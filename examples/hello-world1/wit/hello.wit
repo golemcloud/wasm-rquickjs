@@ -1,0 +1,5 @@
+package quickjs:example1;
+
+world example1 {
+  export hello: func(name: string) -> string;
+}

@@ -1,0 +1,38 @@
+[package]
+name = "wasm-rquickjs-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "wasm-rquickjs"
+path = "src/main.rs"
+
+[dependencies]
+"wasm-rquickjs" = { path = "crates/wasm-rquickjs" }
+
+camino = { workspace = true }
+clap = { version = "4.5.39", features = ["default", "derive"] }
+
+[workspace]
+exclude = [
+    "crates/wasm-rquickjs/skeleton",
+    "tmp"
+]
+members = ["crates/wasm-rquickjs"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+anyhow = "1.0.98"
+camino = "1.1.10"
+fs_extra = "1.3.0"
+heck = "0.5.0"
+include_dir = "0.7.4"
+prettier-please = "0.3.0"
+proc-macro2 = "1.0.95"
+quote = "1.0.40"
+syn = "2.0.101"
+toml_edit = "0.22.27"
+wit-parser = "0.233.0"
