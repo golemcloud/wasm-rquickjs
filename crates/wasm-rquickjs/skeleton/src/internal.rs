@@ -1,88 +1,173 @@
 use crate::native::NativeModule;
 use rquickjs::function::Args;
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ModuleLoader, ScriptLoader};
-use rquickjs::prelude::IntoArgs;
+use rquickjs::prelude::*;
 use rquickjs::{
-    async_with, AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, FromJs, Function, Module,
-    Object, Promise,
+    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, FromJs, Function, Module, Object,
+    Promise, Value, async_with,
 };
 use std::future::Future;
+use tokio::runtime::Runtime;
 
 static JS_MODULE: &str = include_str!("module.js");
 
-pub fn async_exported_function<F: Future>(future: F) -> F::Output {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_time()
-        .build()
-        .unwrap()
-        .block_on(future)
+struct JsState {
+    pub tokio: Runtime,
+    pub rt: AsyncRuntime,
+    pub ctx: AsyncContext,
 }
 
-// TODO: context has to be shared between invocations
+// TODO: remove
+#[rquickjs::function]
+fn print(msg: String) {
+    println!("{msg}");
+}
+
+impl JsState {
+    pub fn new() -> Self {
+        let tokio = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("Failed to create Tokio runtime");
+
+        let (rt, ctx) = tokio.block_on(async {
+            let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+            let ctx = AsyncContext::full(&rt)
+                .await
+                .expect("Failed to create AsyncContext");
+
+            let resolver = BuiltinResolver::default()
+                .with_module("bundle/script_module")
+                .with_module("bundle/native_module");
+            let loader = (
+                BuiltinLoader::default().with_module("bundle/script_module", JS_MODULE),
+                ModuleLoader::default().with_module("bundle/native_module", NativeModule),
+                ScriptLoader::default(),
+            );
+
+            rt.set_loader(resolver, loader).await;
+
+            async_with!(ctx => |ctx| {
+                // TODO: remove >>>
+                let global = ctx.globals();
+                global
+                    .set(
+                        "__print",
+                        js_print
+                    )
+                    .expect("Failed to set global print");
+
+                ctx.eval::<(), _>(
+                    r#"
+                    globalThis.console = {
+                      log(...v) {
+                        globalThis.__print(`${v.join(" ")}`)
+                      }
+                    }
+                "#).catch(&ctx).expect("Failed to set up console.log");
+                // TODO: <<< remove
+
+                Module::evaluate(
+                    ctx.clone(),
+                    "test",
+                    r#"
+                    globalThis.__print(`JSDEBUG: Before import`);
+
+                    import * as userModule from 'bundle/script_module';
+
+                    globalThis.__print(`JSDEBUG: Loaded userModule`);
+                    globalThis.userModule = userModule;
+                    "#,
+                )
+                .catch(&ctx).expect("Failed to evaluate module initialization")
+                .finish::<()>()
+                .catch(&ctx).expect("Failed to finish module initialization");
+
+                println!("DEBUG: JS initialization async_with ending");
+            }).await;
+            rt.idle().await;
+
+            println!("DEBUG: JS module loaded");
+
+            (rt, ctx)
+        });
+
+        Self { tokio, rt, ctx }
+    }
+}
+
+static mut STATE: Option<JsState> = None;
+
+#[allow(static_mut_refs)]
+fn get_js_state() -> &'static JsState {
+    unsafe {
+        if STATE.is_none() {
+            STATE = Some(JsState::new());
+        }
+        STATE.as_ref().unwrap()
+    }
+}
+
+pub fn async_exported_function<F: Future>(future: F) -> F::Output {
+    println!("async_exported_function gets js_state");
+    let js_state = get_js_state();
+    println!("async_exported_function runs future");
+    js_state.tokio.block_on(future)
+}
+
 // TODO: remove debug prints
-// TODO: get rid of unwraps
 // TODO: inject generated native modules
 pub async fn call_js_export<A, R>(function_name: &str, args: A) -> R
 where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
 {
-    let resolver = BuiltinResolver::default()
-        .with_module("bundle/script_module")
-        .with_module("bundle/native_module");
-    let loader = (
-        BuiltinLoader::default().with_module("bundle/script_module", JS_MODULE),
-        ModuleLoader::default().with_module("bundle/native_module", NativeModule),
-        ScriptLoader::default(),
-    );
+    let js_state = get_js_state();
 
-    let rt = AsyncRuntime::new().unwrap();
-    let ctx = AsyncContext::full(&rt).await.unwrap();
-    rt.set_loader(resolver, loader).await;
+    let result: R = async_with!(js_state.ctx => |ctx| {
+        let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
+        let user_function: Function = module.get(function_name).expect(&format!("Cannot find exported JS function {function_name}"));
 
-    let result: R = async_with!(ctx => | ctx| {
-        Module::evaluate(
-            ctx.clone(),
-            "test",
-            r#"
-            import { userModule } from 'bundle/script_module';
+        let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, module, args);
 
-            globalThis.userModule = userModule;
-            "#,
-        ).unwrap().finish::< () > ().unwrap();
-
-        let module: Object = ctx.globals().get("userModule").unwrap();
-        let user_function: Function = module.get(function_name).unwrap();
-
-        let promise: Result < Promise, Error > = call_with_this(ctx.clone(), user_function, module, args);
-
-        let promise = if let Err(Error::Exception) = promise {
-            let exception = ctx.catch();
-            panic! ("Exception during call: {exception:?}");
-        } else {
-            promise.unwrap()
-        };
-
-        let promise_future = promise.into_future::< R> ();
-        let result = match promise_future.await {
-            Ok(result) => {
-                result
+        let result = match result {
+            Err(Error::Exception) => {
+                let exception = ctx.catch();
+                panic! ("Exception during call: {exception:?}");
             }
             Err(e) => {
-                match e {
-                    Error::Exception => {
-                        let exception = ctx.catch();
-                        panic! ("Exception during awaiting call result: {exception:?}")
+                panic! ("Error during call: {e:?}");
+            }
+            Ok(value) => {
+                if value.is_promise() {
+                    let promise: Promise = value.into_promise().unwrap();
+                    let promise_future = promise.into_future::<R> ();
+                    match promise_future.await {
+                        Ok(result) => {
+                            result
+                        }
+                        Err(e) => {
+                            match e {
+                                Error::Exception => {
+                                    let exception = ctx.catch();
+                                    panic! ("Exception during awaiting call result: {exception:?}")
+                                }
+                                _ => {
+                                    panic ! ("Error during awaiting call result: {e:?}")
+                                }
+                            }
+                        }
                     }
-                    _ => {
-                        panic ! ("Error during awaiting call result: {e:?}")
-                    }
+                }
+                else {
+                    R::from_js(&ctx, value).expect("Unexpected result value")
                 }
             }
         };
+
         result
     }).await;
-    rt.idle().await;
+    js_state.rt.idle().await;
     result
 }
 

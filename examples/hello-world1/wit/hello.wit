@@ -2,4 +2,6 @@ package quickjs:example1;
 
 world example1 {
   export hello: func(name: string) -> string;
+
+  export async-hello: func(name: string) -> string;
 }

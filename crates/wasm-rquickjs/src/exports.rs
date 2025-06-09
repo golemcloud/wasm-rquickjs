@@ -1,7 +1,7 @@
 use crate::GeneratorContext;
 use crate::types::to_type_ref;
 use anyhow::{Context, anyhow};
-use heck::ToLowerCamelCase;
+use heck::{ToLowerCamelCase, ToSnakeCase};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Lit, LitStr};
@@ -75,7 +75,7 @@ fn generate_guest_impl(
     let mut func_impls = Vec::new();
 
     for (name, function) in exports {
-        let func_name = syn::Ident::new(name, proc_macro2::Span::call_site());
+        let func_name = syn::Ident::new(&name.to_snake_case(), proc_macro2::Span::call_site());
         let param_ident_type: Vec<_> = function
             .params
             .iter()
