@@ -712,3 +712,6 @@ name = "wit-bindgen-rt"
 version = "0.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "051105bab12bc78e161f8dfb3596e772dd6a01ebf9c4840988e00347e744966a"
+dependencies = [
+ "bitflags",
+]

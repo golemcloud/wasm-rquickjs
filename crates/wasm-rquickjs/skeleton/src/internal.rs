@@ -73,6 +73,9 @@ impl JsState {
                 // TODO: <<< remove
                 // TODO: inject generated native modules
 
+                global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
+                    .expect("Failed to initialize resource table");
+
                 Module::evaluate(
                     ctx.clone(),
                     "test",
@@ -180,9 +183,9 @@ where
 
     let result = async_with!(js_state.ctx => |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
-        let (constructor, parent): (Constructor, Object) = get_path(&module, resource_path).expect(&format!("Cannot find exported JS resource class {}", resource_path.join(".")));
+        let (constructor, _parent): (Constructor, Object) = get_path(&module, resource_path).expect(&format!("Cannot find exported JS resource class {}", resource_path.join(".")));
 
-        let result: Result<Object, Error> = construct_with_this(ctx.clone(), constructor, parent, args);
+        let result: Result<Object, Error> = constructor.construct(args);
 
         let result = match result {
             Err(Error::Exception) => {
@@ -306,23 +309,6 @@ where
     accum_args.this(this)?;
     args.into_args(&mut accum_args)?;
     function.call_arg(accum_args)
-}
-
-fn construct_with_this<'js, A, R>(
-    ctx: Ctx<'js>,
-    constructor: Constructor<'js>,
-    this: Object<'js>,
-    args: A,
-) -> rquickjs::Result<R>
-where
-    A: IntoArgs<'js>,
-    R: FromJs<'js>,
-{
-    let num = args.num_args();
-    let mut accum_args = Args::new(ctx.clone(), num + 1);
-    accum_args.this(this)?;
-    args.into_args(&mut accum_args)?;
-    constructor.construct_args(accum_args)
 }
 
 fn get_path<'js, V: FromJs<'js>>(root: &Object<'js>, path: &[&str]) -> Option<(V, Object<'js>)> {

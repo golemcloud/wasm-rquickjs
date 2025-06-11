@@ -16,4 +16,4 @@ crate-type = ["cdylib"]
 [dependencies]
 rquickjs = { version = "0.9.0", default-features = false, features = ["futures", "bindgen", "loader", "macro"] }
 tokio = { version = "1.43.0", features = ["rt", "sync", "time"] }
-wit-bindgen-rt = { version = "0.42.1" }
+wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }

@@ -1,24 +1,28 @@
+use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
-use crate::skeleton::{copy_skeleton_sources, generate_cargo_toml};
+use crate::skeleton::{copy_skeleton_sources, generate_app_manifest, generate_cargo_toml};
 use anyhow::Context;
 use camino::Utf8Path;
 use fs_extra::dir::CopyOptions;
-use wit_parser::{PackageId, PackageSourceMap, Resolve, WorldId};
+use std::cell::RefCell;
+use std::collections::BTreeSet;
+use wit_parser::{InterfaceId, PackageId, PackageSourceMap, Resolve, TypeId, WorldId, WorldItem};
 
+mod conversions;
 mod exports;
 mod skeleton;
 mod types;
 
 /// Generates a Rust wrapper crate for a combination of a WIT package and a JavaScript module.
-/// 
+///
 /// The `wit` parameter should point to a WIT root (holding the WIT package of the component, with
 /// optionally a `deps` subdirectory with an arbitrary number of dependencies).
-/// 
+///
 /// The `js` parameter must point to a single JavaScript module that implements the WIT package.
-/// 
-/// The `output` parameter is the root directory where the generated Rust crate's source code and 
-/// Cargo manifest is placed. 
-/// 
+///
+/// The `output` parameter is the root directory where the generated Rust crate's source code and
+/// Cargo manifest is placed.
+///
 /// If `world` is `None`, the default world is selected and used, otherwise the specified one.
 pub fn generate_wrapper_crate(
     wit: &Utf8Path,
@@ -36,6 +40,9 @@ pub fn generate_wrapper_crate(
     // Generating the Cargo.toml file
     generate_cargo_toml(&context)?;
 
+    // Generating a Golem App Manifest file (for debugging)
+    generate_app_manifest(&context)?;
+
     // Copying the skeleton files
     copy_skeleton_sources(&context.output).context("Failed to copy skeleton sources")?;
 
@@ -51,15 +58,16 @@ pub fn generate_wrapper_crate(
     generate_export_impls(&context)
         .context("Failed to generate the component export implementations")?;
 
+    // Generating the conversions.rs file implementing the IntoJs and FromJs typeclass instances
+    // This step must be done after `generate_export_impls` to ensure all visited types are registered.
+    generate_conversions(&context)
+        .context("Failed to generate the IntoJs and FromJs typeclass instances")?;
+
     Ok(())
 }
 
 /// Generates TypeScript module definitions for a given (or default) world of a WIT package.
-pub fn generate_dts(
-    wit: &Utf8Path,
-    output: &Utf8Path,
-    world: Option<&str>,
-) -> anyhow::Result<()> {
+pub fn generate_dts(wit: &Utf8Path, output: &Utf8Path, world: Option<&str>) -> anyhow::Result<()> {
     // Making sure the target directories exists
     std::fs::create_dir_all(output).context("Failed to create output directory")?;
 
@@ -75,7 +83,8 @@ struct GeneratorContext<'a> {
     resolve: Resolve,
     root_package: PackageId,
     world: WorldId,
-    source_map: PackageSourceMap
+    source_map: PackageSourceMap,
+    visited_types: RefCell<BTreeSet<TypeId>>,
 }
 
 impl<'a> GeneratorContext<'a> {
@@ -94,12 +103,29 @@ impl<'a> GeneratorContext<'a> {
             resolve,
             root_package,
             world,
-            source_map
+            source_map,
+            visited_types: RefCell::new(BTreeSet::new()),
         })
     }
 
     fn world_name(&self) -> String {
         self.resolve.worlds[self.world].name.clone()
+    }
+
+    fn root_package_name(&self) -> String {
+        self.resolve.packages[self.root_package].name.to_string()
+    }
+
+    fn record_visited_type(&self, type_id: TypeId) {
+        self.visited_types.borrow_mut().insert(type_id);
+    }
+
+    fn is_exported_interface(&self, interface_id: InterfaceId) -> bool {
+        let world = &self.resolve.worlds[self.world];
+        world
+            .exports
+            .iter()
+            .any(|(_, item)| matches!(item, WorldItem::Interface { id, .. } if id == &interface_id))
     }
 }
 
