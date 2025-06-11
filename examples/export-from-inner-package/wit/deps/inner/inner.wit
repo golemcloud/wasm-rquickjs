@@ -1,0 +1,6 @@
+package quickjs:inner@0.0.1;
+
+interface exp1 {
+  hello: func(name: string) -> string;
+  get-const: func() -> u64;
+}

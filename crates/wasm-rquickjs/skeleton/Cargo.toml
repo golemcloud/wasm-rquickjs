@@ -5,6 +5,10 @@ edition = "2024"
 
 [workspace]
 
+[profile.release]
+opt-level = "s"
+lto = true
+
 [lib]
 path = "src/lib.rs"
 crate-type = ["cdylib"]

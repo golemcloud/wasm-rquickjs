@@ -1,0 +1,16 @@
+package quickjs:example2;
+
+interface exp1 {
+  hello: func(name: string) -> string;
+  get-const: func() -> u64;
+}
+
+interface exp2 {
+  async-hello: func(name: string) -> string;
+}
+
+world example2 {
+  export exp1;
+  export exp2;
+  export version: func() -> string;
+}

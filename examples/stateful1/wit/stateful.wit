@@ -1,0 +1,6 @@
+package quickjs:example1;
+
+world example1 {
+  export inc: func(delta: s32);
+  export get: func() -> s32;
+}

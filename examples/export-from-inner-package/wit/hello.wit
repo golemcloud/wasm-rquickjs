@@ -1,0 +1,10 @@
+package quickjs:outer;
+
+interface exp2 {
+  async-hello: func(name: string) -> string;
+}
+
+world example2 {
+  export quickjs:inner/exp1@0.0.1;
+  export exp2;
+}
