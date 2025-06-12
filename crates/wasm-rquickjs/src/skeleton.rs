@@ -47,7 +47,7 @@ pub fn generate_app_manifest(context: &GeneratorContext<'_>) -> anyhow::Result<(
 
     // Replacing `component_name` with the crate's name
     let raw_yaml = raw_yaml
-        .replace("component_name", &context.world_name().to_snake_case())
+        .replace("component_name", &context.world_name.to_snake_case())
         .replace("root:package", &context.root_package_name());
 
     // Writing the result
@@ -58,7 +58,7 @@ pub fn generate_app_manifest(context: &GeneratorContext<'_>) -> anyhow::Result<(
 
 /// Changes the crate's package name to the selected WIT world's name
 fn change_package_name(context: &GeneratorContext, doc: &mut DocumentMut) {
-    let crate_name = context.world_name();
+    let crate_name = &context.world_name;
     doc["package"]["name"] = value(crate_name);
 }
 

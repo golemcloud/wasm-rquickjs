@@ -1,4 +1,3 @@
-use crate::native::NativeModule;
 use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ModuleLoader, ScriptLoader};
 use rquickjs::prelude::*;
@@ -42,11 +41,12 @@ impl JsState {
                 .expect("Failed to create AsyncContext");
 
             let resolver = BuiltinResolver::default()
-                .with_module("bundle/script_module")
-                .with_module("bundle/native_module");
+                .with_module("bundle/script_module");
+            let resolver = crate::modules::add_native_module_resolvers(resolver);
+
             let loader = (
                 BuiltinLoader::default().with_module("bundle/script_module", JS_MODULE),
-                ModuleLoader::default().with_module("bundle/native_module", NativeModule),
+                crate::modules::module_loader(),
                 ScriptLoader::default(),
             );
 

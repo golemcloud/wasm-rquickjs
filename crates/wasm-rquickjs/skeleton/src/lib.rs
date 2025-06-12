@@ -1,5 +1,5 @@
 // Empty file, to be generated
 
 pub mod internal;
-pub mod native;
+mod modules;
 pub mod wrappers;

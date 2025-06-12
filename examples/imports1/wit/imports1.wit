@@ -1,0 +1,7 @@
+package quickjs:imports1;
+
+world imports1 {
+  import wasi:random/random@0.2.3;
+
+  export test: func(name: string) -> string;
+}

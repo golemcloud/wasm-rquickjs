@@ -73,6 +73,7 @@ interface types {
   f11: func(a: color) -> string;
   f12: func(a: string) -> option<color>;
   f13: func(a: permissions) -> permissions;
+  f14: func(a: u64) -> u64;
 }
 
 world example1 {

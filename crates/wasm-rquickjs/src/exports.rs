@@ -1,17 +1,16 @@
 use crate::GeneratorContext;
 use crate::types::{
-    WrappedType, get_wrapped_type, ident_in_exported_interface,
-    ident_in_exported_interface_or_global, type_borrows_resource,
+    ProcessedParameter, WrappedType, get_wrapped_type, ident_in_exported_interface,
+    ident_in_exported_interface_or_global, param_refs_as_tuple, process_parameter,
+    to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource,
 };
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
-use std::iter::Map;
-use std::slice::Iter;
 use syn::{Lit, LitStr};
-use wit_parser::{Function, FunctionKind, Interface, Type, TypeId, WorldItem, WorldKey};
+use wit_parser::{Function, FunctionKind, Interface, TypeId, WorldItem, WorldKey};
 
 /// Generates the `<output>/src/lib.rs` file for the wrapper crate, implementing the component exports
 /// and providing the general Rust module declarations.
@@ -25,9 +24,9 @@ pub fn generate_export_impls(context: &GeneratorContext<'_>) -> anyhow::Result<(
         mod conversions;
         #[allow(unused)]
         mod internal;
-        mod native;
+        mod modules;
         mod wrappers;
-
+        
         struct Component;
 
         #(#guest_impls)*
@@ -285,24 +284,6 @@ fn generate_guest_impl(
     Ok(guest_impls)
 }
 
-struct ProcessedParameter {
-    pub ident: Ident,
-    pub wrapped_type: Option<WrappedType>,
-}
-
-fn process_parameter(
-    context: &GeneratorContext<'_>,
-    param_name: &str,
-    param_type: &Type,
-) -> anyhow::Result<ProcessedParameter> {
-    let wrapped_type = get_wrapped_type(context, param_type)
-        .context(format!("Failed to encode parameter {param_name}'s type"))?;
-    Ok(ProcessedParameter {
-        ident: Ident::new(param_name, Span::call_site()),
-        wrapped_type: Some(wrapped_type),
-    })
-}
-
 /// Generates one trait method implementation for an exported freestanding function
 fn generate_exported_function_impl(
     context: &GeneratorContext<'_>,
@@ -317,14 +298,14 @@ fn generate_exported_function_impl(
         .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    let func_arg_list = to_func_arg_list(&param_ident_type);
+    let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = match &function.result {
         Some(typ) => get_wrapped_type(context, typ)
             .context(format!("Failed to encode result type for {name}"))?,
         None => WrappedType::unit(),
     };
 
-    let param_refs = to_param_refs(&param_ident_type);
+    let param_refs = to_wrapped_param_refs(&param_ident_type);
     let param_refs_tuple = param_refs_as_tuple(&param_refs);
 
     let js_func_name_str = Lit::Str(LitStr::new(&name.to_lower_camel_case(), func_name.span()));
@@ -352,22 +333,6 @@ fn generate_exported_function_impl(
        }
     };
     Ok(func_impl)
-}
-
-fn to_func_arg_list(
-    param_ident_type: &Vec<ProcessedParameter>,
-) -> Map<Iter<ProcessedParameter>, fn(&ProcessedParameter) -> TokenStream> {
-    param_ident_type.iter().map(|param| {
-        let name = &param.ident;
-        let typ = &param.wrapped_type;
-        match typ {
-            Some(wrapped) => {
-                let typ = &wrapped.original_type_ref;
-                quote! { #name: #typ }
-            }
-            None => quote! { &#name },
-        }
-    })
 }
 
 /// Generates one trait method implementation for an exported freestanding function
@@ -424,7 +389,7 @@ fn generate_exported_resource_function_impl(
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    let func_arg_list = to_func_arg_list(&param_ident_type);
+    let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = if matches!(function.kind, FunctionKind::Constructor(_)) {
         WrappedType::no_wrapping(quote! { Self })
     } else {
@@ -435,7 +400,7 @@ fn generate_exported_resource_function_impl(
         }
     };
 
-    let param_refs = to_param_refs(&param_ident_type);
+    let param_refs = to_wrapped_param_refs(&param_ident_type);
 
     let resource_name = context
         .resolve
@@ -535,30 +500,4 @@ fn generate_exported_resource_function_impl(
     };
 
     Ok(func_impl)
-}
-
-fn to_param_refs(param_ident_type: &[ProcessedParameter]) -> Vec<TokenStream> {
-    param_ident_type
-        .iter()
-        .map(|param| {
-            let name = &param.ident;
-            let unwrapped = quote! { #name };
-            match &param.wrapped_type {
-                Some(wrapped) => {
-                    let wrap = &wrapped.wrap;
-                    (wrap)(unwrapped)
-                }
-                None => unwrapped,
-            }
-        })
-        .collect::<Vec<_>>()
-}
-
-fn param_refs_as_tuple(param_refs: &[TokenStream]) -> TokenStream {
-    if param_refs.len() == 1 {
-        let item = &param_refs[0];
-        quote! { (#item,) }
-    } else {
-        quote! { crate::wrappers::JsArgs((#(#param_refs),*)) }
-    }
 }

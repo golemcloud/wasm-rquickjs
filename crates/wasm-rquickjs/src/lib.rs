@@ -1,5 +1,6 @@
 use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
+use crate::imports::generate_import_modules;
 use crate::skeleton::{copy_skeleton_sources, generate_app_manifest, generate_cargo_toml};
 use anyhow::Context;
 use camino::Utf8Path;
@@ -10,6 +11,7 @@ use wit_parser::{InterfaceId, PackageId, PackageSourceMap, Resolve, TypeId, Worl
 
 mod conversions;
 mod exports;
+mod imports;
 mod skeleton;
 mod types;
 
@@ -33,6 +35,8 @@ pub fn generate_wrapper_crate(
     // Making sure the target directories exists
     std::fs::create_dir_all(output).context("Failed to create output directory")?;
     std::fs::create_dir_all(output.join("src")).context("Failed to create output/src directory")?;
+    std::fs::create_dir_all(output.join("src").join("modules"))
+        .context("Failed to create output/src/modules directory")?;
 
     // Resolving the WIT package
     let context = GeneratorContext::new(output, wit, world)?;
@@ -57,6 +61,9 @@ pub fn generate_wrapper_crate(
     // Generating the lib.rs file implementing the component exports
     generate_export_impls(&context)
         .context("Failed to generate the component export implementations")?;
+
+    // Generating the native modules implementing the component imports
+    generate_import_modules(&context).context("Failed to generate the component import modules")?;
 
     // Generating the conversions.rs file implementing the IntoJs and FromJs typeclass instances
     // This step must be done after `generate_export_impls` to ensure all visited types are registered.
@@ -85,6 +92,7 @@ struct GeneratorContext<'a> {
     world: WorldId,
     source_map: PackageSourceMap,
     visited_types: RefCell<BTreeSet<TypeId>>,
+    world_name: String,
 }
 
 impl<'a> GeneratorContext<'a> {
@@ -97,6 +105,7 @@ impl<'a> GeneratorContext<'a> {
             .select_world(root_package, world)
             .context("Failed to select WIT world")?;
 
+        let world_name = resolve.worlds[world].name.clone();
         Ok(Self {
             output,
             wit_source_path: wit,
@@ -105,11 +114,8 @@ impl<'a> GeneratorContext<'a> {
             world,
             source_map,
             visited_types: RefCell::new(BTreeSet::new()),
+            world_name,
         })
-    }
-
-    fn world_name(&self) -> String {
-        self.resolve.worlds[self.world].name.clone()
     }
 
     fn root_package_name(&self) -> String {

@@ -120,5 +120,11 @@ export const types = {
         console.log(`a: ${a}`);
         // return: permissions
         return a;
+    },
+    f14: (a) => {
+        // a: u64
+        console.log(`a: ${a}`);
+        // return: u64
+        return a;
     }
 };

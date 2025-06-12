@@ -151,3 +151,4 @@ sync or async.
 ### Limitations
 
 - Maximum number of function parameters is 26
+- Anonymous interface exports/imports are not supported

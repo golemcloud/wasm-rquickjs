@@ -1,0 +1,293 @@
+use crate::GeneratorContext;
+use crate::types::{
+    WrappedType, get_wrapped_type, ident_in_imported_interface_or_global, process_parameter,
+    to_unwrapped_param_refs, to_wrapped_func_arg_list,
+};
+use anyhow::{Context, anyhow};
+use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::quote;
+use syn::LitStr;
+use wit_parser::{Function, Interface, PackageName, WorldItem, WorldKey};
+
+/// Generates the `mod.rs` and one file per imported interface in the `<output>/src/modules`
+/// directory.
+/// Each Rust module contains a rquicks `NativeModule` exposing the WIT bindings for the
+/// imported WIT interfaces as JavaScript modules.
+pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
+    let (global, interfaces) = collect_imported_interfaces(context)?;
+
+    for interface in &interfaces {
+        let module_name = interface.module_name()?;
+        let file_name = format!("{module_name}.rs");
+
+        let module_path = context.output.join("src").join("modules").join(&file_name);
+        let module_tokens = generate_import_module(context, &interface, &interfaces)?;
+
+        let module_ast: syn::File = syn::parse2(module_tokens)
+            .context(format!("failed to parse generated {file_name} tokens"))?;
+
+        let module_src = prettier_please::unparse(&module_ast);
+
+        std::fs::write(&module_path, module_src)?;
+    }
+
+    let global_module_path = context.output.join("src").join("modules").join("mod.rs");
+    let global_module_tokens = generate_import_module(context, &global, &interfaces)?;
+
+    println!("{global_module_tokens}");
+
+    let global_module_ast: syn::File =
+        syn::parse2(global_module_tokens).context("failed to parse generated mod.rs tokens")?;
+    let global_module_src = prettier_please::unparse(&global_module_ast);
+    std::fs::write(&global_module_path, global_module_src)?;
+
+    Ok(())
+}
+
+struct ImportedInterface<'a> {
+    package_name: Option<&'a PackageName>,
+    name: String,
+    functions: Vec<(&'a str, &'a Function)>,
+    interface: Option<&'a Interface>,
+}
+
+impl<'a> ImportedInterface<'a> {
+    pub fn module_name(&self) -> anyhow::Result<String> {
+        let package_name = self
+            .package_name
+            .ok_or_else(|| anyhow!("imported interface has no package name"))?;
+        let interface_name = &self.name;
+
+        Ok(format!(
+            "{}_{}",
+            package_name.to_string().to_snake_case(),
+            interface_name.to_snake_case()
+        ))
+    }
+
+    pub fn rust_interface_name(&self) -> Ident {
+        let interface_name = self.name.to_upper_camel_case();
+        Ident::new(&interface_name, Span::call_site())
+    }
+
+    pub fn name_and_interface(&self) -> Option<(&str, &Interface)> {
+        self.interface
+            .map(|interface| (self.name.as_str(), interface))
+    }
+
+    pub fn fully_qualified_interface_name(&self) -> String {
+        if let Some(package_name) = &self.package_name {
+            package_name.interface_id(&self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
+fn collect_imported_interfaces<'a>(
+    context: &'a GeneratorContext<'a>,
+) -> anyhow::Result<(ImportedInterface<'a>, Vec<ImportedInterface<'a>>)> {
+    let world = &context.resolve.worlds[context.world];
+
+    let mut global_imports = Vec::new();
+    let mut interfaces = Vec::new();
+
+    for (name, import) in &world.imports {
+        let name = match name {
+            WorldKey::Name(name) => name.as_str(),
+            WorldKey::Interface(id) => {
+                let interface = &context.resolve.interfaces[*id];
+                interface
+                    .name
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Interface import does not have a name"))?
+                    .as_str()
+            }
+        };
+        match import {
+            WorldItem::Interface { id, .. } => {
+                let interface = &context.resolve.interfaces[*id];
+                let functions = interface
+                    .functions
+                    .iter()
+                    .map(|(name, f)| (name.as_str(), f))
+                    .collect();
+
+                let package_id = interface
+                    .package
+                    .ok_or_else(|| anyhow!("Anonymous interface imports are not supported yet"))?;
+                let package = context.resolve.packages.get(package_id).ok_or_else(|| {
+                    anyhow!("Could not find package of imported interface {name}")
+                })?;
+                let package_name = &package.name;
+
+                interfaces.push(ImportedInterface {
+                    package_name: Some(package_name),
+                    name: name.to_string(),
+                    functions,
+                    interface: Some(interface),
+                });
+            }
+            WorldItem::Function(function) => {
+                global_imports.push((name, function));
+            }
+            WorldItem::Type(_) => {}
+        }
+    }
+
+    let global = ImportedInterface {
+        package_name: None,
+        name: context.world_name.to_upper_camel_case(),
+        functions: global_imports,
+        interface: None,
+    };
+
+    Ok((global, interfaces))
+}
+
+fn generate_import_module(
+    context: &GeneratorContext<'_>,
+    import: &ImportedInterface<'_>,
+    all_imported_interfaces: &[ImportedInterface<'_>],
+) -> anyhow::Result<TokenStream> {
+    let mut submodules = Vec::new();
+    let mut loader_init = quote! {};
+    if import.interface.is_none() {
+        let mut resolver_chain = Vec::new();
+        let mut loader_chain = Vec::new();
+
+        // This is the global module
+        for interface in all_imported_interfaces {
+            let module_name = interface.module_name()?;
+            let module_ident = Ident::new(&module_name, Span::call_site());
+            submodules.push(quote! { pub mod #module_ident; });
+
+            let rust_module_struct_ident = interface.rust_interface_name();
+            let fully_qualified_interface = interface.fully_qualified_interface_name();
+            let fully_qualified_interface_lit =
+                LitStr::new(&fully_qualified_interface, Span::call_site());
+
+            resolver_chain.push(quote! { with_module(#fully_qualified_interface_lit)});
+            loader_chain.push(quote! { with_module(#fully_qualified_interface_lit, crate::modules::#module_ident::#rust_module_struct_ident) });
+        }
+
+        loader_init = quote! {
+            pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
+                resolver.#(#resolver_chain).*
+            }
+
+            pub fn module_loader() -> rquickjs::loader::ModuleLoader {
+              rquickjs::loader::ModuleLoader::default().#(#loader_chain).*
+            }
+        };
+    }
+
+    let rust_interface_name = import.rust_interface_name();
+
+    let mut bridge_functions = Vec::new();
+    let mut declarations = Vec::new();
+    let mut exports = Vec::new();
+
+    for (name, function) in &import.functions {
+        let js_function_name = name.to_lower_camel_case();
+        let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
+        let rust_function_name = name.to_snake_case();
+        let rust_function_ident = Ident::new(&rust_function_name, Span::call_site());
+        let js_bridge_name = format!("js_{rust_function_name}");
+        let js_bridge_ident = Ident::new(&js_bridge_name, Span::call_site());
+
+        declarations.push(quote! { decl.declare(#js_function_lit)? });
+
+        exports.push(quote! { exports.export(#js_function_lit, #js_bridge_ident)? });
+
+        let bindgen_path = ident_in_imported_interface_or_global(
+            context,
+            rust_function_ident.clone(),
+            import.name_and_interface(),
+        );
+
+        let parameters = function
+            .params
+            .iter()
+            .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
+        let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
+        let func_ret = match &function.result {
+            Some(typ) => get_wrapped_type(context, typ)
+                .context(format!("Failed to encode result type for {name}"))?,
+            None => WrappedType::unit(),
+        };
+        let original_result = &func_ret.original_type_ref;
+        let wrapped_result = &func_ret.wrapped_type_ref;
+        let wrap = &func_ret.wrap;
+        let wrap_result = (wrap)(quote! { result });
+
+        bridge_functions.push(quote! {
+            #[rquickjs::function]
+            fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
+                let result: #original_result = #bindgen_path(#(#param_refs),*);
+                #wrap_result
+            }
+        });
+
+        // TODO: support resources
+    }
+
+    let module = quote! {
+        #(#submodules);*
+
+        #loader_init
+
+        #(#bridge_functions)*
+
+        pub struct #rust_interface_name;
+
+        impl rquickjs::module::ModuleDef for #rust_interface_name {
+            fn declare(decl: &rquickjs::module::Declarations) -> rquickjs::Result<()> {
+                #(#declarations);*;
+                Ok(())
+            }
+
+            fn evaluate<'js>(
+                ctx: &rquickjs::Ctx<'js>,
+                exports: &rquickjs::module::Exports<'js>,
+            ) -> rquickjs::Result<()> {
+                #(#exports);*;
+                Ok(())
+            }
+        }
+    };
+
+    Ok(module)
+}
+// pub struct Random;
+//
+// #[rquickjs::function]
+// fn get_random_bytes(len: u64) -> Vec<u8> {
+//     crate::bindings::wasi::random::random::get_random_bytes(len)
+// }
+//
+// #[rquickjs::function]
+// fn get_random_u64() -> u64 {
+//     crate::bindings::wasi::random::random::get_random_u64()
+// }
+//
+// impl rquickjs::module::ModuleDef for Random {
+//     fn declare(decl: &rquickjs::module::Declarations) -> rquickjs::Result<()> {
+//         decl.declare("getRandomBytes")?;
+//         decl.declare("getRandomU64")?;
+//         Ok(())
+//     }
+//
+//     fn evaluate<'js>(
+//         ctx: &rquickjs::Ctx<'js>,
+//         exports: &rquickjs::module::Exports<'js>,
+//     ) -> rquickjs::Result<()> {
+//         exports.export("getRandomBytes", js_get_random_bytes)?;
+//         exports.export("getRandomU64", js_get_random_u64)?;
+//         Ok(())
+//     }
+// }
