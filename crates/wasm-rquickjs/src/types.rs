@@ -97,7 +97,6 @@ pub fn type_id_to_type_ref(
                     }
                 }
                 TypeOwner::Interface(interface_id) => {
-                    // TODO: need to distinguish between imported and exported interfaces
                     let interface = context
                         .resolve
                         .interfaces
