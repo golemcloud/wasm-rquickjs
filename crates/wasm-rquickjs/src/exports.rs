@@ -1,9 +1,5 @@
 use crate::GeneratorContext;
-use crate::types::{
-    ProcessedParameter, WrappedType, get_wrapped_type, ident_in_exported_interface,
-    ident_in_exported_interface_or_global, param_refs_as_tuple, process_parameter,
-    to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource,
-};
+use crate::types::{ProcessedParameter, WrappedType, get_wrapped_type, ident_in_exported_interface, ident_in_exported_interface_or_global, param_refs_as_tuple, process_parameter, to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource, get_function_name};
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -26,7 +22,7 @@ pub fn generate_export_impls(context: &GeneratorContext<'_>) -> anyhow::Result<(
         mod internal;
         mod modules;
         mod wrappers;
-        
+
         struct Component;
 
         #(#guest_impls)*
@@ -343,31 +339,7 @@ fn generate_exported_resource_function_impl(
     name: &str,
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
-    let func_name = match &function.kind {
-        FunctionKind::Freestanding => name.to_string(),
-        FunctionKind::AsyncFreestanding => name.to_string(),
-        FunctionKind::Method(_) => name["[method]".len()..]
-            .split_once('.')
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
-            .1
-            .to_string(),
-        FunctionKind::AsyncMethod(_) => name["[method]".len()..]
-            .split_once('.')
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
-            .1
-            .to_string(),
-        FunctionKind::Static(_) => name["[static]".len()..]
-            .split_once('.')
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
-            .1
-            .to_string(),
-        FunctionKind::AsyncStatic(_) => name["[static]".len()..]
-            .split_once('.')
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
-            .1
-            .to_string(),
-        FunctionKind::Constructor(_) => "new".to_string(),
-    };
+    let func_name = get_function_name(name, &function)?;
     let func_name_ident = Ident::new(&func_name.to_snake_case(), Span::call_site());
 
     let param_ident_type: Vec<_> = function
@@ -391,7 +363,7 @@ fn generate_exported_resource_function_impl(
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = if matches!(function.kind, FunctionKind::Constructor(_)) {
-        WrappedType::no_wrapping(quote! { Self })
+        WrappedType::no_wrapping(quote! { Self }, false)
     } else {
         match &function.result {
             Some(typ) => get_wrapped_type(context, typ)
@@ -501,3 +473,4 @@ fn generate_exported_resource_function_impl(
 
     Ok(func_impl)
 }
+

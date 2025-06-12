@@ -1,14 +1,15 @@
 use crate::GeneratorContext;
 use crate::types::{
-    WrappedType, get_wrapped_type, ident_in_imported_interface_or_global, process_parameter,
-    to_unwrapped_param_refs, to_wrapped_func_arg_list,
+    WrappedType, get_function_name, get_wrapped_type, ident_in_imported_interface_or_global,
+    process_parameter, to_unwrapped_param_refs, to_wrapped_func_arg_list,
 };
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use std::collections::BTreeMap;
 use syn::LitStr;
-use wit_parser::{Function, Interface, PackageName, WorldItem, WorldKey};
+use wit_parser::{Function, FunctionKind, Interface, PackageName, WorldItem, WorldKey};
 
 /// Generates the `mod.rs` and one file per imported interface in the `<output>/src/modules`
 /// directory.
@@ -24,6 +25,8 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
         let module_path = context.output.join("src").join("modules").join(&file_name);
         let module_tokens = generate_import_module(context, &interface, &interfaces)?;
 
+        println!("{module_tokens:#}");
+
         let module_ast: syn::File = syn::parse2(module_tokens)
             .context(format!("failed to parse generated {file_name} tokens"))?;
 
@@ -34,8 +37,6 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
 
     let global_module_path = context.output.join("src").join("modules").join("mod.rs");
     let global_module_tokens = generate_import_module(context, &global, &interfaces)?;
-
-    println!("{global_module_tokens}");
 
     let global_module_ast: syn::File =
         syn::parse2(global_module_tokens).context("failed to parse generated mod.rs tokens")?;
@@ -186,62 +187,208 @@ fn generate_import_module(
     let rust_interface_name = import.rust_interface_name();
 
     let mut bridge_functions = Vec::new();
+    let mut bridge_classes = Vec::new();
     let mut declarations = Vec::new();
     let mut exports = Vec::new();
+    let mut resource_functions = BTreeMap::new();
 
     for (name, function) in &import.functions {
-        let js_function_name = name.to_lower_camel_case();
-        let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
-        let rust_function_name = name.to_snake_case();
-        let rust_function_ident = Ident::new(&rust_function_name, Span::call_site());
-        let js_bridge_name = format!("js_{rust_function_name}");
-        let js_bridge_ident = Ident::new(&js_bridge_name, Span::call_site());
+        match &function.kind {
+            FunctionKind::Freestanding => {
+                let js_function_name = name.to_lower_camel_case();
+                let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
+                let rust_function_name = name.to_snake_case();
+                let rust_function_ident = Ident::new(&rust_function_name, Span::call_site());
+                let js_bridge_name = format!("js_{rust_function_name}");
+                let js_bridge_ident = Ident::new(&js_bridge_name, Span::call_site());
 
-        declarations.push(quote! { decl.declare(#js_function_lit)? });
+                declarations.push(quote! { decl.declare(#js_function_lit)? });
 
-        exports.push(quote! { exports.export(#js_function_lit, #js_bridge_ident)? });
+                exports.push(quote! { exports.export(#js_function_lit, #js_bridge_ident)? });
 
+                let bindgen_path = ident_in_imported_interface_or_global(
+                    context,
+                    rust_function_ident.clone(),
+                    import.name_and_interface(),
+                );
+
+                let parameters = function
+                    .params
+                    .iter()
+                    .map(|(param_name, param_type)| {
+                        process_parameter(context, param_name, param_type)
+                    })
+                    .collect::<anyhow::Result<Vec<_>>>()?;
+
+                let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
+                let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
+                let func_ret = match &function.result {
+                    Some(typ) => get_wrapped_type(context, typ)
+                        .context(format!("Failed to encode result type for {name}"))?,
+                    None => WrappedType::unit(),
+                };
+                let original_result = &func_ret.original_type_ref;
+                let wrapped_result = &func_ret.wrapped_type_ref;
+                let wrap = &func_ret.wrap;
+                let wrap_result = (wrap)(quote! { result });
+
+                bridge_functions.push(quote! {
+                    #[rquickjs::function]
+                    fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
+                        let result: #original_result = #bindgen_path(#(#param_refs),*);
+                        #wrap_result
+                    }
+                });
+            }
+            FunctionKind::AsyncFreestanding
+            | FunctionKind::AsyncMethod(_)
+            | FunctionKind::AsyncStatic(_) => {
+                Err(anyhow!("Async imported functions are not supported yet"))?
+            }
+            FunctionKind::Method(type_id)
+            | FunctionKind::Static(type_id)
+            | FunctionKind::Constructor(type_id) => {
+                resource_functions
+                    .entry(type_id)
+                    .or_insert_with(Vec::new)
+                    .push((name, function));
+            }
+        }
+    }
+
+    for (resource_type_id, resource_funcs) in resource_functions {
+        let typ = context
+            .resolve
+            .types
+            .get(*resource_type_id)
+            .ok_or_else(|| anyhow!("Unknown resource type id"))?;
+
+        let resource_name = typ
+            .name
+            .as_ref()
+            .ok_or_else(|| anyhow!("Resource type has no name"))?;
+        let resource_name_ident =
+            Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
         let bindgen_path = ident_in_imported_interface_or_global(
             context,
-            rust_function_ident.clone(),
+            resource_name_ident.clone(),
             import.name_and_interface(),
         );
 
-        let parameters = function
-            .params
+        let constructor_function = resource_funcs
             .iter()
-            .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .find(|(_, f)| matches!(f.kind, FunctionKind::Constructor(_)));
+        let constructor = if let Some((_, constructor_function)) = constructor_function {
+            let parameters = constructor_function
+                .params
+                .iter()
+                .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
+                .collect::<anyhow::Result<Vec<_>>>()?;
 
-        let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
-        let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
-        let func_ret = match &function.result {
-            Some(typ) => get_wrapped_type(context, typ)
-                .context(format!("Failed to encode result type for {name}"))?,
-            None => WrappedType::unit(),
+            let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
+            let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
+            quote! {
+                #[qjs(constructor)]
+                pub fn new(#(#param_list),*) -> Self {
+                  Self {
+                    inner: #bindgen_path::new(#(#param_refs),*),
+                  }
+                }
+            }
+        } else {
+            quote! {}
         };
-        let original_result = &func_ret.original_type_ref;
-        let wrapped_result = &func_ret.wrapped_type_ref;
-        let wrap = &func_ret.wrap;
-        let wrap_result = (wrap)(quote! { result });
 
-        bridge_functions.push(quote! {
-            #[rquickjs::function]
-            fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
-                let result: #original_result = #bindgen_path(#(#param_refs),*);
-                #wrap_result
+        let mut methods: Vec<TokenStream> = Vec::new();
+        for (name, function) in resource_funcs {
+            let name = get_function_name(name, function)?;
+            let rust_method_name = name.to_snake_case();
+            let rust_method_name_ident = Ident::new(&rust_method_name, Span::call_site());
+
+            let parameters = function
+                .params
+                .iter()
+                .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
+                .collect::<anyhow::Result<Vec<_>>>()?;
+
+            let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
+            let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
+
+            let func_ret = match &function.result {
+                Some(typ) => get_wrapped_type(context, typ)
+                    .context(format!("Failed to encode result type for {name}"))?,
+                None => WrappedType::unit(),
+            };
+            let original_result = &func_ret.original_type_ref;
+            let wrapped_result = &func_ret.wrapped_type_ref;
+            let wrap = &func_ret.wrap;
+            let wrap_result = (wrap)(quote! { result });
+
+            match &function.kind {
+                FunctionKind::Method(_) => {
+                    let param_list = param_list[1..].to_vec();
+                    let param_refs = param_refs[1..].to_vec();
+                    methods.push(quote!{
+                       pub fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
+                            let result: #original_result = self.inner.#rust_method_name_ident(#(#param_refs),*);
+                            #wrap_result
+                        }
+                    });
+                }
+                FunctionKind::Static(_) => {
+                    methods.push(quote!{
+                       #[qjs(static)]
+                       pub fn #rust_method_name_ident(#(#param_list),*) -> #wrapped_result {
+                            let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*);
+                            #wrap_result
+                       }
+                    });
+                }
+                _ => {
+                    // skip
+                }
+            }
+
+            // TODO: FromJs/IntoJs instances for resource wrappers
+        }
+
+        bridge_classes.push(quote! {
+            #[rquickjs::class(rename_all = "camelCase")]
+            #[derive(JsLifetime, Trace)]
+            pub struct #resource_name_ident {
+                #[qjs(skip_trace = true)]
+                inner: #bindgen_path,
+            }
+
+            #[rquickjs::methods(rename_all = "camelCase")]
+            impl #resource_name_ident {
+                #constructor
+
+                #(#methods)*
             }
         });
 
-        // TODO: support resources
+        let js_class_lit = LitStr::new(
+            &resource_name_ident.to_string().to_upper_camel_case(),
+            Span::call_site(),
+        );
+        declarations.push(quote! { decl.declare(#js_class_lit)? });
+        exports.push(
+            quote! { exports.export(#js_class_lit, #resource_name_ident::constructor(ctx)?)? },
+        );
     }
 
     let module = quote! {
+        use rquickjs::JsLifetime;
+        use rquickjs::class::{JsClass, Trace};
+
         #(#submodules);*
 
         #loader_init
 
         #(#bridge_functions)*
+
+        #(#bridge_classes)*
 
         pub struct #rust_interface_name;
 
@@ -263,31 +410,3 @@ fn generate_import_module(
 
     Ok(module)
 }
-// pub struct Random;
-//
-// #[rquickjs::function]
-// fn get_random_bytes(len: u64) -> Vec<u8> {
-//     crate::bindings::wasi::random::random::get_random_bytes(len)
-// }
-//
-// #[rquickjs::function]
-// fn get_random_u64() -> u64 {
-//     crate::bindings::wasi::random::random::get_random_u64()
-// }
-//
-// impl rquickjs::module::ModuleDef for Random {
-//     fn declare(decl: &rquickjs::module::Declarations) -> rquickjs::Result<()> {
-//         decl.declare("getRandomBytes")?;
-//         decl.declare("getRandomU64")?;
-//         Ok(())
-//     }
-//
-//     fn evaluate<'js>(
-//         ctx: &rquickjs::Ctx<'js>,
-//         exports: &rquickjs::module::Exports<'js>,
-//     ) -> rquickjs::Result<()> {
-//         exports.export("getRandomBytes", js_get_random_bytes)?;
-//         exports.export("getRandomU64", js_get_random_u64)?;
-//         Ok(())
-//     }
-// }

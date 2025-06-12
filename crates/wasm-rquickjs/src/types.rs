@@ -1,9 +1,11 @@
 use crate::GeneratorContext;
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use wit_parser::{Handle, Interface, Type, TypeDef, TypeDefKind, TypeId, TypeOwner};
+use wit_parser::{
+    Function, FunctionKind, Handle, Interface, Type, TypeDef, TypeDefKind, TypeId, TypeOwner,
+};
 
 /// Converts a WIT `Type` to a fully qualified Rust type
 ///
@@ -267,23 +269,29 @@ pub struct WrappedType {
     pub original_type_ref: TokenStream,
     /// Fully qualified Rust type of the rquickjs representation
     pub wrapped_type_ref: TokenStream,
+    /// If true, the Rust import bindings require passing a reference
+    pub import_bindings_require_reference: bool,
 }
 
 impl WrappedType {
     /// Creates a `WrappedType` that does not apply any wrapping or unwrapping logic
     /// of a wit-bindgen representation given by `original_type_ref`..
-    pub fn no_wrapping(original_type_ref: TokenStream) -> Self {
+    pub fn no_wrapping(
+        original_type_ref: TokenStream,
+        import_bindings_require_reference: bool,
+    ) -> Self {
         WrappedType {
             wrap: identity_wrapper(),
             unwrap: identity_wrapper(),
             original_type_ref: original_type_ref.clone(),
             wrapped_type_ref: original_type_ref,
+            import_bindings_require_reference,
         }
     }
 
     /// Creates a `WrappedType` that represents the unit return type.
     pub fn unit() -> Self {
-        Self::no_wrapping(quote! { () })
+        Self::no_wrapping(quote! { () }, false)
     }
 }
 
@@ -292,6 +300,7 @@ impl WrappedType {
 // TODO: special case for byte arrays to Uint8Array
 // TODO: wrapper for nested options
 // TODO: we may want to encode result<> return values as exceptions like componentize-js
+// TODO: Resource handles must be wrapped for JS in import mode
 /// Gets type information including wrapping and unwrapping logic for a WIT type.
 ///
 /// For example WIT tuples are represented as Rust tuples by wit-bindgen, but to pass
@@ -313,6 +322,7 @@ pub fn get_wrapped_type(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::R
                     unwrap: Box::new(|ts| quote! { # ts.0 }),
                     original_type_ref: original_type_ref.clone(),
                     wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
+                    import_bindings_require_reference: false,
                 }),
                 TypeDefKind::Result(inner) => {
                     let ok = inner
@@ -334,12 +344,19 @@ pub fn get_wrapped_type(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::R
                         unwrap: Box::new(|ts| quote! { # ts.0 }),
                         original_type_ref: original_type_ref.clone(),
                         wrapped_type_ref: quote! { crate::wrappers::JsResult<#wrapped_ok, #wrapped_err> },
+                        import_bindings_require_reference: false,
                     })
                 }
-                _ => Ok(WrappedType::no_wrapping(original_type_ref)),
+                // TODO: follow type aliases
+                TypeDefKind::Record(_)
+                | TypeDefKind::Variant(_)
+                | TypeDefKind::Enum(_)
+                | TypeDefKind::Flags(_) => Ok(WrappedType::no_wrapping(original_type_ref, true)),
+                _ => Ok(WrappedType::no_wrapping(original_type_ref, false)),
             }
         }
-        _ => Ok(WrappedType::no_wrapping(original_type_ref)),
+        Type::String => Ok(WrappedType::no_wrapping(original_type_ref, true)),
+        _ => Ok(WrappedType::no_wrapping(original_type_ref, false)),
     }
 }
 
@@ -357,10 +374,10 @@ fn owned_resource_ref(
         .as_ref()
         .ok_or_else(|| anyhow!("Resource type {resource_type:?} has no name"))?;
 
-    let interface = match &resource_type.owner {
+    let (interface, is_export) = match &resource_type.owner {
         TypeOwner::World(world_id) => {
             if world_id == &context.world {
-                None
+                (None, true)
             } else {
                 return Err(anyhow!(
                     "Resource type {resource_name} is owned by a different world"
@@ -377,7 +394,10 @@ fn owned_resource_ref(
                 .name
                 .as_ref()
                 .ok_or_else(|| anyhow!("Interface export does not have a name"))?;
-            Some((interface_name.as_str(), interface))
+            (
+                Some((interface_name.as_str(), interface)),
+                context.is_exported_interface(*interface_id),
+            )
         }
         TypeOwner::None => {
             return Err(anyhow!("Resource type {resource_name} has no owner"));
@@ -385,7 +405,11 @@ fn owned_resource_ref(
     };
 
     let handle_ident = Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
-    let handle_path = ident_in_exported_interface_or_global(context, handle_ident, interface);
+    let handle_path = if is_export {
+        ident_in_exported_interface_or_global(context, handle_ident, interface)
+    } else {
+        ident_in_imported_interface_or_global(context, handle_ident, interface)
+    };
     Ok(quote! { #handle_path })
 }
 
@@ -403,10 +427,10 @@ fn borrowed_resource_ref(
         .as_ref()
         .ok_or_else(|| anyhow!("Resource type {resource_type:?} has no name"))?;
 
-    let interface = match &resource_type.owner {
+    let (interface, is_export) = match &resource_type.owner {
         TypeOwner::World(world_id) => {
             if world_id == &context.world {
-                None
+                (None, true)
             } else {
                 return Err(anyhow!(
                     "Resource type {resource_name} is owned by a different world"
@@ -423,20 +447,31 @@ fn borrowed_resource_ref(
                 .name
                 .as_ref()
                 .ok_or_else(|| anyhow!("Interface export does not have a name"))?;
-            Some((interface_name.as_str(), interface))
+            (
+                Some((interface_name.as_str(), interface)),
+                context.is_exported_interface(*interface_id),
+            )
         }
         TypeOwner::None => {
             return Err(anyhow!("Resource type {resource_name} has no owner"));
         }
     };
 
-    let borrow_handle_ident = Ident::new(
-        &format!("{}Borrow", resource_name.to_upper_camel_case()),
-        Span::call_site(),
-    );
-    let borrow_handle_path =
-        ident_in_exported_interface_or_global(context, borrow_handle_ident, interface);
-    Ok(quote! { #borrow_handle_path<'_> })
+    if is_export {
+        let borrow_handle_ident = Ident::new(
+            &format!("{}Borrow", resource_name.to_upper_camel_case()),
+            Span::call_site(),
+        );
+        let borrow_handle_path =
+            ident_in_exported_interface_or_global(context, borrow_handle_ident, interface);
+        Ok(quote! { #borrow_handle_path<'_> })
+    } else {
+        let borrow_handle_ident =
+            Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
+        let borrow_handle_path =
+            ident_in_imported_interface_or_global(context, borrow_handle_ident, interface);
+        Ok(quote! { #borrow_handle_path })
+    }
 }
 
 fn record_visited_inner_types(context: &GeneratorContext<'_>, typ: &TypeDef) -> anyhow::Result<()> {
@@ -503,7 +538,12 @@ pub fn to_unwrapped_param_refs(processed_parameters: &[ProcessedParameter]) -> V
             match &param.wrapped_type {
                 Some(wrapped_type) => {
                     let unwrap = &wrapped_type.unwrap;
-                    (unwrap)(wrapped)
+                    let unwrapped = (unwrap)(wrapped);
+                    if wrapped_type.import_bindings_require_reference {
+                        quote! { &#unwrapped }
+                    } else {
+                        quote! { #unwrapped }
+                    }
                 }
                 None => wrapped,
             }
@@ -552,4 +592,33 @@ pub fn param_refs_as_tuple(param_refs: &[TokenStream]) -> TokenStream {
     } else {
         quote! { crate::wrappers::JsArgs((#(#param_refs),*)) }
     }
+}
+
+pub fn get_function_name(name: &str, function: &&Function) -> anyhow::Result<String> {
+    let func_name = match &function.kind {
+        FunctionKind::Freestanding => name.to_string(),
+        FunctionKind::AsyncFreestanding => name.to_string(),
+        FunctionKind::Method(_) => name["[method]".len()..]
+            .split_once('.')
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
+            .1
+            .to_string(),
+        FunctionKind::AsyncMethod(_) => name["[method]".len()..]
+            .split_once('.')
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
+            .1
+            .to_string(),
+        FunctionKind::Static(_) => name["[static]".len()..]
+            .split_once('.')
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
+            .1
+            .to_string(),
+        FunctionKind::AsyncStatic(_) => name["[static]".len()..]
+            .split_once('.')
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse method name {name}"))?
+            .1
+            .to_string(),
+        FunctionKind::Constructor(_) => "new".to_string(),
+    };
+    Ok(func_name)
 }
