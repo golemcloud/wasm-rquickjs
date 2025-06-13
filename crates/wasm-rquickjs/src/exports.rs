@@ -1,5 +1,9 @@
 use crate::GeneratorContext;
-use crate::types::{ProcessedParameter, WrappedType, get_wrapped_type, ident_in_exported_interface, ident_in_exported_interface_or_global, param_refs_as_tuple, process_parameter, to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource, get_function_name};
+use crate::types::{
+    ProcessedParameter, WrappedType, get_function_name, get_wrapped_type,
+    ident_in_exported_interface, ident_in_exported_interface_or_global, param_refs_as_tuple,
+    process_parameter, to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource,
+};
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -472,4 +476,3 @@ fn generate_exported_resource_function_impl(
 
     Ok(func_impl)
 }
-

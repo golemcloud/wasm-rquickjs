@@ -42,5 +42,5 @@ pub enum Command {
         /// The WIT world to use
         #[arg(long)]
         world: Option<String>,
-    }
+    },
 }

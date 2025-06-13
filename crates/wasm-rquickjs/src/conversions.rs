@@ -16,8 +16,8 @@ pub fn generate_conversions(context: &GeneratorContext<'_>) -> anyhow::Result<()
         #(#conversion_instances)*
     };
 
-    let conversions_ast: syn::File =
-        syn::parse2(conversions_tokens).context("failed to parse generated conversions.rs tokens")?;
+    let conversions_ast: syn::File = syn::parse2(conversions_tokens)
+        .context("failed to parse generated conversions.rs tokens")?;
 
     let conversions_path = context.output.join("src").join("conversions.rs");
     let conversions_src = prettier_please::unparse(&conversions_ast);
