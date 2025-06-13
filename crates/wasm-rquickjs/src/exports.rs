@@ -20,6 +20,7 @@ pub fn generate_export_impls(context: &GeneratorContext<'_>) -> anyhow::Result<(
         mod conversions;
         #[allow(unused)]
         mod internal;
+        #[allow(unused)]
         mod modules;
         mod wrappers;
 
@@ -195,6 +196,8 @@ fn generate_guest_impl(
             resource_func_impls.push(func_impl);
         }
 
+        // TODO: drop() must not call async_exported_function, instead just enqueue the drop in sync code.
+        //       async_exported_function must be updated to await a background task that drops all enqueued resources.
         resource_impls.push(quote! {
             struct #resource_name_ident {
                 resource_id: usize
@@ -206,11 +209,7 @@ fn generate_guest_impl(
 
             impl Drop for #resource_name_ident {
                 fn drop(&mut self) {
-                    crate::internal::async_exported_function(async move {
-                        crate::internal::drop_js_resource(
-                             self.resource_id,
-                        ).await;
-                    })
+                    crate::internal::enqueue_drop_js_resource(self.resource_id);
                 }
             }
 

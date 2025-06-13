@@ -1,13 +1,15 @@
 use rquickjs::function::{Args, Constructor};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ModuleLoader, ScriptLoader};
+use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ScriptLoader};
 use rquickjs::prelude::*;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, FromJs, Function, Module, Object,
     Promise, Value, async_with,
 };
+use std::cell::RefCell;
 use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use tokio::runtime::Runtime;
+use tokio::task::{LocalSet, spawn_local};
 
 static JS_MODULE: &str = include_str!("module.js");
 
@@ -19,6 +21,8 @@ struct JsState {
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
     pub last_resource_id: AtomicUsize,
+    pub resource_drop_queue_tx: tokio::sync::mpsc::UnboundedSender<usize>,
+    pub resource_drop_queue_rx: RefCell<Option<tokio::sync::mpsc::UnboundedReceiver<usize>>>,
 }
 
 // TODO: remove
@@ -40,8 +44,7 @@ impl JsState {
                 .await
                 .expect("Failed to create AsyncContext");
 
-            let resolver = BuiltinResolver::default()
-                .with_module("bundle/script_module");
+            let resolver = BuiltinResolver::default().with_module("bundle/script_module");
             let resolver = crate::modules::add_native_module_resolvers(resolver);
 
             let loader = (
@@ -94,12 +97,17 @@ impl JsState {
             (rt, ctx)
         });
 
-        let last_resource_id = AtomicUsize::new(0);
+        let (resource_drop_queue_tx, resource_drop_queue_rx) =
+            tokio::sync::mpsc::unbounded_channel::<usize>();
+
+        let last_resource_id = AtomicUsize::new(1);
         Self {
             tokio,
             rt,
             ctx,
             last_resource_id,
+            resource_drop_queue_tx,
+            resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
         }
     }
 }
@@ -118,7 +126,40 @@ fn get_js_state() -> &'static JsState {
 
 pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     let js_state = get_js_state();
-    js_state.tokio.block_on(future)
+    js_state.tokio.block_on(async move {
+        let local = LocalSet::new();
+
+        local
+            .run_until(async move {
+                if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
+                    let resource_dropper = spawn_local(async move {
+                        while let Some(resource_id) = resource_drop_queue_rx.recv().await {
+                            if resource_id > 0 {
+                                drop_js_resource(resource_id).await;
+                            } else {
+                                break;
+                            }
+                        }
+                        resource_drop_queue_rx
+                    });
+                    let result = future.await;
+                    js_state
+                        .resource_drop_queue_tx
+                        .send(0)
+                        .expect("Failed to enqueue resource dropper stop signal");
+                    let resource_drop_queue_rx =
+                        resource_dropper.await.expect("Resource dropper failed");
+                    js_state
+                        .resource_drop_queue_rx
+                        .replace(Some(resource_drop_queue_rx));
+                    result
+                } else {
+                    // This case will never happen because block_on does not allow reentry
+                    unreachable!()
+                }
+            })
+            .await
+    })
 }
 
 pub async fn call_js_export<A, R>(function_path: &[&str], args: A) -> R
@@ -280,7 +321,15 @@ where
     result
 }
 
-pub async fn drop_js_resource(resource_id: usize) {
+pub fn enqueue_drop_js_resource(resource_id: usize) {
+    let js_state = get_js_state();
+    js_state
+        .resource_drop_queue_tx
+        .send(resource_id)
+        .expect("Failed to enqueue resource drop");
+}
+
+async fn drop_js_resource(resource_id: usize) {
     let js_state = get_js_state();
 
     async_with!(js_state.ctx => |ctx| {

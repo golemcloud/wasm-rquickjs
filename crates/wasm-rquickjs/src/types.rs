@@ -352,6 +352,25 @@ pub fn get_wrapped_type(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::R
                 | TypeDefKind::Variant(_)
                 | TypeDefKind::Enum(_)
                 | TypeDefKind::Flags(_) => Ok(WrappedType::no_wrapping(original_type_ref, true)),
+                TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
+                    if context.is_exported_type(*resource_type_id) {
+                        Ok(WrappedType::no_wrapping(original_type_ref, false))
+                    } else {
+                        let borrowed_resource_ref =
+                            borrowed_resource_ref(context, resource_type_id)?;
+                        Ok(WrappedType {
+                            original_type_ref: original_type_ref.clone(),
+                            wrapped_type_ref: borrowed_resource_ref.clone(),
+                            import_bindings_require_reference: true,
+                            wrap: Box::new(move |ts| {
+                                quote! { #borrowed_resource_ref(#ts) }
+                            }),
+                            unwrap: Box::new(|ts| {
+                                quote! { #ts.0 }
+                            }),
+                        })
+                    }
+                }
                 _ => Ok(WrappedType::no_wrapping(original_type_ref, false)),
             }
         }
@@ -466,11 +485,32 @@ fn borrowed_resource_ref(
             ident_in_exported_interface_or_global(context, borrow_handle_ident, interface);
         Ok(quote! { #borrow_handle_path<'_> })
     } else {
-        let borrow_handle_ident =
-            Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
-        let borrow_handle_path =
-            ident_in_imported_interface_or_global(context, borrow_handle_ident, interface);
-        Ok(quote! { #borrow_handle_path })
+        let borrow_handle_ident = Ident::new(
+            &format!("Borrow{}Wrapper", resource_name.to_upper_camel_case()),
+            Span::call_site(),
+        );
+
+        let module_path = if let Some((interface_name, interface)) = interface {
+            let package_id = interface
+                .package
+                .ok_or_else(|| anyhow::anyhow!("Interface does not have a package"))?;
+            let package = context
+                .resolve
+                .packages
+                .get(package_id)
+                .ok_or_else(|| anyhow::anyhow!("Unknown package id: {package_id:?}"))?;
+            let module_name = format!(
+                "{}_{}",
+                package.name.to_string().to_snake_case(),
+                interface_name.to_snake_case()
+            );
+            let module_ident = Ident::new(&module_name, Span::call_site());
+            quote! { crate::modules::#module_ident }
+        } else {
+            quote! { crate::modules }
+        };
+
+        Ok(quote! { #module_path::#borrow_handle_ident })
     }
 }
 

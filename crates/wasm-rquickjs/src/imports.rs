@@ -25,8 +25,6 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
         let module_path = context.output.join("src").join("modules").join(&file_name);
         let module_tokens = generate_import_module(context, &interface, &interfaces)?;
 
-        println!("{module_tokens:#}");
-
         let module_ast: syn::File = syn::parse2(module_tokens)
             .context(format!("failed to parse generated {file_name} tokens"))?;
 
@@ -173,15 +171,27 @@ fn generate_import_module(
             loader_chain.push(quote! { with_module(#fully_qualified_interface_lit, crate::modules::#module_ident::#rust_module_struct_ident) });
         }
 
-        loader_init = quote! {
-            pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
-                resolver.#(#resolver_chain).*
-            }
+        if all_imported_interfaces.is_empty() {
+            loader_init = quote! {
+                pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
+                    resolver
+                }
 
-            pub fn module_loader() -> rquickjs::loader::ModuleLoader {
-              rquickjs::loader::ModuleLoader::default().#(#loader_chain).*
-            }
-        };
+                pub fn module_loader() -> rquickjs::loader::ModuleLoader {
+                  rquickjs::loader::ModuleLoader::default()
+                }
+            };
+        } else {
+            loader_init = quote! {
+                pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
+                    resolver.#(#resolver_chain).*
+                }
+
+                pub fn module_loader() -> rquickjs::loader::ModuleLoader {
+                  rquickjs::loader::ModuleLoader::default().#(#loader_chain).*
+                }
+            };
+        }
     }
 
     let rust_interface_name = import.rust_interface_name();
@@ -269,6 +279,11 @@ fn generate_import_module(
             .ok_or_else(|| anyhow!("Resource type has no name"))?;
         let resource_name_ident =
             Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
+        let borrow_wrapper_ident = Ident::new(
+            &format!("Borrow{}Wrapper", resource_name_ident),
+            Span::call_site(),
+        );
+
         let bindgen_path = ident_in_imported_interface_or_global(
             context,
             resource_name_ident.clone(),
@@ -291,7 +306,7 @@ fn generate_import_module(
                 #[qjs(constructor)]
                 pub fn new(#(#param_list),*) -> Self {
                   Self {
-                    inner: #bindgen_path::new(#(#param_refs),*),
+                    inner: std::rc::Rc::new(#bindgen_path::new(#(#param_refs),*)),
                   }
                 }
             }
@@ -348,16 +363,14 @@ fn generate_import_module(
                     // skip
                 }
             }
-
-            // TODO: FromJs/IntoJs instances for resource wrappers
         }
 
         bridge_classes.push(quote! {
             #[rquickjs::class(rename_all = "camelCase")]
-            #[derive(JsLifetime, Trace)]
+            #[derive(Clone, JsLifetime, Trace)]
             pub struct #resource_name_ident {
                 #[qjs(skip_trace = true)]
-                inner: #bindgen_path,
+                inner: std::rc::Rc<#bindgen_path>,
             }
 
             #[rquickjs::methods(rename_all = "camelCase")]
@@ -365,6 +378,50 @@ fn generate_import_module(
                 #constructor
 
                 #(#methods)*
+            }
+
+            impl<'js> rquickjs::IntoJs<'js> for #bindgen_path {
+                fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                    #resource_name_ident {
+                        inner: std::rc::Rc::new(self),
+                    }
+                    .into_js(ctx)
+                }
+            }
+
+            impl<'js> rquickjs::FromJs<'js> for #bindgen_path {
+                fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                    let wrapper = #resource_name_ident::from_js(ctx, value)?;
+                    unsafe {
+                        Ok(
+                            #bindgen_path::from_handle(
+                                wrapper.inner.take_handle(),
+                            ),
+                        )
+                    }
+                }
+            }
+
+            pub struct #borrow_wrapper_ident(pub #bindgen_path);
+
+            impl<'js> rquickjs::FromJs<'js> for #borrow_wrapper_ident {
+                fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                    let wrapper = Hello::from_js(ctx, value)?;
+                    unsafe {
+                        Ok(#borrow_wrapper_ident(
+                            #bindgen_path::from_handle(
+                                wrapper.inner.handle(),
+                            ),
+                        ))
+                    }
+                }
+            }
+
+            impl Drop for #borrow_wrapper_ident {
+                fn drop(&mut self) {
+                    // By taking out the handle from the resource it is not going to be dropped
+                    let _ = self.0.take_handle();
+                }
             }
         });
 

@@ -7,7 +7,9 @@ use camino::Utf8Path;
 use fs_extra::dir::CopyOptions;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use wit_parser::{InterfaceId, PackageId, PackageSourceMap, Resolve, TypeId, WorldId, WorldItem};
+use wit_parser::{
+    InterfaceId, PackageId, PackageSourceMap, Resolve, TypeId, TypeOwner, WorldId, WorldItem,
+};
 
 mod conversions;
 mod exports;
@@ -132,6 +134,28 @@ impl<'a> GeneratorContext<'a> {
             .exports
             .iter()
             .any(|(_, item)| matches!(item, WorldItem::Interface { id, .. } if id == &interface_id))
+    }
+
+    fn is_exported_type(&self, type_id: TypeId) -> bool {
+        if let Some(typ) = self.resolve.types.get(type_id) {
+            match &typ.owner {
+                TypeOwner::World(world_id) => {
+                    if world_id == &self.world {
+                        let world = &self.resolve.worlds[self.world];
+                        world
+                            .exports
+                            .iter()
+                            .any(|(_, item)| matches!(item, WorldItem::Type(id) if id == &type_id))
+                    } else {
+                        false
+                    }
+                }
+                TypeOwner::Interface(interface_id) => self.is_exported_interface(*interface_id),
+                TypeOwner::None => false,
+            }
+        } else {
+            false
+        }
     }
 }
 
