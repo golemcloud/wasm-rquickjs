@@ -1,0 +1,81 @@
+package quickjs:types-in-exports;
+
+interface other-types {
+    type list-of-strings = list<string>;
+
+    record rec2 {
+        x: s8,
+        y: s8,
+    }
+
+    enum color {
+        red,
+        green,
+        blue,
+    }
+}
+
+interface types {
+  use other-types.{color, list-of-strings, rec2};
+
+  record rec1 {
+    a: string,
+    b: u32,
+    c: f32,
+    d: rec2,
+    e: option<rec2>,
+    f: result<u32, string>,
+    g: list<rec2>,
+    h: list-of-strings,
+    i: tuple<string, u32, f32>,
+  }
+
+  variant var1 {
+    none,
+    any,
+    specific(string),
+    many(list<rec1>),
+    wrapped-tuple(tuple<string, u32, f32>),
+    wrapped-result(result<u32, string>),
+  }
+
+  flags permissions {
+    read,
+    write,
+    execute,
+  }
+
+  f1: func(a: list<f32>, b: list-of-strings) -> list<string>;
+  f2: func(a: option<string>) -> option<u32>;
+  f3: func(a: bool, b: s8, c: s16, d: s32, e: s64, f: u8, g: u16, h: u32, i: u64, j: f32, k: f64, l: char, m: string) ->
+    tuple<
+      bool,
+      s8,
+      s16,
+      s32,
+      s64,
+      u8,
+      u16,
+      u32,
+      u64,
+      f32,
+      f64,
+      char,
+      string
+    >;
+  f4: func(a: result<s32, string>) -> result<s32, string>;
+  f5: func(a: result<_, string>) -> result<_, string>;
+  f6: func(a: result<string>) -> result<string>;
+  f7: func(a: result) -> result;
+  f8: func(a: tuple<string, u32, f32>);
+  f9: func(a: rec1) -> option<rec1>;
+  f10: func(a: var1) -> var1;
+  f11: func(a: color) -> string;
+  f12: func(a: string) -> option<color>;
+  f13: func(a: permissions) -> permissions;
+  f14: func(a: u64) -> u64;
+}
+
+world example1 {
+  export types;
+}

@@ -1,8 +1,9 @@
 use crate::GeneratorContext;
 use crate::types::{
     ProcessedParameter, WrappedType, get_function_name, get_wrapped_type,
-    ident_in_exported_interface, ident_in_exported_interface_or_global, param_refs_as_tuple,
-    process_parameter, to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource,
+    ident_in_exported_interface, ident_in_exported_interface_or_global, identity_wrapper,
+    param_refs_as_tuple, process_parameter, to_original_func_arg_list, to_wrapped_param_refs,
+    type_borrows_resource,
 };
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
@@ -299,9 +300,9 @@ fn generate_exported_function_impl(
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = match &function.result {
-        Some(typ) => get_wrapped_type(context, typ)
+        Some(typ) => get_wrapped_type(context, typ, false)
             .context(format!("Failed to encode result type for {name}"))?,
-        None => WrappedType::unit(),
+        None => WrappedType::unit(false),
     };
 
     let param_refs = to_wrapped_param_refs(&param_ident_type);
@@ -366,12 +367,12 @@ fn generate_exported_resource_function_impl(
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = if matches!(function.kind, FunctionKind::Constructor(_)) {
-        WrappedType::no_wrapping(quote! { Self }, false)
+        WrappedType::no_wrapping(quote! { Self }, identity_wrapper())
     } else {
         match &function.result {
-            Some(typ) => get_wrapped_type(context, typ)
+            Some(typ) => get_wrapped_type(context, typ, false)
                 .context(format!("Failed to encode result type for {name}"))?,
-            None => WrappedType::unit(),
+            None => WrappedType::unit(false),
         }
     };
 

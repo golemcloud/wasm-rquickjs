@@ -7,6 +7,8 @@ QuickJS engine.
 
 ### Comparison with ComponentizeJS
 
+### Comparison with wasmedge-quickjs
+
 ## Mappings
 
 ### Exports

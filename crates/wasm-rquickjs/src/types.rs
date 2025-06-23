@@ -3,6 +3,7 @@ use anyhow::{Context, anyhow};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use syn::{Lit, LitInt};
 use wit_parser::{
     Function, FunctionKind, Handle, Interface, Type, TypeDef, TypeDefKind, TypeId, TypeOwner,
 };
@@ -269,8 +270,9 @@ pub struct WrappedType {
     pub original_type_ref: TokenStream,
     /// Fully qualified Rust type of the rquickjs representation
     pub wrapped_type_ref: TokenStream,
-    /// If true, the Rust import bindings require passing a reference
-    pub import_bindings_require_reference: bool,
+    /// Function for converting a Rust value to the value required by the Rust import bindings,
+    /// for example adding a `&` prefix for strings.
+    pub import_bindings_conversion: TokenStreamWrapper,
 }
 
 impl WrappedType {
@@ -278,24 +280,27 @@ impl WrappedType {
     /// of a wit-bindgen representation given by `original_type_ref`..
     pub fn no_wrapping(
         original_type_ref: TokenStream,
-        import_bindings_require_reference: bool,
+        import_bindings_conversion: TokenStreamWrapper,
     ) -> Self {
         WrappedType {
             wrap: identity_wrapper(),
             unwrap: identity_wrapper(),
             original_type_ref: original_type_ref.clone(),
             wrapped_type_ref: original_type_ref,
-            import_bindings_require_reference,
+            import_bindings_conversion,
         }
     }
 
     /// Creates a `WrappedType` that represents the unit return type.
-    pub fn unit() -> Self {
-        Self::no_wrapping(quote! { () }, false)
+    pub fn unit(in_as_ref: bool) -> Self {
+        if in_as_ref {
+            Self::no_wrapping(quote! { () }, Box::new(|_| quote! { () }))
+        } else {
+            Self::no_wrapping(quote! { () }, identity_wrapper())
+        }
     }
 }
 
-// TODO: this should be done recursively for Tuple/List/Option/Result
 // TODO: wrap u64 as BigInt as the default rquickjs instance is encoding it as f64 and can overflow
 // TODO: special case for byte arrays to Uint8Array
 // TODO: wrapper for nested options
@@ -306,7 +311,22 @@ impl WrappedType {
 /// For example WIT tuples are represented as Rust tuples by wit-bindgen, but to pass
 /// them to rquickjs we need to wrap them in `rquickjs::convert::List`, and unwrap it
 /// when converting back from JS to Rust.
-pub fn get_wrapped_type(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::Result<WrappedType> {
+pub fn get_wrapped_type(
+    context: &GeneratorContext<'_>,
+    typ: &Type,
+    in_as_ref: bool,
+) -> anyhow::Result<WrappedType> {
+    let deref_if_needed = if in_as_ref {
+        Box::new(|ts| quote! { *#ts })
+    } else {
+        identity_wrapper()
+    };
+    let ref_if_needed = if !in_as_ref {
+        Box::new(|ts| quote! { &#ts })
+    } else {
+        identity_wrapper()
+    };
+
     let original_type_ref = to_type_ref(context, typ)?;
     match typ {
         Type::Id(type_id) => {
@@ -317,65 +337,121 @@ pub fn get_wrapped_type(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::R
                 .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
             match &typ.kind {
-                TypeDefKind::Tuple(_) => Ok(WrappedType {
-                    wrap: Box::new(|ts| quote! { rquickjs::convert::List( # ts) }),
-                    unwrap: Box::new(|ts| quote! { # ts.0 }),
-                    original_type_ref: original_type_ref.clone(),
-                    wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
-                    import_bindings_require_reference: false,
-                }),
+                TypeDefKind::Tuple(inner) => {
+                    let inner_wrappers = inner
+                        .types
+                        .iter()
+                        .map(|ty| get_wrapped_type(context, ty, in_as_ref))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let import_bindings_conversion = Box::new(move |ts| {
+                        let elem_wrappers = inner_wrappers
+                            .iter()
+                            .enumerate()
+                            .map(|(idx, w)| {
+                                let field =
+                                    Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
+                                (w.import_bindings_conversion)(quote! { #ts.#field})
+                            })
+                            .collect::<Vec<_>>();
+
+                        quote! {
+                            (#(#elem_wrappers),*)
+                        }
+                    });
+
+                    Ok(WrappedType {
+                        wrap: Box::new(|ts| quote! { rquickjs::convert::List( # ts) }),
+                        unwrap: Box::new(|ts| quote! { # ts.0 }),
+                        original_type_ref: original_type_ref.clone(),
+                        wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
+                        import_bindings_conversion,
+                    })
+                }
+                TypeDefKind::List(_) => Ok(WrappedType::no_wrapping(
+                    original_type_ref.clone(),
+                    ref_if_needed,
+                )),
+                TypeDefKind::Option(inner) => {
+                    let inner = get_wrapped_type(context, inner, true)?;
+                    let converted_v = (inner.import_bindings_conversion)(quote! { v });
+                    Ok(WrappedType::no_wrapping(
+                        original_type_ref.clone(),
+                        Box::new(move |ts| {
+                            quote! { #ts.as_ref().map(|v| #converted_v) }
+                        }),
+                    ))
+                }
                 TypeDefKind::Result(inner) => {
                     let ok = inner
                         .ok
                         .as_ref()
-                        .map(|ok| get_wrapped_type(context, ok))
+                        .map(|ok| get_wrapped_type(context, ok, true))
                         .transpose()?
-                        .unwrap_or(WrappedType::unit());
+                        .unwrap_or(WrappedType::unit(true));
                     let err = inner
                         .err
                         .as_ref()
-                        .map(|err| get_wrapped_type(context, err))
+                        .map(|err| get_wrapped_type(context, err, true))
                         .transpose()?
-                        .unwrap_or(WrappedType::unit());
+                        .unwrap_or(WrappedType::unit(true));
                     let wrapped_ok = ok.wrapped_type_ref;
                     let wrapped_err = err.wrapped_type_ref;
+
+                    let wrapped_ok_v = (ok.import_bindings_conversion)(quote! { v });
+                    let wrapped_err_v = (err.import_bindings_conversion)(quote! { v });
+
                     Ok(WrappedType {
                         wrap: Box::new(|ts| quote! { crate::wrappers::JsResult( # ts) }),
                         unwrap: Box::new(|ts| quote! { # ts.0 }),
                         original_type_ref: original_type_ref.clone(),
                         wrapped_type_ref: quote! { crate::wrappers::JsResult<#wrapped_ok, #wrapped_err> },
-                        import_bindings_require_reference: false,
+                        import_bindings_conversion: Box::new(move |ts| {
+                            quote! {
+                                #ts.as_ref().map(|v| #wrapped_ok_v).map_err(|v| #wrapped_err_v)
+                            }
+                        }),
                     })
                 }
-                // TODO: follow type aliases
-                TypeDefKind::Record(_)
-                | TypeDefKind::Variant(_)
-                | TypeDefKind::Enum(_)
-                | TypeDefKind::Flags(_) => Ok(WrappedType::no_wrapping(original_type_ref, true)),
+                TypeDefKind::Type(inner) => {
+                    let inner = get_wrapped_type(context, inner, in_as_ref)?;
+                    Ok(WrappedType {
+                        wrap: inner.wrap,
+                        unwrap: inner.unwrap,
+                        original_type_ref: original_type_ref.clone(),
+                        wrapped_type_ref: inner.wrapped_type_ref,
+                        import_bindings_conversion: inner.import_bindings_conversion,
+                    })
+                }
+                TypeDefKind::Record(_) | TypeDefKind::Variant(_) => {
+                    Ok(WrappedType::no_wrapping(original_type_ref, ref_if_needed))
+                }
                 TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
                     if context.is_exported_type(*resource_type_id) {
-                        Ok(WrappedType::no_wrapping(original_type_ref, false))
+                        Ok(WrappedType::no_wrapping(original_type_ref, deref_if_needed))
                     } else {
                         let borrowed_resource_ref =
                             borrowed_resource_ref(context, resource_type_id)?;
                         Ok(WrappedType {
                             original_type_ref: original_type_ref.clone(),
                             wrapped_type_ref: borrowed_resource_ref.clone(),
-                            import_bindings_require_reference: true,
                             wrap: Box::new(move |ts| {
                                 quote! { #borrowed_resource_ref(#ts) }
                             }),
                             unwrap: Box::new(|ts| {
                                 quote! { #ts.0 }
                             }),
+                            import_bindings_conversion: ref_if_needed,
                         })
                     }
                 }
-                _ => Ok(WrappedType::no_wrapping(original_type_ref, false)),
+                _ => Ok(WrappedType::no_wrapping(original_type_ref, deref_if_needed)),
             }
         }
-        Type::String => Ok(WrappedType::no_wrapping(original_type_ref, true)),
-        _ => Ok(WrappedType::no_wrapping(original_type_ref, false)),
+        Type::String => Ok(WrappedType::no_wrapping(
+            original_type_ref,
+            Box::new(|v| quote! { #v.as_str() }),
+        )),
+        _ => Ok(WrappedType::no_wrapping(original_type_ref, deref_if_needed)),
     }
 }
 
@@ -544,7 +620,7 @@ pub fn process_parameter(
     param_name: &str,
     param_type: &Type,
 ) -> anyhow::Result<ProcessedParameter> {
-    let wrapped_type = get_wrapped_type(context, param_type)
+    let wrapped_type = get_wrapped_type(context, param_type, false)
         .context(format!("Failed to encode parameter {param_name}'s type"))?;
     Ok(ProcessedParameter {
         ident: Ident::new(param_name, Span::call_site()),
@@ -579,11 +655,7 @@ pub fn to_unwrapped_param_refs(processed_parameters: &[ProcessedParameter]) -> V
                 Some(wrapped_type) => {
                     let unwrap = &wrapped_type.unwrap;
                     let unwrapped = (unwrap)(wrapped);
-                    if wrapped_type.import_bindings_require_reference {
-                        quote! { &#unwrapped }
-                    } else {
-                        quote! { #unwrapped }
-                    }
+                    (wrapped_type.import_bindings_conversion)(unwrapped)
                 }
                 None => wrapped,
             }

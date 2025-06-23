@@ -1,0 +1,7 @@
+package quickjs:imports3;
+
+world imports3 {
+  import quickjs:types-in-exports/types;
+
+  export test: func();
+}

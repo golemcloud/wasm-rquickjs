@@ -4,6 +4,7 @@ use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use std::collections::BTreeSet;
 use syn::{Lit, LitStr};
 use wit_parser::{Type, TypeDefKind, TypeId};
 
@@ -34,7 +35,9 @@ fn generate_conversion_instances(
 
     let visited_types = context.visited_types.borrow().clone();
     for type_id in &visited_types {
-        if let Some(snippet) = generate_conversion_instances_for_type(context, *type_id)? {
+        if let Some(snippet) =
+            generate_conversion_instances_for_type(context, *type_id, &visited_types)?
+        {
             result.push(snippet);
         }
     }
@@ -45,6 +48,7 @@ fn generate_conversion_instances(
 fn generate_conversion_instances_for_type(
     context: &GeneratorContext<'_>,
     type_id: TypeId,
+    visited_types: &BTreeSet<TypeId>,
 ) -> anyhow::Result<Option<TokenStream>> {
     let typ = context
         .resolve
@@ -65,7 +69,7 @@ fn generate_conversion_instances_for_type(
                 let rust_field_ident = Ident::new(&field.name.to_snake_case(), Span::call_site());
                 let field_name_lit = Lit::Str(LitStr::new(&js_field_name, Span::call_site()));
 
-                let field_type = get_wrapped_type(context, &field.ty)?;
+                let field_type = get_wrapped_type(context, &field.ty, false)?;
 
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
@@ -160,7 +164,7 @@ fn generate_conversion_instances_for_type(
                 let case_name_lit = Lit::Str(LitStr::new(&case.name, Span::call_site()));
 
                 if let Some(ty) = &case.ty {
-                    let wrapped_type = get_wrapped_type(context, ty)?;
+                    let wrapped_type = get_wrapped_type(context, ty, false)?;
                     let wrapped_inner = (wrapped_type.wrap)(quote! { inner });
                     let unwrapped_inner = (wrapped_type.unwrap)(quote! { inner });
                     let wrapped_type = &wrapped_type.wrapped_type_ref;
@@ -280,7 +284,11 @@ fn generate_conversion_instances_for_type(
             }))
         }
         TypeDefKind::Type(Type::Id(type_id)) => {
-            generate_conversion_instances_for_type(context, *type_id)
+            if !visited_types.contains(&type_id) {
+                generate_conversion_instances_for_type(context, *type_id, visited_types)
+            } else {
+                Ok(None)
+            }
         }
         _ => Ok(None),
     }

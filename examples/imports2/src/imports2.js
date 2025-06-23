@@ -1,5 +1,5 @@
 
-import * as iface from 'quickjs:example3/iface';
+import * as iface from 'quickjs:types-in-exports/iface';
 
 export const test = (input) => {
     let hello = new iface.Hello(input);
