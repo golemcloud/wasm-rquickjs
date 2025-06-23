@@ -233,7 +233,7 @@ fn generate_import_module(
                 let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
                 let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
                 let func_ret = match &function.result {
-                    Some(typ) => get_wrapped_type(context, typ, false)
+                    Some(typ) => get_wrapped_type(context, typ, false, false)
                         .context(format!("Failed to encode result type for {name}"))?,
                     None => WrappedType::unit(false),
                 };
@@ -330,7 +330,7 @@ fn generate_import_module(
             let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
 
             let func_ret = match &function.result {
-                Some(typ) => get_wrapped_type(context, typ, false)
+                Some(typ) => get_wrapped_type(context, typ, false, false)
                     .context(format!("Failed to encode result type for {name}"))?,
                 None => WrappedType::unit(false),
             };

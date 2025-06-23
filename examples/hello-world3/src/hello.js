@@ -24,4 +24,15 @@ class Hello {
 
 export const iface = {
     Hello: Hello,
+    dump: (optHello) => {
+        if (optHello === undefined) {
+            return "?";
+        } else {
+            return optHello.getName();
+        }
+    },
+    dumpAll: (lstHello) => {
+        const items = lstHello.map(h => h.getName()).join(", ");
+        return `[${items}]`;
+    }
 };

@@ -270,9 +270,9 @@ pub struct WrappedType {
     pub original_type_ref: TokenStream,
     /// Fully qualified Rust type of the rquickjs representation
     pub wrapped_type_ref: TokenStream,
-    /// Function for converting a Rust value to the value required by the Rust import bindings,
-    /// for example adding a `&` prefix for strings.
-    pub import_bindings_conversion: TokenStreamWrapper,
+    /// Function for converting a Rust representation returned from rquickjs to the value required by the
+    /// wit-bindgen Rust import bindings, for example adding a `.as_str()` for strings.
+    pub unwrap_for_imported: TokenStreamWrapper,
 }
 
 impl WrappedType {
@@ -280,14 +280,14 @@ impl WrappedType {
     /// of a wit-bindgen representation given by `original_type_ref`..
     pub fn no_wrapping(
         original_type_ref: TokenStream,
-        import_bindings_conversion: TokenStreamWrapper,
+        unwrap_for_imported: TokenStreamWrapper,
     ) -> Self {
         WrappedType {
             wrap: identity_wrapper(),
             unwrap: identity_wrapper(),
             original_type_ref: original_type_ref.clone(),
             wrapped_type_ref: original_type_ref,
-            import_bindings_conversion,
+            unwrap_for_imported,
         }
     }
 
@@ -305,7 +305,6 @@ impl WrappedType {
 // TODO: special case for byte arrays to Uint8Array
 // TODO: wrapper for nested options
 // TODO: we may want to encode result<> return values as exceptions like componentize-js
-// TODO: Resource handles must be wrapped for JS in import mode
 /// Gets type information including wrapping and unwrapping logic for a WIT type.
 ///
 /// For example WIT tuples are represented as Rust tuples by wit-bindgen, but to pass
@@ -315,6 +314,7 @@ pub fn get_wrapped_type(
     context: &GeneratorContext<'_>,
     typ: &Type,
     in_as_ref: bool,
+    in_list: bool,
 ) -> anyhow::Result<WrappedType> {
     let deref_if_needed = if in_as_ref {
         Box::new(|ts| quote! { *#ts })
@@ -341,16 +341,16 @@ pub fn get_wrapped_type(
                     let inner_wrappers = inner
                         .types
                         .iter()
-                        .map(|ty| get_wrapped_type(context, ty, in_as_ref))
+                        .map(|ty| get_wrapped_type(context, ty, in_as_ref, false))
                         .collect::<Result<Vec<_>, _>>()?;
-                    let import_bindings_conversion = Box::new(move |ts| {
+                    let unwrap_for_imported = Box::new(move |ts| {
                         let elem_wrappers = inner_wrappers
                             .iter()
                             .enumerate()
                             .map(|(idx, w)| {
                                 let field =
                                     Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
-                                (w.import_bindings_conversion)(quote! { #ts.#field})
+                                (w.unwrap_for_imported)(quote! { #ts.0.#field})
                             })
                             .collect::<Vec<_>>();
 
@@ -364,62 +364,102 @@ pub fn get_wrapped_type(
                         unwrap: Box::new(|ts| quote! { # ts.0 }),
                         original_type_ref: original_type_ref.clone(),
                         wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
-                        import_bindings_conversion,
+                        unwrap_for_imported,
                     })
                 }
-                TypeDefKind::List(_) => Ok(WrappedType::no_wrapping(
-                    original_type_ref.clone(),
-                    ref_if_needed,
-                )),
+                TypeDefKind::List(elem_type) => {
+                    let inner = get_wrapped_type(context, elem_type, true, true)?;
+                    let inner_wrapped_type_ref = inner.wrapped_type_ref;
+                    let wrapped_v = (inner.wrap)(quote! { v });
+                    let unwrapped_v = (inner.unwrap)(quote! { v });
+                    let converted_v = (inner.unwrap_for_imported)(quote! { v });
+                    if elem_type == &Type::String {
+                        // list<string> is a special case
+                        Ok(WrappedType {
+                            wrap: Box::new(
+                                move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
+                            ),
+                            unwrap: Box::new(
+                                move |ts| quote! { #ts.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
+                            ),
+                            original_type_ref: original_type_ref.clone(),
+                            wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
+                            unwrap_for_imported: Box::new(move |ts| {
+                                quote! { &#ts }
+                            }),
+                        })
+                    } else {
+                        Ok(WrappedType {
+                            wrap: Box::new(
+                                move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
+                            ),
+                            unwrap: Box::new(
+                                move |ts| quote! { #ts.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
+                            ),
+                            original_type_ref: original_type_ref.clone(),
+                            wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
+                            unwrap_for_imported: Box::new(move |ts| {
+                                quote! { &#ts.iter().map( |v| #converted_v).collect::<Vec<_>>() }
+                            }),
+                        })
+                    }
+                }
                 TypeDefKind::Option(inner) => {
-                    let inner = get_wrapped_type(context, inner, true)?;
-                    let converted_v = (inner.import_bindings_conversion)(quote! { v });
-                    Ok(WrappedType::no_wrapping(
-                        original_type_ref.clone(),
-                        Box::new(move |ts| {
-                            quote! { #ts.as_ref().map(|v| #converted_v) }
+                    let inner_as_ref = get_wrapped_type(context, inner, true, false)?;
+                    let inner = get_wrapped_type(context, inner, in_as_ref, false)?;
+                    let inner_wrapped_type_ref = inner.wrapped_type_ref;
+                    let wrapped_v = (inner.wrap)(quote! { v });
+                    let unwrapped_v = (inner.unwrap)(quote! { v });
+                    let converted_v = (inner_as_ref.unwrap_for_imported)(quote! { v });
+                    Ok(WrappedType {
+                        wrap: Box::new(move |ts| quote! { #ts.map( |v| #wrapped_v) }),
+                        unwrap: Box::new(move |ts| quote! { #ts.map( |v| #unwrapped_v) }),
+                        original_type_ref: original_type_ref.clone(),
+                        wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
+                        unwrap_for_imported: Box::new(move |ts| {
+                            quote! { #ts.as_ref().map( |v| #converted_v) }
                         }),
-                    ))
+                    })
                 }
                 TypeDefKind::Result(inner) => {
                     let ok = inner
                         .ok
                         .as_ref()
-                        .map(|ok| get_wrapped_type(context, ok, true))
+                        .map(|ok| get_wrapped_type(context, ok, true, false))
                         .transpose()?
                         .unwrap_or(WrappedType::unit(true));
                     let err = inner
                         .err
                         .as_ref()
-                        .map(|err| get_wrapped_type(context, err, true))
+                        .map(|err| get_wrapped_type(context, err, true, false))
                         .transpose()?
                         .unwrap_or(WrappedType::unit(true));
                     let wrapped_ok = ok.wrapped_type_ref;
                     let wrapped_err = err.wrapped_type_ref;
 
-                    let wrapped_ok_v = (ok.import_bindings_conversion)(quote! { v });
-                    let wrapped_err_v = (err.import_bindings_conversion)(quote! { v });
+                    let wrapped_ok_v = (ok.unwrap_for_imported)(quote! { v });
+                    let wrapped_err_v = (err.unwrap_for_imported)(quote! { v });
 
                     Ok(WrappedType {
-                        wrap: Box::new(|ts| quote! { crate::wrappers::JsResult( # ts) }),
-                        unwrap: Box::new(|ts| quote! { # ts.0 }),
+                        wrap: Box::new(|ts| quote! { crate::wrappers::JsResult(#ts) }),
+                        unwrap: Box::new(|ts| quote! { #ts.0 }),
                         original_type_ref: original_type_ref.clone(),
                         wrapped_type_ref: quote! { crate::wrappers::JsResult<#wrapped_ok, #wrapped_err> },
-                        import_bindings_conversion: Box::new(move |ts| {
+                        unwrap_for_imported: Box::new(move |ts| {
                             quote! {
-                                #ts.as_ref().map(|v| #wrapped_ok_v).map_err(|v| #wrapped_err_v)
+                                #ts.0.as_ref().map(|v| #wrapped_ok_v).map_err(|v| #wrapped_err_v)
                             }
                         }),
                     })
                 }
                 TypeDefKind::Type(inner) => {
-                    let inner = get_wrapped_type(context, inner, in_as_ref)?;
+                    let inner = get_wrapped_type(context, inner, in_as_ref, in_list)?;
                     Ok(WrappedType {
                         wrap: inner.wrap,
                         unwrap: inner.unwrap,
                         original_type_ref: original_type_ref.clone(),
                         wrapped_type_ref: inner.wrapped_type_ref,
-                        import_bindings_conversion: inner.import_bindings_conversion,
+                        unwrap_for_imported: inner.unwrap_for_imported,
                     })
                 }
                 TypeDefKind::Record(_) | TypeDefKind::Variant(_) => {
@@ -440,7 +480,9 @@ pub fn get_wrapped_type(
                             unwrap: Box::new(|ts| {
                                 quote! { #ts.0 }
                             }),
-                            import_bindings_conversion: ref_if_needed,
+                            unwrap_for_imported: Box::new(move |ts| {
+                                quote! { &#ts.0 }
+                            }),
                         })
                     }
                 }
@@ -449,7 +491,11 @@ pub fn get_wrapped_type(
         }
         Type::String => Ok(WrappedType::no_wrapping(
             original_type_ref,
-            Box::new(|v| quote! { #v.as_str() }),
+            if !in_list {
+                Box::new(|v| quote! { #v.as_str() })
+            } else {
+                Box::new(|v| quote! { #v })
+            },
         )),
         _ => Ok(WrappedType::no_wrapping(original_type_ref, deref_if_needed)),
     }
@@ -620,7 +666,7 @@ pub fn process_parameter(
     param_name: &str,
     param_type: &Type,
 ) -> anyhow::Result<ProcessedParameter> {
-    let wrapped_type = get_wrapped_type(context, param_type, false)
+    let wrapped_type = get_wrapped_type(context, param_type, false, false)
         .context(format!("Failed to encode parameter {param_name}'s type"))?;
     Ok(ProcessedParameter {
         ident: Ident::new(param_name, Span::call_site()),
@@ -652,11 +698,7 @@ pub fn to_unwrapped_param_refs(processed_parameters: &[ProcessedParameter]) -> V
             let name = &param.ident;
             let wrapped = quote! { #name };
             match &param.wrapped_type {
-                Some(wrapped_type) => {
-                    let unwrap = &wrapped_type.unwrap;
-                    let unwrapped = (unwrap)(wrapped);
-                    (wrapped_type.import_bindings_conversion)(unwrapped)
-                }
+                Some(wrapped_type) => (wrapped_type.unwrap_for_imported)(wrapped),
                 None => wrapped,
             }
         })

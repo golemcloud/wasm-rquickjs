@@ -7,6 +7,9 @@ interface iface {
     compare: static func(h1: borrow<hello>, h2: borrow<hello>) -> s32;
     merge: static func(h1: own<hello>, h2: own<hello>) -> hello;
   }
+
+  dump: func(h: option<borrow<hello>>) -> string;
+  dump-all: func(hs: list<borrow<hello>>) -> string;
 }
 
 world example3 {

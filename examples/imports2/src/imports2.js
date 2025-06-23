@@ -13,5 +13,13 @@ export const test = (input) => {
 
     let merged = iface.Hello.merge(hello, world);
 
+    const dump1 = iface.dump(hello);
+    const dump2 = iface.dump(undefined);
+    const dump3 = iface.dumpAll([hello, world, merged]);
+
+    console.log(`Dump 1: ${dump1}`);
+    console.log(`Dump 2: ${dump2}`);
+    console.log(`Dump 3: ${dump3}`);
+
     return merged.getName();
 };

@@ -69,7 +69,7 @@ fn generate_conversion_instances_for_type(
                 let rust_field_ident = Ident::new(&field.name.to_snake_case(), Span::call_site());
                 let field_name_lit = Lit::Str(LitStr::new(&js_field_name, Span::call_site()));
 
-                let field_type = get_wrapped_type(context, &field.ty, false)?;
+                let field_type = get_wrapped_type(context, &field.ty, false, false)?;
 
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
@@ -164,7 +164,7 @@ fn generate_conversion_instances_for_type(
                 let case_name_lit = Lit::Str(LitStr::new(&case.name, Span::call_site()));
 
                 if let Some(ty) = &case.ty {
-                    let wrapped_type = get_wrapped_type(context, ty, false)?;
+                    let wrapped_type = get_wrapped_type(context, ty, false, false)?;
                     let wrapped_inner = (wrapped_type.wrap)(quote! { inner });
                     let unwrapped_inner = (wrapped_type.unwrap)(quote! { inner });
                     let wrapped_type = &wrapped_type.wrapped_type_ref;

@@ -300,7 +300,7 @@ fn generate_exported_function_impl(
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = match &function.result {
-        Some(typ) => get_wrapped_type(context, typ, false)
+        Some(typ) => get_wrapped_type(context, typ, false, false)
             .context(format!("Failed to encode result type for {name}"))?,
         None => WrappedType::unit(false),
     };
@@ -370,7 +370,7 @@ fn generate_exported_resource_function_impl(
         WrappedType::no_wrapping(quote! { Self }, identity_wrapper())
     } else {
         match &function.result {
-            Some(typ) => get_wrapped_type(context, typ, false)
+            Some(typ) => get_wrapped_type(context, typ, false, false)
                 .context(format!("Failed to encode result type for {name}"))?,
             None => WrappedType::unit(false),
         }
