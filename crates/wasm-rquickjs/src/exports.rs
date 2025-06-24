@@ -23,6 +23,7 @@ pub fn generate_export_impls(context: &GeneratorContext<'_>) -> anyhow::Result<(
         #[allow(static_mut_refs)]
         #[allow(unsafe_op_in_unsafe_fn)]
         mod bindings;
+        mod builtin;
         mod conversions;
         #[allow(unused)]
         mod internal;

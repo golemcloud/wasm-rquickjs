@@ -772,3 +772,6 @@ sync or async.
     - `getColumnNumber`
     - `getLineNumber`
     - `[Symbol.toStringTag]`
+- `Proxy`
+
+    

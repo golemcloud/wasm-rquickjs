@@ -25,12 +25,6 @@ struct JsState {
     pub resource_drop_queue_rx: RefCell<Option<tokio::sync::mpsc::UnboundedReceiver<usize>>>,
 }
 
-// TODO: remove
-#[rquickjs::function]
-fn print(msg: String) {
-    println!("{msg}");
-}
-
 impl JsState {
     pub fn new() -> Self {
         let tokio = tokio::runtime::Builder::new_current_thread()
@@ -46,46 +40,32 @@ impl JsState {
 
             let resolver = BuiltinResolver::default().with_module("bundle/script_module");
             let resolver = crate::modules::add_native_module_resolvers(resolver);
+            let resolver = crate::builtin::add_module_resolvers(resolver);
 
             let loader = (
                 BuiltinLoader::default().with_module("bundle/script_module", JS_MODULE),
                 crate::modules::module_loader(),
+                crate::builtin::module_loader(),
                 ScriptLoader::default(),
             );
 
             rt.set_loader(resolver, loader).await;
 
             async_with!(ctx => |ctx| {
-                // TODO: remove >>>
                 let global = ctx.globals();
-                global
-                    .set(
-                        "__print",
-                        js_print
-                    )
-                    .expect("Failed to set global print");
-
-                ctx.eval::<(), _>(
-                    r#"
-                    globalThis.console = {
-                      log(...v) {
-                        globalThis.__print(`${v.join(" ")}`)
-                      }
-                    }
-                "#).catch(&ctx).expect("Failed to set up console.log");
-                // TODO: <<< remove
-                // TODO: inject generated native modules
-
+                
                 global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                     .expect("Failed to initialize resource table");
 
+                let wiring = crate::builtin::wire_builtins();
                 Module::evaluate(
                     ctx.clone(),
                     "test",
-                    r#"
+                    format!(r#"
+                    {wiring}
                     import * as userModule from 'bundle/script_module';
                     globalThis.userModule = userModule;
-                    "#,
+                    "#),
                 )
                 .catch(&ctx).expect("Failed to evaluate module initialization")
                 .finish::<()>()

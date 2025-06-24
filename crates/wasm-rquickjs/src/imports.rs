@@ -334,8 +334,6 @@ fn generate_import_module(
 
         let mut methods: Vec<TokenStream> = Vec::new();
         for (name, function) in resource_funcs {
-            println!("*** Generating imported resource function {name} ***");
-
             let name = get_function_name(name, function)?;
             let rust_method_name = escape_rust_ident(&name.to_snake_case());
             let rust_method_name_ident = Ident::new(&rust_method_name, Span::call_site());
