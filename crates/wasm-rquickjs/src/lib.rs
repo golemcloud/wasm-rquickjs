@@ -14,6 +14,7 @@ use wit_parser::{
 mod conversions;
 mod exports;
 mod imports;
+mod rust_bindgen;
 mod skeleton;
 mod types;
 
@@ -95,6 +96,7 @@ struct GeneratorContext<'a> {
     source_map: PackageSourceMap,
     visited_types: RefCell<BTreeSet<TypeId>>,
     world_name: String,
+    types: wit_bindgen_core::Types,
 }
 
 impl<'a> GeneratorContext<'a> {
@@ -108,6 +110,10 @@ impl<'a> GeneratorContext<'a> {
             .context("Failed to select WIT world")?;
 
         let world_name = resolve.worlds[world].name.clone();
+
+        let mut types = wit_bindgen_core::Types::default();
+        types.analyze(&resolve);
+
         Ok(Self {
             output,
             wit_source_path: wit,
@@ -117,6 +123,7 @@ impl<'a> GeneratorContext<'a> {
             source_map,
             visited_types: RefCell::new(BTreeSet::new()),
             world_name,
+            types,
         })
     }
 
@@ -156,6 +163,10 @@ impl<'a> GeneratorContext<'a> {
         } else {
             false
         }
+    }
+
+    fn bindgen_type_info(&self, type_id: TypeId) -> wit_bindgen_core::TypeInfo {
+        self.types.get(type_id)
     }
 }
 

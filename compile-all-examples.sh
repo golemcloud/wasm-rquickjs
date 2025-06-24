@@ -13,6 +13,7 @@ cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-cr
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/imports3/wit --js examples/imports3/src/imports3.js --output tmp/imports3
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/stateful1/wit --js examples/stateful1/src/stateful.js --output tmp/stateful1
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/types-in-exports/wit --js examples/types-in-exports/src/types-in-exports.js --output tmp/types-in-exports
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/all-golem-imports/wit --js examples/all-golem-imports/src/all-golem-imports.js --output tmp/all-golem-imports
 
 pushd tmp/export-from-inner-package
 cargo component build
@@ -41,6 +42,8 @@ popd
 pushd tmp/types-in-exports
 cargo component build
 popd
-
+pushd tmp/all-golem-imports
+cargo component build
+popd
 
 

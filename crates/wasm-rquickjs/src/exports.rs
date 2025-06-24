@@ -1,4 +1,5 @@
 use crate::GeneratorContext;
+use crate::rust_bindgen::escape_rust_ident;
 use crate::types::{
     ProcessedParameter, WrappedType, get_function_name, get_wrapped_type,
     ident_in_exported_interface, ident_in_exported_interface_or_global, identity_wrapper,
@@ -291,7 +292,7 @@ fn generate_exported_function_impl(
     name: &str,
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
-    let func_name = Ident::new(&name.to_snake_case(), Span::call_site());
+    let func_name = Ident::new(&escape_rust_ident(&name.to_snake_case()), Span::call_site());
     let param_ident_type: Vec<_> = function
         .params
         .iter()
@@ -300,7 +301,7 @@ fn generate_exported_function_impl(
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = match &function.result {
-        Some(typ) => get_wrapped_type(context, typ, false, false)
+        Some(typ) => get_wrapped_type(context, typ)
             .context(format!("Failed to encode result type for {name}"))?,
         None => WrappedType::unit(false),
     };
@@ -344,7 +345,10 @@ fn generate_exported_resource_function_impl(
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
     let func_name = get_function_name(name, &function)?;
-    let func_name_ident = Ident::new(&func_name.to_snake_case(), Span::call_site());
+    let func_name_ident = Ident::new(
+        &escape_rust_ident(&func_name.to_snake_case()),
+        Span::call_site(),
+    );
 
     let param_ident_type: Vec<_> = function
         .params
@@ -370,7 +374,7 @@ fn generate_exported_resource_function_impl(
         WrappedType::no_wrapping(quote! { Self }, identity_wrapper())
     } else {
         match &function.result {
-            Some(typ) => get_wrapped_type(context, typ, false, false)
+            Some(typ) => get_wrapped_type(context, typ)
                 .context(format!("Failed to encode result type for {name}"))?,
             None => WrappedType::unit(false),
         }

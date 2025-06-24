@@ -1,4 +1,5 @@
 use crate::GeneratorContext;
+use crate::rust_bindgen::escape_rust_ident;
 use crate::types::{get_wrapped_type, type_id_to_type_ref};
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
@@ -33,10 +34,11 @@ fn generate_conversion_instances(
 ) -> anyhow::Result<Vec<TokenStream>> {
     let mut result = Vec::new();
 
-    let visited_types = context.visited_types.borrow().clone();
-    for type_id in &visited_types {
+    let types_to_process = context.visited_types.borrow().clone();
+    let mut visited_types = BTreeSet::new();
+    for type_id in &types_to_process {
         if let Some(snippet) =
-            generate_conversion_instances_for_type(context, *type_id, &visited_types)?
+            generate_conversion_instances_for_type(context, *type_id, &mut visited_types)?
         {
             result.push(snippet);
         }
@@ -48,8 +50,13 @@ fn generate_conversion_instances(
 fn generate_conversion_instances_for_type(
     context: &GeneratorContext<'_>,
     type_id: TypeId,
-    visited_types: &BTreeSet<TypeId>,
+    visited_types: &mut BTreeSet<TypeId>,
 ) -> anyhow::Result<Option<TokenStream>> {
+    if !visited_types.insert(type_id) {
+        // Already processed this type, skip it
+        return Ok(None);
+    }
+
     let typ = context
         .resolve
         .types
@@ -66,10 +73,13 @@ fn generate_conversion_instances_for_type(
 
             for field in &record.fields {
                 let js_field_name = field.name.to_lower_camel_case();
-                let rust_field_ident = Ident::new(&field.name.to_snake_case(), Span::call_site());
+                let rust_field_ident = Ident::new(
+                    &escape_rust_ident(&field.name.to_snake_case()),
+                    Span::call_site(),
+                );
                 let field_name_lit = Lit::Str(LitStr::new(&js_field_name, Span::call_site()));
 
-                let field_type = get_wrapped_type(context, &field.ty, false, false)?;
+                let field_type = get_wrapped_type(context, &field.ty)?;
 
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
@@ -164,7 +174,7 @@ fn generate_conversion_instances_for_type(
                 let case_name_lit = Lit::Str(LitStr::new(&case.name, Span::call_site()));
 
                 if let Some(ty) = &case.ty {
-                    let wrapped_type = get_wrapped_type(context, ty, false, false)?;
+                    let wrapped_type = get_wrapped_type(context, ty)?;
                     let wrapped_inner = (wrapped_type.wrap)(quote! { inner });
                     let unwrapped_inner = (wrapped_type.unwrap)(quote! { inner });
                     let wrapped_type = &wrapped_type.wrapped_type_ref;
@@ -284,11 +294,7 @@ fn generate_conversion_instances_for_type(
             }))
         }
         TypeDefKind::Type(Type::Id(type_id)) => {
-            if !visited_types.contains(&type_id) {
-                generate_conversion_instances_for_type(context, *type_id, visited_types)
-            } else {
-                Ok(None)
-            }
+            generate_conversion_instances_for_type(context, *type_id, visited_types)
         }
         _ => Ok(None),
     }

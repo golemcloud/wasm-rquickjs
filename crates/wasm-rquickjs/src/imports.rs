@@ -1,4 +1,5 @@
 use crate::GeneratorContext;
+use crate::rust_bindgen::escape_rust_ident;
 use crate::types::{
     WrappedType, get_function_name, get_wrapped_type, ident_in_imported_interface_or_global,
     process_parameter, to_unwrapped_param_refs, to_wrapped_func_arg_list,
@@ -9,7 +10,9 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
 use syn::LitStr;
-use wit_parser::{Function, FunctionKind, Interface, PackageName, WorldItem, WorldKey};
+use wit_parser::{
+    Function, FunctionKind, Interface, PackageName, TypeDefKind, WorldItem, WorldKey,
+};
 
 /// Generates the `mod.rs` and one file per imported interface in the `<output>/src/modules`
 /// directory.
@@ -66,7 +69,7 @@ impl<'a> ImportedInterface<'a> {
     }
 
     pub fn rust_interface_name(&self) -> Ident {
-        let interface_name = self.name.to_upper_camel_case();
+        let interface_name = format!("Js{}Module", self.name.to_upper_camel_case());
         Ident::new(&interface_name, Span::call_site())
     }
 
@@ -202,12 +205,27 @@ fn generate_import_module(
     let mut exports = Vec::new();
     let mut resource_functions = BTreeMap::new();
 
+    // Preinitialize resource_functions from types to have entries for resources with no methods
+    if let Some(iface) = import.interface {
+        for (name, type_id) in &iface.types {
+            let typ = context
+                .resolve
+                .types
+                .get(*type_id)
+                .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
+            if typ.kind == TypeDefKind::Resource {
+                resource_functions.insert(*type_id, Vec::new());
+            }
+        }
+    }
+
+    // Process all imported functions
     for (name, function) in &import.functions {
         match &function.kind {
             FunctionKind::Freestanding => {
                 let js_function_name = name.to_lower_camel_case();
                 let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
-                let rust_function_name = name.to_snake_case();
+                let rust_function_name = escape_rust_ident(&name.to_snake_case());
                 let rust_function_ident = Ident::new(&rust_function_name, Span::call_site());
                 let js_bridge_name = format!("js_{rust_function_name}");
                 let js_bridge_ident = Ident::new(&js_bridge_name, Span::call_site());
@@ -233,7 +251,7 @@ fn generate_import_module(
                 let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
                 let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
                 let func_ret = match &function.result {
-                    Some(typ) => get_wrapped_type(context, typ, false, false)
+                    Some(typ) => get_wrapped_type(context, typ)
                         .context(format!("Failed to encode result type for {name}"))?,
                     None => WrappedType::unit(false),
                 };
@@ -259,7 +277,7 @@ fn generate_import_module(
             | FunctionKind::Static(type_id)
             | FunctionKind::Constructor(type_id) => {
                 resource_functions
-                    .entry(type_id)
+                    .entry(*type_id)
                     .or_insert_with(Vec::new)
                     .push((name, function));
             }
@@ -270,7 +288,7 @@ fn generate_import_module(
         let typ = context
             .resolve
             .types
-            .get(*resource_type_id)
+            .get(resource_type_id)
             .ok_or_else(|| anyhow!("Unknown resource type id"))?;
 
         let resource_name = typ
@@ -316,8 +334,10 @@ fn generate_import_module(
 
         let mut methods: Vec<TokenStream> = Vec::new();
         for (name, function) in resource_funcs {
+            println!("*** Generating imported resource function {name} ***");
+
             let name = get_function_name(name, function)?;
-            let rust_method_name = name.to_snake_case();
+            let rust_method_name = escape_rust_ident(&name.to_snake_case());
             let rust_method_name_ident = Ident::new(&rust_method_name, Span::call_site());
 
             let parameters = function
@@ -330,7 +350,7 @@ fn generate_import_module(
             let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
 
             let func_ret = match &function.result {
-                Some(typ) => get_wrapped_type(context, typ, false, false)
+                Some(typ) => get_wrapped_type(context, typ)
                     .context(format!("Failed to encode result type for {name}"))?,
                 None => WrappedType::unit(false),
             };
@@ -345,7 +365,7 @@ fn generate_import_module(
                     let param_refs = param_refs[1..].to_vec();
                     methods.push(quote!{
                        pub fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
-                            let result: #original_result = self.inner.#rust_method_name_ident(#(#param_refs),*);
+                            let result: #original_result = self.inner.deref().#rust_method_name_ident(#(#param_refs),*);
                             #wrap_result
                         }
                     });
@@ -406,7 +426,7 @@ fn generate_import_module(
 
             impl<'js> rquickjs::FromJs<'js> for #borrow_wrapper_ident {
                 fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
-                    let wrapper = Hello::from_js(ctx, value)?;
+                    let wrapper = #resource_name_ident::from_js(ctx, value)?;
                     unsafe {
                         Ok(#borrow_wrapper_ident(
                             #bindgen_path::from_handle(
@@ -438,6 +458,7 @@ fn generate_import_module(
     let module = quote! {
         use rquickjs::JsLifetime;
         use rquickjs::class::{JsClass, Trace};
+        use std::ops::Deref;
 
         #(#submodules)*
 

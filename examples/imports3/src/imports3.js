@@ -1,8 +1,8 @@
 import * as types from 'quickjs:types-in-exports/types';
 
 export const test = () => {
-    // f1: func(a: list<f32>, b: list-of-strings) -> list<string>;
-    console.log(`f1: ${types.f1([0.1, 0.2, 0.3], ["a", "b"])}`);
+    // f1: func(a: list<f32>, b: list-of-strings, c: list<string>) -> list<string>;
+    console.log(`f1: ${types.f1([0.1, 0.2, 0.3], ["a", "b"], ["c", "d"])}`);
     // f2: func(a: option<string>) -> option<u32>;
     console.log(`f2: ${types.f2("hello world")}`);
     // f3: func(a: bool, b: s8, c: s16, d: s32, e: s64, f: u8, g: u16, h: u32, i: u64, j: f32, k: f64, l: char, m: string)
