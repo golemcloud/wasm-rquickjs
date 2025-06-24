@@ -297,7 +297,7 @@ pub struct WrappedType {
 
 impl WrappedType {
     /// Creates a `WrappedType` that does not apply any wrapping or unwrapping logic
-    /// of a wit-bindgen representation given by `original_type_ref`..
+    /// of a wit-bindgen representation given by `original_type_ref`.
     pub fn no_wrapping(
         original_type_ref: TokenStream,
         unwrap_for_imported: TokenStreamWrapper,
@@ -342,18 +342,13 @@ pub fn get_wrapped_type_internal(
     in_as_ref: bool,
     mode: TypeMode,
 ) -> anyhow::Result<WrappedType> {
-    let deref_if_needed = if in_as_ref {
-        Box::new(|ts| quote! { *#ts })
-    } else {
-        identity_wrapper()
-    };
-    let ref_if_needed = if !in_as_ref {
-        Box::new(|ts| quote! { &#ts })
-    } else {
-        identity_wrapper()
-    };
-
     let original_type_ref = to_type_ref(context, typ)?;
+    let ctx = GetWrappedTypeContext {
+        context,
+        in_as_ref,
+        mode,
+        original_type_ref,
+    };
 
     match typ {
         Type::Id(type_id) => {
@@ -363,274 +358,330 @@ pub fn get_wrapped_type_internal(
                 .get(*type_id)
                 .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
-            println!("Type name: {:?}", typ.name);
-
             match &typ.kind {
-                TypeDefKind::Tuple(inner) => {
-                    let inner_wrappers = inner
-                        .types
-                        .iter()
-                        .map(|ty| {
-                            get_wrapped_type_internal(
-                                context,
-                                ty,
-                                in_as_ref,
-                                if typ.name.is_some() {
-                                    filter_mode(context, ty, mode)
-                                } else {
-                                    filter_mode_preserve_top(context, ty, mode)
-                                },
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    let cannot_drop = inner_wrappers.iter().any(|w| w.cannot_drop);
-                    let unwrap_for_imported = Box::new(move |ts| {
-                        let elem_wrappers = inner_wrappers
-                            .iter()
-                            .enumerate()
-                            .map(|(idx, w)| {
-                                let field =
-                                    Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
-                                (w.unwrap_for_imported)(quote! { #ts.0.#field})
-                            })
-                            .collect::<Vec<_>>();
-
-                        quote! {
-                            (#(#elem_wrappers),*)
-                        }
-                    });
-
-                    Ok(WrappedType {
-                        wrap: Box::new(|ts| quote! { rquickjs::convert::List( # ts) }),
-                        unwrap: Box::new(|ts| quote! { # ts.0 }),
-                        original_type_ref: original_type_ref.clone(),
-                        wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
-                        unwrap_for_imported,
-                        cannot_drop,
-                    })
-                }
-                TypeDefKind::List(elem_type) => {
-                    let inner_mode = if mode.lifetime.is_some() {
-                        filter_mode(context, elem_type, mode)
-                    } else {
-                        mode
-                    };
-                    let mut inner =
-                        get_wrapped_type_internal(context, elem_type, false, inner_mode)?;
-                    if inner.cannot_drop {
-                        inner = get_wrapped_type_internal(context, elem_type, true, inner_mode)?;
-                    }
-
-                    let inner_wrapped_type_ref = inner.wrapped_type_ref;
-                    let wrapped_v = (inner.wrap)(quote! { v });
-                    let unwrapped_v = (inner.unwrap)(quote! { v });
-                    let converted_v = (inner.unwrap_for_imported)(quote! { v });
-
-                    let unwrap_for_imported_inner: TokenStreamWrapper = if inner.cannot_drop {
-                        Box::new(move |ts| {
-                            quote! { #ts.iter().map( |v| #converted_v).collect::<Vec<_>>() }
-                        })
-                    } else {
-                        Box::new(move |ts| {
-                            quote! { #ts.into_iter().map( |v| #converted_v).collect::<Vec<_>>() }
-                        })
-                    };
-
-                    Ok(WrappedType {
-                        wrap: Box::new(
-                            move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
-                        ),
-                        unwrap: Box::new(
-                            move |ts| quote! { #ts.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
-                        ),
-                        original_type_ref: original_type_ref.clone(),
-                        wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
-                        unwrap_for_imported: Box::new(move |ts| {
-                            let inner = unwrap_for_imported_inner(ts);
-                            if mode.lists_borrowed {
-                                quote! { &#inner }
-                            } else {
-                                inner
-                            }
-                        }),
-                        cannot_drop: inner.cannot_drop,
-                    })
-                }
-                TypeDefKind::Option(elem_type) => {
-                    let inner_mode = filter_mode_preserve_top(context, elem_type, mode);
-                    let mut use_as_ref = true;
-                    let mut inner =
-                        get_wrapped_type_internal(context, elem_type, true, inner_mode)?;
-                    if !inner.cannot_drop && inner_mode.style == TypeOwnershipStyle::Owned {
-                        use_as_ref = false;
-                        inner =
-                            get_wrapped_type_internal(context, elem_type, in_as_ref, inner_mode)?;
-                    }
-
-                    let inner_wrapped_type_ref = inner.wrapped_type_ref;
-                    let wrapped_v = (inner.wrap)(quote! { v });
-                    let unwrapped_v = (inner.unwrap)(quote! { v });
-                    let converted_v = (inner.unwrap_for_imported)(quote! { v });
-                    Ok(WrappedType {
-                        wrap: Box::new(move |ts| quote! { #ts.map( |v| #wrapped_v) }),
-                        unwrap: Box::new(move |ts| quote! { #ts.map( |v| #unwrapped_v) }),
-                        original_type_ref: original_type_ref.clone(),
-                        wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
-                        unwrap_for_imported: if use_as_ref {
-                            Box::new(move |ts| {
-                                quote! { #ts.as_ref().map( |v| #converted_v) }
-                            })
-                        } else {
-                            Box::new(move |ts| {
-                                quote! { #ts.map( |v| #converted_v) }
-                            })
-                        },
-                        cannot_drop: inner.cannot_drop,
-                    })
-                }
-                TypeDefKind::Result(inner) => {
-                    let mut use_as_ref = true;
-                    let mut ok = inner
-                        .ok
-                        .as_ref()
-                        .map(|ok| get_wrapped_type_internal(context, ok, true, mode))
-                        .transpose()?
-                        .unwrap_or(WrappedType::unit(true));
-                    let mut err = inner
-                        .err
-                        .as_ref()
-                        .map(|err| get_wrapped_type_internal(context, err, true, mode))
-                        .transpose()?
-                        .unwrap_or(WrappedType::unit(true));
-
-                    if !ok.cannot_drop
-                        && !err.cannot_drop
-                        && mode.style == TypeOwnershipStyle::Owned
-                    {
-                        use_as_ref = false;
-                        ok = inner
-                            .ok
-                            .as_ref()
-                            .map(|ok| get_wrapped_type_internal(context, ok, false, mode))
-                            .transpose()?
-                            .unwrap_or(WrappedType::unit(false));
-                        err = inner
-                            .err
-                            .as_ref()
-                            .map(|err| get_wrapped_type_internal(context, err, false, mode))
-                            .transpose()?
-                            .unwrap_or(WrappedType::unit(false));
-                    }
-
-                    let wrapped_ok = ok.wrapped_type_ref;
-                    let wrapped_err = err.wrapped_type_ref;
-
-                    let wrap_ok = (ok.wrap)(quote! { v });
-                    let wrap_err = (err.wrap)(quote! { v });
-
-                    let unwrap_for_imported_ok = (ok.unwrap_for_imported)(quote! { v });
-                    let unwrap_for_imported_err = (err.unwrap_for_imported)(quote! { v });
-
-                    Ok(WrappedType {
-                        wrap: Box::new(move |ts| {
-                            quote! {
-                                crate::wrappers::JsResult(
-                                    match #ts {
-                                        Ok(v) => Ok(#wrap_ok),
-                                        Err(v) => Err(#wrap_err),
-                                    }
-                                )
-                            }
-                        }),
-                        unwrap: Box::new(|ts| quote! { #ts.0 }),
-                        original_type_ref: original_type_ref.clone(),
-                        wrapped_type_ref: quote! { crate::wrappers::JsResult<#wrapped_ok, #wrapped_err> },
-                        unwrap_for_imported: if use_as_ref {
-                            Box::new(move |ts| {
-                                quote! {
-                                    #ts.0.as_ref().map(|v| #unwrap_for_imported_ok).map_err(|v| #unwrap_for_imported_err)
-                                }
-                            })
-                        } else {
-                            Box::new(move |ts| {
-                                quote! {
-                                    #ts.0.map(|v| #unwrap_for_imported_ok).map_err(|v| #unwrap_for_imported_err)
-                                }
-                            })
-                        },
-                        cannot_drop: ok.cannot_drop || err.cannot_drop,
-                    })
+                TypeDefKind::Tuple(tuple) => get_wrapped_type_tuple(ctx, &typ.name, tuple),
+                TypeDefKind::List(elem_type) => get_wrapped_type_list(ctx, elem_type),
+                TypeDefKind::Option(elem_type) => get_wrapped_type_option(ctx, elem_type),
+                TypeDefKind::Result(result) => get_wrapped_type_result(ctx, result),
+                TypeDefKind::Record(_) | TypeDefKind::Variant(_) => get_wrapped_type_adt(ctx),
+                TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
+                    get_wrapped_type_borrow_handle(ctx, resource_type_id)
                 }
                 TypeDefKind::Type(inner) => {
+                    // Recursively dealiasing
                     let inner = get_wrapped_type_internal(context, inner, in_as_ref, mode)?;
                     Ok(WrappedType {
                         wrap: inner.wrap,
                         unwrap: inner.unwrap,
-                        original_type_ref: original_type_ref.clone(),
+                        original_type_ref: ctx.original_type_ref,
                         wrapped_type_ref: inner.wrapped_type_ref,
                         unwrap_for_imported: inner.unwrap_for_imported,
                         cannot_drop: inner.cannot_drop,
                     })
                 }
-                TypeDefKind::Record(_) | TypeDefKind::Variant(_) => match mode.style {
-                    TypeOwnershipStyle::Owned => Ok(WrappedType::no_wrapping(
-                        original_type_ref,
-                        identity_wrapper(),
-                    )),
-                    TypeOwnershipStyle::OnlyTopBorrowed => {
-                        if mode.lifetime.is_some() {
-                            Ok(WrappedType::no_wrapping(original_type_ref, ref_if_needed))
-                        } else {
-                            Ok(WrappedType::no_wrapping(
-                                original_type_ref,
-                                identity_wrapper(),
-                            ))
-                        }
-                    }
-                },
-                TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
-                    if context.is_exported_type(*resource_type_id) {
-                        Ok(WrappedType::no_wrapping(original_type_ref, deref_if_needed))
-                    } else {
-                        let borrowed_resource_ref =
-                            borrowed_resource_ref(context, resource_type_id)?;
-                        Ok(WrappedType {
-                            original_type_ref: original_type_ref.clone(),
-                            wrapped_type_ref: borrowed_resource_ref.clone(),
-                            wrap: Box::new(move |ts| {
-                                quote! { #borrowed_resource_ref(#ts) }
-                            }),
-                            unwrap: Box::new(|ts| {
-                                quote! { #ts.0 }
-                            }),
-                            unwrap_for_imported: Box::new(move |ts| {
-                                quote! { &#ts.0 }
-                            }),
-                            cannot_drop: true,
-                        })
-                    }
-                }
-                _ => Ok(WrappedType::no_wrapping(original_type_ref, deref_if_needed)),
+                _ => get_wrapped_type_default(ctx),
             }
         }
-        Type::String => {
-            // if mode.lifetime.is_some() then the import binding accepts &str otherwise String
-
-            Ok(WrappedType::no_wrapping(
-                original_type_ref,
-                if mode.lifetime.is_some() {
-                    Box::new(|v| quote! { #v.as_str() })
-                } else {
-                    if in_as_ref {
-                        Box::new(|ts| quote! { #ts.clone() })
-                    } else {
-                        identity_wrapper()
-                    }
-                },
-            ))
-        }
-        _ => Ok(WrappedType::no_wrapping(original_type_ref, deref_if_needed)),
+        Type::String => get_wrapped_type_string(ctx),
+        _ => get_wrapped_type_default(ctx),
     }
+}
+
+struct GetWrappedTypeContext<'a> {
+    context: &'a GeneratorContext<'a>,
+    in_as_ref: bool,
+    mode: TypeMode,
+    original_type_ref: TokenStream,
+}
+
+impl<'a> GetWrappedTypeContext<'a> {
+    fn ref_if_needed(&self) -> TokenStreamWrapper {
+        if !self.in_as_ref {
+            Box::new(|ts| quote! { &#ts })
+        } else {
+            identity_wrapper()
+        }
+    }
+
+    fn deref_if_needed(&self) -> TokenStreamWrapper {
+        if self.in_as_ref {
+            Box::new(|ts| quote! { *#ts })
+        } else {
+            identity_wrapper()
+        }
+    }
+}
+
+fn get_wrapped_type_default(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {
+    let deref = ctx.deref_if_needed();
+    Ok(WrappedType::no_wrapping(ctx.original_type_ref, deref))
+}
+
+fn get_wrapped_type_option(
+    ctx: GetWrappedTypeContext<'_>,
+    elem_type: &Type,
+) -> anyhow::Result<WrappedType> {
+    let inner_mode = filter_mode_preserve_top(ctx.context, elem_type, ctx.mode);
+    let mut use_as_ref = true;
+    let mut inner = get_wrapped_type_internal(ctx.context, elem_type, true, inner_mode)?;
+    if !inner.cannot_drop && inner_mode.style == TypeOwnershipStyle::Owned {
+        use_as_ref = false;
+        inner = get_wrapped_type_internal(ctx.context, elem_type, ctx.in_as_ref, inner_mode)?;
+    }
+
+    let inner_wrapped_type_ref = inner.wrapped_type_ref;
+    let wrapped_v = (inner.wrap)(quote! { v });
+    let unwrapped_v = (inner.unwrap)(quote! { v });
+    let converted_v = (inner.unwrap_for_imported)(quote! { v });
+    Ok(WrappedType {
+        wrap: Box::new(move |ts| quote! { #ts.map( |v| #wrapped_v) }),
+        unwrap: Box::new(move |ts| quote! { #ts.map( |v| #unwrapped_v) }),
+        original_type_ref: ctx.original_type_ref,
+        wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
+        unwrap_for_imported: if use_as_ref {
+            Box::new(move |ts| {
+                quote! { #ts.as_ref().map( |v| #converted_v) }
+            })
+        } else {
+            Box::new(move |ts| {
+                quote! { #ts.map( |v| #converted_v) }
+            })
+        },
+        cannot_drop: inner.cannot_drop,
+    })
+}
+
+fn get_wrapped_type_tuple(
+    ctx: GetWrappedTypeContext<'_>,
+    name: &Option<String>,
+    tuple: &wit_parser::Tuple,
+) -> anyhow::Result<WrappedType> {
+    let inner_wrappers = tuple
+        .types
+        .iter()
+        .map(|ty| {
+            get_wrapped_type_internal(
+                ctx.context,
+                ty,
+                ctx.in_as_ref,
+                if name.is_some() {
+                    filter_mode(ctx.context, ty, ctx.mode)
+                } else {
+                    filter_mode_preserve_top(ctx.context, ty, ctx.mode)
+                },
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let cannot_drop = inner_wrappers.iter().any(|w| w.cannot_drop);
+    let unwrap_for_imported = Box::new(move |ts| {
+        let elem_wrappers = inner_wrappers
+            .iter()
+            .enumerate()
+            .map(|(idx, w)| {
+                let field = Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
+                (w.unwrap_for_imported)(quote! { #ts.0.#field})
+            })
+            .collect::<Vec<_>>();
+
+        quote! {
+            (#(#elem_wrappers),*)
+        }
+    });
+
+    let original_type_ref = ctx.original_type_ref.clone();
+    Ok(WrappedType {
+        wrap: Box::new(|ts| quote! { rquickjs::convert::List( # ts) }),
+        unwrap: Box::new(|ts| quote! { # ts.0 }),
+        original_type_ref: ctx.original_type_ref,
+        wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
+        unwrap_for_imported,
+        cannot_drop,
+    })
+}
+
+fn get_wrapped_type_list(
+    ctx: GetWrappedTypeContext<'_>,
+    elem_type: &Type,
+) -> anyhow::Result<WrappedType> {
+    let inner_mode = if ctx.mode.lifetime.is_some() {
+        filter_mode(ctx.context, elem_type, ctx.mode)
+    } else {
+        ctx.mode
+    };
+    let mut inner = get_wrapped_type_internal(ctx.context, elem_type, false, inner_mode)?;
+    if inner.cannot_drop {
+        inner = get_wrapped_type_internal(ctx.context, elem_type, true, inner_mode)?;
+    }
+
+    let inner_wrapped_type_ref = inner.wrapped_type_ref;
+    let wrapped_v = (inner.wrap)(quote! { v });
+    let unwrapped_v = (inner.unwrap)(quote! { v });
+    let converted_v = (inner.unwrap_for_imported)(quote! { v });
+
+    let unwrap_for_imported_inner: TokenStreamWrapper = if inner.cannot_drop {
+        Box::new(move |ts| {
+            quote! { #ts.iter().map( |v| #converted_v).collect::<Vec<_>>() }
+        })
+    } else {
+        Box::new(move |ts| {
+            quote! { #ts.into_iter().map( |v| #converted_v).collect::<Vec<_>>() }
+        })
+    };
+
+    Ok(WrappedType {
+        wrap: Box::new(
+            move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
+        ),
+        unwrap: Box::new(
+            move |ts| quote! { #ts.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
+        ),
+        original_type_ref: ctx.original_type_ref,
+        wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
+        unwrap_for_imported: Box::new(move |ts| {
+            let inner = unwrap_for_imported_inner(ts);
+            if ctx.mode.lists_borrowed {
+                quote! { &#inner }
+            } else {
+                inner
+            }
+        }),
+        cannot_drop: inner.cannot_drop,
+    })
+}
+
+fn get_wrapped_type_result(
+    ctx: GetWrappedTypeContext<'_>,
+    result: &wit_parser::Result_,
+) -> anyhow::Result<WrappedType> {
+    let mut use_as_ref = true;
+    let mut ok = result
+        .ok
+        .as_ref()
+        .map(|ok| get_wrapped_type_internal(ctx.context, ok, true, ctx.mode))
+        .transpose()?
+        .unwrap_or(WrappedType::unit(true));
+    let mut err = result
+        .err
+        .as_ref()
+        .map(|err| get_wrapped_type_internal(ctx.context, err, true, ctx.mode))
+        .transpose()?
+        .unwrap_or(WrappedType::unit(true));
+
+    if !ok.cannot_drop && !err.cannot_drop && ctx.mode.style == TypeOwnershipStyle::Owned {
+        use_as_ref = false;
+        ok = result
+            .ok
+            .as_ref()
+            .map(|ok| get_wrapped_type_internal(ctx.context, ok, false, ctx.mode))
+            .transpose()?
+            .unwrap_or(WrappedType::unit(false));
+        err = result
+            .err
+            .as_ref()
+            .map(|err| get_wrapped_type_internal(ctx.context, err, false, ctx.mode))
+            .transpose()?
+            .unwrap_or(WrappedType::unit(false));
+    }
+
+    let wrapped_ok = ok.wrapped_type_ref;
+    let wrapped_err = err.wrapped_type_ref;
+
+    let wrap_ok = (ok.wrap)(quote! { v });
+    let wrap_err = (err.wrap)(quote! { v });
+
+    let unwrap_for_imported_ok = (ok.unwrap_for_imported)(quote! { v });
+    let unwrap_for_imported_err = (err.unwrap_for_imported)(quote! { v });
+
+    Ok(WrappedType {
+        wrap: Box::new(move |ts| {
+            quote! {
+                crate::wrappers::JsResult(
+                    match #ts {
+                        Ok(v) => Ok(#wrap_ok),
+                        Err(v) => Err(#wrap_err),
+                    }
+                )
+            }
+        }),
+        unwrap: Box::new(|ts| quote! { #ts.0 }),
+        original_type_ref: ctx.original_type_ref,
+        wrapped_type_ref: quote! { crate::wrappers::JsResult<#wrapped_ok, #wrapped_err> },
+        unwrap_for_imported: if use_as_ref {
+            Box::new(move |ts| {
+                quote! {
+                    #ts.0.as_ref().map(|v| #unwrap_for_imported_ok).map_err(|v| #unwrap_for_imported_err)
+                }
+            })
+        } else {
+            Box::new(move |ts| {
+                quote! {
+                    #ts.0.map(|v| #unwrap_for_imported_ok).map_err(|v| #unwrap_for_imported_err)
+                }
+            })
+        },
+        cannot_drop: ok.cannot_drop || err.cannot_drop,
+    })
+}
+
+fn get_wrapped_type_borrow_handle(
+    ctx: GetWrappedTypeContext<'_>,
+    resource_type_id: &TypeId,
+) -> anyhow::Result<WrappedType> {
+    if ctx.context.is_exported_type(*resource_type_id) {
+        let deref = ctx.deref_if_needed();
+        Ok(WrappedType::no_wrapping(ctx.original_type_ref, deref))
+    } else {
+        let borrowed_resource_ref = borrowed_resource_ref(ctx.context, resource_type_id)?;
+        Ok(WrappedType {
+            original_type_ref: ctx.original_type_ref,
+            wrapped_type_ref: borrowed_resource_ref.clone(),
+            wrap: Box::new(move |ts| {
+                quote! { #borrowed_resource_ref(#ts) }
+            }),
+            unwrap: Box::new(|ts| {
+                quote! { #ts.0 }
+            }),
+            unwrap_for_imported: Box::new(move |ts| {
+                quote! { &#ts.0 }
+            }),
+            cannot_drop: true,
+        })
+    }
+}
+
+fn get_wrapped_type_adt(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {
+    match ctx.mode.style {
+        TypeOwnershipStyle::Owned => Ok(WrappedType::no_wrapping(
+            ctx.original_type_ref,
+            identity_wrapper(),
+        )),
+        TypeOwnershipStyle::OnlyTopBorrowed => {
+            if ctx.mode.lifetime.is_some() {
+                let rf = ctx.ref_if_needed();
+                Ok(WrappedType::no_wrapping(ctx.original_type_ref, rf))
+            } else {
+                Ok(WrappedType::no_wrapping(
+                    ctx.original_type_ref,
+                    identity_wrapper(),
+                ))
+            }
+        }
+    }
+}
+
+fn get_wrapped_type_string(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {
+    Ok(WrappedType::no_wrapping(
+        ctx.original_type_ref,
+        if ctx.mode.lifetime.is_some() {
+            Box::new(|v| quote! { #v.as_str() })
+        } else {
+            if ctx.in_as_ref {
+                Box::new(|ts| quote! { #ts.clone() })
+            } else {
+                identity_wrapper()
+            }
+        },
+    ))
 }
 
 fn owned_resource_ref(
@@ -814,7 +865,7 @@ pub fn to_wrapped_param_refs(processed_parameters: &[ProcessedParameter]) -> Vec
             match &param.wrapped_type {
                 Some(wrapped) => {
                     let wrap = &wrapped.wrap;
-                    (wrap)(unwrapped)
+                    wrap(unwrapped)
                 }
                 None => unwrapped,
             }
