@@ -9,7 +9,8 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{Lit, LitInt};
 use wit_parser::{
-    Function, FunctionKind, Handle, Interface, Type, TypeDef, TypeDefKind, TypeId, TypeOwner,
+    Function, FunctionKind, Handle, Interface, PackageId, Type, TypeDef, TypeDefKind, TypeId,
+    TypeOwner,
 };
 
 /// Converts a WIT `Type` to a fully qualified Rust type
@@ -160,6 +161,27 @@ pub fn ident_in_exported_interface_or_global(
     }
 }
 
+fn add_package_to_path(
+    context: &GeneratorContext<'_>,
+    path: &mut Vec<TokenStream>,
+    package_id: &Option<PackageId>,
+) {
+    if let Some(package_id) = package_id {
+        let package = &context.resolve.packages[*package_id];
+        let ns_ident = Ident::new(
+            &escape_rust_ident(&package.name.namespace.to_snake_case()),
+            Span::call_site(),
+        );
+        let name_ident = Ident::new(
+            &escape_rust_ident(&package.name.name.to_snake_case()),
+            Span::call_site(),
+        );
+
+        path.push(quote! { #ns_ident });
+        path.push(quote! { #name_ident });
+    }
+}
+
 /// Gets the fully qualified path to an identifier which is in an exported interface.
 pub fn ident_in_exported_interface(
     context: &GeneratorContext<'_>,
@@ -177,20 +199,7 @@ pub fn ident_in_exported_interface(
     path.push(quote! { bindings });
     path.push(quote! { exports });
 
-    if let Some(package_id) = &interface.package {
-        let package = &context.resolve.packages[*package_id];
-        let ns_ident = Ident::new(
-            &escape_rust_ident(&package.name.namespace.to_snake_case()),
-            Span::call_site(),
-        );
-        let name_ident = Ident::new(
-            &escape_rust_ident(&package.name.name.to_snake_case()),
-            Span::call_site(),
-        );
-
-        path.push(quote! { #ns_ident });
-        path.push(quote! { #name_ident });
-    }
+    add_package_to_path(context, &mut path, &interface.package);
 
     path.push(quote! { #name_ident });
     path.push(quote! { #ident });
@@ -228,20 +237,7 @@ pub fn ident_in_imported_interface(
     path.push(quote! { crate });
     path.push(quote! { bindings });
 
-    if let Some(package_id) = &interface.package {
-        let package = &context.resolve.packages[*package_id];
-        let ns_ident = Ident::new(
-            &escape_rust_ident(&package.name.namespace.to_snake_case()),
-            Span::call_site(),
-        );
-        let name_ident = Ident::new(
-            &escape_rust_ident(&package.name.name.to_snake_case()),
-            Span::call_site(),
-        );
-
-        path.push(quote! { #ns_ident });
-        path.push(quote! { #name_ident });
-    }
+    add_package_to_path(context, &mut path, &interface.package);
 
     path.push(quote! { #name_ident });
     path.push(quote! { #ident });
@@ -337,14 +333,13 @@ impl WrappedType {
 /// when converting back from JS to Rust.
 pub fn get_wrapped_type(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::Result<WrappedType> {
     let mode = type_mode_for(context, typ, TypeOwnershipStyle::OnlyTopBorrowed, "'_");
-    get_wrapped_type_internal(context, typ, false, false, mode)
+    get_wrapped_type_internal(context, typ, false, mode)
 }
 
 pub fn get_wrapped_type_internal(
     context: &GeneratorContext<'_>,
     typ: &Type,
     in_as_ref: bool,
-    in_list: bool,
     mode: TypeMode,
 ) -> anyhow::Result<WrappedType> {
     let deref_if_needed = if in_as_ref {
@@ -359,7 +354,6 @@ pub fn get_wrapped_type_internal(
     };
 
     let original_type_ref = to_type_ref(context, typ)?;
-    println!("Type ({original_type_ref}) has mode {mode:?}");
 
     match typ {
         Type::Id(type_id) => {
@@ -381,7 +375,6 @@ pub fn get_wrapped_type_internal(
                                 context,
                                 ty,
                                 in_as_ref,
-                                false,
                                 if typ.name.is_some() {
                                     filter_mode(context, ty, mode)
                                 } else {
@@ -423,10 +416,9 @@ pub fn get_wrapped_type_internal(
                         mode
                     };
                     let mut inner =
-                        get_wrapped_type_internal(context, elem_type, false, true, inner_mode)?;
+                        get_wrapped_type_internal(context, elem_type, false, inner_mode)?;
                     if inner.cannot_drop {
-                        inner =
-                            get_wrapped_type_internal(context, elem_type, true, true, inner_mode)?;
+                        inner = get_wrapped_type_internal(context, elem_type, true, inner_mode)?;
                     }
 
                     let inner_wrapped_type_ref = inner.wrapped_type_ref;
@@ -468,12 +460,11 @@ pub fn get_wrapped_type_internal(
                     let inner_mode = filter_mode_preserve_top(context, elem_type, mode);
                     let mut use_as_ref = true;
                     let mut inner =
-                        get_wrapped_type_internal(context, elem_type, true, false, inner_mode)?;
+                        get_wrapped_type_internal(context, elem_type, true, inner_mode)?;
                     if !inner.cannot_drop && inner_mode.style == TypeOwnershipStyle::Owned {
                         use_as_ref = false;
-                        inner = get_wrapped_type_internal(
-                            context, elem_type, in_as_ref, false, inner_mode,
-                        )?;
+                        inner =
+                            get_wrapped_type_internal(context, elem_type, in_as_ref, inner_mode)?;
                     }
 
                     let inner_wrapped_type_ref = inner.wrapped_type_ref;
@@ -502,23 +493,13 @@ pub fn get_wrapped_type_internal(
                     let mut ok = inner
                         .ok
                         .as_ref()
-                        .map(|ok| {
-                            get_wrapped_type_internal(
-                                context, ok, true, false,
-                                mode, // filter_mode(context, ok, mode),
-                            )
-                        })
+                        .map(|ok| get_wrapped_type_internal(context, ok, true, mode))
                         .transpose()?
                         .unwrap_or(WrappedType::unit(true));
                     let mut err = inner
                         .err
                         .as_ref()
-                        .map(|err| {
-                            get_wrapped_type_internal(
-                                context, err, true, false,
-                                mode, // filter_mode(context, err, mode),
-                            )
-                        })
+                        .map(|err| get_wrapped_type_internal(context, err, true, mode))
                         .transpose()?
                         .unwrap_or(WrappedType::unit(true));
 
@@ -530,23 +511,13 @@ pub fn get_wrapped_type_internal(
                         ok = inner
                             .ok
                             .as_ref()
-                            .map(|ok| {
-                                get_wrapped_type_internal(
-                                    context, ok, false, false,
-                                    mode, // filter_mode(context, ok, mode),
-                                )
-                            })
+                            .map(|ok| get_wrapped_type_internal(context, ok, false, mode))
                             .transpose()?
                             .unwrap_or(WrappedType::unit(false));
                         err = inner
                             .err
                             .as_ref()
-                            .map(|err| {
-                                get_wrapped_type_internal(
-                                    context, err, false, false,
-                                    mode, // filter_mode(context, err, mode),
-                                )
-                            })
+                            .map(|err| get_wrapped_type_internal(context, err, false, mode))
                             .transpose()?
                             .unwrap_or(WrappedType::unit(false));
                     }
@@ -591,8 +562,7 @@ pub fn get_wrapped_type_internal(
                     })
                 }
                 TypeDefKind::Type(inner) => {
-                    let inner =
-                        get_wrapped_type_internal(context, inner, in_as_ref, in_list, mode)?;
+                    let inner = get_wrapped_type_internal(context, inner, in_as_ref, mode)?;
                     Ok(WrappedType {
                         wrap: inner.wrap,
                         unwrap: inner.unwrap,
@@ -607,7 +577,7 @@ pub fn get_wrapped_type_internal(
                         original_type_ref,
                         identity_wrapper(),
                     )),
-                    TypeOwnershipStyle::Borrowed | TypeOwnershipStyle::OnlyTopBorrowed => {
+                    TypeOwnershipStyle::OnlyTopBorrowed => {
                         if mode.lifetime.is_some() {
                             Ok(WrappedType::no_wrapping(original_type_ref, ref_if_needed))
                         } else {
@@ -677,35 +647,8 @@ fn owned_resource_ref(
         .as_ref()
         .ok_or_else(|| anyhow!("Resource type {resource_type:?} has no name"))?;
 
-    let (interface, is_export) = match &resource_type.owner {
-        TypeOwner::World(world_id) => {
-            if world_id == &context.world {
-                (None, true)
-            } else {
-                return Err(anyhow!(
-                    "Resource type {resource_name} is owned by a different world"
-                ));
-            }
-        }
-        TypeOwner::Interface(interface_id) => {
-            let interface = context
-                .resolve
-                .interfaces
-                .get(*interface_id)
-                .ok_or_else(|| anyhow!("Unknown interface id: {interface_id:?}"))?;
-            let interface_name = interface
-                .name
-                .as_ref()
-                .ok_or_else(|| anyhow!("Interface export does not have a name"))?;
-            (
-                Some((interface_name.as_str(), interface)),
-                context.is_exported_interface(*interface_id),
-            )
-        }
-        TypeOwner::None => {
-            return Err(anyhow!("Resource type {resource_name} has no owner"));
-        }
-    };
+    let (interface, is_export) =
+        analyse_resource_type_owner(context, resource_name, &resource_type)?;
 
     let handle_ident = Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
     let handle_path = if is_export {
@@ -737,24 +680,19 @@ fn follow_type_paths(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow:
     }
 }
 
-fn borrowed_resource_ref(
-    context: &GeneratorContext<'_>,
-    resource_type_id: &TypeId,
-) -> anyhow::Result<TokenStream> {
-    let resource_type = follow_type_paths(context, *resource_type_id)?;
-    let resource_name = resource_type
-        .name
-        .as_ref()
-        .ok_or_else(|| anyhow!("Resource type {resource_type:?} has no name"))?;
-
-    let (interface, is_export) = match &resource_type.owner {
+fn analyse_resource_type_owner<'a>(
+    context: &'a GeneratorContext<'a>,
+    resource_name: &str,
+    resource_type: &TypeDef,
+) -> anyhow::Result<(Option<(&'a str, &'a Interface)>, bool)> {
+    match &resource_type.owner {
         TypeOwner::World(world_id) => {
             if world_id == &context.world {
-                (None, true)
+                Ok((None, true))
             } else {
-                return Err(anyhow!(
+                Err(anyhow!(
                     "Resource type {resource_name} is owned by a different world"
-                ));
+                ))
             }
         }
         TypeOwner::Interface(interface_id) => {
@@ -767,15 +705,27 @@ fn borrowed_resource_ref(
                 .name
                 .as_ref()
                 .ok_or_else(|| anyhow!("Interface export does not have a name"))?;
-            (
+            Ok((
                 Some((interface_name.as_str(), interface)),
                 context.is_exported_interface(*interface_id),
-            )
+            ))
         }
-        TypeOwner::None => {
-            return Err(anyhow!("Resource type {resource_name} has no owner"));
-        }
-    };
+        TypeOwner::None => Err(anyhow!("Resource type {resource_name} has no owner")),
+    }
+}
+
+fn borrowed_resource_ref(
+    context: &GeneratorContext<'_>,
+    resource_type_id: &TypeId,
+) -> anyhow::Result<TokenStream> {
+    let resource_type = follow_type_paths(context, *resource_type_id)?;
+    let resource_name = resource_type
+        .name
+        .as_ref()
+        .ok_or_else(|| anyhow!("Resource type {resource_type:?} has no name"))?;
+
+    let (interface, is_export) =
+        analyse_resource_type_owner(context, resource_name, &resource_type)?;
 
     if is_export {
         let borrow_handle_ident = Ident::new(

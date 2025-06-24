@@ -207,7 +207,7 @@ fn generate_import_module(
 
     // Preinitialize resource_functions from types to have entries for resources with no methods
     if let Some(iface) = import.interface {
-        for (name, type_id) in &iface.types {
+        for (_, type_id) in &iface.types {
             let typ = context
                 .resolve
                 .types

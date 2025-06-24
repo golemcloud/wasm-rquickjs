@@ -108,8 +108,8 @@ pub struct TypeMode {
 
     /// The "style" of ownership that this mode was created with.
     ///
-    /// This information is used to determine what mode the next layer deep int
-    /// he type tree is rendered with. For example if this layer is owned so is
+    /// This information is used to determine what mode the next layer deep in
+    /// the type tree is rendered with. For example if this layer is owned so is
     /// the next layer. This is primarily used for the "OnlyTopBorrowed"
     /// ownership style where all further layers beneath that are `Owned`.
     pub style: TypeOwnershipStyle,
@@ -123,11 +123,6 @@ pub enum TypeOwnershipStyle {
     ///
     /// Note that this primarily applies to lists.
     Owned,
-
-    /// This style means that lists/strings are `&[T]` and `&str`.
-    ///
-    /// Note that this primarily applies to lists.
-    Borrowed,
 
     /// This style means that the top-level of a type is borrowed but all other
     /// layers are `Owned`.
@@ -156,7 +151,6 @@ impl TypeOwnershipStyle {
     pub fn next(&self) -> TypeOwnershipStyle {
         match self {
             TypeOwnershipStyle::Owned => TypeOwnershipStyle::Owned,
-            TypeOwnershipStyle::Borrowed => TypeOwnershipStyle::Borrowed,
             TypeOwnershipStyle::OnlyTopBorrowed => TypeOwnershipStyle::Owned,
         }
     }
@@ -229,7 +223,7 @@ pub fn type_mode_for_type_info(
         // * No owned handles
         // * A list is somewhere
         // * This type is used somewhere in an owned position
-        // * This type does not used "two names" meaning that we must use
+        // * This type is not used "two names" meaning that we must use
         //   the owned version of the type.
         //
         // If the configured ownership mode for generating types of this
