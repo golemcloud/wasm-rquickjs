@@ -291,8 +291,6 @@ pub struct WrappedType {
     /// Function for converting a Rust representation returned from rquickjs to the value required by the
     /// wit-bindgen Rust import bindings, for example adding a `.as_str()` for strings.
     pub unwrap_for_imported: TokenStreamWrapper,
-    /// Indicates that this type cannot be dropped so when converting iter() needs to be used
-    pub cannot_drop: bool,
 }
 
 impl WrappedType {
@@ -308,7 +306,6 @@ impl WrappedType {
             original_type_ref: original_type_ref.clone(),
             wrapped_type_ref: original_type_ref,
             unwrap_for_imported,
-            cannot_drop: false,
         }
     }
 
@@ -376,7 +373,6 @@ pub fn get_wrapped_type_internal(
                         original_type_ref: ctx.original_type_ref,
                         wrapped_type_ref: inner.wrapped_type_ref,
                         unwrap_for_imported: inner.unwrap_for_imported,
-                        cannot_drop: inner.cannot_drop,
                     })
                 }
                 _ => get_wrapped_type_default(ctx),
@@ -417,17 +413,19 @@ fn get_wrapped_type_default(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<Wr
     Ok(WrappedType::no_wrapping(ctx.original_type_ref, deref))
 }
 
+fn must_use_as_ref(mode: &TypeMode) -> bool {
+    // The wrappers for borrow handles cannot be dropped, so we cannot use into_iter etc. to convert them
+    let has_borrow_handle = mode.type_info.map(|i| i.has_borrow_handle).unwrap_or(false);
+    has_borrow_handle || mode.style != TypeOwnershipStyle::Owned
+}
+
 fn get_wrapped_type_option(
     ctx: GetWrappedTypeContext<'_>,
     elem_type: &Type,
 ) -> anyhow::Result<WrappedType> {
     let inner_mode = filter_mode_preserve_top(ctx.context, elem_type, ctx.mode);
-    let mut use_as_ref = true;
-    let mut inner = get_wrapped_type_internal(ctx.context, elem_type, true, inner_mode)?;
-    if !inner.cannot_drop && inner_mode.style == TypeOwnershipStyle::Owned {
-        use_as_ref = false;
-        inner = get_wrapped_type_internal(ctx.context, elem_type, ctx.in_as_ref, inner_mode)?;
-    }
+    let use_as_ref = must_use_as_ref(&inner_mode);
+    let inner = get_wrapped_type_internal(ctx.context, elem_type, use_as_ref, inner_mode)?;
 
     let inner_wrapped_type_ref = inner.wrapped_type_ref;
     let wrapped_v = (inner.wrap)(quote! { v });
@@ -447,7 +445,6 @@ fn get_wrapped_type_option(
                 quote! { #ts.map( |v| #converted_v) }
             })
         },
-        cannot_drop: inner.cannot_drop,
     })
 }
 
@@ -472,7 +469,6 @@ fn get_wrapped_type_tuple(
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let cannot_drop = inner_wrappers.iter().any(|w| w.cannot_drop);
     let unwrap_for_imported = Box::new(move |ts| {
         let elem_wrappers = inner_wrappers
             .iter()
@@ -495,7 +491,6 @@ fn get_wrapped_type_tuple(
         original_type_ref: ctx.original_type_ref,
         wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
         unwrap_for_imported,
-        cannot_drop,
     })
 }
 
@@ -508,17 +503,15 @@ fn get_wrapped_type_list(
     } else {
         ctx.mode
     };
-    let mut inner = get_wrapped_type_internal(ctx.context, elem_type, false, inner_mode)?;
-    if inner.cannot_drop {
-        inner = get_wrapped_type_internal(ctx.context, elem_type, true, inner_mode)?;
-    }
+    let use_as_ref = must_use_as_ref(&inner_mode);
+    let inner = get_wrapped_type_internal(ctx.context, elem_type, use_as_ref, inner_mode)?;
 
     let inner_wrapped_type_ref = inner.wrapped_type_ref;
     let wrapped_v = (inner.wrap)(quote! { v });
     let unwrapped_v = (inner.unwrap)(quote! { v });
     let converted_v = (inner.unwrap_for_imported)(quote! { v });
 
-    let unwrap_for_imported_inner: TokenStreamWrapper = if inner.cannot_drop {
+    let unwrap_for_imported_inner: TokenStreamWrapper = if use_as_ref {
         Box::new(move |ts| {
             quote! { #ts.iter().map( |v| #converted_v).collect::<Vec<_>>() }
         })
@@ -545,7 +538,6 @@ fn get_wrapped_type_list(
                 inner
             }
         }),
-        cannot_drop: inner.cannot_drop,
     })
 }
 
@@ -553,35 +545,19 @@ fn get_wrapped_type_result(
     ctx: GetWrappedTypeContext<'_>,
     result: &wit_parser::Result_,
 ) -> anyhow::Result<WrappedType> {
-    let mut use_as_ref = true;
-    let mut ok = result
+    let use_as_ref = must_use_as_ref(&ctx.mode);
+    let ok = result
         .ok
         .as_ref()
-        .map(|ok| get_wrapped_type_internal(ctx.context, ok, true, ctx.mode))
+        .map(|ok| get_wrapped_type_internal(ctx.context, ok, use_as_ref, ctx.mode))
         .transpose()?
         .unwrap_or(WrappedType::unit(true));
-    let mut err = result
+    let err = result
         .err
         .as_ref()
-        .map(|err| get_wrapped_type_internal(ctx.context, err, true, ctx.mode))
+        .map(|err| get_wrapped_type_internal(ctx.context, err, use_as_ref, ctx.mode))
         .transpose()?
         .unwrap_or(WrappedType::unit(true));
-
-    if !ok.cannot_drop && !err.cannot_drop && ctx.mode.style == TypeOwnershipStyle::Owned {
-        use_as_ref = false;
-        ok = result
-            .ok
-            .as_ref()
-            .map(|ok| get_wrapped_type_internal(ctx.context, ok, false, ctx.mode))
-            .transpose()?
-            .unwrap_or(WrappedType::unit(false));
-        err = result
-            .err
-            .as_ref()
-            .map(|err| get_wrapped_type_internal(ctx.context, err, false, ctx.mode))
-            .transpose()?
-            .unwrap_or(WrappedType::unit(false));
-    }
 
     let wrapped_ok = ok.wrapped_type_ref;
     let wrapped_err = err.wrapped_type_ref;
@@ -619,7 +595,6 @@ fn get_wrapped_type_result(
                 }
             })
         },
-        cannot_drop: ok.cannot_drop || err.cannot_drop,
     })
 }
 
@@ -644,7 +619,6 @@ fn get_wrapped_type_borrow_handle(
             unwrap_for_imported: Box::new(move |ts| {
                 quote! { &#ts.0 }
             }),
-            cannot_drop: true,
         })
     }
 }
@@ -846,7 +820,6 @@ pub fn process_parameter(
     param_name: &str,
     param_type: &Type,
 ) -> anyhow::Result<ProcessedParameter> {
-    println!("*** Processing parameter {param_name}");
     let wrapped_type = get_wrapped_type(context, param_type)
         .context(format!("Failed to encode parameter {param_name}'s type"))?;
     let param_name = escape_rust_ident(param_name);

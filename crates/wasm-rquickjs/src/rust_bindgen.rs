@@ -93,7 +93,7 @@ pub fn escape_rust_ident(name: &str) -> String {
 ///
 /// Lists have a choice of being rendered as borrowed or not but resources are
 /// required to be borrowed.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone)]
 pub struct TypeMode {
     /// The lifetime parameter, if any, for this type. If present this type is
     /// required to have a lifetime parameter.
@@ -113,6 +113,8 @@ pub struct TypeMode {
     /// the next layer. This is primarily used for the "OnlyTopBorrowed"
     /// ownership style where all further layers beneath that are `Owned`.
     pub style: TypeOwnershipStyle,
+
+    pub type_info: Option<TypeInfo>,
 }
 
 /// The style of ownership of a type, used to initially create a `TypeMode` and
@@ -128,7 +130,7 @@ pub enum TypeOwnershipStyle {
     /// layers are `Owned`.
     ///
     /// This is used for parameters in the "owning" mode of generation to
-    /// imports. It's easy enough to create a `&T` at the root layer but it's
+    /// imports. It's easy enough to create a `&T` at the root layer, but it's
     /// more difficult to create `&T` stored within a `U`, for example.
     OnlyTopBorrowed,
 }
@@ -136,11 +138,12 @@ pub enum TypeOwnershipStyle {
 impl TypeMode {
     /// Returns a mode where everything is indicated that it's supposed to be
     /// rendered as an "owned" type.
-    fn owned() -> TypeMode {
+    fn owned(type_info: Option<TypeInfo>) -> TypeMode {
         TypeMode {
             lifetime: None,
             lists_borrowed: false,
             style: TypeOwnershipStyle::Owned,
+            type_info,
         }
     }
 }
@@ -259,6 +262,8 @@ pub fn type_mode_for_type_info(
         } else {
             style
         },
+
+        type_info: Some(info),
     }
 }
 
@@ -288,9 +293,10 @@ pub fn type_mode_for(
             lifetime: Some(lt),
             lists_borrowed: true,
             style,
+            type_info: None,
         },
 
-        _ => TypeMode::owned(),
+        _ => TypeMode::owned(None),
     }
 }
 
@@ -303,7 +309,7 @@ pub fn type_mode_for(
 pub fn filter_mode(context: &GeneratorContext<'_>, ty: &Type, mode: TypeMode) -> TypeMode {
     match mode.lifetime {
         Some(lt) => type_mode_for(context, ty, mode.style.next(), lt),
-        None => TypeMode::owned(),
+        None => TypeMode::owned(mode.type_info),
     }
 }
 
