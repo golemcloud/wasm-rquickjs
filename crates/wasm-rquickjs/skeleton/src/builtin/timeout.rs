@@ -59,11 +59,11 @@ pub const TIMEOUT_JS: &str = include_str!("timeout.js");
 
 // JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"
-        import * as timeout from '__wasm_rquickjs_builtin/timeout';
-        globalThis.setTimeout = timeout.setTimeout;
-        globalThis.setImmediate = timeout.setImmediate;
-        globalThis.setInterval = timeout.setInterval;
-        globalThis.clearTimeout = timeout.clearTimeout;
+        import * as __wasm_rquickjs_timeout from '__wasm_rquickjs_builtin/timeout';
+        globalThis.setTimeout = __wasm_rquickjs_timeout.setTimeout;
+        globalThis.setImmediate = __wasm_rquickjs_timeout.setImmediate;
+        globalThis.setInterval = __wasm_rquickjs_timeout.setInterval;
+        globalThis.clearTimeout = __wasm_rquickjs_timeout.clearTimeout;
     "#;
 
 async fn scheduled_task(

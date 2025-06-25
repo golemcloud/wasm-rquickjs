@@ -1,0 +1,5 @@
+package quickjs:fetch;
+
+world fetch {
+  export test1: func();
+}

@@ -35,7 +35,7 @@ pub mod native_module {
     fn trace_impl(line: String) {
         println!("TRACE: {line}");
     }
-    
+
     #[cfg(feature = "logging")]
     fn trace_impl(line: String) {
         log::trace!(target: "js", "{line}");
@@ -45,7 +45,7 @@ pub mod native_module {
     fn debug_impl(line: String) {
         println!("DEBUG: {line}");
     }
-    
+
     #[cfg(feature = "logging")]
     fn debug_impl(line: String) {
         log::debug!(target: "js", "{line}");
@@ -55,7 +55,7 @@ pub mod native_module {
     fn info_impl(line: String) {
         println!("INFO: {line}");
     }
-    
+
     #[cfg(feature = "logging")]
     fn info_impl(line: String) {
         log::info!(target: "js", "{line}");
@@ -65,7 +65,7 @@ pub mod native_module {
     fn warn_impl(line: String) {
         println!("WARN: {line}");
     }
-    
+
     #[cfg(feature = "logging")]
     fn warn_impl(line: String) {
         log::warn!(target: "js", "{line}");
@@ -75,7 +75,7 @@ pub mod native_module {
     fn error_impl(line: String) {
         println!("ERROR: {line}");
     }
-    
+
     #[cfg(feature = "logging")]
     fn error_impl(line: String) {
         log::error!(target: "js", "{line}");
@@ -87,6 +87,6 @@ pub const CONSOLE_JS: &str = include_str!("console.js");
 
 // JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"
-        import * as console from '__wasm_rquickjs_builtin/console';
-        globalThis.console = console;
+        import * as __wasm_rquickjs_console from '__wasm_rquickjs_builtin/console';
+        globalThis.console = __wasm_rquickjs_console;
     "#;

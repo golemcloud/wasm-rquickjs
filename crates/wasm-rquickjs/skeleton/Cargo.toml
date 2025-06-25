@@ -14,7 +14,8 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [features]
-default = ["logging"]
+default = ["http", "logging"]
+http = ["dep:reqwest"]
 logging = ["dep:log", "dep:wasi-logger"]
 
 [dependencies]
@@ -23,6 +24,9 @@ rquickjs = { version = "0.9.0", default-features = false, features = ["futures",
 tokio = { version = "1.43.0", features = ["macros", "rt", "sync", "time"] }
 tokio-util = { version = "0.7.15", default-features = false }
 wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
+
+# HTTP
+reqwest = { git = "https://github.com/golemcloud/reqwest", branch = "update-may-2025", optional = true }
 
 # Logging
 log = { version = "0.4.22", default-features = false, optional = true }
