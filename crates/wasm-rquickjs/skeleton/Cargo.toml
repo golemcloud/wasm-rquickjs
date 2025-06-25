@@ -20,7 +20,8 @@ logging = ["dep:log", "dep:wasi-logger"]
 [dependencies]
 # Core dependencies
 rquickjs = { version = "0.9.0", default-features = false, features = ["futures", "bindgen", "loader", "macro"] }
-tokio = { version = "1.43.0", features = ["rt", "sync", "time"] }
+tokio = { version = "1.43.0", features = ["macros", "rt", "sync", "time"] }
+tokio-util = { version = "0.7.15", default-features = false }
 wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
 
 # Logging

@@ -6,23 +6,31 @@ use rquickjs::{
     Promise, Value, async_with,
 };
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::future::Future;
-use std::sync::atomic::AtomicUsize;
+use std::pin::{Pin, pin};
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, AtomicUsize};
+use std::task::{Context, Poll};
 use tokio::runtime::Runtime;
-use tokio::task::{LocalSet, spawn_local};
+use tokio::task::{JoinError, JoinSet, LocalSet, spawn_local};
+use tokio_util::sync::CancellationToken;
 
 static JS_MODULE: &str = include_str!("module.js");
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
 
-struct JsState {
+pub struct JsState {
     pub tokio: Runtime,
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
     pub last_resource_id: AtomicUsize,
     pub resource_drop_queue_tx: tokio::sync::mpsc::UnboundedSender<usize>,
     pub resource_drop_queue_rx: RefCell<Option<tokio::sync::mpsc::UnboundedReceiver<usize>>>,
+    pub last_scheduled_task_id: AtomicU32,
+    pub scheduled_tasks: RefCell<HashMap<u32, CancellationToken>>,
+    pub current_join_set: RefCell<Option<JoinSet<()>>>,
 }
 
 impl JsState {
@@ -83,6 +91,7 @@ impl JsState {
             tokio::sync::mpsc::unbounded_channel::<usize>();
 
         let last_resource_id = AtomicUsize::new(1);
+        let last_scheduled_task_id = AtomicU32::new(0);
         Self {
             tokio,
             rt,
@@ -90,6 +99,9 @@ impl JsState {
             last_resource_id,
             resource_drop_queue_tx,
             resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
+            last_scheduled_task_id,
+            scheduled_tasks: RefCell::new(HashMap::new()),
+            current_join_set: RefCell::new(None),
         }
     }
 }
@@ -108,7 +120,7 @@ fn init_logging() {
 static mut STATE: Option<JsState> = None;
 
 #[allow(static_mut_refs)]
-fn get_js_state() -> &'static JsState {
+pub fn get_js_state() -> &'static JsState {
     unsafe {
         if STATE.is_none() {
             STATE = Some(JsState::new());
@@ -119,12 +131,22 @@ fn get_js_state() -> &'static JsState {
 
 pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     let js_state = get_js_state();
+
     js_state.tokio.block_on(async move {
-        let local = LocalSet::new();
+        let local = Rc::new(LocalSet::new());
+        let join_set = JoinSet::new();
+
+        js_state.current_join_set.replace(Some(join_set));
 
         local
             .run_until(async move {
                 if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
+                    let heartbeat = spawn_local(async move {
+                        loop {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        }
+                    });
+
                     let resource_dropper = spawn_local(async move {
                         while let Some(resource_id) = resource_drop_queue_rx.recv().await {
                             if resource_id > 0 {
@@ -136,6 +158,13 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
                         resource_drop_queue_rx
                     });
                     let result = future.await;
+
+                    // Await scheduled tasks
+                    if let Err(err) = AwaitScheduledTasks::PollNext.await {
+                        panic!("Error while awaiting scheduled tasks: {err}");
+                    };
+
+                    // Finish resource dropper
                     js_state
                         .resource_drop_queue_tx
                         .send(0)
@@ -145,6 +174,8 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
                     js_state
                         .resource_drop_queue_rx
                         .replace(Some(resource_drop_queue_rx));
+
+                    heartbeat.abort();
                     result
                 } else {
                     // This case will never happen because block_on does not allow reentry
@@ -153,6 +184,55 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
             })
             .await
     })
+}
+
+enum AwaitScheduledTasks {
+    PollNext,
+    RunJs,
+}
+
+impl Future for AwaitScheduledTasks {
+    type Output = Result<(), JoinError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let state = get_js_state();
+        let self_ = self.get_mut();
+        match self_ {
+            AwaitScheduledTasks::PollNext => {
+                let mut join_set = state.current_join_set.borrow_mut();
+                let poll_result = join_set
+                    .as_mut()
+                    .expect("No current join set")
+                    .poll_join_next(cx);
+
+                match poll_result {
+                    Poll::Ready(Some(Ok(()))) => Poll::Pending, // One task done, go to the next
+                    Poll::Ready(Some(Err(err))) => Poll::Ready(Err(err)), // Task failed, return the error
+                    Poll::Ready(None) => Poll::Ready(Ok(())), // No more tasks to wait for
+                    Poll::Pending => {
+                        *self_ = AwaitScheduledTasks::RunJs; // No tasks ready, switch to running the JS event loop
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                }
+            }
+            AwaitScheduledTasks::RunJs => {
+                // Scheduled tasks are still pending, we run the JS runtime in the meantime
+                let mut idle_future = state.rt.idle();
+                let idle_future = pin!(idle_future);
+                let idle_poll_result = idle_future.poll(cx);
+                match idle_poll_result {
+                    Poll::Ready(()) => {
+                        // idle() completed, going back to poll from the join set
+                        *self_ = AwaitScheduledTasks::PollNext;
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                    Poll::Pending => Poll::Pending,
+                }
+            }
+        }
+    }
 }
 
 pub async fn call_js_export<A, R>(function_path: &[&str], args: A) -> R

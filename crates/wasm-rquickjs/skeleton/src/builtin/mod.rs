@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 mod console;
+mod timeout;
 
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
@@ -8,6 +9,8 @@ pub fn add_module_resolvers(
     resolver
         .with_module("__wasm_rquickjs_builtin/console_native")
         .with_module("__wasm_rquickjs_builtin/console")
+        .with_module("__wasm_rquickjs_builtin/timeout_native")
+        .with_module("__wasm_rquickjs_builtin/timeout")
 }
 
 pub fn module_loader() -> (
@@ -15,17 +18,24 @@ pub fn module_loader() -> (
     rquickjs::loader::BuiltinLoader,
 ) {
     (
-        rquickjs::loader::ModuleLoader::default().with_module(
-            "__wasm_rquickjs_builtin/console_native",
-            console::js_native_module,
-        ),
+        rquickjs::loader::ModuleLoader::default()
+            .with_module(
+                "__wasm_rquickjs_builtin/console_native",
+                console::js_native_module,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/timeout_native",
+                timeout::js_native_module,
+            ),
         rquickjs::loader::BuiltinLoader::default()
-            .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS),
+            .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
+            .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS),
     )
 }
 
 pub fn wire_builtins() -> String {
     let mut result = String::new();
     writeln!(result, "{}", console::WIRE_JS).unwrap();
+    writeln!(result, "{}", timeout::WIRE_JS).unwrap();
     result
 }

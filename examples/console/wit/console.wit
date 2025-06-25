@@ -1,5 +1,5 @@
-package quickjs:example1;
+package quickjs:console;
 
-world example1 {
+world console {
   export run: func();
 }
