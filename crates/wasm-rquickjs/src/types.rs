@@ -319,10 +319,6 @@ impl WrappedType {
     }
 }
 
-// TODO: wrap u64 as BigInt as the default rquickjs instance is encoding it as f64 and can overflow
-// TODO: special case for byte arrays to Uint8Array
-// TODO: wrapper for nested options
-// TODO: we may want to encode result<> return values as exceptions like componentize-js
 /// Gets type information including wrapping and unwrapping logic for a WIT type.
 ///
 /// For example WIT tuples are represented as Rust tuples by wit-bindgen, but to pass

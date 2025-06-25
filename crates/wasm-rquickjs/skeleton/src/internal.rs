@@ -27,6 +27,8 @@ struct JsState {
 
 impl JsState {
     pub fn new() -> Self {
+        init_logging();
+
         let tokio = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -53,7 +55,7 @@ impl JsState {
 
             async_with!(ctx => |ctx| {
                 let global = ctx.globals();
-                
+
                 global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                     .expect("Failed to initialize resource table");
 
@@ -90,6 +92,17 @@ impl JsState {
             resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
         }
     }
+}
+
+#[cfg(feature = "logging")]
+fn init_logging() {
+    wasi_logger::Logger::install().expect("failed to install wasi_logger::Logger");
+    log::set_max_level(log::LevelFilter::Trace);
+}
+
+#[cfg(not(feature = "logging"))]
+fn init_logging() {
+    // No-op if logging is not enabled
 }
 
 static mut STATE: Option<JsState> = None;

@@ -203,8 +203,6 @@ fn generate_guest_impl(
             resource_func_impls.push(func_impl);
         }
 
-        // TODO: drop() must not call async_exported_function, instead just enqueue the drop in sync code.
-        //       async_exported_function must be updated to await a background task that drops all enqueued resources.
         resource_impls.push(quote! {
             struct #resource_name_ident {
                 resource_id: usize
