@@ -20,10 +20,10 @@ export async function fetch(resource, options = {}) {
 
     let version = options.version || 'HTTP/1.1';
 
-    // TODO: init.mode
-    // TODO: init.referer
-    // TODO: init.credentials
-    // TODO: init.cache
+    // TODO: options.mode
+    // TODO: options.referer
+    // TODO: options.credentials
+    // TODO: options.cache
 
     let request = new httpNative.HttpRequest(
         resource,
@@ -59,41 +59,67 @@ export class Response {
     constructor(nativeResponse, url) {
         this.nativeResponse = nativeResponse;
         this.url = url;
-
-        this.status = nativeResponse.status;
-        this.statusText = nativeResponse.statusText;
-
-        const rawHeaders = nativeResponse.headers;
-        this.headers = new Headers();
-        for (const [name, value] of rawHeaders) {
-            this.headers.set(name, value);
-        }
-
-        this.ok = this.status >= 200 && this.status < 300;
-        this.redirected = false; // TODO: support redirects
+        this.bodyUsed = false;
     }
 
-    // TODO: prop body
-    // TODO: prop bodyUsed
-    // TODO: prop headers
+    get status() {
+        return this.nativeResponse.status;
+    }
+
+    get statusText() {
+        return this.nativeResponse.statusText;
+    }
+
+    get body() {
+        let streamSource = this.nativeResponse.stream();
+        this.bodyUsed = true;
+        return new ReadableStream(streamSource);
+    }
+
+    get headers() {
+        const rawHeaders = this.nativeResponse.headers;
+        let result = new Headers();
+        for (const [name, value] of rawHeaders) {
+            result.set(name, value);
+        }
+        return result;
+    }
+
+    get ok() {
+        return this.nativeResponse.status >= 200 && this.nativeResponse.status < 300;
+    }
+
+    get redirected() {
+        return false; // TODO: support redirects
+    }
+
     // TODO: prop type
 
     // TODO: static error()
     // TODO: static redirect()
     // TODO: static json()
 
-    // TODO: arrayBuffer()
     // TODO: blob()
     // TODO: bytes()
     // TODO: clone()
     // TODO: formData()
 
+    async arrayBuffer() {
+        let result = await this.nativeResponse.arrayBuffer();
+        this.bodyUsed = true;
+        return result;
+    }
+
     async json() {
-        return JSON.parse(await this.text());
+        let result = JSON.parse(await this.text());
+        this.bodyUsed = true;
+        return result;
     }
 
     async text(){
-        return await this.nativeResponse.text();
+        let result = await this.nativeResponse.text();
+        this.bodyUsed = true;
+        return result;
     }
 }
 

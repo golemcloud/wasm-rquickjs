@@ -6,9 +6,10 @@ pub mod native_module {
 }
 
 use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::{Body, Method, Request, Url, Version};
+use reqwest::{Body, Method, Request, StreamError, Url, Version};
 use rquickjs::class::Trace;
-use rquickjs::{ArrayBuffer, JsLifetime};
+use rquickjs::function::Args;
+use rquickjs::{ArrayBuffer, Ctx, Function, JsLifetime, Object, TypedArray, Value};
 use std::collections::HashMap;
 
 #[derive(Trace, JsLifetime)]
@@ -159,12 +160,132 @@ impl HttpResponse {
             .to_string()
     }
 
+    pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> ArrayBuffer<'js> {
+        let bytes = self
+            .response
+            .take()
+            .expect("The response has already been consumed")
+            .bytes()
+            .expect("failed to read response body");
+
+        ArrayBuffer::new(ctx, bytes).expect("failed to create ArrayBuffer from response body")
+    }
+
+    pub fn stream(&mut self) -> ResponseBodyStream {
+        let mut response = self
+            .response
+            .take()
+            .expect("The response has already been consumed");
+
+        let stream = response.get_raw_input_stream();
+
+        ResponseBodyStream {
+            stream: Some((stream, response)),
+        }
+    }
+
     pub async fn text(&mut self) -> String {
         self.response
             .take()
             .expect("The response has already been consumed")
             .text()
             .expect("failed to read response body")
+    }
+}
+
+/// Implements a source for ReadableStream reading the response body
+///
+/// See https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/ReadableStream
+#[derive(Trace, JsLifetime)]
+#[rquickjs::class(rename_all = "camelCase")]
+pub struct ResponseBodyStream {
+    #[qjs(skip_trace)]
+    stream: Option<(reqwest::InputStream, reqwest::Response)>,
+}
+
+#[rquickjs::methods(rename_all = "camelCase")]
+impl ResponseBodyStream {
+    #[qjs(constructor)]
+    pub fn new() -> Self {
+        ResponseBodyStream { stream: None }
+    }
+
+    #[qjs(get, rename = "type")]
+    pub fn get_typ(&self) -> String {
+        "bytes".to_string()
+    }
+
+    pub fn pull<'js>(&mut self, ctx: Ctx<'js>, controller: Object<'js>) {
+        // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
+        let close: Function = controller
+            .get("close")
+            .expect("Controller has no 'close' method");
+        let enqueue: Function = controller
+            .get("enqueue")
+            .expect("Controller has no 'enqueue' method");
+        let error: Function = controller
+            .get("error")
+            .expect("Controller has no 'error' method");
+
+        if let Some((stream, _response)) = &mut self.stream {
+            const CHUNK_SIZE: u64 = 4096;
+            match stream.blocking_read(CHUNK_SIZE) {
+                Ok(chunk) => {
+                    let js_array = TypedArray::new_copy(ctx.clone(), chunk)
+                        .expect("Failed to create TypedArray from response body chunk");
+                    let mut args = Args::new(ctx, 1);
+                    args.this(controller)
+                        .expect("Failed to set 'this' for controller.enqueue");
+                    args.push_arg(js_array)
+                        .expect("Failed to push argument for controller.enqueue");
+                    enqueue
+                        .call_arg::<Value<'_>>(args)
+                        .expect("Failed to call 'enqueue' on controller");
+                }
+                Err(StreamError::Closed) => {
+                    // No more data to read, close the stream
+                    let mut args = Args::new(ctx.clone(), 0);
+                    args.this(controller)
+                        .expect("Failed to set 'this' for controller.close");
+                    close
+                        .call_arg::<Value<'_>>(args)
+                        .expect("Failed to call 'close' on controller");
+                    self.stream = None; // Mark the response as consumed
+                }
+                Err(StreamError::LastOperationFailed(err)) => {
+                    Self::report_stream_error(
+                        ctx,
+                        controller,
+                        error,
+                        &format!("Failed to read response body: {}", err.to_debug_string()),
+                    );
+                }
+            }
+        } else {
+            Self::report_stream_error(
+                ctx,
+                controller,
+                error,
+                "Response body stream has already been consumed",
+            )
+        }
+    }
+
+    #[qjs(skip)]
+    fn report_stream_error<'js>(
+        ctx: Ctx<'js>,
+        controller: Object<'js>,
+        error: Function<'js>,
+        message: &str,
+    ) {
+        let mut args = Args::new(ctx, 1);
+        args.this(controller)
+            .expect("Failed to set 'this' for controller.error");
+        args.push_arg(message)
+            .expect("Failed to push argument for controller.error");
+        error
+            .call_arg::<Value<'_>>(args)
+            .expect("Failed to call 'error' on controller");
     }
 }
 
