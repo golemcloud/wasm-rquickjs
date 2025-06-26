@@ -46,6 +46,24 @@ export async function fetch(resource, options = {}) {
         request.uint8ArrayBody(body);
     } else if (typeof body === 'string' || body instanceof String) {
         request.stringBody(body);
+    } else if (body instanceof ReadableStream) {
+        // TODO: currently the native implementation does not support streaming request body, so we just buffer
+        // TODO: the stream here
+        const reader = body.getReader();
+        let chunks = [];
+        let done, value;
+        while ({done, value} = await reader.read(), !done) {
+            chunks.push(value);
+        }
+        // Concatenate all chunks into a single Uint8Array
+        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+        const concatenated = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+            concatenated.set(chunk, offset);
+            offset += chunk.length;
+        }
+        request.uint8ArrayBody(concatenated);
     } else {
         console.warn('Unsupported body type');
     }
@@ -116,7 +134,7 @@ export class Response {
         return result;
     }
 
-    async text(){
+    async text() {
         let result = await this.nativeResponse.text();
         this.bodyUsed = true;
         return result;

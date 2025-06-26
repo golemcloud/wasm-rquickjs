@@ -11,6 +11,7 @@ use rquickjs::class::Trace;
 use rquickjs::function::Args;
 use rquickjs::{ArrayBuffer, Ctx, Function, JsLifetime, Object, TypedArray, Value};
 use std::collections::HashMap;
+use std::io::Read;
 
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]

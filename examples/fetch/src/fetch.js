@@ -43,3 +43,14 @@ export async function test3() {
         console.log(`Received chunk: ${chunk}`);
     }
 }
+
+export async function test4() {
+    console.log("fetch test 4");
+    const response1 = await fetch("https://postman-echo.com/stream/10");
+    const response2 = await fetch("https://postman-echo.com/post", {
+        method: "POST",
+        body: response1.body
+    });
+
+    console.log("Second response:", await response2.text());
+}
