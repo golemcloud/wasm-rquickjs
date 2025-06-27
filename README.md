@@ -154,8 +154,56 @@ sync or async.
 
 - Maximum number of function parameters is 26
 - Anonymous interface exports/imports are not supported
+- Imported individual functions into the world are not supported (only whole interfaces)
 
 ## Available JavaScript APIs
+
+### APIs
+
+#### Console
+If the `logging` feature flag is enabled in the generated crate, it depends on `wasi:logging`, otherwise just on the core WASI interfaces.
+
+- `assert`
+- `clear`
+- `debug`
+- `error`
+- `group`
+- `groupCollapsed`
+- `groupEnd`
+- `info`
+- `log`
+- `trace`
+- `warn`
+
+#### HTTP (fetch)
+Only if the `http` feature flag is enabled in the generated crate. It depends on `wasi:http`.
+
+- `fetch`
+- `Headers`
+- `Response`
+
+#### Streams
+Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
+
+- `ByteLengthQueuingStrategy`
+- `CountQueuingStrategy`
+- `ReadableByteStreamController`
+- `ReadableStream`
+- `ReadableStreamBYOBReader`
+- `ReadableStreamBYOBRequest`
+- `ReadableStreamDefaultController`
+- `ReadableStreamDefaultReader`
+- `TransformStream`
+- `TransformStreamDefaultController`
+- `WritableStream`
+- `WritableStreamDefaultController`
+
+#### Timeout functions
+- `setTimeout`
+- `clearTimeout`
+- `setInterval`
+- `clearInterval`
+- `setImmediate`
 
 ### Coming from QuickJS
 

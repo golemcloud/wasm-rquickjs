@@ -17,6 +17,7 @@ mod imports;
 mod rust_bindgen;
 mod skeleton;
 mod types;
+mod typescript;
 
 /// Generates a Rust wrapper crate for a combination of a WIT package and a JavaScript module.
 ///
@@ -82,9 +83,16 @@ pub fn generate_dts(wit: &Utf8Path, output: &Utf8Path, world: Option<&str>) -> a
     std::fs::create_dir_all(output).context("Failed to create output directory")?;
 
     // Resolving the WIT package
-    let _context = GeneratorContext::new(output, wit, world)?;
+    let context = GeneratorContext::new(output, wit, world)?;
 
-    todo!();
+    typescript::generate_export_module(&context)
+        .context("Failed to generate the TypeScript module definition for the exports")?;
+
+    // Generating the native modules implementing the component imports
+    typescript::generate_import_modules(&context)
+        .context("Failed to generate the TypeScript module definitions for the imported modules")?;
+
+    Ok(())
 }
 
 struct GeneratorContext<'a> {

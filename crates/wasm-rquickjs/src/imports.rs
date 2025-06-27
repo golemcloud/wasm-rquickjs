@@ -47,7 +47,7 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
     Ok(())
 }
 
-struct ImportedInterface<'a> {
+pub struct ImportedInterface<'a> {
     package_name: Option<&'a PackageName>,
     name: String,
     functions: Vec<(&'a str, &'a Function)>,
@@ -87,7 +87,7 @@ impl<'a> ImportedInterface<'a> {
     }
 }
 
-fn collect_imported_interfaces<'a>(
+pub fn collect_imported_interfaces<'a>(
     context: &'a GeneratorContext<'a>,
 ) -> anyhow::Result<(ImportedInterface<'a>, Vec<ImportedInterface<'a>>)> {
     let world = &context.resolve.worlds[context.world];
