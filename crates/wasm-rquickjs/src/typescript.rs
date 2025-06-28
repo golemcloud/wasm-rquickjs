@@ -1,6 +1,6 @@
 use crate::GeneratorContext;
 use crate::types::get_function_name;
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 use camino::Utf8Path;
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use std::collections::{BTreeMap, BTreeSet};
@@ -13,6 +13,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
     result.begin_declare_module(&world.name);
 
     let mut global_exports = Vec::new();
+    let mut global_types = Vec::new();
     let mut interface_exports = Vec::new();
 
     // Enumerating all exports and separating them into global exports and interface exports.
@@ -35,7 +36,9 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
             WorldItem::Function(function) => {
                 global_exports.push((name, function));
             }
-            WorldItem::Type(_) => {}
+            WorldItem::Type(typ) => {
+                global_types.push(*typ);
+            }
         }
     }
 
@@ -49,18 +52,37 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
             .iter()
             .map(|(name, function)| (name.clone(), function))
             .collect();
+        let interface_types: Vec<_> = interface
+            .types
+            .iter()
+            .map(|(_, type_id)| *type_id)
+            .collect();
 
         result.begin_export_module(&name);
         declare_functions_and_resources(&mut result, context, &interface_exports, true)?;
+
+        export_types(
+            &mut result,
+            context,
+            &interface_types,
+            &interface_exports
+                .into_iter()
+                .map(|(_, f)| f)
+                .collect::<Vec<_>>(),
+        )?;
+
         result.end_export_module();
     }
 
-    result.export_type(
-        "Result<T, E>",
-        "{ tag: 'ok', val: T } | { tag: 'err', val: E }",
-    );
-
-    export_types(&mut result, context)?;
+    export_types(
+        &mut result,
+        context,
+        &global_types,
+        &global_exports
+            .into_iter()
+            .map(|(_, f)| f)
+            .collect::<Vec<_>>(),
+    )?;
 
     result.end_declare_module();
     result.finish(&context.output.join("exports.d.ts"))
@@ -76,20 +98,29 @@ pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<()>
         let mut result = DtsWriter::new();
 
         result.begin_declare_module(&interface.fully_qualified_interface_name());
-        if let Some((iface_name, iface)) = interface.name_and_interface() {
+        if let Some((_iface_name, iface)) = interface.name_and_interface() {
             let interface_imports = iface
                 .functions
                 .iter()
                 .map(|(name, function)| (name.clone(), function))
                 .collect::<Vec<_>>();
+            let interface_types = iface
+                .types
+                .iter()
+                .map(|(_, type_id)| *type_id)
+                .collect::<Vec<_>>();
+
             declare_functions_and_resources(&mut result, context, &interface_imports, false)?;
 
-            result.export_type(
-                "Result<T, E>",
-                "{ tag: 'ok', val: T } | { tag: 'err', val: E }",
-            );
-
-            // TODO: define types
+            export_types(
+                &mut result,
+                context,
+                &interface_types,
+                &interface_imports
+                    .into_iter()
+                    .map(|(_, f)| f)
+                    .collect::<Vec<_>>(),
+            )?;
         }
         result.end_declare_module();
 
@@ -117,7 +148,9 @@ fn declare_functions_and_resources(
                     result.begin_export_function(&js_name)
                 };
                 for (param_name, param_type) in &function.params {
-                    exported_function.param(param_name, &ts_type_reference(context, param_type)?);
+                    let js_param_name = param_name.to_lower_camel_case();
+                    exported_function
+                        .param(&js_param_name, &ts_type_reference(context, param_type)?);
                 }
                 if let Some(result_type) = &function.result {
                     exported_function.result(&ts_type_reference(context, result_type)?);
@@ -165,8 +198,18 @@ fn declare_functions_and_resources(
                 FunctionKind::Constructor(_) => result.begin_constructor(),
                 _ => unreachable!(),
             };
-            for (param_name, param_type) in &function.params {
-                fun.param(param_name, &ts_type_reference(context, param_type)?);
+            let params = if matches!(
+                &function.kind,
+                FunctionKind::Method(_) | FunctionKind::AsyncMethod(_)
+            ) {
+                // Skipping `self`
+                &function.params[1..]
+            } else {
+                &function.params
+            };
+            for (param_name, param_type) in params {
+                let js_param_name = param_name.to_lower_camel_case();
+                fun.param(&js_param_name, &ts_type_reference(context, param_type)?);
             }
             if !matches!(&function.kind, FunctionKind::Constructor(_)) {
                 if let Some(result_type) = &function.result {
@@ -181,12 +224,35 @@ fn declare_functions_and_resources(
     Ok(())
 }
 
-// TODO: this should not work on a global "visited types" here, but types must be collected per exported/imported interface
-fn export_types(result: &mut DtsWriter, context: &GeneratorContext) -> anyhow::Result<()> {
-    let types_to_process = context.visited_types.borrow().clone();
+fn export_types(
+    result: &mut DtsWriter,
+    context: &GeneratorContext,
+    types: &[TypeId],
+    functions: &[&Function],
+) -> anyhow::Result<()> {
+    let mut visit_result = VisitResult::default();
+    for type_id in types {
+        visit_subtree(context, &Type::Id(*type_id), &mut visit_result)?;
+    }
+    for function in functions {
+        for (_, param_type) in &function.params {
+            visit_subtree(context, &param_type, &mut visit_result)?;
+        }
+        if let Some(result_type) = &function.result {
+            visit_subtree(context, &result_type, &mut visit_result)?;
+        }
+    }
+
     let mut visited_types = BTreeSet::new();
-    for type_id in &types_to_process {
+    for type_id in &visit_result.visited_types {
         export_type_definition(result, context, *type_id, &mut visited_types)?;
+    }
+
+    if visit_result.has_result {
+        result.export_type(
+            "Result<T, E>",
+            "{ tag: 'ok', val: T } | { tag: 'err', val: E }",
+        );
     }
 
     Ok(())
@@ -209,10 +275,12 @@ fn export_type_definition(
         .get(type_id)
         .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
-    if let TypeDefKind::Type(Type::Id(type_id)) = &typ.kind {
-        export_type_definition(result, context, *type_id, visited_types)
-    } else {
-        match &typ.name {
+    match &typ.kind {
+        TypeDefKind::Type(Type::Id(type_id)) => {
+            export_type_definition(result, context, *type_id, visited_types)
+        }
+        TypeDefKind::Resource => Ok(()),
+        _ => match &typ.name {
             Some(name) => {
                 let js_name = name.to_upper_camel_case();
                 let type_def = ts_type_definition(context, &typ)?;
@@ -220,7 +288,7 @@ fn export_type_definition(
                 Ok(())
             }
             None => Ok(()),
-        }
+        },
     }
 }
 
@@ -240,13 +308,17 @@ fn ts_type_reference(context: &GeneratorContext, typ: &Type) -> anyhow::Result<S
         Type::Char => Ok("string".to_string()),
         Type::String => Ok("string".to_string()),
         Type::ErrorContext => Ok("ErrorContext".to_string()),
-        Type::Id(_) => {
-            let typ = visit_subtree(context, typ)?.unwrap();
+        Type::Id(type_id) => {
+            let typ = context
+                .resolve
+                .types
+                .get(*type_id)
+                .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
             match &typ.name {
                 None => ts_type_definition(context, &typ),
                 Some(name) => {
-                    // TODO: check the owner of the type, may require an import?
+                    // TODO: in the current version we are not dealing with type imports between modules, instead we duplicate everything everywhere it's used.
                     Ok(name.to_upper_camel_case())
                 }
             }
@@ -254,10 +326,25 @@ fn ts_type_reference(context: &GeneratorContext, typ: &Type) -> anyhow::Result<S
     }
 }
 
+struct VisitResult {
+    visited_types: BTreeSet<TypeId>,
+    has_result: bool,
+}
+
+impl Default for VisitResult {
+    fn default() -> Self {
+        VisitResult {
+            visited_types: BTreeSet::new(),
+            has_result: false,
+        }
+    }
+}
+
 fn visit_subtree<'a>(
     context: &'a GeneratorContext<'a>,
     typ: &Type,
-) -> anyhow::Result<Option<&'a TypeDef>> {
+    result: &mut VisitResult,
+) -> anyhow::Result<()> {
     if let Type::Id(type_id) = typ {
         let typ = context
             .resolve
@@ -265,55 +352,54 @@ fn visit_subtree<'a>(
             .get(*type_id)
             .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
-        if !context.visited_types.borrow().contains(&type_id) {
-            context.record_visited_type(*type_id);
+        if !result.visited_types.contains(&type_id) {
+            result.visited_types.insert(*type_id);
 
             match &typ.kind {
                 TypeDefKind::Record(record) => {
                     for field in &record.fields {
-                        let _ = visit_subtree(context, &field.ty)?;
+                        visit_subtree(context, &field.ty, result)?;
                     }
                 }
                 TypeDefKind::Tuple(tuple) => {
                     for field_type in &tuple.types {
-                        let _ = visit_subtree(context, field_type)?;
+                        visit_subtree(context, field_type, result)?;
                     }
                 }
                 TypeDefKind::Variant(variant) => {
                     for case in &variant.cases {
                         if let Some(ty) = &case.ty {
-                            let _ = visit_subtree(context, ty)?;
+                            visit_subtree(context, ty, result)?;
                         }
                     }
                 }
                 TypeDefKind::Option(inner) => {
-                    let _ = visit_subtree(context, inner)?;
+                    visit_subtree(context, inner, result)?;
                 }
-                TypeDefKind::Result(result) => {
-                    if let Some(ok_type) = &result.ok {
-                        let _ = visit_subtree(context, ok_type)?;
+                TypeDefKind::Result(result_) => {
+                    result.has_result = true;
+                    if let Some(ok_type) = &result_.ok {
+                        visit_subtree(context, ok_type, result)?;
                     }
-                    if let Some(err_type) = &result.err {
-                        let _ = visit_subtree(context, err_type)?;
+                    if let Some(err_type) = &result_.err {
+                        visit_subtree(context, err_type, result)?;
                     }
                 }
                 TypeDefKind::List(elem_type) => {
-                    let _ = visit_subtree(context, elem_type)?;
+                    visit_subtree(context, elem_type, result)?;
                 }
                 TypeDefKind::FixedSizeList(elem_type, _) => {
-                    let _ = visit_subtree(context, elem_type)?;
+                    visit_subtree(context, elem_type, result)?;
                 }
                 TypeDefKind::Type(type_id) => {
-                    let _ = visit_subtree(context, type_id)?;
+                    visit_subtree(context, type_id, result)?;
                 }
                 _ => {}
             }
         }
-
-        Ok(Some(typ))
-    } else {
-        Ok(None)
     }
+
+    Ok(())
 }
 
 fn ts_type_definition(context: &GeneratorContext, typ: &&TypeDef) -> anyhow::Result<String> {

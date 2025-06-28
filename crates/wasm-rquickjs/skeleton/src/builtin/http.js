@@ -36,7 +36,6 @@ export async function fetch(resource, options = {}) {
     // TODO: DataView support
     // TODO: FormData support
     // TODO: URLSearchParams support
-    // TODO: ReadableStream support
 
     let body = options.body || '';
 
@@ -47,8 +46,7 @@ export async function fetch(resource, options = {}) {
     } else if (typeof body === 'string' || body instanceof String) {
         request.stringBody(body);
     } else if (body instanceof ReadableStream) {
-        // TODO: currently the native implementation does not support streaming request body, so we just buffer
-        // TODO: the stream here
+        // TODO: currently the native implementation does not support streaming request body, so we just buffer the stream here
         const reader = body.getReader();
         let chunks = [];
         let done, value;
