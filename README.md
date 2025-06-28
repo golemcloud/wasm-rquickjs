@@ -96,11 +96,11 @@ using Golem app templates.
 The following WIT code:
 
 ```wit
-package demo: package;
+package demo:pkg;
 
-                     world example {
-                                     export hello: func() -> string;
-                                     }
+world example {
+  export hello: func() -> string;
+}
 ```
 
 must be implemented in JavaScript as:
@@ -120,15 +120,15 @@ Exported interfaces has to be exported from JavaScript as objects:
 The following WIT example:
 
 ```wit
-package demo: package;
+package demo:pkg;
 
-                     interface sample-api {
-                                          get-string-length: func(value: string) -> u64;
-                                            }
+interface sample-api {
+  get-string-length: func(value: string) -> u64;
+}
 
 world example {
-                export sample-api;
-                }
+  export sample-api;
+}
 ```
 
 has to be implemented in JavaScript as:
@@ -151,20 +151,20 @@ Exported resources are implemented as **classes** in JS:
 The following WIT example:
 
 ```wit
-package demo: package;
+package demo:pkg;
 
-                     interface iface {
-                                       resource example-resource {
-                                                                 constructor(name: string);
-                                                                 get-name: func() -> string;
-                                                                               compare: static func(h1: borrow<example-resource>, h2: borrow<example-resource>) -> s32;
-                                                                                                                                            merge: static func(h1: own<example-resource>, h2: own<example-resource>) -> hello;
-                                                                   }
-                                       }
+interface iface {
+  resource example-resource {
+    constructor(name: string);
+    get-name: func() -> string;
+    compare: static func(h1: borrow<example-resource>, h2: borrow<example-resource>) -> s32;
+    merge: static func(h1: own<example-resource>, h2: own<example-resource>) -> hello;
+  }
+}
 
 world example {
-                export iface;
-                }
+  export iface;
+}
 ```
 
 Must be exported from JavaScript in the following way:
