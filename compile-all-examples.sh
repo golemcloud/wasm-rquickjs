@@ -3,7 +3,6 @@
 set -euox pipefail
 
 # Temporary test script until integration tests are implemented
-
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/export-from-inner-package/wit --js examples/export-from-inner-package/src/hello.js --output tmp/export-from-inner-package
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/hello-world1/wit --js examples/hello-world1/src/hello.js --output tmp/hello-world1
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/hello-world2/wit --js examples/hello-world2/src/hello.js --output tmp/hello-world2
@@ -16,7 +15,26 @@ cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-cr
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/all-golem-imports/wit --js examples/all-golem-imports/src/all-golem-imports.js --output tmp/all-golem-imports
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/console/wit --js examples/console/src/console.js --output tmp/console
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/timeout/wit --js examples/timeout/src/timeout.js --output tmp/timeout
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/streams/wit --js examples/streams/src/streams.js --output tmp/streams
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/fetch/wit --js examples/fetch/src/fetch.js --output tmp/fetch
 
+# Generate .d.ts files for all examples
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/export-from-inner-package/wit --output tmp/export-from-inner-package/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/hello-world1/wit --output tmp/hello-world1/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/hello-world2/wit --output tmp/hello-world2/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/hello-world3/wit --output tmp/hello-world3/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/imports1/wit --output tmp/imports1/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/imports2/wit --output tmp/imports2/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/imports3/wit --output tmp/imports3/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/stateful1/wit --output tmp/stateful1/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/types-in-exports/wit --output tmp/types-in-exports/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/all-golem-imports/wit --output tmp/all-golem-imports/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/console/wit --output tmp/console/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/timeout/wit --output tmp/timeout/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/streams/wit --output tmp/streams/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/fetch/wit --output tmp/fetch/dts
+
+# All generated crates can be compiled
 pushd tmp/export-from-inner-package
 cargo component build
 popd
@@ -53,4 +71,19 @@ popd
 pushd tmp/timeout
 cargo component build
 popd
+pushd tmp/streams
+cargo component build
+popd
+pushd tmp/fetch
+cargo component build
+popd
 
+# Test feature flags in one of the examples
+pushd tmp/hello-world1
+cargo clean
+cargo component build --no-default-features
+cargo clean
+cargo component build --no-default-features --feature logging
+cargo clean
+cargo component build --no-default-features --feature http
+popd

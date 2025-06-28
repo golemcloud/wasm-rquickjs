@@ -21,7 +21,7 @@ exclude = [
 members = ["crates/wasm-rquickjs"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.0"
 edition = "2024"
 
 [workspace.dependencies]
