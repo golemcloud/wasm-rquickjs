@@ -441,7 +441,6 @@ struct VisitResult {
     has_result: bool,
 }
 
-
 fn visit_subtree<'a>(
     context: &'a GeneratorContext<'a>,
     typ: &Type,
