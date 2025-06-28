@@ -295,10 +295,10 @@ fn export_types(
     }
     for function in functions {
         for (_, param_type) in &function.params {
-            visit_subtree(context, &param_type, interface_stack, &mut visit_result)?;
+            visit_subtree(context, param_type, interface_stack, &mut visit_result)?;
         }
         if let Some(result_type) = &function.result {
-            visit_subtree(context, &result_type, interface_stack, &mut visit_result)?;
+            visit_subtree(context, result_type, interface_stack, &mut visit_result)?;
         }
     }
 
@@ -345,38 +345,32 @@ fn export_type_definition(
         Some(name) => {
             let js_name = name.to_upper_camel_case();
 
-            match &typ.kind {
-                TypeDefKind::Type(Type::Id(type_id)) => {
-                    if !visited_types.contains(type_id) {
-                        let aliased_type = context
-                            .resolve
-                            .types
-                            .get(*type_id)
-                            .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
-                        match &aliased_type.owner {
-                            TypeOwner::Interface(interface_id) => {
-                                if !interface_stack.contains(interface_id) {
-                                    // The type is defined in a different module, need to be imported
-                                    let imported_interface =
-                                        context.get_imported_interface(interface_id)?;
-                                    let imported_module_name = escape_js_ident(
-                                        imported_interface.module_name()?.to_lower_camel_case(),
-                                    );
+            if let TypeDefKind::Type(Type::Id(type_id)) = &typ.kind {
+                if !visited_types.contains(type_id) {
+                    let aliased_type = context
+                        .resolve
+                        .types
+                        .get(*type_id)
+                        .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
+                    if let TypeOwner::Interface(interface_id) = &aliased_type.owner {
+                        if !interface_stack.contains(interface_id) {
+                            // The type is defined in a different module, need to be imported
+                            let imported_interface =
+                                context.get_imported_interface(interface_id)?;
+                            let imported_module_name = escape_js_ident(
+                                imported_interface.module_name()?.to_lower_camel_case(),
+                            );
 
-                                    result.import_module(
-                                        &imported_module_name,
-                                        &imported_interface.fully_qualified_interface_name(),
-                                    );
-                                }
-                            }
-                            _ => {}
+                            result.import_module(
+                                &imported_module_name,
+                                &imported_interface.fully_qualified_interface_name(),
+                            );
                         }
                     }
                 }
-                _ => {}
             };
 
-            let type_def = ts_type_definition(context, &typ, interface_stack)?;
+            let type_def = ts_type_definition(context, typ, interface_stack)?;
             result.export_type(&js_name, &type_def);
             Ok(())
         }
@@ -412,7 +406,7 @@ fn ts_type_reference(
                 .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
             match &typ.name {
-                None => ts_type_definition(context, &typ, interface_stack),
+                None => ts_type_definition(context, typ, interface_stack),
                 Some(name) => {
                     match &typ.owner {
                         TypeOwner::Interface(interface_id) => {
@@ -441,19 +435,12 @@ fn ts_type_reference(
     }
 }
 
+#[derive(Default)]
 struct VisitResult {
     visited_types: BTreeSet<TypeId>,
     has_result: bool,
 }
 
-impl Default for VisitResult {
-    fn default() -> Self {
-        VisitResult {
-            visited_types: BTreeSet::new(),
-            has_result: false,
-        }
-    }
-}
 
 fn visit_subtree<'a>(
     context: &'a GeneratorContext<'a>,
@@ -468,7 +455,7 @@ fn visit_subtree<'a>(
             .get(*type_id)
             .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
-        if !result.visited_types.contains(&type_id) {
+        if !result.visited_types.contains(type_id) {
             if !matches!(typ.kind, TypeDefKind::Resource) {
                 // Resource types are handled specially, we don't want them in the set of type IDs
                 result.visited_types.insert(*type_id);
@@ -548,7 +535,7 @@ fn ts_type_definition(
                 let field_type = ts_type_reference(context, &field.ty, interface_stack)?;
                 record_def.push_str(&format!("  {js_name}: {field_type};\n"));
             }
-            record_def.push_str("}");
+            record_def.push('}');
             Ok(record_def)
         }
         TypeDefKind::Handle(handle) => {
@@ -571,7 +558,7 @@ fn ts_type_definition(
                 let flag_name = escape_js_ident(flag.name.to_lower_camel_case());
                 flags_def.push_str(&format!("  {flag_name}: boolean;\n"));
             }
-            flags_def.push_str("}");
+            flags_def.push('}');
             Ok(flags_def)
         }
         TypeDefKind::Tuple(tuple) => {
@@ -656,7 +643,7 @@ fn ts_resource_reference(
                 let imported_module_name =
                     escape_js_ident(imported_interface.module_name()?.to_lower_camel_case());
 
-                Ok(format!("{}.{}", imported_module_name, js_resource_name))
+                Ok(format!("{imported_module_name}.{js_resource_name}"))
             } else {
                 Ok(js_resource_name)
             }
@@ -824,7 +811,7 @@ impl DtsWriter {
 
     fn indented_write(&mut self, line: impl AsRef<str>) {
         let indent = "  ".repeat(self.current_indent);
-        self.write(&format!("{}{}", indent, line.as_ref()));
+        self.write(format!("{}{}", indent, line.as_ref()));
     }
 
     fn write(&mut self, content: impl AsRef<str>) {
@@ -848,7 +835,7 @@ impl<'a> DtsFunctionWriter<'a> {
         if self.param_count > 0 {
             self.writer.write(", ");
         }
-        self.writer.write(&format!("{name}: {typ}"));
+        self.writer.write(format!("{name}: {typ}"));
         self.param_count += 1;
     }
 

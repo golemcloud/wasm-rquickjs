@@ -141,8 +141,8 @@ fn generate_guest_impl(
                 let func_impl = generate_exported_function_impl(
                     context,
                     interface.map(|(name, _)| name),
-                    &name,
-                    &function,
+                    name,
+                    function,
                 )?;
                 func_impls.push(func_impl);
             }
@@ -198,8 +198,8 @@ fn generate_guest_impl(
                 context,
                 interface.map(|(name, _)| name),
                 resource_type_id,
-                &name,
-                &resource_function,
+                name,
+                resource_function,
             )?;
             resource_func_impls.push(func_impl);
         }

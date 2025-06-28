@@ -52,7 +52,7 @@ pub fn generate_app_manifest(context: &GeneratorContext<'_>) -> anyhow::Result<(
 
     // Writing the result
     let output_path = context.output.join("golem.yaml");
-    std::fs::write(output_path, raw_yaml.to_string())?;
+    std::fs::write(output_path, &raw_yaml)?;
     Ok(())
 }
 
@@ -102,7 +102,7 @@ fn add_wit_dependencies(context: &&GeneratorContext, doc: &mut DocumentMut) -> a
             let mut parents = BTreeSet::new();
             for path in paths {
                 let path = Utf8Path::from_path(path).ok_or_else(|| anyhow!("Invalid path"))?;
-                let relative_path = path.strip_prefix(&context.wit_source_path).unwrap_or(path);
+                let relative_path = path.strip_prefix(context.wit_source_path).unwrap_or(path);
                 if let Some(parent) = relative_path.parent() {
                     parents.insert(parent);
                 }

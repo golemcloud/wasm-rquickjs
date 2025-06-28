@@ -644,12 +644,10 @@ fn get_wrapped_type_string(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<Wra
         ctx.original_type_ref,
         if ctx.mode.lifetime.is_some() {
             Box::new(|v| quote! { #v.as_str() })
+        } else if ctx.in_as_ref {
+            Box::new(|ts| quote! { #ts.clone() })
         } else {
-            if ctx.in_as_ref {
-                Box::new(|ts| quote! { #ts.clone() })
-            } else {
-                identity_wrapper()
-            }
+            identity_wrapper()
         },
     ))
 }
@@ -669,7 +667,7 @@ fn owned_resource_ref(
         .ok_or_else(|| anyhow!("Resource type {resource_type:?} has no name"))?;
 
     let (interface, is_export) =
-        analyse_resource_type_owner(context, resource_name, &resource_type)?;
+        analyse_resource_type_owner(context, resource_name, resource_type)?;
 
     let handle_ident = Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
     let handle_path = if is_export {
@@ -689,13 +687,10 @@ fn follow_type_paths(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow:
             .get(current_type_id)
             .ok_or_else(|| anyhow!("Unknown type id: {current_type_id:?}"))?;
         match &typ.kind {
-            TypeDefKind::Type(inner) => match inner {
-                Type::Id(inner_type_id) => {
-                    current_type_id = *inner_type_id;
-                    continue;
-                }
-                _ => return Ok(typ.clone()),
-            },
+            TypeDefKind::Type(Type::Id(inner_type_id)) => {
+                current_type_id = *inner_type_id;
+                continue;
+            }
             _ => return Ok(typ.clone()),
         }
     }

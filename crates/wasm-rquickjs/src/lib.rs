@@ -56,14 +56,14 @@ pub fn generate_wrapper_crate(
     generate_app_manifest(&context)?;
 
     // Copying the skeleton files
-    copy_skeleton_sources(&context.output).context("Failed to copy skeleton sources")?;
+    copy_skeleton_sources(context.output).context("Failed to copy skeleton sources")?;
 
     // Copying the WIT package to the output directory
-    copy_wit_directory(&wit, &context.output)
+    copy_wit_directory(wit, context.output)
         .context("Failed to copy WIT package to output directory")?;
 
     // Copying the JavaScript module to the output directory
-    copy_js_module(js, &context.output)
+    copy_js_module(js, context.output)
         .context("Failed to copy JavaScript module to output directory")?;
 
     // Generating the lib.rs file implementing the component exports

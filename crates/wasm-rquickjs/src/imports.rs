@@ -25,7 +25,7 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
         let file_name = format!("{module_name}.rs");
 
         let module_path = context.output.join("src").join("modules").join(&file_name);
-        let module_tokens = generate_import_module(context, &interface, &interfaces)?;
+        let module_tokens = generate_import_module(context, interface, &interfaces)?;
 
         let module_ast: syn::File = syn::parse2(module_tokens)
             .context(format!("failed to parse generated {file_name} tokens"))?;
@@ -238,7 +238,7 @@ fn generate_import_module(
         let resource_name_ident =
             Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
         let borrow_wrapper_ident = Ident::new(
-            &format!("Borrow{}Wrapper", resource_name_ident),
+            &format!("Borrow{resource_name_ident}Wrapper"),
             Span::call_site(),
         );
 
