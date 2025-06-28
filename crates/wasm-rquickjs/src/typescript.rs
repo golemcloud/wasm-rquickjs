@@ -1,10 +1,14 @@
 use crate::GeneratorContext;
+use crate::javascript::escape_js_ident;
 use crate::types::get_function_name;
 use anyhow::anyhow;
 use camino::Utf8Path;
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
-use std::collections::{BTreeMap, BTreeSet};
-use wit_parser::{Function, FunctionKind, Type, TypeDef, TypeDefKind, TypeId, WorldItem, WorldKey};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use wit_parser::{
+    Function, FunctionKind, InterfaceId, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, WorldItem,
+    WorldKey,
+};
 
 pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> {
     let mut result = DtsWriter::new();
@@ -31,7 +35,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
         match export {
             WorldItem::Interface { id, .. } => {
                 let interface = &context.resolve.interfaces[*id];
-                interface_exports.push((name, interface));
+                interface_exports.push((name, interface, *id));
             }
             WorldItem::Function(function) => {
                 global_exports.push((name, function));
@@ -43,10 +47,17 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
     }
 
     // Each global export is directly exported as an async function.
-    declare_functions_and_resources(&mut result, context, &global_exports, true)?;
+    declare_functions_and_resources(
+        &mut result,
+        context,
+        &global_exports,
+        &global_types,
+        true,
+        &VecDeque::new(),
+    )?;
 
     // Declaring each exported interface as a module
-    for (name, interface) in interface_exports {
+    for (name, interface, interface_id) in interface_exports {
         let interface_exports: Vec<_> = interface
             .functions
             .iter()
@@ -57,9 +68,17 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
             .iter()
             .map(|(_, type_id)| *type_id)
             .collect();
+        let interface_stack: VecDeque<_> = vec![interface_id].into_iter().collect();
 
         result.begin_export_module(&name);
-        declare_functions_and_resources(&mut result, context, &interface_exports, true)?;
+        declare_functions_and_resources(
+            &mut result,
+            context,
+            &interface_exports,
+            &interface_types,
+            true,
+            &interface_stack,
+        )?;
 
         export_types(
             &mut result,
@@ -69,6 +88,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
                 .into_iter()
                 .map(|(_, f)| f)
                 .collect::<Vec<_>>(),
+            &interface_stack,
         )?;
 
         result.end_export_module();
@@ -82,6 +102,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
             .into_iter()
             .map(|(_, f)| f)
             .collect::<Vec<_>>(),
+        &VecDeque::new(),
     )?;
 
     result.end_declare_module();
@@ -109,8 +130,16 @@ pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<()>
                 .iter()
                 .map(|(_, type_id)| *type_id)
                 .collect::<Vec<_>>();
+            let interface_stack = interface.interface_stack();
 
-            declare_functions_and_resources(&mut result, context, &interface_imports, false)?;
+            declare_functions_and_resources(
+                &mut result,
+                context,
+                &interface_imports,
+                &interface_types,
+                false,
+                &interface_stack,
+            )?;
 
             export_types(
                 &mut result,
@@ -120,6 +149,7 @@ pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<()>
                     .into_iter()
                     .map(|(_, f)| f)
                     .collect::<Vec<_>>(),
+                &interface_stack,
             )?;
         }
         result.end_declare_module();
@@ -134,26 +164,46 @@ fn declare_functions_and_resources(
     result: &mut DtsWriter,
     context: &GeneratorContext,
     functions: &[(String, &Function)],
+    types: &[TypeId],
     async_: bool,
+    interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<()> {
     let mut resource_functions = BTreeMap::new();
+
+    // Preinitialize resource_functions from types to have entries for resources with no methods
+    for type_id in types {
+        let typ = context
+            .resolve
+            .types
+            .get(*type_id)
+            .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
+        if typ.kind == TypeDefKind::Resource {
+            resource_functions.insert(type_id, Vec::new());
+        }
+    }
 
     for (name, function) in functions {
         match &function.kind {
             FunctionKind::Freestanding => {
-                let js_name = name.to_lower_camel_case();
+                let js_name = escape_js_ident(name.to_lower_camel_case());
                 let mut exported_function = if async_ {
                     result.begin_export_async_function(&js_name)
                 } else {
                     result.begin_export_function(&js_name)
                 };
                 for (param_name, param_type) in &function.params {
-                    let js_param_name = param_name.to_lower_camel_case();
-                    exported_function
-                        .param(&js_param_name, &ts_type_reference(context, param_type)?);
+                    let js_param_name = escape_js_ident(param_name.to_lower_camel_case());
+                    exported_function.param(
+                        &js_param_name,
+                        &ts_type_reference(context, param_type, interface_stack)?,
+                    );
                 }
                 if let Some(result_type) = &function.result {
-                    exported_function.result(&ts_type_reference(context, result_type)?);
+                    exported_function.result(&ts_type_reference(
+                        context,
+                        result_type,
+                        interface_stack,
+                    )?);
                 }
             }
             FunctionKind::AsyncFreestanding
@@ -189,7 +239,7 @@ fn declare_functions_and_resources(
         result.begin_export_class(&js_resource_name);
 
         for (name, function) in resource_funcs {
-            let js_name = get_function_name(name, function)?.to_lower_camel_case();
+            let js_name = escape_js_ident(get_function_name(name, function)?.to_lower_camel_case());
             let mut fun = match &function.kind {
                 FunctionKind::Method(_) if async_ => result.begin_async_method(&js_name),
                 FunctionKind::Method(_) => result.begin_method(&js_name),
@@ -208,12 +258,15 @@ fn declare_functions_and_resources(
                 &function.params
             };
             for (param_name, param_type) in params {
-                let js_param_name = param_name.to_lower_camel_case();
-                fun.param(&js_param_name, &ts_type_reference(context, param_type)?);
+                let js_param_name = escape_js_ident(param_name.to_lower_camel_case());
+                fun.param(
+                    &js_param_name,
+                    &ts_type_reference(context, param_type, interface_stack)?,
+                );
             }
             if !matches!(&function.kind, FunctionKind::Constructor(_)) {
                 if let Some(result_type) = &function.result {
-                    fun.result(&ts_type_reference(context, result_type)?);
+                    fun.result(&ts_type_reference(context, result_type, interface_stack)?);
                 }
             }
         }
@@ -229,23 +282,35 @@ fn export_types(
     context: &GeneratorContext,
     types: &[TypeId],
     functions: &[&Function],
+    interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<()> {
     let mut visit_result = VisitResult::default();
     for type_id in types {
-        visit_subtree(context, &Type::Id(*type_id), &mut visit_result)?;
+        visit_subtree(
+            context,
+            &Type::Id(*type_id),
+            interface_stack,
+            &mut visit_result,
+        )?;
     }
     for function in functions {
         for (_, param_type) in &function.params {
-            visit_subtree(context, &param_type, &mut visit_result)?;
+            visit_subtree(context, &param_type, interface_stack, &mut visit_result)?;
         }
         if let Some(result_type) = &function.result {
-            visit_subtree(context, &result_type, &mut visit_result)?;
+            visit_subtree(context, &result_type, interface_stack, &mut visit_result)?;
         }
     }
 
     let mut visited_types = BTreeSet::new();
     for type_id in &visit_result.visited_types {
-        export_type_definition(result, context, *type_id, &mut visited_types)?;
+        export_type_definition(
+            result,
+            context,
+            *type_id,
+            &mut visited_types,
+            interface_stack,
+        )?;
     }
 
     if visit_result.has_result {
@@ -263,6 +328,7 @@ fn export_type_definition(
     context: &GeneratorContext<'_>,
     type_id: TypeId,
     visited_types: &mut BTreeSet<TypeId>,
+    interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<()> {
     if !visited_types.insert(type_id) {
         // Already processed this type, skip it
@@ -275,24 +341,54 @@ fn export_type_definition(
         .get(type_id)
         .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
-    match &typ.kind {
-        TypeDefKind::Type(Type::Id(type_id)) => {
-            export_type_definition(result, context, *type_id, visited_types)
+    match &typ.name {
+        Some(name) => {
+            let js_name = name.to_upper_camel_case();
+
+            match &typ.kind {
+                TypeDefKind::Type(Type::Id(type_id)) => {
+                    if !visited_types.contains(type_id) {
+                        let aliased_type = context
+                            .resolve
+                            .types
+                            .get(*type_id)
+                            .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
+                        match &aliased_type.owner {
+                            TypeOwner::Interface(interface_id) => {
+                                if !interface_stack.contains(interface_id) {
+                                    // The type is defined in a different module, need to be imported
+                                    let imported_interface =
+                                        context.get_imported_interface(interface_id)?;
+                                    let imported_module_name = escape_js_ident(
+                                        imported_interface.module_name()?.to_lower_camel_case(),
+                                    );
+
+                                    result.import_module(
+                                        &imported_module_name,
+                                        &imported_interface.fully_qualified_interface_name(),
+                                    );
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            };
+
+            let type_def = ts_type_definition(context, &typ, interface_stack)?;
+            result.export_type(&js_name, &type_def);
+            Ok(())
         }
-        TypeDefKind::Resource => Ok(()),
-        _ => match &typ.name {
-            Some(name) => {
-                let js_name = name.to_upper_camel_case();
-                let type_def = ts_type_definition(context, &typ)?;
-                result.export_type(&js_name, &type_def);
-                Ok(())
-            }
-            None => Ok(()),
-        },
+        None => Ok(()),
     }
 }
 
-fn ts_type_reference(context: &GeneratorContext, typ: &Type) -> anyhow::Result<String> {
+fn ts_type_reference(
+    context: &GeneratorContext,
+    typ: &Type,
+    interface_stack: &VecDeque<InterfaceId>,
+) -> anyhow::Result<String> {
     match typ {
         Type::Bool => Ok("boolean".to_string()),
         Type::U8
@@ -316,10 +412,29 @@ fn ts_type_reference(context: &GeneratorContext, typ: &Type) -> anyhow::Result<S
                 .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
             match &typ.name {
-                None => ts_type_definition(context, &typ),
+                None => ts_type_definition(context, &typ, interface_stack),
                 Some(name) => {
-                    // TODO: in the current version we are not dealing with type imports between modules, instead we duplicate everything everywhere it's used.
-                    Ok(name.to_upper_camel_case())
+                    match &typ.owner {
+                        TypeOwner::Interface(interface_id) => {
+                            if !interface_stack.contains(interface_id) {
+                                // The type is defined in a different module, need to be imported
+                                let imported_interface =
+                                    context.get_imported_interface(interface_id)?;
+                                let imported_module_name = escape_js_ident(
+                                    imported_interface.module_name()?.to_lower_camel_case(),
+                                );
+
+                                Ok(format!(
+                                    "{}.{}",
+                                    imported_module_name,
+                                    name.to_upper_camel_case()
+                                ))
+                            } else {
+                                Ok(name.to_upper_camel_case())
+                            }
+                        }
+                        _ => Ok(name.to_upper_camel_case()),
+                    }
                 }
             }
         }
@@ -343,6 +458,7 @@ impl Default for VisitResult {
 fn visit_subtree<'a>(
     context: &'a GeneratorContext<'a>,
     typ: &Type,
+    interface_stack: &VecDeque<InterfaceId>,
     result: &mut VisitResult,
 ) -> anyhow::Result<()> {
     if let Type::Id(type_id) = typ {
@@ -353,46 +469,62 @@ fn visit_subtree<'a>(
             .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
         if !result.visited_types.contains(&type_id) {
-            result.visited_types.insert(*type_id);
+            if !matches!(typ.kind, TypeDefKind::Resource) {
+                // Resource types are handled specially, we don't want them in the set of type IDs
+                result.visited_types.insert(*type_id);
+            }
 
             match &typ.kind {
                 TypeDefKind::Record(record) => {
                     for field in &record.fields {
-                        visit_subtree(context, &field.ty, result)?;
+                        visit_subtree(context, &field.ty, interface_stack, result)?;
                     }
                 }
                 TypeDefKind::Tuple(tuple) => {
                     for field_type in &tuple.types {
-                        visit_subtree(context, field_type, result)?;
+                        visit_subtree(context, field_type, interface_stack, result)?;
                     }
                 }
                 TypeDefKind::Variant(variant) => {
                     for case in &variant.cases {
                         if let Some(ty) = &case.ty {
-                            visit_subtree(context, ty, result)?;
+                            visit_subtree(context, ty, interface_stack, result)?;
                         }
                     }
                 }
                 TypeDefKind::Option(inner) => {
-                    visit_subtree(context, inner, result)?;
+                    visit_subtree(context, inner, interface_stack, result)?;
                 }
                 TypeDefKind::Result(result_) => {
                     result.has_result = true;
                     if let Some(ok_type) = &result_.ok {
-                        visit_subtree(context, ok_type, result)?;
+                        visit_subtree(context, ok_type, interface_stack, result)?;
                     }
                     if let Some(err_type) = &result_.err {
-                        visit_subtree(context, err_type, result)?;
+                        visit_subtree(context, err_type, interface_stack, result)?;
                     }
                 }
                 TypeDefKind::List(elem_type) => {
-                    visit_subtree(context, elem_type, result)?;
+                    visit_subtree(context, elem_type, interface_stack, result)?;
                 }
                 TypeDefKind::FixedSizeList(elem_type, _) => {
-                    visit_subtree(context, elem_type, result)?;
+                    visit_subtree(context, elem_type, interface_stack, result)?;
                 }
-                TypeDefKind::Type(type_id) => {
-                    visit_subtree(context, type_id, result)?;
+                TypeDefKind::Type(Type::Id(type_id)) => {
+                    let aliased_type = context
+                        .resolve
+                        .types
+                        .get(*type_id)
+                        .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
+                    if let TypeOwner::Interface(interface_id) = &aliased_type.owner {
+                        if !interface_stack.contains(interface_id) {
+                            // The type is defined in a different module. In this case we are not
+                            // following the type reference, we will only generate an import
+                        }
+                    }
+                }
+                TypeDefKind::Type(typ) => {
+                    visit_subtree(context, typ, interface_stack, result)?;
                 }
                 _ => {}
             }
@@ -402,14 +534,18 @@ fn visit_subtree<'a>(
     Ok(())
 }
 
-fn ts_type_definition(context: &GeneratorContext, typ: &&TypeDef) -> anyhow::Result<String> {
+fn ts_type_definition(
+    context: &GeneratorContext,
+    typ: &TypeDef,
+    interface_stack: &VecDeque<InterfaceId>,
+) -> anyhow::Result<String> {
     match &typ.kind {
         TypeDefKind::Record(record) => {
             let mut record_def = String::new();
             record_def.push_str("{\n");
             for field in &record.fields {
-                let js_name = field.name.to_lower_camel_case(); // TODO: escape JS/TS idents
-                let field_type = ts_type_reference(context, &field.ty)?;
+                let js_name = escape_js_ident(field.name.to_lower_camel_case());
+                let field_type = ts_type_reference(context, &field.ty, interface_stack)?;
                 record_def.push_str(&format!("  {js_name}: {field_type};\n"));
             }
             record_def.push_str("}");
@@ -420,25 +556,19 @@ fn ts_type_definition(context: &GeneratorContext, typ: &&TypeDef) -> anyhow::Res
                 wit_parser::Handle::Borrow(id) => *id,
                 wit_parser::Handle::Own(id) => *id,
             };
-
             let resource_type = context
                 .resolve
                 .types
                 .get(resource_type_id)
                 .ok_or_else(|| anyhow!("Unknown type id: {resource_type_id:?}"))?;
 
-            let resource_name = resource_type
-                .name
-                .as_ref()
-                .ok_or_else(|| anyhow!("Resource type has no name: {resource_type_id:?}"))?;
-
-            Ok(resource_name.to_upper_camel_case())
+            ts_resource_reference(context, resource_type, interface_stack)
         }
         TypeDefKind::Flags(flags) => {
             let mut flags_def = String::new();
             flags_def.push_str("{\n");
             for flag in &flags.flags {
-                let flag_name = flag.name.to_lower_camel_case();
+                let flag_name = escape_js_ident(flag.name.to_lower_camel_case());
                 flags_def.push_str(&format!("  {flag_name}: boolean;\n"));
             }
             flags_def.push_str("}");
@@ -448,7 +578,7 @@ fn ts_type_definition(context: &GeneratorContext, typ: &&TypeDef) -> anyhow::Res
             let types: Vec<String> = tuple
                 .types
                 .iter()
-                .map(|t| ts_type_reference(context, t))
+                .map(|t| ts_type_reference(context, t, interface_stack))
                 .collect::<Result<_, _>>()?;
             Ok(format!("[{}]", types.join(", ")))
         }
@@ -458,7 +588,7 @@ fn ts_type_definition(context: &GeneratorContext, typ: &&TypeDef) -> anyhow::Res
                 let case_name = &case.name;
                 match &case.ty {
                     Some(ty) => {
-                        let case_type = ts_type_reference(context, ty)?;
+                        let case_type = ts_type_reference(context, ty, interface_stack)?;
                         case_defs.push(format!("{{\n  tag: '{case_name}'\n  val: {case_type}\n}}"));
                     }
                     None => {
@@ -480,37 +610,70 @@ fn ts_type_definition(context: &GeneratorContext, typ: &&TypeDef) -> anyhow::Res
         }
         TypeDefKind::Option(inner_type) => Ok(format!(
             "{} | undefined",
-            ts_type_reference(context, inner_type)?
+            ts_type_reference(context, inner_type, interface_stack)?
         )),
         TypeDefKind::Result(result) => {
             let ok_type = result
                 .ok
-                .map(|t| ts_type_reference(context, &t))
+                .map(|t| ts_type_reference(context, &t, interface_stack))
                 .transpose()?
                 .unwrap_or("void".to_string());
             let err_type = result
                 .err
-                .map(|t| ts_type_reference(context, &t))
+                .map(|t| ts_type_reference(context, &t, interface_stack))
                 .transpose()?
                 .unwrap_or("Error".to_string());
             Ok(format!("Result<{ok_type}, {err_type}>"))
         }
-        TypeDefKind::List(elem_type) | TypeDefKind::FixedSizeList(elem_type, _) => {
-            Ok(format!("{}[]", ts_type_reference(context, elem_type)?))
-        }
-        TypeDefKind::Type(aliased) => ts_type_reference(context, aliased),
+        TypeDefKind::List(elem_type) | TypeDefKind::FixedSizeList(elem_type, _) => Ok(format!(
+            "{}[]",
+            ts_type_reference(context, elem_type, interface_stack)?
+        )),
+        TypeDefKind::Type(aliased) => ts_type_reference(context, aliased, interface_stack),
         TypeDefKind::Future(_) => Err(anyhow!("Future types are not supported yet")),
         TypeDefKind::Stream(_) => Err(anyhow!("Stream types are not supported yet")),
-        TypeDefKind::Resource => Err(anyhow!(
-            "Cannot generate TypeScript type definition for a Resource"
-        )),
+        TypeDefKind::Resource => ts_resource_reference(context, typ, interface_stack),
         TypeDefKind::Unknown => Err(anyhow!("Unknown type definition kind")),
     }
+}
+
+fn ts_resource_reference(
+    context: &GeneratorContext,
+    resource_type: &TypeDef,
+    interface_stack: &VecDeque<InterfaceId>,
+) -> anyhow::Result<String> {
+    let resource_name = resource_type
+        .name
+        .as_ref()
+        .ok_or_else(|| anyhow!("Resource type has no name: {resource_type:?}"))?;
+    let js_resource_name = resource_name.to_upper_camel_case();
+
+    match &resource_type.owner {
+        TypeOwner::Interface(interface_id) => {
+            if !interface_stack.contains(interface_id) {
+                // The type is defined in a different module, need to be imported
+                let imported_interface = context.get_imported_interface(interface_id)?;
+                let imported_module_name =
+                    escape_js_ident(imported_interface.module_name()?.to_lower_camel_case());
+
+                Ok(format!("{}.{}", imported_module_name, js_resource_name))
+            } else {
+                Ok(js_resource_name)
+            }
+        }
+        _ => Ok(js_resource_name),
+    }
+}
+
+struct DtsModuleState {
+    imports: BTreeSet<String>,
+    content: String,
 }
 
 struct DtsWriter {
     content: String,
     current_indent: usize,
+    module_stack: Vec<DtsModuleState>,
 }
 
 impl DtsWriter {
@@ -518,6 +681,7 @@ impl DtsWriter {
         DtsWriter {
             content: String::new(),
             current_indent: 0,
+            module_stack: Vec::new(),
         }
     }
 
@@ -529,6 +693,10 @@ impl DtsWriter {
     pub fn begin_declare_module(&mut self, name: &str) {
         self.indented_write_line(format!("declare module '{name}' {{"));
         self.current_indent += 1;
+        self.module_stack.push(DtsModuleState {
+            imports: BTreeSet::new(),
+            content: String::new(),
+        })
     }
 
     pub fn begin_export_module(&mut self, name: &str) {
@@ -537,6 +705,14 @@ impl DtsWriter {
     }
 
     pub fn end_declare_module(&mut self) {
+        let module = self.module_stack.pop().expect("No module state to end");
+        // Write all imports collected in this module
+        for import in module.imports {
+            self.indented_write_line(import);
+        }
+        // Write all lines collected in this module
+        self.write(module.content);
+
         self.current_indent -= 1;
         self.indented_write_line("}");
     }
@@ -630,6 +806,15 @@ impl DtsWriter {
         self.indented_write_line(format!("export type {name} = {definition};"));
     }
 
+    pub fn import_module(&mut self, name: &str, from: &str) {
+        let import_line = format!("import * as {name} from '{from}';");
+        if let Some(module) = self.module_stack.last_mut() {
+            module.imports.insert(import_line);
+        } else {
+            self.indented_write_line(import_line);
+        }
+    }
+
     fn indented_write_line(&mut self, line: impl AsRef<str>) {
         for line in line.as_ref().lines() {
             self.indented_write(line);
@@ -643,7 +828,11 @@ impl DtsWriter {
     }
 
     fn write(&mut self, content: impl AsRef<str>) {
-        self.content.push_str(content.as_ref());
+        if let Some(module) = self.module_stack.last_mut() {
+            module.content.push_str(content.as_ref());
+        } else {
+            self.content.push_str(content.as_ref());
+        }
     }
 }
 

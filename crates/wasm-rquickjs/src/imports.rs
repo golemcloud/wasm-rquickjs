@@ -1,18 +1,17 @@
-use crate::GeneratorContext;
+use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::escape_rust_ident;
 use crate::types::{
     WrappedType, get_function_name, get_wrapped_type, ident_in_imported_interface_or_global,
     process_parameter, to_unwrapped_param_refs, to_wrapped_func_arg_list,
 };
+use crate::{GeneratorContext, ImportedInterface};
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
 use syn::LitStr;
-use wit_parser::{
-    Function, FunctionKind, Interface, PackageName, TypeDefKind, WorldItem, WorldKey,
-};
+use wit_parser::{FunctionKind, TypeDefKind, WorldItem, WorldKey};
 
 /// Generates the `mod.rs` and one file per imported interface in the `<output>/src/modules`
 /// directory.
@@ -47,46 +46,6 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
     Ok(())
 }
 
-pub struct ImportedInterface<'a> {
-    package_name: Option<&'a PackageName>,
-    name: String,
-    functions: Vec<(&'a str, &'a Function)>,
-    interface: Option<&'a Interface>,
-}
-
-impl<'a> ImportedInterface<'a> {
-    pub fn module_name(&self) -> anyhow::Result<String> {
-        let package_name = self
-            .package_name
-            .ok_or_else(|| anyhow!("imported interface has no package name"))?;
-        let interface_name = &self.name;
-
-        Ok(format!(
-            "{}_{}",
-            package_name.to_string().to_snake_case(),
-            interface_name.to_snake_case()
-        ))
-    }
-
-    pub fn rust_interface_name(&self) -> Ident {
-        let interface_name = format!("Js{}Module", self.name.to_upper_camel_case());
-        Ident::new(&interface_name, Span::call_site())
-    }
-
-    pub fn name_and_interface(&self) -> Option<(&str, &Interface)> {
-        self.interface
-            .map(|interface| (self.name.as_str(), interface))
-    }
-
-    pub fn fully_qualified_interface_name(&self) -> String {
-        if let Some(package_name) = &self.package_name {
-            package_name.interface_id(&self.name)
-        } else {
-            self.name.clone()
-        }
-    }
-}
-
 pub fn collect_imported_interfaces<'a>(
     context: &'a GeneratorContext<'a>,
 ) -> anyhow::Result<(ImportedInterface<'a>, Vec<ImportedInterface<'a>>)> {
@@ -109,27 +68,7 @@ pub fn collect_imported_interfaces<'a>(
         };
         match import {
             WorldItem::Interface { id, .. } => {
-                let interface = &context.resolve.interfaces[*id];
-                let functions = interface
-                    .functions
-                    .iter()
-                    .map(|(name, f)| (name.as_str(), f))
-                    .collect();
-
-                let package_id = interface
-                    .package
-                    .ok_or_else(|| anyhow!("Anonymous interface imports are not supported yet"))?;
-                let package = context.resolve.packages.get(package_id).ok_or_else(|| {
-                    anyhow!("Could not find package of imported interface {name}")
-                })?;
-                let package_name = &package.name;
-
-                interfaces.push(ImportedInterface {
-                    package_name: Some(package_name),
-                    name: name.to_string(),
-                    functions,
-                    interface: Some(interface),
-                });
+                interfaces.push(context.get_imported_interface(id)?);
             }
             WorldItem::Function(function) => {
                 global_imports.push((name, function));
@@ -143,6 +82,7 @@ pub fn collect_imported_interfaces<'a>(
         name: context.world_name.to_upper_camel_case(),
         functions: global_imports,
         interface: None,
+        interface_id: None,
     };
 
     Ok((global, interfaces))
@@ -223,7 +163,7 @@ fn generate_import_module(
     for (name, function) in &import.functions {
         match &function.kind {
             FunctionKind::Freestanding => {
-                let js_function_name = name.to_lower_camel_case();
+                let js_function_name = escape_js_ident(name.to_lower_camel_case());
                 let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
                 let rust_function_name = escape_rust_ident(&name.to_snake_case());
                 let rust_function_ident = Ident::new(&rust_function_name, Span::call_site());

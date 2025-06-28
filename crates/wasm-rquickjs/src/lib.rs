@@ -2,18 +2,22 @@ use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
 use crate::imports::generate_import_modules;
 use crate::skeleton::{copy_skeleton_sources, generate_app_manifest, generate_cargo_toml};
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use camino::Utf8Path;
 use fs_extra::dir::CopyOptions;
+use heck::{ToSnakeCase, ToUpperCamelCase};
+use proc_macro2::{Ident, Span};
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 use wit_parser::{
-    InterfaceId, PackageId, PackageSourceMap, Resolve, TypeId, TypeOwner, WorldId, WorldItem,
+    Function, Interface, InterfaceId, PackageId, PackageName, PackageSourceMap, Resolve, TypeId,
+    TypeOwner, WorldId, WorldItem,
 };
 
 mod conversions;
 mod exports;
 mod imports;
+mod javascript;
 mod rust_bindgen;
 mod skeleton;
 mod types;
@@ -175,6 +179,87 @@ impl<'a> GeneratorContext<'a> {
 
     fn bindgen_type_info(&self, type_id: TypeId) -> wit_bindgen_core::TypeInfo {
         self.types.get(type_id)
+    }
+
+    fn get_imported_interface(
+        &self,
+        interface_id: &InterfaceId,
+    ) -> anyhow::Result<ImportedInterface> {
+        let interface = &self.resolve.interfaces[*interface_id];
+        let name = interface
+            .name
+            .as_ref()
+            .ok_or_else(|| anyhow!("Interface import does not have a name"))?
+            .as_str();
+
+        let functions = interface
+            .functions
+            .iter()
+            .map(|(name, f)| (name.as_str(), f))
+            .collect();
+
+        let package_id = interface
+            .package
+            .ok_or_else(|| anyhow!("Anonymous interface imports are not supported yet"))?;
+        let package = self
+            .resolve
+            .packages
+            .get(package_id)
+            .ok_or_else(|| anyhow!("Could not find package of imported interface {name}"))?;
+        let package_name = &package.name;
+
+        Ok(ImportedInterface {
+            package_name: Some(package_name),
+            name: name.to_string(),
+            functions,
+            interface: Some(interface),
+            interface_id: Some(*interface_id),
+        })
+    }
+}
+
+pub struct ImportedInterface<'a> {
+    package_name: Option<&'a PackageName>,
+    name: String,
+    functions: Vec<(&'a str, &'a Function)>,
+    interface: Option<&'a Interface>,
+    interface_id: Option<InterfaceId>,
+}
+
+impl<'a> ImportedInterface<'a> {
+    pub fn module_name(&self) -> anyhow::Result<String> {
+        let package_name = self
+            .package_name
+            .ok_or_else(|| anyhow!("imported interface has no package name"))?;
+        let interface_name = &self.name;
+
+        Ok(format!(
+            "{}_{}",
+            package_name.to_string().to_snake_case(),
+            interface_name.to_snake_case()
+        ))
+    }
+
+    pub fn rust_interface_name(&self) -> Ident {
+        let interface_name = format!("Js{}Module", self.name.to_upper_camel_case());
+        Ident::new(&interface_name, Span::call_site())
+    }
+
+    pub fn name_and_interface(&self) -> Option<(&str, &Interface)> {
+        self.interface
+            .map(|interface| (self.name.as_str(), interface))
+    }
+
+    pub fn fully_qualified_interface_name(&self) -> String {
+        if let Some(package_name) = &self.package_name {
+            package_name.interface_id(&self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+
+    pub fn interface_stack(&self) -> VecDeque<InterfaceId> {
+        self.interface_id.iter().cloned().collect()
     }
 }
 

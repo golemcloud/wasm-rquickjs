@@ -1,4 +1,5 @@
 use crate::GeneratorContext;
+use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::escape_rust_ident;
 use crate::types::{get_wrapped_type, type_id_to_type_ref};
 use anyhow::{Context, anyhow};
@@ -72,7 +73,7 @@ fn generate_conversion_instances_for_type(
             let mut rust_field_list = Vec::new();
 
             for field in &record.fields {
-                let js_field_name = field.name.to_lower_camel_case();
+                let js_field_name = escape_js_ident(field.name.to_lower_camel_case());
                 let rust_field_ident = Ident::new(
                     &escape_rust_ident(&field.name.to_snake_case()),
                     Span::call_site(),
@@ -128,7 +129,7 @@ fn generate_conversion_instances_for_type(
             let mut get_fields = Vec::new();
 
             for flag in &flags.flags {
-                let js_field_name = flag.name.to_lower_camel_case();
+                let js_field_name = escape_js_ident(flag.name.to_lower_camel_case());
                 let rust_field_ident =
                     Ident::new(&flag.name.to_shouty_snake_case(), Span::call_site());
                 let field_name_lit = Lit::Str(LitStr::new(&js_field_name, Span::call_site()));

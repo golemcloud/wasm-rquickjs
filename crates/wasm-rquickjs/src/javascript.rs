@@ -1,0 +1,57 @@
+pub fn escape_js_ident(ident: impl AsRef<str>) -> String {
+    if KEYWORDS.contains(&ident.as_ref()) {
+        format!("{}_", ident.as_ref())
+    } else {
+        ident.as_ref().to_string()
+    }
+}
+
+const KEYWORDS: &[&str] = &[
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "eval",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "instanceof",
+    "interface",
+    "let",
+    "new",
+    "null",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "return",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+];

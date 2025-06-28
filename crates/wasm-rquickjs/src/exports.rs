@@ -1,4 +1,5 @@
 use crate::GeneratorContext;
+use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::escape_rust_ident;
 use crate::types::{
     ProcessedParameter, WrappedType, get_function_name, get_wrapped_type,
@@ -308,10 +309,16 @@ fn generate_exported_function_impl(
     let param_refs = to_wrapped_param_refs(&param_ident_type);
     let param_refs_tuple = param_refs_as_tuple(&param_refs);
 
-    let js_func_name_str = Lit::Str(LitStr::new(&name.to_lower_camel_case(), func_name.span()));
+    let js_func_name_str = Lit::Str(LitStr::new(
+        &escape_js_ident(name.to_lower_camel_case()),
+        func_name.span(),
+    ));
     let js_func_path = match interface_name {
         Some(iface_name) => {
-            let if_name_str = LitStr::new(&iface_name.to_lower_camel_case(), func_name.span());
+            let if_name_str = LitStr::new(
+                &escape_js_ident(iface_name.to_lower_camel_case()),
+                func_name.span(),
+            );
             quote! { &[#if_name_str, #js_func_name_str] }
         }
         None => quote! { &[#js_func_name_str] },
@@ -396,19 +403,25 @@ fn generate_exported_resource_function_impl(
     ));
     let js_resource_path = match interface_name {
         Some(iface_name) => {
-            let if_name_str = LitStr::new(&iface_name.to_lower_camel_case(), Span::call_site());
+            let if_name_str = LitStr::new(
+                &escape_js_ident(iface_name.to_lower_camel_case()),
+                Span::call_site(),
+            );
             quote! { &[#if_name_str, #js_resource_name_str] }
         }
         None => quote! { &[#js_resource_name_str] },
     };
 
     let js_func_name_str = Lit::Str(LitStr::new(
-        &func_name.to_lower_camel_case(),
+        &escape_js_ident(func_name.to_lower_camel_case()),
         Span::call_site(),
     ));
     let js_static_func_path = match interface_name {
         Some(iface_name) => {
-            let if_name_str = LitStr::new(&iface_name.to_lower_camel_case(), Span::call_site());
+            let if_name_str = LitStr::new(
+                &escape_js_ident(iface_name.to_lower_camel_case()),
+                Span::call_site(),
+            );
             quote! { &[#if_name_str, #js_resource_name_str, #js_func_name_str] }
         }
         None => quote! { &[#js_func_name_str] },
