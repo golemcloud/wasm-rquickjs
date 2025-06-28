@@ -30,6 +30,9 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install cargo-component
+        run: cargo binstall --force --locked cargo-component@0.21.1
       - name: Check formatting
         run: cargo fmt -- --check
       - name: Clippy
