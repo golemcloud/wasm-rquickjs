@@ -2,13 +2,17 @@
 name = "wasm-rquickjs-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description.workspace = true
 
 [[bin]]
 name = "wasm-rquickjs"
 path = "src/main.rs"
 
 [dependencies]
-"wasm-rquickjs" = { path = "crates/wasm-rquickjs" }
+"wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0" }
 
 camino = { workspace = true }
 clap = { version = "4.5.39", features = ["default", "derive"] }
@@ -23,6 +27,11 @@ members = ["crates/wasm-rquickjs"]
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
+
+license = "Apache-2.0"
+homepage = "https://github.com/golemcloud/wasm-rquickjs"
+repository = "https://github.com/golemcloud/wasm-rquickjs"
+description = "Tool for wrapping JavaScript modules as WebAssembly components using the QuickJS engine"
 
 [workspace.dependencies]
 anyhow = "1.0.98"

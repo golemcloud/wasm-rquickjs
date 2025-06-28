@@ -83,7 +83,7 @@ pushd tmp/hello-world1
 cargo clean
 cargo component build --no-default-features
 cargo clean
-cargo component build --no-default-features --feature logging
+cargo component build --no-default-features --features logging
 cargo clean
-cargo component build --no-default-features --feature http
+cargo component build --no-default-features --features http
 popd
