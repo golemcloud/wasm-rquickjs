@@ -1,6 +1,6 @@
-package quickjs:example1;
+package quickjs:stateful1;
 
-world example1 {
+world stateful1 {
   export inc: func(delta: s32);
   export get: func() -> s32;
 }

@@ -76,6 +76,6 @@ interface types {
   f14: func(a: u64) -> u64;
 }
 
-world example1 {
+world types-in-exports {
   export types;
 }

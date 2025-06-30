@@ -36,54 +36,54 @@ cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit 
 
 # All generated crates can be compiled
 pushd tmp/export-from-inner-package
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/hello-world1
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/hello-world2
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/hello-world3
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/imports1
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/imports2
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/imports3
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/stateful1
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/types-in-exports
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/all-golem-imports
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/console
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/timeout
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/streams
-cargo component build
+cargo component build --target-dir ../target
 popd
 pushd tmp/fetch
-cargo component build
+cargo component build --target-dir ../target
 popd
 
 # Test feature flags in one of the examples
 pushd tmp/hello-world1
 cargo clean
-cargo component build --no-default-features
+cargo component build --no-default-features --target-dir ../target
 cargo clean
-cargo component build --no-default-features --features logging
+cargo component build --no-default-features --features logging --target-dir ../target
 cargo clean
-cargo component build --no-default-features --features http
+cargo component build --no-default-features --features http --target-dir ../target
 popd
