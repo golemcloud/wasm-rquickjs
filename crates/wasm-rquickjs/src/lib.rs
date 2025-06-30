@@ -59,7 +59,7 @@ pub fn generate_wrapper_crate(
     copy_skeleton_sources(context.output).context("Failed to copy skeleton sources")?;
 
     // Copying the WIT package to the output directory
-    copy_wit_directory(wit, context.output)
+    copy_wit_directory(wit, &context.output.join("wit"))
         .context("Failed to copy WIT package to output directory")?;
 
     // Copying the JavaScript module to the output directory
@@ -267,6 +267,7 @@ impl<'a> ImportedInterface<'a> {
 fn copy_wit_directory(wit: &Utf8Path, output: &Utf8Path) -> anyhow::Result<()> {
     let options = CopyOptions {
         overwrite: true,
+        copy_inside: true,
         ..Default::default()
     };
 
