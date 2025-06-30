@@ -70,7 +70,8 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
             .collect();
         let interface_stack: VecDeque<_> = vec![interface_id].into_iter().collect();
 
-        result.begin_export_module(&name);
+        let js_name = escape_js_ident(name.to_lower_camel_case());
+        result.begin_export_module(&js_name);
         declare_functions_and_resources(
             &mut result,
             context,
