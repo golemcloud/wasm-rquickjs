@@ -268,7 +268,7 @@ where
                             match e {
                                 Error::Exception => {
                                     let exception = ctx.catch();
-                                    panic! ("Exception during awaiting call result: {exception:?}")
+                                    panic! ("Exception during awaiting call result for {function_path}: {exception:?}", function_path=function_path.join("."))
                                 }
                                 _ => {
                                     panic ! ("Error during awaiting call result: {e:?}")
