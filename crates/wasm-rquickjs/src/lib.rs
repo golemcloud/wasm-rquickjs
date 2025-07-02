@@ -265,13 +265,10 @@ impl<'a> ImportedInterface<'a> {
 
 /// Recursively copies a WIT directory to `<output>/wit`.
 fn copy_wit_directory(wit: &Utf8Path, output: &Utf8Path) -> anyhow::Result<()> {
-    let options = CopyOptions {
-        overwrite: true,
-        copy_inside: true,
-        ..Default::default()
-    };
-
-    fs_extra::copy_items(&[wit], output, &options).context("Failed to copy WIT directory")?;
+    fs_extra::dir::create(output, true)
+        .context("Failed to create and erase output WIT directory")?;
+    fs_extra::dir::copy(wit, output, &CopyOptions::new().content_only(true))
+        .context("Failed to copy WIT directory")?;
 
     Ok(())
 }
