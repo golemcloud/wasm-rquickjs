@@ -267,7 +267,7 @@ impl<'a> ImportedInterface<'a> {
 fn copy_wit_directory(wit: &Utf8Path, output: &Utf8Path) -> anyhow::Result<()> {
     fs_extra::dir::create(output, true)
         .context("Failed to create and erase output WIT directory")?;
-    fs_extra::dir::copy(&wit, output, &CopyOptions::new().content_only(true))
+    fs_extra::dir::copy(wit, output, &CopyOptions::new().content_only(true))
         .context("Failed to copy WIT directory")?;
 
     Ok(())
