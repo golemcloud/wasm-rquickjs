@@ -56,7 +56,7 @@ impl HttpRequest {
             "HTTP/1.1" => Version::HTTP_11,
             "HTTP/2.0" => Version::HTTP_2,
             "HTTP/3.0" => Version::HTTP_3,
-            _ => panic!("Unsupported HTTP version: {}", version),
+            _ => panic!("Unsupported HTTP version: {version}"),
         };
 
         let mut hdrs = HashMap::new();
@@ -115,6 +115,12 @@ impl HttpRequest {
 pub struct HttpResponse {
     #[qjs(skip_trace)]
     response: Option<reqwest::Response>,
+}
+
+impl Default for HttpResponse {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[rquickjs::methods(rename_all = "camelCase")]

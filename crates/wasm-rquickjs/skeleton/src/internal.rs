@@ -1,3 +1,7 @@
+use futures::future::{AbortHandle, Aborted};
+use futures::stream::FuturesUnordered;
+use futures_concurrency::future::Join;
+use pin_project::pin_project;
 use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ScriptLoader};
 use rquickjs::prelude::*;
@@ -9,12 +13,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::{Pin, pin};
-use std::rc::Rc;
-use std::sync::atomic::{AtomicU32, AtomicUsize};
+use std::sync::atomic::AtomicUsize;
 use std::task::{Context, Poll};
-use tokio::runtime::Runtime;
-use tokio::task::{JoinError, JoinSet, LocalSet, spawn_local};
-use tokio_util::sync::CancellationToken;
+use std::time::Duration;
+use wasi::clocks::monotonic_clock::subscribe_duration;
+use wasi_async_runtime::{Reactor, block_on};
 
 static JS_MODULE: &str = include_str!("module.js");
 
@@ -22,27 +25,28 @@ pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
 
 pub struct JsState {
-    pub tokio: Runtime,
+    pub reactor: RefCell<Option<Reactor>>,
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
     pub last_resource_id: AtomicUsize,
-    pub resource_drop_queue_tx: tokio::sync::mpsc::UnboundedSender<usize>,
-    pub resource_drop_queue_rx: RefCell<Option<tokio::sync::mpsc::UnboundedReceiver<usize>>>,
-    pub last_scheduled_task_id: AtomicU32,
-    pub scheduled_tasks: RefCell<HashMap<u32, CancellationToken>>,
-    pub current_join_set: RefCell<Option<JoinSet<()>>>,
+    pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
+    pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
+    pub scheduled_tasks: RefCell<Vec<Pin<Box<dyn Future<Output = Result<(), Aborted>>>>>>,
+    pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
+    pub last_abort_id: AtomicUsize,
+}
+
+impl Default for JsState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JsState {
     pub fn new() -> Self {
         init_logging();
 
-        let tokio = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .expect("Failed to create Tokio runtime");
-
-        let (rt, ctx) = tokio.block_on(async {
+        block_on(|_reactor| async {
             let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
             let ctx = AsyncContext::full(&rt)
                 .await
@@ -84,25 +88,22 @@ impl JsState {
             .await;
             rt.idle().await;
 
-            (rt, ctx)
-        });
+            let (resource_drop_queue_tx, resource_drop_queue_rx) =
+                futures::channel::mpsc::unbounded();
 
-        let (resource_drop_queue_tx, resource_drop_queue_rx) =
-            tokio::sync::mpsc::unbounded_channel::<usize>();
-
-        let last_resource_id = AtomicUsize::new(1);
-        let last_scheduled_task_id = AtomicU32::new(0);
-        Self {
-            tokio,
-            rt,
-            ctx,
-            last_resource_id,
-            resource_drop_queue_tx,
-            resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
-            last_scheduled_task_id,
-            scheduled_tasks: RefCell::new(HashMap::new()),
-            current_join_set: RefCell::new(None),
-        }
+            let last_resource_id = AtomicUsize::new(1);
+            Self {
+                reactor: RefCell::new(None),
+                rt,
+                ctx,
+                last_resource_id,
+                resource_drop_queue_tx,
+                resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
+                scheduled_tasks: RefCell::new(Vec::new()),
+                abort_handles: RefCell::new(HashMap::new()),
+                last_abort_id: AtomicUsize::new(0),
+            }
+        })
     }
 }
 
@@ -132,107 +133,53 @@ pub fn get_js_state() -> &'static JsState {
 pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     let js_state = get_js_state();
 
-    js_state.tokio.block_on(async move {
-        let local = Rc::new(LocalSet::new());
-        let join_set = JoinSet::new();
+    block_on(|reactor| async move {
+        use futures::StreamExt;
 
-        js_state.current_join_set.replace(Some(join_set));
-
-        local
-            .run_until(async move {
-                if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
-                    let heartbeat = spawn_local(async move {
-                        loop {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                        }
-                    });
-
-                    let resource_dropper = spawn_local(async move {
-                        while let Some(resource_id) = resource_drop_queue_rx.recv().await {
-                            if resource_id > 0 {
-                                drop_js_resource(resource_id).await;
-                            } else {
-                                break;
-                            }
-                        }
-                        resource_drop_queue_rx
-                    });
-                    let result = future.await;
-
-                    // Await scheduled tasks
-                    if let Err(err) = AwaitScheduledTasks::PollNext.await {
-                        panic!("Error while awaiting scheduled tasks: {err}");
-                    };
-
-                    // Finish resource dropper
-                    js_state
-                        .resource_drop_queue_tx
-                        .send(0)
-                        .expect("Failed to enqueue resource dropper stop signal");
-                    let resource_drop_queue_rx =
-                        resource_dropper.await.expect("Resource dropper failed");
-                    js_state
-                        .resource_drop_queue_rx
-                        .replace(Some(resource_drop_queue_rx));
-
-                    heartbeat.abort();
-                    result
-                } else {
-                    // This case will never happen because block_on does not allow reentry
-                    unreachable!()
-                }
-            })
-            .await
-    })
-}
-
-enum AwaitScheduledTasks {
-    PollNext,
-    RunJs,
-}
-
-impl Future for AwaitScheduledTasks {
-    type Output = Result<(), JoinError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let state = get_js_state();
-        let self_ = self.get_mut();
-        match self_ {
-            AwaitScheduledTasks::PollNext => {
-                let mut join_set = state.current_join_set.borrow_mut();
-                let poll_result = join_set
-                    .as_mut()
-                    .expect("No current join set")
-                    .poll_join_next(cx);
-
-                match poll_result {
-                    Poll::Ready(Some(Ok(()))) => Poll::Pending, // One task done, go to the next
-                    Poll::Ready(Some(Err(err))) => Poll::Ready(Err(err)), // Task failed, return the error
-                    Poll::Ready(None) => Poll::Ready(Ok(())), // No more tasks to wait for
-                    Poll::Pending => {
-                        *self_ = AwaitScheduledTasks::RunJs; // No tasks ready, switch to running the JS event loop
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
+        js_state.reactor.replace(Some(reactor));
+        if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
+            let resource_dropper = async move {
+                while let Some(resource_id) = resource_drop_queue_rx.next().await {
+                    if resource_id > 0 {
+                        drop_js_resource(resource_id).await;
+                    } else {
+                        break;
                     }
                 }
-            }
-            AwaitScheduledTasks::RunJs => {
-                // Scheduled tasks are still pending, we run the JS runtime in the meantime
-                let mut idle_future = state.rt.idle();
-                let idle_future = pin!(idle_future);
-                let idle_poll_result = idle_future.poll(cx);
-                match idle_poll_result {
-                    Poll::Ready(()) => {
-                        // idle() completed, going back to poll from the join set
-                        *self_ = AwaitScheduledTasks::PollNext;
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
+                resource_drop_queue_rx
+            };
+
+            let result = async {
+                let run_scheduled_tasks = async {
+                    let mut futures = FuturesUnordered::from_iter(
+                        js_state.scheduled_tasks.borrow_mut().drain(..),
+                    );
+                    while (futures.next().with_js_idle_loop().await).is_some() {
+                        js_state.rt.idle().await;
+                        futures.extend(js_state.scheduled_tasks.borrow_mut().drain(..))
                     }
-                    Poll::Pending => Poll::Pending,
-                }
-            }
+                };
+
+                let (future_result, _) = (future, run_scheduled_tasks).join().await;
+                future_result
+            };
+
+            // Finish resource dropper
+            js_state
+                .resource_drop_queue_tx
+                .unbounded_send(0)
+                .expect("Failed to enqueue resource dropper stop signal");
+            let (result, resource_drop_queue_rx) = (result, resource_dropper).join().await;
+            js_state
+                .resource_drop_queue_rx
+                .replace(Some(resource_drop_queue_rx));
+
+            result
+        } else {
+            // This case will never happen because block_on does not allow reentry
+            unreachable!()
         }
-    }
+    })
 }
 
 pub async fn call_js_export<A, R>(function_path: &[&str], args: A) -> R
@@ -244,11 +191,11 @@ where
 
     let result: R = async_with!(js_state.ctx => |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
-        let (user_function, parent) = get_path(&module, function_path).expect(&format!("Cannot find exported JS function {}", function_path.join(".")));
+        let (user_function, parent) = get_path(&module, function_path).unwrap_or_else(|| panic!("Cannot find exported JS function {}", function_path.join(".")));
 
         let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, parent, args);
 
-        let result = match result {
+        match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
                 panic! ("Exception during call: {exception:?}");
@@ -281,9 +228,7 @@ where
                     R::from_js(&ctx, value).expect("Unexpected result value")
                 }
             }
-        };
-
-        result
+        }
     }).await;
     js_state.rt.idle().await;
     result
@@ -297,11 +242,11 @@ where
 
     let result = async_with!(js_state.ctx => |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
-        let (constructor, _parent): (Constructor, Object) = get_path(&module, resource_path).expect(&format!("Cannot find exported JS resource class {}", resource_path.join(".")));
+        let (constructor, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("Cannot find exported JS resource class {}", resource_path.join(".")));
 
         let result: Result<Object, Error> = constructor.construct(args);
 
-        let result = match result {
+        match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
                 panic! ("Exception during call: {exception:?}");
@@ -321,9 +266,7 @@ where
 
                 resource_id
             }
-        };
-
-        result
+        }
     }).await;
     js_state.rt.idle().await;
     result
@@ -346,14 +289,14 @@ where
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
-            .expect(&format!("Failed to get resource instance with id {resource_id}"));
+            .unwrap_or_else(|_| panic!("Failed to get resource instance with id {resource_id}"));
 
         let method: Function = resource_instance.get(name)
-            .expect(&format!("Failed to get method {name} from resource instance with id {resource_id}"));
+            .unwrap_or_else(|_| panic!("Failed to get method {name} from resource instance with id {resource_id}"));
 
         let result: Result<Value, Error> = call_with_this(ctx.clone(), method, resource_instance, args);
 
-        let result = match result {
+        match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
                 panic! ("Exception during call: {exception:?}");
@@ -386,9 +329,7 @@ where
                     R::from_js(&ctx, value).expect("Unexpected result value")
                 }
             }
-        };
-
-        result
+        }
     }).await;
     js_state.rt.idle().await;
     result
@@ -398,8 +339,16 @@ pub fn enqueue_drop_js_resource(resource_id: usize) {
     let js_state = get_js_state();
     js_state
         .resource_drop_queue_tx
-        .send(resource_id)
+        .unbounded_send(resource_id)
         .expect("Failed to enqueue resource drop");
+}
+
+pub async fn sleep(duration: Duration) {
+    let js_state = get_js_state();
+    let reactor = js_state.reactor.borrow().clone().unwrap();
+
+    let pollable = subscribe_duration(duration.as_nanos() as u64);
+    reactor.wait_for(pollable).await;
 }
 
 async fn drop_js_resource(resource_id: usize) {
@@ -440,5 +389,76 @@ fn get_path<'js, V: FromJs<'js>>(root: &Object<'js>, path: &[&str]) -> Option<(V
     } else {
         let next: Object<'js> = root.get(*head).ok()?;
         get_path(&next, tail)
+    }
+}
+
+/// Future that runs the JS event loop every time the underlying future is pending
+#[pin_project]
+struct WithJsIdleLoop<F> {
+    #[pin]
+    inner: F,
+    state: WithJsIdleLoopState,
+}
+
+impl<F: Future> WithJsIdleLoop<F> {
+    pub fn new(inner: F) -> Self {
+        WithJsIdleLoop {
+            inner,
+            state: WithJsIdleLoopState::Inner,
+        }
+    }
+}
+
+enum WithJsIdleLoopState {
+    Inner,
+    Js,
+}
+
+impl<F: Future> Future for WithJsIdleLoop<F> {
+    type Output = F::Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.state {
+            WithJsIdleLoopState::Inner => {
+                let inner_poll = this.inner.poll(cx);
+                match inner_poll {
+                    Poll::Ready(result) => Poll::Ready(result),
+                    Poll::Pending => {
+                        // Switch to JS event loop
+                        *this.state = WithJsIdleLoopState::Js;
+                        cx.waker().wake_by_ref();
+                        Poll::Pending
+                    }
+                }
+            }
+            WithJsIdleLoopState::Js => {
+                let js_state = get_js_state();
+                let idle_future = js_state.rt.idle();
+                let idle_future = pin!(idle_future);
+                let idle_poll_result = idle_future.poll(cx);
+                match idle_poll_result {
+                    Poll::Ready(()) => {
+                        // Go back to the inner future
+                        *this.state = WithJsIdleLoopState::Inner;
+                        cx.waker().wake_by_ref();
+                        this.inner.poll(cx)
+                    }
+                    Poll::Pending => Poll::Pending,
+                }
+            }
+        }
+    }
+}
+
+trait JsFutureExt {
+    fn with_js_idle_loop(self) -> WithJsIdleLoop<Self>
+    where
+        Self: Sized;
+}
+
+impl<F: Future> JsFutureExt for F {
+    fn with_js_idle_loop(self) -> WithJsIdleLoop<Self> {
+        WithJsIdleLoop::new(self)
     }
 }
