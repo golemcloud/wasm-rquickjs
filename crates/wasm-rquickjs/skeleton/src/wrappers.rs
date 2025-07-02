@@ -111,7 +111,7 @@ impl<'js, Ok: FromJs<'js>, Err: FromJs<'js>> FromJs<'js> for JsResult<Ok, Err> {
             _ => Err(rquickjs::Error::new_from_js_message(
                 "JS result object",
                 "WIT result type",
-                format!("Unknown tag: {}", tag),
+                format!("Unknown tag: {tag}"),
             )),
         }
     }

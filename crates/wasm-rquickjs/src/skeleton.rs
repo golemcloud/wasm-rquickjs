@@ -20,6 +20,7 @@ pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()>
     // Loading the skeleton Cargo.toml file
     let cargo_toml = SKELETON
         .get_file("Cargo.toml_")
+        .or_else(|| SKELETON.get_file("Cargo.toml"))
         .ok_or_else(|| anyhow!("Missing Cargo.toml skeleton"))?
         .contents_utf8()
         .ok_or_else(|| anyhow!("Cargo.toml skeleton is not valid UTF-8"))?;
