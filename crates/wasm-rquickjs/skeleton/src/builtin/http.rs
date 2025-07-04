@@ -7,14 +7,17 @@ pub mod native_module {
 
 use futures::SinkExt;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures_concurrency::future::Race;
 use futures_concurrency::stream::IntoStream;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Body, Method, Request, StreamError, Url, Version};
 use rquickjs::class::Trace;
-use rquickjs::function::Args;
-use rquickjs::{ArrayBuffer, Ctx, Function, JsLifetime, Object, TypedArray, Value};
+use rquickjs::prelude::List;
+use rquickjs::{ArrayBuffer, Ctx, JsLifetime, TypedArray};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
@@ -260,18 +263,10 @@ impl ResponseBodyStream {
         "bytes".to_string()
     }
 
-    pub async fn pull<'js>(&mut self, ctx: Ctx<'js>, controller: Object<'js>) {
-        // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
-        let close: Function = controller
-            .get("close")
-            .expect("Controller has no 'close' method");
-        let enqueue: Function = controller
-            .get("enqueue")
-            .expect("Controller has no 'enqueue' method");
-        let error: Function = controller
-            .get("error")
-            .expect("Controller has no 'error' method");
-
+    pub async fn pull<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+    ) -> List<(Option<TypedArray<'js, u8>>, Option<String>)> {
         if let Some((stream, _body, _response)) = &mut self.stream {
             const CHUNK_SIZE: u64 = 4096;
             let pollable = stream.subscribe();
@@ -288,59 +283,27 @@ impl ResponseBodyStream {
                 Ok(chunk) => {
                     let js_array = TypedArray::new_copy(ctx.clone(), chunk)
                         .expect("Failed to create TypedArray from response body chunk");
-                    let mut args = Args::new(ctx, 1);
-                    args.this(controller)
-                        .expect("Failed to set 'this' for controller.enqueue");
-                    args.push_arg(js_array)
-                        .expect("Failed to push argument for controller.enqueue");
-                    enqueue
-                        .call_arg::<Value<'_>>(args)
-                        .expect("Failed to call 'enqueue' on controller");
+                    List((Some(js_array), None))
                 }
                 Err(StreamError::Closed) => {
                     // No more data to read, close the stream
-                    let mut args = Args::new(ctx.clone(), 0);
-                    args.this(controller)
-                        .expect("Failed to set 'this' for controller.close");
-                    close
-                        .call_arg::<Value<'_>>(args)
-                        .expect("Failed to call 'close' on controller");
                     self.stream = None; // Mark the response as consumed
+                    List((None, None))
                 }
-                Err(StreamError::LastOperationFailed(err)) => {
-                    Self::report_stream_error(
-                        ctx,
-                        controller,
-                        error,
-                        &format!("Failed to read response body: {}", err.to_debug_string()),
-                    );
-                }
+                Err(StreamError::LastOperationFailed(err)) => List((
+                    None,
+                    Some(format!(
+                        "Failed to read response body: {}",
+                        err.to_debug_string()
+                    )),
+                )),
             }
         } else {
-            Self::report_stream_error(
-                ctx,
-                controller,
-                error,
-                "Response body stream has already been consumed",
-            )
+            List((
+                None,
+                Some("Response body stream has already been consumed".to_string()),
+            ))
         }
-    }
-
-    #[qjs(skip)]
-    fn report_stream_error<'js>(
-        ctx: Ctx<'js>,
-        controller: Object<'js>,
-        error: Function<'js>,
-        message: &str,
-    ) {
-        let mut args = Args::new(ctx, 1);
-        args.this(controller)
-            .expect("Failed to set 'this' for controller.error");
-        args.push_arg(message)
-            .expect("Failed to push argument for controller.error");
-        error
-            .call_arg::<Value<'_>>(args)
-            .expect("Failed to call 'error' on controller");
     }
 }
 

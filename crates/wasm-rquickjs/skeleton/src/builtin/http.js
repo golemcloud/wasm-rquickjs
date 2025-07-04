@@ -91,9 +91,30 @@ export class Response {
     }
 
     get body() {
-        let streamSource = this.nativeResponse.stream();
+        let nativeStreamSource = this.nativeResponse.stream();
         this.bodyUsed = true;
-        return new ReadableStream(streamSource);
+        return new ReadableStream({
+            start() {
+                console.log("Response body stream started");
+            },
+            get type() {
+                return "bytes";
+            },
+            async pull(controller) {
+                // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
+                const [next, err] = await nativeStreamSource.pull();
+                if (err !== undefined) {
+                    console.error("Error reading response body stream:", err);
+                    controller.error(err);
+                } else if (next === undefined) {
+                    console.log("Response body stream closed");
+                    controller.close();
+                } else {
+                    console.log(`Enqueuing chunk: ${next}`);
+                    controller.enqueue(next);
+                }
+            }
+        });
     }
 
     get headers() {

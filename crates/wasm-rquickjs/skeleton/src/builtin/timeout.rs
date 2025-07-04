@@ -1,6 +1,6 @@
 use crate::internal::sleep;
 use rquickjs::function::Args;
-use rquickjs::{Ctx, Persistent, Value};
+use rquickjs::{CatchResultExt, Ctx, Persistent, Value};
 use std::time::Duration;
 
 // Native functions for the timeout implementation
@@ -70,7 +70,8 @@ async fn scheduled_task(
     args: Persistent<Vec<Value<'static>>>,
 ) {
     if delay == 0 {
-        run_scheduled_task(ctx, code_or_fn.clone(), args.clone())
+        run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
+            .catch(&ctx)
             .expect("Failed to run scheduled task");
     } else {
         let duration = Duration::from_millis(delay as u64);
@@ -79,6 +80,7 @@ async fn scheduled_task(
             sleep(duration).await;
 
             run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
+                .catch(&ctx)
                 .expect("Failed to run scheduled task");
 
             if !periodic {
