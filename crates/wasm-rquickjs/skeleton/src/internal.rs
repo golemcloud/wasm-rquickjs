@@ -1,23 +1,19 @@
-use futures::future::{AbortHandle, Aborted};
-use futures::stream::FuturesUnordered;
+use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
-use pin_project::pin_project;
 use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ScriptLoader};
 use rquickjs::prelude::*;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, FromJs, Function, Module, Object,
-    Promise, Value, async_with,
+    async_with, AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, FromJs, Function, Module,
+    Object, Promise, Value,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
-use std::pin::{Pin, pin};
 use std::sync::atomic::AtomicUsize;
-use std::task::{Context, Poll};
 use std::time::Duration;
 use wasi::clocks::monotonic_clock::subscribe_duration;
-use wasi_async_runtime::{Reactor, block_on};
+use wasi_async_runtime::{block_on, Reactor};
 
 static JS_MODULE: &str = include_str!("module.js");
 
@@ -31,7 +27,6 @@ pub struct JsState {
     pub last_resource_id: AtomicUsize,
     pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
-    pub scheduled_tasks: RefCell<Vec<Pin<Box<dyn Future<Output = Result<(), Aborted>>>>>>,
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
 }
@@ -99,7 +94,6 @@ impl JsState {
                 last_resource_id,
                 resource_drop_queue_tx,
                 resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
-                scheduled_tasks: RefCell::new(Vec::new()),
                 abort_handles: RefCell::new(HashMap::new()),
                 last_abort_id: AtomicUsize::new(0),
             }
@@ -149,27 +143,12 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
                 resource_drop_queue_rx
             };
 
-            let result = async {
-                let run_scheduled_tasks = async {
-                    let mut futures = FuturesUnordered::from_iter(
-                        js_state.scheduled_tasks.borrow_mut().drain(..),
-                    );
-                    while (futures.next().with_js_idle_loop().await).is_some() {
-                        js_state.rt.idle().await;
-                        futures.extend(js_state.scheduled_tasks.borrow_mut().drain(..))
-                    }
-                };
-
-                let (future_result, _) = (future, run_scheduled_tasks).join().await;
-                future_result
-            };
-
             // Finish resource dropper
             js_state
                 .resource_drop_queue_tx
                 .unbounded_send(0)
                 .expect("Failed to enqueue resource dropper stop signal");
-            let (result, resource_drop_queue_rx) = (result, resource_dropper).join().await;
+            let (result, resource_drop_queue_rx) = (future, resource_dropper).join().await;
             js_state
                 .resource_drop_queue_rx
                 .replace(Some(resource_drop_queue_rx));
@@ -389,76 +368,5 @@ fn get_path<'js, V: FromJs<'js>>(root: &Object<'js>, path: &[&str]) -> Option<(V
     } else {
         let next: Object<'js> = root.get(*head).ok()?;
         get_path(&next, tail)
-    }
-}
-
-/// Future that runs the JS event loop every time the underlying future is pending
-#[pin_project]
-struct WithJsIdleLoop<F> {
-    #[pin]
-    inner: F,
-    state: WithJsIdleLoopState,
-}
-
-impl<F: Future> WithJsIdleLoop<F> {
-    pub fn new(inner: F) -> Self {
-        WithJsIdleLoop {
-            inner,
-            state: WithJsIdleLoopState::Inner,
-        }
-    }
-}
-
-enum WithJsIdleLoopState {
-    Inner,
-    Js,
-}
-
-impl<F: Future> Future for WithJsIdleLoop<F> {
-    type Output = F::Output;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match this.state {
-            WithJsIdleLoopState::Inner => {
-                let inner_poll = this.inner.poll(cx);
-                match inner_poll {
-                    Poll::Ready(result) => Poll::Ready(result),
-                    Poll::Pending => {
-                        // Switch to JS event loop
-                        *this.state = WithJsIdleLoopState::Js;
-                        cx.waker().wake_by_ref();
-                        Poll::Pending
-                    }
-                }
-            }
-            WithJsIdleLoopState::Js => {
-                let js_state = get_js_state();
-                let idle_future = js_state.rt.idle();
-                let idle_future = pin!(idle_future);
-                let idle_poll_result = idle_future.poll(cx);
-                match idle_poll_result {
-                    Poll::Ready(()) => {
-                        // Go back to the inner future
-                        *this.state = WithJsIdleLoopState::Inner;
-                        cx.waker().wake_by_ref();
-                        this.inner.poll(cx)
-                    }
-                    Poll::Pending => Poll::Pending,
-                }
-            }
-        }
-    }
-}
-
-trait JsFutureExt {
-    fn with_js_idle_loop(self) -> WithJsIdleLoop<Self>
-    where
-        Self: Sized;
-}
-
-impl<F: Future> JsFutureExt for F {
-    fn with_js_idle_loop(self) -> WithJsIdleLoop<Self> {
-        WithJsIdleLoop::new(self)
     }
 }

@@ -5,4 +5,6 @@ world fetch {
   export test2: func();
   export test3: func();
   export test4: func();
+  export test5: func();
+  export test6: func();
 }

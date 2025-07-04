@@ -1,4 +1,4 @@
-use crate::internal::{get_js_state, sleep};
+use crate::internal::sleep;
 use rquickjs::function::Args;
 use rquickjs::{Ctx, Persistent, Value};
 use std::time::Duration;
@@ -8,11 +8,12 @@ use std::time::Duration;
 pub mod native_module {
     use crate::internal::get_js_state;
     use futures::future::abortable;
-    use rquickjs::{Persistent, Value};
+    use rquickjs::{Ctx, Persistent, Value};
     use std::sync::atomic::Ordering;
 
     #[rquickjs::function]
     pub fn schedule(
+        ctx: Ctx<'_>,
         code_or_fn: Persistent<Value<'static>>,
         delay: Option<u32>,
         periodic: bool,
@@ -21,12 +22,18 @@ pub mod native_module {
         let state = get_js_state();
         let delay = delay.unwrap_or(0);
 
-        let (task, abort_handle) =
-            abortable(super::scheduled_task(code_or_fn, delay, periodic, args));
+        let (task, abort_handle) = abortable(super::scheduled_task(
+            ctx.clone(),
+            code_or_fn,
+            delay,
+            periodic,
+            args,
+        ));
 
         let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
-        let mut scheduled_tasks = state.scheduled_tasks.borrow_mut();
-        scheduled_tasks.push(Box::pin(task));
+        ctx.spawn(async move {
+            let _ = task.await;
+        });
         state.abort_handles.borrow_mut().insert(key, abort_handle);
         key
     }
@@ -56,33 +63,23 @@ pub const WIRE_JS: &str = r#"
     "#;
 
 async fn scheduled_task(
+    ctx: Ctx<'_>,
     code_or_fn: Persistent<Value<'static>>,
     delay: u32,
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
 ) {
-    let state = get_js_state();
-    let context = &state.ctx;
-
     if delay == 0 {
-        context
-            .with(|ctx| {
-                run_scheduled_task(ctx, code_or_fn.clone(), args.clone())
-                    .expect("Failed to run scheduled task");
-            })
-            .await;
+        run_scheduled_task(ctx, code_or_fn.clone(), args.clone())
+            .expect("Failed to run scheduled task");
     } else {
         let duration = Duration::from_millis(delay as u64);
 
         loop {
             sleep(duration).await;
 
-            context
-                .with(|ctx| {
-                    run_scheduled_task(ctx, code_or_fn.clone(), args.clone())
-                        .expect("Failed to run scheduled task");
-                })
-                .await;
+            run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
+                .expect("Failed to run scheduled task");
 
             if !periodic {
                 break;
@@ -102,7 +99,7 @@ fn run_scheduled_task(
     if let Some(func) = restored_code_or_fn.as_function() {
         let mut args = Args::new(ctx, restored_args.len());
         args.push_args(&restored_args)?;
-        func.defer_arg(args)
+        func.call_arg(args)
     } else if let Some(code) = restored_code_or_fn.as_string() {
         if !restored_args.is_empty() {
             panic!("Passing arguments to scheduled code snippets is not supported");

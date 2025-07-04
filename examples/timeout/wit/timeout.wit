@@ -2,4 +2,5 @@ package quickjs:timeout;
 
 world timeout {
   export run: func();
+  export parallel: func();
 }

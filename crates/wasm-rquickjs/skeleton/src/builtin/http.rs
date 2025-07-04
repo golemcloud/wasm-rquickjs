@@ -5,11 +5,15 @@ pub mod native_module {
     pub use super::HttpResponse;
 }
 
+use futures::SinkExt;
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures_concurrency::stream::IntoStream;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Body, Method, Request, StreamError, Url, Version};
 use rquickjs::class::Trace;
 use rquickjs::function::Args;
 use rquickjs::{ArrayBuffer, Ctx, Function, JsLifetime, Object, TypedArray, Value};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 #[derive(Trace, JsLifetime)]
@@ -80,16 +84,36 @@ impl HttpRequest {
         self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
     }
 
-    pub fn uint8_array_body(&mut self, body: rquickjs::TypedArray<'_, u8>) {
-        self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
+    pub fn readable_stream_body<'js>(&mut self) -> BodySink {
+        use futures::StreamExt;
+
+        let mut body_sink = BodySink::new();
+        let receiver = body_sink.take_receiver();
+
+        let stream = receiver.into_stream().map(|chunk| Ok(chunk));
+        let body = Body::from_stream(stream);
+        self.body = Some(body);
+        body_sink
     }
 
     pub fn string_body(&mut self, body: String) {
         self.body = Some(Body::from(body));
     }
 
+    pub fn uint8_array_body(&mut self, body: rquickjs::TypedArray<'_, u8>) {
+        self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
+    }
+
     pub async fn send(&mut self) -> HttpResponse {
-        let client = reqwest::ClientBuilder::new()
+        let js_state = crate::internal::get_js_state();
+        let reactor = js_state
+            .reactor
+            .borrow()
+            .as_ref()
+            .expect("http send is called from outside of an async call")
+            .clone();
+
+        let client = reqwest::ClientBuilder::new(reactor)
             .build()
             .expect("Failed to create HTTP client");
 
@@ -102,11 +126,9 @@ impl HttpRequest {
 
         *request.body_mut() = self.body.take();
 
-        let response = client.execute(request).expect("HTTP request failed");
+        let response = client.execute(request).await.expect("HTTP request failed");
 
-        HttpResponse {
-            response: Some(response),
-        }
+        HttpResponse::from_response(response)
     }
 }
 
@@ -115,6 +137,9 @@ impl HttpRequest {
 pub struct HttpResponse {
     #[qjs(skip_trace)]
     response: Option<reqwest::Response>,
+    headers: Vec<Vec<String>>,
+    #[qjs(skip_trace)]
+    status: reqwest::StatusCode,
 }
 
 impl Default for HttpResponse {
@@ -127,14 +152,16 @@ impl Default for HttpResponse {
 impl HttpResponse {
     #[qjs(constructor)]
     pub fn new() -> Self {
-        Self { response: None }
+        Self {
+            response: None,
+            headers: Vec::new(),
+            status: reqwest::StatusCode::OK,
+        }
     }
 
-    #[qjs(get)]
-    pub fn headers(&self) -> Vec<Vec<String>> {
-        self.response
-            .as_ref()
-            .expect("The response has not been set")
+    #[qjs(skip)]
+    pub fn from_response(response: reqwest::Response) -> Self {
+        let headers = response
             .headers()
             .iter()
             .map(|(name, value)| {
@@ -143,24 +170,30 @@ impl HttpResponse {
                     value.to_str().unwrap_or("Invalid header value").to_string(),
                 ]
             })
-            .collect()
+            .collect();
+
+        let status = response.status();
+
+        HttpResponse {
+            response: Some(response),
+            headers,
+            status,
+        }
+    }
+
+    #[qjs(get)]
+    pub fn headers(&self) -> Vec<Vec<String>> {
+        self.headers.clone()
     }
 
     #[qjs(get)]
     pub fn status(&self) -> u16 {
-        self.response
-            .as_ref()
-            .expect("The response has not been set")
-            .status()
-            .as_u16()
+        self.status.as_u16()
     }
 
     #[qjs(get, rename = "statusText")]
     pub fn status_text(&self) -> String {
-        self.response
-            .as_ref()
-            .expect("The response has not been set")
-            .status()
+        self.status
             .canonical_reason()
             .unwrap_or("Unknown status")
             .to_string()
@@ -172,6 +205,7 @@ impl HttpResponse {
             .take()
             .expect("The response has already been consumed")
             .bytes()
+            .await
             .expect("failed to read response body");
 
         ArrayBuffer::new(ctx, bytes).expect("failed to create ArrayBuffer from response body")
@@ -183,10 +217,10 @@ impl HttpResponse {
             .take()
             .expect("The response has already been consumed");
 
-        let stream = response.get_raw_input_stream();
+        let (stream, body) = response.get_raw_input_stream();
 
         ResponseBodyStream {
-            stream: Some((stream, response)),
+            stream: Some((stream, body, response)),
         }
     }
 
@@ -195,6 +229,7 @@ impl HttpResponse {
             .take()
             .expect("The response has already been consumed")
             .text()
+            .await
             .expect("failed to read response body")
     }
 }
@@ -206,7 +241,11 @@ impl HttpResponse {
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct ResponseBodyStream {
     #[qjs(skip_trace)]
-    stream: Option<(reqwest::InputStream, reqwest::Response)>,
+    stream: Option<(
+        reqwest::InputStream,
+        reqwest::IncomingBody,
+        reqwest::Response,
+    )>,
 }
 
 #[rquickjs::methods(rename_all = "camelCase")]
@@ -221,7 +260,7 @@ impl ResponseBodyStream {
         "bytes".to_string()
     }
 
-    pub fn pull<'js>(&mut self, ctx: Ctx<'js>, controller: Object<'js>) {
+    pub async fn pull<'js>(&mut self, ctx: Ctx<'js>, controller: Object<'js>) {
         // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
         let close: Function = controller
             .get("close")
@@ -233,9 +272,19 @@ impl ResponseBodyStream {
             .get("error")
             .expect("Controller has no 'error' method");
 
-        if let Some((stream, _response)) = &mut self.stream {
+        if let Some((stream, _body, _response)) = &mut self.stream {
             const CHUNK_SIZE: u64 = 4096;
-            match stream.blocking_read(CHUNK_SIZE) {
+            let pollable = stream.subscribe();
+            let js_state = crate::internal::get_js_state();
+            let reactor = js_state
+                .reactor
+                .borrow()
+                .as_ref()
+                .expect("http pull is called from outside of an async call")
+                .clone();
+            reactor.wait_for(pollable).await;
+
+            match stream.read(CHUNK_SIZE) {
                 Ok(chunk) => {
                     let js_array = TypedArray::new_copy(ctx.clone(), chunk)
                         .expect("Failed to create TypedArray from response body chunk");
@@ -292,6 +341,52 @@ impl ResponseBodyStream {
         error
             .call_arg::<Value<'_>>(args)
             .expect("Failed to call 'error' on controller");
+    }
+}
+
+#[derive(Trace, JsLifetime)]
+#[rquickjs::class(rename_all = "camelCase")]
+pub struct BodySink {
+    #[qjs(skip_trace)]
+    sender: RefCell<UnboundedSender<Vec<u8>>>,
+    #[qjs(skip_trace)]
+    receiver: Option<UnboundedReceiver<Vec<u8>>>,
+}
+
+#[rquickjs::methods(rename_all = "camelCase")]
+impl BodySink {
+    #[qjs(constructor)]
+    pub fn new() -> Self {
+        let (sender, receiver) = futures::channel::mpsc::unbounded();
+        BodySink {
+            sender: RefCell::new(sender),
+            receiver: Some(receiver),
+        }
+    }
+
+    #[qjs(skip)]
+    pub fn take_receiver(&mut self) -> UnboundedReceiver<Vec<u8>> {
+        self.receiver
+            .take()
+            .expect("BodySink receiver has already been taken")
+    }
+
+    pub async fn write(&self, chunk: TypedArray<'_, u8>) {
+        let mut sender = self.sender.borrow_mut();
+        sender
+            .send(
+                chunk
+                    .as_bytes()
+                    .expect("the UInt8Array passed to the BodySink is detached")
+                    .to_vec(),
+            )
+            .await
+            .expect("Failed to send chunk to BodySink");
+    }
+
+    pub fn close(&self) {
+        let sender = self.sender.borrow();
+        sender.close_channel();
     }
 }
 

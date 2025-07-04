@@ -39,36 +39,40 @@ export async function fetch(resource, options = {}) {
 
     let body = options.body || '';
 
-    if (body instanceof ArrayBuffer) {
-        request.arrayBufferBody(body);
-    } else if (body instanceof Uint8Array) {
-        request.uint8ArrayBody(body);
-    } else if (typeof body === 'string' || body instanceof String) {
-        request.stringBody(body);
-    } else if (body instanceof ReadableStream) {
-        // TODO: currently the native implementation does not support streaming request body, so we just buffer the stream here
-        const reader = body.getReader();
-        let chunks = [];
-        let done, value;
-        while ({done, value} = await reader.read(), !done) {
-            chunks.push(value);
-        }
-        // Concatenate all chunks into a single Uint8Array
-        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-        const concatenated = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-            concatenated.set(chunk, offset);
-            offset += chunk.length;
-        }
-        request.uint8ArrayBody(concatenated);
+    if (body instanceof ReadableStream) {
+        const nativeBodySink = request.readableStreamBody();
+        const bodySink = new WritableStream(
+            {
+                write(chunk) {
+                    nativeBodySink.write(chunk);
+                },
+                close() {
+                    nativeBodySink.close();
+                }
+            }
+        );
+        const nativeResponsePromise = request.send();
+        const requestBodyPromise = body.pipeTo(bodySink);
+        const results = await Promise.all([
+            nativeResponsePromise,
+            requestBodyPromise,
+        ]);
+        const nativeResponse = results[0];
+        return new Response(nativeResponse, resource);
     } else {
-        console.warn('Unsupported body type');
+        if (body instanceof ArrayBuffer) {
+            request.arrayBufferBody(body);
+        } else if (body instanceof Uint8Array) {
+            request.uint8ArrayBody(body);
+        } else if (typeof body === 'string' || body instanceof String) {
+            request.stringBody(body);
+        } else {
+            console.warn('Unsupported body type');
+        }
+
+        const nativeResponse = await request.send();
+        return new Response(nativeResponse, resource);
     }
-
-    let nativeResponse = await request.send();
-
-    return new Response(nativeResponse, resource);
 }
 
 export class Response {

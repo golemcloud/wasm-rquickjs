@@ -54,3 +54,60 @@ export async function test4() {
 
     console.log("Second response:", await response2.text());
 }
+
+export async function test5() {
+    async function test(i) {
+        let response = await fetch(`https://jsonplaceholder.typicode.com/todos/${i}`);
+        let json = await response.json();
+        console.log(response.status, JSON.stringify(json));
+    }
+
+    let promises = [];
+    for (let i = 0; i < 5; i++) {
+        promises.push(test(i));
+    }
+
+    await Promise.all(promises);
+}
+
+class SlowRequestBodySource {
+    #interval
+
+    constructor(body) {
+        this.body = body;
+    }
+
+    start(controller) {
+        console.log(`Starting request body stream`);
+        this.#interval = setInterval(() => {
+            const next = this.body.slice(0, 2);
+            this.body = this.body.slice(2);
+            if (next.length === 0) {
+                console.log(`Closing request body stream`);
+                controller.close();
+                clearInterval(this.#interval);
+            } else {
+                console.log(`Enqueuing chunk: ${next}`);
+                controller.enqueue(next);
+            }
+        }, 100);
+    }
+
+    cancel() {
+        console.log(`Cancelling request body stream`);
+        clearInterval(this.#interval);
+    }
+}
+
+export async function test6() {
+    let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
+    const stream = new ReadableStream(new SlowRequestBodySource(body));
+    const response = await fetch("https://jsonplaceholder.typicode.com/posts", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: stream
+    });
+    await dumpResponse(response);
+}
