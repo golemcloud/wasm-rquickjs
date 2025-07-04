@@ -41,23 +41,14 @@ export async function fetch(resource, options = {}) {
 
     if (body instanceof ReadableStream) {
         const nativeBodySink = request.readableStreamBody();
-        const bodySink = new WritableStream(
-            {
-                write(chunk) {
-                    nativeBodySink.write(chunk);
-                },
-                close() {
-                    nativeBodySink.close();
-                }
-            }
-        );
+
         const nativeResponsePromise = request.send();
-        const requestBodyPromise = body.pipeTo(bodySink);
-        const results = await Promise.all([
-            nativeResponsePromise,
-            requestBodyPromise,
-        ]);
-        const nativeResponse = results[0];
+        for await (const chunk of body) {
+            nativeBodySink.write(chunk);
+        }
+        nativeBodySink.close();
+        const nativeResponse = await nativeResponsePromise;
+
         return new Response(nativeResponse, resource);
     } else {
         if (body instanceof ArrayBuffer) {
