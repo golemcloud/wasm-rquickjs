@@ -1,56 +1,51 @@
-use crate::internal::get_js_state;
+use crate::internal::sleep;
 use rquickjs::function::Args;
-use rquickjs::{Ctx, Persistent, Value};
+use rquickjs::{CatchResultExt, Ctx, Persistent, Value};
 use std::time::Duration;
-use tokio::select;
-use tokio_util::sync::CancellationToken;
 
 // Native functions for the timeout implementation
 #[rquickjs::module]
 pub mod native_module {
     use crate::internal::get_js_state;
-    use rquickjs::{Persistent, Value};
-    use tokio_util::sync::CancellationToken;
+    use futures::future::abortable;
+    use rquickjs::{Ctx, Persistent, Value};
+    use std::sync::atomic::Ordering;
 
     #[rquickjs::function]
     pub fn schedule(
+        ctx: Ctx<'_>,
         code_or_fn: Persistent<Value<'static>>,
         delay: Option<u32>,
         periodic: bool,
         args: Persistent<Vec<Value<'static>>>,
-    ) -> u32 {
+    ) -> usize {
         let state = get_js_state();
         let delay = delay.unwrap_or(0);
 
-        let id = state
-            .last_scheduled_task_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (task, abort_handle) = abortable(super::scheduled_task(
+            ctx.clone(),
+            code_or_fn,
+            delay,
+            periodic,
+            args,
+        ));
 
-        let token = CancellationToken::new();
-
-        let mut scheduled_tasks = state.scheduled_tasks.borrow_mut();
-        scheduled_tasks.insert(id, token.clone());
-        drop(scheduled_tasks);
-
-        let mut join_set = state.current_join_set.borrow_mut();
-        if let Some(join_set) = join_set.as_mut() {
-            let _ = join_set.spawn_local(async move {
-                super::scheduled_task(token, code_or_fn, delay, periodic, args).await;
-            });
-
-            id
-        } else {
-            panic!("No JoinSet available, cannot spawn new task");
-        }
+        let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
+        ctx.spawn(async move {
+            let _ = task.await;
+        });
+        state.abort_handles.borrow_mut().insert(key, abort_handle);
+        key
     }
 
     #[rquickjs::function]
-    pub fn clear_schedule(timeout_id: u32) {
+    pub fn clear_schedule(timeout_id: usize) {
         let state = get_js_state();
-        let mut scheduled_tasks = state.scheduled_tasks.borrow_mut();
-        if let Some(token) = scheduled_tasks.remove(&timeout_id) {
-            token.cancel();
-        }
+        let mut abort_handles = state.abort_handles.borrow_mut();
+        let handle = abort_handles
+            .remove(&timeout_id)
+            .expect("No such timeout ID");
+        handle.abort();
     }
 }
 
@@ -68,34 +63,25 @@ pub const WIRE_JS: &str = r#"
     "#;
 
 async fn scheduled_task(
-    token: CancellationToken,
+    ctx: Ctx<'_>,
     code_or_fn: Persistent<Value<'static>>,
     delay: u32,
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
 ) {
-    let state = get_js_state();
-    let context = &state.ctx;
-
     if delay == 0 {
-        context
-            .with(|ctx| {
-                run_scheduled_task(ctx, code_or_fn.clone(), args.clone())
-                    .expect("Failed to run scheduled task");
-            })
-            .await;
+        run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
+            .catch(&ctx)
+            .expect("Failed to run scheduled task");
     } else {
         let duration = Duration::from_millis(delay as u64);
 
         loop {
-            select! {
-                _ = token.cancelled() => break,
-                _ = tokio::time::sleep(duration) => {
-                        context.with(|ctx| {
-                            run_scheduled_task(ctx, code_or_fn.clone(), args.clone()).expect("Failed to run scheduled task");
-                        }).await;
-                }
-            }
+            sleep(duration).await;
+
+            run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
+                .catch(&ctx)
+                .expect("Failed to run scheduled task");
 
             if !periodic {
                 break;
@@ -115,16 +101,13 @@ fn run_scheduled_task(
     if let Some(func) = restored_code_or_fn.as_function() {
         let mut args = Args::new(ctx, restored_args.len());
         args.push_args(&restored_args)?;
-        func.defer_arg(args)
+        func.call_arg(args)
     } else if let Some(code) = restored_code_or_fn.as_string() {
-        if restored_args.len() > 0 {
+        if !restored_args.is_empty() {
             panic!("Passing arguments to scheduled code snippets is not supported");
         }
         ctx.eval(code.to_string()?)
     } else {
-        panic!(
-            "Unsupported value passed to setTimeout or setInterval: {:?}",
-            restored_code_or_fn
-        );
+        panic!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
     }
 }

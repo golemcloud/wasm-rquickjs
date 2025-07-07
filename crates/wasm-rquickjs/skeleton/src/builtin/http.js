@@ -39,36 +39,38 @@ export async function fetch(resource, options = {}) {
 
     let body = options.body || '';
 
-    if (body instanceof ArrayBuffer) {
-        request.arrayBufferBody(body);
-    } else if (body instanceof Uint8Array) {
-        request.uint8ArrayBody(body);
-    } else if (typeof body === 'string' || body instanceof String) {
-        request.stringBody(body);
-    } else if (body instanceof ReadableStream) {
-        // TODO: currently the native implementation does not support streaming request body, so we just buffer the stream here
-        const reader = body.getReader();
-        let chunks = [];
-        let done, value;
-        while ({done, value} = await reader.read(), !done) {
-            chunks.push(value);
+    if (body instanceof ReadableStream) {
+        request.initSend();
+        const bodyWriter = request.initRequestBody();
+        request.sendRequest();
+
+        async function sendBody(bodyWriter, body) {
+            const reader = body.getReader();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                await bodyWriter.writeRequestBodyChunk(value);
+            }
+            bodyWriter.finishBody();
         }
-        // Concatenate all chunks into a single Uint8Array
-        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-        const concatenated = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-            concatenated.set(chunk, offset);
-            offset += chunk.length;
-        }
-        request.uint8ArrayBody(concatenated);
+
+        const [nativeResponse, _] = await Promise.all([request.receiveResponse(), sendBody(bodyWriter, body)]);
+
+        return new Response(nativeResponse, resource);
     } else {
-        console.warn('Unsupported body type');
+        if (body instanceof ArrayBuffer) {
+            request.arrayBufferBody(body);
+        } else if (body instanceof Uint8Array) {
+            request.uint8ArrayBody(body);
+        } else if (typeof body === 'string' || body instanceof String) {
+            request.stringBody(body);
+        } else {
+            console.warn('Unsupported body type');
+        }
+
+        const nativeResponse = await request.simpleSend();
+        return new Response(nativeResponse, resource);
     }
-
-    let nativeResponse = await request.send();
-
-    return new Response(nativeResponse, resource);
 }
 
 export class Response {
@@ -87,9 +89,27 @@ export class Response {
     }
 
     get body() {
-        let streamSource = this.nativeResponse.stream();
+        let nativeStreamSource = this.nativeResponse.stream();
         this.bodyUsed = true;
-        return new ReadableStream(streamSource);
+        return new ReadableStream({
+            start() {
+            },
+            get type() {
+                return "bytes";
+            },
+            async pull(controller) {
+                // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
+                const [next, err] = await nativeStreamSource.pull();
+                if (err !== undefined) {
+                    console.error("Error reading response body stream:", err);
+                    controller.error(err);
+                } else if (next === undefined) {
+                    controller.close();
+                } else {
+                    controller.enqueue(next);
+                }
+            }
+        });
     }
 
     get headers() {

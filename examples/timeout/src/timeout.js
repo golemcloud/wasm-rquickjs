@@ -20,3 +20,15 @@ export const run = () => {
         console.log("Message from setImmediate #2");
     });
 }
+
+export async function parallel() {
+    function test(i) {
+        console.log("test", i);
+    }
+
+    for (let i = 0; i < 1000; i++) {
+        setTimeout(() => {
+            test(i);
+        }, 100)
+    }
+}

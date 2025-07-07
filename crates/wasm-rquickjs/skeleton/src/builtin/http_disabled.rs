@@ -1,6 +1,5 @@
 #[rquickjs::module]
-pub mod native_module {
-}
+pub mod native_module {}
 
 // JS functions for the console implementation
 pub const HTTP_JS: &str = "";
