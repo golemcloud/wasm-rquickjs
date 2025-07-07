@@ -30,8 +30,7 @@ wasi-async-runtime = "0.1.2"
 wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
 
 # HTTP
-#reqwest = { git = "https://github.com/golemcloud/reqwest", branch = "update-may-2025", optional = true }
-reqwest = { path = "/Users/vigoo/projects/golem/reqwest", features = ["async"], optional = true }
+reqwest = { git = "https://github.com/golemcloud/reqwest", branch = "update-july-2025", features = ["async"], optional = true }
 
 # Logging
 log = { version = "0.4.22", default-features = false, optional = true }
