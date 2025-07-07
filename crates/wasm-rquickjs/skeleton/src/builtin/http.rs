@@ -5,19 +5,20 @@ pub mod native_module {
     pub use super::HttpResponse;
 }
 
-use futures::SinkExt;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures::SinkExt;
 use futures_concurrency::future::Race;
 use futures_concurrency::stream::IntoStream;
 use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::{Body, Method, Request, StreamError, Url, Version};
+use reqwest::{
+    Body, CustomRequestBodyWriter, CustomRequestExecution, Method, Request, StreamError, Url,
+    Version,
+};
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, JsLifetime, TypedArray};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
@@ -32,6 +33,8 @@ pub struct HttpRequest {
     version: Version,
     #[qjs(skip_trace)]
     body: Option<Body>,
+    #[qjs(skip_trace)]
+    execution: Option<CustomRequestExecution>,
 }
 
 impl Default for HttpRequest {
@@ -42,6 +45,7 @@ impl Default for HttpRequest {
             headers: HashMap::new(),
             version: Version::HTTP_11,
             body: None,
+            execution: None,
         }
     }
 }
@@ -80,6 +84,7 @@ impl HttpRequest {
             headers: hdrs,
             version,
             body: None,
+            execution: None,
         }
     }
 
@@ -107,7 +112,65 @@ impl HttpRequest {
         self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
     }
 
-    pub async fn send(&mut self) -> HttpResponse {
+    pub fn init_send(&mut self) {
+        let js_state = crate::internal::get_js_state();
+        let reactor = js_state
+            .reactor
+            .borrow()
+            .as_ref()
+            .expect("http send is called from outside of an async call")
+            .clone();
+
+        let client = reqwest::ClientBuilder::new(reactor)
+            .build()
+            .expect("Failed to create HTTP client");
+
+        let mut request = Request::new(self.method.clone(), self.url.clone());
+
+        *request.version_mut() = self.version;
+        for (name, value) in &self.headers {
+            request.headers_mut().insert(name.clone(), value.clone());
+        }
+
+        self.execution = Some(client.execute_custom(request).expect("HTTP request failed"));
+    }
+
+    pub fn send_request(&mut self) {
+        if let Some(execution) = self.execution.as_mut() {
+            execution
+                .send_request()
+                .expect("Failed to send HTTP request");
+        } else {
+            panic!("HTTP request has not been initialized for sending");
+        }
+    }
+
+    pub fn init_request_body(&mut self) -> WrappedRequestBodyWriter {
+        if let Some(execution) = self.execution.as_mut() {
+            let writer = execution
+                .init_request_body()
+                .expect("Failed to init HTTP request body");
+
+            WrappedRequestBodyWriter { writer: Some(writer) }
+        } else {
+            panic!("HTTP request has not been initialized for sending");
+        }
+    }
+
+    pub async fn receive_response(&mut self) -> HttpResponse {
+        if let Some(execution) = self.execution.take() {
+            let response = execution
+                .receive_response()
+                .await
+                .expect("Failed to receive HTTP response");
+
+            HttpResponse::from_response(response)
+        } else {
+            panic!("HTTP request has not been initialized for sending");
+        }
+    }
+
+    pub async fn simple_send(&mut self) -> HttpResponse {
         let js_state = crate::internal::get_js_state();
         let reactor = js_state
             .reactor
@@ -132,6 +195,46 @@ impl HttpRequest {
         let response = client.execute(request).await.expect("HTTP request failed");
 
         HttpResponse::from_response(response)
+    }
+}
+
+#[derive(Trace, JsLifetime)]
+#[rquickjs::class(rename_all = "camelCase")]
+pub struct WrappedRequestBodyWriter {
+    #[qjs(skip_trace)]
+    writer: Option<CustomRequestBodyWriter>,
+}
+
+#[rquickjs::methods(rename_all = "camelCase")]
+impl WrappedRequestBodyWriter {
+    #[qjs(constructor)]
+    pub fn new() -> Self {
+        WrappedRequestBodyWriter { writer: None }
+    }
+
+    pub async fn write_request_body_chunk(&mut self, chunk: TypedArray<'_, u8>) {
+        if let Some(writer) = self.writer.as_mut() {
+            writer
+                .write_body_chunk(
+                    chunk
+                        .as_bytes()
+                        .expect("the UInt8Array passed to the HTTP request is detached"),
+                )
+                .await
+                .expect("Failed to write HTTP request body chunk");
+        } else {
+            panic!("HTTP request has not been initialized for sending");
+        }
+    }
+
+    pub fn finish_body(&mut self) {
+        if let Some(writer) = self.writer.take() {
+            writer
+                .finish_body()
+                .expect("Failed to init HTTP request body");
+        } else {
+            panic!("HTTP request has not been initialized for sending");
+        }
     }
 }
 

@@ -40,14 +40,21 @@ export async function fetch(resource, options = {}) {
     let body = options.body || '';
 
     if (body instanceof ReadableStream) {
-        const nativeBodySink = request.readableStreamBody();
+        request.initSend();
+        const bodyWriter = request.initRequestBody();
+        request.sendRequest();
 
-        const nativeResponsePromise = request.send();
-        for await (const chunk of body) {
-            nativeBodySink.write(chunk);
+        async function sendBody(bodyWriter, body) {
+            const reader = body.getReader();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                await bodyWriter.writeRequestBodyChunk(value);
+            }
+            bodyWriter.finishBody();
         }
-        nativeBodySink.close();
-        const nativeResponse = await nativeResponsePromise;
+
+        const [nativeResponse, _] = await Promise.all([request.receiveResponse(), sendBody(bodyWriter, body)]);
 
         return new Response(nativeResponse, resource);
     } else {
@@ -61,7 +68,7 @@ export async function fetch(resource, options = {}) {
             console.warn('Unsupported body type');
         }
 
-        const nativeResponse = await request.send();
+        const nativeResponse = await request.simpleSend();
         return new Response(nativeResponse, resource);
     }
 }
@@ -86,7 +93,6 @@ export class Response {
         this.bodyUsed = true;
         return new ReadableStream({
             start() {
-                console.log("Response body stream started");
             },
             get type() {
                 return "bytes";
@@ -98,10 +104,8 @@ export class Response {
                     console.error("Error reading response body stream:", err);
                     controller.error(err);
                 } else if (next === undefined) {
-                    console.log("Response body stream closed");
                     controller.close();
                 } else {
-                    console.log(`Enqueuing chunk: ${next}`);
                     controller.enqueue(next);
                 }
             }
