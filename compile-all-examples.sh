@@ -17,6 +17,7 @@ cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-cr
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/timeout/wit --js examples/timeout/src/timeout.js --output tmp/timeout
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/streams/wit --js examples/streams/src/streams.js --output tmp/streams
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/fetch/wit --js examples/fetch/src/fetch.js --output tmp/fetch
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-wrapper-crate --wit examples/encoding/wit --js examples/encoding/src/encoding.js --output tmp/encoding
 
 # Generate .d.ts files for all examples
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/export-from-inner-package/wit --output tmp/export-from-inner-package/dts
@@ -33,6 +34,7 @@ cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit 
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/timeout/wit --output tmp/timeout/dts
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/streams/wit --output tmp/streams/dts
 cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/fetch/wit --output tmp/fetch/dts
+cargo run --package wasm-rquickjs-cli --bin wasm-rquickjs -- generate-dts --wit examples/encoding/wit --output tmp/encoding/dts
 
 # All generated crates can be compiled
 pushd tmp/export-from-inner-package

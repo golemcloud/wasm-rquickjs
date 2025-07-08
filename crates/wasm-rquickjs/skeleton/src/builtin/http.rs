@@ -7,7 +7,6 @@ pub mod native_module {
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::SinkExt;
-use futures_concurrency::future::Race;
 use futures_concurrency::stream::IntoStream;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{

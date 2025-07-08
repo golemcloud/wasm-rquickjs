@@ -1,0 +1,5 @@
+package quickjs:encoding;
+
+world encoding {
+  export test1: func();
+}
