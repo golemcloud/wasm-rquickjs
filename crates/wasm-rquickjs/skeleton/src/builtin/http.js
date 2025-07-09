@@ -1,7 +1,9 @@
 import * as httpNative from '__wasm_rquickjs_builtin/http_native'
+import {formDataToBlob} from '__wasm_rquickjs_builtin/http_form_data';
 
 // Partially based on the implementation in wasmedge-quickjs
 // Partially based on https://github.com/JakeChampion/fetch/blob/main/fetch.js
+// Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
 
 export async function fetch(resource, options = {}) {
     let method = options.method || 'GET'
@@ -32,31 +34,18 @@ export async function fetch(resource, options = {}) {
         version
     )
 
-    // TODO: Blob support
     // TODO: DataView support
-    // TODO: FormData support
     // TODO: URLSearchParams support
 
     let body = options.body || '';
 
     if (body instanceof ReadableStream) {
-        request.initSend();
-        const bodyWriter = request.initRequestBody();
-        request.sendRequest();
-
-        async function sendBody(bodyWriter, body) {
-            const reader = body.getReader();
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                await bodyWriter.writeRequestBodyChunk(value);
-            }
-            bodyWriter.finishBody();
-        }
-
-        const [nativeResponse, _] = await Promise.all([request.receiveResponse(), sendBody(bodyWriter, body)]);
-
-        return new Response(nativeResponse, resource);
+        return await streamingRequest(request, resource, body);
+    } else if (body instanceof FormData) {
+        const blob = formDataToBlob(body);
+        return await blobRequestBody(request, resource, blob);
+    } else if (body instanceof Blob) {
+        return await blobRequestBody(request, resource, body);
     } else {
         if (body instanceof ArrayBuffer) {
             request.arrayBufferBody(body);
@@ -71,6 +60,34 @@ export async function fetch(resource, options = {}) {
         const nativeResponse = await request.simpleSend();
         return new Response(nativeResponse, resource);
     }
+}
+
+async function sendBody(bodyWriter, body) {
+    const reader = body.getReader();
+    while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        await bodyWriter.writeRequestBodyChunk(value);
+    }
+    bodyWriter.finishBody();
+}
+
+async function streamingRequest(request, resource, body) {
+    request.initSend();
+    const bodyWriter = request.initRequestBody();
+    request.sendRequest();
+
+    const [nativeResponse, _] = await Promise.all([request.receiveResponse(), sendBody(bodyWriter, body)]);
+
+    return new Response(nativeResponse, resource);
+}
+
+async function blobRequestBody(request, resource, blob) {
+    const stream = blob.stream();
+    if (blob.type && blob.type !== '') {
+        request.addHeader('Content-Type', blob.type);
+    }
+    return await streamingRequest(request, resource, stream);
 }
 
 export class Response {

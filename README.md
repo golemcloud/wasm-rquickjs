@@ -262,6 +262,9 @@ Only if the `http` feature flag is enabled in the generated crate. It depends on
 - `fetch`
 - `Headers`
 - `Response`
+- `FormData`
+- `Blob`
+- `File`
 
 #### Streams
 
@@ -287,6 +290,14 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `setInterval`
 - `clearInterval`
 - `setImmediate`
+
+
+#### Encoding
+
+- `TextEncoder`
+- `TextDecoder`
+- `TextDecoderStream`
+- `TextEncoderStream`
 
 ### Coming from QuickJS
 
