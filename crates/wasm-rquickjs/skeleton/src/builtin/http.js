@@ -152,8 +152,6 @@ export class Response {
     // TODO: static redirect()
     // TODO: static json()
 
-    // TODO: blob()
-    // TODO: bytes()
     // TODO: clone()
     // TODO: formData()
 
@@ -161,6 +159,14 @@ export class Response {
         let result = await this.nativeResponse.arrayBuffer();
         this.bodyUsed = true;
         return result;
+    }
+
+    async blob() {
+        new Blob([await this.arrayBuffer()], {type: this.headers.get('Content-Type') || ''});
+    }
+
+    async bytes() {
+        new Uint8Array(await this.arrayBuffer())
     }
 
     async json() {

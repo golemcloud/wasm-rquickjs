@@ -1,9 +1,11 @@
 class TimestampSource {
     #interval
+    #counter = 0;
 
     start(controller) {
         this.#interval = setInterval(() => {
-            const string = new Date().toLocaleTimeString();
+            const string = `[Message ${this.#counter}]`;
+            this.#counter += 1;
             // Add the string to the stream.
             controller.enqueue(string);
             console.log(`Enqueued ${string}`);
@@ -40,8 +42,8 @@ async function test1Impl() {
         // The `read()` method returns a promise that
         // resolves when a value has been received.
         const {done, value} = await encodingReader.read();
-        console.log("Encoded chunk:", JSON.stringify(value));
         if (done) break;
+        console.log("Encoded chunk:", JSON.stringify(value));
         buf.push(...value);
     }
 
@@ -65,8 +67,8 @@ async function test1Impl() {
         // The `read()` method returns a promise that
         // resolves when a value has been received.
         const {done, value} = await decodingReader.read();
-        console.log("Decoded chunk:", JSON.stringify(value));
         if (done) break;
+        console.log("Decoded chunk:", JSON.stringify(value));
         decodedString += value;
     }
 }

@@ -6,6 +6,7 @@ use test_r::core::{DynamicTestRegistration, TestProperties};
 use test_r::test_gen;
 use wasm_rquickjs::generate_dts;
 
+#[allow(dead_code)]
 mod common;
 
 #[test_gen]

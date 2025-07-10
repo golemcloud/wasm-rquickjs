@@ -1,10 +1,10 @@
-package quickjs:outer;
+package quickjs:export-from-inner-package;
 
 interface exp2 {
   async-hello: func(name: string) -> string;
 }
 
-world export-from-inner {
+world export-from-inner-package {
   export quickjs:inner/exp1@0.0.1;
   export exp2;
 }

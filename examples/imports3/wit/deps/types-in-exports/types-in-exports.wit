@@ -74,9 +74,8 @@ interface types {
   f12: func(a: string) -> option<color>;
   f13: func(a: permissions) -> permissions;
   f14: func(a: u64) -> u64;
-  f15: func(a: list<rec2>) -> u32;
 }
 
-world example1 {
+world types-in-exports {
   export types;
 }

@@ -1,47 +1,14 @@
 test_r::enable!();
 
-use crate::common::collect_example_paths;
+use crate::common::{FeatureCombination, collect_example_paths};
 use camino::Utf8Path;
 use std::process::Command;
 use test_r::core::{DynamicTestRegistration, TestProperties};
 use test_r::test_gen;
 use wasm_rquickjs::generate_wrapper_crate;
 
+#[allow(dead_code)]
 mod common;
-
-#[derive(Copy, Clone)]
-enum FeatureCombination {
-    None,
-    LogOnly,
-    HttpOnly,
-    Default,
-}
-
-impl FeatureCombination {
-    pub fn all() -> Vec<FeatureCombination> {
-        vec![Self::None, Self::LogOnly, Self::HttpOnly, Self::Default]
-    }
-
-    pub fn label(&self) -> &str {
-        match self {
-            Self::None => "none",
-            Self::LogOnly => "log",
-            Self::HttpOnly => "http",
-            Self::Default => "default",
-        }
-    }
-
-    pub fn cargo_args(&self) -> Vec<&'static str> {
-        match self {
-            FeatureCombination::None => vec!["--no-default-features"],
-            FeatureCombination::LogOnly => {
-                vec!["--no-default-features", "--features", "logging"]
-            }
-            FeatureCombination::HttpOnly => vec!["--no-default-features", "--features", "http"],
-            FeatureCombination::Default => vec![],
-        }
-    }
-}
 
 #[test_gen]
 fn gen_compilation_tests(r: &mut DynamicTestRegistration) {
