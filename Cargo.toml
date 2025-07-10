@@ -17,6 +17,20 @@ path = "src/main.rs"
 camino = { workspace = true }
 clap = { version = "4.5.39", features = ["default", "derive"] }
 
+[dev-dependencies]
+anyhow = { workspace = true }
+test-r = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+wasmtime = { workspace = true, features = ["component-model"] }
+
+[[test]]
+name = "compilation"
+harness = false
+
+[[test]]
+name = "dts"
+harness = false
+
 [workspace]
 exclude = [
     "crates/wasm-rquickjs/skeleton",
@@ -43,6 +57,9 @@ prettier-please = "0.3.0"
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
 syn = "2.0.101"
+test-r = "2.2.0"
+tokio = "1.46.1"
 toml_edit = "0.22.27"
-wit-bindgen-core = "0.42.1"
-wit-parser = "0.230.0"
+wasmtime = "34.0.1"
+wit-bindgen-core = "0.43.0"
+wit-parser = "0.235.0"
