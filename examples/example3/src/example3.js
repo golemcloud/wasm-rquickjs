@@ -31,8 +31,8 @@ export const iface = {
             return optHello.getName();
         }
     },
-    dumpAll: (lstHello) => {
-        const items = lstHello.map(h => h.getName()).join(", ");
+    dumpAll: async (lstHello) => {
+        const items = await Promise.all(lstHello.map(h => h.getName())).then(names => names.join(", "));
         return `[${items}]`;
     }
 };

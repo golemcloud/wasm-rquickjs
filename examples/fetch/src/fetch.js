@@ -52,7 +52,20 @@ export async function test4() {
         body: response1.body
     });
 
-    console.log("Second response:", await response2.text());
+    await dumpResponse(response2);
+}
+
+export async function test4Buffered() {
+    console.log("fetch test 4");
+    const response1 = await fetch("https://postman-echo.com/stream/10");
+    let body1 = await response1.bytes();
+
+    const response2 = await fetch("https://postman-echo.com/post", {
+        method: "POST",
+        body: body1
+    });
+
+    await dumpResponse(response2);
 }
 
 export async function test5() {

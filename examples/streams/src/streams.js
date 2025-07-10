@@ -1,11 +1,12 @@
 class TimestampSource {
     #interval
+    #counter = 0
 
     start(controller) {
         this.#interval = setInterval(() => {
-            const string = new Date().toLocaleTimeString();
-            // Add the string to the stream.
+            const string = `${this.#counter}`
             controller.enqueue(string);
+            this.#counter++;
             console.log(`Enqueued ${string}`);
         }, 1_000);
 

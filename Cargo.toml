@@ -10,12 +10,36 @@ description.workspace = true
 [[bin]]
 name = "wasm-rquickjs"
 path = "src/main.rs"
+test = false
 
 [dependencies]
 "wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0" }
 
 camino = { workspace = true }
 clap = { version = "4.5.39", features = ["default", "derive"] }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+camino-tempfile = { workspace = true }
+heck = { workspace = true }
+indoc = { workspace = true }
+test-r = { workspace = true }
+wac-graph = { workspace = true }
+wasmtime = { workspace = true, features = ["async", "component-model"] }
+wasmtime-wasi = { workspace = true }
+wasmtime-wasi-http = { workspace = true }
+
+[[test]]
+name = "compilation"
+harness = false
+
+[[test]]
+name = "dts"
+harness = false
+
+[[test]]
+name = "runtime"
+harness = false
 
 [workspace]
 exclude = [
@@ -36,13 +60,20 @@ description = "Tool for wrapping JavaScript modules as WebAssembly components us
 [workspace.dependencies]
 anyhow = "1.0.98"
 camino = "1.1.10"
+camino-tempfile = "1.4.1"
 fs_extra = "1.3.0"
 heck = "0.5.0"
 include_dir = "0.7.4"
+indoc = "2.0.6"
 prettier-please = "0.3.0"
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
 syn = "2.0.101"
+test-r = "2.2.0"
 toml_edit = "0.22.27"
-wit-bindgen-core = "0.42.1"
-wit-parser = "0.230.0"
+wac-graph = "0.7.0"
+wasmtime = "34.0.1"
+wasmtime-wasi = "34.0.1"
+wasmtime-wasi-http = "34.0.1"
+wit-bindgen-core = "0.43.0"
+wit-parser = "0.235.0"
