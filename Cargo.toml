@@ -10,6 +10,7 @@ description.workspace = true
 [[bin]]
 name = "wasm-rquickjs"
 path = "src/main.rs"
+test = false
 
 [dependencies]
 "wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0" }
