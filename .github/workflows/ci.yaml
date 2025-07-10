@@ -13,10 +13,10 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: useblacksmith/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -49,13 +49,13 @@ jobs:
   publish:
     needs: [ build ]
     if: "startsWith(github.ref, 'refs/tags/v')"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/cache@v3
+      - uses: useblacksmith/cache@v5
         with:
           path: |
             ~/.cargo/bin/
