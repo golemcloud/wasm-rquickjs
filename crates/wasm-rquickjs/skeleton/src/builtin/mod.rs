@@ -26,6 +26,8 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/timeout")
         .with_module("__wasm_rquickjs_builtin/http_native")
         .with_module("__wasm_rquickjs_builtin/http")
+        .with_module("__wasm_rquickjs_builtin/http_blob")
+        .with_module("__wasm_rquickjs_builtin/http_form_data")
         .with_module("__wasm_rquickjs_builtin/streams_native")
         .with_module("__wasm_rquickjs_builtin/streams")
         .with_module("__wasm_rquickjs_builtin/encoding_native")
@@ -61,6 +63,8 @@ pub fn module_loader() -> (
         rquickjs::loader::BuiltinLoader::default()
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
             .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
+            .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
+            .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
             .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
             .with_module("__wasm_rquickjs_builtin/streams", streams::STREAMS_JS)
             .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS),

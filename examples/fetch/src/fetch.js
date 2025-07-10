@@ -111,3 +111,67 @@ export async function test6() {
     });
     await dumpResponse(response);
 }
+
+export async function test7() {
+    const blob = new Blob(['hello, world'])
+
+    const text = await blob.text();
+    console.log(`Blob text: ${text}`);
+
+    const array = await blob.arrayBuffer();
+    console.log(`Blob array buffer length: ${array.byteLength}`);
+    console.log(`Blob array buffer: ${array}`);
+
+    for await (let chunk of blob.stream()) {
+        console.log(`Blob stream chunk: ${chunk}`);
+    }
+
+    let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
+    const stream = new ReadableStream(new SlowRequestBodySource(body));
+    const formData = new FormData()
+    formData.append('f1', new File(['abc'], 'hello-world.txt'))
+    formData.append('f2', {
+        size: 123,
+        type: '',
+        name: 'cat-video.mp4',
+        stream() {
+            return stream
+        },
+        [Symbol.toStringTag]: 'File'
+    });
+
+    console.log(`FormData keys: ${JSON.stringify([...formData.keys()])}`);
+    for (const pair of formData.entries()) {
+        console.log(pair[0], JSON.stringify(pair[1]));
+    }
+
+    console.log("done");
+}
+
+export async function test8() {
+    let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
+    const blob = new Blob([body], {type: "application/json"});
+    const response = await fetch("https://jsonplaceholder.typicode.com/posts", {
+        method: "POST",
+        body: blob
+    });
+    await dumpResponse(response);
+}
+
+export async function test9() {
+    let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
+    const stream = new ReadableStream(new SlowRequestBodySource(body));
+    const formData = new FormData()
+    formData.append('f1', new File(['abc'], 'hello-world.txt'))
+    formData.append('f2', {
+        size: 123,
+        type: '',
+        name: 'cat-video.mp4',
+        stream() {
+            return stream
+        },
+        [Symbol.toStringTag]: 'File'
+    });
+    const response = await fetch('https://httpbin.org/post', {method: 'POST', body: formData});
+    await dumpResponse(response);
+}

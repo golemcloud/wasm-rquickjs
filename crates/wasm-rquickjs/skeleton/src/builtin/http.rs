@@ -5,8 +5,8 @@ pub mod native_module {
     pub use super::HttpResponse;
 }
 
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::SinkExt;
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_concurrency::stream::IntoStream;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{
@@ -111,6 +111,12 @@ impl HttpRequest {
         self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
     }
 
+    pub fn add_header(&mut self, name: String, value: String) {
+        let header_name = HeaderName::from_bytes(name.as_bytes()).expect("failed to parse header name");
+        let header_value = HeaderValue::from_str(&value).expect("failed to parse header value");
+        self.headers.insert(header_name, header_value);
+    }
+
     pub fn init_send(&mut self) {
         let js_state = crate::internal::get_js_state();
         let reactor = js_state
@@ -150,7 +156,9 @@ impl HttpRequest {
                 .init_request_body()
                 .expect("Failed to init HTTP request body");
 
-            WrappedRequestBodyWriter { writer: Some(writer) }
+            WrappedRequestBodyWriter {
+                writer: Some(writer),
+            }
         } else {
             panic!("HTTP request has not been initialized for sending");
         }
@@ -457,11 +465,19 @@ impl BodySink {
 
 // JS functions for the console implementation
 pub const HTTP_JS: &str = include_str!("http.js");
+pub const FETCH_BLOB_JS: &str = include_str!("fetch-blob-4.0.0.js");
+pub const FORMDATA_JS: &str = include_str!("formdata-polyfill-4.0.10.js");
 
 // JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_http from '__wasm_rquickjs_builtin/http';
+        import * as __wasm_rquickjs_http_blob from '__wasm_rquickjs_builtin/http_blob';
+        import * as __wasm_rquickjs_http_form_data from '__wasm_rquickjs_builtin/http_form_data';
+
         globalThis.fetch = __wasm_rquickjs_http.fetch;
         globalThis.Headers = __wasm_rquickjs_http.Headers;
         globalThis.Response = __wasm_rquickjs_http.Response;
+        globalThis.Blob = __wasm_rquickjs_http_blob.Blob;
+        globalThis.File = __wasm_rquickjs_http_blob.File;
+        globalThis.FormData = __wasm_rquickjs_http_form_data.FormData;
     "#;
