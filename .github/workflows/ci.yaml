@@ -13,18 +13,14 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: useblacksmith/rust-cache@v3
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-is
+          prefix-key: v1-rust
+          shared-key: debug
+          cache-all-crates: true
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -37,8 +33,28 @@ jobs:
         run: cargo fmt -- --check
       - name: Clippy
         run: cargo clippy -- -Dwarnings
+      - name: Build
+        run: cargo build --all-features --all-targets
+  test:
+    needs: [ build ]
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v3
+      - uses: useblacksmith/rust-cache@v3
+        with:
+          prefix-key: v1-rust
+          shared-key: debug
+          cache-all-crates: true
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install cargo-component
+        run: cargo binstall --force --locked cargo-component@0.21.1
       - name: Tests
-        run: cargo test -- --report-time --format junit --logfile target/report.xml
+        run: cargo test -- --nocapture --report-time --format junit --logfile target/report.xml
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v5
         if: success() || failure() # always run even if the previous step fails
@@ -47,24 +63,14 @@ jobs:
           detailed_summary: true
           include_passed: true
   publish:
-    needs: [ build ]
+    needs: [ test ]
     if: "startsWith(github.ref, 'refs/tags/v')"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-is
-
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
