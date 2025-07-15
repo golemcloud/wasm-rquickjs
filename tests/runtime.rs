@@ -636,12 +636,12 @@ async fn stateful1(#[tagged_as("stateful1")] compiled: &CompiledTest) -> anyhow:
     let (r, output1) = test_instance
         .invoke_and_capture_output(None, "inc", &[Val::S32(1)])
         .await;
-    let r = r?;
+    let _ = r?;
 
     let (r, output2) = test_instance
         .invoke_and_capture_output(None, "inc", &[Val::S32(3)])
         .await;
-    let r = r?;
+    let _ = r?;
 
     let (v1, _) = test_instance
         .invoke_and_capture_output(None, "get", &[])

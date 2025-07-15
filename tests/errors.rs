@@ -2,6 +2,7 @@ test_r::enable!();
 
 use crate::common::{CompiledTest, invoke_and_capture_output_with_stderr};
 use camino::Utf8Path;
+use indoc::indoc;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -31,7 +32,13 @@ async fn missing_exported_top_level_function_in_js(
     println!("Error: {}", stderr);
 
     assert!(result.is_err());
-    assert!(stderr.contains("Cannot find exported JS function fun1"));
+    assert!(stderr.contains(indoc!(
+        r#"Cannot find exported JS function fun1 of WIT package quickjs:errors
+           Provided exports:
+             api, api22, fun3, fun4, fun5, fun6, wrongFun1
+
+           Try adding an export `export const fun1 = ...`"#
+    )));
 
     Ok(())
 }
@@ -53,7 +60,16 @@ async fn missing_exported_interface_function_in_js(
     println!("Error: {}", stderr);
 
     assert!(result.is_err());
-    assert!(stderr.contains("Cannot find exported JS function api.fun2"));
+    assert!(stderr.contains(indoc!(
+        r#"Cannot find exported JS function api.fun2 of WIT package quickjs:errors
+           Provided exports:
+             api, api22, fun3, fun4, fun5, fun6, wrongFun1
+
+           Keys in api:
+             wrongFun2
+
+           Try adding a field `fun2` to api"#
+    )));
 
     Ok(())
 }
@@ -66,7 +82,7 @@ async fn missing_exported_interface_in_js(
         compiled.wasm_path(),
         Some("quickjs:errors/api2"),
         "fun7",
-        &[Val::String("world".to_string())],
+        &[],
     )
     .await;
 
@@ -75,10 +91,13 @@ async fn missing_exported_interface_in_js(
     println!("Error: {}", stderr);
 
     assert!(result.is_err());
-    assert_eq!(
-        result.err().unwrap().to_string(),
-        "Interface quickjs:errors/api2 not found".to_string()
-    );
+    assert!(stderr.contains(indoc!(
+        r#"Cannot find exported JS function api2.fun7 of WIT package quickjs:errors
+           Provided exports:
+             api, api22, fun3, fun4, fun5, fun6, wrongFun1
+
+           Try adding an export `export const api2 = { ... }`"#
+    )));
 
     Ok(())
 }
@@ -94,11 +113,11 @@ async fn js_expects_nonexisting_parameter(
     println!("Output: {}", stdout);
     println!("Error: {}", stderr);
 
-    assert!(result.is_ok());
-    assert_eq!(
-        result.ok().unwrap(),
-        Some(Val::String("Hello, undefined!".to_string()))
-    );
+    assert!(result.is_err());
+    assert!(stderr.contains(indoc!(
+        r#"The WIT specification defines 0 parameters,
+           but the exported JavaScript function got 1 parameters (exported function fun3 in WIT package quickjs:errors)"#
+    )));
 
     Ok(())
 }
@@ -119,11 +138,11 @@ async fn js_expects_fewer_parameter(
     println!("Output: {}", stdout);
     println!("Error: {}", stderr);
 
-    assert!(result.is_ok());
-    assert_eq!(
-        result.ok().unwrap(),
-        Some(Val::String("Hello, 1!".to_string()))
-    );
+    assert!(result.is_err());
+    assert!(stderr.contains(indoc!(
+        r#"The WIT specification defines 2 parameters,
+           but the exported JavaScript function got 1 parameters (exported function fun4 in WIT package quickjs:errors)"#
+    )));
 
     Ok(())
 }
@@ -145,6 +164,7 @@ async fn js_expects_wrong_parameter_types(
     println!("Error: {}", stderr);
 
     assert!(result.is_err());
+    assert!(stderr.contains("Exception during call of fun5"));
     assert!(stderr.contains("not a function")); // calling a.substring throws an exception
 
     Ok(())
@@ -163,7 +183,7 @@ async fn js_returns_wrong_type(
 
     assert!(result.is_err());
     assert!(stderr.contains(
-        r#"Unexpected result value: FromJs { from: "string", to: "f64", message: None }"#
+        r#"Unexpected result value for exported function fun6: FromJs { from: "string", to: "f64", message: None }"#
     ));
 
     Ok(())

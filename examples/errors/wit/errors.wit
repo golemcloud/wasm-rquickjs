@@ -15,4 +15,5 @@ world errors {
   export fun5: func(a: u32, b: string) -> string;
   export fun6: func() -> f32;
   export api;
+  export api2;
 }
