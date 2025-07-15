@@ -102,7 +102,8 @@ async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyh
         "hello",
         &[Val::String("world".to_string())],
     )
-    .await?;
+    .await;
+    let result = result?;
 
     assert_eq!(result, Some(Val::String("Hello, world! (123)".to_string())));
     assert_eq!(output, "hello called with world\n");
@@ -118,7 +119,8 @@ async fn example1_async(#[tagged_as("example1")] compiled: &CompiledTest) -> any
         "async-hello",
         &[Val::String("world".to_string())],
     )
-    .await?;
+    .await;
+    let result = result?;
 
     assert_eq!(result, Some(Val::String("Hello, world! (123)".to_string())));
     assert_eq!(output, "hello called with world\n");
@@ -134,7 +136,8 @@ async fn example2_sync(#[tagged_as("example2")] compiled: &CompiledTest) -> anyh
         "hello",
         &[Val::String("world".to_string())],
     )
-    .await?;
+    .await;
+    let result = result?;
 
     assert_eq!(result, Some(Val::String("Hello, world! (123)".to_string())));
     assert_eq!(output, "hello called with world\n");
@@ -150,7 +153,8 @@ async fn example2_async(#[tagged_as("example2")] compiled: &CompiledTest) -> any
         "async-hello",
         &[Val::String("world".to_string())],
     )
-    .await?;
+    .await;
+    let result = result?;
 
     assert_eq!(result, Some(Val::String("Hello, world!".to_string())));
     assert_eq!(output, "hello called with world\n");
@@ -168,7 +172,9 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             "[constructor]hello",
             &[Val::String("user1".to_string())],
         )
-        .await?;
+        .await;
+    let h1 = h1?;
+
     let Val::Resource(h1) = h1.unwrap() else {
         panic!("Expected a resource handle")
     };
@@ -179,7 +185,8 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             "[method]hello.get-name",
             &[Val::Resource(h1)],
         )
-        .await?;
+        .await;
+    let name1 = name1?;
 
     let (h2, _) = test_instance
         .invoke_and_capture_output(
@@ -187,7 +194,8 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             "[constructor]hello",
             &[Val::String("user2".to_string())],
         )
-        .await?;
+        .await;
+    let h2 = h2?;
     let Val::Resource(h2) = h2.unwrap() else {
         panic!("Expected a resource handle")
     };
@@ -198,7 +206,8 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             "[method]hello.get-name",
             &[Val::Resource(h2)],
         )
-        .await?;
+        .await;
+    let name2 = name2?;
 
     let (compare, _) = test_instance
         .invoke_and_capture_output(
@@ -206,7 +215,8 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             "[static]hello.compare",
             &[Val::Resource(h1), Val::Resource(h2)],
         )
-        .await?;
+        .await;
+    let compare = compare?;
 
     let (merged, _) = test_instance
         .invoke_and_capture_output(
@@ -214,7 +224,8 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             "[static]hello.merge",
             &[Val::Resource(h1), Val::Resource(h2)],
         )
-        .await?;
+        .await;
+    let merged = merged?;
     let Val::Resource(merged) = merged.unwrap() else {
         panic!("Expected a resource handle")
     };
@@ -225,7 +236,8 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             "[method]hello.get-name",
             &[Val::Resource(merged)],
         )
-        .await?;
+        .await;
+    let name3 = name3?;
 
     test_instance.drop_resource(merged).await?;
 
@@ -239,7 +251,8 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
 
 #[test]
 async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
+    let _ = r?;
 
     println!("{output}");
 
@@ -267,7 +280,8 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
 
 #[test]
 async fn encoding(#[tagged_as("encoding")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await;
+    let _ = r?;
 
     assert_eq!(
         output,
@@ -318,7 +332,8 @@ async fn export_from_inner_package(
         "hello",
         &[Val::String("world".to_string())],
     )
-    .await?;
+    .await;
+    let result = result?;
 
     assert_eq!(result, Some(Val::String("Hello, world!".to_string())));
     assert_eq!(output, "hello called with world\n");
@@ -328,7 +343,8 @@ async fn export_from_inner_package(
 
 #[test]
 async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await;
+    let _ = r?;
 
     assert!(output.contains(
         "Response from https://jsonplaceholder.typicode.com/posts/1: 200 OK (ok=true)\n"
@@ -346,7 +362,8 @@ async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[]).await;
+    let _ = r?;
 
     println!("{output}");
 
@@ -365,7 +382,8 @@ async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test3", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test3", &[]).await;
+    let _ = r?;
 
     let chunk_count = output
         .lines()
@@ -378,7 +396,8 @@ async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[]).await;
+    let _ = r?;
 
     assert!(output.contains("Response from https://postman-echo.com/post: 200 OK (ok=true)"));
     assert!(output.contains("Body: {\"args\":{},\"data\":"));
@@ -388,8 +407,9 @@ async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test4-buffered", &[]).await?;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test4-buffered", &[]).await;
+    let _ = r?;
 
     assert!(output.contains("Response from https://postman-echo.com/post: 200 OK (ok=true)"));
     assert!(output.contains("Body: {\"args\":{},\"data\":"));
@@ -399,7 +419,8 @@ async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyh
 
 #[test]
 async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[]).await;
+    let _ = r?;
 
     assert!(output.contains("200 {\"userId\":1,\"id\":1,\""));
     assert!(output.contains("200 {\"userId\":1,\"id\":2,\""));
@@ -412,7 +433,8 @@ async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_6(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test6", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test6", &[]).await;
+    let _ = r?;
 
     assert!(output.contains(
         "Response from https://jsonplaceholder.typicode.com/posts: 201 Created (ok=true)"
@@ -424,7 +446,8 @@ async fn fetch_6(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test7", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test7", &[]).await;
+    let _ = r?;
 
     assert!(output.contains("Blob text: hello, world"));
     assert!(output.contains("Blob array buffer length: 12"));
@@ -437,7 +460,8 @@ async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[]).await;
+    let _ = r?;
 
     assert!(output.contains(
         "Response from https://jsonplaceholder.typicode.com/posts: 201 Created (ok=true)"
@@ -449,7 +473,8 @@ async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_9(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test9", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test9", &[]).await;
+    let _ = r?;
 
     println!("{output}");
     assert!(output.contains("Response from https://httpbin.org/post: 200 OK (ok=true)"));
@@ -466,7 +491,9 @@ async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::R
         "test",
         &[Val::String("someone".to_string())],
     )
-    .await?;
+    .await;
+    let result = result?;
+
     let Some(Val::String(result)) = result else {
         return Err(anyhow!("Expected a string result"));
     };
@@ -495,7 +522,9 @@ async fn imports2(
         "test",
         &[Val::String("someone".to_string())],
     )
-    .await?;
+    .await;
+    let result = result?;
+
     let Some(Val::String(result)) = result else {
         return Err(anyhow!("Expected a string result"));
     };
@@ -524,7 +553,8 @@ async fn imports3(
 ) -> anyhow::Result<()> {
     let composed = types_in_exports.plug_into(compiled)?;
 
-    let (_, output) = invoke_and_capture_output(composed.wasm_path(), None, "test", &[]).await?;
+    let (r, output) = invoke_and_capture_output(composed.wasm_path(), None, "test", &[]).await;
+    let _ = r?;
 
     println!("{output}");
     assert_eq!(
@@ -596,22 +626,28 @@ async fn stateful1(#[tagged_as("stateful1")] compiled: &CompiledTest) -> anyhow:
 
     let (v0, _) = test_instance
         .invoke_and_capture_output(None, "get", &[])
-        .await?;
+        .await;
+    let v0 = v0?;
+
     let Val::S32(v0) = v0.unwrap() else {
         panic!("Expected s32")
     };
 
-    let (_, output1) = test_instance
+    let (r, output1) = test_instance
         .invoke_and_capture_output(None, "inc", &[Val::S32(1)])
-        .await?;
+        .await;
+    let r = r?;
 
-    let (_, output2) = test_instance
+    let (r, output2) = test_instance
         .invoke_and_capture_output(None, "inc", &[Val::S32(3)])
-        .await?;
+        .await;
+    let r = r?;
 
     let (v1, _) = test_instance
         .invoke_and_capture_output(None, "get", &[])
-        .await?;
+        .await;
+    let v1 = v1?;
+
     let Val::S32(v1) = v1.unwrap() else {
         panic!("Expected s32")
     };
@@ -626,7 +662,8 @@ async fn stateful1(#[tagged_as("stateful1")] compiled: &CompiledTest) -> anyhow:
 
 #[test]
 async fn streams(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await;
+    let _ = r?;
 
     assert_eq!(
         output,
@@ -669,7 +706,8 @@ async fn streams(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Res
 
 #[test]
 async fn timeout_1(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
+    let _ = r?;
 
     assert_eq!(
         output,
@@ -702,8 +740,8 @@ async fn timeout_1(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
 #[test]
 #[ignore] // NOTE: this test passes with Golem but not with wasmtime. To be investigated.
 async fn timeout_2(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "parallel", &[]).await?;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "parallel", &[]).await;
+    let _ = r?;
 
     for i in 0..1000 {
         assert!(output.contains(&format!("test {i}")));
