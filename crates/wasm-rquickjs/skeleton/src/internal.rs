@@ -4,8 +4,8 @@ use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ScriptLoader};
 use rquickjs::prelude::*;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, FromJs, Function, Module, Object,
-    Promise, Value, async_with,
+    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
+    Object, Promise, Value, async_with,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -291,7 +291,13 @@ pub fn get_free_resource_id() -> usize {
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-pub async fn call_js_resource_method<A, R>(resource_id: usize, name: &str, args: A) -> R
+pub async fn call_js_resource_method<A, R>(
+    wit_package: &str,
+    resource_path: &[&str],
+    resource_id: usize,
+    name: &str,
+    args: A,
+) -> R
 where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
@@ -302,20 +308,28 @@ where
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
-            .unwrap_or_else(|_| panic!("Failed to get resource instance with id {resource_id}"));
+            .unwrap_or_else(|_| panic!("Failed to get resource instance with id #{resource_id} of class {}", resource_path.join(".")));
 
         let method_obj: Object = resource_instance.get(name)
-            .unwrap_or_else(|_| panic!("Failed to get method {name} from resource instance with id {resource_id}"));
+            .unwrap_or_else(|_| panic!("{}", dump_cannot_find_method(
+                name,
+                resource_path,
+                &resource_instance,
+                wit_package,
+            )));
 
-        let method = method_obj.as_function().expect("Expected method to be a function").clone();
+        let method = method_obj.as_function().expect(
+            &format!("Expected method {name} to be a function in class {}", resource_path.join("."))).clone();
 
-        let parameter_count = method.get::<&str, usize>("length").expect("Failed to get parameter count of exported method");
+        let parameter_count = method.get::<&str, usize>("length").expect(&format!("Failed to get parameter count of exported method {name} in class {}", resource_path.join(".")));
         if parameter_count != args.num_args() {
             panic!(
-                "The WIT specification defines {} parameters,\nbut the exported JavaScript method got {} parameters (exported method {})",
+                "The WIT specification defines {} parameters,\nbut the exported JavaScript method got {} parameters (exported method {} of class {} representing a resource defined in WIT package {})",
                 args.num_args(),
                 parameter_count,
-                name
+                name,
+                resource_path.join("."),
+                wit_package
             );
         }
 
@@ -324,10 +338,10 @@ where
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call: {exception:?}");
+                panic!("Exception during call of method {name} in {path}: {exception:?}", path=resource_path.join("."));
             }
             Err(e) => {
-                panic! ("Error during call: {e:?}");
+                panic!("Error during call of method {name} in {path}: {e:?}", path=resource_path.join("."));
             }
             Ok(value) => {
                 if value.is_promise() {
@@ -341,20 +355,23 @@ where
                             match e {
                                 Error::Exception => {
                                     let exception = ctx.catch();
-                                    panic! ("Exception during awaiting call result: {exception:?}")
+                                    panic!("Exception during awaiting call result of method {name} in {path}: {exception:?}", path=resource_path.join("."));
                                 }
                                 _ => {
-                                    panic ! ("Error during awaiting call result: {e:?}")
+                                    panic!("Error during awaiting call result of method {name} in {path}: {e:?}", path=resource_path.join("."));
                                 }
                             }
                         }
                     }
                 }
                 else {
-                    R::from_js(&ctx, value).expect("Unexpected result value")
-                }
-            }
-        }
+                    R::from_js(&ctx, value).expect(
+                        &format!("Unexpected result value for method {name} in exported class {path}",
+                                path=resource_path.join(".")
+                        ))
+}
+    }
+    }
     }).await;
     js_state.rt.idle().await;
     result
@@ -478,5 +495,37 @@ fn dump_cannot_find_export(
             }
         }
     }
+    panic_message
+}
+
+fn dump_cannot_find_method(
+    name: &str,
+    resource_path: &[&str],
+    class_instance: &Object,
+    wit_package: &str,
+) -> String {
+    let mut panic_message = String::new();
+    panic_message.push_str(&format!(
+        "Cannot find method {name} in an instance of class {path} of WIT package {wit_package}",
+        path = resource_path.join(".")
+    ));
+    if let Some(prototype) = class_instance.get_prototype() {
+        panic_message.push_str("\nKeys in the instance's prototype:\n");
+        let mut keys: Vec<String> = vec![];
+        for key in prototype.own_keys(Filter::new().symbol().string().private()) {
+            if let Ok(key) = key {
+                keys.push(key);
+            }
+        }
+        keys.sort();
+        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+    }
+
+    panic_message.push_str(&format!(
+        "\nTry adding a method `{}() {{ ... }}` to class {path}\n",
+        name,
+        path = resource_path.join(".")
+    ));
+
     panic_message
 }

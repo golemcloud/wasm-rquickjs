@@ -488,6 +488,8 @@ fn generate_exported_resource_function_impl(
                fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                    crate::internal::async_exported_function(async move {
                        let result: #wrapped_result = crate::internal::call_js_resource_method(
+                            #wit_package_lit,
+                            #js_resource_path,
                             self.resource_id,
                             #js_func_name_str,
                             #param_refs_tuple,
