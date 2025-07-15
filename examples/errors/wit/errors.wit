@@ -1,0 +1,37 @@
+package quickjs:errors;
+
+interface api {
+  fun2: func(name: string) -> string;
+}
+
+interface api2 {
+    fun7: func() -> string;
+}
+
+interface api3 {
+  resource res1 {
+    constructor(name: string);
+  }
+
+  resource res2 {
+    constructor();
+  }
+
+  resource res3 {
+    constructor();
+    m1: func() -> string;
+    m2: func(a: u32, b: u32) -> string;
+    m3: func() -> f32;
+  }
+}
+
+world errors {
+  export fun1: func(name: string) -> string;
+  export fun3: func() -> string;
+  export fun4: func(a: u32, b: u32) -> string;
+  export fun5: func(a: u32, b: string) -> string;
+  export fun6: func() -> f32;
+  export api;
+  export api2;
+  export api3;
+}

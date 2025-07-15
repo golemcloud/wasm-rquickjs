@@ -72,8 +72,8 @@ pub struct TestInstance {
     component: Component,
     store: Store<Host>,
     instance: Instance,
-    stdout_file: camino_tempfile::NamedUtf8TempFile,
-    stderr_file: camino_tempfile::NamedUtf8TempFile,
+    stdout_file: NamedUtf8TempFile,
+    stderr_file: NamedUtf8TempFile,
 }
 
 impl TestInstance {
@@ -90,8 +90,8 @@ impl TestInstance {
         )?;
         wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
 
-        let stdout_file = camino_tempfile::NamedUtf8TempFile::new()?;
-        let stderr_file = camino_tempfile::NamedUtf8TempFile::new()?;
+        let stdout_file = NamedUtf8TempFile::new()?;
+        let stderr_file = NamedUtf8TempFile::new()?;
 
         let ctx = WasiCtx::builder()
             .stdout(OutputFile::new(stdout_file.reopen()?))
@@ -125,7 +125,49 @@ impl TestInstance {
         interface_name: Option<&str>,
         function_name: &str,
         args: &[Val],
-    ) -> anyhow::Result<(Option<Val>, String)> {
+    ) -> (anyhow::Result<Option<Val>>, String) {
+        let (results, stdout, _stderr) = self
+            .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
+            .await;
+        (results, stdout)
+    }
+
+    pub async fn invoke_and_capture_output_with_stderr(
+        &mut self,
+        interface_name: Option<&str>,
+        function_name: &str,
+        args: &[Val],
+    ) -> (anyhow::Result<Option<Val>>, String, String) {
+        let results = self
+            .invoke_and_capture_output_inner(interface_name, function_name, args)
+            .await;
+
+        let stdout = fs::read_to_string(&self.stdout_file).expect("failed to read stdout");
+        let stderr = fs::read_to_string(&self.stderr_file).expect("failed to read stderr");
+
+        if results.is_err() {
+            for line in stdout.lines() {
+                println!("[stdout] {line}");
+            }
+        }
+
+        for line in stderr.lines() {
+            println!("[stderr] {line}");
+        }
+
+        (
+            results.map(|results| results.first().cloned()),
+            stdout,
+            stderr,
+        )
+    }
+
+    async fn invoke_and_capture_output_inner(
+        &mut self,
+        interface_name: Option<&str>,
+        function_name: &str,
+        args: &[Val],
+    ) -> anyhow::Result<Vec<Val>> {
         let func = match interface_name {
             Some(interface_name) => {
                 let (_, exported_instance_id) = self
@@ -148,23 +190,7 @@ impl TestInstance {
                 .ok_or_else(|| anyhow!("Function {function_name} not found"))?,
         };
 
-        let results = self.perform_invoke(func, args).await;
-
-        let stdout = std::fs::read_to_string(&self.stdout_file)?;
-        let stderr = std::fs::read_to_string(&self.stderr_file)?;
-
-        if results.is_err() {
-            for line in stdout.lines() {
-                eprintln!("[stdout] {line}");
-            }
-        }
-
-        for line in stderr.lines() {
-            eprintln!("[stderr] {line}");
-        }
-
-        let results = results?;
-        Ok((results.first().cloned(), stdout))
+        self.perform_invoke(func, args).await
     }
 
     async fn perform_invoke(&mut self, func: Func, args: &[Val]) -> anyhow::Result<Vec<Val>> {
@@ -186,11 +212,31 @@ pub async fn invoke_and_capture_output(
     interface_name: Option<&str>,
     function_name: &str,
     args: &[Val],
-) -> anyhow::Result<(Option<Val>, String)> {
-    let mut test_instance = TestInstance::new(wasm_path).await?;
-    test_instance
-        .invoke_and_capture_output(interface_name, function_name, args)
-        .await
+) -> (anyhow::Result<Option<Val>>, String) {
+    match TestInstance::new(wasm_path).await {
+        Ok(mut test_instance) => {
+            test_instance
+                .invoke_and_capture_output(interface_name, function_name, args)
+                .await
+        }
+        Err(e) => (Err(e), String::new()),
+    }
+}
+
+pub async fn invoke_and_capture_output_with_stderr(
+    wasm_path: &Utf8Path,
+    interface_name: Option<&str>,
+    function_name: &str,
+    args: &[Val],
+) -> (anyhow::Result<Option<Val>>, String, String) {
+    match TestInstance::new(wasm_path).await {
+        Ok(mut test_instance) => {
+            test_instance
+                .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
+                .await
+        }
+        Err(e) => (Err(e), String::new(), String::new()),
+    }
 }
 
 enum WasmSource {

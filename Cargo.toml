@@ -41,6 +41,10 @@ harness = false
 name = "runtime"
 harness = false
 
+[[test]]
+name = "errors"
+harness = false
+
 [workspace]
 exclude = [
     "crates/wasm-rquickjs/skeleton",

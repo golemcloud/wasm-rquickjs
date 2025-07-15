@@ -138,12 +138,8 @@ fn generate_guest_impl(
     for (name, function) in exports {
         match &function.kind {
             FunctionKind::Freestanding => {
-                let func_impl = generate_exported_function_impl(
-                    context,
-                    interface.map(|(name, _)| name),
-                    name,
-                    function,
-                )?;
+                let func_impl =
+                    generate_exported_function_impl(context, interface, name, function)?;
                 func_impls.push(func_impl);
             }
             FunctionKind::AsyncFreestanding
@@ -196,7 +192,7 @@ fn generate_guest_impl(
         for (name, resource_function) in resource_funcs {
             let func_impl = generate_exported_resource_function_impl(
                 context,
-                interface.map(|(name, _)| name),
+                interface,
                 resource_type_id,
                 name,
                 resource_function,
@@ -288,7 +284,7 @@ fn generate_guest_impl(
 /// Generates one trait method implementation for an exported freestanding function
 fn generate_exported_function_impl(
     context: &GeneratorContext<'_>,
-    interface_name: Option<&str>,
+    interface: Option<(&str, &Interface)>,
     name: &str,
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
@@ -313,15 +309,32 @@ fn generate_exported_function_impl(
         &escape_js_ident(name.to_lower_camel_case()),
         func_name.span(),
     ));
-    let js_func_path = match interface_name {
-        Some(iface_name) => {
+    let (js_func_path, wit_package_lit) = match interface {
+        Some((iface_name, iface)) => {
             let if_name_str = LitStr::new(
                 &escape_js_ident(iface_name.to_lower_camel_case()),
                 func_name.span(),
             );
-            quote! { &[#if_name_str, #js_func_name_str] }
+
+            let owner_package_name = match iface.package {
+                Some(package_id) => {
+                    let package = context.resolve.packages.get(package_id).ok_or_else(|| {
+                        anyhow!("Unknown owner package of interface: {iface_name}")
+                    })?;
+                    package.name.to_string()
+                }
+                None => context.root_package_name().to_string(),
+            };
+
+            (
+                quote! { &[#if_name_str, #js_func_name_str] },
+                Lit::Str(LitStr::new(&owner_package_name, Span::call_site())),
+            )
         }
-        None => quote! { &[#js_func_name_str] },
+        None => (
+            quote! { &[#js_func_name_str] },
+            Lit::Str(LitStr::new(&context.root_package_name(), Span::call_site())),
+        ),
     };
 
     let original_result = &func_ret.original_type_ref;
@@ -332,6 +345,7 @@ fn generate_exported_function_impl(
        fn #func_name(#(#func_arg_list),*) -> #original_result {
            crate::internal::async_exported_function(async move {
                let result: #wrapped_result = crate::internal::call_js_export(
+                   #wit_package_lit,
                    #js_func_path,
                    #param_refs_tuple
                ).await;
@@ -345,7 +359,7 @@ fn generate_exported_function_impl(
 /// Generates one trait method implementation for an exported freestanding function
 fn generate_exported_resource_function_impl(
     context: &GeneratorContext<'_>,
-    interface_name: Option<&str>,
+    interface: Option<(&str, &Interface)>,
     resource_type_id: &TypeId,
     name: &str,
     function: &Function,
@@ -401,23 +415,40 @@ fn generate_exported_resource_function_impl(
         &resource_name.to_upper_camel_case(),
         Span::call_site(),
     ));
-    let js_resource_path = match interface_name {
-        Some(iface_name) => {
+    let (js_resource_path, wit_package_lit) = match interface {
+        Some((iface_name, iface)) => {
             let if_name_str = LitStr::new(
                 &escape_js_ident(iface_name.to_lower_camel_case()),
                 Span::call_site(),
             );
-            quote! { &[#if_name_str, #js_resource_name_str] }
+
+            let owner_package_name = match iface.package {
+                Some(package_id) => {
+                    let package = context.resolve.packages.get(package_id).ok_or_else(|| {
+                        anyhow!("Unknown owner package of interface: {iface_name}")
+                    })?;
+                    package.name.to_string()
+                }
+                None => context.root_package_name().to_string(),
+            };
+
+            (
+                quote! { &[#if_name_str, #js_resource_name_str] },
+                Lit::Str(LitStr::new(&owner_package_name, Span::call_site())),
+            )
         }
-        None => quote! { &[#js_resource_name_str] },
+        None => (
+            quote! { &[#js_resource_name_str] },
+            Lit::Str(LitStr::new(&context.root_package_name(), Span::call_site())),
+        ),
     };
 
     let js_func_name_str = Lit::Str(LitStr::new(
         &escape_js_ident(func_name.to_lower_camel_case()),
         Span::call_site(),
     ));
-    let js_static_func_path = match interface_name {
-        Some(iface_name) => {
+    let js_static_func_path = match interface {
+        Some((iface_name, _)) => {
             let if_name_str = LitStr::new(
                 &escape_js_ident(iface_name.to_lower_camel_case()),
                 Span::call_site(),
@@ -435,6 +466,7 @@ fn generate_exported_resource_function_impl(
               fn #func_name_ident(#(#func_arg_list),*) -> Self {
                   crate::internal::async_exported_function(async move {
                     let resource_id = crate::internal::call_js_resource_constructor(
+                         #wit_package_lit,
                          #js_resource_path,
                          #param_refs_tuple,
                     ).await;
@@ -456,6 +488,8 @@ fn generate_exported_resource_function_impl(
                fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                    crate::internal::async_exported_function(async move {
                        let result: #wrapped_result = crate::internal::call_js_resource_method(
+                            #wit_package_lit,
+                            #js_resource_path,
                             self.resource_id,
                             #js_func_name_str,
                             #param_refs_tuple,
@@ -475,6 +509,7 @@ fn generate_exported_resource_function_impl(
                fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                    crate::internal::async_exported_function(async move {
                        let result: #wrapped_result = crate::internal::call_js_export(
+                           #wit_package_lit,
                            #js_static_func_path,
                            #param_refs_tuple,
                        ).await;

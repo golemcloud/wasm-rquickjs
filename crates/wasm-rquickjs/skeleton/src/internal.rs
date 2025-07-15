@@ -4,8 +4,8 @@ use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ScriptLoader};
 use rquickjs::prelude::*;
 use rquickjs::{
-    async_with, AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, FromJs, Function, Module,
-    Object, Promise, Value,
+    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
+    Object, Promise, Value, async_with,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
 use wasi::clocks::monotonic_clock::subscribe_duration;
-use wasi_async_runtime::{block_on, Reactor};
+use wasi_async_runtime::{Reactor, block_on};
 
 static JS_MODULE: &str = include_str!("module.js");
 
@@ -161,7 +161,7 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     })
 }
 
-pub async fn call_js_export<A, R>(function_path: &[&str], args: A) -> R
+pub async fn call_js_export<A, R>(wit_package: &str, function_path: &[&str], args: A) -> R
 where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
@@ -170,17 +170,31 @@ where
 
     let result: R = async_with!(js_state.ctx => |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
-        let (user_function, parent) = get_path(&module, function_path).unwrap_or_else(|| panic!("Cannot find exported JS function {}", function_path.join(".")));
+        let (user_function_obj, parent): (Object, Object) = get_path(&module, function_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS function", function_path, &module, wit_package)));
+        let user_function = user_function_obj.as_function().expect(
+            &format!("Expected export {} to be a function", function_path.join("."))).clone();
+
+        let parameter_count = user_function_obj.get::<&str, usize>("length").expect(
+            &format!("Failed to get parameter count of exported function {}", function_path.join(".")));
+        if parameter_count != args.num_args() {
+            panic!(
+                "The WIT specification defines {} parameters,\nbut the exported JavaScript function got {} parameters (exported function {} in WIT package {})",
+                args.num_args(),
+                parameter_count,
+                function_path.join("."),
+                wit_package
+            );
+        }
 
         let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, parent, args);
 
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call: {exception:?}");
+                panic! ("Exception during call of {fun}: {exception:?}", fun = function_path.join("."));
             }
             Err(e) => {
-                panic! ("Error during call: {e:?}");
+                panic! ("Error during call of {fun}: {e:?}", fun = function_path.join("."));
             }
             Ok(value) => {
                 if value.is_promise() {
@@ -197,14 +211,14 @@ where
                                     panic! ("Exception during awaiting call result for {function_path}: {exception:?}", function_path=function_path.join("."))
                                 }
                                 _ => {
-                                    panic ! ("Error during awaiting call result: {e:?}")
+                                    panic ! ("Error during awaiting call result for {function_path}: {e:?}", function_path=function_path.join("."))
                                 }
                             }
                         }
                     }
                 }
                 else {
-                    R::from_js(&ctx, value).expect("Unexpected result value")
+                    R::from_js(&ctx, value).expect(&format!("Unexpected result value for exported function {path}", path=function_path.join(".")))
                 }
             }
         }
@@ -213,7 +227,11 @@ where
     result
 }
 
-pub async fn call_js_resource_constructor<A>(resource_path: &[&str], args: A) -> usize
+pub async fn call_js_resource_constructor<A>(
+    wit_package: &str,
+    resource_path: &[&str],
+    args: A,
+) -> usize
 where
     A: for<'js> IntoArgs<'js>,
 {
@@ -221,17 +239,33 @@ where
 
     let result = async_with!(js_state.ctx => |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
-        let (constructor, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("Cannot find exported JS resource class {}", resource_path.join(".")));
+        let (constructor_obj, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS resource class", resource_path, &module, wit_package)));
+        let constructor = constructor_obj.as_constructor().expect(
+            &format!("Expected export {path} to be a class with a constructor", path = resource_path.join("."))
+        ).clone();
+
+        let parameter_count = constructor_obj.get::<&str, usize>("length").expect(
+            &format!("Failed to get parameter count of exported constructor {}", resource_path.join("."))
+        );
+        if parameter_count != args.num_args() {
+            panic!(
+                "The WIT specification defines {} parameters,\nbut the exported JavaScript constructor got {} parameters (exported constructor {} in WIT package {})",
+                args.num_args(),
+                parameter_count,
+                resource_path.join("."),
+                wit_package
+            );
+        }
 
         let result: Result<Object, Error> = constructor.construct(args);
 
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call: {exception:?}");
+                panic! ("Exception during call of constructor {path}: {exception:?}", path= resource_path.join("."));
             }
             Err(e) => {
-                panic! ("Error during call: {e:?}");
+                panic! ("Error during call of constructor {path}: {e:?}", path= resource_path.join("."));
             }
             Ok(resource) => {
                 let resource_id = get_free_resource_id();
@@ -257,7 +291,13 @@ pub fn get_free_resource_id() -> usize {
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-pub async fn call_js_resource_method<A, R>(resource_id: usize, name: &str, args: A) -> R
+pub async fn call_js_resource_method<A, R>(
+    wit_package: &str,
+    resource_path: &[&str],
+    resource_id: usize,
+    name: &str,
+    args: A,
+) -> R
 where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
@@ -268,20 +308,40 @@ where
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
-            .unwrap_or_else(|_| panic!("Failed to get resource instance with id {resource_id}"));
+            .unwrap_or_else(|_| panic!("Failed to get resource instance with id #{resource_id} of class {}", resource_path.join(".")));
 
-        let method: Function = resource_instance.get(name)
-            .unwrap_or_else(|_| panic!("Failed to get method {name} from resource instance with id {resource_id}"));
+        let method_obj: Object = resource_instance.get(name)
+            .unwrap_or_else(|_| panic!("{}", dump_cannot_find_method(
+                name,
+                resource_path,
+                &resource_instance,
+                wit_package,
+            )));
+
+        let method = method_obj.as_function().expect(
+            &format!("Expected method {name} to be a function in class {}", resource_path.join("."))).clone();
+
+        let parameter_count = method.get::<&str, usize>("length").expect(&format!("Failed to get parameter count of exported method {name} in class {}", resource_path.join(".")));
+        if parameter_count != args.num_args() {
+            panic!(
+                "The WIT specification defines {} parameters,\nbut the exported JavaScript method got {} parameters (exported method {} of class {} representing a resource defined in WIT package {})",
+                args.num_args(),
+                parameter_count,
+                name,
+                resource_path.join("."),
+                wit_package
+            );
+        }
 
         let result: Result<Value, Error> = call_with_this(ctx.clone(), method, resource_instance, args);
 
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call: {exception:?}");
+                panic!("Exception during call of method {name} in {path}: {exception:?}", path=resource_path.join("."));
             }
             Err(e) => {
-                panic! ("Error during call: {e:?}");
+                panic!("Error during call of method {name} in {path}: {e:?}", path=resource_path.join("."));
             }
             Ok(value) => {
                 if value.is_promise() {
@@ -295,20 +355,23 @@ where
                             match e {
                                 Error::Exception => {
                                     let exception = ctx.catch();
-                                    panic! ("Exception during awaiting call result: {exception:?}")
+                                    panic!("Exception during awaiting call result of method {name} in {path}: {exception:?}", path=resource_path.join("."));
                                 }
                                 _ => {
-                                    panic ! ("Error during awaiting call result: {e:?}")
+                                    panic!("Error during awaiting call result of method {name} in {path}: {e:?}", path=resource_path.join("."));
                                 }
                             }
                         }
                     }
                 }
                 else {
-                    R::from_js(&ctx, value).expect("Unexpected result value")
-                }
-            }
-        }
+                    R::from_js(&ctx, value).expect(
+                        &format!("Unexpected result value for method {name} in exported class {path}",
+                                path=resource_path.join(".")
+                        ))
+}
+    }
+    }
     }).await;
     js_state.rt.idle().await;
     result
@@ -369,4 +432,100 @@ fn get_path<'js, V: FromJs<'js>>(root: &Object<'js>, path: &[&str]) -> Option<(V
         let next: Object<'js> = root.get(*head).ok()?;
         get_path(&next, tail)
     }
+}
+
+fn dump_cannot_find_export(
+    what: &str,
+    path: &[&str],
+    module: &Object,
+    wit_package: &str,
+) -> String {
+    let mut panic_message = String::new();
+    panic_message.push_str(&format!(
+        "Cannot find {what} {} of WIT package {wit_package}",
+        path.join(".")
+    ));
+    panic_message.push_str("\nProvided exports:\n");
+    let mut keys: Vec<String> = vec![];
+    for key in module.keys() {
+        if let Ok(key) = key {
+            keys.push(key);
+        }
+    }
+    keys.sort();
+    panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+
+    if path.len() == 1 {
+        panic_message.push_str(&format!(
+            "\nTry adding an export `export const {} = ...`\n",
+            path[0]
+        ));
+    } else if path.len() > 1 {
+        let mut current_object = module.clone();
+        for i in 0..path.len() {
+            match current_object.get::<&str, Object>(path[i]) {
+                Ok(child) => {
+                    current_object = child;
+                }
+                Err(_) => {
+                    if i == 0 {
+                        panic_message.push_str(&format!(
+                            "\nTry adding an export `export const {} = {{ ... }}`\n",
+                            path[i]
+                        ));
+                    } else {
+                        panic_message.push_str(&format!("\nKeys in {}:\n", path[..i].join(".")));
+                        let mut keys: Vec<String> = vec![];
+                        for key in current_object.keys() {
+                            if let Ok(key) = key {
+                                keys.push(key);
+                            }
+                        }
+                        keys.sort();
+                        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+
+                        panic_message.push_str(&format!(
+                            "\nTry adding a field `{}` to {}\n",
+                            path[i],
+                            path[..i].join(".")
+                        ));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    panic_message
+}
+
+fn dump_cannot_find_method(
+    name: &str,
+    resource_path: &[&str],
+    class_instance: &Object,
+    wit_package: &str,
+) -> String {
+    let mut panic_message = String::new();
+    panic_message.push_str(&format!(
+        "Cannot find method {name} in an instance of class {path} of WIT package {wit_package}",
+        path = resource_path.join(".")
+    ));
+    if let Some(prototype) = class_instance.get_prototype() {
+        panic_message.push_str("\nKeys in the instance's prototype:\n");
+        let mut keys: Vec<String> = vec![];
+        for key in prototype.own_keys(Filter::new().symbol().string().private()) {
+            if let Ok(key) = key {
+                keys.push(key);
+            }
+        }
+        keys.sort();
+        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+    }
+
+    panic_message.push_str(&format!(
+        "\nTry adding a method `{}() {{ ... }}` to class {path}\n",
+        name,
+        path = resource_path.join(".")
+    ));
+
+    panic_message
 }
