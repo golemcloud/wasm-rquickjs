@@ -43,3 +43,43 @@ export const api22 = {
         return `Hello, ${name}!`;
     },
 }
+
+// should be called `Res1`
+class Res11 {
+    constructor(name) {
+        this.name = name;
+    }
+}
+
+class Res2 {
+    // Should not have any parameters
+    constructor(name) {
+        this.name = name;
+    }
+}
+
+class Res3 {
+    constructor() {
+    }
+
+    // should be called `m1`
+    mm1() {
+        return `Hello from mm1!`;
+    }
+
+    // should have two parameters
+    m2(a) {
+        return `Hello from m2 with ${a}!`;
+    }
+
+    // should return a number
+    m3() {
+        return `Hello from m3!`;
+    }
+}
+
+export const api3 = {
+    Res11: Res11,
+    Res2: Res2,
+    Res3: Res3
+}
