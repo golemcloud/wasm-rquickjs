@@ -241,6 +241,10 @@ fn generate_import_module(
             &format!("Borrow{resource_name_ident}Wrapper"),
             Span::call_site(),
         );
+        let resource_name_lit = LitStr::new(
+            &resource_name_ident.to_string().to_upper_camel_case(),
+            Span::call_site(),
+        );
 
         let bindgen_path = ident_in_imported_interface_or_global(
             context,
@@ -264,7 +268,7 @@ fn generate_import_module(
                 #[qjs(constructor)]
                 pub fn new(#(#param_list),*) -> Self {
                   Self {
-                    inner: std::rc::Rc::new(#bindgen_path::new(#(#param_refs),*)),
+                    inner: Some(std::rc::Rc::new(#bindgen_path::new(#(#param_refs),*))),
                   }
                 }
             }
@@ -301,9 +305,14 @@ fn generate_import_module(
                 FunctionKind::Method(_) => {
                     let param_list = param_list[1..].to_vec();
                     let param_refs = param_refs[1..].to_vec();
-                    methods.push(quote!{
+                    methods.push(quote! {
                        pub fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
-                            let result: #original_result = self.inner.deref().#rust_method_name_ident(#(#param_refs),*);
+                            let result: #original_result = self
+                              .inner
+                              .as_ref()
+                              .expect("Resource has already been disposed")
+                              .deref()
+                              .#rust_method_name_ident(#(#param_refs),*);
                             #wrap_result
                         }
                     });
@@ -323,25 +332,34 @@ fn generate_import_module(
             }
         }
 
+        let rquickjs_class =
+            generate_rquickjs_class_module(resource_name, &resource_name_ident, &resource_name_lit);
+
         bridge_classes.push(quote! {
-            #[rquickjs::class(rename_all = "camelCase")]
             #[derive(Clone, JsLifetime, Trace)]
             pub struct #resource_name_ident {
                 #[qjs(skip_trace = true)]
-                inner: std::rc::Rc<#bindgen_path>,
+                inner: Option<std::rc::Rc<#bindgen_path>>,
             }
+
+            #rquickjs_class
 
             #[rquickjs::methods(rename_all = "camelCase")]
             impl #resource_name_ident {
                 #constructor
 
                 #(#methods)*
+
+                #[qjs(rename="__dispose")]
+                pub fn __dispose(&mut self) {
+                    let _ = self.inner.take();
+                }
             }
 
             impl<'js> rquickjs::IntoJs<'js> for #bindgen_path {
                 fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
                     #resource_name_ident {
-                        inner: std::rc::Rc::new(self),
+                        inner: Some(std::rc::Rc::new(self)),
                     }
                     .into_js(ctx)
                 }
@@ -353,7 +371,10 @@ fn generate_import_module(
                     unsafe {
                         Ok(
                             #bindgen_path::from_handle(
-                                wrapper.inner.take_handle(),
+                                wrapper
+                                  .inner
+                                  .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
+                                  .take_handle(),
                             ),
                         )
                     }
@@ -368,7 +389,10 @@ fn generate_import_module(
                     unsafe {
                         Ok(#borrow_wrapper_ident(
                             #bindgen_path::from_handle(
-                                wrapper.inner.handle(),
+                                wrapper
+                                  .inner
+                                  .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
+                                  .handle(),
                             ),
                         ))
                     }
@@ -425,4 +449,71 @@ fn generate_import_module(
     };
 
     Ok(module)
+}
+
+/// This function generates what the #[rquickjs::class] macro would, with an additional
+/// wiring of the `[Symbol.dispose]` method to the `__dispose` method of the class.
+///
+/// This is necessary because we cannot bind the Rust dispose method to `Symbol.dispose` with
+/// the macros.
+fn generate_rquickjs_class_module(
+    resource_name: &str,
+    resource_name_ident: &Ident,
+    resource_name_lit: &LitStr,
+) -> TokenStream {
+    let mod_name = Ident::new(
+        &format!("__impl_class_{}_", resource_name.to_snake_case()),
+        Span::call_site(),
+    );
+
+    quote! {
+        mod #mod_name {
+            pub use super::*;
+            use rquickjs::{Atom, Symbol, Value};
+            impl<'js> rquickjs::class::JsClass<'js> for #resource_name_ident {
+                const NAME: &'static str = #resource_name_lit;
+                type Mutable = rquickjs::class::Writable;
+                fn prototype(ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<Option<rquickjs::Object<'js>>> {
+                    use rquickjs::class::impl_::MethodImplementor;
+                    let proto = rquickjs::Object::new(ctx.clone())?;
+                    let implementor = rquickjs::class::impl_::MethodImpl::<Self>::new();
+                    (&implementor).implement(&proto)?;
+
+                    let dispose_symbol: Symbol = ctx.globals().get(crate::internal::DISPOSE_SYMBOL)?;
+                    let dispose_fn: Value = proto.get("__dispose")?;
+                    proto.set(dispose_symbol, dispose_fn)?;
+
+                    Ok(Some(proto))
+                }
+                fn constructor(
+                    ctx: &rquickjs::Ctx<'js>,
+                ) -> rquickjs::Result<Option<rquickjs::function::Constructor<'js>>> {
+                    use rquickjs::class::impl_::ConstructorCreator;
+                    let implementor = rquickjs::class::impl_::ConstructorCreate::<Self>::new();
+                    (&implementor).create_constructor(ctx)
+                }
+            }
+            impl<'js> rquickjs::IntoJs<'js> for #resource_name_ident {
+                fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                    let cls = rquickjs::class::Class::<Self>::instance(ctx.clone(), self)?;
+                    rquickjs::IntoJs::into_js(cls, ctx)
+                }
+            }
+            impl<'js> rquickjs::FromJs<'js> for #resource_name_ident
+            where
+                for<'a> rquickjs::class::impl_::CloneWrapper<'a, Self>:
+                    rquickjs::class::impl_::CloneTrait<Self>,
+            {
+                fn from_js(
+                    ctx: &rquickjs::Ctx<'js>,
+                    value: rquickjs::Value<'js>,
+                ) -> rquickjs::Result<Self> {
+                    use rquickjs::class::impl_::CloneTrait;
+                    let value = rquickjs::class::Class::<Self>::from_js(ctx, value)?;
+                    let borrow = value.try_borrow()?;
+                    Ok(rquickjs::class::impl_::CloneWrapper(&*borrow).wrap_clone())
+                }
+            }
+        }
+    }
 }
