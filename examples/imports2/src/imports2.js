@@ -21,5 +21,9 @@ export const test = (input) => {
     const dump3 = iface.dumpAll([merged]);
     console.log(`Dump 3: ${dump3}`);
 
-    return merged.getName();
+    const result = merged.getName();
+
+    merged[Symbol.dispose]();
+
+    return result;
 };

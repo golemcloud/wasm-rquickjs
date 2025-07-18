@@ -19,6 +19,7 @@ static JS_MODULE: &str = include_str!("module.js");
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
+pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
 pub struct JsState {
     pub reactor: RefCell<Option<Reactor>>,
@@ -46,6 +47,21 @@ impl JsState {
             let ctx = AsyncContext::full(&rt)
                 .await
                 .expect("Failed to create AsyncContext");
+
+            async_with!(ctx => |ctx| {
+                Module::evaluate(
+                    ctx.clone(),
+                    "dispose",
+                    format!(r#"
+                    const dispose = Symbol.for("dispose");
+                    globalThis.{DISPOSE_SYMBOL} = dispose;
+                    Symbol.dispose = dispose;
+                    "#)
+                ).catch(&ctx).expect("Failed to evaluate dispose module initialization")
+                .finish::<()>()
+                .catch(&ctx).expect("Failed to finish dispose module initialization");
+            }).await;
+            rt.idle().await;
 
             let resolver = BuiltinResolver::default().with_module("bundle/script_module");
             let resolver = crate::modules::add_native_module_resolvers(resolver);
