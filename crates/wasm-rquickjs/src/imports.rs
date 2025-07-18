@@ -332,11 +332,8 @@ fn generate_import_module(
             }
         }
 
-        let rquickjs_class = generate_rquickjs_class_module(
-            resource_name,
-            &resource_name_ident,
-            &resource_name_lit,
-        );
+        let rquickjs_class =
+            generate_rquickjs_class_module(resource_name, &resource_name_ident, &resource_name_lit);
 
         bridge_classes.push(quote! {
             #[derive(Clone, JsLifetime, Trace)]
