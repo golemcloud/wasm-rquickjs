@@ -4,6 +4,7 @@ use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
 use indoc::indoc;
+use rand::Rng;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -92,6 +93,12 @@ fn compiled_streams() -> CompiledTest {
 fn compiled_timeout() -> CompiledTest {
     let path = Utf8Path::new("examples/timeout");
     CompiledTest::new(path).expect("Failed to compile timeout")
+}
+
+#[test_dep(tagged_as = "bigint_roundtrip")]
+fn compiled_bigint_roundtrip() -> CompiledTest {
+    let path = Utf8Path::new("examples/bigint-roundtrip");
+    CompiledTest::new(path).expect("Failed to compile bigint-roundtrip")
 }
 
 #[test]
@@ -747,5 +754,47 @@ async fn timeout_2(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
         assert!(output.contains(&format!("test {i}")));
     }
 
+    Ok(())
+}
+
+#[test]
+async fn roundtrip_u64(
+    #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    // FIXME: This should use a property-based testing library, but proptest does not support async.
+    let mut rng = rand::rng();
+    for _ in 0..5 {
+        let value: u64 = rng.random();
+        let input = Val::U64(value);
+        let (result, _) = invoke_and_capture_output(
+            compiled.wasm_path(),
+            None,
+            "roundtrip-u64",
+            &[input.clone()],
+        )
+        .await;
+        assert_eq!(result?, Some(input));
+    }
+    Ok(())
+}
+
+#[test]
+async fn roundtrip_s64(
+    #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    // FIXME: This should use a property-based testing library, but proptest does not support async.
+    let mut rng = rand::rng();
+    for _ in 0..5 {
+        let value: i64 = rng.random();
+        let input = Val::S64(value);
+        let (result, _) = invoke_and_capture_output(
+            compiled.wasm_path(),
+            None,
+            "roundtrip-s64",
+            &[input.clone()],
+        )
+        .await;
+        assert_eq!(result?, Some(input));
+    }
     Ok(())
 }

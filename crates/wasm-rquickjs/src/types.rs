@@ -360,17 +360,6 @@ pub fn get_wrapped_type_internal(
                 TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
                     get_wrapped_type_borrow_handle(ctx, resource_type_id)
                 }
-                // u64 converts to number by default, which only has 52 bits. Convert to bigint instead.
-                TypeDefKind::Type(Type::S64 | Type::U64) => {
-                    let original_type_ref = ctx.original_type_ref;
-                    Ok(WrappedType {
-                        wrap: Box::new(move |ts| quote! { crate::internal::BigIntWrapper(#ts) }),
-                        unwrap: Box::new(move |ts| quote! { #ts.0 }),
-                        wrapped_type_ref: quote! { crate::internal::BigIntWrapper<#original_type_ref> },
-                        original_type_ref,
-                        unwrap_for_imported: Box::new(move |ts| quote! { #ts.0 } ),
-                    })
-                },
                 TypeDefKind::Type(inner) => {
                     // Recursively dealiasing
                     let inner = get_wrapped_type_internal(context, inner, in_as_ref, mode)?;
@@ -386,6 +375,17 @@ pub fn get_wrapped_type_internal(
             }
         }
         Type::String => get_wrapped_type_string(ctx),
+        // u64 converts to number by default, which only has 52 bits. Convert to bigint instead.
+        Type::S64 | Type::U64 => {
+            let original_type_ref = ctx.original_type_ref;
+            Ok(WrappedType {
+                wrap: Box::new(move |ts| quote! { crate::internal::BigIntWrapper(#ts) }),
+                unwrap: Box::new(move |ts| quote! { #ts.0 }),
+                wrapped_type_ref: quote! { crate::internal::BigIntWrapper<#original_type_ref> },
+                original_type_ref,
+                unwrap_for_imported: Box::new(move |ts| quote! { #ts.0 }),
+            })
+        }
         _ => get_wrapped_type_default(ctx),
     }
 }
