@@ -389,13 +389,12 @@ fn ts_type_reference(
         Type::U8
         | Type::U16
         | Type::U32
-        | Type::U64
         | Type::S8
         | Type::S16
         | Type::S32
-        | Type::S64
         | Type::F32
         | Type::F64 => Ok("number".to_string()),
+        Type::U64 | Type::S64 => Ok("bigint".to_string()),
         Type::Char => Ok("string".to_string()),
         Type::String => Ok("string".to_string()),
         Type::ErrorContext => Ok("ErrorContext".to_string()),
@@ -720,7 +719,7 @@ impl DtsWriter {
     }
 
     pub fn begin_export_async_function<'a>(&'a mut self, name: &str) -> DtsFunctionWriter<'a> {
-        self.indented_write(format!("export async function {name}("));
+        self.indented_write(format!("export function {name}("));
         DtsFunctionWriter {
             writer: self,
             param_count: 0,
