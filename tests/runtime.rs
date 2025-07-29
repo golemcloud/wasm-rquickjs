@@ -575,19 +575,19 @@ async fn imports3(
             f1: 0.10000000149011612 - a - c,0.20000000298023224 - b - d,0.30000001192092896 - undefined - undefined
             a: hello world
             f2: 11
-            a: true
-            b: -8
-            c: -16
-            d: -32
-            e: -64
-            f: 8
-            g: 16
-            h: 32
-            i: 64
-            j: 3.140000104904175
-            k: 2.718281828459045
-            l: c
-            m: hello world
+            a: true (boolean)
+            b: -8 (number)
+            c: -16 (number)
+            d: -32 (number)
+            e: -64 (bigint)
+            f: 8 (number)
+            g: 16 (number)
+            h: 32 (number)
+            i: 64 (bigint)
+            j: 3.140000104904175 (number)
+            k: 2.718281828459045 (number)
+            l: c (string)
+            m: hello world (string)
             f3: true,-8,-16,-32,-64,8,16,32,64,3.140000104904175,2.718281828459045,c,hello world
             a: {"tag":"ok","val":42}
             a.tag: ok

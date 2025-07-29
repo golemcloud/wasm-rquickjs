@@ -476,27 +476,69 @@ fn get_wrapped_type_tuple(
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let unwrap_for_imported = Box::new(move |ts| {
-        let elem_wrappers = inner_wrappers
+
+    let mut element_wraps = Vec::new();
+    let mut element_unwraps = Vec::new();
+    let mut element_wrapped_type_refs = Vec::new();
+    let mut element_unwrap_for_imported = Vec::new();
+
+    for element in inner_wrappers {
+        element_wraps.push(element.wrap);
+        element_unwraps.push(element.unwrap);
+        element_wrapped_type_refs.push(element.wrapped_type_ref);
+        element_unwrap_for_imported.push(element.unwrap_for_imported);
+    }
+
+    let wrap = Box::new(move |ts| {
+        let wrapped_fields = element_wraps
             .iter()
             .enumerate()
-            .map(|(idx, w)| {
+            .map(|(idx, wrap)| {
                 let field = Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
-                (w.unwrap_for_imported)(quote! { #ts.0.#field})
+                (wrap)(quote! { #ts.#field })
             })
             .collect::<Vec<_>>();
 
         quote! {
-            (#(#elem_wrappers),*)
+            rquickjs::convert::List((#(#wrapped_fields),*))
         }
     });
 
-    let original_type_ref = ctx.original_type_ref.clone();
+    let unwrap = Box::new(move |ts| {
+        let unwrapped_fields = element_unwraps
+            .iter()
+            .enumerate()
+            .map(|(idx, unwrap)| {
+                let field = Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
+                (unwrap)(quote! { #ts.0.#field})
+            })
+            .collect::<Vec<_>>();
+
+        quote! {
+            (#(#unwrapped_fields),*)
+        }
+    });
+
+    let unwrap_for_imported = Box::new(move |ts| {
+        let unwrapped_fields = element_unwrap_for_imported
+            .iter()
+            .enumerate()
+            .map(|(idx, unwrap)| {
+                let field = Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
+                (unwrap)(quote! { #ts.0.#field})
+            })
+            .collect::<Vec<_>>();
+
+        quote! {
+            (#(#unwrapped_fields),*)
+        }
+    });
+
     Ok(WrappedType {
-        wrap: Box::new(|ts| quote! { rquickjs::convert::List( # ts) }),
-        unwrap: Box::new(|ts| quote! { # ts.0 }),
+        wrap,
+        unwrap,
         original_type_ref: ctx.original_type_ref,
-        wrapped_type_ref: quote! { rquickjs::convert::List<#original_type_ref> },
+        wrapped_type_ref: quote! { rquickjs::convert::List<(#(#element_wrapped_type_refs),*)> },
         unwrap_for_imported,
     })
 }

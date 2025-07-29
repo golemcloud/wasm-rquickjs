@@ -30,19 +30,19 @@ export const types = {
         // k: f64
         // l: char
         // m: string
-        console.log(`a: ${a}`);
-        console.log(`b: ${b}`);
-        console.log(`c: ${c}`);
-        console.log(`d: ${d}`);
-        console.log(`e: ${e}`);
-        console.log(`f: ${f}`);
-        console.log(`g: ${g}`);
-        console.log(`h: ${h}`);
-        console.log(`i: ${i}`);
-        console.log(`j: ${j}`);
-        console.log(`k: ${k}`);
-        console.log(`l: ${l}`);
-        console.log(`m: ${m}`);
+        console.log(`a: ${a} (${typeof a})`);
+        console.log(`b: ${b} (${typeof b})`);
+        console.log(`c: ${c} (${typeof c})`);
+        console.log(`d: ${d} (${typeof d})`);
+        console.log(`e: ${e} (${typeof e})`);
+        console.log(`f: ${f} (${typeof f})`);
+        console.log(`g: ${g} (${typeof g})`);
+        console.log(`h: ${h} (${typeof h})`);
+        console.log(`i: ${i} (${typeof i})`);
+        console.log(`j: ${j} (${typeof j})`);
+        console.log(`k: ${k} (${typeof k})`);
+        console.log(`l: ${l} (${typeof l})`);
+        console.log(`m: ${m} (${typeof m})`);
         // return: tuple
         return [a, b, c, d, e, f, g, h, i, j, k, l, m];
     },
@@ -125,7 +125,7 @@ export const types = {
     },
     f14: (a) => {
         // a: u64
-        console.log(`a: ${JSON.stringify(a)}`);
+        console.log(`a: ${a}`);
         // return: u64
         return a;
     }
