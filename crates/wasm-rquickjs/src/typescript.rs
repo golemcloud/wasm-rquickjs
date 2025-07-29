@@ -71,7 +71,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
         let interface_stack: VecDeque<_> = vec![interface_id].into_iter().collect();
 
         let js_name = escape_js_ident(name.to_lower_camel_case());
-        result.begin_export_module(&js_name);
+        result.begin_export_namespace(&js_name);
         declare_functions_and_resources(
             &mut result,
             context,
@@ -685,8 +685,8 @@ impl DtsWriter {
         })
     }
 
-    pub fn begin_export_module(&mut self, name: &str) {
-        self.indented_write_line(format!("export module {name} {{"));
+    pub fn begin_export_namespace(&mut self, name: &str) {
+        self.indented_write_line(format!("export namespace {name} {{"));
         self.current_indent += 1;
     }
 
