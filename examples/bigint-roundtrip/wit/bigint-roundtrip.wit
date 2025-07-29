@@ -1,0 +1,6 @@
+package quickjs:bigint-roundtrip;
+
+world bigint-roundtrip {
+  export roundtrip-u64: func(v: u64) -> u64;
+  export roundtrip-s64: func(v: s64) -> s64;
+}

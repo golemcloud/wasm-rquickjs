@@ -4,6 +4,8 @@ use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
 use indoc::indoc;
+use rand::Rng;
+use std::i64;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -92,6 +94,12 @@ fn compiled_streams() -> CompiledTest {
 fn compiled_timeout() -> CompiledTest {
     let path = Utf8Path::new("examples/timeout");
     CompiledTest::new(path).expect("Failed to compile timeout")
+}
+
+#[test_dep(tagged_as = "bigint_roundtrip")]
+fn compiled_bigint_roundtrip() -> CompiledTest {
+    let path = Utf8Path::new("examples/bigint-roundtrip");
+    CompiledTest::new(path).expect("Failed to compile bigint-roundtrip")
 }
 
 #[test]
@@ -567,19 +575,19 @@ async fn imports3(
             f1: 0.10000000149011612 - a - c,0.20000000298023224 - b - d,0.30000001192092896 - undefined - undefined
             a: hello world
             f2: 11
-            a: true
-            b: -8
-            c: -16
-            d: -32
-            e: -64
-            f: 8
-            g: 16
-            h: 32
-            i: 64
-            j: 3.140000104904175
-            k: 2.718281828459045
-            l: c
-            m: hello world
+            a: true (boolean)
+            b: -8 (number)
+            c: -16 (number)
+            d: -32 (number)
+            e: -64 (bigint)
+            f: 8 (number)
+            g: 16 (number)
+            h: 32 (number)
+            i: 64 (bigint)
+            j: 3.140000104904175 (number)
+            k: 2.718281828459045 (number)
+            l: c (string)
+            m: hello world (string)
             f3: true,-8,-16,-32,-64,8,16,32,64,3.140000104904175,2.718281828459045,c,hello world
             a: {"tag":"ok","val":42}
             a.tag: ok
@@ -747,5 +755,61 @@ async fn timeout_2(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
         assert!(output.contains(&format!("test {i}")));
     }
 
+    Ok(())
+}
+
+#[test]
+async fn roundtrip_u64(
+    #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    // FIXME: This should use a property-based testing library, but proptest does not support async.
+    let mut rng = rand::rng();
+    let mut cases = Vec::new();
+    for _ in 0..5 {
+        cases.push(rng.random());
+    }
+    // interesting hardcoded cases
+    cases.push(u64::MAX);
+    cases.push(u64::MIN);
+
+    for case in cases {
+        let input = Val::U64(case);
+        let (result, _) = invoke_and_capture_output(
+            compiled.wasm_path(),
+            None,
+            "roundtrip-u64",
+            &[input.clone()],
+        )
+        .await;
+        assert_eq!(result?, Some(input));
+    }
+    Ok(())
+}
+
+#[test]
+async fn roundtrip_s64(
+    #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    // FIXME: This should use a property-based testing library, but proptest does not support async.
+    let mut rng = rand::rng();
+    let mut cases = Vec::new();
+    for _ in 0..5 {
+        cases.push(rng.random());
+    }
+    // interesting hardcoded cases
+    cases.push(i64::MAX);
+    cases.push(i64::MIN);
+
+    for case in cases {
+        let input = Val::S64(case);
+        let (result, _) = invoke_and_capture_output(
+            compiled.wasm_path(),
+            None,
+            "roundtrip-s64",
+            &[input.clone()],
+        )
+        .await;
+        assert_eq!(result?, Some(input));
+    }
     Ok(())
 }

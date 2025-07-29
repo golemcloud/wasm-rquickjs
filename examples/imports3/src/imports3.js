@@ -6,7 +6,7 @@ export const test = () => {
     // f2: func(a: option<string>) -> option<u32>;
     console.log(`f2: ${types.f2("hello world")}`);
     // f3: func(a: bool, b: s8, c: s16, d: s32, e: s64, f: u8, g: u16, h: u32, i: u64, j: f32, k: f64, l: char, m: string)
-    console.log(`f3: ${types.f3(true, -8, -16, -32, -64, 8, 16, 32, 64, 3.14, 2.718281828459045, 'c', "hello world")}`);
+    console.log(`f3: ${types.f3(true, -8, -16, -32, -64n, 8, 16, 32, 64n, 3.14, 2.718281828459045, 'c', "hello world")}`);
     // f4: func(a: result<s32, string>) -> result<s32, string>;
     console.log(`f4: ${JSON.stringify(types.f4({tag: 'ok', val: 42}))}`);
     // f5: func(a: result<_, string>) -> result<_, string>;
@@ -75,6 +75,6 @@ export const test = () => {
     const f13 = types.f13({read: true, write: false, execute: true});
     console.log(`f13: ${JSON.stringify(f13)}`);
     // f14: func(a: u64) -> u64;
-    const f14 = types.f14(1234567890);
+    const f14 = types.f14(1234567890n);
     console.log(`f14: ${f14}`);
 };
