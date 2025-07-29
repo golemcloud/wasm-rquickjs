@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use camino::Utf8Path;
 use indoc::indoc;
 use rand::Rng;
+use std::i64;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -763,9 +764,16 @@ async fn roundtrip_u64(
 ) -> anyhow::Result<()> {
     // FIXME: This should use a property-based testing library, but proptest does not support async.
     let mut rng = rand::rng();
+    let mut cases = Vec::new();
     for _ in 0..5 {
-        let value: u64 = rng.random();
-        let input = Val::U64(value);
+        cases.push(rng.random());
+    }
+    // interesting hardcoded cases
+    cases.push(u64::MAX);
+    cases.push(u64::MIN);
+
+    for case in cases {
+        let input = Val::U64(case);
         let (result, _) = invoke_and_capture_output(
             compiled.wasm_path(),
             None,
@@ -784,9 +792,16 @@ async fn roundtrip_s64(
 ) -> anyhow::Result<()> {
     // FIXME: This should use a property-based testing library, but proptest does not support async.
     let mut rng = rand::rng();
+    let mut cases = Vec::new();
     for _ in 0..5 {
-        let value: i64 = rng.random();
-        let input = Val::S64(value);
+        cases.push(rng.random());
+    }
+    // interesting hardcoded cases
+    cases.push(i64::MAX);
+    cases.push(i64::MIN);
+
+    for case in cases {
+        let input = Val::S64(case);
         let (result, _) = invoke_and_capture_output(
             compiled.wasm_path(),
             None,
