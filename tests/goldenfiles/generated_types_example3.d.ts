@@ -1,5 +1,5 @@
 declare module 'example3' {
-  export module iface {
+  export namespace iface {
     export function dump(h: Hello | undefined): Promise<string>;
     export function dumpAll(hs: Hello[]): Promise<string>;
     export class Hello {

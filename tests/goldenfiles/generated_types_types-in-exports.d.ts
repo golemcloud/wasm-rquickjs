@@ -1,6 +1,6 @@
 declare module 'types-in-exports' {
   import * as quickjsTypesInExportsOtherTypes from 'quickjs:types-in-exports/other-types';
-  export module types {
+  export namespace types {
     export function f1(a: number[], b: ListOfStrings, c: string[]): Promise<string[]>;
     export function f2(a: string | undefined): Promise<number | undefined>;
     export function f3(a: boolean, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: bigint, j: number, k: number, l: string, m: string): Promise<[boolean, number, number, number, bigint, number, number, number, bigint, number, number, string, string]>;
