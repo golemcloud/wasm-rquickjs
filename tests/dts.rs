@@ -38,7 +38,7 @@ fn gen_dts_tests(r: &mut DynamicTestRegistration) {
 
 fn dts_test(name: &str, path: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {
     let target = Utf8Path::new("tmp").join(name).join("dts");
-    let dts_path = target.join(format!("exports.d.ts"));
+    let dts_path = target.join("exports.d.ts".to_string());
 
     println!("Generating d.ts for example '{name}' to {target}");
     generate_dts(&path.join("wit"), &target, None)?;
@@ -54,7 +54,7 @@ fn assert_types_match_goldenfile(
     let differ = Box::new(goldenfile::differs::text_diff);
 
     let path = mint
-        .new_goldenpath_with_differ(format!("generated_types_{}.d.ts", name), differ)
+        .new_goldenpath_with_differ(format!("generated_types_{name}.d.ts"), differ)
         .unwrap();
 
     std::fs::copy(generated_types, path)?;
