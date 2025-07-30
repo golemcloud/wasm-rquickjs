@@ -19,4 +19,5 @@ quote = { workspace = true }
 syn = { workspace = true }
 toml_edit = { workspace = true }
 wit-bindgen-core = { workspace = true }
+wit-encoder = { workspace = true }
 wit-parser = { workspace = true }

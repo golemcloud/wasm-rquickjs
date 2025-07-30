@@ -1,4 +1,3 @@
-use crate::GeneratorContext;
 use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::escape_rust_ident;
 use crate::types::{
@@ -7,6 +6,7 @@ use crate::types::{
     param_refs_as_tuple, process_parameter, to_original_func_arg_list, to_wrapped_param_refs,
     type_borrows_resource,
 };
+use crate::{EmbeddingMode, GeneratorContext, JsModuleSpec};
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -17,8 +17,12 @@ use wit_parser::{Function, FunctionKind, Interface, TypeId, WorldItem, WorldKey}
 
 /// Generates the `<output>/src/lib.rs` file for the wrapper crate, implementing the component exports
 /// and providing the general Rust module declarations.
-pub fn generate_export_impls(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
+pub fn generate_export_impls(
+    context: &GeneratorContext<'_>,
+    js_modules: &[JsModuleSpec],
+) -> anyhow::Result<()> {
     let guest_impls = generate_guest_impls(context)?;
+    let module_defs = generate_module_defs(js_modules)?;
 
     let lib_tokens = quote! {
         #[allow(static_mut_refs)]
@@ -31,6 +35,8 @@ pub fn generate_export_impls(context: &GeneratorContext<'_>) -> anyhow::Result<(
         #[allow(unused)]
         mod modules;
         mod wrappers;
+
+        #module_defs
 
         struct Component;
 
@@ -527,4 +533,40 @@ fn generate_exported_resource_function_impl(
     };
 
     Ok(func_impl)
+}
+
+fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStream> {
+    if let Some((export_module, additional_modules)) = js_modules.split_first() {
+        let export_module_name = LitStr::new(&export_module.name, Span::call_site());
+        let export_module_file_name = LitStr::new(&export_module.file_name(), Span::call_site());
+
+        let mut additional_module_pairs = Vec::new();
+        for module in additional_modules {
+            match module.mode {
+                EmbeddingMode::EmbedFile(_) => {
+                    let name = LitStr::new(&module.name, Span::call_site());
+                    let file_name = LitStr::new(&module.file_name(), Span::call_site());
+                    additional_module_pairs
+                        .push(quote! { (#name, Box::new(|| { include_str!(#file_name) })) });
+                }
+                EmbeddingMode::Composition => {
+                    let name = LitStr::new(&module.name, Span::call_site());
+                    additional_module_pairs
+                        .push(quote! { (#name, Box::new(|| { crate::bindings::get_script() })) });
+                }
+            }
+        }
+
+        Ok(quote! {
+            static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
+            static JS_EXPORT_MODULE: &str = include_str!(#export_module_file_name);
+
+            static JS_ADDITIONAL_MODULES: std::sync::LazyLock<Vec<(&str, Box<dyn (Fn() -> String) + Send + Sync>)>> =
+              std::sync::LazyLock::new(|| { vec![
+                 #(#additional_module_pairs),*
+              ]});
+        })
+    } else {
+        Err(anyhow!("No JS modules provided."))?
+    }
 }

@@ -10,7 +10,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
-use wasm_rquickjs::generate_wrapper_crate;
+use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{Component, Func, Instance, Linker, ResourceAny, ResourceTable, Val};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
@@ -264,7 +264,10 @@ impl CompiledTest {
         println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
         generate_wrapper_crate(
             &path.join("wit"),
-            &path.join("src").join(format!("{name}.js")),
+            &[JsModuleSpec {
+                name: name.to_string(),
+                mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
+            }],
             &wrapper_crate_root,
             None,
         )?;
