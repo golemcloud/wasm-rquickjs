@@ -15,8 +15,6 @@ use std::time::Duration;
 use wasi::clocks::monotonic_clock::subscribe_duration;
 use wasi_async_runtime::{Reactor, block_on};
 
-static JS_MODULE: &str = include_str!("module.js");
-
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
@@ -60,15 +58,25 @@ impl JsState {
                 ).catch(&ctx).expect("Failed to evaluate dispose module initialization")
                 .finish::<()>()
                 .catch(&ctx).expect("Failed to finish dispose module initialization");
-            }).await;
+            })
+            .await;
             rt.idle().await;
 
-            let resolver = BuiltinResolver::default().with_module("bundle/script_module");
+            let mut resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
+            for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+                resolver = resolver.with_module(name.to_string());
+            }
             let resolver = crate::modules::add_native_module_resolvers(resolver);
             let resolver = crate::builtin::add_module_resolvers(resolver);
 
+            let mut builtin_loader = BuiltinLoader::default()
+                .with_module(crate::JS_EXPORT_MODULE_NAME, crate::JS_EXPORT_MODULE);
+            for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
+                builtin_loader = builtin_loader.with_module(name.to_string(), (get_module)());
+            }
+
             let loader = (
-                BuiltinLoader::default().with_module("bundle/script_module", JS_MODULE),
+                builtin_loader,
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
                 ScriptLoader::default(),
@@ -88,13 +96,22 @@ impl JsState {
                     "test",
                     format!(r#"
                     {wiring}
-                    import * as userModule from 'bundle/script_module';
+                    import * as userModule from '{}';
                     globalThis.userModule = userModule;
-                    "#),
+                    "#, crate::JS_EXPORT_MODULE_NAME),
                 )
                 .catch(&ctx).expect("Failed to evaluate module initialization")
                 .finish::<()>()
                 .catch(&ctx).expect("Failed to finish module initialization");
+
+                for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+                  Module::import(&ctx, name.to_string())
+                     .catch(&ctx)
+                     .expect(&format!("Failed to import user module {name}"))
+                     .finish::<()>()
+                     .catch(&ctx)
+                     .expect(&format!("Failed to finish importing user module {name}"));
+                }
             })
             .await;
             rt.idle().await;
@@ -549,21 +566,21 @@ fn dump_cannot_find_method(
 // Wrapper type that forces the js type to be a bigint instead of the default number which can loose some bits due to
 pub struct BigIntWrapper<T>(pub T);
 
-impl <'js> IntoJs<'js> for BigIntWrapper<u64> {
+impl<'js> IntoJs<'js> for BigIntWrapper<u64> {
     fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
         let bigint = rquickjs::BigInt::from_u64(ctx.clone(), self.0)?;
         Ok(Value::from_big_int(bigint))
     }
 }
 
-impl <'js> IntoJs<'js> for BigIntWrapper<i64> {
+impl<'js> IntoJs<'js> for BigIntWrapper<i64> {
     fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
         let bigint = rquickjs::BigInt::from_i64(ctx.clone(), self.0)?;
         Ok(Value::from_big_int(bigint))
     }
 }
 
-impl <'js> FromJs<'js> for BigIntWrapper<u64> {
+impl<'js> FromJs<'js> for BigIntWrapper<u64> {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
         let bigint = rquickjs::BigInt::from_js(ctx, value)?;
         let i64_value = bigint.to_i64()?;
@@ -571,7 +588,7 @@ impl <'js> FromJs<'js> for BigIntWrapper<u64> {
     }
 }
 
-impl <'js> FromJs<'js> for BigIntWrapper<i64> {
+impl<'js> FromJs<'js> for BigIntWrapper<i64> {
     fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
         let bigint = rquickjs::BigInt::from_js(ctx, value)?;
         let i64_value = bigint.to_i64()?;

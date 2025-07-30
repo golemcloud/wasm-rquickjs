@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use std::process::Command;
 use test_r::core::{DynamicTestRegistration, TestProperties};
 use test_r::test_gen;
-use wasm_rquickjs::generate_wrapper_crate;
+use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 
 #[allow(dead_code)]
 mod common;
@@ -51,7 +51,10 @@ fn compilation_test(
     println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
     generate_wrapper_crate(
         &path.join("wit"),
-        &path.join("src").join(format!("{name}.js")),
+        &[JsModuleSpec {
+            name: name.to_string(),
+            mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
+        }],
         &wrapper_crate_root,
         None,
     )?;

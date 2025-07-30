@@ -2,8 +2,9 @@ use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
 use crate::imports::generate_import_modules;
 use crate::skeleton::{copy_skeleton_sources, generate_app_manifest, generate_cargo_toml};
+use crate::wit::add_get_script_import;
 use anyhow::{Context, anyhow};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use fs_extra::dir::CopyOptions;
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span};
@@ -22,13 +23,38 @@ mod rust_bindgen;
 mod skeleton;
 mod types;
 mod typescript;
+mod wit;
+
+/// Specifies how a given user-defined JS module gets embedded into the generated Rust crate.
+#[derive(Debug, Clone)]
+pub enum EmbeddingMode {
+    /// Points to a JS module file that is going to be embedded into the generated Rust crate
+    EmbedFile(Utf8PathBuf),
+    /// The JS module is going to be fetched run-time through an imported WIT interface
+    Composition,
+}
+
+/// Specifies a JS module to be evaluated in the generated component.
+#[derive(Debug, Clone)]
+pub struct JsModuleSpec {
+    pub name: String,
+    pub mode: EmbeddingMode,
+}
+
+impl JsModuleSpec {
+    pub fn file_name(&self) -> String {
+        self.name.replace('/', "_") + ".js"
+    }
+}
 
 /// Generates a Rust wrapper crate for a combination of a WIT package and a JavaScript module.
 ///
 /// The `wit` parameter should point to a WIT root (holding the WIT package of the component, with
 /// optionally a `deps` subdirectory with an arbitrary number of dependencies).
 ///
-/// The `js` parameter must point to a single JavaScript module that implements the WIT package.
+/// The `js_modules` parameter must point to at least one JavaScript module that implements the WIT package,
+/// and optionally additional modules that get imported during the initialization of the component. It is
+/// always the first in the list that is considered the one containing the implementation of the WIT exports.
 ///
 /// The `output` parameter is the root directory where the generated Rust crate's source code and
 /// Cargo manifest is placed.
@@ -36,7 +62,7 @@ mod typescript;
 /// If `world` is `None`, the default world is selected and used, otherwise the specified one.
 pub fn generate_wrapper_crate(
     wit: &Utf8Path,
-    js: &Utf8Path,
+    js_modules: &[JsModuleSpec],
     output: &Utf8Path,
     world: Option<&str>,
 ) -> anyhow::Result<()> {
@@ -62,12 +88,17 @@ pub fn generate_wrapper_crate(
     copy_wit_directory(wit, &context.output.join("wit"))
         .context("Failed to copy WIT package to output directory")?;
 
+    if uses_composition(js_modules) {
+        add_get_script_import(&context.output.join("wit"), world)
+            .context("Failed to add get-script import to the WIT world")?;
+    }
+
     // Copying the JavaScript module to the output directory
-    copy_js_module(js, context.output)
+    copy_js_modules(js_modules, context.output)
         .context("Failed to copy JavaScript module to output directory")?;
 
     // Generating the lib.rs file implementing the component exports
-    generate_export_impls(&context)
+    generate_export_impls(&context, js_modules)
         .context("Failed to generate the component export implementations")?;
 
     // Generating the native modules implementing the component imports
@@ -273,9 +304,22 @@ fn copy_wit_directory(wit: &Utf8Path, output: &Utf8Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Copies the JS module file to `<output>/src/module.js`.
-fn copy_js_module(js: &Utf8Path, output: &Utf8Path) -> anyhow::Result<()> {
-    let js_dest = output.join("src").join("module.js");
-    std::fs::copy(js, js_dest).context("Failed to copy JavaScript module")?;
+/// Copies the JS module files to `<output>/src/<name>.js`.
+fn copy_js_modules(js_modules: &[JsModuleSpec], output: &Utf8Path) -> anyhow::Result<()> {
+    for module in js_modules {
+        if let EmbeddingMode::EmbedFile(source) = &module.mode {
+            let filename = module.file_name();
+            let js_dest = output.join("src").join(filename);
+            std::fs::copy(source, js_dest)
+                .context(format!("Failed to copy JavaScript module {}", module.name))?;
+        }
+    }
     Ok(())
+}
+
+/// Checks if any of the provided JS modules uses composition mode.
+fn uses_composition(js_module_spec: &[JsModuleSpec]) -> bool {
+    js_module_spec
+        .iter()
+        .any(|m| matches!(m.mode, EmbeddingMode::Composition))
 }
