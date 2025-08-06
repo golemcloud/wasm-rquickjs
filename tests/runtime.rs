@@ -8,6 +8,7 @@ use rand::Rng;
 use std::i64;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
+use self::common::test_server::start_test_server;
 
 #[allow(dead_code)]
 mod common;
@@ -351,7 +352,9 @@ async fn export_from_inner_package(
 
 #[test]
 async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await;
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(

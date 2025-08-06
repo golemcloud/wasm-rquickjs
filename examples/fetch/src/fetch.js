@@ -9,12 +9,9 @@ async function dumpResponse(response) {
     console.log(`Body: ${JSON.stringify(data)}`);
 }
 
-export async function test1() {
+export async function test1(port) {
     console.log("fetch test 1");
-    const response1 = await fetch("https://jsonplaceholder.typicode.com/posts/1");
-    await dumpResponse(response1);
-
-    const response2 = await fetch("https://jsonplaceholder.typicode.com/posts", {
+    const response1 = await fetch(`http://localhost:${port}/todos`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -25,6 +22,10 @@ export async function test1() {
             userId: 1
         })
     });
+
+    const response2 = await fetch(`http://localhost:${port}/todos/1`);
+
+    await dumpResponse(response1);
     await dumpResponse(response2);
 }
 
