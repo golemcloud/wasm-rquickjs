@@ -358,15 +358,12 @@ async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
     let _ = r?;
 
     assert!(output.contains(
-        "Response from https://jsonplaceholder.typicode.com/posts/1: 200 OK (ok=true)\n"
+        &format!("Response from http://localhost:{port}/todos: 201 Created (ok=true)\n")
     ));
     assert!(output.contains(
-        "Response from https://jsonplaceholder.typicode.com/posts: 201 Created (ok=true)\n"
+        &format!("Response from http://localhost:{port}/todos/0: 200 OK (ok=true)\n")
     ));
-    assert!(output.contains("Body: {\"userId\":1,\"id\":1,\"title\":\""));
-    assert!(
-        output.contains("Body: {\"title\":\"foo\",\"body\":\"bar\",\"userId\":1,\"id\":101}\n")
-    );
+    assert!(output.contains("Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"));
 
     Ok(())
 }

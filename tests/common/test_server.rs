@@ -38,10 +38,15 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                             completed: false
                         };
 
-                        state.todos.push(todo.clone());
+                        let response = (
+                            StatusCode::CREATED,
+                            Json(&todo)
+                        ).into_response();
+
+                        state.todos.push(todo);
                         state.current_todo_id += 1;
 
-                        Json(todo)
+                        response
                     }),
                 )
                 .route(

@@ -23,7 +23,7 @@ export async function test1(port) {
         })
     });
 
-    const response2 = await fetch(`http://localhost:${port}/todos/1`);
+    const response2 = await fetch(`http://localhost:${port}/todos/0`);
 
     await dumpResponse(response1);
     await dumpResponse(response2);
