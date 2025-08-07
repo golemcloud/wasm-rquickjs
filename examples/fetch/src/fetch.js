@@ -69,12 +69,13 @@ export async function test4(port) {
     await dumpResponse(response2);
 }
 
-export async function test4Buffered() {
-    console.log("fetch test 4");
-    const response1 = await fetch("https://postman-echo.com/stream/10");
+export async function test4Buffered(port) {
+    console.log("fetch test 4 (buffered)");
+    const response1 = await fetch(`http://localhost:${port}/todos-stream`);
+
     let body1 = await response1.bytes();
 
-    const response2 = await fetch("https://postman-echo.com/post", {
+    const response2 = await fetch(`http://localhost:${port}/echo`, {
         method: "POST",
         body: body1
     });

@@ -97,7 +97,7 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
 
                         (
                             AppendHeaders([
-                                (header::CONTENT_TYPE, "application/octet-stream"),
+                                (header::CONTENT_TYPE, "application/json"),
                             ]),
                             Body::from_stream(body_stream)
                         )

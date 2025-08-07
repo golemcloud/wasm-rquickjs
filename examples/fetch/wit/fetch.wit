@@ -5,7 +5,7 @@ world fetch {
   export test2: func(port: u16);
   export test3: func(port: u16);
   export test4: func(port: u16);
-  export test4-buffered: func();
+  export test4-buffered: func(port: u16);
   export test5: func();
   export test6: func();
   export test7: func();

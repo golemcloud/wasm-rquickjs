@@ -422,8 +422,10 @@ async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test4-buffered", &[]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "test4-buffered", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(
