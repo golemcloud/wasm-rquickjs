@@ -265,10 +265,10 @@ fn declare_functions_and_resources(
                     &ts_type_reference(context, param_type, interface_stack)?,
                 );
             }
-            if !matches!(&function.kind, FunctionKind::Constructor(_)) {
-                if let Some(result_type) = &function.result {
-                    fun.result(&ts_type_reference(context, result_type, interface_stack)?);
-                }
+            if !matches!(&function.kind, FunctionKind::Constructor(_))
+                && let Some(result_type) = &function.result
+            {
+                fun.result(&ts_type_reference(context, result_type, interface_stack)?);
             }
         }
 
@@ -346,28 +346,26 @@ fn export_type_definition(
         Some(name) => {
             let js_name = name.to_upper_camel_case();
 
-            if let TypeDefKind::Type(Type::Id(type_id)) = &typ.kind {
-                if !visited_types.contains(type_id) {
-                    let aliased_type = context
-                        .resolve
-                        .types
-                        .get(*type_id)
-                        .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
-                    if let TypeOwner::Interface(interface_id) = &aliased_type.owner {
-                        if !interface_stack.contains(interface_id) {
-                            // The type is defined in a different module, need to be imported
-                            let imported_interface =
-                                context.get_imported_interface(interface_id)?;
-                            let imported_module_name = escape_js_ident(
-                                imported_interface.module_name()?.to_lower_camel_case(),
-                            );
+            if let TypeDefKind::Type(Type::Id(type_id)) = &typ.kind
+                && !visited_types.contains(type_id)
+            {
+                let aliased_type = context
+                    .resolve
+                    .types
+                    .get(*type_id)
+                    .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
+                if let TypeOwner::Interface(interface_id) = &aliased_type.owner
+                    && !interface_stack.contains(interface_id)
+                {
+                    // The type is defined in a different module, need to be imported
+                    let imported_interface = context.get_imported_interface(interface_id)?;
+                    let imported_module_name =
+                        escape_js_ident(imported_interface.module_name()?.to_lower_camel_case());
 
-                            result.import_module(
-                                &imported_module_name,
-                                &imported_interface.fully_qualified_interface_name(),
-                            );
-                        }
-                    }
+                    result.import_module(
+                        &imported_module_name,
+                        &imported_interface.fully_qualified_interface_name(),
+                    );
                 }
             };
 
@@ -502,11 +500,11 @@ fn visit_subtree<'a>(
                         .types
                         .get(*type_id)
                         .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
-                    if let TypeOwner::Interface(interface_id) = &aliased_type.owner {
-                        if !interface_stack.contains(interface_id) {
-                            // The type is defined in a different module. In this case we are not
-                            // following the type reference, we will only generate an import
-                        }
+                    if let TypeOwner::Interface(interface_id) = &aliased_type.owner
+                        && !interface_stack.contains(interface_id)
+                    {
+                        // The type is defined in a different module. In this case we are not
+                        // following the type reference, we will only generate an import
                     }
                 }
                 TypeDefKind::Type(typ) => {

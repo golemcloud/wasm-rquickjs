@@ -215,7 +215,7 @@ impl<'a> GeneratorContext<'a> {
     fn get_imported_interface(
         &self,
         interface_id: &InterfaceId,
-    ) -> anyhow::Result<ImportedInterface> {
+    ) -> anyhow::Result<ImportedInterface<'_>> {
         let interface = &self.resolve.interfaces[*interface_id];
         let name = interface
             .name
