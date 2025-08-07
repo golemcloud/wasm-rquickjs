@@ -49,9 +49,9 @@ export async function test2(port) {
     console.log(`Response body as ArrayBuffer:`, data);
 }
 
-export async function test3() {
+export async function test3(port) {
     console.log("fetch test 3");
-    const response = await fetch("https://postman-echo.com/stream/100");
+    const response = await fetch(`http://localhost:${port}/todos-stream`);
     for await (const chunk of response.body) {
         // Do something with each "chunk"
         console.log(`Received chunk: ${chunk}`);

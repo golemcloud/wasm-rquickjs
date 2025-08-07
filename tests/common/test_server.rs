@@ -2,12 +2,15 @@ use tokio::task::JoinHandle;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
-use http::{HeaderMap, StatusCode};
+use http::{header, HeaderMap, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use axum::extract::Path;
-use axum::response::IntoResponse;
+use axum::response::{AppendHeaders, IntoResponse};
+use futures::StreamExt;
+use http_body::Frame;
+use axum::body::Body;
 
 pub async fn start_test_server() -> (u16, JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -69,6 +72,28 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                         } else {
                             StatusCode::NOT_FOUND.into_response()
                         }
+                    }),
+                )
+                .route(
+                    "/todos-stream",
+                    get(async move || {
+
+                        let mut todos = Vec::new();
+                        for i in 0..100 {
+                            todos.push(Todo {
+                                id: i,
+                                user_id: 1,
+                                title: format!("todo_title_{i}"),
+                                body: format!("todo_body_{i}"),
+                                completed: i % 2 == 0
+                            });
+                        };
+                        (
+                            AppendHeaders([
+                                (header::CONTENT_TYPE, "application/json"),
+                            ]),
+                            Body::from_stream(futures::stream::iter(todos).map(|t| serde_json::to_vec(&t)))
+                        )
                     }),
                 );
 
