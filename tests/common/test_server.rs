@@ -6,7 +6,7 @@ use http::{header, HeaderMap, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use axum::extract::Path;
+use axum::extract::{Multipart, Path};
 use axum::response::{AppendHeaders, IntoResponse};
 use futures::StreamExt;
 use http_body::Frame;
@@ -113,6 +113,24 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                             body
                         )
                     }),
+                )
+                .route(
+                    "/echo-form",
+                    post(async move |mut multipart: Multipart| {
+                        let mut parts = Vec::new();
+
+                        while let Some(field) = multipart.next_field().await.unwrap() {
+                            let name = field.name().unwrap().to_string();
+                            let data = field.bytes().await.unwrap();
+
+                            parts.push(MultiPartPart {
+                                name,
+                                data: data.to_vec()
+                            });
+                        }
+
+                        Json(parts)
+                    }),
                 );
 
             axum::serve(listener, router).await.unwrap();
@@ -152,4 +170,11 @@ impl Default for State {
             todos: Vec::new()
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MultiPartPart {
+    name: String,
+    data: Vec<u8>
 }

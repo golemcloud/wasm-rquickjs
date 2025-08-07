@@ -199,7 +199,7 @@ export async function test8(port) {
     await dumpResponse(response);
 }
 
-export async function test9() {
+export async function test9(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const stream = new ReadableStream(new SlowRequestBodySource(body));
     const formData = new FormData()
@@ -213,6 +213,6 @@ export async function test9() {
         },
         [Symbol.toStringTag]: 'File'
     });
-    const response = await fetch('https://httpbin.org/post', {method: 'POST', body: formData});
+    const response = await fetch(`http://localhost:${port}/echo-form`, {method: 'POST', body: formData});
     await dumpResponse(response);
 }

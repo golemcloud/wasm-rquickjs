@@ -20,7 +20,7 @@ clap = { version = "4.5.39", features = ["default", "derive"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-axum = { workspace = true }
+axum = { workspace = true, features = ["multipart"]}
 bytes = { workspace = true }
 camino-tempfile = { workspace = true }
 futures = { workspace = true }
