@@ -166,7 +166,7 @@ export class Response {
     }
 
     async bytes() {
-        new Uint8Array(await this.arrayBuffer())
+        return new Uint8Array(await this.arrayBuffer())
     }
 
     async json() {

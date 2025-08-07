@@ -9,12 +9,9 @@ async function dumpResponse(response) {
     console.log(`Body: ${JSON.stringify(data)}`);
 }
 
-export async function test1() {
+export async function test1(port) {
     console.log("fetch test 1");
-    const response1 = await fetch("https://jsonplaceholder.typicode.com/posts/1");
-    await dumpResponse(response1);
-
-    const response2 = await fetch("https://jsonplaceholder.typicode.com/posts", {
+    const response1 = await fetch(`http://localhost:${port}/todos`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -25,29 +22,46 @@ export async function test1() {
             userId: 1
         })
     });
+
+    const response2 = await fetch(`http://localhost:${port}/todos/0`);
+
+    await dumpResponse(response1);
     await dumpResponse(response2);
 }
 
-export async function test2() {
+export async function test2(port) {
     console.log("fetch test 2");
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts/1");
+
+    await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "foo",
+            body: "bar",
+            userId: 1
+        })
+    });
+
+    const response = await fetch(`http://localhost:${port}/todos/0`);
     const data = await response.arrayBuffer();
     console.log(`Response body as ArrayBuffer:`, data);
 }
 
-export async function test3() {
+export async function test3(port) {
     console.log("fetch test 3");
-    const response = await fetch("https://postman-echo.com/stream/100");
+    const response = await fetch(`http://localhost:${port}/todos-stream`);
     for await (const chunk of response.body) {
         // Do something with each "chunk"
         console.log(`Received chunk: ${chunk}`);
     }
 }
 
-export async function test4() {
+export async function test4(port) {
     console.log("fetch test 4");
-    const response1 = await fetch("https://postman-echo.com/stream/10");
-    const response2 = await fetch("https://postman-echo.com/post", {
+    const response1 = await fetch(`http://localhost:${port}/todos-stream`);
+    const response2 = await fetch(`http://localhost:${port}/echo`, {
         method: "POST",
         body: response1.body
     });
@@ -55,12 +69,13 @@ export async function test4() {
     await dumpResponse(response2);
 }
 
-export async function test4Buffered() {
-    console.log("fetch test 4");
-    const response1 = await fetch("https://postman-echo.com/stream/10");
+export async function test4Buffered(port) {
+    console.log("fetch test 4 (buffered)");
+    const response1 = await fetch(`http://localhost:${port}/todos-stream`);
+
     let body1 = await response1.bytes();
 
-    const response2 = await fetch("https://postman-echo.com/post", {
+    const response2 = await fetch(`http://localhost:${port}/echo`, {
         method: "POST",
         body: body1
     });
@@ -68,11 +83,24 @@ export async function test4Buffered() {
     await dumpResponse(response2);
 }
 
-export async function test5() {
+export async function test5(port) {
     async function test(i) {
-        let response = await fetch(`https://jsonplaceholder.typicode.com/todos/${i}`);
-        let json = await response.json();
-        console.log(response.status, JSON.stringify(json));
+        let response1 = await fetch(`http://localhost:${port}/todos`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                title: `title_${i}`,
+                body: `body_${i}`,
+                userId: 1
+            })
+        });
+        let response1Json = await response1.json()
+
+        let response2 = await fetch(`http://localhost:${port}/todos/${response1Json.id}`);
+        let response2Json = await response2.json();
+        console.log(response2.status, JSON.stringify(response2Json));
     }
 
     let promises = [];
@@ -112,10 +140,10 @@ class SlowRequestBodySource {
     }
 }
 
-export async function test6() {
+export async function test6(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const stream = new ReadableStream(new SlowRequestBodySource(body));
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts", {
+    const response = await fetch(`http://localhost:${port}/todos`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -161,17 +189,17 @@ export async function test7() {
     console.log("done");
 }
 
-export async function test8() {
+export async function test8(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const blob = new Blob([body], {type: "application/json"});
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts", {
+    const response = await fetch(`http://localhost:${port}/todos`, {
         method: "POST",
         body: blob
     });
     await dumpResponse(response);
 }
 
-export async function test9() {
+export async function test9(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const stream = new ReadableStream(new SlowRequestBodySource(body));
     const formData = new FormData()
@@ -185,6 +213,6 @@ export async function test9() {
         },
         [Symbol.toStringTag]: 'File'
     });
-    const response = await fetch('https://httpbin.org/post', {method: 'POST', body: formData});
+    const response = await fetch(`http://localhost:${port}/echo-form`, {method: 'POST', body: formData});
     await dumpResponse(response);
 }

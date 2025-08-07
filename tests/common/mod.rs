@@ -1,3 +1,5 @@
+pub mod test_server;
+
 use crate::common::WasmSource::Precompiled;
 use anyhow::anyhow;
 use camino::{Utf8Path, Utf8PathBuf};
