@@ -482,13 +482,14 @@ async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[]).await;
+    let (port, _) = start_test_server().await;
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(
-        "Response from https://jsonplaceholder.typicode.com/posts: 201 Created (ok=true)"
+        &format!("Response from http://localhost:{port}/todos: 201 Created (ok=true)")
     ));
-    assert!(output.contains("{\"title\":\"foo\",\"body\":\"bar\",\"userId\":1,\"id\":101}"));
+    assert!(output.contains("Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"));
 
     Ok(())
 }
