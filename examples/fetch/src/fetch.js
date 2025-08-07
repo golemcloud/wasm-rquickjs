@@ -140,10 +140,10 @@ class SlowRequestBodySource {
     }
 }
 
-export async function test6() {
+export async function test6(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const stream = new ReadableStream(new SlowRequestBodySource(body));
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts", {
+    const response = await fetch(`http://localhost:${port}/todos`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
