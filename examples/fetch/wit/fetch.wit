@@ -2,7 +2,7 @@ package quickjs:fetch;
 
 world fetch {
   export test1: func(port: u16);
-  export test2: func();
+  export test2: func(port: u16);
   export test3: func();
   export test4: func();
   export test4-buffered: func();

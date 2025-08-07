@@ -370,7 +370,9 @@ async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[]).await;
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[Val::U16(port)]).await;
     let _ = r?;
 
     println!("{output}");

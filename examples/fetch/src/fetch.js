@@ -29,9 +29,22 @@ export async function test1(port) {
     await dumpResponse(response2);
 }
 
-export async function test2() {
+export async function test2(port) {
     console.log("fetch test 2");
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts/1");
+
+    await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "foo",
+            body: "bar",
+            userId: 1
+        })
+    });
+
+    const response = await fetch(`http://localhost:${port}/todos/0`);
     const data = await response.arrayBuffer();
     console.log(`Response body as ArrayBuffer:`, data);
 }
