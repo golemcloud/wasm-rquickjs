@@ -1,5 +1,6 @@
 test_r::enable!();
 
+use self::common::test_server::start_test_server;
 use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
@@ -8,7 +9,6 @@ use rand::Rng;
 use std::i64;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
-use self::common::test_server::start_test_server;
 
 #[allow(dead_code)]
 mod common;
@@ -354,12 +354,19 @@ async fn export_from_inner_package(
 async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains(&format!("Response from http://localhost:{port}/todos: 201 Created (ok=true)\n")));
-    assert!(output.contains(&format!("Response from http://localhost:{port}/todos/0: 200 OK (ok=true)\n")));
-    assert!(output.contains("Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/todos: 201 Created (ok=true)\n"
+    )));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/todos/0: 200 OK (ok=true)\n"
+    )));
+    assert!(output.contains(
+        "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
+    ));
 
     Ok(())
 }
@@ -368,7 +375,8 @@ async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert_eq!(
@@ -388,7 +396,8 @@ async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test3", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test3", &[Val::U16(port)]).await;
     let _ = r?;
 
     let chunk_count = output
@@ -404,10 +413,13 @@ async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains(&format!("Response from http://localhost:{port}/echo: 200 OK (ok=true)")));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/echo: 200 OK (ok=true)"
+    )));
     assert!(output.contains("Body: [{\"id\":"));
 
     Ok(())
@@ -417,11 +429,18 @@ async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test4-buffered", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test4-buffered",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
-    assert!(output.contains(&format!("Response from http://localhost:{port}/echo: 200 OK (ok=true)")));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/echo: 200 OK (ok=true)"
+    )));
     assert!(output.contains("Body: [{\"id\":"));
 
     Ok(())
@@ -431,7 +450,8 @@ async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyh
 async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains("200 {\"id\":0,\""));
@@ -447,11 +467,16 @@ async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 async fn fetch_6(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test6", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test6", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains(&format!("Response from http://localhost:{port}/todos: 201 Created (ok=true)")));
-    assert!(output.contains("Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/todos: 201 Created (ok=true)"
+    )));
+    assert!(output.contains(
+        "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
+    ));
 
     Ok(())
 }
@@ -473,13 +498,16 @@ async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 #[test]
 async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[Val::U16(port)]).await;
     let _ = r?;
 
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/todos: 201 Created (ok=true)"
+    )));
     assert!(output.contains(
-        &format!("Response from http://localhost:{port}/todos: 201 Created (ok=true)")
+        "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
     ));
-    assert!(output.contains("Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"));
 
     Ok(())
 }
@@ -487,10 +515,13 @@ async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 #[test]
 async fn fetch_9(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test9", &[Val::U16(port)]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test9", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains(&format!("http://localhost:{port}/echo-form: 200 OK (ok=true)")));
+    assert!(output.contains(&format!(
+        "http://localhost:{port}/echo-form: 200 OK (ok=true)"
+    )));
     assert!(output.contains("Body: [{\"name\":\"f1\",\"data\":[97,98,99]},{\"name\":\"f2\",\"data\":[123,34,116,105,116,108,101,34,58,34,102,111,111,34,44,34,98,111,100,121,34,58,34,98,97,114,34,44,34,117,115,101,114,73,100,34,58,49,125]}]"));
 
     Ok(())
