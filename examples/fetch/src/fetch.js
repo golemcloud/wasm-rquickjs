@@ -58,10 +58,10 @@ export async function test3(port) {
     }
 }
 
-export async function test4() {
+export async function test4(port) {
     console.log("fetch test 4");
-    const response1 = await fetch("https://postman-echo.com/stream/10");
-    const response2 = await fetch("https://postman-echo.com/post", {
+    const response1 = await fetch(`http://localhost:${port}/todos-stream`);
+    const response2 = await fetch(`http://localhost:${port}/echo`, {
         method: "POST",
         body: response1.body
     });

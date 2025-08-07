@@ -408,11 +408,14 @@ async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 
 #[test]
 async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[]).await;
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains("Response from https://postman-echo.com/post: 200 OK (ok=true)"));
-    assert!(output.contains("Body: {\"args\":{},\"data\":"));
+    assert!(output.contains(
+        &format!("Response from http://localhost:{port}/echo: 200 OK (ok=true)")));
+    assert!(output.contains("Body: [{\"id\":"));
 
     Ok(())
 }
@@ -423,8 +426,9 @@ async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyh
         invoke_and_capture_output(compiled.wasm_path(), None, "test4-buffered", &[]).await;
     let _ = r?;
 
-    assert!(output.contains("Response from https://postman-echo.com/post: 200 OK (ok=true)"));
-    assert!(output.contains("Body: {\"args\":{},\"data\":"));
+    assert!(output.contains(
+        &format!("Response from http://localhost:{port}/echo: 200 OK (ok=true)")));
+    assert!(output.contains("Body: [{\"id\":"));
 
     Ok(())
 }

@@ -10,7 +10,9 @@ use axum::extract::Path;
 use axum::response::{AppendHeaders, IntoResponse};
 use futures::StreamExt;
 use http_body::Frame;
-use axum::body::Body;
+use axum::body::{Body, BodyDataStream};
+use tokio_util::io::ReaderStream;
+use std::io::Cursor;
 
 pub async fn start_test_server() -> (u16, JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -88,11 +90,27 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                                 completed: i % 2 == 0
                             });
                         };
+
+                        let json_bytes = serde_json::to_vec(&todos).unwrap();
+
+                        let body_stream = ReaderStream::with_capacity(Cursor::new(json_bytes), 100);
+
                         (
                             AppendHeaders([
-                                (header::CONTENT_TYPE, "application/json"),
+                                (header::CONTENT_TYPE, "application/octet-stream"),
                             ]),
-                            Body::from_stream(futures::stream::iter(todos).map(|t| serde_json::to_vec(&t)))
+                            Body::from_stream(body_stream)
+                        )
+                    }),
+                )
+                .route(
+                    "/echo",
+                    post(async move |body: Body| {
+                        (
+                            AppendHeaders([
+                                (header::CONTENT_TYPE, "application/octet-stream"),
+                            ]),
+                            body
                         )
                     }),
                 );
