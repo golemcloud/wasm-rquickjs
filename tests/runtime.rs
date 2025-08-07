@@ -437,14 +437,16 @@ async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyh
 
 #[test]
 async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[]).await;
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains("200 {\"userId\":1,\"id\":1,\""));
-    assert!(output.contains("200 {\"userId\":1,\"id\":2,\""));
-    assert!(output.contains("200 {\"userId\":1,\"id\":3,\""));
-    assert!(output.contains("200 {\"userId\":1,\"id\":4,\""));
-    assert!(output.contains("404 {}"));
+    assert!(output.contains("200 {\"id\":0,\""));
+    assert!(output.contains("200 {\"id\":1,\""));
+    assert!(output.contains("200 {\"id\":2,\""));
+    assert!(output.contains("200 {\"id\":3,\""));
+    assert!(output.contains("200 {\"id\":4,\""));
 
     Ok(())
 }

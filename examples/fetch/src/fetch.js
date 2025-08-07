@@ -83,11 +83,24 @@ export async function test4Buffered(port) {
     await dumpResponse(response2);
 }
 
-export async function test5() {
+export async function test5(port) {
     async function test(i) {
-        let response = await fetch(`https://jsonplaceholder.typicode.com/todos/${i}`);
-        let json = await response.json();
-        console.log(response.status, JSON.stringify(json));
+        let response1 = await fetch(`http://localhost:${port}/todos`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                title: `title_${i}`,
+                body: `body_${i}`,
+                userId: 1
+            })
+        });
+        let response1Json = await response1.json()
+
+        let response2 = await fetch(`http://localhost:${port}/todos/${response1Json.id}`);
+        let response2Json = await response2.json();
+        console.log(response2.status, JSON.stringify(response2Json));
     }
 
     let promises = [];
