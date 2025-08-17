@@ -1,0 +1,5 @@
+package wasi:logging-rust;
+
+world wasi-logging {
+  import wasi:logging/logging;
+}

@@ -38,7 +38,7 @@ pub mod native_module {
 
     #[cfg(feature = "logging")]
     fn trace_impl(line: String) {
-        log::trace!(target: "js", "{line}");
+        wasi_logging::log(wasi_logging::Level::Trace, "", &line);
     }
 
     #[cfg(not(feature = "logging"))]
@@ -48,7 +48,7 @@ pub mod native_module {
 
     #[cfg(feature = "logging")]
     fn debug_impl(line: String) {
-        log::debug!(target: "js", "{line}");
+        wasi_logging::log(wasi_logging::Level::Debug, "", &line);
     }
 
     #[cfg(not(feature = "logging"))]
@@ -58,7 +58,7 @@ pub mod native_module {
 
     #[cfg(feature = "logging")]
     fn info_impl(line: String) {
-        log::info!(target: "js", "{line}");
+        wasi_logging::log(wasi_logging::Level::Info, "", &line);
     }
 
     #[cfg(not(feature = "logging"))]
@@ -68,7 +68,7 @@ pub mod native_module {
 
     #[cfg(feature = "logging")]
     fn warn_impl(line: String) {
-        log::warn!(target: "js", "{line}");
+        wasi_logging::log(wasi_logging::Level::Warn, "", &line);
     }
 
     #[cfg(not(feature = "logging"))]
@@ -78,7 +78,7 @@ pub mod native_module {
 
     #[cfg(feature = "logging")]
     fn error_impl(line: String) {
-        log::error!(target: "js", "{line}");
+        wasi_logging::log(wasi_logging::Level::Error, "", &line);
     }
 }
 

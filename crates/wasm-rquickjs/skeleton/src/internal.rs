@@ -38,8 +38,6 @@ impl Default for JsState {
 
 impl JsState {
     pub fn new() -> Self {
-        init_logging();
-
         block_on(|_reactor| async {
             let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
             let ctx = AsyncContext::full(&rt)
@@ -132,17 +130,6 @@ impl JsState {
             }
         })
     }
-}
-
-#[cfg(feature = "logging")]
-fn init_logging() {
-    wasi_logger::Logger::install().expect("failed to install wasi_logger::Logger");
-    log::set_max_level(log::LevelFilter::Trace);
-}
-
-#[cfg(not(feature = "logging"))]
-fn init_logging() {
-    // No-op if logging is not enabled
 }
 
 static mut STATE: Option<JsState> = None;
