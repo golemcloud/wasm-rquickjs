@@ -1,6 +1,7 @@
 package quickjs:types-in-exports;
 
 interface other-types {
+    /// An example type alias
     type list-of-strings = list<string>;
 
     record rec2 {
@@ -8,6 +9,7 @@ interface other-types {
         y: s8,
     }
 
+    /// An example enum
     enum color {
         red,
         green,
@@ -18,6 +20,7 @@ interface other-types {
 interface types {
   use other-types.{color, list-of-strings, rec2};
 
+  /// An example record
   record rec1 {
     a: string,
     b: u32,
@@ -30,6 +33,7 @@ interface types {
     i: tuple<string, u32, f32>,
   }
 
+  /// An example variant
   variant var1 {
     none,
     any,
@@ -39,6 +43,7 @@ interface types {
     wrapped-result(result<u32, string>),
   }
 
+  /// An example flags type
   flags permissions {
     read,
     write,

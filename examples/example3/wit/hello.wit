@@ -1,13 +1,20 @@
 package quickjs:example3;
 
+/// The exported interface
 interface iface {
+  /// The example resource
   resource hello {
+    /// Creates an instance of the example resource
     constructor(name: string);
+    /// Gets the name passed to the constructor
     get-name: func() -> string;
+    /// Example of a static method
     compare: static func(h1: borrow<hello>, h2: borrow<hello>) -> s32;
+    /// Example of a static method taking owned handles
     merge: static func(h1: own<hello>, h2: own<hello>) -> hello;
   }
 
+  /// Dump function
   dump: func(h: option<borrow<hello>>) -> string;
   dump-all: func(hs: list<borrow<hello>>) -> string;
 }
