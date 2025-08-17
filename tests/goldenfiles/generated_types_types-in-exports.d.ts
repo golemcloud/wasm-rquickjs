@@ -19,6 +19,9 @@ declare module 'types-in-exports' {
     export type Color = quickjsTypesInExportsOtherTypes.Color;
     export type ListOfStrings = quickjsTypesInExportsOtherTypes.ListOfStrings;
     export type Rec2 = quickjsTypesInExportsOtherTypes.Rec2;
+    /**
+     * An example record
+     */
     export type Rec1 = {
       a: string;
       b: number;
@@ -30,6 +33,9 @@ declare module 'types-in-exports' {
       h: ListOfStrings;
       i: [string, number, number];
     };
+    /**
+     * An example variant
+     */
     export type Var1 = {
       tag: 'none'
     } |
@@ -52,6 +58,9 @@ declare module 'types-in-exports' {
       tag: 'wrapped-result'
       val: Result<number, string>
     };
+    /**
+     * An example flags type
+     */
     export type Permissions = {
       read: boolean;
       write: boolean;

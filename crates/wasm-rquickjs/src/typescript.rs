@@ -6,8 +6,8 @@ use camino::Utf8Path;
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use wit_parser::{
-    Function, FunctionKind, InterfaceId, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, WorldItem,
-    WorldKey,
+    Docs, Function, FunctionKind, InterfaceId, Type, TypeDef, TypeDefKind, TypeId, TypeOwner,
+    WorldItem, WorldKey,
 };
 
 pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> {
@@ -70,6 +70,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
             .collect();
         let interface_stack: VecDeque<_> = vec![interface_id].into_iter().collect();
 
+        result.write_docs(&interface.docs);
         let js_name = escape_js_ident(name.to_lower_camel_case());
         result.begin_export_namespace(&js_name);
         declare_functions_and_resources(
@@ -119,6 +120,9 @@ pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<()>
 
         let mut result = DtsWriter::new();
 
+        if let Some(docs) = &interface.interface.as_ref().map(|i| &i.docs) {
+            result.write_docs(docs);
+        }
         result.begin_declare_module(&interface.fully_qualified_interface_name());
         if let Some((_iface_name, iface)) = interface.name_and_interface() {
             let interface_imports = iface
@@ -186,6 +190,7 @@ fn declare_functions_and_resources(
     for (name, function) in functions {
         match &function.kind {
             FunctionKind::Freestanding => {
+                result.write_docs(&function.docs);
                 let js_name = escape_js_ident(name.to_lower_camel_case());
                 let mut exported_function = if async_ {
                     result.begin_export_async_function(&js_name)
@@ -240,6 +245,7 @@ fn declare_functions_and_resources(
         result.begin_export_class(&js_resource_name);
 
         for (name, function) in resource_funcs {
+            result.write_docs(&function.docs);
             let js_name = escape_js_ident(get_function_name(name, function)?.to_lower_camel_case());
             let mut fun = match &function.kind {
                 FunctionKind::Method(_) if async_ => result.begin_async_method(&js_name),
@@ -370,6 +376,7 @@ fn export_type_definition(
             };
 
             let type_def = ts_type_definition(context, typ, interface_stack)?;
+            result.write_docs(&typ.docs);
             result.export_type(&js_name, &type_def);
             Ok(())
         }
@@ -797,6 +804,18 @@ impl DtsWriter {
             module.imports.insert(import_line);
         } else {
             self.indented_write_line(import_line);
+        }
+    }
+
+    pub fn write_docs(&mut self, docs: &Docs) {
+        if let Some(contents) = &docs.contents {
+            self.indented_write_line("/**");
+            for line in contents.lines() {
+                if !line.trim().is_empty() {
+                    self.indented_write_line(format!(" * {line}"));
+                }
+            }
+            self.indented_write_line(" */");
         }
     }
 
