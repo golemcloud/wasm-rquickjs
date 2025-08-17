@@ -16,15 +16,15 @@ declare module 'example3' {
       /**
        * Gets the name passed to the constructor
        */
-      async getName(): Promise<string>;
+      getName(): Promise<string>;
       /**
        * Example of a static method
        */
-      static async compare(h1: Hello, h2: Hello): Promise<number>;
+      static compare(h1: Hello, h2: Hello): Promise<number>;
       /**
        * Example of a static method taking owned handles
        */
-      static async merge(h1: Hello, h2: Hello): Promise<Hello>;
+      static merge(h1: Hello, h2: Hello): Promise<Hello>;
     }
   }
 }

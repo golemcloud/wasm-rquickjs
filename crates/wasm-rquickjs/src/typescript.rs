@@ -745,7 +745,7 @@ impl DtsWriter {
     }
 
     pub fn begin_async_method<'a>(&'a mut self, name: &str) -> DtsFunctionWriter<'a> {
-        self.indented_write(format!("async {name}("));
+        self.indented_write(format!("{name}("));
         DtsFunctionWriter {
             writer: self,
             param_count: 0,
@@ -765,7 +765,7 @@ impl DtsWriter {
     }
 
     pub fn begin_static_async_method<'a>(&'a mut self, name: &str) -> DtsFunctionWriter<'a> {
-        self.indented_write(format!("static async {name}("));
+        self.indented_write(format!("static {name}("));
         DtsFunctionWriter {
             writer: self,
             param_count: 0,
