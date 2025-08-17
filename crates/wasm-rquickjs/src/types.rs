@@ -353,6 +353,22 @@ pub fn get_wrapped_type_internal(
 
             match &typ.kind {
                 TypeDefKind::Tuple(tuple) => get_wrapped_type_tuple(ctx, &typ.name, tuple),
+                TypeDefKind::List(Type::U8) => {
+                    // Special case for list<u8> to be represented by UInt8Array
+                    Ok(WrappedType {
+                        wrap: Box::new(move |ts| quote! { crate::wrappers::UInt8Array(#ts) }),
+                        unwrap: Box::new(move |ts| quote! { #ts.0 }),
+                        wrapped_type_ref: quote! { crate::wrappers::UInt8Array },
+                        original_type_ref: quote! { Vec<u8> },
+                        unwrap_for_imported: Box::new(move |ts| {
+                            if ctx.mode.lists_borrowed {
+                                quote! {&#ts.0 }
+                            } else {
+                                quote! { #ts.0 }
+                            }
+                        }),
+                    })
+                }
                 TypeDefKind::List(elem_type) => get_wrapped_type_list(ctx, elem_type),
                 TypeDefKind::Option(elem_type) => get_wrapped_type_option(ctx, elem_type),
                 TypeDefKind::Result(result) => get_wrapped_type_result(ctx, result),
@@ -379,9 +395,9 @@ pub fn get_wrapped_type_internal(
         Type::S64 | Type::U64 => {
             let original_type_ref = ctx.original_type_ref;
             Ok(WrappedType {
-                wrap: Box::new(move |ts| quote! { crate::internal::BigIntWrapper(#ts) }),
+                wrap: Box::new(move |ts| quote! { crate::wrappers::BigIntWrapper(#ts) }),
                 unwrap: Box::new(move |ts| quote! { #ts.0 }),
-                wrapped_type_ref: quote! { crate::internal::BigIntWrapper<#original_type_ref> },
+                wrapped_type_ref: quote! { crate::wrappers::BigIntWrapper<#original_type_ref> },
                 original_type_ref,
                 unwrap_for_imported: Box::new(move |ts| quote! { #ts.0 }),
             })

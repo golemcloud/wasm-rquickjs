@@ -116,3 +116,57 @@ impl<'js, Ok: FromJs<'js>, Err: FromJs<'js>> FromJs<'js> for JsResult<Ok, Err> {
         }
     }
 }
+
+// Wrapper type that forces the js type to be a bigint instead of the default number which can loose some bits due to
+pub struct BigIntWrapper<T>(pub T);
+
+impl<'js> IntoJs<'js> for BigIntWrapper<u64> {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        let bigint = rquickjs::BigInt::from_u64(ctx.clone(), self.0)?;
+        Ok(Value::from_big_int(bigint))
+    }
+}
+
+impl<'js> IntoJs<'js> for BigIntWrapper<i64> {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        let bigint = rquickjs::BigInt::from_i64(ctx.clone(), self.0)?;
+        Ok(Value::from_big_int(bigint))
+    }
+}
+
+impl<'js> FromJs<'js> for BigIntWrapper<u64> {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let bigint = rquickjs::BigInt::from_js(ctx, value)?;
+        let i64_value = bigint.to_i64()?;
+        Ok(BigIntWrapper(i64_value as u64))
+    }
+}
+
+impl<'js> FromJs<'js> for BigIntWrapper<i64> {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let bigint = rquickjs::BigInt::from_js(ctx, value)?;
+        let i64_value = bigint.to_i64()?;
+        Ok(BigIntWrapper(i64_value))
+    }
+}
+
+pub struct UInt8Array(pub Vec<u8>);
+
+impl<'js> IntoJs<'js> for UInt8Array {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        let array = rquickjs::TypedArray::new_copy(ctx.clone(), self.0)?;
+        Ok(array.into_value())
+    }
+}
+
+impl<'js> FromJs<'js> for UInt8Array {
+    fn from_js(_ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let array = rquickjs::TypedArray::<'js, u8>::from_value(value)?;
+        Ok(UInt8Array(
+            array
+                .as_bytes()
+                .expect("the UInt8Array passed to decode is detached")
+                .to_vec(),
+        ))
+    }
+}
