@@ -128,5 +128,9 @@ export const types = {
         console.log(`a: ${a}`);
         // return: u64
         return a;
+    },
+    f15: (bytes) => {
+        console.log(`bytes: ${bytes}`);
+        return bytes;
     }
 };

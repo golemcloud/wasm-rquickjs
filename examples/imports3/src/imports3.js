@@ -77,4 +77,10 @@ export const test = () => {
     // f14: func(a: u64) -> u64;
     const f14 = types.f14(1234567890n);
     console.log(`f14: ${f14}`);
+    // f15: func(bytes: list<u8>) -> list<u8>
+    const f15 = types.f15(new Uint8Array([1, 2, 3, 4, 5]));
+    console.log(`f15: ${f15}`);
+    if (f15 instanceof Uint8Array) {
+        console.log(`f15 is a Uint8Array with length: ${f15.length}`);
+    }
 };

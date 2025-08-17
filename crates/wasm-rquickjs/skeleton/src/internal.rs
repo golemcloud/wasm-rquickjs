@@ -549,36 +549,3 @@ fn dump_cannot_find_method(
 
     panic_message
 }
-
-// Wrapper type that forces the js type to be a bigint instead of the default number which can loose some bits due to
-pub struct BigIntWrapper<T>(pub T);
-
-impl<'js> IntoJs<'js> for BigIntWrapper<u64> {
-    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
-        let bigint = rquickjs::BigInt::from_u64(ctx.clone(), self.0)?;
-        Ok(Value::from_big_int(bigint))
-    }
-}
-
-impl<'js> IntoJs<'js> for BigIntWrapper<i64> {
-    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
-        let bigint = rquickjs::BigInt::from_i64(ctx.clone(), self.0)?;
-        Ok(Value::from_big_int(bigint))
-    }
-}
-
-impl<'js> FromJs<'js> for BigIntWrapper<u64> {
-    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
-        let bigint = rquickjs::BigInt::from_js(ctx, value)?;
-        let i64_value = bigint.to_i64()?;
-        Ok(BigIntWrapper(i64_value as u64))
-    }
-}
-
-impl<'js> FromJs<'js> for BigIntWrapper<i64> {
-    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
-        let bigint = rquickjs::BigInt::from_js(ctx, value)?;
-        let i64_value = bigint.to_i64()?;
-        Ok(BigIntWrapper(i64_value))
-    }
-}

@@ -657,6 +657,9 @@ async fn imports3(
             f13: {"read":true,"write":false,"execute":true}
             a: 1234567890
             f14: 1234567890
+            bytes: 1,2,3,4,5
+            f15: 1,2,3,4,5
+            f15 is a Uint8Array with length: 5
       "#
         )
     );

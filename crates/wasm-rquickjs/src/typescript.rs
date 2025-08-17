@@ -609,6 +609,7 @@ fn ts_type_definition(
                 .unwrap_or("Error".to_string());
             Ok(format!("Result<{ok_type}, {err_type}>"))
         }
+        TypeDefKind::List(Type::U8) => Ok("Uint8Array".to_string()),
         TypeDefKind::List(elem_type) | TypeDefKind::FixedSizeList(elem_type, _) => Ok(format!(
             "{}[]",
             ts_type_reference(context, elem_type, interface_stack)?
