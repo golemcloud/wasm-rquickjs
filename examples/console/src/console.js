@@ -22,6 +22,27 @@ function runImpl() {
     console.count();
     console.dir({key: "value", nested: {a: 1, b: 2}}, {depth: 2, colors: true});
     console.dir({key: "value", nested: {a: 1, b: 2}}, {colors: false});
+    console.table(["apples", "oranges", "bananas"]);
+    const people = [
+        ["Tyrone", "Jones"],
+        ["Janet", "Smith"],
+        ["Maria", "Cruz"],
+    ];
+    console.table(people);
+
+    function Person(firstName, lastName) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+    }
+
+    const me = new Person("Tyrone", "Jones");
+    console.table(me);
+
+    const tyrone = new Person("Tyrone", "Jones");
+    const janet = new Person("Janet", "Smith");
+    const maria = new Person("Maria", "Cruz");
+
+    console.table([tyrone, janet, maria], ["firstName"]);
 }
 
 export const run = runImpl;

@@ -288,6 +288,33 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
     default: 1
     {colored}
     {{ key: 'value', nested: {{ a: 1, b: 2 }} }}
+    ======================
+     (index)  │ 0        │
+    ----------------------
+     0        │ apples   │
+     1        │ oranges  │
+     2        │ bananas  │
+    ======================
+    ==============================
+     (index)  │ 0       │ 1      │
+    ------------------------------
+     0        │ Tyrone  │ Jones  │
+     1        │ Janet   │ Smith  │
+     2        │ Maria   │ Cruz   │
+    ==============================
+    =======================
+     (index)    │ 0       │
+    -----------------------
+     firstName  │ Tyrone  │
+     lastName   │ Jones   │
+    =======================
+    ========================
+     (index)  │ firstName  │
+    ------------------------
+     0        │ Tyrone     │
+     1        │ Janet      │
+     2        │ Maria      │
+    ========================
     "#,
             colored = "{ key: \u{1b}[32m'value'\u{1b}[39m, nested: { a: \u{1b}[33m1\u{1b}[39m, b: \u{1b}[33m2\u{1b}[39m } }"
         )
