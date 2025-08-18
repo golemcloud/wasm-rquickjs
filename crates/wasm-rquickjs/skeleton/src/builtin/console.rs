@@ -80,6 +80,15 @@ pub mod native_module {
     fn error_impl(line: String) {
         wasi_logging::log(wasi_logging::Level::Error, "", &line);
     }
+
+    #[rquickjs::function]
+    pub fn timestamp() -> u64 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
 }
 
 // JS functions for the console implementation

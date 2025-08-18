@@ -4,7 +4,7 @@ use self::common::test_server::start_test_server;
 use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use rand::Rng;
 use std::i64;
 use test_r::{test, test_dep};
@@ -265,24 +265,71 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
 
     println!("{output}");
 
+    // Removing the last 3 lines which are printed by timers and can have slight differences in the millisecond
+    // values
+
+    let lines = output.lines().collect::<Vec<_>>();
+    let (output, timer_output) = lines.split_at(lines.len() - 3);
+    let output = output.join("\n");
+    let timer_output = timer_output.join("\n");
+
     assert_eq!(
         output,
-        indoc!(
+        formatdoc!(
             r#"
-    logged message 1 2 [object Object]
+    default: 1
+    logged message 1 2 {{ key: 'value' }}
     TRACE: This is a trace message
     DEBUG: This is an debug message
     INFO: This is an info message
     WARN: This is a warning message
     ERROR: This is an error message
+    default: 2
     WARN: Assertion failed: This is an assertion failure
     Group 1
     Inside Group 1
     Group 2
     Inside Group 2
-    "#
+    default: 3
+    test: 1
+    test: 2
+    default: 1
+    {colored}
+    {{ key: 'value', nested: {{ a: 1, b: 2 }} }}
+    ======================
+     (index)  │ 0        │
+    ----------------------
+     0        │ apples   │
+     1        │ oranges  │
+     2        │ bananas  │
+    ======================
+    ==============================
+     (index)  │ 0       │ 1      │
+    ------------------------------
+     0        │ Tyrone  │ Jones  │
+     1        │ Janet   │ Smith  │
+     2        │ Maria   │ Cruz   │
+    ==============================
+    =======================
+     (index)    │ 0       │
+    -----------------------
+     firstName  │ Tyrone  │
+     lastName   │ Jones   │
+    =======================
+    ========================
+     (index)  │ firstName  │
+    ------------------------
+     0        │ Tyrone     │
+     1        │ Janet      │
+     2        │ Maria      │
+    ========================"#,
+            colored = "{ key: \u{1b}[32m'value'\u{1b}[39m, nested: { a: \u{1b}[33m1\u{1b}[39m, b: \u{1b}[33m2\u{1b}[39m } }"
         )
     );
+
+    assert!(timer_output.contains("after 1 second"));
+    assert!(timer_output.contains("after 2 seconds"));
+    assert!(timer_output.contains("- timer ended"));
 
     Ok(())
 }
@@ -384,7 +431,7 @@ async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
         indoc!(
             r#"
         fetch test 2
-        Response body as ArrayBuffer: [object ArrayBuffer]
+        Response body as ArrayBuffer: {}
     "#
         )
     );
@@ -454,11 +501,11 @@ async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
         invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains("200 {\"id\":0,\""));
-    assert!(output.contains("200 {\"id\":1,\""));
-    assert!(output.contains("200 {\"id\":2,\""));
-    assert!(output.contains("200 {\"id\":3,\""));
-    assert!(output.contains("200 {\"id\":4,\""));
+    assert!(output.contains("200 '{\"id\":0,\""));
+    assert!(output.contains("200 '{\"id\":1,\""));
+    assert!(output.contains("200 '{\"id\":2,\""));
+    assert!(output.contains("200 '{\"id\":3,\""));
+    assert!(output.contains("200 '{\"id\":4,\""));
 
     Ok(())
 }
