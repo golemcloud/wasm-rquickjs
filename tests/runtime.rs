@@ -4,7 +4,7 @@ use self::common::test_server::start_test_server;
 use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use rand::Rng;
 use std::i64;
 use test_r::{test, test_dep};
@@ -267,10 +267,10 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
 
     assert_eq!(
         output,
-        indoc!(
+        formatdoc!(
             r#"
     default: 1
-    logged message 1 2 { key: 'value' }
+    logged message 1 2 {{ key: 'value' }}
     TRACE: This is a trace message
     DEBUG: This is an debug message
     INFO: This is an info message
@@ -286,7 +286,10 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
     test: 1
     test: 2
     default: 1
-    "#
+    {colored}
+    {{ key: 'value', nested: {{ a: 1, b: 2 }} }}
+    "#,
+            colored = "{ key: \u{1b}[32m'value'\u{1b}[39m, nested: { a: \u{1b}[33m1\u{1b}[39m, b: \u{1b}[33m2\u{1b}[39m } }"
         )
     );
 

@@ -36,8 +36,14 @@ export function debug(...v) {
     consoleNative.debug(util.format(...v))
 }
 
-// TODO: dir()
-// TODO: dirxml()
+export function dir(object, options) {
+    consoleNative.println(util.inspect(object, options));
+}
+
+export function dirxml(object) {
+    // just fallback to dir() here
+    dir(object);
+}
 
 export function error(...v) {
     consoleNative.error(util.format(...v))

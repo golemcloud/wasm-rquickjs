@@ -1,6 +1,6 @@
 function runImpl() {
     console.count();
-    console.log("logged", "message", 1, 2, { key: "value" });
+    console.log("logged", "message", 1, 2, {key: "value"});
     console.trace("This is a trace message");
     console.debug("This is an debug message");
     console.info("This is an info message");
@@ -20,6 +20,8 @@ function runImpl() {
     console.countReset();
     console.count("test");
     console.count();
+    console.dir({key: "value", nested: {a: 1, b: 2}}, {depth: 2, colors: true});
+    console.dir({key: "value", nested: {a: 1, b: 2}}, {colors: false});
 }
 
 export const run = runImpl;
