@@ -19,9 +19,9 @@ declare module 'errors' {
     }
     export class Res3 {
       constructor();
-      async m1(): Promise<string>;
-      async m2(a: number, b: number): Promise<string>;
-      async m3(): Promise<number>;
+      m1(): Promise<string>;
+      m2(a: number, b: number): Promise<string>;
+      m3(): Promise<number>;
     }
   }
 }
