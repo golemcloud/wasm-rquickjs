@@ -269,17 +269,23 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
         output,
         indoc!(
             r#"
+    default: 1
     logged message 1 2 { key: 'value' }
     TRACE: This is a trace message
     DEBUG: This is an debug message
     INFO: This is an info message
     WARN: This is a warning message
     ERROR: This is an error message
+    default: 2
     WARN: Assertion failed: This is an assertion failure
     Group 1
     Inside Group 1
     Group 2
     Inside Group 2
+    default: 3
+    test: 1
+    test: 2
+    default: 1
     "#
         )
     );

@@ -11,8 +11,27 @@ export function clear() {
     // not supported
 }
 
-// TODO: count()
-// TODO: countReset()
+const DEFAULT_LABEL = 'default';
+let counts     = {};
+
+export function count(label) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    if (!counts[label]) {
+        counts[label] = 0;
+    }
+    counts[label]++;
+    log(`${label}: ${counts[label]}`);
+}
+
+export function countReset(label) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    if (counts[label]) {
+        counts[label] = 0;
+    } else {
+        console.warn(`Count for '${label}' does not exist`);
+    }
+}
+
 export function debug(...v) {
     consoleNative.debug(util.format(...v))
 }
