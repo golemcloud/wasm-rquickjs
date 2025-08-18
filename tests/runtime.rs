@@ -384,7 +384,7 @@ async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
         indoc!(
             r#"
         fetch test 2
-        Response body as ArrayBuffer: [object ArrayBuffer]
+        Response body as ArrayBuffer: {}
     "#
         )
     );
@@ -454,11 +454,11 @@ async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
         invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[Val::U16(port)]).await;
     let _ = r?;
 
-    assert!(output.contains("200 {\"id\":0,\""));
-    assert!(output.contains("200 {\"id\":1,\""));
-    assert!(output.contains("200 {\"id\":2,\""));
-    assert!(output.contains("200 {\"id\":3,\""));
-    assert!(output.contains("200 {\"id\":4,\""));
+    assert!(output.contains("200 '{\"id\":0,\""));
+    assert!(output.contains("200 '{\"id\":1,\""));
+    assert!(output.contains("200 '{\"id\":2,\""));
+    assert!(output.contains("200 '{\"id\":3,\""));
+    assert!(output.contains("200 '{\"id\":4,\""));
 
     Ok(())
 }
