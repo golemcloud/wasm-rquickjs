@@ -76,9 +76,38 @@ export function table(data, keys) {
     console.log(printTable(data, keys));
 }
 
-// TODO: time()
-// TODO: timeEnd()
-// TODO: timeLog()
+let timers = {}
+
+export function time(label) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    const start = consoleNative.timestamp();
+    timers[label] = start;
+}
+
+export function timeLog(label, ...v) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    const start = timers[label];
+    if (start === undefined) {
+        warn(`No such timer label: ${label}`);
+        return;
+    }
+    const now = consoleNative.timestamp();
+    const diff = now - start;
+    log(`${label}: ${diff}ms`, ...v);
+}
+
+export function timeEnd(label) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    const start = timers[label];
+    if (start === undefined) {
+        warn(`No such timer label: ${label}`);
+        return;
+    }
+    const now = consoleNative.timestamp();
+    const diff = now - start;
+    log(`${label}: ${diff}ms - timer ended`);
+    delete timers[label];
+}
 
 export function trace(...v) {
     consoleNative.trace(util.format(...v))

@@ -265,6 +265,14 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
 
     println!("{output}");
 
+    // Removing the last 3 lines which are printed by timers and can have slight differences in the millisecond
+    // values
+
+    let lines = output.lines().collect::<Vec<_>>();
+    let (output, timer_output) = lines.split_at(lines.len() - 3);
+    let output = output.join("\n");
+    let timer_output = timer_output.join("\n");
+
     assert_eq!(
         output,
         formatdoc!(
@@ -314,11 +322,14 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
      0        │ Tyrone     │
      1        │ Janet      │
      2        │ Maria      │
-    ========================
-    "#,
+    ========================"#,
             colored = "{ key: \u{1b}[32m'value'\u{1b}[39m, nested: { a: \u{1b}[33m1\u{1b}[39m, b: \u{1b}[33m2\u{1b}[39m } }"
         )
     );
+
+    assert!(timer_output.contains("after 1 second"));
+    assert!(timer_output.contains("after 2 seconds"));
+    assert!(timer_output.contains("- timer ended"));
 
     Ok(())
 }

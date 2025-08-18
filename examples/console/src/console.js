@@ -43,6 +43,14 @@ function runImpl() {
     const maria = new Person("Maria", "Cruz");
 
     console.table([tyrone, janet, maria], ["firstName"]);
+    console.time("time-test");
+    setTimeout(() => {
+        console.timeLog("time-test", "after 1 second");
+        setTimeout(() => {
+            console.timeLog("time-test", "after 2 seconds");
+            console.timeEnd("time-test");
+        }, 1000);
+    }, 1000);
 }
 
 export const run = runImpl;

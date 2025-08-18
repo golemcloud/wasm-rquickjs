@@ -245,13 +245,21 @@ core WASI interfaces.
 
 - `assert`
 - `clear`
+- `count`
+- `countReset`
 - `debug`
+- `dir`
+- `dirXml`
 - `error`
 - `group`
 - `groupCollapsed`
 - `groupEnd`
 - `info`
 - `log`
+- `table`
+- `time`
+- `timeEnd`
+- `timeLog`
 - `trace`
 - `warn`
 
