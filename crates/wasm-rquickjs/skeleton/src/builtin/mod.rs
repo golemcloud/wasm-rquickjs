@@ -15,6 +15,7 @@ mod http {
 
 mod streams;
 mod timeout;
+mod util;
 
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
@@ -32,6 +33,8 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/streams")
         .with_module("__wasm_rquickjs_builtin/encoding_native")
         .with_module("__wasm_rquickjs_builtin/encoding")
+        .with_module("__wasm_rquickjs_builtin/util_native")
+        .with_module("node:util")
 }
 
 pub fn module_loader() -> (
@@ -59,6 +62,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/encoding_native",
                 encoding::js_native_module,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/util_native",
+                util::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
@@ -67,7 +74,8 @@ pub fn module_loader() -> (
             .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
             .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
             .with_module("__wasm_rquickjs_builtin/streams", streams::STREAMS_JS)
-            .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS),
+            .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
+            .with_module("node:util", util::UTIL_JS),
     )
 }
 
@@ -78,5 +86,6 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", http::WIRE_JS).unwrap();
     writeln!(result, "{}", streams::WIRE_JS).unwrap();
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
+    writeln!(result, "{}", util::WIRE_JS).unwrap();
     result
 }

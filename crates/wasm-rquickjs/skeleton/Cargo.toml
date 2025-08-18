@@ -16,7 +16,7 @@ crate-type = ["cdylib"]
 [features]
 default = ["http", "logging"]
 http = ["dep:reqwest"]
-logging = ["dep:log", "dep:wasi-logger"]
+logging = ["dep:wasi-logging"]
 
 [dependencies]
 # Core dependencies
@@ -26,7 +26,7 @@ encoding_rs = "0.8.35"
 futures = { version = "0.3.31", features = [] }
 futures-concurrency = "7.6.3"
 pin-project = "1.1.10"
-wasi = "0.12.1+wasi-0.2.0"w
+wasi = "0.12.1+wasi-0.2.0"
 wasi-async-runtime = "0.1.2"
 wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
 
@@ -34,8 +34,7 @@ wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
 reqwest = { git = "https://github.com/golemcloud/reqwest", branch = "update-july-2025", features = ["async"], optional = true }
 
 # Logging
-log = { version = "0.4.22", default-features = false, optional = true }
-wasi-logger = { version = "0.1.2", default-features = false, optional = true }
+wasi-logging = { version = "0.0.1", optional = true }
 
 [package.metadata.component.bindings]
 ownership = "owning"

@@ -269,7 +269,7 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
         output,
         indoc!(
             r#"
-    logged message 1 2 [object Object]
+    logged message 1 2 { key: 'value' }
     TRACE: This is a trace message
     DEBUG: This is an debug message
     INFO: This is an info message

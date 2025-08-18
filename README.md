@@ -299,6 +299,31 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `TextDecoderStream`
 - `TextEncoderStream`
 
+### `node:util`
+- `format`
+- `deprecate`
+- `debugLog`
+- `inspect`
+- `isArray`
+- `isBoolean`
+- `isNull`
+- `isNullOrUndefined`
+- `isNumber`
+- `isString`
+- `isSymbol`
+- `isUndefined`
+- `isRegExp`
+- `isObject`
+- `isDate`
+- `isError`
+- `isFunction`
+- `isPrimitive`
+- `isBuffer`
+- `log`
+- `_extend`
+- `promisify`
+- `callbackify`
+
 ### Coming from QuickJS
 
 - Global:

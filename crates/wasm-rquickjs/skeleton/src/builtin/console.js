@@ -1,4 +1,5 @@
 import * as consoleNative from '__wasm_rquickjs_builtin/console_native'
+import * as util from 'node:util'
 
 export function assert(condition, ...v) {
     if (!condition) {
@@ -13,14 +14,14 @@ export function clear() {
 // TODO: count()
 // TODO: countReset()
 export function debug(...v) {
-    consoleNative.debug(format(...v))
+    consoleNative.debug(util.format(...v))
 }
 
 // TODO: dir()
 // TODO: dirxml()
 
 export function error(...v) {
-    consoleNative.error(format(...v))
+    consoleNative.error(util.format(...v))
 }
 
 export function group(label) {
@@ -39,11 +40,11 @@ export function groupEnd() {
 }
 
 export function info(...v) {
-    consoleNative.info(format(...v))
+    consoleNative.info(util.format(...v))
 }
 
 export function log(...v) {
-    consoleNative.println(format(...v))
+    consoleNative.println(util.format(...v))
 }
 
 // TODO: table()
@@ -52,14 +53,9 @@ export function log(...v) {
 // TODO: timeLog()
 
 export function trace(...v) {
-    consoleNative.trace(format(...v))
+    consoleNative.trace(util.format(...v))
 }
 
 export function warn(...v) {
-    consoleNative.warn(format(...v))
-}
-
-function format(...v) {
-    // TODO: support string substitutions: https://developer.mozilla.org/en-US/docs/Web/API/console#using_string_substitutions
-    return v.join(" ")
+    consoleNative.warn(util.format(...v))
 }
