@@ -103,6 +103,12 @@ fn compiled_bigint_roundtrip() -> CompiledTest {
     CompiledTest::new(path).expect("Failed to compile bigint-roundtrip")
 }
 
+#[test_dep(tagged_as = "pollable")]
+fn compiled_pollable() -> CompiledTest {
+    let path = Utf8Path::new("examples/pollable");
+    CompiledTest::new(path).expect("Failed to compile pollable")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -897,5 +903,17 @@ async fn roundtrip_s64(
         .await;
         assert_eq!(result?, Some(input));
     }
+    Ok(())
+}
+
+#[test]
+async fn await_pollable(#[tagged_as("pollable")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _) = invoke_and_capture_output(compiled.wasm_path(), None, "test", &[]).await;
+    let result = r?;
+
+    let Some(Val::U64(n)) = result else {
+        return Err(anyhow!("Expected a u64 result"));
+    };
+    assert!(n > 2000000000);
     Ok(())
 }

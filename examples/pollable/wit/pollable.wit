@@ -1,0 +1,8 @@
+package quickjs:pollable;
+
+world pollable {
+  import wasi:clocks/monotonic-clock@0.2.3;
+  import wasi:io/poll@0.2.3;
+
+  export test: func() -> u64;
+}

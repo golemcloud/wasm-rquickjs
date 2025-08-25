@@ -332,6 +332,27 @@ fn generate_import_module(
             }
         }
 
+        let mut special_methods = Vec::new();
+        if resource_name == "pollable"
+            && &import.name == "poll"
+            && import
+                .package_name
+                .as_ref()
+                .map(|p| format!("{}:{}", p.namespace, p.name))
+                == Some("wasi:io".to_string())
+        {
+            special_methods.push(quote! {
+                pub async fn promise(&mut self) -> () {
+                    let js_state = crate::internal::get_js_state();
+                    let reactor = js_state.reactor.borrow().clone().unwrap();
+
+                    let pollable = self.inner.take().expect("Resource has already been disposed");
+                    let pollable: wasi::io::poll::Pollable = unsafe { wasi::io::poll::Pollable::from_handle(pollable.take_handle()) };
+                    reactor.wait_for(pollable).await;
+                }
+            });
+        }
+
         let rquickjs_class =
             generate_rquickjs_class_module(resource_name, &resource_name_ident, &resource_name_lit);
 
@@ -354,6 +375,8 @@ fn generate_import_module(
                 pub fn __dispose(&mut self) {
                     let _ = self.inner.take();
                 }
+
+                #(#special_methods)*
             }
 
             impl<'js> rquickjs::IntoJs<'js> for #bindgen_path {
