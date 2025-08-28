@@ -9,8 +9,6 @@ world all-golem-imports {
   import golem:rdbms/postgres@0.0.1;
   import golem:rdbms/types@0.0.1;
 
-  import golem:llm/llm@1.0.0;
-
   import wasi:blobstore/blobstore;
   import wasi:blobstore/container;
   import wasi:cli/environment@0.2.3;
