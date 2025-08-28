@@ -60,13 +60,15 @@ fn compilation_test(
     )?;
 
     println!("Compiling wrapper crate in {wrapper_crate_root}");
-    Command::new("cargo-component")
+    let status = Command::new("cargo-component")
         .arg("build")
         .arg("--target-dir")
         .arg(shared_target)
         .args(feature_combination.cargo_args())
         .current_dir(&wrapper_crate_root)
         .status()?;
+
+    assert!(status.success());
 
     Ok(())
 }
