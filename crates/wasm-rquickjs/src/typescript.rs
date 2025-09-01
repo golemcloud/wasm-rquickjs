@@ -282,30 +282,30 @@ fn declare_functions_and_resources(
                 fun.result(&ts_type_reference(context, result_type, interface_stack)?);
             }
         }
-        //
-        // if let Some(interface_id) = interface_stack.iter().next() {
-        //     let interface = context
-        //         .resolve
-        //         .interfaces
-        //         .get(*interface_id)
-        //         .ok_or_else(|| anyhow!("Unknown interface id"))?;
-        //
-        //     if let Some(package_id) = &interface.package {
-        //         let package = context
-        //             .resolve
-        //             .packages
-        //             .get(*package_id)
-        //             .ok_or_else(|| anyhow!("Unknown package id"))?;
-        //
-        //         if resource_name == "pollable"
-        //             && &interface.name.as_deref() == &Some("poll")
-        //             && &package.name.namespace == "wasi"
-        //             && &package.name.name == "io"
-        //         {
-        //             let _fun = result.begin_async_method("promise");
-        //         }
-        //     }
-        // }
+
+        if let Some(interface_id) = interface_stack.iter().next() {
+            let interface = context
+                .resolve
+                .interfaces
+                .get(*interface_id)
+                .ok_or_else(|| anyhow!("Unknown interface id"))?;
+
+            if let Some(package_id) = &interface.package {
+                let package = context
+                    .resolve
+                    .packages
+                    .get(*package_id)
+                    .ok_or_else(|| anyhow!("Unknown package id"))?;
+
+                if resource_name == "pollable"
+                    && &interface.name.as_deref() == &Some("poll")
+                    && &package.name.namespace == "wasi"
+                    && &package.name.name == "io"
+                {
+                    let _fun = result.begin_async_method("promise");
+                }
+            }
+        }
 
         result.end_export_class();
     }

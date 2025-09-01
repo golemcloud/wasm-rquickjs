@@ -33,5 +33,6 @@ declare module 'wasi:io/poll@0.2.3' {
      * containing only this pollable.
      */
     block(): void;
+    promise(): Promise<void>;
   }
 }
