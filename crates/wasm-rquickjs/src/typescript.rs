@@ -298,7 +298,7 @@ fn declare_functions_and_resources(
                     .ok_or_else(|| anyhow!("Unknown package id"))?;
 
                 if resource_name == "pollable"
-                    && &interface.name.as_deref() == &Some("poll")
+                    && interface.name.as_deref() == Some("poll")
                     && &package.name.namespace == "wasi"
                     && &package.name.name == "io"
                 {
