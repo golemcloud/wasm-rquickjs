@@ -439,7 +439,8 @@ fn get_wrapped_type_default(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<Wr
 fn must_use_as_ref(mode: &TypeMode) -> bool {
     // The wrappers for borrow handles cannot be dropped, so we cannot use into_iter etc. to convert them
     let has_borrow_handle = mode.type_info.map(|i| i.has_borrow_handle).unwrap_or(false);
-    has_borrow_handle || mode.style != TypeOwnershipStyle::Owned
+    let is_copy = mode.type_info.map(|i| i.is_copy()).unwrap_or(false);
+    has_borrow_handle || (mode.style != TypeOwnershipStyle::Owned && !is_copy)
 }
 
 fn get_wrapped_type_option(
@@ -448,6 +449,7 @@ fn get_wrapped_type_option(
 ) -> anyhow::Result<WrappedType> {
     let inner_mode = filter_mode_preserve_top(ctx.context, elem_type, ctx.mode);
     let use_as_ref = must_use_as_ref(&inner_mode);
+
     let inner = get_wrapped_type_internal(ctx.context, elem_type, use_as_ref, inner_mode)?;
 
     let inner_wrapped_type_ref = inner.wrapped_type_ref;
@@ -461,7 +463,7 @@ fn get_wrapped_type_option(
         wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
         unwrap_for_imported: if use_as_ref {
             Box::new(move |ts| {
-                quote! { #ts.as_ref().map( |v| #converted_v) }
+                quote! { #ts.as_ref().map(|v| #converted_v).as_deref() }
             })
         } else {
             Box::new(move |ts| {
@@ -711,7 +713,7 @@ fn get_wrapped_type_adt(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<Wrappe
 fn get_wrapped_type_string(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {
     Ok(WrappedType::no_wrapping(
         ctx.original_type_ref,
-        if ctx.mode.lifetime.is_some() {
+        if ctx.mode.lifetime.is_some() && !ctx.in_as_ref {
             Box::new(|v| quote! { #v.as_str() })
         } else if ctx.in_as_ref {
             Box::new(|ts| quote! { #ts.clone() })
@@ -863,6 +865,9 @@ fn record_visited_inner_types(context: &GeneratorContext<'_>, typ: &TypeDef) -> 
                     let _ = to_type_ref(context, ty)?;
                 }
             }
+        }
+        TypeDefKind::Type(Type::Id(type_id)) => {
+            let _ = type_id_to_type_ref(context, *type_id)?;
         }
         _ => {}
     }
