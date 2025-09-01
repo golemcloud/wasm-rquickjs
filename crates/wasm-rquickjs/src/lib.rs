@@ -113,21 +113,31 @@ pub fn generate_wrapper_crate(
 }
 
 /// Generates TypeScript module definitions for a given (or default) world of a WIT package.
-pub fn generate_dts(wit: &Utf8Path, output: &Utf8Path, world: Option<&str>) -> anyhow::Result<()> {
+///
+/// Returns the list of generated files.
+pub fn generate_dts(
+    wit: &Utf8Path,
+    output: &Utf8Path,
+    world: Option<&str>,
+) -> anyhow::Result<Vec<Utf8PathBuf>> {
     // Making sure the target directories exists
     std::fs::create_dir_all(output).context("Failed to create output directory")?;
 
     // Resolving the WIT package
     let context = GeneratorContext::new(output, wit, world)?;
 
-    typescript::generate_export_module(&context)
-        .context("Failed to generate the TypeScript module definition for the exports")?;
+    let mut result = Vec::new();
+    result.extend(
+        typescript::generate_export_module(&context)
+            .context("Failed to generate the TypeScript module definition for the exports")?,
+    );
 
     // Generating the native modules implementing the component imports
-    typescript::generate_import_modules(&context)
-        .context("Failed to generate the TypeScript module definitions for the imported modules")?;
+    result.extend(typescript::generate_import_modules(&context).context(
+        "Failed to generate the TypeScript module definitions for the imported modules",
+    )?);
 
-    Ok(())
+    Ok(result)
 }
 
 struct GeneratorContext<'a> {
