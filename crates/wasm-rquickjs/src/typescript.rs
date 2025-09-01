@@ -2,7 +2,7 @@ use crate::GeneratorContext;
 use crate::javascript::escape_js_ident;
 use crate::types::get_function_name;
 use anyhow::anyhow;
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use wit_parser::{
@@ -10,7 +10,7 @@ use wit_parser::{
     WorldItem, WorldKey,
 };
 
-pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> {
+pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<Utf8PathBuf>> {
     let mut result = DtsWriter::new();
 
     let world = &context.resolve.worlds[context.world];
@@ -108,10 +108,13 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<()> 
     )?;
 
     result.end_declare_module();
-    result.finish(&context.output.join("exports.d.ts"))
+    let target = context.output.join("exports.d.ts");
+    result.finish(&target)?;
+    Ok(vec![target])
 }
 
-pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<()> {
+pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<Vec<Utf8PathBuf>> {
+    let mut results = Vec::new();
     let (_global, interfaces) = crate::imports::collect_imported_interfaces(context)?;
 
     for interface in &interfaces {
@@ -159,10 +162,12 @@ pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<()>
         }
         result.end_declare_module();
 
-        result.finish(&context.output.join(file_name))?;
+        let target = context.output.join(file_name);
+        result.finish(&target)?;
+        results.push(target);
     }
 
-    Ok(())
+    Ok(results)
 }
 
 fn declare_functions_and_resources(
@@ -275,6 +280,30 @@ fn declare_functions_and_resources(
                 && let Some(result_type) = &function.result
             {
                 fun.result(&ts_type_reference(context, result_type, interface_stack)?);
+            }
+        }
+
+        if let Some(interface_id) = interface_stack.iter().next() {
+            let interface = context
+                .resolve
+                .interfaces
+                .get(*interface_id)
+                .ok_or_else(|| anyhow!("Unknown interface id"))?;
+
+            if let Some(package_id) = &interface.package {
+                let package = context
+                    .resolve
+                    .packages
+                    .get(*package_id)
+                    .ok_or_else(|| anyhow!("Unknown package id"))?;
+
+                if resource_name == "pollable"
+                    && interface.name.as_deref() == Some("poll")
+                    && &package.name.namespace == "wasi"
+                    && &package.name.name == "io"
+                {
+                    let _fun = result.begin_async_method("promise");
+                }
             }
         }
 
