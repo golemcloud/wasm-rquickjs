@@ -881,7 +881,6 @@ impl RustType {
                 }
             }
             _ => {
-                println!("!: {self}->{other} == {self:?} -> {other:?}");
                 TokenStreamWrapper::identity() // Leaving the Rust compiler to fail with a proper error
             }
         }

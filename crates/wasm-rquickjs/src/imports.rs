@@ -164,7 +164,6 @@ fn generate_import_module(
         match &function.kind {
             FunctionKind::Freestanding => {
                 let rust_fn = RustWitFunction::new(context, name, function);
-                println!("{rust_fn}");
 
                 let rust_function_name = &rust_fn.function_name;
                 let rust_function_ident = rust_fn.function_name_ident();
@@ -204,7 +203,6 @@ fn generate_import_module(
 
                 let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
 
-                println!("Generating function {rust_function_name}");
                 let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
                 let func_ret = match &function.result {
                     Some(typ) => {
@@ -275,7 +273,6 @@ fn generate_import_module(
             .find(|(_, f)| matches!(f.kind, FunctionKind::Constructor(_)));
         let constructor = if let Some((_, constructor_function)) = constructor_function {
             let rust_fn = RustWitFunction::new(context, "new", constructor_function);
-            println!("{rust_fn}");
 
             let parameters = constructor_function
                 .params
@@ -314,9 +311,7 @@ fn generate_import_module(
             let name = get_function_name(name, function)?;
 
             let rust_fn = RustWitFunction::new(context, &name, function);
-            println!("{rust_fn}");
 
-            let rust_method_name = &rust_fn.function_name;
             let rust_method_name_ident = rust_fn.function_name_ident();
 
             let parameters = function
@@ -339,7 +334,6 @@ fn generate_import_module(
 
             let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
 
-            println!("Generating function {resource_name}::{rust_method_name}");
             let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
 
             let func_ret = match &function.result {
