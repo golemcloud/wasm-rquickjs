@@ -16,6 +16,8 @@ declare module 'types-in-exports' {
     export function f13(a: Permissions): Promise<Permissions>;
     export function f14(a: bigint): Promise<bigint>;
     export function f15(bytes: Uint8Array): Promise<Uint8Array>;
+    export function f16(in_: Rec2[] | undefined): Promise<string[] | undefined>;
+    export function f17(in_: string[] | undefined): Promise<Rec2[] | undefined>;
     export type Color = quickjsTypesInExportsOtherTypes.Color;
     export type ListOfStrings = quickjsTypesInExportsOtherTypes.ListOfStrings;
     export type Rec2 = quickjsTypesInExportsOtherTypes.Rec2;
