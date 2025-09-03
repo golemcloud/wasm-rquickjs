@@ -3,7 +3,7 @@
  * the durability and transactional guarantees the executor provides.
  */
 declare module 'golem:api/host@1.1.7' {
-  import * as golemRpc021Types from 'golem:rpc/types@0.2.1';
+  import * as golemRpc022Types from 'golem:rpc/types@0.2.2';
   import * as wasiClocks023MonotonicClock from 'wasi:clocks/monotonic-clock@0.2.3';
   /**
    * Create a new promise
@@ -142,9 +142,10 @@ declare module 'golem:api/host@1.1.7' {
     getNext(): WorkerMetadata[] | undefined;
   }
   export type Duration = wasiClocks023MonotonicClock.Duration;
-  export type ComponentId = golemRpc021Types.ComponentId;
-  export type Uuid = golemRpc021Types.Uuid;
-  export type WorkerId = golemRpc021Types.WorkerId;
+  export type ComponentId = golemRpc022Types.ComponentId;
+  export type Uuid = golemRpc022Types.Uuid;
+  export type ValueAndType = golemRpc022Types.ValueAndType;
+  export type WorkerId = golemRpc022Types.WorkerId;
   /**
    * An index into the persistent log storing all performed operations of a worker
    */
@@ -166,6 +167,12 @@ declare module 'golem:api/host@1.1.7' {
    */
   export type AccountId = {
     value: string;
+  };
+  /**
+   * Represents a Golem project
+   */
+  export type ProjectId = {
+    uuid: Uuid;
   };
   /**
    * Configures how the executor retries failures
@@ -217,6 +224,11 @@ declare module 'golem:api/host@1.1.7' {
     comparator: StringFilterComparator;
     value: string;
   };
+  export type WorkerWasiConfigVarsFilter = {
+    name: string;
+    comparator: StringFilterComparator;
+    value: string;
+  };
   export type WorkerPropertyFilter = {
     tag: 'name'
     val: WorkerNameFilter
@@ -236,6 +248,10 @@ declare module 'golem:api/host@1.1.7' {
   {
     tag: 'env'
     val: WorkerEnvFilter
+  } |
+  {
+    tag: 'wasi-config-vars'
+    val: WorkerWasiConfigVarsFilter
   };
   export type WorkerAllFilter = {
     filters: WorkerPropertyFilter[];
@@ -247,6 +263,7 @@ declare module 'golem:api/host@1.1.7' {
     workerId: WorkerId;
     args: string[];
     env: [string, string][];
+    wasiConfigVars: [string, string][];
     status: WorkerStatus;
     componentVersion: bigint;
     retryCount: bigint;

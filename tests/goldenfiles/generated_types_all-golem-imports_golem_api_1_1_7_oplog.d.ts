@@ -4,7 +4,7 @@
 declare module 'golem:api/oplog@1.1.7' {
   import * as golemApi117Context from 'golem:api/context@1.1.7';
   import * as golemApi117Host from 'golem:api/host@1.1.7';
-  import * as golemRpc021Types from 'golem:rpc/types@0.2.1';
+  import * as golemRpc022Types from 'golem:rpc/types@0.2.2';
   import * as wasiClocks023WallClock from 'wasi:clocks/wall-clock@0.2.3';
   export class GetOplog {
     constructor(workerId: WorkerId, start: OplogIndex);
@@ -15,11 +15,12 @@ declare module 'golem:api/oplog@1.1.7' {
     getNext(): [OplogIndex, OplogEntry][] | undefined;
   }
   export type Datetime = wasiClocks023WallClock.Datetime;
-  export type WitValue = golemRpc021Types.WitValue;
+  export type WitValue = golemRpc022Types.WitValue;
   export type AccountId = golemApi117Host.AccountId;
   export type ComponentVersion = golemApi117Host.ComponentVersion;
   export type OplogIndex = golemApi117Host.OplogIndex;
   export type PersistenceLevel = golemApi117Host.PersistenceLevel;
+  export type ProjectId = golemApi117Host.ProjectId;
   export type RetryPolicy = golemApi117Host.RetryPolicy;
   export type Uuid = golemApi117Host.Uuid;
   export type WorkerId = golemApi117Host.WorkerId;
@@ -55,7 +56,8 @@ declare module 'golem:api/oplog@1.1.7' {
     componentVersion: ComponentVersion;
     args: string[];
     env: [string, string][];
-    accountId: AccountId;
+    createdBy: AccountId;
+    projectId: ProjectId;
     parent: WorkerId | undefined;
     componentSize: bigint;
     initialTotalLinearMemorySize: bigint;
@@ -174,12 +176,6 @@ declare module 'golem:api/oplog@1.1.7' {
   export type DropResourceParameters = {
     timestamp: Datetime;
     resourceId: WorkerResourceId;
-  };
-  export type DescribeResourceParameters = {
-    timestamp: Datetime;
-    resourceId: WorkerResourceId;
-    resourceName: string;
-    resourceParams: WitValue[];
   };
   export type LogLevel = "stdout" | "stderr" | "trace" | "debug" | "info" | "warn" | "error" | "critical";
   export type LogParameters = {
@@ -313,10 +309,6 @@ declare module 'golem:api/oplog@1.1.7' {
   {
     tag: 'drop-resource'
     val: DropResourceParameters
-  } |
-  {
-    tag: 'describe-resource'
-    val: DescribeResourceParameters
   } |
   {
     tag: 'log'
