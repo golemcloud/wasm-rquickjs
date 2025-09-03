@@ -1,7 +1,5 @@
 use crate::GeneratorContext;
-use crate::rust_bindgen::{
-    RustFunctionParameter, RustType, TypeMode, TypeOwnershipStyle, escape_rust_ident,
-};
+use crate::rust_bindgen::{RustFunctionParameter, RustType, escape_rust_ident};
 use anyhow::{Context, anyhow};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -340,12 +338,8 @@ impl WrappedType {
     }
 
     /// Creates a `WrappedType` that represents the unit return type.
-    pub fn unit(in_as_ref: bool) -> Self {
-        if in_as_ref {
-            Self::no_wrapping(quote! { () })
-        } else {
-            Self::no_wrapping(quote! { () })
-        }
+    pub fn unit() -> Self {
+        Self::no_wrapping(quote! { () })
     }
 }
 
@@ -356,24 +350,33 @@ impl WrappedType {
 /// when converting back from JS to Rust.
 pub fn get_wrapped_type(
     context: &GeneratorContext<'_>,
-    rust_type: &RustType,
+    import_rust_type: &RustType,
+    export_rust_type: &RustType,
     typ: &Type,
 ) -> anyhow::Result<WrappedType> {
-    get_wrapped_type_internal(context, rust_type, typ, true, false)
+    get_wrapped_type_internal(
+        context,
+        import_rust_type,
+        export_rust_type,
+        typ,
+        false,
+        false,
+    )
 }
 
 pub fn get_wrapped_type_internal(
     context: &GeneratorContext<'_>,
-    rust_type: &RustType,
+    import_rust_type: &RustType,
+    export_rust_type: &RustType,
     typ: &Type,
-    is_top_level: bool,
+    in_tuple: bool,
     in_iter: bool,
 ) -> anyhow::Result<WrappedType> {
     let original_type_ref = to_type_ref(context, typ)?;
     let ctx = GetWrappedTypeContext {
         context,
         original_type_ref,
-        is_top_level,
+        in_tuple,
         forced_ref: in_iter,
     };
 
@@ -386,7 +389,9 @@ pub fn get_wrapped_type_internal(
                 .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
             match &typ.kind {
-                TypeDefKind::Tuple(tuple) => get_wrapped_type_tuple(ctx, rust_type, tuple),
+                TypeDefKind::Tuple(tuple) => {
+                    get_wrapped_type_tuple(ctx, import_rust_type, export_rust_type, tuple)
+                }
                 TypeDefKind::List(Type::U8) => {
                     // Special case for list<u8> to be represented by UInt8Array
                     Ok(WrappedType {
@@ -398,11 +403,15 @@ pub fn get_wrapped_type_internal(
                         original_type_ref: quote! { Vec<u8> },
                     })
                 }
-                TypeDefKind::List(elem_type) => get_wrapped_type_list(ctx, rust_type, elem_type),
-                TypeDefKind::Option(elem_type) => {
-                    get_wrapped_type_option(ctx, rust_type, elem_type)
+                TypeDefKind::List(elem_type) => {
+                    get_wrapped_type_list(ctx, import_rust_type, export_rust_type, elem_type)
                 }
-                TypeDefKind::Result(result) => get_wrapped_type_result(ctx, rust_type, result),
+                TypeDefKind::Option(elem_type) => {
+                    get_wrapped_type_option(ctx, import_rust_type, export_rust_type, elem_type)
+                }
+                TypeDefKind::Result(result) => {
+                    get_wrapped_type_result(ctx, import_rust_type, export_rust_type, result)
+                }
                 TypeDefKind::Record(_) | TypeDefKind::Variant(_) => get_wrapped_type_adt(ctx),
                 TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
                     get_wrapped_type_borrow_handle(ctx, resource_type_id)
@@ -411,9 +420,10 @@ pub fn get_wrapped_type_internal(
                     // Recursively dealiasing
                     let inner = get_wrapped_type_internal(
                         context,
-                        rust_type,
+                        import_rust_type,
+                        export_rust_type,
                         inner,
-                        is_top_level,
+                        in_tuple,
                         in_iter,
                     )?;
                     Ok(WrappedType {
@@ -446,7 +456,7 @@ pub fn get_wrapped_type_internal(
 struct GetWrappedTypeContext<'a> {
     context: &'a GeneratorContext<'a>,
     original_type_ref: TokenStream,
-    is_top_level: bool,
+    in_tuple: bool,
     forced_ref: bool,
 }
 
@@ -456,33 +466,37 @@ fn get_wrapped_type_default(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<Wr
     Ok(WrappedType::no_wrapping(ctx.original_type_ref))
 }
 
-// fn must_use_as_ref(mode: &TypeMode) -> bool {
-//     The wrappers for borrow handles cannot be dropped, so we cannot use into_iter etc. to convert them
-// let has_borrow_handle = mode.type_info.map(|i| i.has_borrow_handle).unwrap_or(false);
-// has_borrow_handle || mode.style != TypeOwnershipStyle::Owned
-// }
-
-fn must_use_as_ref(mode: &TypeMode) -> bool {
-    // The wrappers for borrow handles cannot be dropped, so we cannot use into_iter etc. to convert them
-    let has_borrow_handle = mode.type_info.map(|i| i.has_borrow_handle).unwrap_or(false);
-    let is_copy = mode.type_info.map(|i| i.is_copy()).unwrap_or(false);
-    has_borrow_handle || (mode.style != TypeOwnershipStyle::Owned && !is_copy)
-}
-
 fn get_wrapped_type_option(
     ctx: GetWrappedTypeContext<'_>,
-    rust_type: &RustType,
+    import_rust_type: &RustType,
+    export_rust_type: &RustType,
     elem_type: &Type,
 ) -> anyhow::Result<WrappedType> {
-    let RustType::Option { inner } = rust_type else {
+    let RustType::Option {
+        inner: import_inner,
+    } = import_rust_type
+    else {
+        Err(anyhow!("Type mismatch in option"))?
+    };
+    let RustType::Option {
+        inner: export_inner,
+    } = export_rust_type
+    else {
         Err(anyhow!("Type mismatch in option"))?
     };
 
-    if rust_type.cannot_into_iter() {
+    if import_rust_type.cannot_into_iter() {
         // The option contains borrowed resource wrappers, which cannot be used with map because
         // their explicit drop. So we need to special case this everywhere.
 
-        let inner = get_wrapped_type_internal(ctx.context, inner, elem_type, false, true)?;
+        let inner = get_wrapped_type_internal(
+            ctx.context,
+            import_inner,
+            export_inner,
+            elem_type,
+            false,
+            true,
+        )?;
 
         let inner_wrapped_type_ref = inner.wrapped_type_ref;
         let wrapped_v = inner.wrap.run(quote! { v });
@@ -490,12 +504,21 @@ fn get_wrapped_type_option(
 
         Ok(WrappedType {
             wrap: TokenStreamWrapper::new(move |ts| quote! { #ts.map( |v| #wrapped_v) }),
-            unwrap: TokenStreamWrapper::new(move |ts| quote! { #ts.as_ref().map( |v| #unwrapped_v) }),
+            unwrap: TokenStreamWrapper::new(
+                move |ts| quote! { #ts.as_ref().map( |v| #unwrapped_v) },
+            ),
             original_type_ref: ctx.original_type_ref,
             wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
         })
     } else {
-        let inner = get_wrapped_type_internal(ctx.context, inner, elem_type, false, ctx.forced_ref)?;
+        let inner = get_wrapped_type_internal(
+            ctx.context,
+            import_inner,
+            export_inner,
+            elem_type,
+            false,
+            ctx.forced_ref,
+        )?;
 
         let inner_wrapped_type_ref = inner.wrapped_type_ref;
         let wrapped_v = inner.wrap.run(quote! { v });
@@ -512,18 +535,36 @@ fn get_wrapped_type_option(
 
 fn get_wrapped_type_tuple(
     ctx: GetWrappedTypeContext<'_>,
-    rust_type: &RustType,
+    import_rust_type: &RustType,
+    export_rust_type: &RustType,
     tuple: &wit_parser::Tuple,
 ) -> anyhow::Result<WrappedType> {
-    let RustType::Tuple { items } = rust_type else {
+    let RustType::Tuple {
+        items: import_items,
+    } = import_rust_type
+    else {
+        Err(anyhow!("Type mismatch in tuple"))?
+    };
+    let RustType::Tuple {
+        items: export_items,
+    } = export_rust_type
+    else {
         Err(anyhow!("Type mismatch in tuple"))?
     };
     let inner_wrappers = tuple
         .types
         .iter()
-        .zip(items)
-        .map(|(ty, rust_type)| {
-            get_wrapped_type_internal(ctx.context, &rust_type, ty, false, ctx.forced_ref)
+        .zip(import_items)
+        .zip(export_items)
+        .map(|((ty, import_rust_type), export_rust_type)| {
+            get_wrapped_type_internal(
+                ctx.context,
+                import_rust_type,
+                export_rust_type,
+                ty,
+                true,
+                false, // resetting this because of the explicit conversion introduced below
+            )
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -552,20 +593,33 @@ fn get_wrapped_type_tuple(
         }
     });
 
-    let unwrap = TokenStreamWrapper::new(move |ts| {
-        let unwrapped_fields = element_unwraps
-            .iter()
-            .enumerate()
-            .map(|(idx, unwrap)| {
-                let field = Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
-                unwrap.run(quote! { #ts.0.#field})
-            })
-            .collect::<Vec<_>>();
+    let unwrap = match (export_rust_type, import_rust_type) {
+        (RustType::Tuple { items: from_items }, RustType::Tuple { items: to_items })
+            if to_items.len() == from_items.len() =>
+        {
+            let mut conversions = Vec::new();
+            for (from_item, to_item) in from_items.iter().zip(to_items.iter()) {
+                let conversion = from_item.conversion_into_type(to_item);
+                conversions.push(conversion);
+            }
+            TokenStreamWrapper::new(move |ts| {
+                let mut converted_items = Vec::new();
+                for ((idx, unwrap), conversion) in
+                    element_unwraps.iter().enumerate().zip(&conversions)
+                {
+                    let field = Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
+                    let unwrap = unwrap.run(quote! { #ts.0.#field});
+                    let conversion = conversion.run(quote! { #unwrap });
+                    converted_items.push(conversion);
+                }
+                quote! {
+                     (#(#converted_items),*)
 
-        quote! {
-            (#(#unwrapped_fields),*)
+                }
+            })
         }
-    });
+        _ => Err(anyhow!("Type mismatch in tuple"))?,
+    };
 
     Ok(WrappedType {
         wrap,
@@ -577,25 +631,43 @@ fn get_wrapped_type_tuple(
 
 fn get_wrapped_type_list(
     ctx: GetWrappedTypeContext<'_>,
-    rust_type: &RustType,
+    import_rust_type: &RustType,
+    export_rust_type: &RustType,
     elem_type: &Type,
 ) -> anyhow::Result<WrappedType> {
-    let elem_rust_type = match rust_type {
+    let import_elem_rust_type = match import_rust_type {
         RustType::Vec { element } => element,
         RustType::Slice { element, .. } => element,
         _ => {
             return Err(anyhow!(
                 "Type mismatch in list, expected Vec or Slice, got {:?}",
-                rust_type
+                import_rust_type
+            ));
+        }
+    };
+    let export_elem_rust_type = match export_rust_type {
+        RustType::Vec { element } => element,
+        RustType::Slice { element, .. } => element,
+        _ => {
+            return Err(anyhow!(
+                "Type mismatch in list, expected Vec or Slice, got {:?}",
+                import_rust_type
             ));
         }
     };
 
-    if rust_type.cannot_into_iter() {
+    if import_rust_type.cannot_into_iter() {
         // The list contains borrowed resource wrappers, which cannot be used with into_iter because
         // their explicit drop. So we need to special case this everywhere.
 
-        let inner = get_wrapped_type_internal(ctx.context, elem_rust_type, elem_type, false, true)?;
+        let inner = get_wrapped_type_internal(
+            ctx.context,
+            import_elem_rust_type,
+            export_elem_rust_type,
+            elem_type,
+            false,
+            true,
+        )?;
         let inner_wrapped_type_ref = inner.wrapped_type_ref;
         let wrapped_v = inner.wrap.run(quote! { v });
         let unwrapped_v = inner.unwrap.run(quote! { v });
@@ -611,8 +683,14 @@ fn get_wrapped_type_list(
             wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
         })
     } else {
-        let inner =
-            get_wrapped_type_internal(ctx.context, elem_rust_type, elem_type, false, ctx.forced_ref)?;
+        let inner = get_wrapped_type_internal(
+            ctx.context,
+            import_elem_rust_type,
+            export_elem_rust_type,
+            elem_type,
+            false,
+            ctx.forced_ref,
+        )?;
         let inner_wrapped_type_ref = inner.wrapped_type_ref;
         let wrapped_v = inner.wrap.run(quote! { v });
         let unwrapped_v = inner.unwrap.run(quote! { v });
@@ -632,28 +710,55 @@ fn get_wrapped_type_list(
 
 fn get_wrapped_type_result(
     ctx: GetWrappedTypeContext<'_>,
-    rust_type: &RustType,
+    import_rust_type: &RustType,
+    export_rust_type: &RustType,
     result: &wit_parser::Result_,
 ) -> anyhow::Result<WrappedType> {
     let RustType::Result {
-        ok: ok_rust_type,
-        err: err_rust_type,
-    } = rust_type
+        ok: import_ok_rust_type,
+        err: import_err_rust_type,
+    } = import_rust_type
     else {
         Err(anyhow!("Type mismatch in result"))?
     };
+    let RustType::Result {
+        ok: export_ok_rust_type,
+        err: export_err_rust_type,
+    } = export_rust_type
+    else {
+        Err(anyhow!("Type mismatch in result"))?
+    };
+
     let ok = result
         .ok
         .as_ref()
-        .map(|ok| get_wrapped_type_internal(ctx.context, ok_rust_type, ok, false, ctx.forced_ref))
+        .map(|ok| {
+            get_wrapped_type_internal(
+                ctx.context,
+                import_ok_rust_type,
+                export_ok_rust_type,
+                ok,
+                false,
+                ctx.forced_ref,
+            )
+        })
         .transpose()?
-        .unwrap_or(WrappedType::unit(true));
+        .unwrap_or(WrappedType::unit());
     let err = result
         .err
         .as_ref()
-        .map(|err| get_wrapped_type_internal(ctx.context, err_rust_type, err, false, ctx.forced_ref))
+        .map(|err| {
+            get_wrapped_type_internal(
+                ctx.context,
+                import_err_rust_type,
+                export_err_rust_type,
+                err,
+                false,
+                ctx.forced_ref,
+            )
+        })
         .transpose()?
-        .unwrap_or(WrappedType::unit(true));
+        .unwrap_or(WrappedType::unit());
 
     let wrapped_ok = ok.wrapped_type_ref;
     let wrapped_err = err.wrapped_type_ref;
@@ -710,7 +815,14 @@ fn get_wrapped_type_adt(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<Wrappe
 }
 
 fn get_wrapped_type_string(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {
-    if ctx.forced_ref {
+    if ctx.in_tuple {
+        Ok(WrappedType {
+            wrap: TokenStreamWrapper::identity(),
+            unwrap: TokenStreamWrapper::new(|s| quote! { #s.clone() }),
+            original_type_ref: ctx.original_type_ref.clone(),
+            wrapped_type_ref: ctx.original_type_ref,
+        })
+    } else if ctx.forced_ref {
         Ok(WrappedType {
             wrap: TokenStreamWrapper::identity(),
             unwrap: TokenStreamWrapper::reference(),
@@ -888,11 +1000,16 @@ pub fn process_parameter(
     export_parameter: &RustFunctionParameter,
     import_parameter: &RustFunctionParameter,
 ) -> anyhow::Result<ProcessedParameter> {
-    let wrapped_type = get_wrapped_type(context, &import_parameter.typ, param_type)
-        .context(format!("Failed to encode parameter {param_name}'s type"))?;
+    let wrapped_type = get_wrapped_type(
+        context,
+        &import_parameter.typ,
+        &export_parameter.typ,
+        param_type,
+    )
+    .context(format!("Failed to encode parameter {param_name}'s type"))?;
     let param_name = &export_parameter.name;
     Ok(ProcessedParameter {
-        ident: Ident::new(&param_name, Span::call_site()),
+        ident: Ident::new(param_name, Span::call_site()),
         wrapped_type: Some(wrapped_type),
         export_parameter: export_parameter.clone(),
         import_parameter: import_parameter.clone(),

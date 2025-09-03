@@ -316,9 +316,9 @@ fn generate_exported_function_impl(
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = match &function.result {
-        Some(typ) => get_wrapped_type(context, &rust_fn.return_type, typ)
+        Some(typ) => get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
             .context(format!("Failed to encode result type for {name}"))?,
-        None => WrappedType::unit(false),
+        None => WrappedType::unit(),
     };
 
     let param_refs = to_wrapped_param_refs(&param_ident_type);
@@ -422,9 +422,9 @@ fn generate_exported_resource_function_impl(
         WrappedType::no_wrapping(quote! { Self })
     } else {
         match &function.result {
-            Some(typ) => get_wrapped_type(context, &rust_fn.return_type, typ)
+            Some(typ) => get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
                 .context(format!("Failed to encode result type for {name}"))?,
-            None => WrappedType::unit(false),
+            None => WrappedType::unit(),
         }
     };
 

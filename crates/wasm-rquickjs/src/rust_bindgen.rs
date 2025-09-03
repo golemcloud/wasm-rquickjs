@@ -6,7 +6,6 @@ use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span};
 use quote::quote;
 use std::fmt::{Display, Formatter};
-use syn::{Lit, LitInt};
 use wit_bindgen_core::{TypeInfo, dealias};
 use wit_parser::{Docs, Function, Handle, Type, TypeDefKind, TypeId};
 
@@ -417,8 +416,8 @@ impl RustType {
                 TypeDefKind::List(element) => {
                     if let Some(lt) = mode.lifetime {
                         let next_mode = filter_mode(context, ty, mode);
-                        if mode.lists_borrowed {
-                            return if lt == "'_" {
+                        return if mode.lists_borrowed {
+                            if lt == "'_" {
                                 Self::Slice {
                                     element: Box::new(RustType::from_type(
                                         context, element, next_mode,
@@ -432,12 +431,12 @@ impl RustType {
                                     )),
                                     lifetime: Some(lt.to_string()),
                                 }
-                            };
+                            }
                         } else {
-                            return Self::Vec {
+                            Self::Vec {
                                 element: Box::new(RustType::from_type(context, element, next_mode)),
-                            };
-                        }
+                            }
+                        };
                     }
                 }
                 _ => {}
@@ -461,7 +460,7 @@ impl RustType {
             Type::String => {
                 assert_eq!(mode.lists_borrowed, mode.lifetime.is_some());
                 match mode.lifetime {
-                    Some(lt) if lt == "'_" => Self::Str { lifetime: None },
+                    Some("'_") => Self::Str { lifetime: None },
                     Some(lt) => Self::Str {
                         lifetime: Some(lt.to_string()),
                     },
@@ -563,7 +562,7 @@ impl RustType {
                 }
             }
             TypeDefKind::Result(r) => {
-                let ok = Self::from_optional_type(context, r.ok.as_ref(), mode.clone());
+                let ok = Self::from_optional_type(context, r.ok.as_ref(), mode);
                 let err = Self::from_optional_type(context, r.err.as_ref(), mode);
                 Self::Result {
                     ok: Box::new(ok),
@@ -691,7 +690,7 @@ impl RustType {
                     element: slice_element,
                     ..
                 },
-            ) if &*vec_element == &*slice_element => TokenStreamWrapper::as_slice(),
+            ) if vec_element == slice_element => TokenStreamWrapper::as_slice(),
             (
                 RustType::Owned { name: owned_name },
                 RustType::BorrowedResource {
@@ -717,10 +716,10 @@ impl RustType {
                             let conversion = conversion.run(quote! { v });
                             TokenStreamWrapper::new(move |ts| {
                                 quote! {
-                                #ts.map(|v| {
-                                    #conversion
-                                })
-                            }
+                                    #ts.map(|v| {
+                                        #conversion
+                                    })
+                                }
                             })
                         }
                         TokenStreamWrapper::Ref => TokenStreamWrapper::new(move |ts| {
@@ -758,6 +757,63 @@ impl RustType {
                             quote! { #ts.as_deref() }
                         }),
                     }
+                }
+            }
+            (
+                RustType::Result {
+                    ok: from_ok,
+                    err: from_err,
+                },
+                RustType::Result {
+                    ok: to_ok,
+                    err: to_err,
+                },
+            ) => {
+                let ok_conversion = from_ok.conversion_into_type(to_ok);
+                let err_conversion = from_err.conversion_into_type(to_err);
+                match (&ok_conversion, &err_conversion) {
+                    (TokenStreamWrapper::F(_), TokenStreamWrapper::F(_)) => {
+                        let ok_conversion = ok_conversion.run(quote! { v });
+                        let err_conversion = err_conversion.run(quote! { v });
+                        TokenStreamWrapper::new(move |ts| {
+                            quote! {
+                                #ts.map(|v| {
+                                    #ok_conversion
+                                }).map_err(|v| {
+                                    #err_conversion
+                                })
+                            }
+                        })
+                    }
+                    (TokenStreamWrapper::Identity, TokenStreamWrapper::AsStr) => {
+                        TokenStreamWrapper::new(move |ts| {
+                            quote! {
+                                #ts.as_ref().map(|v| *v).map_err(|v| v.as_str())
+                            }
+                        })
+                    }
+                    (TokenStreamWrapper::Identity, TokenStreamWrapper::AsSlice) => {
+                        TokenStreamWrapper::new(move |ts| {
+                            quote! {
+                                #ts.as_ref().map(|v| *v).map_err(|v| v.as_slice())
+                            }
+                        })
+                    }
+                    (TokenStreamWrapper::AsStr, TokenStreamWrapper::Identity) => {
+                        TokenStreamWrapper::new(move |ts| {
+                            quote! {
+                                #ts.as_ref().map_err(|v| *v).map(|v| v.as_str())
+                            }
+                        })
+                    }
+                    (TokenStreamWrapper::AsSlice, TokenStreamWrapper::Identity) => {
+                        TokenStreamWrapper::new(move |ts| {
+                            quote! {
+                                #ts.as_ref().map_err(|v| *v).map(|v| v.as_slice())
+                            }
+                        })
+                    }
+                    _ => TokenStreamWrapper::identity(),
                 }
             }
             (
@@ -823,29 +879,6 @@ impl RustType {
                         }),
                     }
                 }
-            }
-            (RustType::Tuple { items: from_items }, RustType::Tuple { items: to_items })
-                if to_items.len() == from_items.len() =>
-            {
-                let mut conversions = Vec::new();
-                for (from_item, to_item) in from_items.iter().zip(to_items.iter()) {
-                    let conversion = from_item.conversion_into_type(to_item);
-                    conversions.push(conversion);
-                }
-                TokenStreamWrapper::new(move |ts| {
-                    let mut converted_items = Vec::new();
-                    for (idx, conversion) in conversions.iter().enumerate() {
-                        let field = Lit::from(LitInt::new(&idx.to_string(), Span::call_site()));
-                        let conversion = conversion.run(quote! { __t.#field });
-                        converted_items.push(conversion);
-                    }
-                    quote! {
-                        {
-                            let __t = #ts;
-                            (#(#converted_items),*)
-                        }
-                    }
-                })
             }
             _ => {
                 println!("!: {self}->{other} == {self:?} -> {other:?}");
@@ -920,15 +953,15 @@ impl RustType {
 
     fn should_dealias(kind: &TypeDefKind) -> bool {
         // NOTE: this is a difference from wit-bindgen-rust, we want to dealias all type aliases
-        match kind {
+        !matches!(
+            kind,
             TypeDefKind::Record(_)
-            | TypeDefKind::Variant(_)
-            | TypeDefKind::Enum(_)
-            | TypeDefKind::Flags(_)
-            | TypeDefKind::Handle(_)
-            | TypeDefKind::Resource => false,
-            _ => true,
-        }
+                | TypeDefKind::Variant(_)
+                | TypeDefKind::Enum(_)
+                | TypeDefKind::Flags(_)
+                | TypeDefKind::Handle(_)
+                | TypeDefKind::Resource
+        )
     }
 }
 

@@ -1,10 +1,8 @@
-use crate::javascript::escape_js_ident;
-use crate::rust_bindgen::{
-    escape_rust_ident, type_mode_for, RustType, TypeOwnershipStyle,
-};
-use crate::types::{get_wrapped_type, type_id_to_type_ref};
 use crate::GeneratorContext;
-use anyhow::{anyhow, Context};
+use crate::javascript::escape_js_ident;
+use crate::rust_bindgen::{RustType, TypeOwnershipStyle, escape_rust_ident, type_mode_for};
+use crate::types::{get_wrapped_type, type_id_to_type_ref};
+use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -87,7 +85,7 @@ fn generate_conversion_instances_for_type(
                     &field.ty,
                     type_mode_for(context, &field.ty, TypeOwnershipStyle::Owned, "'_"),
                 );
-                let field_type = get_wrapped_type(context, &rust_type, &field.ty)?;
+                let field_type = get_wrapped_type(context, &rust_type, &rust_type, &field.ty)?;
 
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
@@ -184,10 +182,10 @@ fn generate_conversion_instances_for_type(
                 if let Some(ty) = &case.ty {
                     let rust_type = RustType::from_type(
                         context,
-                        &ty,
-                        type_mode_for(context, &ty, TypeOwnershipStyle::Owned, "'_"),
+                        ty,
+                        type_mode_for(context, ty, TypeOwnershipStyle::Owned, "'_"),
                     );
-                    let wrapped_type = get_wrapped_type(context, &rust_type, ty)?;
+                    let wrapped_type = get_wrapped_type(context, &rust_type, &rust_type, ty)?;
                     let wrapped_inner = wrapped_type.wrap.run(quote! { inner });
                     let unwrapped_inner = wrapped_type.unwrap.run(quote! { inner });
                     let wrapped_type = &wrapped_type.wrapped_type_ref;

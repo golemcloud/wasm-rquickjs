@@ -207,9 +207,11 @@ fn generate_import_module(
                 println!("Generating function {rust_function_name}");
                 let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
                 let func_ret = match &function.result {
-                    Some(typ) => get_wrapped_type(context, &rust_fn.return_type, typ)
-                        .context(format!("Failed to encode result type for {name}"))?,
-                    None => WrappedType::unit(false),
+                    Some(typ) => {
+                        get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
+                            .context(format!("Failed to encode result type for {name}"))?
+                    }
+                    None => WrappedType::unit(),
                 };
                 let original_result = &func_ret.original_type_ref;
                 let wrapped_result = &func_ret.wrapped_type_ref;
@@ -341,9 +343,11 @@ fn generate_import_module(
             let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
 
             let func_ret = match &function.result {
-                Some(typ) => get_wrapped_type(context, &rust_fn.return_type, typ)
-                    .context(format!("Failed to encode result type for {name}"))?,
-                None => WrappedType::unit(false),
+                Some(typ) => {
+                    get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
+                        .context(format!("Failed to encode result type for {name}"))?
+                }
+                None => WrappedType::unit(),
             };
             let original_result = &func_ret.original_type_ref;
             let wrapped_result = &func_ret.wrapped_type_ref;
