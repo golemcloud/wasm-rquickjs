@@ -1,14 +1,13 @@
 use crate::javascript::escape_js_ident;
-use crate::rust_bindgen::escape_rust_ident;
+use crate::rust_bindgen::RustWitFunction;
 use crate::types::{
     ProcessedParameter, WrappedType, get_function_name, get_wrapped_type,
-    ident_in_exported_interface, ident_in_exported_interface_or_global, identity_wrapper,
-    param_refs_as_tuple, process_parameter, to_original_func_arg_list, to_wrapped_param_refs,
-    type_borrows_resource,
+    ident_in_exported_interface, ident_in_exported_interface_or_global, param_refs_as_tuple,
+    process_parameter, to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource,
 };
 use crate::{EmbeddingMode, GeneratorContext, JsModuleSpec};
 use anyhow::{Context, anyhow};
-use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
@@ -294,18 +293,32 @@ fn generate_exported_function_impl(
     name: &str,
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
-    let func_name = Ident::new(&escape_rust_ident(&name.to_snake_case()), Span::call_site());
+    let rust_fn = RustWitFunction::new(context, name, function);
+    let func_name = rust_fn.function_name_ident();
+
     let param_ident_type: Vec<_> = function
         .params
         .iter()
-        .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
+        .zip(rust_fn.export_parameters)
+        .zip(rust_fn.import_parameters)
+        .map(
+            |(((param_name, param_type), export_parameter), import_parameter)| {
+                process_parameter(
+                    context,
+                    param_name,
+                    param_type,
+                    &export_parameter,
+                    &import_parameter,
+                )
+            },
+        )
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = match &function.result {
-        Some(typ) => get_wrapped_type(context, typ)
+        Some(typ) => get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
             .context(format!("Failed to encode result type for {name}"))?,
-        None => WrappedType::unit(false),
+        None => WrappedType::unit(),
     };
 
     let param_refs = to_wrapped_param_refs(&param_ident_type);
@@ -346,7 +359,7 @@ fn generate_exported_function_impl(
     let original_result = &func_ret.original_type_ref;
     let wrapped_result = &func_ret.wrapped_type_ref;
     let unwrap = &func_ret.unwrap;
-    let unwrap_result = (unwrap)(quote! { result });
+    let unwrap_result = unwrap.run(quote! { result });
     let func_impl = quote! {
        fn #func_name(#(#func_arg_list),*) -> #original_result {
            crate::internal::async_exported_function(async move {
@@ -371,15 +384,16 @@ fn generate_exported_resource_function_impl(
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
     let func_name = get_function_name(name, &function)?;
-    let func_name_ident = Ident::new(
-        &escape_rust_ident(&func_name.to_snake_case()),
-        Span::call_site(),
-    );
+
+    let rust_fn = RustWitFunction::new(context, &func_name, function);
+    let func_name_ident = rust_fn.function_name_ident();
 
     let param_ident_type: Vec<_> = function
         .params
         .iter()
-        .map(|(param_name, param_type)| {
+        .zip(rust_fn.export_parameters)
+        .zip(rust_fn.import_parameters)
+        .map(|(((param_name, param_type), export_param), import_param)| {
             if matches!(
                 function.kind,
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_)
@@ -388,21 +402,29 @@ fn generate_exported_resource_function_impl(
                 Ok(ProcessedParameter {
                     ident: Ident::new(param_name, Span::call_site()),
                     wrapped_type: None,
+                    export_parameter: export_param,
+                    import_parameter: import_param,
                 })
             } else {
-                process_parameter(context, param_name, param_type)
+                process_parameter(
+                    context,
+                    param_name,
+                    param_type,
+                    &export_param,
+                    &import_param,
+                )
             }
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
     let func_ret = if matches!(function.kind, FunctionKind::Constructor(_)) {
-        WrappedType::no_wrapping(quote! { Self }, identity_wrapper())
+        WrappedType::no_wrapping(quote! { Self })
     } else {
         match &function.result {
-            Some(typ) => get_wrapped_type(context, typ)
+            Some(typ) => get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
                 .context(format!("Failed to encode result type for {name}"))?,
-            None => WrappedType::unit(false),
+            None => WrappedType::unit(),
         }
     };
 
@@ -489,7 +511,7 @@ fn generate_exported_resource_function_impl(
             let original_result = &func_ret.original_type_ref;
             let wrapped_result = &func_ret.wrapped_type_ref;
             let unwrap = &func_ret.unwrap;
-            let unwrap_result = (unwrap)(quote! { result });
+            let unwrap_result = unwrap.run(quote! { result });
             quote! {
                fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                    crate::internal::async_exported_function(async move {
@@ -510,7 +532,7 @@ fn generate_exported_resource_function_impl(
             let original_result = &func_ret.original_type_ref;
             let wrapped_result = &func_ret.wrapped_type_ref;
             let unwrap = &func_ret.unwrap;
-            let unwrap_result = (unwrap)(quote! { result });
+            let unwrap_result = unwrap.run(quote! { result });
             quote! {
                fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                    crate::internal::async_exported_function(async move {

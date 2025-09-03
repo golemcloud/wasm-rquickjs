@@ -1,7 +1,7 @@
 declare module 'golem:durability/durability@1.2.1' {
   import * as golemApi117Host from 'golem:api/host@1.1.7';
   import * as golemApi117Oplog from 'golem:api/oplog@1.1.7';
-  import * as golemRpc021Types from 'golem:rpc/types@0.2.1';
+  import * as golemRpc022Types from 'golem:rpc/types@0.2.2';
   import * as wasiClocks023WallClock from 'wasi:clocks/wall-clock@0.2.3';
   import * as wasiIo023Poll from 'wasi:io/poll@0.2.3';
   /**
@@ -65,7 +65,7 @@ declare module 'golem:durability/durability@1.2.1' {
   export type WrappedFunctionType = golemApi117Oplog.WrappedFunctionType;
   export type Datetime = wasiClocks023WallClock.Datetime;
   export type Pollable = wasiIo023Poll.Pollable;
-  export type ValueAndType = golemRpc021Types.ValueAndType;
+  export type ValueAndType = golemRpc022Types.ValueAndType;
   export type DurableFunctionType = WrappedFunctionType;
   export type DurableExecutionState = {
     isLive: boolean;

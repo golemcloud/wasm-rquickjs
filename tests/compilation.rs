@@ -46,6 +46,8 @@ fn compilation_test(
         .join(feature_combination.label());
 
     // shared_target is relative to wrapper_crate_root
+    let share_target_dir = name != "pollable"; // <- exclude shared target dir for some examples
+
     let shared_target = Utf8Path::new("..").join("..").join("target");
 
     println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
@@ -60,13 +62,17 @@ fn compilation_test(
     )?;
 
     println!("Compiling wrapper crate in {wrapper_crate_root}");
-    Command::new("cargo-component")
-        .arg("build")
-        .arg("--target-dir")
-        .arg(shared_target)
+    let mut cmd = Command::new("cargo-component");
+    cmd.arg("build");
+    if share_target_dir {
+        cmd.arg("--target-dir").arg(shared_target);
+    }
+    let status = cmd
         .args(feature_combination.cargo_args())
         .current_dir(&wrapper_crate_root)
         .status()?;
+
+    assert!(status.success());
 
     Ok(())
 }

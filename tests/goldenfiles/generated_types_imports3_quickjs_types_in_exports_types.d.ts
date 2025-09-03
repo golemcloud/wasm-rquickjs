@@ -15,6 +15,8 @@ declare module 'quickjs:types-in-exports/types' {
   export function f13(a: Permissions): Permissions;
   export function f14(a: bigint): bigint;
   export function f15(bytes: Uint8Array): Uint8Array;
+  export function f16(in_: Rec2[] | undefined): string[] | undefined;
+  export function f17(in_: string[] | undefined): Rec2[] | undefined;
   export type Color = quickjsTypesInExportsOtherTypes.Color;
   export type ListOfStrings = quickjsTypesInExportsOtherTypes.ListOfStrings;
   export type Rec2 = quickjsTypesInExportsOtherTypes.Rec2;
