@@ -1,5 +1,5 @@
 use crate::javascript::escape_js_ident;
-use crate::rust_bindgen::escape_rust_ident;
+use crate::rust_bindgen::RustWitFunction;
 use crate::types::{
     WrappedType, get_function_name, get_wrapped_type, ident_in_imported_interface_or_global,
     process_parameter, to_unwrapped_param_refs, to_wrapped_func_arg_list,
@@ -163,10 +163,14 @@ fn generate_import_module(
     for (name, function) in &import.functions {
         match &function.kind {
             FunctionKind::Freestanding => {
+                let rust_fn = RustWitFunction::new(context, name, function);
+                println!("{rust_fn}");
+
+                let rust_function_name = &rust_fn.function_name;
+                let rust_function_ident = rust_fn.function_name_ident();
+
                 let js_function_name = escape_js_ident(name.to_lower_camel_case());
                 let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
-                let rust_function_name = escape_rust_ident(&name.to_snake_case());
-                let rust_function_ident = Ident::new(&rust_function_name, Span::call_site());
                 let js_bridge_name = format!("js_{rust_function_name}");
                 let js_bridge_ident = Ident::new(&js_bridge_name, Span::call_site());
 
@@ -183,22 +187,34 @@ fn generate_import_module(
                 let parameters = function
                     .params
                     .iter()
-                    .map(|(param_name, param_type)| {
-                        process_parameter(context, param_name, param_type)
-                    })
+                    .zip(rust_fn.export_parameters)
+                    .zip(rust_fn.import_parameters)
+                    .map(
+                        |(((param_name, param_type), export_parameter), import_parameter)| {
+                            process_parameter(
+                                context,
+                                param_name,
+                                param_type,
+                                &export_parameter,
+                                &import_parameter,
+                            )
+                        },
+                    )
                     .collect::<anyhow::Result<Vec<_>>>()?;
 
                 let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
+
+                println!("Generating function {rust_function_name}");
                 let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
                 let func_ret = match &function.result {
-                    Some(typ) => get_wrapped_type(context, typ)
+                    Some(typ) => get_wrapped_type(context, &rust_fn.return_type, typ)
                         .context(format!("Failed to encode result type for {name}"))?,
                     None => WrappedType::unit(false),
                 };
                 let original_result = &func_ret.original_type_ref;
                 let wrapped_result = &func_ret.wrapped_type_ref;
                 let wrap = &func_ret.wrap;
-                let wrap_result = (wrap)(quote! { result });
+                let wrap_result = wrap.run(quote! { result });
 
                 bridge_functions.push(quote! {
                     #[rquickjs::function]
@@ -256,10 +272,25 @@ fn generate_import_module(
             .iter()
             .find(|(_, f)| matches!(f.kind, FunctionKind::Constructor(_)));
         let constructor = if let Some((_, constructor_function)) = constructor_function {
+            let rust_fn = RustWitFunction::new(context, "new", constructor_function);
+            println!("{rust_fn}");
+
             let parameters = constructor_function
                 .params
                 .iter()
-                .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
+                .zip(rust_fn.export_parameters)
+                .zip(rust_fn.import_parameters)
+                .map(
+                    |(((param_name, param_type), export_parameter), import_parameter)| {
+                        process_parameter(
+                            context,
+                            param_name,
+                            param_type,
+                            &export_parameter,
+                            &import_parameter,
+                        )
+                    },
+                )
                 .collect::<anyhow::Result<Vec<_>>>()?;
 
             let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
@@ -279,27 +310,45 @@ fn generate_import_module(
         let mut methods: Vec<TokenStream> = Vec::new();
         for (name, function) in resource_funcs {
             let name = get_function_name(name, function)?;
-            let rust_method_name = escape_rust_ident(&name.to_snake_case());
-            let rust_method_name_ident = Ident::new(&rust_method_name, Span::call_site());
+
+            let rust_fn = RustWitFunction::new(context, &name, function);
+            println!("{rust_fn}");
+
+            let rust_method_name = &rust_fn.function_name;
+            let rust_method_name_ident = rust_fn.function_name_ident();
 
             let parameters = function
                 .params
                 .iter()
-                .map(|(param_name, param_type)| process_parameter(context, param_name, param_type))
+                .zip(rust_fn.export_parameters)
+                .zip(rust_fn.import_parameters)
+                .map(
+                    |(((param_name, param_type), export_parameter), import_parameter)| {
+                        process_parameter(
+                            context,
+                            param_name,
+                            param_type,
+                            &export_parameter,
+                            &import_parameter,
+                        )
+                    },
+                )
                 .collect::<anyhow::Result<Vec<_>>>()?;
 
             let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
+
+            println!("Generating function {resource_name}::{rust_method_name}");
             let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
 
             let func_ret = match &function.result {
-                Some(typ) => get_wrapped_type(context, typ)
+                Some(typ) => get_wrapped_type(context, &rust_fn.return_type, typ)
                     .context(format!("Failed to encode result type for {name}"))?,
                 None => WrappedType::unit(false),
             };
             let original_result = &func_ret.original_type_ref;
             let wrapped_result = &func_ret.wrapped_type_ref;
             let wrap = &func_ret.wrap;
-            let wrap_result = (wrap)(quote! { result });
+            let wrap_result = wrap.run(quote! { result });
 
             match &function.kind {
                 FunctionKind::Method(_) => {

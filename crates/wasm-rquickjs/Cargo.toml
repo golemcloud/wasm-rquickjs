@@ -13,6 +13,7 @@ camino = { workspace = true }
 fs_extra = { workspace = true }
 heck = { workspace = true }
 include_dir = { workspace = true }
+indexmap = "2.11.0"
 prettier-please = { workspace = true }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
