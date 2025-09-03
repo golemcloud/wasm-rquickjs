@@ -374,7 +374,7 @@ pub fn get_wrapped_type_internal(
         context,
         original_type_ref,
         is_top_level,
-        in_iter,
+        forced_ref: in_iter,
     };
 
     match typ {
@@ -447,7 +447,7 @@ struct GetWrappedTypeContext<'a> {
     context: &'a GeneratorContext<'a>,
     original_type_ref: TokenStream,
     is_top_level: bool,
-    in_iter: bool,
+    forced_ref: bool,
 }
 
 impl<'a> GetWrappedTypeContext<'a> {}
@@ -477,18 +477,37 @@ fn get_wrapped_type_option(
     let RustType::Option { inner } = rust_type else {
         Err(anyhow!("Type mismatch in option"))?
     };
-    let inner = get_wrapped_type_internal(ctx.context, inner, elem_type, false, ctx.in_iter)?;
 
-    let inner_wrapped_type_ref = inner.wrapped_type_ref;
-    let wrapped_v = inner.wrap.run(quote! { v });
-    let unwrapped_v = inner.unwrap.run(quote! { v });
+    if rust_type.cannot_into_iter() {
+        // The option contains borrowed resource wrappers, which cannot be used with map because
+        // their explicit drop. So we need to special case this everywhere.
 
-    Ok(WrappedType {
-        wrap: TokenStreamWrapper::new(move |ts| quote! { #ts.map( |v| #wrapped_v) }),
-        unwrap: TokenStreamWrapper::new(move |ts| quote! { #ts.map( |v| #unwrapped_v) }),
-        original_type_ref: ctx.original_type_ref,
-        wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
-    })
+        let inner = get_wrapped_type_internal(ctx.context, inner, elem_type, false, true)?;
+
+        let inner_wrapped_type_ref = inner.wrapped_type_ref;
+        let wrapped_v = inner.wrap.run(quote! { v });
+        let unwrapped_v = inner.unwrap.run(quote! { v });
+
+        Ok(WrappedType {
+            wrap: TokenStreamWrapper::new(move |ts| quote! { #ts.map( |v| #wrapped_v) }),
+            unwrap: TokenStreamWrapper::new(move |ts| quote! { #ts.as_ref().map( |v| #unwrapped_v) }),
+            original_type_ref: ctx.original_type_ref,
+            wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
+        })
+    } else {
+        let inner = get_wrapped_type_internal(ctx.context, inner, elem_type, false, ctx.forced_ref)?;
+
+        let inner_wrapped_type_ref = inner.wrapped_type_ref;
+        let wrapped_v = inner.wrap.run(quote! { v });
+        let unwrapped_v = inner.unwrap.run(quote! { v });
+
+        Ok(WrappedType {
+            wrap: TokenStreamWrapper::new(move |ts| quote! { #ts.map( |v| #wrapped_v) }),
+            unwrap: TokenStreamWrapper::new(move |ts| quote! { #ts.map( |v| #unwrapped_v) }),
+            original_type_ref: ctx.original_type_ref,
+            wrapped_type_ref: quote! { Option<#inner_wrapped_type_ref> },
+        })
+    }
 }
 
 fn get_wrapped_type_tuple(
@@ -504,7 +523,7 @@ fn get_wrapped_type_tuple(
         .iter()
         .zip(items)
         .map(|(ty, rust_type)| {
-            get_wrapped_type_internal(ctx.context, &rust_type, ty, false, ctx.in_iter)
+            get_wrapped_type_internal(ctx.context, &rust_type, ty, false, ctx.forced_ref)
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -593,7 +612,7 @@ fn get_wrapped_type_list(
         })
     } else {
         let inner =
-            get_wrapped_type_internal(ctx.context, elem_rust_type, elem_type, false, ctx.in_iter)?;
+            get_wrapped_type_internal(ctx.context, elem_rust_type, elem_type, false, ctx.forced_ref)?;
         let inner_wrapped_type_ref = inner.wrapped_type_ref;
         let wrapped_v = inner.wrap.run(quote! { v });
         let unwrapped_v = inner.unwrap.run(quote! { v });
@@ -626,13 +645,13 @@ fn get_wrapped_type_result(
     let ok = result
         .ok
         .as_ref()
-        .map(|ok| get_wrapped_type_internal(ctx.context, ok_rust_type, ok, false, ctx.in_iter))
+        .map(|ok| get_wrapped_type_internal(ctx.context, ok_rust_type, ok, false, ctx.forced_ref))
         .transpose()?
         .unwrap_or(WrappedType::unit(true));
     let err = result
         .err
         .as_ref()
-        .map(|err| get_wrapped_type_internal(ctx.context, err_rust_type, err, false, ctx.in_iter))
+        .map(|err| get_wrapped_type_internal(ctx.context, err_rust_type, err, false, ctx.forced_ref))
         .transpose()?
         .unwrap_or(WrappedType::unit(true));
 
@@ -673,7 +692,7 @@ fn get_wrapped_type_borrow_handle(
             wrap: TokenStreamWrapper::new(move |ts| {
                 quote! { #borrowed_resource_ref(#ts) }
             }),
-            unwrap: if ctx.in_iter {
+            unwrap: if ctx.forced_ref {
                 TokenStreamWrapper::new(|ts| {
                     quote! { &#ts.0 }
                 })
@@ -691,7 +710,7 @@ fn get_wrapped_type_adt(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<Wrappe
 }
 
 fn get_wrapped_type_string(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {
-    if ctx.in_iter {
+    if ctx.forced_ref {
         Ok(WrappedType {
             wrap: TokenStreamWrapper::identity(),
             unwrap: TokenStreamWrapper::reference(),

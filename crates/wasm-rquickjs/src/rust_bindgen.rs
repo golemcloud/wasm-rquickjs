@@ -707,28 +707,57 @@ impl RustType {
                 },
             ) if owned_name == borrowed_name => TokenStreamWrapper::reference(),
             (RustType::Option { inner: from_inner }, RustType::Option { inner: to_inner }) => {
-                let conversion = from_inner.conversion_into_type(to_inner);
-                match conversion {
-                    TokenStreamWrapper::F(_) => {
-                        let conversion = conversion.run(quote! { v });
-                        TokenStreamWrapper::new(move |ts| {
-                            quote! {
+                let cannot_map = to_inner.cannot_into_iter();
+
+                if cannot_map {
+                    let adjusted_to_element = to_inner.in_iter();
+                    let conversion = adjusted_to_element.conversion_into_type(to_inner);
+                    match conversion {
+                        TokenStreamWrapper::F(_) => {
+                            let conversion = conversion.run(quote! { v });
+                            TokenStreamWrapper::new(move |ts| {
+                                quote! {
                                 #ts.map(|v| {
                                     #conversion
                                 })
                             }
-                        })
+                            })
+                        }
+                        TokenStreamWrapper::Ref => TokenStreamWrapper::new(move |ts| {
+                            quote! { #ts.as_ref() }
+                        }),
+                        TokenStreamWrapper::Identity => TokenStreamWrapper::identity(),
+                        TokenStreamWrapper::AsStr => TokenStreamWrapper::new(move |ts| {
+                            quote! { #ts.as_deref() }
+                        }),
+                        TokenStreamWrapper::AsSlice => TokenStreamWrapper::new(move |ts| {
+                            quote! { #ts.as_deref() }
+                        }),
                     }
-                    TokenStreamWrapper::Ref => TokenStreamWrapper::new(move |ts| {
-                        quote! { #ts.as_ref() }
-                    }),
-                    TokenStreamWrapper::Identity => TokenStreamWrapper::identity(),
-                    TokenStreamWrapper::AsStr => TokenStreamWrapper::new(move |ts| {
-                        quote! { #ts.as_deref() }
-                    }),
-                    TokenStreamWrapper::AsSlice => TokenStreamWrapper::new(move |ts| {
-                        quote! { #ts.as_deref() }
-                    }),
+                } else {
+                    let conversion = from_inner.conversion_into_type(to_inner);
+                    match conversion {
+                        TokenStreamWrapper::F(_) => {
+                            let conversion = conversion.run(quote! { v });
+                            TokenStreamWrapper::new(move |ts| {
+                                quote! {
+                                    #ts.map(|v| {
+                                        #conversion
+                                    })
+                                }
+                            })
+                        }
+                        TokenStreamWrapper::Ref => TokenStreamWrapper::new(move |ts| {
+                            quote! { #ts.as_ref() }
+                        }),
+                        TokenStreamWrapper::Identity => TokenStreamWrapper::identity(),
+                        TokenStreamWrapper::AsStr => TokenStreamWrapper::new(move |ts| {
+                            quote! { #ts.as_deref() }
+                        }),
+                        TokenStreamWrapper::AsSlice => TokenStreamWrapper::new(move |ts| {
+                            quote! { #ts.as_deref() }
+                        }),
+                    }
                 }
             }
             (
@@ -744,9 +773,6 @@ impl RustType {
 
                 if cannot_into_iter {
                     let adjusted_to_element = to_element.in_iter();
-                    println!("elem type: {to_element}"); //  (String, &OutgoingValue)
-                    println!("adjusted elem type: {adjusted_to_element}"); //
-
                     let conversion = adjusted_to_element.conversion_into_type(to_element);
                     match conversion {
                         TokenStreamWrapper::F(_) => {
