@@ -215,8 +215,8 @@ sync or async.
 | Unsigned 16-bit integer | `u16`               | `number`                                          | -                                                                             |
 | Signed 32-bit integer   | `s32`               | `number`                                          | -                                                                             |
 | Unsigned 32-bit integer | `u32`               | `number`                                          | -                                                                             |
-| Signed 64-bit integer   | `s64`               | `number`                                          | -                                                                             |
-| Unsigned 64-bit integer | `u64`               | `number`                                          | -                                                                             |
+| Signed 64-bit integer   | `s64`               | `bigint`                                          | -                                                                             |
+| Unsigned 64-bit integer | `u64`               | `bigint`                                          | -                                                                             |
 | 32-bit float            | `f32`               | `number`                                          | -                                                                             |
 | 64-bit float            | `f64`               | `number`                                          | -                                                                             |
 | Optional type           | `option<T>`         | `T \| undefined`                                  | Nested options are encoded differently                                        |
@@ -331,6 +331,35 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `_extend`
 - `promisify`
 - `callbackify`
+
+### `node:buffer`
+- `Buffer`
+- `INSPECT_MAX_BYTES`
+- `kMaxLength`
+- `kStringMaxLength`
+- `constants`
+- `SlowBuffer`
+
+### `node:fs`
+- `readFile`
+- `readFileSync`
+- `writeFile`
+- `writeFileSync`
+
+### `node:process`
+- `argv`
+- `argv0`
+- `env`
+- `cwd`
+
+### `base64-js`
+- `byteLength`
+- `toByteArray`
+- `fromByteArray`
+
+### `ieee754`
+- `read`
+- `write`
 
 ### Coming from QuickJS
 
