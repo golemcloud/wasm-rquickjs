@@ -16,97 +16,103 @@ mod common;
 #[test_dep(tagged_as = "example1")]
 fn compiled_example1() -> CompiledTest {
     let path = Utf8Path::new("examples/example1");
-    CompiledTest::new(path).expect("Failed to compile example1")
+    CompiledTest::new(path, true).expect("Failed to compile example1")
 }
 
 #[test_dep(tagged_as = "example2")]
 fn compiled_example2() -> CompiledTest {
     let path = Utf8Path::new("examples/example2");
-    CompiledTest::new(path).expect("Failed to compile example2")
+    CompiledTest::new(path, true).expect("Failed to compile example2")
 }
 
 #[test_dep(tagged_as = "example3")]
 fn compiled_example3() -> CompiledTest {
     let path = Utf8Path::new("examples/example3");
-    CompiledTest::new(path).expect("Failed to compile example3")
+    CompiledTest::new(path, true).expect("Failed to compile example3")
 }
 
 #[test_dep(tagged_as = "console")]
 fn compiled_console() -> CompiledTest {
     let path = Utf8Path::new("examples/console");
-    CompiledTest::new(path).expect("Failed to compile console")
+    CompiledTest::new(path, true).expect("Failed to compile console")
 }
 
 #[test_dep(tagged_as = "encoding")]
 fn compiled_encoding() -> CompiledTest {
     let path = Utf8Path::new("examples/encoding");
-    CompiledTest::new(path).expect("Failed to compile encoding")
+    CompiledTest::new(path, true).expect("Failed to compile encoding")
 }
 
 #[test_dep(tagged_as = "export_from_inner_package")]
 fn compiled_export_from_inner_package() -> CompiledTest {
     let path = Utf8Path::new("examples/export-from-inner-package");
-    CompiledTest::new(path).expect("Failed to compile export-from-inner-package")
+    CompiledTest::new(path, true).expect("Failed to compile export-from-inner-package")
 }
 
 #[test_dep(tagged_as = "fetch")]
 fn compiled_fetch() -> CompiledTest {
     let path = Utf8Path::new("examples/fetch");
-    CompiledTest::new(path).expect("Failed to compile fetch")
+    CompiledTest::new(path, true).expect("Failed to compile fetch")
 }
 
 #[test_dep(tagged_as = "imports1")]
 fn compiled_imports1() -> CompiledTest {
     let path = Utf8Path::new("examples/imports1");
-    CompiledTest::new(path).expect("Failed to compile imports1")
+    CompiledTest::new(path, true).expect("Failed to compile imports1")
 }
 
 #[test_dep(tagged_as = "imports2")]
 fn compiled_imports2() -> CompiledTest {
     let path = Utf8Path::new("examples/imports2");
-    CompiledTest::new(path).expect("Failed to compile imports2")
+    CompiledTest::new(path, true).expect("Failed to compile imports2")
 }
 
 #[test_dep(tagged_as = "imports3")]
 fn compiled_imports3() -> CompiledTest {
     let path = Utf8Path::new("examples/imports3");
-    CompiledTest::new(path).expect("Failed to compile imports3")
+    CompiledTest::new(path, true).expect("Failed to compile imports3")
 }
 
 #[test_dep(tagged_as = "types_in_exports")]
 fn compiled_types_in_exports() -> CompiledTest {
     let path = Utf8Path::new("examples/types-in-exports");
-    CompiledTest::new(path).expect("Failed to compile types-in-exports")
+    CompiledTest::new(path, true).expect("Failed to compile types-in-exports")
 }
 
 #[test_dep(tagged_as = "stateful1")]
 fn compiled_stateful1() -> CompiledTest {
     let path = Utf8Path::new("examples/stateful1");
-    CompiledTest::new(path).expect("Failed to compile stateful1")
+    CompiledTest::new(path, true).expect("Failed to compile stateful1")
 }
 
 #[test_dep(tagged_as = "streams")]
 fn compiled_streams() -> CompiledTest {
     let path = Utf8Path::new("examples/streams");
-    CompiledTest::new(path).expect("Failed to compile streams")
+    CompiledTest::new(path, true).expect("Failed to compile streams")
 }
 
 #[test_dep(tagged_as = "timeout")]
 fn compiled_timeout() -> CompiledTest {
     let path = Utf8Path::new("examples/timeout");
-    CompiledTest::new(path).expect("Failed to compile timeout")
+    CompiledTest::new(path, true).expect("Failed to compile timeout")
 }
 
 #[test_dep(tagged_as = "bigint_roundtrip")]
 fn compiled_bigint_roundtrip() -> CompiledTest {
     let path = Utf8Path::new("examples/bigint-roundtrip");
-    CompiledTest::new(path).expect("Failed to compile bigint-roundtrip")
+    CompiledTest::new(path, true).expect("Failed to compile bigint-roundtrip")
 }
 
 #[test_dep(tagged_as = "pollable")]
 fn compiled_pollable() -> CompiledTest {
     let path = Utf8Path::new("examples/pollable");
-    CompiledTest::new(path).expect("Failed to compile pollable")
+    CompiledTest::new(path, true).expect("Failed to compile pollable")
+}
+
+#[test_dep(tagged_as = "fs")]
+fn compiled_fs() -> CompiledTest {
+    let path = Utf8Path::new("examples/fs");
+    CompiledTest::new(path, false).expect("Failed to compile fs")
 }
 
 #[test]
@@ -915,5 +921,40 @@ async fn await_pollable(#[tagged_as("pollable")] compiled: &CompiledTest) -> any
         return Err(anyhow!("Expected a u64 result"));
     };
     assert!(n > 2000000000);
+    Ok(())
+}
+
+#[test]
+async fn fs(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance.invoke_and_capture_output(None, "run", &[]).await;
+    let _result = r?;
+
+    let result_file = String::from_utf8(std::fs::read(
+        instance.temp_dir_path().join("test").join("output.txt"),
+    )?)?;
+
+    assert_eq!(
+        output,
+        "Current working directory: /\nArguments: [ 'first-arg', 'second-arg' ]\nEnvironment variables:\nTEST_KEY: TEST_VALUE\nTEST_KEY_2: TEST_VALUE_2\n"
+    );
+    assert_eq!(result_file, "test file contents - Processed by test");
+    Ok(())
+}
+
+#[test]
+async fn fs_async(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "run-async", &[])
+        .await;
+    let _result = r?;
+
+    let result_file = String::from_utf8(std::fs::read(
+        instance.temp_dir_path().join("test").join("output.txt"),
+    )?)?;
+
+    assert_eq!(output, "test file contents\n");
+    assert_eq!(result_file, "test file contents - Processed by test");
     Ok(())
 }

@@ -1,7 +1,3 @@
-// Native functions for the streams implementation
-#[rquickjs::module(rename_vars = "camelCase")]
-pub mod native_module {}
-
 // JS functions for the streams implementation
 pub const STREAMS_JS: &str = include_str!("web-streams-polyfill-4.1.0.js");
 

@@ -3,7 +3,7 @@ pub mod test_server;
 use crate::common::WasmSource::Precompiled;
 use anyhow::anyhow;
 use camino::{Utf8Path, Utf8PathBuf};
-use camino_tempfile::NamedUtf8TempFile;
+use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -16,6 +16,7 @@ use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{Component, Func, Instance, Linker, ResourceAny, ResourceTable, Val};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
+use wasmtime_wasi::{DirPerms, FilePerms};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 pub fn collect_example_paths() -> anyhow::Result<Vec<Utf8PathBuf>> {
@@ -76,6 +77,7 @@ pub struct TestInstance {
     instance: Instance,
     stdout_file: NamedUtf8TempFile,
     stderr_file: NamedUtf8TempFile,
+    temp_dir: Utf8TempDir,
 }
 
 impl TestInstance {
@@ -95,9 +97,18 @@ impl TestInstance {
         let stdout_file = NamedUtf8TempFile::new()?;
         let stderr_file = NamedUtf8TempFile::new()?;
 
+        let temp_dir = Utf8TempDir::new()?;
+        fs::write(temp_dir.path().join("input.txt"), "test file contents")?;
+        fs::create_dir(temp_dir.path().join("test"))?;
+
         let ctx = WasiCtx::builder()
             .stdout(OutputFile::new(stdout_file.reopen()?))
             .stderr(OutputFile::new(stderr_file.reopen()?))
+            .arg("first-arg")
+            .arg("second-arg")
+            .env("TEST_KEY", "TEST_VALUE")
+            .env("TEST_KEY_2", "TEST_VALUE_2")
+            .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
             .build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
@@ -119,6 +130,7 @@ impl TestInstance {
             instance,
             stdout_file,
             stderr_file,
+            temp_dir,
         })
     }
 
@@ -162,6 +174,10 @@ impl TestInstance {
             stdout,
             stderr,
         )
+    }
+
+    pub fn temp_dir_path(&self) -> &Utf8Path {
+        self.temp_dir.path()
     }
 
     async fn invoke_and_capture_output_inner(
@@ -251,7 +267,7 @@ pub struct CompiledTest {
 }
 
 impl CompiledTest {
-    pub fn new(path: &Utf8Path) -> anyhow::Result<CompiledTest> {
+    pub fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
         let feature_combination = FeatureCombination::HttpOnly;
         let name = path.file_name().unwrap();
         let wrapper_crate_root = Utf8Path::new("tmp")
@@ -275,23 +291,38 @@ impl CompiledTest {
         )?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
-        Command::new("cargo-component")
-            .arg("build")
-            .arg("--target-dir")
-            .arg(shared_target)
+        let mut command = Command::new("cargo-component");
+        command.arg("build");
+        if use_shared_target {
+            command.arg("--target-dir");
+            command.arg(shared_target);
+        }
+        command
             .args(feature_combination.cargo_args())
             .current_dir(&wrapper_crate_root)
             .status()?;
 
-        Ok(CompiledTest {
-            wasm: Precompiled(
-                Utf8Path::new("tmp")
-                    .join("rt-target")
-                    .join("wasm32-wasip1")
-                    .join("debug")
-                    .join(format!("{}.wasm", name.to_snake_case())),
-            ),
-        })
+        if use_shared_target {
+            Ok(CompiledTest {
+                wasm: Precompiled(
+                    Utf8Path::new("tmp")
+                        .join("rt-target")
+                        .join("wasm32-wasip1")
+                        .join("debug")
+                        .join(format!("{}.wasm", name.to_snake_case())),
+                ),
+            })
+        } else {
+            Ok(CompiledTest {
+                wasm: Precompiled(
+                    wrapper_crate_root
+                        .join("target")
+                        .join("wasm32-wasip1")
+                        .join("debug")
+                        .join(format!("{}.wasm", name.to_snake_case())),
+                ),
+            })
+        }
     }
 
     pub fn wasm_path(&self) -> &Utf8Path {

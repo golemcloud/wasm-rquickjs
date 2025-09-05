@@ -1,0 +1,6 @@
+package quickjs:fs;
+
+world fs {
+  export run-async: func();
+  export run: func();
+}
