@@ -26,5 +26,11 @@ declare module 'example3' {
        */
       static merge(h1: Hello, h2: Hello): Promise<Hello>;
     }
+    export class HelloWithStaticCreate {
+      static create(name: string): Promise<HelloWithStaticCreate>;
+      getName(): Promise<string>;
+      static compare(h1: Hello, h2: Hello): Promise<number>;
+      static merge(h1: Hello, h2: Hello): Promise<Hello>;
+    }
   }
 }

@@ -7,4 +7,10 @@ declare module 'quickjs:example3/iface' {
     static compare(h1: Hello, h2: Hello): number;
     static merge(h1: Hello, h2: Hello): Hello;
   }
+  export class HelloWithStaticCreate {
+    static create(name: string): HelloWithStaticCreate;
+    getName(): string;
+    static compare(h1: Hello, h2: Hello): number;
+    static merge(h1: Hello, h2: Hello): Hello;
+  }
 }
