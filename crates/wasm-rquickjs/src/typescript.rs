@@ -206,13 +206,14 @@ fn declare_functions_and_resources(
                     let js_param_name = escape_js_ident(param_name.to_lower_camel_case());
                     exported_function.param(
                         &js_param_name,
-                        &ts_type_reference(context, param_type, interface_stack)?,
+                        &ts_type_reference(context, param_type, false, interface_stack)?,
                     );
                 }
                 if let Some(result_type) = &function.result {
                     exported_function.result(&ts_type_reference(
                         context,
                         result_type,
+                        false,
                         interface_stack,
                     )?);
                 }
@@ -273,13 +274,18 @@ fn declare_functions_and_resources(
                 let js_param_name = escape_js_ident(param_name.to_lower_camel_case());
                 fun.param(
                     &js_param_name,
-                    &ts_type_reference(context, param_type, interface_stack)?,
+                    &ts_type_reference(context, param_type, false, interface_stack)?,
                 );
             }
             if !matches!(&function.kind, FunctionKind::Constructor(_))
                 && let Some(result_type) = &function.result
             {
-                fun.result(&ts_type_reference(context, result_type, interface_stack)?);
+                fun.result(&ts_type_reference(
+                    context,
+                    result_type,
+                    false,
+                    interface_stack,
+                )?);
             }
         }
 
@@ -404,7 +410,7 @@ fn export_type_definition(
                 }
             };
 
-            let type_def = ts_type_definition(context, typ, interface_stack)?;
+            let type_def = ts_type_definition(context, typ, false, interface_stack)?;
             result.write_docs(&typ.docs);
             result.export_type(&js_name, &type_def);
             Ok(())
@@ -416,6 +422,7 @@ fn export_type_definition(
 fn ts_type_reference(
     context: &GeneratorContext,
     typ: &Type,
+    is_field: bool,
     interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<String> {
     match typ {
@@ -440,7 +447,7 @@ fn ts_type_reference(
                 .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
 
             match &typ.name {
-                None => ts_type_definition(context, typ, interface_stack),
+                None => ts_type_definition(context, typ, is_field, interface_stack),
                 Some(name) => {
                     match &typ.owner {
                         TypeOwner::Interface(interface_id) => {
@@ -557,6 +564,7 @@ fn visit_subtree<'a>(
 fn ts_type_definition(
     context: &GeneratorContext,
     typ: &TypeDef,
+    is_field: bool,
     interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<String> {
     match &typ.kind {
@@ -565,8 +573,17 @@ fn ts_type_definition(
             record_def.push_str("{\n");
             for field in &record.fields {
                 let js_name = escape_js_ident(field.name.to_lower_camel_case());
-                let field_type = ts_type_reference(context, &field.ty, interface_stack)?;
-                record_def.push_str(&format!("  {js_name}: {field_type};\n"));
+                let field_type = ts_type_reference(context, &field.ty, true, interface_stack)?;
+                let optional = {
+                    match &field.ty {
+                        Type::Id(type_id) => match &context.typ(*type_id)?.kind {
+                            TypeDefKind::Option(_) => "?",
+                            _ => "",
+                        },
+                        _ => "",
+                    }
+                };
+                record_def.push_str(&format!("  {js_name}{optional}: {field_type};\n"));
             }
             record_def.push('}');
             Ok(record_def)
@@ -598,7 +615,7 @@ fn ts_type_definition(
             let types: Vec<String> = tuple
                 .types
                 .iter()
-                .map(|t| ts_type_reference(context, t, interface_stack))
+                .map(|t| ts_type_reference(context, t, false, interface_stack))
                 .collect::<Result<_, _>>()?;
             Ok(format!("[{}]", types.join(", ")))
         }
@@ -608,7 +625,7 @@ fn ts_type_definition(
                 let case_name = &case.name;
                 match &case.ty {
                     Some(ty) => {
-                        let case_type = ts_type_reference(context, ty, interface_stack)?;
+                        let case_type = ts_type_reference(context, ty, false, interface_stack)?;
                         case_defs.push(format!("{{\n  tag: '{case_name}'\n  val: {case_type}\n}}"));
                     }
                     None => {
@@ -628,19 +645,23 @@ fn ts_type_definition(
                 .collect::<Vec<_>>();
             Ok(cases.join(" | "))
         }
-        TypeDefKind::Option(inner_type) => Ok(format!(
-            "{} | undefined",
-            ts_type_reference(context, inner_type, interface_stack)?
-        )),
+        TypeDefKind::Option(inner_type) => {
+            let inner_ts_type = ts_type_reference(context, inner_type, false, interface_stack)?;
+            if is_field {
+                Ok(inner_ts_type)
+            } else {
+                Ok(format!("{} | undefined", inner_ts_type))
+            }
+        }
         TypeDefKind::Result(result) => {
             let ok_type = result
                 .ok
-                .map(|t| ts_type_reference(context, &t, interface_stack))
+                .map(|t| ts_type_reference(context, &t, false, interface_stack))
                 .transpose()?
                 .unwrap_or("void".to_string());
             let err_type = result
                 .err
-                .map(|t| ts_type_reference(context, &t, interface_stack))
+                .map(|t| ts_type_reference(context, &t, false, interface_stack))
                 .transpose()?
                 .unwrap_or("Error".to_string());
             Ok(format!("Result<{ok_type}, {err_type}>"))
@@ -648,9 +669,9 @@ fn ts_type_definition(
         TypeDefKind::List(Type::U8) => Ok("Uint8Array".to_string()),
         TypeDefKind::List(elem_type) | TypeDefKind::FixedSizeList(elem_type, _) => Ok(format!(
             "{}[]",
-            ts_type_reference(context, elem_type, interface_stack)?
+            ts_type_reference(context, elem_type, false, interface_stack)?
         )),
-        TypeDefKind::Type(aliased) => ts_type_reference(context, aliased, interface_stack),
+        TypeDefKind::Type(aliased) => ts_type_reference(context, aliased, false, interface_stack),
         TypeDefKind::Future(_) => Err(anyhow!("Future types are not supported yet")),
         TypeDefKind::Stream(_) => Err(anyhow!("Stream types are not supported yet")),
         TypeDefKind::Resource => ts_resource_reference(context, typ, interface_stack),

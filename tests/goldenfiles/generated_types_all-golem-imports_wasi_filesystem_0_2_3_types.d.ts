@@ -302,9 +302,9 @@ declare module 'wasi:filesystem/types@0.2.3' {
     type: DescriptorType;
     linkCount: LinkCount;
     size: Filesize;
-    dataAccessTimestamp: Datetime | undefined;
-    dataModificationTimestamp: Datetime | undefined;
-    statusChangeTimestamp: Datetime | undefined;
+    dataAccessTimestamp?: Datetime;
+    dataModificationTimestamp?: Datetime;
+    statusChangeTimestamp?: Datetime;
   };
   /**
    * When setting a timestamp, this gives the value to set it to.

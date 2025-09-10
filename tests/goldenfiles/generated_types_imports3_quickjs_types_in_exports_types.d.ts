@@ -25,7 +25,7 @@ declare module 'quickjs:types-in-exports/types' {
     b: number;
     c: number;
     d: Rec2;
-    e: Rec2 | undefined;
+    e?: Rec2;
     f: Result<number, string>;
     g: Rec2[];
     h: ListOfStrings;

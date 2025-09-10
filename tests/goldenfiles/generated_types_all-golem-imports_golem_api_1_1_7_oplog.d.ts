@@ -58,7 +58,7 @@ declare module 'golem:api/oplog@1.1.7' {
     env: [string, string][];
     createdBy: AccountId;
     projectId: ProjectId;
-    parent: WorkerId | undefined;
+    parent?: WorkerId;
     componentSize: bigint;
     initialTotalLinearMemorySize: bigint;
     initialActivePlugins: PluginInstallationDescription[];
@@ -73,8 +73,8 @@ declare module 'golem:api/oplog@1.1.7' {
   export type LocalSpanData = {
     spanId: SpanId;
     start: Datetime;
-    parent: SpanId | undefined;
-    linkedContext: bigint | undefined;
+    parent?: SpanId;
+    linkedContext?: bigint;
     attributes: Attribute[];
     inherited: boolean;
   };
@@ -100,7 +100,7 @@ declare module 'golem:api/oplog@1.1.7' {
   };
   export type ExportedFunctionCompletedParameters = {
     timestamp: Datetime;
-    response: WitValue | undefined;
+    response?: WitValue;
     consumedFuel: bigint;
   };
   export type ErrorParameters = {
@@ -127,7 +127,7 @@ declare module 'golem:api/oplog@1.1.7' {
   export type ExportedFunctionInvocationParameters = {
     idempotencyKey: string;
     functionName: string;
-    input: WitValue[] | undefined;
+    input?: WitValue[];
   };
   export type WorkerInvocation = {
     tag: 'exported-function'
@@ -162,7 +162,7 @@ declare module 'golem:api/oplog@1.1.7' {
   export type FailedUpdateParameters = {
     timestamp: Datetime;
     targetVersion: ComponentVersion;
-    details: string | undefined;
+    details?: string;
   };
   export type GrowMemoryParameters = {
     timestamp: Datetime;
@@ -204,8 +204,8 @@ declare module 'golem:api/oplog@1.1.7' {
   export type StartSpanParameters = {
     timestamp: Datetime;
     spanId: SpanId;
-    parent: SpanId | undefined;
-    linkedContext: SpanId | undefined;
+    parent?: SpanId;
+    linkedContext?: SpanId;
     attributes: Attribute[];
   };
   export type FinishSpanParameters = {
