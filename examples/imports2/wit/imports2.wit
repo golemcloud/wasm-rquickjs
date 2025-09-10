@@ -4,4 +4,5 @@ world imports2 {
   import quickjs:example3/iface;
 
   export test: func(name: string) -> string;
+  export test-static-create: func(name: string) -> string;
 }

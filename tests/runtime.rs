@@ -237,6 +237,7 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
             &[Val::Resource(h1), Val::Resource(h2)],
         )
         .await;
+
     let compare = compare?;
 
     let (merged, _) = test_instance
@@ -635,15 +636,47 @@ async fn imports2(
     assert_eq!(result, "someone & World");
     assert_eq!(
         output,
-        indoc!(
-            r#"
-      Comparison 1: 1
-      Comparison 2: -1
-      Dump 1: someone
-      Dump 2: ?
-      Dump 3: [someone & World]
-      "#
-        )
+        indoc! { r#"
+          Comparison 1: 1
+          Comparison 2: -1
+          Dump 1: someone
+          Dump 2: ?
+          Dump 3: [someone & World]
+        "# }
+    );
+
+    Ok(())
+}
+
+#[test]
+async fn imports2_static_create(
+    #[tagged_as("imports2")] compiled: &CompiledTest,
+    #[tagged_as("example3")] example3: &CompiledTest,
+) -> anyhow::Result<()> {
+    let composed = example3.plug_into(compiled)?;
+
+    let (result, output) = invoke_and_capture_output(
+        composed.wasm_path(),
+        None,
+        "test-static-create",
+        &[Val::String("someone".to_string())],
+    )
+    .await;
+    let result = result?;
+
+    let Some(Val::String(result)) = result else {
+        return Err(anyhow!("Expected a string result"));
+    };
+
+    assert_eq!(result, "someone");
+    assert_eq!(
+        output,
+        indoc! { r#"
+          { [Function: HelloWithStaticCreate] create: [Function], compare: [Function], merge: [Function] }
+          [Function]
+          [Function]
+          [Function]
+        "# }
     );
 
     Ok(())

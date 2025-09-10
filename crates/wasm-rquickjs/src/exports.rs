@@ -383,7 +383,7 @@ fn generate_exported_resource_function_impl(
     name: &str,
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
-    let func_name = get_function_name(name, &function)?;
+    let func_name = get_function_name(name, function)?;
 
     let rust_fn = RustWitFunction::new(context, &func_name, function);
     let func_name_ident = rust_fn.function_name_ident();

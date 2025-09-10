@@ -1,4 +1,3 @@
-
 import * as iface from 'quickjs:example3/iface';
 
 export const test = (input) => {
@@ -26,4 +25,16 @@ export const test = (input) => {
     merged[Symbol.dispose]();
 
     return result;
+};
+
+
+export const testStaticCreate = (input) => {
+    // NOTE: we cannot implement the constructor in js properly,
+    //       so we just check for the existence of functions
+    console.log(iface.HelloWithStaticCreate);
+    console.log(iface.HelloWithStaticCreate.create);
+    console.log(iface.HelloWithStaticCreate.compare);
+    console.log(iface.HelloWithStaticCreate.merge);
+
+    return input;
 };

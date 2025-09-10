@@ -1080,7 +1080,7 @@ pub fn param_refs_as_tuple(param_refs: &[TokenStream]) -> TokenStream {
     }
 }
 
-pub fn get_function_name(name: &str, function: &&Function) -> anyhow::Result<String> {
+pub fn get_function_name(name: &str, function: &Function) -> anyhow::Result<String> {
     let func_name = match &function.kind {
         FunctionKind::Freestanding => name.to_string(),
         FunctionKind::AsyncFreestanding => name.to_string(),
