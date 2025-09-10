@@ -11,8 +11,8 @@ use proc_macro2::{Ident, Span};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, VecDeque};
 use wit_parser::{
-    Function, Interface, InterfaceId, PackageId, PackageName, PackageSourceMap, Resolve, TypeId,
-    TypeOwner, WorldId, WorldItem,
+    Function, Interface, InterfaceId, PackageId, PackageName, PackageSourceMap, Resolve, TypeDef,
+    TypeId, TypeOwner, WorldId, WorldItem,
 };
 
 mod conversions;
@@ -120,7 +120,7 @@ pub fn generate_dts(
     output: &Utf8Path,
     world: Option<&str>,
 ) -> anyhow::Result<Vec<Utf8PathBuf>> {
-    // Making sure the target directories exists
+    // Making sure the target directories exist
     std::fs::create_dir_all(output).context("Failed to create output directory")?;
 
     // Resolving the WIT package
@@ -256,6 +256,13 @@ impl<'a> GeneratorContext<'a> {
             interface: Some(interface),
             interface_id: Some(*interface_id),
         })
+    }
+
+    fn typ(&self, type_id: TypeId) -> anyhow::Result<&TypeDef> {
+        self.resolve
+            .types
+            .get(type_id)
+            .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))
     }
 }
 

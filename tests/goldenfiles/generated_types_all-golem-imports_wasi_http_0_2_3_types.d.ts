@@ -446,22 +446,22 @@ declare module 'wasi:http/types@0.2.3' {
    * Defines the case payload type for `DNS-error` above:
    */
   export type DnsErrorPayload = {
-    rcode: string | undefined;
-    infoCode: number | undefined;
+    rcode?: string;
+    infoCode?: number;
   };
   /**
    * Defines the case payload type for `TLS-alert-received` above:
    */
   export type TlsAlertReceivedPayload = {
-    alertId: number | undefined;
-    alertMessage: string | undefined;
+    alertId?: number;
+    alertMessage?: string;
   };
   /**
    * Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
    */
   export type FieldSizePayload = {
-    fieldName: string | undefined;
-    fieldSize: number | undefined;
+    fieldName?: string;
+    fieldSize?: number;
   };
   /**
    * These cases are inspired by the IANA HTTP Proxy Error Types:
