@@ -303,7 +303,14 @@ fn generate_import_module(
                 }
             }
         } else {
-            quote! {}
+            quote! {
+                #[qjs(constructor)]
+                pub fn new() -> Self {
+                  Self {
+                    inner: None,
+                  }
+                }
+            }
         };
 
         let mut methods: Vec<TokenStream> = Vec::new();
@@ -365,7 +372,7 @@ fn generate_import_module(
                     });
                 }
                 FunctionKind::Static(_) => {
-                    methods.push(quote!{
+                    methods.push(quote! {
                        #[qjs(static)]
                        pub fn #rust_method_name_ident(#(#param_list),*) -> #wrapped_result {
                             let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*);
