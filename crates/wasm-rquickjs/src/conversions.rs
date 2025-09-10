@@ -2,7 +2,7 @@ use crate::GeneratorContext;
 use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::{RustType, TypeOwnershipStyle, escape_rust_ident, type_mode_for};
 use crate::types::{get_wrapped_type, type_id_to_type_ref};
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -58,11 +58,7 @@ fn generate_conversion_instances_for_type(
         return Ok(None);
     }
 
-    let typ = context
-        .resolve
-        .types
-        .get(type_id)
-        .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
+    let typ = context.typ(type_id)?;
 
     match &typ.kind {
         TypeDefKind::Record(record) => {

@@ -46,11 +46,8 @@ pub fn type_id_to_type_ref(
     context: &GeneratorContext,
     type_id: TypeId,
 ) -> anyhow::Result<TokenStream> {
-    let typ = context
-        .resolve
-        .types
-        .get(type_id)
-        .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
+    let typ = context.typ(type_id)?;
+
     match &typ.kind {
         TypeDefKind::Option(inner) => {
             let inner_ref = to_type_ref(context, inner)?;
@@ -251,11 +248,7 @@ pub fn type_borrows_resource(
 ) -> anyhow::Result<bool> {
     match typ {
         Type::Id(type_id) => {
-            let typ = context
-                .resolve
-                .types
-                .get(*type_id)
-                .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
+            let typ = context.typ(*type_id)?;
 
             match &typ.kind {
                 TypeDefKind::Handle(Handle::Borrow(id)) if id == resource_type_id => Ok(true),
@@ -382,11 +375,7 @@ pub fn get_wrapped_type_internal(
 
     match typ {
         Type::Id(type_id) => {
-            let typ = context
-                .resolve
-                .types
-                .get(*type_id)
-                .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
+            let typ = context.typ(*type_id)?;
 
             match &typ.kind {
                 TypeDefKind::Tuple(tuple) => {
@@ -863,11 +852,8 @@ fn owned_resource_ref(
 fn follow_type_paths(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow::Result<TypeDef> {
     let mut current_type_id = type_id;
     loop {
-        let typ = context
-            .resolve
-            .types
-            .get(current_type_id)
-            .ok_or_else(|| anyhow!("Unknown type id: {current_type_id:?}"))?;
+        let typ = context.typ(current_type_id)?;
+
         match &typ.kind {
             TypeDefKind::Type(Type::Id(inner_type_id)) => {
                 current_type_id = *inner_type_id;

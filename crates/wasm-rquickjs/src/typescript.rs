@@ -377,11 +377,7 @@ fn export_type_definition(
         return Ok(());
     }
 
-    let typ = context
-        .resolve
-        .types
-        .get(type_id)
-        .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
+    let typ = context.typ(type_id)?;
 
     match &typ.name {
         Some(name) => {
@@ -440,11 +436,7 @@ fn ts_type_reference(
         Type::String => Ok("string".to_string()),
         Type::ErrorContext => Ok("ErrorContext".to_string()),
         Type::Id(type_id) => {
-            let typ = context
-                .resolve
-                .types
-                .get(*type_id)
-                .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
+            let typ = context.typ(*type_id)?;
 
             match &typ.name {
                 None => ts_type_definition(context, typ, is_field, interface_stack),
@@ -489,11 +481,7 @@ fn visit_subtree<'a>(
     result: &mut VisitResult,
 ) -> anyhow::Result<()> {
     if let Type::Id(type_id) = typ {
-        let typ = context
-            .resolve
-            .types
-            .get(*type_id)
-            .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))?;
+        let typ = context.typ(*type_id)?;
 
         if !result.visited_types.contains(type_id) {
             if !matches!(typ.kind, TypeDefKind::Resource) {
@@ -593,11 +581,7 @@ fn ts_type_definition(
                 wit_parser::Handle::Borrow(id) => *id,
                 wit_parser::Handle::Own(id) => *id,
             };
-            let resource_type = context
-                .resolve
-                .types
-                .get(resource_type_id)
-                .ok_or_else(|| anyhow!("Unknown type id: {resource_type_id:?}"))?;
+            let resource_type = context.typ(resource_type_id)?;
 
             ts_resource_reference(context, resource_type, interface_stack)
         }
