@@ -91,13 +91,13 @@ impl HttpRequest {
         self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
     }
 
-    pub fn readable_stream_body<'js>(&mut self) -> BodySink {
+    pub fn readable_stream_body(&mut self) -> BodySink {
         use futures::StreamExt;
 
         let mut body_sink = BodySink::new();
         let receiver = body_sink.take_receiver();
 
-        let stream = receiver.into_stream().map(|chunk| Ok(chunk));
+        let stream = receiver.into_stream().map(Ok);
         let body = Body::from_stream(stream);
         self.body = Some(body);
         body_sink
@@ -112,7 +112,8 @@ impl HttpRequest {
     }
 
     pub fn add_header(&mut self, name: String, value: String) {
-        let header_name = HeaderName::from_bytes(name.as_bytes()).expect("failed to parse header name");
+        let header_name =
+            HeaderName::from_bytes(name.as_bytes()).expect("failed to parse header name");
         let header_value = HeaderValue::from_str(&value).expect("failed to parse header value");
         self.headers.insert(header_name, header_value);
     }

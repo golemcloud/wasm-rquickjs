@@ -11,7 +11,7 @@ pub mod native_module {
         encoding: String,
     ) -> List<(Option<String>, Option<String>)> {
         let path = Path::new(&path);
-        match std::fs::read(&path) {
+        match std::fs::read(path) {
             Ok(bytes) => match Encoding::for_label(encoding.as_bytes()) {
                 Some(encoding) => {
                     let (decoded, _) = encoding.decode_with_bom_removal(&bytes);
@@ -33,7 +33,7 @@ pub mod native_module {
         ctx: Ctx<'_>,
     ) -> List<(Option<TypedArray<'_, u8>>, Option<String>)> {
         let path = Path::new(&path);
-        match std::fs::read(&path) {
+        match std::fs::read(path) {
             Ok(bytes) => {
                 let typed_array =
                     TypedArray::new_copy(ctx.clone(), &bytes).expect("Failed to create TypedArray");
@@ -57,16 +57,15 @@ pub mod native_module {
         } else {
             let bytes = content.as_bytes();
             let path = Path::new(&path);
-            if let Some(parent) = path.parent() {
-                if let Err(err) = std::fs::create_dir_all(parent) {
+            if let Some(parent) = path.parent()
+                && let Err(err) = std::fs::create_dir_all(parent) {
                     return Some(format!(
                         "Failed to create directory {}: {}",
                         parent.display(),
                         err
                     ));
                 }
-            }
-            if let Err(err) = std::fs::write(&path, bytes) {
+            if let Err(err) = std::fs::write(path, bytes) {
                 Some(format!("Failed to write file {path:?}: {err}"))
             } else {
                 None // Success
@@ -78,16 +77,15 @@ pub mod native_module {
     pub fn write_file(path: String, content: TypedArray<'_, u8>) -> Option<String> {
         if let Some(bytes) = content.as_bytes() {
             let path = Path::new(&path);
-            if let Some(parent) = path.parent() {
-                if let Err(err) = std::fs::create_dir_all(parent) {
+            if let Some(parent) = path.parent()
+                && let Err(err) = std::fs::create_dir_all(parent) {
                     return Some(format!(
                         "Failed to create directory {}: {}",
                         parent.display(),
                         err
                     ));
                 }
-            }
-            if let Err(err) = std::fs::write(&path, bytes) {
+            if let Err(err) = std::fs::write(path, bytes) {
                 Some(format!("Failed to write file {path:?}: {err}"))
             } else {
                 None // Success
