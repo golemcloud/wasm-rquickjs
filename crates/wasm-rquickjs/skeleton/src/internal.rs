@@ -211,7 +211,7 @@ where
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call of {fun}: {exception:?}", fun = function_path.join("."));
+                panic! ("Exception during call of {fun}: {exception}", fun = function_path.join("."), exception = format_js_exception(&ctx, exception));
             }
             Err(e) => {
                 panic! ("Error during call of {fun}: {e:?}", fun = function_path.join("."));
@@ -228,7 +228,7 @@ where
                             match e {
                                 Error::Exception => {
                                     let exception = ctx.catch();
-                                    panic! ("Exception during awaiting call result for {function_path}: {exception:?}", function_path=function_path.join("."))
+                                    panic! ("Exception during awaiting call result for {function_path}: {exception}", function_path=function_path.join("."), exception = format_js_exception(&ctx, exception))
                                 }
                                 _ => {
                                     panic ! ("Error during awaiting call result for {function_path}: {e:?}", function_path=function_path.join("."))
@@ -548,4 +548,20 @@ fn dump_cannot_find_method(
     ));
 
     panic_message
+}
+
+fn format_js_exception<'js>(ctx: &Ctx<'js>, exc: Value<'js>) -> String {
+    if let Ok(obj) = Object::from_js(ctx, exc.clone()) {
+        let message: Option<String> = obj.get("message").ok();
+        let stack: Option<String> = obj.get("stack").ok();
+
+        match (message, stack) {
+            (Some(msg), Some(st)) => format!("JavaScript Error: {msg}\nStack:\n{st}"),
+            (Some(msg), None) => format!("JavaScript Error: {msg}"),
+            (None, Some(st)) => format!("JavaScript Error (no message)\nStack:\n{st}"),
+            _ => format!("JavaScript exception: {exc:?}"),
+        }
+    } else {
+        format!("JavaScript exception (non-object): {exc:?}")
+    }
 }
