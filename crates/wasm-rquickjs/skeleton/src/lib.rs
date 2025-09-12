@@ -10,4 +10,4 @@ static JS_EXPORT_MODULE: &str = include_str!("bundle_script_module.js");
 
 static JS_ADDITIONAL_MODULES: std::sync::LazyLock<
     Vec<(&str, Box<dyn (Fn() -> String) + Send + Sync>)>,
-> = std::sync::LazyLock::new(|| vec![]);
+> = std::sync::LazyLock::new(std::vec::Vec::new);
