@@ -1143,7 +1143,7 @@ pub fn get_return_type(
 
                 let expected_exception = result
                     .err
-                    .map(|err_type| get_wrapped_type(context, &*err, &*err, &err_type))
+                    .map(|err_type| get_wrapped_type(context, err, err, &err_type))
                     .transpose()?
                     .unwrap_or(WrappedType::unit());
 
@@ -1156,7 +1156,7 @@ pub fn get_return_type(
                             typ,
                         )
                         .context(format!("Failed to encode result type for {name}"))?,
-                        func_ret: get_wrapped_type(context, &*ok, &*ok, &ok_type)
+                        func_ret: get_wrapped_type(context, ok, ok, &ok_type)
                             .context(format!("Failed to encode result type for {name}"))?,
                         expected_exception: Some(expected_exception),
                     })

@@ -204,7 +204,7 @@ fn generate_import_module(
                 let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
 
                 let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
-                let return_types = get_return_type(context, &function, name, &rust_fn)?;
+                let return_types = get_return_type(context, function, name, &rust_fn)?;
                 let original_result = &return_types.wit_level_ret.original_type_ref;
                 let wrapped_result = &return_types.func_ret.wrapped_type_ref;
                 let wrap = &return_types.func_ret.wrap;
@@ -356,7 +356,7 @@ fn generate_import_module(
 
             let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
 
-            let return_types = get_return_type(context, &function, &name, &rust_fn)?;
+            let return_types = get_return_type(context, function, &name, &rust_fn)?;
             let original_result = &return_types.wit_level_ret.original_type_ref;
             let wrapped_result = &return_types.func_ret.wrapped_type_ref;
             let wrap = &return_types.func_ret.wrap;

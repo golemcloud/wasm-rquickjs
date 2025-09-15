@@ -212,9 +212,9 @@ fn declare_functions_and_resources(
                     );
                 }
                 define_return_type(
-                    &context,
-                    &interface_stack,
-                    &function,
+                    context,
+                    interface_stack,
+                    function,
                     &mut exported_function,
                 )?;
             }
@@ -280,7 +280,7 @@ fn declare_functions_and_resources(
                 );
             }
             if !matches!(&function.kind, FunctionKind::Constructor(_)) {
-                define_return_type(&context, &interface_stack, &function, &mut fun)?;
+                define_return_type(context, interface_stack, function, &mut fun)?;
             }
         }
 
@@ -322,15 +322,15 @@ fn add_throws_to_doc(
 ) -> anyhow::Result<Docs> {
     let mut docs = original_docs.clone();
 
-    if let Some(result_type) = return_type {
-        if let Type::Id(type_id) = result_type {
+    if let Some(result_type) = return_type
+        && let Type::Id(type_id) = result_type {
             let typ = context
                 .resolve
                 .types
                 .get(*type_id)
                 .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
-            if let TypeDefKind::Result(result) = &typ.kind {
-                if let Some(err) = result.err {
+            if let TypeDefKind::Result(result) = &typ.kind
+                && let Some(err) = result.err {
                     let error_type = ts_type_reference(context, &err, false, interface_stack)?;
                     let throws_line = format!("@throws {error_type}");
                     if docs.is_empty() {
@@ -342,9 +342,7 @@ fn add_throws_to_doc(
                             .push_str(&format!("\n{}", throws_line));
                     }
                 }
-            }
-        }
-    };
+        };
 
     Ok(docs)
 }

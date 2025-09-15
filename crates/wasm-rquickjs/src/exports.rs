@@ -315,7 +315,7 @@ fn generate_exported_function_impl(
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
-    let return_types = get_return_type(context, &function, name, &rust_fn)?;
+    let return_types = get_return_type(context, function, name, &rust_fn)?;
 
     let param_refs = to_wrapped_param_refs(&param_ident_type);
     let param_refs_tuple = param_refs_as_tuple(&param_refs);
@@ -426,7 +426,7 @@ fn generate_exported_resource_function_impl(
             expected_exception: None,
         }
     } else {
-        get_return_type(context, &function, name, &rust_fn)?
+        get_return_type(context, function, name, &rust_fn)?
     };
 
     let param_refs = to_wrapped_param_refs(&param_ident_type);
