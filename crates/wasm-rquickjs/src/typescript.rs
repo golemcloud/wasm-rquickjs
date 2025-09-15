@@ -211,12 +211,7 @@ fn declare_functions_and_resources(
                         &ts_type_reference(context, param_type, false, interface_stack)?,
                     );
                 }
-                define_return_type(
-                    context,
-                    interface_stack,
-                    function,
-                    &mut exported_function,
-                )?;
+                define_return_type(context, interface_stack, function, &mut exported_function)?;
             }
             FunctionKind::AsyncFreestanding
             | FunctionKind::AsyncMethod(_)
@@ -323,26 +318,28 @@ fn add_throws_to_doc(
     let mut docs = original_docs.clone();
 
     if let Some(result_type) = return_type
-        && let Type::Id(type_id) = result_type {
-            let typ = context
-                .resolve
-                .types
-                .get(*type_id)
-                .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
-            if let TypeDefKind::Result(result) = &typ.kind
-                && let Some(err) = result.err {
-                    let error_type = ts_type_reference(context, &err, false, interface_stack)?;
-                    let throws_line = format!("@throws {error_type}");
-                    if docs.is_empty() {
-                        docs.contents = Some(throws_line);
-                    } else {
-                        docs.contents
-                            .as_mut()
-                            .unwrap()
-                            .push_str(&format!("\n{}", throws_line));
-                    }
-                }
-        };
+        && let Type::Id(type_id) = result_type
+    {
+        let typ = context
+            .resolve
+            .types
+            .get(*type_id)
+            .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
+        if let TypeDefKind::Result(result) = &typ.kind
+            && let Some(err) = result.err
+        {
+            let error_type = ts_type_reference(context, &err, false, interface_stack)?;
+            let throws_line = format!("@throws {error_type}");
+            if docs.is_empty() {
+                docs.contents = Some(throws_line);
+            } else {
+                docs.contents
+                    .as_mut()
+                    .unwrap()
+                    .push_str(&format!("\n{}", throws_line));
+            }
+        }
+    };
 
     Ok(docs)
 }
