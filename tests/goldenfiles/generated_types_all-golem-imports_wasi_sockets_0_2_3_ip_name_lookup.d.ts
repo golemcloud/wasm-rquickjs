@@ -17,8 +17,9 @@ declare module 'wasi:sockets/ip-name-lookup@0.2.3' {
    * - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
    * - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
+   * @throws ErrorCode
    */
-  export function resolveAddresses(network: Network, name: string): Result<ResolveAddressStream, ErrorCode>;
+  export function resolveAddresses(network: Network, name: string): ResolveAddressStream;
   export class ResolveAddressStream {
     /**
      * Returns the next address from the resolver.
@@ -31,8 +32,9 @@ declare module 'wasi:sockets/ip-name-lookup@0.2.3' {
      * - `temporary-resolver-failure`: A temporary failure in name resolution occurred. (EAI_AGAIN)
      * - `permanent-resolver-failure`: A permanent failure in name resolution occurred. (EAI_FAIL)
      * - `would-block`:                A result is not available yet. (EWOULDBLOCK, EAGAIN)
+     * @throws ErrorCode
      */
-    resolveNextAddress(): Result<IpAddress | undefined, ErrorCode>;
+    resolveNextAddress(): IpAddress | undefined;
     /**
      * Create a `pollable` which will resolve once the stream is ready for I/O.
      * Note: this function is here for WASI 0.2 only.

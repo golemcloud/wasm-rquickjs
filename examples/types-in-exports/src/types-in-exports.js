@@ -52,7 +52,11 @@ export const types = {
         console.log(`a.tag: ${a.tag}`);
         console.log(`a.val: ${a.val}`);
         // return: result<s32, string>
-        return a;
+        if (a.tag === 'ok') {
+            return a.val;
+        } else {
+            throw a.val;
+        }
     },
     f5: (a) => {
         // a: result<_, string>
@@ -60,7 +64,11 @@ export const types = {
         console.log(`a.tag: ${a.tag}`);
         console.log(`a.val: ${a.val}`);
         // return: result<_, string>
-        return a;
+        if (a.tag === 'ok') {
+            return a.val;
+        } else {
+            throw a.val;
+        }
     },
     f6: (a) => {
         // a: result<string>
@@ -68,7 +76,11 @@ export const types = {
         console.log(`a.tag: ${a.tag}`);
         console.log(`a.val: ${a.val}`);
         // return: result<string>
-        return a;
+        if (a.tag === 'ok') {
+            return a.val;
+        } else {
+            throw a.val;
+        }
     },
     f7: (a) => {
         // a: result
@@ -76,7 +88,11 @@ export const types = {
         console.log(`a.tag: ${a.tag}`);
         console.log(`a.val: ${a.val}`);
         // return: result
-        return a;
+        if (a.tag === 'ok') {
+            return a.val;
+        } else {
+            throw a.val;
+        }
     },
     f8: (a) => {
         // a: tuple<string, u32, f32>

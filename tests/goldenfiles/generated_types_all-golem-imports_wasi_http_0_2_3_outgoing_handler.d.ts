@@ -13,8 +13,9 @@ declare module 'wasi:http/outgoing-handler@0.2.3' {
    * This function may return an error if the `outgoing-request` is invalid
    * or not allowed to be made. Otherwise, protocol errors are reported
    * through the `future-incoming-response`.
+   * @throws ErrorCode
    */
-  export function handle(request: OutgoingRequest, options: RequestOptions | undefined): Result<FutureIncomingResponse, ErrorCode>;
+  export function handle(request: OutgoingRequest, options: RequestOptions | undefined): FutureIncomingResponse;
   export type OutgoingRequest = wasiHttp023Types.OutgoingRequest;
   export type RequestOptions = wasiHttp023Types.RequestOptions;
   export type FutureIncomingResponse = wasiHttp023Types.FutureIncomingResponse;

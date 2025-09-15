@@ -1,5 +1,5 @@
 use crate::GeneratorContext;
-use crate::rust_bindgen::{RustFunctionParameter, RustType, escape_rust_ident};
+use crate::rust_bindgen::{RustFunctionParameter, RustType, RustWitFunction, escape_rust_ident};
 use anyhow::{Context, anyhow};
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -1107,4 +1107,95 @@ pub fn get_function_name(name: &str, function: &Function) -> anyhow::Result<Stri
         FunctionKind::Constructor(_) => "new".to_string(),
     };
     Ok(func_name)
+}
+
+pub struct ReturnTypeInformation {
+    /// The function's return type on WIT level
+    pub wit_level_ret: WrappedType,
+    /// The function's return type on wasm-rquickjs level (for Result<T, E>, it's just T)
+    pub func_ret: WrappedType,
+    /// The expected exception (if wit_level_ret is a Result<T, E>, it is Some(E))
+    pub expected_exception: Option<WrappedType>,
+}
+
+pub fn get_return_type(
+    context: &GeneratorContext,
+    function: &Function,
+    name: &str,
+    rust_fn: &RustWitFunction,
+) -> anyhow::Result<ReturnTypeInformation> {
+    match &function.result {
+        Some(typ) => match &rust_fn.return_type {
+            RustType::Result { ok, err } => {
+                let Type::Id(id) = typ else {
+                    return Err(anyhow!("Unexpected mismatch between Type and RustType"));
+                };
+                let typedef = context
+                    .resolve
+                    .types
+                    .get(*id)
+                    .ok_or_else(|| anyhow!("Unknown type id {id:?}"))?;
+                let TypeDefKind::Result(result) = &typedef.kind else {
+                    return Err(anyhow!(
+                        "Unexpected mismatch between TypeDefKind and RustType"
+                    ));
+                };
+
+                let expected_exception = result
+                    .err
+                    .map(|err_type| get_wrapped_type(context, err, err, &err_type))
+                    .transpose()?
+                    .unwrap_or(WrappedType::unit());
+
+                if let Some(ok_type) = result.ok {
+                    Ok(ReturnTypeInformation {
+                        wit_level_ret: get_wrapped_type(
+                            context,
+                            &rust_fn.return_type,
+                            &rust_fn.return_type,
+                            typ,
+                        )
+                        .context(format!("Failed to encode result type for {name}"))?,
+                        func_ret: get_wrapped_type(context, ok, ok, &ok_type)
+                            .context(format!("Failed to encode result type for {name}"))?,
+                        expected_exception: Some(expected_exception),
+                    })
+                } else {
+                    Ok(ReturnTypeInformation {
+                        wit_level_ret: get_wrapped_type(
+                            context,
+                            &rust_fn.return_type,
+                            &rust_fn.return_type,
+                            typ,
+                        )
+                        .context(format!("Failed to encode result type for {name}"))?,
+                        func_ret: WrappedType::unit(),
+                        expected_exception: Some(expected_exception),
+                    })
+                }
+            }
+            _ => Ok(ReturnTypeInformation {
+                wit_level_ret: get_wrapped_type(
+                    context,
+                    &rust_fn.return_type,
+                    &rust_fn.return_type,
+                    typ,
+                )
+                .context(format!("Failed to encode result type for {name}"))?,
+                func_ret: get_wrapped_type(
+                    context,
+                    &rust_fn.return_type,
+                    &rust_fn.return_type,
+                    typ,
+                )
+                .context(format!("Failed to encode result type for {name}"))?,
+                expected_exception: None,
+            }),
+        },
+        None => Ok(ReturnTypeInformation {
+            wit_level_ret: WrappedType::unit(),
+            func_ret: WrappedType::unit(),
+            expected_exception: None,
+        }),
+    }
 }

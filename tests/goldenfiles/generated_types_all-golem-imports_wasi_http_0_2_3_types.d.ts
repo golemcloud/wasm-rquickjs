@@ -36,8 +36,9 @@ declare module 'wasi:http/types@0.2.3' {
      * Value, represented as a list of bytes.
      * An error result will be returned if any `field-name` or `field-value` is
      * syntactically invalid, or if a field is forbidden.
+     * @throws HeaderError
      */
-    static fromList(entries: [FieldName, FieldValue][]): Result<Fields, HeaderError>;
+    static fromList(entries: [FieldName, FieldValue][]): Fields;
     /**
      * Get all of the values corresponding to a name. If the name is not present
      * in this `fields` or is syntactically invalid, an empty list is returned.
@@ -56,24 +57,27 @@ declare module 'wasi:http/types@0.2.3' {
      * Fails with `header-error.immutable` if the `fields` are immutable.
      * Fails with `header-error.invalid-syntax` if the `field-name` or any of
      * the `field-value`s are syntactically invalid.
+     * @throws HeaderError
      */
-    set(name: FieldName, value: FieldValue[]): Result<void, HeaderError>;
+    set(name: FieldName, value: FieldValue[]): void;
     /**
      * Delete all values for a name. Does nothing if no values for the name
      * exist.
      * Fails with `header-error.immutable` if the `fields` are immutable.
      * Fails with `header-error.invalid-syntax` if the `field-name` is
      * syntactically invalid.
+     * @throws HeaderError
      */
-    delete_(name: FieldName): Result<void, HeaderError>;
+    delete_(name: FieldName): void;
     /**
      * Append a value for a name. Does not change or delete any existing
      * values for that name.
      * Fails with `header-error.immutable` if the `fields` are immutable.
      * Fails with `header-error.invalid-syntax` if the `field-name` or
      * `field-value` are syntactically invalid.
+     * @throws HeaderError
      */
-    append(name: FieldName, value: FieldValue): Result<void, HeaderError>;
+    append(name: FieldName, value: FieldValue): void;
     /**
      * Retrieve the full set of names and values in the Fields. Like the
      * constructor, the list represents each name-value pair.
@@ -121,7 +125,7 @@ declare module 'wasi:http/types@0.2.3' {
      * Gives the `incoming-body` associated with this request. Will only
      * return success at most once, and subsequent calls will return error.
      */
-    consume(): Result<IncomingBody, Error>;
+    consume(): IncomingBody;
   }
   export class OutgoingRequest {
     /**
@@ -142,7 +146,7 @@ declare module 'wasi:http/types@0.2.3' {
      * this `outgoing-request` can be retrieved at most once. Subsequent
      * calls will return error.
      */
-    body(): Result<OutgoingBody, Error>;
+    body(): OutgoingBody;
     /**
      * Get the Method for the Request.
      */
@@ -151,7 +155,7 @@ declare module 'wasi:http/types@0.2.3' {
      * Set the Method for the Request. Fails if the string present in a
      * `method.other` argument is not a syntactically valid method.
      */
-    setMethod(method: Method): Result<void, Error>;
+    setMethod(method: Method): void;
     /**
      * Get the combination of the HTTP Path and Query for the Request.
      * When `none`, this represents an empty Path and empty Query.
@@ -162,7 +166,7 @@ declare module 'wasi:http/types@0.2.3' {
      * When `none`, this represents an empty Path and empty Query. Fails is the
      * string given is not a syntactically valid path and query uri component.
      */
-    setPathWithQuery(pathWithQuery: string | undefined): Result<void, Error>;
+    setPathWithQuery(pathWithQuery: string | undefined): void;
     /**
      * Get the HTTP Related Scheme for the Request. When `none`, the
      * implementation may choose an appropriate default scheme.
@@ -173,7 +177,7 @@ declare module 'wasi:http/types@0.2.3' {
      * implementation may choose an appropriate default scheme. Fails if the
      * string given is not a syntactically valid uri scheme.
      */
-    setScheme(scheme: Scheme | undefined): Result<void, Error>;
+    setScheme(scheme: Scheme | undefined): void;
     /**
      * Get the authority of the Request's target URI. A value of `none` may be used
      * with Related Schemes which do not require an authority. The HTTP and
@@ -186,7 +190,7 @@ declare module 'wasi:http/types@0.2.3' {
      * HTTPS schemes always require an authority. Fails if the string given is
      * not a syntactically valid URI authority.
      */
-    setAuthority(authority: string | undefined): Result<void, Error>;
+    setAuthority(authority: string | undefined): void;
     /**
      * Get the headers associated with the Request.
      * The returned `headers` resource is immutable: `set`, `append`, and
@@ -210,7 +214,7 @@ declare module 'wasi:http/types@0.2.3' {
      * Set the timeout for the initial connect to the HTTP Server. An error
      * return value indicates that this timeout is not supported.
      */
-    setConnectTimeout(duration: Duration | undefined): Result<void, Error>;
+    setConnectTimeout(duration: Duration | undefined): void;
     /**
      * The timeout for receiving the first byte of the Response body.
      */
@@ -219,7 +223,7 @@ declare module 'wasi:http/types@0.2.3' {
      * Set the timeout for receiving the first byte of the Response body. An
      * error return value indicates that this timeout is not supported.
      */
-    setFirstByteTimeout(duration: Duration | undefined): Result<void, Error>;
+    setFirstByteTimeout(duration: Duration | undefined): void;
     /**
      * The timeout for receiving subsequent chunks of bytes in the Response
      * body stream.
@@ -230,7 +234,7 @@ declare module 'wasi:http/types@0.2.3' {
      * body stream. An error return value indicates that this timeout is not
      * supported.
      */
-    setBetweenBytesTimeout(duration: Duration | undefined): Result<void, Error>;
+    setBetweenBytesTimeout(duration: Duration | undefined): void;
   }
   export class ResponseOutparam {
     /**
@@ -261,7 +265,7 @@ declare module 'wasi:http/types@0.2.3' {
      * Returns the incoming body. May be called at most once. Returns error
      * if called additional times.
      */
-    consume(): Result<IncomingBody, Error>;
+    consume(): IncomingBody;
   }
   export class IncomingBody {
     /**
@@ -278,7 +282,7 @@ declare module 'wasi:http/types@0.2.3' {
      * and for that backpressure to not inhibit delivery of the trailers if
      * the user does not read the entire body.
      */
-    stream(): Result<InputStream, Error>;
+    stream(): InputStream;
     /**
      * Takes ownership of `incoming-body`, and returns a `future-trailers`.
      * This function will trap if the `input-stream` child is still alive.
@@ -327,7 +331,7 @@ declare module 'wasi:http/types@0.2.3' {
      * Set the HTTP Status Code for the Response. Fails if the status-code
      * given is not a valid http status code.
      */
-    setStatusCode(statusCode: StatusCode): Result<void, Error>;
+    setStatusCode(statusCode: StatusCode): void;
     /**
      * Get the headers associated with the Request.
      * The returned `headers` resource is immutable: `set`, `append`, and
@@ -343,7 +347,7 @@ declare module 'wasi:http/types@0.2.3' {
      * this `outgoing-response` can be retrieved at most once. Subsequent
      * calls will return error.
      */
-    body(): Result<OutgoingBody, Error>;
+    body(): OutgoingBody;
   }
   export class OutgoingBody {
     /**
@@ -355,7 +359,7 @@ declare module 'wasi:http/types@0.2.3' {
      * this `outgoing-body` may be retrieved at most once. Subsequent calls
      * will return error.
      */
-    write(): Result<OutputStream, Error>;
+    write(): OutputStream;
     /**
      * Finalize an outgoing body, optionally providing trailers. This must be
      * called to signal that the response is complete. If the `outgoing-body`
@@ -365,8 +369,9 @@ declare module 'wasi:http/types@0.2.3' {
      * constructed with a Content-Length header, and the contents written
      * to the body (via `write`) does not match the value given in the
      * Content-Length.
+     * @throws ErrorCode
      */
-    static finish(this_: OutgoingBody, trailers: Trailers | undefined): Result<void, ErrorCode>;
+    static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
   }
   export class FutureIncomingResponse {
     /**

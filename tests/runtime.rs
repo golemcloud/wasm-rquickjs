@@ -5,8 +5,9 @@ use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
 use indoc::{formatdoc, indoc};
+use pretty_assertions::assert_eq;
 use rand::Rng;
-use std::i64;
+use std::slice;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -909,7 +910,7 @@ async fn roundtrip_u64(
             compiled.wasm_path(),
             None,
             "roundtrip-u64",
-            &[input.clone()],
+            slice::from_ref(&input),
         )
         .await;
         assert_eq!(result?, Some(input));
@@ -937,7 +938,7 @@ async fn roundtrip_s64(
             compiled.wasm_path(),
             None,
             "roundtrip-s64",
-            &[input.clone()],
+            slice::from_ref(&input),
         )
         .await;
         assert_eq!(result?, Some(input));

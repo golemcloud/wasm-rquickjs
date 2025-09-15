@@ -3,10 +3,16 @@ declare module 'quickjs:types-in-exports/types' {
   export function f1(a: number[], b: ListOfStrings, c: string[]): string[];
   export function f2(a: string | undefined): number | undefined;
   export function f3(a: boolean, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: bigint, j: number, k: number, l: string, m: string): [boolean, number, number, number, bigint, number, number, number, bigint, number, number, string, string];
-  export function f4(a: Result<number, string>): Result<number, string>;
-  export function f5(a: Result<void, string>): Result<void, string>;
-  export function f6(a: Result<string, Error>): Result<string, Error>;
-  export function f7(a: Result<void, Error>): Result<void, Error>;
+  /**
+   * @throws string
+   */
+  export function f4(a: Result<number, string>): number;
+  /**
+   * @throws string
+   */
+  export function f5(a: Result<void, string>): void;
+  export function f6(a: Result<string, Error>): string;
+  export function f7(a: Result<void, Error>): void;
   export function f8(a: [string, number, number]): void;
   export function f9(a: Rec1): Rec1 | undefined;
   export function f10(a: Var1): Var1;

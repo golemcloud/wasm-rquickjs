@@ -1,5 +1,14 @@
 import * as types from 'quickjs:types-in-exports/types';
 
+function as_result(f) {
+    try {
+        const result = f();
+        return { tag: 'ok', val: result };
+    } catch (error) {
+        return { tag: 'err', val: error };
+    }
+}
+
 export const test = () => {
     // f1: func(a: list<f32>, b: list-of-strings, c: list<string>) -> list<string>;
     console.log(`f1: ${types.f1([0.1, 0.2, 0.3], ["a", "b"], ["c", "d"])}`);
@@ -8,13 +17,13 @@ export const test = () => {
     // f3: func(a: bool, b: s8, c: s16, d: s32, e: s64, f: u8, g: u16, h: u32, i: u64, j: f32, k: f64, l: char, m: string)
     console.log(`f3: ${types.f3(true, -8, -16, -32, -64n, 8, 16, 32, 64n, 3.14, 2.718281828459045, 'c', "hello world")}`);
     // f4: func(a: result<s32, string>) -> result<s32, string>;
-    console.log(`f4: ${JSON.stringify(types.f4({tag: 'ok', val: 42}))}`);
+    console.log(`f4: ${JSON.stringify(as_result(() => types.f4({tag: 'ok', val: 42})))}`);
     // f5: func(a: result<_, string>) -> result<_, string>;
-    console.log(`f5: ${JSON.stringify(types.f5({tag: 'err', val: 'error message'}))}`);
+    console.log(`f5: ${JSON.stringify(as_result(() => types.f5({tag: 'err', val: 'error message'})))}`);
     // f6: func(a: result<string>) -> result<string>;
-    console.log(`f6: ${JSON.stringify(types.f6({tag: 'ok', val: 'success'}))}`);
+    console.log(`f6: ${JSON.stringify(as_result(() => types.f6({tag: 'ok', val: 'success'})))}`);
     // f7: func(a: result) -> result;
-    console.log(`f7: ${JSON.stringify(types.f7({tag: 'ok'}))}`);
+    console.log(`f7: ${JSON.stringify(as_result(() => types.f7({tag: 'ok'})))}`);
     // f8: func(a: tuple<string, u32, f32>);
     console.log(`f8: ${types.f8(['example', 123, 4.56])}`);
     // f9: func(a: rec1) -> option<rec1>;

@@ -1,7 +1,7 @@
 use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::RustWitFunction;
 use crate::types::{
-    ProcessedParameter, WrappedType, get_function_name, get_wrapped_type,
+    ProcessedParameter, ReturnTypeInformation, WrappedType, get_function_name, get_return_type,
     ident_in_exported_interface, ident_in_exported_interface_or_global, param_refs_as_tuple,
     process_parameter, to_original_func_arg_list, to_wrapped_param_refs, type_borrows_resource,
 };
@@ -299,8 +299,8 @@ fn generate_exported_function_impl(
     let param_ident_type: Vec<_> = function
         .params
         .iter()
-        .zip(rust_fn.export_parameters)
-        .zip(rust_fn.import_parameters)
+        .zip(rust_fn.export_parameters.clone())
+        .zip(rust_fn.import_parameters.clone())
         .map(
             |(((param_name, param_type), export_parameter), import_parameter)| {
                 process_parameter(
@@ -315,11 +315,7 @@ fn generate_exported_function_impl(
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
-    let func_ret = match &function.result {
-        Some(typ) => get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
-            .context(format!("Failed to encode result type for {name}"))?,
-        None => WrappedType::unit(),
-    };
+    let return_types = get_return_type(context, function, name, &rust_fn)?;
 
     let param_refs = to_wrapped_param_refs(&param_ident_type);
     let param_refs_tuple = param_refs_as_tuple(&param_refs);
@@ -356,14 +352,19 @@ fn generate_exported_function_impl(
         ),
     };
 
-    let original_result = &func_ret.original_type_ref;
-    let wrapped_result = &func_ret.wrapped_type_ref;
-    let unwrap = &func_ret.unwrap;
+    let original_result = &return_types.wit_level_ret.original_type_ref;
+    let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;
+    let unwrap = &return_types.wit_level_ret.unwrap;
     let unwrap_result = unwrap.run(quote! { result });
+    let call = if return_types.expected_exception.is_some() {
+        quote! { call_js_export_returning_result }
+    } else {
+        quote! { call_js_export }
+    };
     let func_impl = quote! {
        fn #func_name(#(#func_arg_list),*) -> #original_result {
            crate::internal::async_exported_function(async move {
-               let result: #wrapped_result = crate::internal::call_js_export(
+               let result: #wrapped_result = crate::internal::#call(
                    #wit_package_lit,
                    #js_func_path,
                    #param_refs_tuple
@@ -391,8 +392,8 @@ fn generate_exported_resource_function_impl(
     let param_ident_type: Vec<_> = function
         .params
         .iter()
-        .zip(rust_fn.export_parameters)
-        .zip(rust_fn.import_parameters)
+        .zip(rust_fn.export_parameters.clone())
+        .zip(rust_fn.import_parameters.clone())
         .map(|(((param_name, param_type), export_param), import_param)| {
             if matches!(
                 function.kind,
@@ -418,14 +419,14 @@ fn generate_exported_resource_function_impl(
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
-    let func_ret = if matches!(function.kind, FunctionKind::Constructor(_)) {
-        WrappedType::no_wrapping(quote! { Self })
-    } else {
-        match &function.result {
-            Some(typ) => get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
-                .context(format!("Failed to encode result type for {name}"))?,
-            None => WrappedType::unit(),
+    let return_types = if matches!(function.kind, FunctionKind::Constructor(_)) {
+        ReturnTypeInformation {
+            wit_level_ret: WrappedType::no_wrapping(quote! { Self }),
+            func_ret: WrappedType::no_wrapping(quote! { Self }),
+            expected_exception: None,
         }
+    } else {
+        get_return_type(context, function, name, &rust_fn)?
     };
 
     let param_refs = to_wrapped_param_refs(&param_ident_type);
@@ -508,14 +509,19 @@ fn generate_exported_resource_function_impl(
         FunctionKind::Method(_) => {
             let param_refs = param_refs[1..].to_vec();
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
-            let original_result = &func_ret.original_type_ref;
-            let wrapped_result = &func_ret.wrapped_type_ref;
-            let unwrap = &func_ret.unwrap;
+            let original_result = &return_types.func_ret.original_type_ref;
+            let wrapped_result = &return_types.func_ret.wrapped_type_ref;
+            let unwrap = &return_types.func_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
+            let call = if return_types.expected_exception.is_some() {
+                quote! { call_js_resource_method_returning_result }
+            } else {
+                quote! { call_js_resource_method }
+            };
             quote! {
                fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                    crate::internal::async_exported_function(async move {
-                       let result: #wrapped_result = crate::internal::call_js_resource_method(
+                       let result: #wrapped_result = crate::internal::#call(
                             #wit_package_lit,
                             #js_resource_path,
                             self.resource_id,
@@ -529,14 +535,19 @@ fn generate_exported_resource_function_impl(
         }
         FunctionKind::Static(_) => {
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
-            let original_result = &func_ret.original_type_ref;
-            let wrapped_result = &func_ret.wrapped_type_ref;
-            let unwrap = &func_ret.unwrap;
+            let original_result = &return_types.wit_level_ret.original_type_ref;
+            let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;
+            let unwrap = &return_types.wit_level_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
+            let call = if return_types.expected_exception.is_some() {
+                quote! { call_js_export_returning_result }
+            } else {
+                quote! { call_js_export }
+            };
             quote! {
                fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                    crate::internal::async_exported_function(async move {
-                       let result: #wrapped_result = crate::internal::call_js_export(
+                       let result: #wrapped_result = crate::internal::#call(
                            #wit_package_lit,
                            #js_static_func_path,
                            #param_refs_tuple,

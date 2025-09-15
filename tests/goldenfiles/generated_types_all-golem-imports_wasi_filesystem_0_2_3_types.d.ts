@@ -39,41 +39,47 @@ declare module 'wasi:filesystem/types@0.2.3' {
      * Multiple read, write, and append streams may be active on the same open
      * file and they do not interfere with each other.
      * Note: This allows using `read-stream`, which is similar to `read` in POSIX.
+     * @throws ErrorCode
      */
-    readViaStream(offset: Filesize): Result<InputStream, ErrorCode>;
+    readViaStream(offset: Filesize): InputStream;
     /**
      * Return a stream for writing to a file, if available.
      * May fail with an error-code describing why the file cannot be written.
      * Note: This allows using `write-stream`, which is similar to `write` in
      * POSIX.
+     * @throws ErrorCode
      */
-    writeViaStream(offset: Filesize): Result<OutputStream, ErrorCode>;
+    writeViaStream(offset: Filesize): OutputStream;
     /**
      * Return a stream for appending to a file, if available.
      * May fail with an error-code describing why the file cannot be appended.
      * Note: This allows using `write-stream`, which is similar to `write` with
      * `O_APPEND` in POSIX.
+     * @throws ErrorCode
      */
-    appendViaStream(): Result<OutputStream, ErrorCode>;
+    appendViaStream(): OutputStream;
     /**
      * Provide file advisory information on a descriptor.
      * This is similar to `posix_fadvise` in POSIX.
+     * @throws ErrorCode
      */
-    advise(offset: Filesize, length: Filesize, advice: Advice): Result<void, ErrorCode>;
+    advise(offset: Filesize, length: Filesize, advice: Advice): void;
     /**
      * Synchronize the data of a file to disk.
      * This function succeeds with no effect if the file descriptor is not
      * opened for writing.
      * Note: This is similar to `fdatasync` in POSIX.
+     * @throws ErrorCode
      */
-    syncData(): Result<void, ErrorCode>;
+    syncData(): void;
     /**
      * Get flags associated with a descriptor.
      * Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
      * Note: This returns the value that was the `fs_flags` value returned
      * from `fdstat_get` in earlier versions of WASI.
+     * @throws ErrorCode
      */
-    getFlags(): Result<DescriptorFlags, ErrorCode>;
+    getFlags(): DescriptorFlags;
     /**
      * Get the dynamic type of a descriptor.
      * Note: This returns the same value as the `type` field of the `fd-stat`
@@ -82,20 +88,23 @@ declare module 'wasi:filesystem/types@0.2.3' {
      * by `fstat` in POSIX.
      * Note: This returns the value that was the `fs_filetype` value returned
      * from `fdstat_get` in earlier versions of WASI.
+     * @throws ErrorCode
      */
-    getType(): Result<DescriptorType, ErrorCode>;
+    getType(): DescriptorType;
     /**
      * Adjust the size of an open file. If this increases the file's size, the
      * extra bytes are filled with zeros.
      * Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
+     * @throws ErrorCode
      */
-    setSize(size: Filesize): Result<void, ErrorCode>;
+    setSize(size: Filesize): void;
     /**
      * Adjust the timestamps of an open file or directory.
      * Note: This is similar to `futimens` in POSIX.
      * Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
+     * @throws ErrorCode
      */
-    setTimes(dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): Result<void, ErrorCode>;
+    setTimes(dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
     /**
      * Read from a descriptor, without using and updating the descriptor's offset.
      * This function returns a list of bytes containing the data that was
@@ -105,8 +114,9 @@ declare module 'wasi:filesystem/types@0.2.3' {
      * if the I/O operation is interrupted.
      * In the future, this may change to return a `stream<u8, error-code>`.
      * Note: This is similar to `pread` in POSIX.
+     * @throws ErrorCode
      */
-    read(length: Filesize, offset: Filesize): Result<[Uint8Array, boolean], ErrorCode>;
+    read(length: Filesize, offset: Filesize): [Uint8Array, boolean];
     /**
      * Write to a descriptor, without using and updating the descriptor's offset.
      * It is valid to write past the end of a file; the file is extended to the
@@ -114,8 +124,9 @@ declare module 'wasi:filesystem/types@0.2.3' {
      * the write set to zero.
      * In the future, this may change to take a `stream<u8, error-code>`.
      * Note: This is similar to `pwrite` in POSIX.
+     * @throws ErrorCode
      */
-    write(buffer: Uint8Array, offset: Filesize): Result<Filesize, ErrorCode>;
+    write(buffer: Uint8Array, offset: Filesize): Filesize;
     /**
      * Read directory entries from a directory.
      * On filesystems where directories contain entries referring to themselves
@@ -124,20 +135,23 @@ declare module 'wasi:filesystem/types@0.2.3' {
      * This always returns a new stream which starts at the beginning of the
      * directory. Multiple streams may be active on the same directory, and they
      * do not interfere with each other.
+     * @throws ErrorCode
      */
-    readDirectory(): Result<DirectoryEntryStream, ErrorCode>;
+    readDirectory(): DirectoryEntryStream;
     /**
      * Synchronize the data and metadata of a file to disk.
      * This function succeeds with no effect if the file descriptor is not
      * opened for writing.
      * Note: This is similar to `fsync` in POSIX.
+     * @throws ErrorCode
      */
-    sync(): Result<void, ErrorCode>;
+    sync(): void;
     /**
      * Create a directory.
      * Note: This is similar to `mkdirat` in POSIX.
+     * @throws ErrorCode
      */
-    createDirectoryAt(path: string): Result<void, ErrorCode>;
+    createDirectoryAt(path: string): void;
     /**
      * Return the attributes of an open file or directory.
      * Note: This is similar to `fstat` in POSIX, except that it does not return
@@ -146,28 +160,32 @@ declare module 'wasi:filesystem/types@0.2.3' {
      * additional data that can be used do determine whether a file has been
      * modified, use `metadata-hash`.
      * Note: This was called `fd_filestat_get` in earlier versions of WASI.
+     * @throws ErrorCode
      */
-    stat(): Result<DescriptorStat, ErrorCode>;
+    stat(): DescriptorStat;
     /**
      * Return the attributes of a file or directory.
      * Note: This is similar to `fstatat` in POSIX, except that it does not
      * return device and inode information. See the `stat` description for a
      * discussion of alternatives.
      * Note: This was called `path_filestat_get` in earlier versions of WASI.
+     * @throws ErrorCode
      */
-    statAt(pathFlags: PathFlags, path: string): Result<DescriptorStat, ErrorCode>;
+    statAt(pathFlags: PathFlags, path: string): DescriptorStat;
     /**
      * Adjust the timestamps of a file or directory.
      * Note: This is similar to `utimensat` in POSIX.
      * Note: This was called `path_filestat_set_times` in earlier versions of
      * WASI.
+     * @throws ErrorCode
      */
-    setTimesAt(pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): Result<void, ErrorCode>;
+    setTimesAt(pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
     /**
      * Create a hard link.
      * Note: This is similar to `linkat` in POSIX.
+     * @throws ErrorCode
      */
-    linkAt(oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): Result<void, ErrorCode>;
+    linkAt(oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
     /**
      * Open a file or directory.
      * If `flags` contains `descriptor-flags::mutate-directory`, and the base
@@ -178,39 +196,45 @@ declare module 'wasi:filesystem/types@0.2.3' {
      * `descriptor-flags::mutate-directory` set, `open-at` fails with
      * `error-code::read-only`.
      * Note: This is similar to `openat` in POSIX.
+     * @throws ErrorCode
      */
-    openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags): Result<Descriptor, ErrorCode>;
+    openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags): Descriptor;
     /**
      * Read the contents of a symbolic link.
      * If the contents contain an absolute or rooted path in the underlying
      * filesystem, this function fails with `error-code::not-permitted`.
      * Note: This is similar to `readlinkat` in POSIX.
+     * @throws ErrorCode
      */
-    readlinkAt(path: string): Result<string, ErrorCode>;
+    readlinkAt(path: string): string;
     /**
      * Remove a directory.
      * Return `error-code::not-empty` if the directory is not empty.
      * Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
+     * @throws ErrorCode
      */
-    removeDirectoryAt(path: string): Result<void, ErrorCode>;
+    removeDirectoryAt(path: string): void;
     /**
      * Rename a filesystem object.
      * Note: This is similar to `renameat` in POSIX.
+     * @throws ErrorCode
      */
-    renameAt(oldPath: string, newDescriptor: Descriptor, newPath: string): Result<void, ErrorCode>;
+    renameAt(oldPath: string, newDescriptor: Descriptor, newPath: string): void;
     /**
      * Create a symbolic link (also known as a "symlink").
      * If `old-path` starts with `/`, the function fails with
      * `error-code::not-permitted`.
      * Note: This is similar to `symlinkat` in POSIX.
+     * @throws ErrorCode
      */
-    symlinkAt(oldPath: string, newPath: string): Result<void, ErrorCode>;
+    symlinkAt(oldPath: string, newPath: string): void;
     /**
      * Unlink a filesystem object that is not a directory.
      * Return `error-code::is-directory` if the path refers to a directory.
      * Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
+     * @throws ErrorCode
      */
-    unlinkFileAt(path: string): Result<void, ErrorCode>;
+    unlinkFileAt(path: string): void;
     /**
      * Test whether two descriptors refer to the same filesystem object.
      * In POSIX, this corresponds to testing whether the two descriptors have the
@@ -235,20 +259,23 @@ declare module 'wasi:filesystem/types@0.2.3' {
      *  - The inputs to the hash should not be easily computable from the
      *    computed hash.
      * However, none of these is required.
+     * @throws ErrorCode
      */
-    metadataHash(): Result<MetadataHashValue, ErrorCode>;
+    metadataHash(): MetadataHashValue;
     /**
      * Return a hash of the metadata associated with a filesystem object referred
      * to by a directory descriptor and a relative path.
      * This performs the same hash computation as `metadata-hash`.
+     * @throws ErrorCode
      */
-    metadataHashAt(pathFlags: PathFlags, path: string): Result<MetadataHashValue, ErrorCode>;
+    metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;
   }
   export class DirectoryEntryStream {
     /**
      * Read a single directory entry from a `directory-entry-stream`.
+     * @throws ErrorCode
      */
-    readDirectoryEntry(): Result<DirectoryEntry | undefined, ErrorCode>;
+    readDirectoryEntry(): DirectoryEntry | undefined;
   }
   export type InputStream = wasiIo023Streams.InputStream;
   export type OutputStream = wasiIo023Streams.OutputStream;
