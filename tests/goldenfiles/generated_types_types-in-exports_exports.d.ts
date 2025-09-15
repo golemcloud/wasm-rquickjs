@@ -4,10 +4,16 @@ declare module 'types-in-exports' {
     export function f1(a: number[], b: ListOfStrings, c: string[]): Promise<string[]>;
     export function f2(a: string | undefined): Promise<number | undefined>;
     export function f3(a: boolean, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: bigint, j: number, k: number, l: string, m: string): Promise<[boolean, number, number, number, bigint, number, number, number, bigint, number, number, string, string]>;
-    export function f4(a: Result<number, string>): Promise<Result<number, string>>;
-    export function f5(a: Result<void, string>): Promise<Result<void, string>>;
-    export function f6(a: Result<string, Error>): Promise<Result<string, Error>>;
-    export function f7(a: Result<void, Error>): Promise<Result<void, Error>>;
+    /**
+     * @throws string
+     */
+    export function f4(a: Result<number, string>): Promise<number>;
+    /**
+     * @throws string
+     */
+    export function f5(a: Result<void, string>): Promise<void>;
+    export function f6(a: Result<string, Error>): Promise<string>;
+    export function f7(a: Result<void, Error>): Promise<void>;
     export function f8(a: [string, number, number]): Promise<void>;
     export function f9(a: Rec1): Promise<Rec1 | undefined>;
     export function f10(a: Var1): Promise<Var1>;

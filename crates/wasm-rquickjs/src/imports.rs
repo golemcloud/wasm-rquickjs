@@ -1,8 +1,8 @@
 use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::RustWitFunction;
 use crate::types::{
-    WrappedType, get_function_name, get_wrapped_type, ident_in_imported_interface_or_global,
-    process_parameter, to_unwrapped_param_refs, to_wrapped_func_arg_list,
+    get_function_name, get_return_type, ident_in_imported_interface_or_global, process_parameter,
+    to_unwrapped_param_refs, to_wrapped_func_arg_list,
 };
 use crate::{GeneratorContext, ImportedInterface};
 use anyhow::{Context, anyhow};
@@ -186,8 +186,8 @@ fn generate_import_module(
                 let parameters = function
                     .params
                     .iter()
-                    .zip(rust_fn.export_parameters)
-                    .zip(rust_fn.import_parameters)
+                    .zip(rust_fn.export_parameters.clone())
+                    .zip(rust_fn.import_parameters.clone())
                     .map(
                         |(((param_name, param_type), export_parameter), import_parameter)| {
                             process_parameter(
@@ -204,25 +204,38 @@ fn generate_import_module(
                 let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
 
                 let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
-                let func_ret = match &function.result {
-                    Some(typ) => {
-                        get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
-                            .context(format!("Failed to encode result type for {name}"))?
-                    }
-                    None => WrappedType::unit(),
-                };
-                let original_result = &func_ret.original_type_ref;
-                let wrapped_result = &func_ret.wrapped_type_ref;
-                let wrap = &func_ret.wrap;
+                let return_types = get_return_type(context, &function, name, &rust_fn)?;
+                let original_result = &return_types.wit_level_ret.original_type_ref;
+                let wrapped_result = &return_types.func_ret.wrapped_type_ref;
+                let wrap = &return_types.func_ret.wrap;
                 let wrap_result = wrap.run(quote! { result });
 
-                bridge_functions.push(quote! {
-                    #[rquickjs::function]
-                    fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
-                        let result: #original_result = #bindgen_path(#(#param_refs),*);
-                        #wrap_result
-                    }
-                });
+                if let Some(exception) = &return_types.expected_exception {
+                    let wrapped_exception = &exception.wrapped_type_ref;
+                    let wrap_exception = exception.wrap.run(quote! { error });
+
+                    bridge_functions.push(quote! {
+                        #[rquickjs::function]
+                        fn #rust_function_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                            let result: #original_result = #bindgen_path(#(#param_refs),*);
+                            match result {
+                                Ok(result) => Ok(#wrap_result),
+                                Err(error) => {
+                                    let error: #wrapped_exception = #wrap_exception;
+                                    Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    bridge_functions.push(quote! {
+                        #[rquickjs::function]
+                        fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
+                            let result: #original_result = #bindgen_path(#(#param_refs),*);
+                            #wrap_result
+                        }
+                    });
+                }
             }
             FunctionKind::AsyncFreestanding
             | FunctionKind::AsyncMethod(_)
@@ -324,8 +337,8 @@ fn generate_import_module(
             let parameters = function
                 .params
                 .iter()
-                .zip(rust_fn.export_parameters)
-                .zip(rust_fn.import_parameters)
+                .zip(rust_fn.export_parameters.clone())
+                .zip(rust_fn.import_parameters.clone())
                 .map(
                     |(((param_name, param_type), export_parameter), import_parameter)| {
                         process_parameter(
@@ -343,42 +356,78 @@ fn generate_import_module(
 
             let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
 
-            let func_ret = match &function.result {
-                Some(typ) => {
-                    get_wrapped_type(context, &rust_fn.return_type, &rust_fn.return_type, typ)
-                        .context(format!("Failed to encode result type for {name}"))?
-                }
-                None => WrappedType::unit(),
-            };
-            let original_result = &func_ret.original_type_ref;
-            let wrapped_result = &func_ret.wrapped_type_ref;
-            let wrap = &func_ret.wrap;
+            let return_types = get_return_type(context, &function, &name, &rust_fn)?;
+            let original_result = &return_types.wit_level_ret.original_type_ref;
+            let wrapped_result = &return_types.func_ret.wrapped_type_ref;
+            let wrap = &return_types.func_ret.wrap;
             let wrap_result = wrap.run(quote! { result });
 
             match &function.kind {
                 FunctionKind::Method(_) => {
                     let param_list = param_list[1..].to_vec();
                     let param_refs = param_refs[1..].to_vec();
-                    methods.push(quote! {
-                       pub fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
-                            let result: #original_result = self
-                              .inner
-                              .as_ref()
-                              .expect("Resource has already been disposed")
-                              .deref()
-                              .#rust_method_name_ident(#(#param_refs),*);
-                            #wrap_result
-                        }
-                    });
+                    if let Some(exception) = &return_types.expected_exception {
+                        let wrapped_exception = &exception.wrapped_type_ref;
+                        let wrap_exception = exception.wrap.run(quote! { error });
+
+                        methods.push(quote! {
+                            pub fn #rust_method_name_ident(&self, ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                                let result: #original_result = self
+                                      .inner
+                                      .as_ref()
+                                      .expect("Resource has already been disposed")
+                                      .deref()
+                                      .#rust_method_name_ident(#(#param_refs),*);
+                                match result {
+                                    Ok(result) => Ok(#wrap_result),
+                                    Err(error) => {
+                                        let error: #wrapped_exception = #wrap_exception;
+                                        Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        methods.push(quote! {
+                           pub fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
+                                let result: #original_result = self
+                                  .inner
+                                  .as_ref()
+                                  .expect("Resource has already been disposed")
+                                  .deref()
+                                  .#rust_method_name_ident(#(#param_refs),*);
+                                #wrap_result
+                            }
+                        });
+                    }
                 }
                 FunctionKind::Static(_) => {
-                    methods.push(quote! {
-                       #[qjs(static)]
-                       pub fn #rust_method_name_ident(#(#param_list),*) -> #wrapped_result {
-                            let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*);
-                            #wrap_result
-                       }
-                    });
+                    if let Some(exception) = &return_types.expected_exception {
+                        let wrapped_exception = &exception.wrapped_type_ref;
+                        let wrap_exception = exception.wrap.run(quote! { error });
+
+                        methods.push(quote! {
+                            #[qjs(static)]
+                            pub fn #rust_method_name_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                                let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*);
+                                match result {
+                                    Ok(result) => Ok(#wrap_result),
+                                    Err(error) => {
+                                        let error: #wrapped_exception = #wrap_exception;
+                                        Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        methods.push(quote! {
+                           #[qjs(static)]
+                           pub fn #rust_method_name_ident(#(#param_list),*) -> #wrapped_result {
+                                let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*);
+                                #wrap_result
+                           }
+                        });
+                    }
                 }
                 _ => {
                     // skip

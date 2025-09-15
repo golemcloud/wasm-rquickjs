@@ -190,9 +190,49 @@ where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
 {
+    call_js_export_internal(wit_package, function_path, args, |a| a, |_, _| None).await
+}
+
+pub async fn call_js_export_returning_result<A, R, E>(
+    wit_package: &str,
+    function_path: &[&str],
+    args: A,
+) -> crate::wrappers::JsResult<R, E>
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    E: for<'js> FromJs<'js> + 'static,
+{
+    call_js_export_internal(
+        wit_package,
+        function_path,
+        args,
+        |a| crate::wrappers::JsResult(Ok(a)),
+        |ctx, value| {
+            FromJs::from_js(ctx, value.clone())
+                .ok()
+                .map(|e| crate::wrappers::JsResult(Err(e)))
+        },
+    )
+    .await
+}
+
+async fn call_js_export_internal<A, R, FR, TME>(
+    wit_package: &str,
+    function_path: &[&str],
+    args: A,
+    map_result: impl Fn(R) -> FR,
+    try_map_exception: TME,
+) -> FR
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    FR: 'static,
+    TME: for<'js> Fn(&Ctx<'js>, &Value<'js>) -> Option<FR>,
+{
     let js_state = get_js_state();
 
-    let result: R = async_with!(js_state.ctx => |ctx| {
+    let result: FR = async_with!(js_state.ctx => |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
         let (user_function_obj, parent): (Object, Object) = get_path(&module, function_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS function", function_path, &module, wit_package)));
         let user_function = user_function_obj.as_function().unwrap_or_else(|| panic!("Expected export {} to be a function", function_path.join("."))).clone();
@@ -213,7 +253,11 @@ where
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&ctx, exception));
+                if let Some(result) = try_map_exception(&ctx, &exception) {
+                    result
+                } else {
+                    panic! ("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&ctx, exception));
+                }
             }
             Err(e) => {
                 panic! ("Error during call of {fun}:\n{e:?}", fun = function_path.join("."));
@@ -224,13 +268,17 @@ where
                     let promise_future = promise.into_future::<R> ();
                     match promise_future.await {
                         Ok(result) => {
-                            result
+                            map_result(result)
                         }
                         Err(e) => {
                             match e {
                                 Error::Exception => {
                                     let exception = ctx.catch();
-                                    panic! ("Exception during awaiting call result for {function_path}:\n{exception}", function_path=function_path.join("."), exception = format_js_exception(&ctx, exception))
+                                    if let Some(result) = try_map_exception(&ctx, &exception) {
+                                        result
+                                    } else {
+                                        panic! ("Exception during awaiting call result for {function_path}:\n{exception}", function_path=function_path.join("."), exception = format_js_exception(&ctx, exception))
+                                    }
                                 }
                                 _ => {
                                     panic ! ("Error during awaiting call result for {function_path}:\n{e:?}", function_path=function_path.join("."))
@@ -240,7 +288,9 @@ where
                     }
                 }
                 else {
-                    R::from_js(&ctx, value).expect(&format!("Unexpected result value for exported function {path}", path=function_path.join(".")))
+                    (map_result)(
+                        R::from_js(&ctx, value).expect(&format!("Unexpected result value for exported function {path}", path=function_path.join(".")))
+                    )
                 }
             }
         }
@@ -320,9 +370,64 @@ where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
 {
+    call_js_resource_method_internal(
+        wit_package,
+        resource_path,
+        resource_id,
+        name,
+        args,
+        |a| a,
+        |_, _| None,
+    )
+    .await
+}
+
+pub async fn call_js_resource_method_returning_result<A, R, E>(
+    wit_package: &str,
+    resource_path: &[&str],
+    resource_id: usize,
+    name: &str,
+    args: A,
+) -> crate::wrappers::JsResult<R, E>
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    E: for<'js> FromJs<'js> + 'static,
+{
+    call_js_resource_method_internal(
+        wit_package,
+        resource_path,
+        resource_id,
+        name,
+        args,
+        |a| crate::wrappers::JsResult(Ok(a)),
+        |ctx, value| {
+            FromJs::from_js(ctx, value.clone())
+                .ok()
+                .map(|e| crate::wrappers::JsResult(Err(e)))
+        },
+    )
+    .await
+}
+
+async fn call_js_resource_method_internal<A, R, FR, TME>(
+    wit_package: &str,
+    resource_path: &[&str],
+    resource_id: usize,
+    name: &str,
+    args: A,
+    map_result: impl Fn(R) -> FR,
+    try_map_exception: TME,
+) -> FR
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    FR: 'static,
+    TME: for<'js> Fn(&Ctx<'js>, &Value<'js>) -> Option<FR>,
+{
     let js_state = get_js_state();
 
-    let result: R = async_with!(js_state.ctx => |ctx| {
+    let result: FR = async_with!(js_state.ctx => |ctx| {
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
@@ -355,7 +460,11 @@ where
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic!("Exception during call of method {name} in {path}:\n{exception}", path=resource_path.join("."), exception = format_js_exception(&ctx, exception));
+                if let Some(result) = try_map_exception(&ctx, &exception) {
+                    result
+                } else {
+                    panic!("Exception during call of method {name} in {path}:\n{exception}", path=resource_path.join("."), exception = format_js_exception(&ctx, exception));
+                }
             }
             Err(e) => {
                 panic!("Error during call of method {name} in {path}:\n{e:?}", path=resource_path.join("."));
@@ -366,13 +475,17 @@ where
                     let promise_future = promise.into_future::<R> ();
                     match promise_future.await {
                         Ok(result) => {
-                            result
+                            map_result(result)
                         }
                         Err(e) => {
                             match e {
                                 Error::Exception => {
                                     let exception = ctx.catch();
-                                    panic!("Exception during awaiting call result of method {name} in {path}:\n{exception:?}", path=resource_path.join("."), exception = format_js_exception(&ctx, exception));
+                                    if let Some(result) = try_map_exception(&ctx, &exception) {
+                                        result
+                                    } else {
+                                        panic!("Exception during awaiting call result of method {name} in {path}:\n{exception:?}", path=resource_path.join("."), exception = format_js_exception(&ctx, exception));
+                                    }
                                 }
                                 _ => {
                                     panic!("Error during awaiting call result of method {name} in {path}:\n{e:?}", path=resource_path.join("."));
@@ -382,13 +495,13 @@ where
                     }
                 }
                 else {
-                    R::from_js(&ctx, value).expect(
+                    map_result(R::from_js(&ctx, value).expect(
                         &format!("Unexpected result value for method {name} in exported class {path}",
                                 path=resource_path.join(".")
-                        ))
-}
-    }
-    }
+                        )))
+                }
+            }
+        }
     }).await;
     js_state.rt.idle().await;
     result
@@ -525,7 +638,10 @@ fn dump_cannot_find_method(
     if let Some(prototype) = class_instance.get_prototype() {
         panic_message.push_str("\nKeys in the instance's prototype:\n");
         let mut keys: Vec<String> = vec![];
-        for key in prototype.own_keys(Filter::new().symbol().string().private()).flatten() {
+        for key in prototype
+            .own_keys(Filter::new().symbol().string().private())
+            .flatten()
+        {
             keys.push(key);
         }
         keys.sort();

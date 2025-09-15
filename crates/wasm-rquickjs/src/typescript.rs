@@ -195,7 +195,9 @@ fn declare_functions_and_resources(
     for (name, function) in functions {
         match &function.kind {
             FunctionKind::Freestanding => {
-                result.write_docs(&function.docs);
+                let docs =
+                    add_throws_to_doc(context, interface_stack, &function.result, &function.docs)?;
+                result.write_docs(&docs);
                 let js_name = escape_js_ident(name.to_lower_camel_case());
                 let mut exported_function = if async_ {
                     result.begin_export_async_function(&js_name)
@@ -209,14 +211,12 @@ fn declare_functions_and_resources(
                         &ts_type_reference(context, param_type, false, interface_stack)?,
                     );
                 }
-                if let Some(result_type) = &function.result {
-                    exported_function.result(&ts_type_reference(
-                        context,
-                        result_type,
-                        false,
-                        interface_stack,
-                    )?);
-                }
+                define_return_type(
+                    &context,
+                    &interface_stack,
+                    &function,
+                    &mut exported_function,
+                )?;
             }
             FunctionKind::AsyncFreestanding
             | FunctionKind::AsyncMethod(_)
@@ -251,7 +251,9 @@ fn declare_functions_and_resources(
         result.begin_export_class(&js_resource_name);
 
         for (name, function) in resource_funcs {
-            result.write_docs(&function.docs);
+            let docs =
+                add_throws_to_doc(context, interface_stack, &function.result, &function.docs)?;
+            result.write_docs(&docs);
             let js_name = escape_js_ident(get_function_name(name, function)?.to_lower_camel_case());
             let mut fun = match &function.kind {
                 FunctionKind::Method(_) if async_ => result.begin_async_method(&js_name),
@@ -277,15 +279,8 @@ fn declare_functions_and_resources(
                     &ts_type_reference(context, param_type, false, interface_stack)?,
                 );
             }
-            if !matches!(&function.kind, FunctionKind::Constructor(_))
-                && let Some(result_type) = &function.result
-            {
-                fun.result(&ts_type_reference(
-                    context,
-                    result_type,
-                    false,
-                    interface_stack,
-                )?);
+            if !matches!(&function.kind, FunctionKind::Constructor(_)) {
+                define_return_type(&context, &interface_stack, &function, &mut fun)?;
             }
         }
 
@@ -316,6 +311,85 @@ fn declare_functions_and_resources(
         result.end_export_class();
     }
 
+    Ok(())
+}
+
+fn add_throws_to_doc(
+    context: &GeneratorContext,
+    interface_stack: &VecDeque<InterfaceId>,
+    return_type: &Option<Type>,
+    original_docs: &Docs,
+) -> anyhow::Result<Docs> {
+    let mut docs = original_docs.clone();
+
+    if let Some(result_type) = return_type {
+        if let Type::Id(type_id) = result_type {
+            let typ = context
+                .resolve
+                .types
+                .get(*type_id)
+                .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
+            if let TypeDefKind::Result(result) = &typ.kind {
+                if let Some(err) = result.err {
+                    let error_type = ts_type_reference(context, &err, false, interface_stack)?;
+                    let throws_line = format!("@throws {error_type}");
+                    if docs.is_empty() {
+                        docs.contents = Some(throws_line);
+                    } else {
+                        docs.contents
+                            .as_mut()
+                            .unwrap()
+                            .push_str(&format!("\n{}", throws_line));
+                    }
+                }
+            }
+        }
+    };
+
+    Ok(docs)
+}
+
+fn define_return_type(
+    context: &GeneratorContext,
+    interface_stack: &VecDeque<InterfaceId>,
+    function: &Function,
+    exported_function: &mut DtsFunctionWriter,
+) -> anyhow::Result<()> {
+    if let Some(result_type) = &function.result {
+        let special_case_for_result = if let Type::Id(type_id) = result_type {
+            let typ = context
+                .resolve
+                .types
+                .get(*type_id)
+                .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
+            if let TypeDefKind::Result(result) = &typ.kind {
+                if let Some(ok) = result.ok {
+                    exported_function.result(&ts_type_reference(
+                        context,
+                        &ok,
+                        false,
+                        interface_stack,
+                    )?);
+                    true
+                } else {
+                    true
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !special_case_for_result {
+            exported_function.result(&ts_type_reference(
+                context,
+                result_type,
+                false,
+                interface_stack,
+            )?);
+        }
+    }
     Ok(())
 }
 

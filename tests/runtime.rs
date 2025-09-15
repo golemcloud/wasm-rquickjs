@@ -5,6 +5,7 @@ use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
 use indoc::{formatdoc, indoc};
+use pretty_assertions::assert_eq;
 use rand::Rng;
 use std::i64;
 use test_r::{test, test_dep};
