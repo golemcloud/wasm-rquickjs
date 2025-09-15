@@ -408,13 +408,12 @@ fn plug(
         let mut cache = Default::default();
         let mut checker = SubtypeChecker::new(&mut cache);
         for (name, plug_ty) in &graph.types()[graph[plug].ty()].exports {
-            if let Some(socket_ty) = graph.types()[graph[socket].ty()].imports.get(name) {
-                if checker
+            if let Some(socket_ty) = graph.types()[graph[socket].ty()].imports.get(name)
+                && checker
                     .is_subtype(*plug_ty, graph.types(), *socket_ty, graph.types())
                     .is_ok()
-                {
-                    plug_exports.push(name.clone());
-                }
+            {
+                plug_exports.push(name.clone());
             }
         }
 

@@ -146,18 +146,10 @@ struct NewTodo {
     body: String,
 }
 
+#[derive(Default)]
 struct State {
     current_todo_id: usize,
     todos: Vec<Todo>,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            current_todo_id: 0,
-            todos: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]

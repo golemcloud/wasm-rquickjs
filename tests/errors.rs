@@ -3,6 +3,7 @@ test_r::enable!();
 use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output_with_stderr};
 use camino::Utf8Path;
 use indoc::indoc;
+use std::slice;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -229,7 +230,7 @@ async fn missing_method_in_js_class(
         .invoke_and_capture_output_with_stderr(
             Some("quickjs:errors/api3"),
             "[method]res3.m1",
-            &[handle.clone()],
+            slice::from_ref(&handle),
         )
         .await;
 
@@ -293,7 +294,7 @@ async fn method_with_wrong_return_type_in_js_class(
         .invoke_and_capture_output_with_stderr(
             Some("quickjs:errors/api3"),
             "[method]res3.m3",
-            &[handle.clone()],
+            slice::from_ref(&handle),
         )
         .await;
 
