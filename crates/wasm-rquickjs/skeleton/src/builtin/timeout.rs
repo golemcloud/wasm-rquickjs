@@ -75,7 +75,7 @@ async fn scheduled_task(
             .unwrap_or_else(|e| {
                 panic!(
                     "Failed to run scheduled task:\n{}",
-                    format_caught_error(&ctx, e)
+                    format_caught_error(e)
                 )
             });
     } else {
@@ -89,7 +89,7 @@ async fn scheduled_task(
                 .unwrap_or_else(|e| {
                     panic!(
                         "Failed to run scheduled task:\n{}",
-                        format_caught_error(&ctx, e)
+                        format_caught_error(e)
                     )
                 });
 

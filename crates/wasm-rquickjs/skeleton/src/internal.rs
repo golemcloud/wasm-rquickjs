@@ -54,12 +54,12 @@ impl JsState {
                     Symbol.dispose = dispose;
                     "#)
                 ).catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(&ctx, e)))
+                .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
                 .finish::<()>()
                 .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(&ctx, e)));
+                .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
             })
-            .await;
+                .await;
             rt.idle().await;
 
             let mut resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
@@ -101,21 +101,21 @@ impl JsState {
                     "#, crate::JS_EXPORT_MODULE_NAME),
                 )
                 .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(&ctx, e)))
+                .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
                 .finish::<()>()
                 .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(&ctx, e)));
+                .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
 
                 for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
                   Module::import(&ctx, name.to_string())
                      .catch(&ctx)
-                     .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(&ctx, e)))
+                     .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
                      .finish::<()>()
                      .catch(&ctx)
-                     .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(&ctx, e)));
+                     .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
                 }
             })
-            .await;
+                .await;
             rt.idle().await;
 
             let (resource_drop_queue_tx, resource_drop_queue_rx) =
@@ -256,7 +256,7 @@ where
                 if let Some(result) = try_map_exception(&ctx, &exception) {
                     result
                 } else {
-                    panic! ("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&ctx, exception));
+                    panic! ("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&exception));
                 }
             }
             Err(e) => {
@@ -277,7 +277,7 @@ where
                                     if let Some(result) = try_map_exception(&ctx, &exception) {
                                         result
                                     } else {
-                                        panic! ("Exception during awaiting call result for {function_path}:\n{exception}", function_path=function_path.join("."), exception = format_js_exception(&ctx, exception))
+                                        panic! ("Exception during awaiting call result for {function_path}:\n{exception}", function_path=function_path.join("."), exception = format_js_exception(&exception))
                                     }
                                 }
                                 _ => {
@@ -330,7 +330,7 @@ where
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call of constructor {path}:\n{exception}", path= resource_path.join("."), exception = format_js_exception(&ctx, exception));
+                panic! ("Exception during call of constructor {path}:\n{exception}", path= resource_path.join("."), exception = format_js_exception(&exception));
             }
             Err(e) => {
                 panic! ("Error during call of constructor {path}: {e:?}", path= resource_path.join("."));
@@ -463,7 +463,7 @@ where
                 if let Some(result) = try_map_exception(&ctx, &exception) {
                     result
                 } else {
-                    panic!("Exception during call of method {name} in {path}:\n{exception}", path=resource_path.join("."), exception = format_js_exception(&ctx, exception));
+                    panic!("Exception during call of method {name} in {path}:\n{exception}", path=resource_path.join("."), exception = format_js_exception(&exception));
                 }
             }
             Err(e) => {
@@ -484,7 +484,7 @@ where
                                     if let Some(result) = try_map_exception(&ctx, &exception) {
                                         result
                                     } else {
-                                        panic!("Exception during awaiting call result of method {name} in {path}:\n{exception:?}", path=resource_path.join("."), exception = format_js_exception(&ctx, exception));
+                                        panic!("Exception during awaiting call result of method {name} in {path}:\n{exception:?}", path=resource_path.join("."), exception = format_js_exception(&exception));
                                     }
                                 }
                                 _ => {
@@ -657,28 +657,83 @@ fn dump_cannot_find_method(
     panic_message
 }
 
-pub fn format_js_exception<'js>(ctx: &Ctx<'js>, exc: Value<'js>) -> String {
-    if let Ok(obj) = Object::from_js(ctx, exc.clone()) {
-        let message: Option<String> = obj.get("message").ok();
-        let stack: Option<String> = obj.get("stack").ok();
+pub fn format_js_exception(exc: &Value) -> String {
+    try_format_js_error(exc)
+        .or_else(|| try_format_tagged_error(exc))
+        .unwrap_or_else(|| {
+            let formatted_exc = pretty_stringify_or_debug_print(&exc);
+            if formatted_exc.contains("\n") {
+                format!("JavaScript exception:\n{formatted_exc}",)
+            } else {
+                format!("JavaScript exception: {formatted_exc}",)
+            }
+        })
+}
 
-        match (message, stack) {
-            (Some(msg), Some(st)) => format!("JavaScript Error: {msg}\nStack:\n{st}"),
-            (Some(msg), None) => format!("JavaScript Error: {msg}"),
-            (None, Some(st)) => format!("JavaScript Error (no message)\nStack:\n{st}"),
-            _ => format!("JavaScript exception: {exc:?}"),
-        }
-    } else {
-        format!("JavaScript exception (non-object): {exc:?}")
+pub fn try_format_js_error(err: &Value) -> Option<String> {
+    let obj = err.as_object()?;
+    let message: Option<String> = obj.get("message").ok();
+    let stack: Option<String> = obj.get("stack").ok();
+
+    match (message, stack) {
+        (Some(msg), Some(st)) => Some(format!("JavaScript error: {msg}\nStack:\n{st}")),
+        (Some(msg), None) => Some(format!("JavaScript error: {msg}")),
+        (None, Some(st)) => Some(format!("JavaScript error: <no message>\nStack:\n{st}")),
+        _ => None,
     }
 }
 
-pub fn format_caught_error<'js>(ctx: &Ctx<'js>, caught: CaughtError<'js>) -> String {
+pub fn try_format_tagged_error(err: &Value) -> Option<String> {
+    let obj = err.as_object()?;
+    let tag: Option<String> = obj.get("tag").ok();
+    let val: Option<Value> = obj.get("val").ok();
+    let val = val.and_then(|v| (!v.is_undefined()).then(|| v));
+
+    match (tag, val) {
+        (Some(tag), Some(val)) => {
+            let formatted_val = pretty_stringify_or_debug_print(&val);
+            if formatted_val.contains("\n") {
+                Some(format!("Error: {tag}:\n{formatted_val}"))
+            } else {
+                Some(format!("Error: {tag}: {formatted_val}"))
+            }
+        }
+        (Some(tag), None) => Some(format!("Error: {tag}")),
+        _ => None,
+    }
+}
+
+fn pretty_stringify_or_debug_print(val: &Value) -> String {
+    if let Some(formatted) = try_pretty_stringify(val) {
+        formatted
+    } else {
+        format!("{val:#?}")
+    }
+}
+
+fn try_pretty_stringify(val: &Value) -> Option<String> {
+    if val.is_undefined() {
+        return Some("undefined".to_string());
+    }
+
+    // Return strings as they are
+    if let Some(str) = val.as_string() {
+        return str.to_string().ok();
+    }
+
+    // For other values try to use JSON.stringify()
+    let json: Object = val.ctx().globals().get("JSON").ok()?;
+    let stringify: Function = json.get("stringify").ok()?;
+    let res: Result<String, Error> = stringify.call((val, rquickjs::Undefined, 2));
+    res.ok()
+}
+
+pub fn format_caught_error(caught: CaughtError) -> String {
     match caught {
         CaughtError::Error(e) => {
             format!("Host error: {e:?}")
         }
-        CaughtError::Exception(exc) => format_js_exception(ctx, exc.into_value()),
-        CaughtError::Value(val) => format_js_exception(ctx, val),
+        CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
+        CaughtError::Value(val) => format_js_exception(&val),
     }
 }
