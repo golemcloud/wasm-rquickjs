@@ -256,7 +256,7 @@ where
                 if let Some(result) = try_map_exception(&ctx, &exception) {
                     result
                 } else {
-                    panic! ("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(exception));
+                    panic! ("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&exception));
                 }
             }
             Err(e) => {
@@ -277,7 +277,7 @@ where
                                     if let Some(result) = try_map_exception(&ctx, &exception) {
                                         result
                                     } else {
-                                        panic! ("Exception during awaiting call result for {function_path}:\n{exception}", function_path=function_path.join("."), exception = format_js_exception(exception))
+                                        panic! ("Exception during awaiting call result for {function_path}:\n{exception}", function_path=function_path.join("."), exception = format_js_exception(&exception))
                                     }
                                 }
                                 _ => {
@@ -330,7 +330,7 @@ where
         match result {
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic! ("Exception during call of constructor {path}:\n{exception}", path= resource_path.join("."), exception = format_js_exception(exception));
+                panic! ("Exception during call of constructor {path}:\n{exception}", path= resource_path.join("."), exception = format_js_exception(&exception));
             }
             Err(e) => {
                 panic! ("Error during call of constructor {path}: {e:?}", path= resource_path.join("."));
@@ -463,7 +463,7 @@ where
                 if let Some(result) = try_map_exception(&ctx, &exception) {
                     result
                 } else {
-                    panic!("Exception during call of method {name} in {path}:\n{exception}", path=resource_path.join("."), exception = format_js_exception(exception));
+                    panic!("Exception during call of method {name} in {path}:\n{exception}", path=resource_path.join("."), exception = format_js_exception(&exception));
                 }
             }
             Err(e) => {
@@ -484,7 +484,7 @@ where
                                     if let Some(result) = try_map_exception(&ctx, &exception) {
                                         result
                                     } else {
-                                        panic!("Exception during awaiting call result of method {name} in {path}:\n{exception:?}", path=resource_path.join("."), exception = format_js_exception(exception));
+                                        panic!("Exception during awaiting call result of method {name} in {path}:\n{exception:?}", path=resource_path.join("."), exception = format_js_exception(&exception));
                                     }
                                 }
                                 _ => {
@@ -657,23 +657,21 @@ fn dump_cannot_find_method(
     panic_message
 }
 
-pub fn format_js_exception(exc: Value) -> String {
-    match exc.as_object() {
-        Some(obj) => try_format_js_error(obj)
-            .or_else(|| try_format_tagged_error(obj))
-            .unwrap_or_else(|| {
-                let formatted_exc = pretty_stringify_or_debug_print(&exc);
-                if formatted_exc.contains("\n") {
-                    format!("JavaScript exception:\n{formatted_exc}",)
-                } else {
-                    format!("JavaScript exception: {formatted_exc}",)
-                }
-            }),
-        None => format!("JavaScript exception: {exc:?}"),
-    }
+pub fn format_js_exception(exc: &Value) -> String {
+    try_format_js_error(exc)
+        .or_else(|| try_format_tagged_error(exc))
+        .unwrap_or_else(|| {
+            let formatted_exc = pretty_stringify_or_debug_print(&exc);
+            if formatted_exc.contains("\n") {
+                format!("JavaScript exception:\n{formatted_exc}",)
+            } else {
+                format!("JavaScript exception: {formatted_exc}",)
+            }
+        })
 }
 
-pub fn try_format_js_error(obj: &Object) -> Option<String> {
+pub fn try_format_js_error(err: &Value) -> Option<String> {
+    let obj = err.as_object()?;
     let message: Option<String> = obj.get("message").ok();
     let stack: Option<String> = obj.get("stack").ok();
 
@@ -685,9 +683,11 @@ pub fn try_format_js_error(obj: &Object) -> Option<String> {
     }
 }
 
-pub fn try_format_tagged_error(obj: &Object) -> Option<String> {
+pub fn try_format_tagged_error(err: &Value) -> Option<String> {
+    let obj = err.as_object()?;
     let tag: Option<String> = obj.get("tag").ok();
     let val: Option<Value> = obj.get("val").ok();
+    let val = val.and_then(|v| (!v.is_undefined()).then(|| v));
 
     match (tag, val) {
         (Some(tag), Some(val)) => {
@@ -712,7 +712,11 @@ fn pretty_stringify_or_debug_print(val: &Value) -> String {
 }
 
 fn try_pretty_stringify(val: &Value) -> Option<String> {
-    // Return string as they are
+    if val.is_undefined() {
+        return Some("undefined".to_string());
+    }
+
+    // Return strings as they are
     if let Some(str) = val.as_string() {
         return str.to_string().ok();
     }
@@ -729,7 +733,7 @@ pub fn format_caught_error(caught: CaughtError) -> String {
         CaughtError::Error(e) => {
             format!("Host error: {e:?}")
         }
-        CaughtError::Exception(exc) => format_js_exception(exc.into_value()),
-        CaughtError::Value(val) => format_js_exception(val),
+        CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
+        CaughtError::Value(val) => format_js_exception(&val),
     }
 }
