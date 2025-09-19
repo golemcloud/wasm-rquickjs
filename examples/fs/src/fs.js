@@ -1,5 +1,6 @@
 import {readFile, readFileSync, writeFile, writeFileSync} from "node:fs";
 import {cwd, argv, env} from "node:process";
+import {env as env2} from "process"; // validating that node:process is also registered as 'process'
 
 export const run = () => {
     console.log("Current working directory:", cwd());
@@ -9,6 +10,11 @@ export const run = () => {
     sortedEnv.forEach(([key, value]) => {
         console.log(`${key}: ${value}`);
     });
+
+    const sortedEnv2 = Object.entries(env2).sort(([a], [b]) => a.localeCompare(b));
+    sortedEnv2.forEach(([key, value]) => {
+        console.log(`@@ ${key}: ${value}`);
+    })
 
     const content = readFileSync("input.txt", "utf8");
     writeFileSync("/test/output.txt", content + " - Processed by test");
