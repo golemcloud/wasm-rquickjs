@@ -38,13 +38,17 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/encoding_native")
         .with_module("__wasm_rquickjs_builtin/encoding")
         .with_module("node:util")
+        .with_module("util")
         .with_module("__wasm_rquickjs_builtin/fs_native")
         .with_module("node:fs")
+        .with_module("fs")
         .with_module("node:buffer")
+        .with_module("buffer")
         .with_module("base64-js")
         .with_module("ieee754")
         .with_module("__wasm_rquickjs_builtin/process_native")
         .with_module("node:process")
+        .with_module("process")
 }
 
 pub fn module_loader() -> (
@@ -83,11 +87,15 @@ pub fn module_loader() -> (
             .with_module("__wasm_rquickjs_builtin/streams", streams::STREAMS_JS)
             .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
             .with_module("node:util", util::UTIL_JS)
+            .with_module("util", util::UTIL_JS)
             .with_module("base64-js", base64::BASE64_JS)
             .with_module("ieee754", ieee754::IEEE754_JS)
             .with_module("node:buffer", buffer::BUFFER_JS)
+            .with_module("buffer", buffer::BUFFER_JS)
             .with_module("node:fs", fs::FS_JS)
-            .with_module("node:process", process::PROCESS_JS),
+            .with_module("fs", fs::FS_JS)
+            .with_module("node:process", process::PROCESS_JS)
+            .with_module("process", process::PROCESS_JS),
     )
 }
 

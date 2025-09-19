@@ -970,7 +970,7 @@ async fn fs(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
 
     assert_eq!(
         output,
-        "Current working directory: /\nArguments: [ 'first-arg', 'second-arg' ]\nEnvironment variables:\nTEST_KEY: TEST_VALUE\nTEST_KEY_2: TEST_VALUE_2\n"
+        "Current working directory: /\nArguments: [ 'first-arg', 'second-arg' ]\nEnvironment variables:\nTEST_KEY: TEST_VALUE\nTEST_KEY_2: TEST_VALUE_2\n@@ TEST_KEY: TEST_VALUE\n@@ TEST_KEY_2: TEST_VALUE_2\n"
     );
     assert_eq!(result_file, "test file contents - Processed by test");
     Ok(())
