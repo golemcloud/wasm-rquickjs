@@ -1,0 +1,8 @@
+package quickjs:url;
+
+world url {
+  export test1: func() -> bool;
+  export test2: func() -> bool;
+  export test3: func();
+  export test4: func();
+}
