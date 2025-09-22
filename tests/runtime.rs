@@ -116,6 +116,12 @@ fn compiled_fs() -> CompiledTest {
     CompiledTest::new(path, false).expect("Failed to compile fs")
 }
 
+#[test_dep(tagged_as = "url")]
+fn compiled_url() -> CompiledTest {
+    let path = Utf8Path::new("examples/url");
+    CompiledTest::new(path, false).expect("Failed to compile url")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -990,5 +996,86 @@ async fn fs_async(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<
 
     assert_eq!(output, "test file contents\n");
     assert_eq!(result_file, "test file contents - Processed by test");
+    Ok(())
+}
+
+#[test]
+async fn url_test1(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test1", &[]).await;
+    let r = r?;
+
+    println!("Output:\n{}", output);
+
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn url_test2(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test2", &[]).await;
+    let r = r?;
+
+    println!("Output:\n{}", output);
+
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn url_test3(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test3", &[]).await;
+    let _ = r?;
+
+    println!("Output:\n{}", output);
+
+    assert_eq!(
+        output,
+        indoc! {
+            r#"[ 'q', 'URLUtils.searchParams' ]
+           [ 'topic', 'api' ]
+           true
+           false
+           true
+           [ 'api' ]
+           true
+           undefined
+           q=URLUtils.searchParams&topic=api&topic=webdev
+           undefined
+           q=URLUtils.searchParams&topic=More+webdev
+           undefined
+           q=URLUtils.searchParams
+           "#
+        }
+    );
+    Ok(())
+}
+
+#[test]
+async fn url_test4(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test4", &[]).await;
+    let _ = r?;
+
+    println!("Output:\n{}", output);
+
+    assert_eq!(
+        output,
+        indoc! {
+            r#"https:
+           test
+           pass
+           example.com
+           1234
+           /path
+           #fragment
+           api
+           URLUtils.searchParams
+           https://test:pass@example.com:1234/path?query=URLUtils.searchParams&topic=api#fragment
+           "#
+        }
+    );
     Ok(())
 }
