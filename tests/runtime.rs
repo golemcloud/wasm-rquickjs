@@ -617,7 +617,6 @@ async fn fetch_10(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
     Ok(())
 }
 
-
 #[test]
 async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, _) = invoke_and_capture_output(
