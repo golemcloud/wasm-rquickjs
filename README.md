@@ -269,10 +269,16 @@ Only if the `http` feature flag is enabled in the generated crate. It depends on
 
 - `fetch`
 - `Headers`
+- `Request`
 - `Response`
 - `FormData`
 - `Blob`
 - `File`
+
+#### URL
+
+- `URL`
+- `URLSearchParams`
 
 #### Streams
 

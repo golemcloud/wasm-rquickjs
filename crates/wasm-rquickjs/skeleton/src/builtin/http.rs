@@ -477,6 +477,7 @@ pub const WIRE_JS: &str = r#"
 
         globalThis.fetch = __wasm_rquickjs_http.fetch;
         globalThis.Headers = __wasm_rquickjs_http.Headers;
+        globalThis.Request = __wasm_rquickjs_http.Request;
         globalThis.Response = __wasm_rquickjs_http.Response;
         globalThis.Blob = __wasm_rquickjs_http_blob.Blob;
         globalThis.File = __wasm_rquickjs_http_blob.File;

@@ -6,46 +6,73 @@ import {formDataToBlob} from '__wasm_rquickjs_builtin/http_form_data';
 // Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
 
 export async function fetch(resource, options = {}) {
-    let method = options.method || 'GET'
-    method = method.toUpperCase();
+    let request;
+    let body;
+    let url;
 
-    let headers = new Headers(options.headers || {});
+    if (typeof resource === 'object' && resource instanceof Request) {
+        const method = resource.method.toUpperCase();
+        const headers = resource.headers;
+        if (!headers.has('Accept')) {
+            headers.set('Accept', '*/*');
+        }
+        let rawHeaders = {};
+        for (const [name, value] of headers.entries()) {
+            rawHeaders[name] = value;
+        }
+        let version = options.version || 'HTTP/1.1';
+        request = new httpNative.HttpRequest(
+            resource.url,
+            method,
+            rawHeaders,
+            version
+        )
+        resource._bodyUsed = true;
+        body = resource._body;
+        url = resource.url;
+    } else {
+        let method = options.method || 'GET'
+        method = method.toUpperCase();
 
-    if (!headers.has('Accept')) {
-        headers.set('Accept', '*/*');
+        let headers = new Headers(options.headers || {});
+
+        if (!headers.has('Accept')) {
+            headers.set('Accept', '*/*');
+        }
+
+        let rawHeaders = {};
+        for (const [name, value] of headers.entries()) {
+            rawHeaders[name] = value;
+        }
+
+        let version = options.version || 'HTTP/1.1';
+
+        // TODO: options.mode
+        // TODO: options.referer
+        // TODO: options.credentials
+        // TODO: options.cache
+
+        request = new httpNative.HttpRequest(
+            resource,
+            method,
+            rawHeaders,
+            version
+        )
+
+        // TODO: DataView support
+        // TODO: URLSearchParams support
+
+        body = options.body || '';
+        url = resource;
     }
-
-    let rawHeaders = {};
-    for (const [name, value] of headers.entries()) {
-        rawHeaders[name] = value;
-    }
-
-    let version = options.version || 'HTTP/1.1';
-
-    // TODO: options.mode
-    // TODO: options.referer
-    // TODO: options.credentials
-    // TODO: options.cache
-
-    let request = new httpNative.HttpRequest(
-        resource,
-        method,
-        rawHeaders,
-        version
-    )
-
-    // TODO: DataView support
-    // TODO: URLSearchParams support
-
-    let body = options.body || '';
 
     if (body instanceof ReadableStream) {
-        return await streamingRequest(request, resource, body);
+        return await streamingRequest(request, url, body);
     } else if (body instanceof FormData) {
         const blob = formDataToBlob(body);
-        return await blobRequestBody(request, resource, blob);
+        return await blobRequestBody(request, url, blob);
     } else if (body instanceof Blob) {
-        return await blobRequestBody(request, resource, body);
+        return await blobRequestBody(request, url, body);
     } else {
         if (body instanceof ArrayBuffer) {
             request.arrayBufferBody(body);
@@ -58,7 +85,7 @@ export async function fetch(resource, options = {}) {
         }
 
         const nativeResponse = await request.simpleSend();
-        return new Response(nativeResponse, resource);
+        return new Response(nativeResponse, url);
     }
 }
 
@@ -296,4 +323,245 @@ export class Headers {
     [Symbol.iterator]() {
         this.entries()
     }
+}
+
+export class Request {
+    constructor(input, options = {}) {
+        if (input instanceof Request) {
+            this._url = input._url;
+            this._headers = new Headers(input._headers);
+            this._bodyUsed = false;
+            this._options = {
+                body: input.bytes().slice(),
+                ...input._options,
+            };
+        } else {
+            this._url = input;
+            this._headers = new Headers(options.headers || {});
+            this._bodyUsed = false;
+            this._options = options;
+            this._body = options.body;
+        }
+    }
+
+    get body() {
+        this._bodyUsed = true;
+        if (this._body instanceof ReadableStream) {
+            return this._body;
+        } else if (this._body instanceof FormData) {
+            const blob = formDataToBlob(this._body);
+            return blob.stream();
+        } else if (this._body instanceof Blob) {
+            return this._body.stream();
+        } else {
+            if (this._body instanceof ArrayBuffer) {
+                const blob = new Blob([this._body]);
+                return blob.stream();
+            } else if (this._body instanceof Uint8Array) {
+                const blob = new Blob([this._body]);
+                return blob.stream();
+            } else if (typeof this._body === 'string' || this._body instanceof String) {
+                const blob = new Blob([this._body]);
+                return blob.stream();
+            } else {
+                console.warn('Unsupported body type');
+                return new Blob([]).stream();
+            }
+        }
+    }
+
+    get bodyUsed() {
+        return this._bodyUsed;
+    }
+
+    get cache() {
+        return this._options.cache ?? 'default';
+    }
+
+    get credentials() {
+        return this._options.credentials ?? 'same-origin';
+    }
+
+    get destination() {
+        return '';
+    }
+
+    get duplex() {
+        return this._options.duplex ?? 'half';
+    }
+
+    get headers() {
+        return this._headers;
+    }
+
+    get integrity() {
+        return this._options.integrity ?? '';
+    }
+
+    get isHistoryNavigation() {
+        return false;
+    }
+
+    get keepalive() {
+        return this._options.keepalive ?? false;
+    }
+
+    get method() {
+        return this._options.method ?? 'GET';
+    }
+
+    get mode() {
+        return this._options.mode ?? 'cors';
+    }
+
+    get redirect() {
+        return this._options.redirect ?? 'follow';
+    }
+
+    get referrer() {
+        return this._options.referrer ?? 'about:client';
+    }
+
+    get referrerPolicy() {
+        return this._options.referrerPolicy ?? '';
+    }
+
+    get signal() {
+        return this._options.signal;
+    }
+
+    get url() {
+        return this._url;
+    }
+
+    async arrayBuffer() {
+        this._bodyUsed = true;
+        if (this._body instanceof ReadableStream) {
+            return await streamToArrayBuffer(this._body);
+        } else if (this._body instanceof FormData) {
+            const blob = formDataToBlob(this._body);
+            return blob.arrayBuffer();
+        } else if (this._body instanceof Blob) {
+            return this._body.arrayBuffer();
+        } else {
+            if (this._body instanceof ArrayBuffer) {
+                return this._body;
+            } else if (this._body instanceof Uint8Array) {
+                return this._body.buffer;
+            } else if (typeof this._body === 'string' || this._body instanceof String) {
+                new TextEncoder().encode(this._body).buffer;
+            } else {
+                console.warn('Unsupported body type');
+                return new ArrayBuffer(0);
+            }
+        }
+    }
+
+    async blob() {
+        this._bodyUsed = true;
+        if (this._body instanceof ReadableStream) {
+            return await streamToBlob(this._body);
+        } else if (this._body instanceof FormData) {
+            const blob = formDataToBlob(this._body);
+            return blob;
+        } else if (this._body instanceof Blob) {
+            return this._body;
+        } else {
+            if (this._body instanceof ArrayBuffer) {
+                return new Blob([this._body]);
+            } else if (this._body instanceof Uint8Array) {
+                return new Blob([this._body]);
+            } else if (typeof this._body === 'string' || this._body instanceof String) {
+                return new Blob([this._body]);
+            } else {
+                console.warn('Unsupported body type');
+                return new Blob([]);
+            }
+        }
+    }
+
+    async bytes() {
+        this._bodyUsed = true;
+        if (this._body instanceof ReadableStream) {
+            return new Uint8Array(await streamToArrayBuffer(this._body));
+        } else if (this._body instanceof FormData) {
+            const blob = formDataToBlob(this._body);
+            return blob.bytes();
+        } else if (this._body instanceof Blob) {
+            return this._body.bytes();
+        } else {
+            if (this._body instanceof ArrayBuffer) {
+                return new Uint8Array(this._body);
+            } else if (this._body instanceof Uint8Array) {
+                return this._body;
+            } else if (typeof this._body === 'string' || this._body instanceof String) {
+                new TextEncoder().encode(this._body);
+            } else {
+                console.warn('Unsupported body type');
+                return new Uint8Array(0);
+            }
+        }
+    }
+
+    clone() {
+        return new Response(this);
+    }
+
+    async formData() {
+        this._bodyUsed = true;
+        if (this._body instanceof FormData) {
+            return this._body;
+        } else {
+            throw new Error('Body is not FormData');
+        }
+    }
+
+    async json() {
+        return JSON.stringify(await this.text());
+    }
+
+    async text() {
+        return (await this.blob()).text();
+    }
+}
+
+async function streamToArrayBuffer(stream) {
+    const chunks = [];
+    const reader = stream.getReader();
+
+    try {
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            chunks.push(value);          // value is Uint8Array
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    const total = chunks.reduce((acc, c) => acc + c.length, 0);
+    const result = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return result.buffer;
+}
+
+async function streamToBlob(stream) {
+    const chunks = [];
+    const reader = stream.getReader();
+
+    try {
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    return new Blob(chunks);
 }
