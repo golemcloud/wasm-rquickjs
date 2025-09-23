@@ -216,3 +216,26 @@ export async function test9(port) {
     const response = await fetch(`http://localhost:${port}/echo-form`, {method: 'POST', body: formData});
     await dumpResponse(response);
 }
+
+
+export async function test10(port) {
+    console.log("fetch test 10");
+    const request1 = new Request(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "foo",
+            body: "bar",
+            userId: 1
+        })
+    });
+    const response1 = await fetch(request1);
+
+    const request2 = new Request(`http://localhost:${port}/todos/0`);
+    const response2 = await fetch(request2);
+
+    await dumpResponse(response1);
+    await dumpResponse(response2);
+}
