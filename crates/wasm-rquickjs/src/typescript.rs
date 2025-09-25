@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use camino::{Utf8Path, Utf8PathBuf};
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fmt::Write;
 use wit_parser::{
     Docs, Function, FunctionKind, InterfaceId, Type, TypeDef, TypeDefKind, TypeId, TypeOwner,
     WorldItem, WorldKey,
@@ -631,6 +632,7 @@ fn ts_type_definition(
             for field in &record.fields {
                 let js_name = escape_js_ident(field.name.to_lower_camel_case());
                 let field_type = ts_type_reference(context, &field.ty, true, interface_stack)?;
+                let doc_prefix = docs_to_string(&field.docs);
                 let optional = {
                     match &field.ty {
                         Type::Id(type_id) => match &context.typ(*type_id)?.kind {
@@ -640,7 +642,9 @@ fn ts_type_definition(
                         _ => "",
                     }
                 };
-                record_def.push_str(&format!("  {js_name}{optional}: {field_type};\n"));
+                let field_str = format!("{doc_prefix}{js_name}{optional}: {field_type};\n");
+                let indented = indent(&field_str, 2);
+                record_def.push_str(&indented);
             }
             record_def.push('}');
             Ok(record_def)
@@ -676,18 +680,21 @@ fn ts_type_definition(
             let mut case_defs = Vec::new();
             for case in &variant.cases {
                 let case_name = &case.name;
+                let doc_prefix = docs_to_string(&case.docs);
                 match &case.ty {
                     Some(ty) => {
                         let case_type = ts_type_reference(context, ty, false, interface_stack)?;
-                        case_defs.push(format!("{{\n  tag: '{case_name}'\n  val: {case_type}\n}}"));
+                        case_defs.push(format!(
+                            "{doc_prefix}{{\n  tag: '{case_name}'\n  val: {case_type}\n}}"
+                        ));
                     }
                     None => {
                         // No type means it's a unit variant
-                        case_defs.push(format!("{{\n  tag: '{case_name}'\n}}"));
+                        case_defs.push(format!("{doc_prefix}{{\n  tag: '{case_name}'\n}}"));
                     }
                 }
             }
-            let cases = case_defs.join(" |\n");
+            let cases = format!("\n{}", case_defs.join(" |\n"));
             Ok(cases)
         }
         TypeDefKind::Enum(r#enum) => {
@@ -980,4 +987,30 @@ impl<'a> Drop for DtsFunctionWriter<'a> {
         }
         self.writer.write(";\n");
     }
+}
+
+fn docs_to_string(docs: &Docs) -> String {
+    let mut result = String::new();
+    if let Some(contents) = &docs.contents {
+        let line_count = contents.lines().count();
+        if line_count == 1 {
+            let _ = writeln!(result, "/** {} */", contents.trim());
+        } else {
+            let _ = writeln!(result, "/**");
+            for line in contents.lines() {
+                if !line.trim().is_empty() {
+                    let _ = writeln!(result, " * {line}");
+                }
+            }
+            let _ = writeln!(result, " */");
+        }
+    }
+    result
+}
+
+fn indent(s: &str, spaces: usize) -> String {
+    let indent = " ".repeat(spaces);
+    s.lines()
+        .map(|line| format!("{indent}{line}\n"))
+        .collect::<String>()
 }

@@ -178,16 +178,22 @@ declare module 'golem:api/host@1.1.7' {
    * Configures how the executor retries failures
    */
   export type RetryPolicy = {
+    /** The maximum number of retries before the worker becomes permanently failed */
     maxAttempts: number;
+    /** The minimum delay between retries (applied to the first retry) */
     minDelay: Duration;
+    /** The maximum delay between retries */
     maxDelay: Duration;
+    /** Multiplier applied to the delay on each retry to implement exponential backoff */
     multiplier: number;
+    /** The maximum amount of jitter to add to the delay */
     maxJitterFactor?: number;
   };
   /**
    * Configurable persistence level for workers
    */
-  export type PersistenceLevel = {
+  export type PersistenceLevel = 
+  {
     tag: 'persist-nothing'
   } |
   {
@@ -229,7 +235,8 @@ declare module 'golem:api/host@1.1.7' {
     comparator: StringFilterComparator;
     value: string;
   };
-  export type WorkerPropertyFilter = {
+  export type WorkerPropertyFilter = 
+  {
     tag: 'name'
     val: WorkerNameFilter
   } |
@@ -271,10 +278,13 @@ declare module 'golem:api/host@1.1.7' {
   /**
    * Target parameter for the `revert-worker` operation
    */
-  export type RevertWorkerTarget = {
+  export type RevertWorkerTarget = 
+  /** Revert to a specific oplog index. The given index will be the last one to be kept. */
+  {
     tag: 'revert-to-oplog-index'
     val: OplogIndex
   } |
+  /** Revert the last N invocations. */
   {
     tag: 'revert-last-invocations'
     val: bigint

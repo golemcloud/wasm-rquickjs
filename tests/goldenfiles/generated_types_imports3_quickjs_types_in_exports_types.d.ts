@@ -37,7 +37,8 @@ declare module 'quickjs:types-in-exports/types' {
     h: ListOfStrings;
     i: [string, number, number];
   };
-  export type Var1 = {
+  export type Var1 = 
+  {
     tag: 'none'
   } |
   {

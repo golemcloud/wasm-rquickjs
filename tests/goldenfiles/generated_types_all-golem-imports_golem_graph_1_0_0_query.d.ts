@@ -19,7 +19,8 @@ declare module 'golem:graph/query@1.0.0' {
   /**
    * Query result that maintains symmetry with data insertion formats
    */
-  export type QueryResult = {
+  export type QueryResult = 
+  {
     tag: 'vertices'
     val: Vertex[]
   } |
@@ -50,6 +51,7 @@ declare module 'golem:graph/query@1.0.0' {
     timeoutSeconds?: number;
     maxResults?: number;
     explain: boolean;
+    /** Return execution plan instead of results */
     profile: boolean;
   };
   /**
@@ -60,6 +62,7 @@ declare module 'golem:graph/query@1.0.0' {
     executionTimeMs?: number;
     rowsAffected?: number;
     explanation?: string;
+    /** Execution plan if requested */
     profileData?: string;
   };
   export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
