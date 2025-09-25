@@ -44,7 +44,8 @@ declare module 'types-in-exports' {
     /**
      * An example variant
      */
-    export type Var1 = {
+    export type Var1 = 
+    {
       tag: 'none'
     } |
     {

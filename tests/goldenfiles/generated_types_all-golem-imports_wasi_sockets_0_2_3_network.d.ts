@@ -17,7 +17,8 @@ declare module 'wasi:sockets/network@0.2.3' {
   export type IpAddressFamily = "ipv4" | "ipv6";
   export type Ipv4Address = [number, number, number, number];
   export type Ipv6Address = [number, number, number, number, number, number, number, number];
-  export type IpAddress = {
+  export type IpAddress = 
+  {
     tag: 'ipv4'
     val: Ipv4Address
   } |
@@ -26,16 +27,23 @@ declare module 'wasi:sockets/network@0.2.3' {
     val: Ipv6Address
   };
   export type Ipv4SocketAddress = {
+    /** sin_port */
     port: number;
+    /** sin_addr */
     address: Ipv4Address;
   };
   export type Ipv6SocketAddress = {
+    /** sin6_port */
     port: number;
+    /** sin6_flowinfo */
     flowInfo: number;
+    /** sin6_addr */
     address: Ipv6Address;
+    /** sin6_scope_id */
     scopeId: number;
   };
-  export type IpSocketAddress = {
+  export type IpSocketAddress = 
+  {
     tag: 'ipv4'
     val: Ipv4SocketAddress
   } |
