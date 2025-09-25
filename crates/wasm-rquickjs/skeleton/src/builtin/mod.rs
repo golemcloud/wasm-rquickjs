@@ -18,10 +18,12 @@ mod http {
 
 mod ieee754;
 mod process;
-mod streams;
+mod webstreams;
 mod timeout;
 mod url;
 mod util;
+mod eventemitter;
+mod streams;
 
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
@@ -52,6 +54,10 @@ pub fn add_module_resolvers(
         .with_module("process")
         .with_module("__wasm_rquickjs_builtin/url_native")
         .with_module("__wasm_rquickjs_builtin/url")
+        .with_module("node:events")
+        .with_module("events")
+        .with_module("node:stream")
+        .with_module("stream")
 }
 
 pub fn module_loader() -> (
@@ -88,7 +94,7 @@ pub fn module_loader() -> (
             .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
             .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
             .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
-            .with_module("__wasm_rquickjs_builtin/streams", streams::STREAMS_JS)
+            .with_module("__wasm_rquickjs_builtin/streams", webstreams::WEBSTREAMS_JS)
             .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
             .with_module("node:util", util::UTIL_JS)
             .with_module("util", util::UTIL_JS)
@@ -100,7 +106,12 @@ pub fn module_loader() -> (
             .with_module("fs", fs::FS_JS)
             .with_module("node:process", process::PROCESS_JS)
             .with_module("process", process::PROCESS_JS)
-            .with_module("__wasm_rquickjs_builtin/url", url::URL_JS),
+            .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
+            .with_module("node:events", eventemitter::EVENTEMITTER_JS)
+            .with_module("events", eventemitter::EVENTEMITTER_JS)
+            .with_module("node:stream", streams::STREAMS_JS)
+            .with_module("stream", streams::STREAMS_JS)
+        ,
     )
 }
 
@@ -109,7 +120,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();
     writeln!(result, "{}", http::WIRE_JS).unwrap();
-    writeln!(result, "{}", streams::WIRE_JS).unwrap();
+    writeln!(result, "{}", webstreams::WIRE_JS).unwrap();
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
     writeln!(result, "{}", url::WIRE_JS).unwrap();
 

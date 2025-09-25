@@ -2129,3 +2129,12 @@ function defineBigIntMethod (fn) {
 function BufferBigIntNotDefined () {
     throw new Error('BigInt not supported')
 }
+
+export default {
+    INSPECT_MAX_BYTES,
+    kMaxLength,
+    kStringMaxLength,
+    constants,
+    Buffer,
+    SlowBuffer
+}
