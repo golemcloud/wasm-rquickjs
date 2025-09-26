@@ -999,3 +999,18 @@ There are a few important things to keep in mind when working on the project:
   times and huge resulting binaries. Use the `cleanup-skeleton.sh` script to quickly remove the `target` directory from
   the `skeleton` crate.
 
+## Acknowledgements
+
+The builtin JS modules are based on the work of several other projects:
+ 
+- [base64-js](https://github.com/beatgammit/base64-js)
+- [buffer](https://github.com/feross/buffer)
+- [consoleTable](https://github.com/ronnyKJ/consoleTable)
+- [eventemitter3](https://github.com/primus/eventemitter3)
+- [fetch-blob](https://github.com/node-fetch/fetch-blob)
+- [fetch.js](https://github.com/JakeChampion/fetch/blob/main/fetch.js)
+- [FormData](https://github.com/jimmywarting/FormData)
+- [ieee754](https://github.com/feross/ieee754)
+- [url-search-params-polyfill](https://github.com/jerrybendy/url-search-params-polyfill)
+- [wasmedge-quickjs](https://github.com/second-state/wasmedge-quickjs)
+- [web-streams-polyfill](https://github.com/MattiasBuelens/web-streams-polyfill)

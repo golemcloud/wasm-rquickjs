@@ -931,6 +931,39 @@ async fn timeout_2(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
 }
 
 #[test]
+async fn timeout_3(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "use-next-tick", &[]).await;
+    let _ = r?;
+
+    assert_eq!(
+        output,
+        indoc!(
+            r#"
+        timeout test starts
+        Message from setImmediate #1
+        Message from setImmediate #2
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a delayed message after 1s, with params x, 100
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a delayed message after 2s
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a repeated message every 250ms
+        This is a followup delayed message after 1s
+        "#
+        )
+    );
+
+    Ok(())
+}
+
+#[test]
 async fn roundtrip_u64(
     #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

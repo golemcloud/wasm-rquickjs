@@ -16,52 +16,61 @@ mod http {
     pub use super::http_disabled::*;
 }
 
+mod eventemitter;
 mod ieee754;
+mod internal;
 mod process;
-mod webstreams;
+mod stream;
+mod string_decoder;
 mod timeout;
 mod url;
 mod util;
-mod eventemitter;
-mod streams;
+mod webstreams;
 
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
 ) -> rquickjs::loader::BuiltinResolver {
-    resolver
-        .with_module("__wasm_rquickjs_builtin/console_native")
-        .with_module("__wasm_rquickjs_builtin/console")
-        .with_module("__wasm_rquickjs_builtin/timeout_native")
-        .with_module("__wasm_rquickjs_builtin/timeout")
-        .with_module("__wasm_rquickjs_builtin/http_native")
-        .with_module("__wasm_rquickjs_builtin/http")
-        .with_module("__wasm_rquickjs_builtin/http_blob")
-        .with_module("__wasm_rquickjs_builtin/http_form_data")
-        .with_module("__wasm_rquickjs_builtin/streams")
-        .with_module("__wasm_rquickjs_builtin/encoding_native")
-        .with_module("__wasm_rquickjs_builtin/encoding")
-        .with_module("node:util")
-        .with_module("util")
-        .with_module("__wasm_rquickjs_builtin/fs_native")
-        .with_module("node:fs")
-        .with_module("fs")
-        .with_module("node:buffer")
-        .with_module("buffer")
-        .with_module("base64-js")
-        .with_module("ieee754")
-        .with_module("__wasm_rquickjs_builtin/process_native")
-        .with_module("node:process")
-        .with_module("process")
-        .with_module("__wasm_rquickjs_builtin/url_native")
-        .with_module("__wasm_rquickjs_builtin/url")
-        .with_module("node:events")
-        .with_module("events")
-        .with_module("node:stream")
-        .with_module("stream")
+    internal::add_to_resolver(
+        resolver
+            .with_module("__wasm_rquickjs_builtin/console_native")
+            .with_module("__wasm_rquickjs_builtin/console")
+            .with_module("__wasm_rquickjs_builtin/timeout_native")
+            .with_module("__wasm_rquickjs_builtin/timeout")
+            .with_module("__wasm_rquickjs_builtin/http_native")
+            .with_module("__wasm_rquickjs_builtin/http")
+            .with_module("__wasm_rquickjs_builtin/http_blob")
+            .with_module("__wasm_rquickjs_builtin/http_form_data")
+            .with_module("__wasm_rquickjs_builtin/streams")
+            .with_module("__wasm_rquickjs_builtin/encoding_native")
+            .with_module("__wasm_rquickjs_builtin/encoding")
+            .with_module("node:util")
+            .with_module("util")
+            .with_module("__wasm_rquickjs_builtin/fs_native")
+            .with_module("node:fs")
+            .with_module("fs")
+            .with_module("node:buffer")
+            .with_module("buffer")
+            .with_module("base64-js")
+            .with_module("ieee754")
+            .with_module("__wasm_rquickjs_builtin/process_native")
+            .with_module("node:process")
+            .with_module("process")
+            .with_module("__wasm_rquickjs_builtin/url_native")
+            .with_module("__wasm_rquickjs_builtin/url")
+            .with_module("node:events")
+            .with_module("events")
+            .with_module("node:stream")
+            .with_module("node:stream/promises")
+            .with_module("stream")
+            .with_module("stream/promises")
+            .with_module("node:string_decoder")
+            .with_module("string_decoder"),
+    )
 }
 
 pub fn module_loader() -> (
     rquickjs::loader::ModuleLoader,
+    rquickjs::loader::BuiltinLoader,
     rquickjs::loader::BuiltinLoader,
 ) {
     (
@@ -109,9 +118,13 @@ pub fn module_loader() -> (
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module("node:events", eventemitter::EVENTEMITTER_JS)
             .with_module("events", eventemitter::EVENTEMITTER_JS)
-            .with_module("node:stream", streams::STREAMS_JS)
-            .with_module("stream", streams::STREAMS_JS)
-        ,
+            .with_module("node:stream", stream::STREAM_JS)
+            .with_module("stream", stream::STREAM_JS)
+            .with_module("node:stream/promises", stream::STREAM_PROMISES_JS)
+            .with_module("stream/promises", stream::STREAM_PROMISES_JS)
+            .with_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
+            .with_module("string_decoder", string_decoder::STRING_DECODER_JS),
+        internal::module_loader(),
     )
 }
 

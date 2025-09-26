@@ -8,8 +8,9 @@ use rquickjs::{
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
 use wasi::clocks::monotonic_clock::subscribe_duration;
@@ -28,6 +29,8 @@ pub struct JsState {
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
+    next_tick_queue:
+        RefCell<VecDeque<Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()> + 'static>>>>>,
 }
 
 impl Default for JsState {
@@ -131,8 +134,42 @@ impl JsState {
                 resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
                 abort_handles: RefCell::new(HashMap::new()),
                 last_abort_id: AtomicUsize::new(0),
+                next_tick_queue: RefCell::new(VecDeque::new()),
             }
         })
+    }
+
+    pub fn add_next_tick_callback(
+        &self,
+        callback: Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()> + 'static>>>,
+    ) {
+        self.next_tick_queue.borrow_mut().push_back(callback);
+    }
+
+    fn pop_next_tick_callback(
+        &self,
+    ) -> Option<Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()> + 'static>>>> {
+        let result = self.next_tick_queue.borrow_mut().pop_front();
+        result
+    }
+
+    pub async fn idle(&self) {
+        let mut n = 0;
+
+        loop {
+            n = 0;
+
+            while let Some(f) = self.pop_next_tick_callback() {
+                f().await;
+                n += 1;
+            }
+
+            self.rt.idle().await;
+
+            if n == 0 {
+                break;
+            }
+        }
     }
 }
 
@@ -295,7 +332,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    js_state.idle().await;
     result
 }
 
@@ -349,7 +386,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    js_state.idle().await;
     result
 }
 
@@ -503,7 +540,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    js_state.idle().await;
     result
 }
 
@@ -534,7 +571,7 @@ async fn drop_js_resource(resource_id: usize) {
         }
     })
     .await;
-    js_state.rt.idle().await;
+    js_state.idle().await;
 }
 
 fn call_with_this<'js, A, R>(

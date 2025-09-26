@@ -151,17 +151,30 @@ pub fn copy_skeleton_sources(output: &Utf8Path) -> anyhow::Result<()> {
             std::fs::write(dest_path, file.contents())?;
         }
 
-        std::fs::create_dir_all(output.join("src/builtin"))?;
-        for file in src
-            .get_dir("src/builtin")
-            .ok_or_else(|| anyhow!("Missing builtin module in skeleton"))?
-            .files()
-        {
-            let src_path = Utf8Path::from_path(file.path())
-                .ok_or_else(|| anyhow!("Unexpected non-UTF-8 path in skeleton"))?;
-            let dest_path = output.join(src_path);
-            std::fs::write(dest_path, file.contents())?;
-        }
+        recursive_copy_sources(
+            src.get_dir("src/builtin")
+                .ok_or_else(|| anyhow!("Missing builtin module in skeleton"))?,
+            output,
+        )?;
     }
+    Ok(())
+}
+
+fn recursive_copy_sources(dir: &Dir, output: &Utf8Path) -> anyhow::Result<()> {
+    let dir_path = Utf8Path::from_path(dir.path())
+        .ok_or_else(|| anyhow!("Unexpected non-UTF-8 path in skeleton"))?;
+    std::fs::create_dir_all(output.join(dir_path))?;
+
+    for file in dir.files() {
+        let src_path = Utf8Path::from_path(file.path())
+            .ok_or_else(|| anyhow!("Unexpected non-UTF-8 path in skeleton"))?;
+        let dest_path = output.join(src_path);
+        std::fs::write(dest_path, file.contents())?;
+    }
+
+    for dir in dir.dirs() {
+        recursive_copy_sources(dir, output)?;
+    }
+
     Ok(())
 }
