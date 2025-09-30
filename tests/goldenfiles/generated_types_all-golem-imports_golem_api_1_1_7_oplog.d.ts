@@ -59,6 +59,10 @@ declare module 'golem:api/oplog@1.1.7' {
   {
     tag: 'write-remote-batched'
     val: OplogIndex | undefined
+  } |
+  {
+    tag: 'write-remote-transaction'
+    val: OplogIndex | undefined
   };
   export type PluginInstallationDescription = {
     installationId: Uuid;
@@ -198,10 +202,14 @@ declare module 'golem:api/oplog@1.1.7' {
   export type CreateResourceParameters = {
     timestamp: Datetime;
     resourceId: WorkerResourceId;
+    name: string;
+    owner: string;
   };
   export type DropResourceParameters = {
     timestamp: Datetime;
     resourceId: WorkerResourceId;
+    name: string;
+    owner: string;
   };
   export type LogLevel = "stdout" | "stderr" | "trace" | "debug" | "info" | "warn" | "error" | "critical";
   export type LogParameters = {
@@ -247,6 +255,14 @@ declare module 'golem:api/oplog@1.1.7' {
   export type ChangePersistenceLevelParameters = {
     timestamp: Datetime;
     persistenceLevel: PersistenceLevel;
+  };
+  export type BeginRemoteTransactionParameters = {
+    timestamp: Datetime;
+    transactionId: string;
+  };
+  export type RemoteTransactionParameters = {
+    timestamp: Datetime;
+    beginIndex: OplogIndex;
   };
   export type OplogEntry = 
   /** The initial worker oplog entry */
@@ -430,5 +446,30 @@ declare module 'golem:api/oplog@1.1.7' {
   {
     tag: 'change-persistence-level'
     val: ChangePersistenceLevelParameters
+  } |
+  /** Begins a transaction operation */
+  {
+    tag: 'begin-remote-transaction'
+    val: BeginRemoteTransactionParameters
+  } |
+  /** Pre-Commit of the transaction, indicating that the transaction will be committed */
+  {
+    tag: 'pre-commit-remote-transaction'
+    val: RemoteTransactionParameters
+  } |
+  /** Pre-Rollback of the transaction, indicating that the transaction will be rolled back */
+  {
+    tag: 'pre-rollback-remote-transaction'
+    val: RemoteTransactionParameters
+  } |
+  /** Committed transaction operation, indicating that the transaction was committed */
+  {
+    tag: 'committed-remote-transaction'
+    val: RemoteTransactionParameters
+  } |
+  /** Rolled back transaction operation, indicating that the transaction was rolled back */
+  {
+    tag: 'rolled-back-remote-transaction'
+    val: RemoteTransactionParameters
   };
 }
