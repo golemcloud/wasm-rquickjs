@@ -367,6 +367,10 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `read`
 - `write`
 
+### Crypto
+- `crypto.randomUUID`
+- `crypto.getRandomValues`
+
 ### Coming from QuickJS
 
 - Global:

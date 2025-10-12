@@ -37,6 +37,7 @@ serde_json = { workspace = true }
 test-r = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+uuid = { version = "1.18.1", features = ["v4"] }
 wac-graph = { workspace = true }
 wasmtime = { workspace = true, features = ["async", "component-model"] }
 wasmtime-wasi = { workspace = true }
