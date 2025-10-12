@@ -11,3 +11,5 @@ export let env = get_env();
 export function cwd() {
     return "/";
 }
+
+export default {argv, argv0, env, cwd};
