@@ -22,6 +22,7 @@ mod streams;
 mod timeout;
 mod url;
 mod util;
+mod web_crypto;
 
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
@@ -52,6 +53,8 @@ pub fn add_module_resolvers(
         .with_module("process")
         .with_module("__wasm_rquickjs_builtin/url_native")
         .with_module("__wasm_rquickjs_builtin/url")
+        .with_module("__wasm_rquickjs_builtin/web_crypto_native")
+        .with_module("__wasm_rquickjs_builtin/web_crypto")
 }
 
 pub fn module_loader() -> (
@@ -81,7 +84,11 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
             )
-            .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module),
+            .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
+            .with_module(
+                "__wasm_rquickjs_builtin/web_crypto_native",
+                web_crypto::js_native_module,
+            ),
         rquickjs::loader::BuiltinLoader::default()
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
             .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
@@ -100,7 +107,11 @@ pub fn module_loader() -> (
             .with_module("fs", fs::FS_JS)
             .with_module("node:process", process::PROCESS_JS)
             .with_module("process", process::PROCESS_JS)
-            .with_module("__wasm_rquickjs_builtin/url", url::URL_JS),
+            .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
+            .with_module(
+                "__wasm_rquickjs_builtin/web_crypto",
+                web_crypto::WEB_CRYPTO_JS,
+            ),
     )
 }
 
@@ -112,6 +123,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", streams::WIRE_JS).unwrap();
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
     writeln!(result, "{}", url::WIRE_JS).unwrap();
+    writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
 
     result
 }
