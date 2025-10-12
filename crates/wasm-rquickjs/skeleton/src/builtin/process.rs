@@ -3,7 +3,7 @@
 pub mod native_module {
     use crate::internal::{format_caught_error, get_js_state};
     use rquickjs::function::Args;
-    use rquickjs::{CatchResultExt, Function, Persistent, Value, async_with};
+    use rquickjs::{CatchResultExt, Ctx, Function, Persistent, Value, async_with};
     use std::collections::HashMap;
 
     #[rquickjs::function]
@@ -18,11 +18,13 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn next_tick(
+        ctx: Ctx<'_>,
         function: Persistent<Function<'static>>,
         args: Persistent<Vec<Value<'static>>>,
     ) {
         let state = get_js_state();
 
+        println!("add_next_tick_callback");
         state.add_next_tick_callback(Box::new(move || {
             Box::pin(next_tick_callback(function, args))
         }))

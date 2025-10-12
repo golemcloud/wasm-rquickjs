@@ -18,6 +18,7 @@ use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, JsLifetime, TypedArray};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use wstd::runtime::AsyncPollable;
 
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
@@ -119,15 +120,7 @@ impl HttpRequest {
     }
 
     pub fn init_send(&mut self) {
-        let js_state = crate::internal::get_js_state();
-        let reactor = js_state
-            .reactor
-            .borrow()
-            .as_ref()
-            .expect("http send is called from outside of an async call")
-            .clone();
-
-        let client = reqwest::ClientBuilder::new(reactor)
+        let client = reqwest::ClientBuilder::new()
             .build()
             .expect("Failed to create HTTP client");
 
@@ -179,15 +172,7 @@ impl HttpRequest {
     }
 
     pub async fn simple_send(&mut self) -> HttpResponse {
-        let js_state = crate::internal::get_js_state();
-        let reactor = js_state
-            .reactor
-            .borrow()
-            .as_ref()
-            .expect("http send is called from outside of an async call")
-            .clone();
-
-        let client = reqwest::ClientBuilder::new(reactor)
+        let client = reqwest::ClientBuilder::new()
             .build()
             .expect("Failed to create HTTP client");
 
@@ -381,14 +366,7 @@ impl ResponseBodyStream {
         if let Some((stream, _body, _response)) = &mut self.stream {
             const CHUNK_SIZE: u64 = 4096;
             let pollable = stream.subscribe();
-            let js_state = crate::internal::get_js_state();
-            let reactor = js_state
-                .reactor
-                .borrow()
-                .as_ref()
-                .expect("http pull is called from outside of an async call")
-                .clone();
-            reactor.wait_for(pollable).await;
+            AsyncPollable::new(pollable).wait_for().await;
 
             match stream.read(CHUNK_SIZE) {
                 Ok(chunk) => {

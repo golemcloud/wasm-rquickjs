@@ -939,23 +939,11 @@ async fn timeout_3(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
         output,
         indoc!(
             r#"
-        timeout test starts
-        Message from setImmediate #1
-        Message from setImmediate #2
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a delayed message after 1s, with params x, 100
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a delayed message after 2s
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a repeated message every 250ms
-        This is a followup delayed message after 1s
+            start
+            end
+            nextTick callback 1
+            nextTick callback 2
+            setImmediate callback 1
         "#
         )
     );
