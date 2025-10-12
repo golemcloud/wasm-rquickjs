@@ -1,3 +1,5 @@
+import {nextTick} from "node:process";
+
 export const run = () => {
     console.log("timeout test starts");
     const repeated = setInterval(() => {
@@ -31,4 +33,18 @@ export async function parallel() {
             test(i);
         }, 100)
     }
+}
+
+export async function useNextTick() {
+    console.log("start");
+    nextTick(() => {
+        console.log("nextTick callback 1");
+    });
+    nextTick(() => {
+        console.log("nextTick callback 2");
+    });
+    setImmediate(() => {
+        console.log("setImmediate callback 1");
+    });
+    console.log("end");
 }

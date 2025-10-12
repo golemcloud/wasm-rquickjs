@@ -1,7 +1,7 @@
-// JS functions for the streams implementation
-pub const STREAMS_JS: &str = include_str!("web-streams-polyfill-4.1.0.js");
+// JS functions for the web streams implementation
+pub const WEBSTREAMS_JS: &str = include_str!("web-streams-polyfill-4.1.0.js");
 
-// JS code wiring the streams module into the global context
+// JS code wiring the web streams module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_streams from '__wasm_rquickjs_builtin/streams';
         globalThis.streams = __wasm_rquickjs_streams;

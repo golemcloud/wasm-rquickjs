@@ -8,19 +8,17 @@ use rquickjs::{
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
-use std::time::Duration;
-use wasi::clocks::monotonic_clock::subscribe_duration;
-use wasi_async_runtime::{Reactor, block_on};
+use wstd::runtime::block_on;
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
 pub struct JsState {
-    pub reactor: RefCell<Option<Reactor>>,
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
     pub last_resource_id: AtomicUsize,
@@ -28,6 +26,8 @@ pub struct JsState {
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
+    next_tick_queue:
+        RefCell<VecDeque<Box<dyn FnOnce() -> Pin<Box<dyn Future<Output=()> + 'static>>>>>,
 }
 
 impl Default for JsState {
@@ -38,7 +38,7 @@ impl Default for JsState {
 
 impl JsState {
     pub fn new() -> Self {
-        block_on(|_reactor| async {
+        block_on(async {
             let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
             let ctx = AsyncContext::full(&rt)
                 .await
@@ -123,7 +123,6 @@ impl JsState {
 
             let last_resource_id = AtomicUsize::new(1);
             Self {
-                reactor: RefCell::new(None),
                 rt,
                 ctx,
                 last_resource_id,
@@ -131,8 +130,46 @@ impl JsState {
                 resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
                 abort_handles: RefCell::new(HashMap::new()),
                 last_abort_id: AtomicUsize::new(0),
+                next_tick_queue: RefCell::new(VecDeque::new()),
             }
         })
+    }
+
+    pub fn add_next_tick_callback(
+        &self,
+        callback: Box<dyn FnOnce() -> Pin<Box<dyn Future<Output=()> + 'static>>>,
+    ) {
+        self.next_tick_queue.borrow_mut().push_back(callback);
+    }
+
+    fn pop_next_tick_callback(
+        &self,
+    ) -> Option<Box<dyn FnOnce() -> Pin<Box<dyn Future<Output=()> + 'static>>>> {
+        let result = self.next_tick_queue.borrow_mut().pop_front();
+        result
+    }
+
+    pub async fn idle(&self) {
+        let mut n;
+
+        loop {
+            n = 0;
+
+            while let Some(f) = self.pop_next_tick_callback() {
+                println!("** CALLING NEXT_TICK CALLBACK");
+                f().await;
+                n += 1;
+            }
+
+            println!("** CALLING RT.IDLE");
+            self.rt.idle().await;
+
+            println!("** IDLE DONE {n}");
+
+            if n == 0 {
+                break;
+            }
+        }
     }
 }
 
@@ -151,10 +188,10 @@ pub fn get_js_state() -> &'static JsState {
 pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     let js_state = get_js_state();
 
-    block_on(|reactor| async move {
+    block_on(async move {
         use futures::StreamExt;
 
-        js_state.reactor.replace(Some(reactor));
+        println!("async_exported_function start");
         if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
             let resource_dropper = async move {
                 while let Some(resource_id) = resource_drop_queue_rx.next().await {
@@ -176,6 +213,8 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
             js_state
                 .resource_drop_queue_rx
                 .replace(Some(resource_drop_queue_rx));
+
+            println!("async_exported_function end");
 
             result
         } else {
@@ -214,7 +253,7 @@ where
                 .map(|e| crate::wrappers::JsResult(Err(e)))
         },
     )
-    .await
+        .await
 }
 
 async fn call_js_export_internal<A, R, FR, TME>(
@@ -266,6 +305,8 @@ where
                 if value.is_promise() {
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<R> ();
+                    println!("promise future await start");
+                    
                     match promise_future.await {
                         Ok(result) => {
                             map_result(result)
@@ -295,7 +336,9 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    println!("async_with finished, before idle");
+    js_state.idle().await;
+    println!("after idle");
     result
 }
 
@@ -349,7 +392,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    js_state.idle().await;
     result
 }
 
@@ -379,7 +422,7 @@ where
         |a| a,
         |_, _| None,
     )
-    .await
+        .await
 }
 
 pub async fn call_js_resource_method_returning_result<A, R, E>(
@@ -407,7 +450,7 @@ where
                 .map(|e| crate::wrappers::JsResult(Err(e)))
         },
     )
-    .await
+        .await
 }
 
 async fn call_js_resource_method_internal<A, R, FR, TME>(
@@ -503,7 +546,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    js_state.idle().await;
     result
 }
 
@@ -513,14 +556,6 @@ pub fn enqueue_drop_js_resource(resource_id: usize) {
         .resource_drop_queue_tx
         .unbounded_send(resource_id)
         .expect("Failed to enqueue resource drop");
-}
-
-pub async fn sleep(duration: Duration) {
-    let js_state = get_js_state();
-    let reactor = js_state.reactor.borrow().clone().unwrap();
-
-    let pollable = subscribe_duration(duration.as_nanos() as u64);
-    reactor.wait_for(pollable).await;
 }
 
 async fn drop_js_resource(resource_id: usize) {
@@ -533,8 +568,8 @@ async fn drop_js_resource(resource_id: usize) {
             panic!("Failed to delete resource {resource_id}: {e:?}");
         }
     })
-    .await;
-    js_state.rt.idle().await;
+        .await;
+    js_state.idle().await;
 }
 
 fn call_with_this<'js, A, R>(
@@ -663,9 +698,9 @@ pub fn format_js_exception(exc: &Value) -> String {
         .unwrap_or_else(|| {
             let formatted_exc = pretty_stringify_or_debug_print(&exc);
             if formatted_exc.contains("\n") {
-                format!("JavaScript exception:\n{formatted_exc}",)
+                format!("JavaScript exception:\n{formatted_exc}", )
             } else {
-                format!("JavaScript exception: {formatted_exc}",)
+                format!("JavaScript exception: {formatted_exc}", )
             }
         })
 }

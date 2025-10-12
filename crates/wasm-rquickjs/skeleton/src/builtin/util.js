@@ -638,3 +638,29 @@ export function callbackify(original) {
         getOwnPropertyDescriptors(original));
     return callbackified;
 }
+
+export default {
+    format,
+    deprecate,
+    debuglog,
+    inspect,
+    isArray,
+    isBoolean,
+    isNull,
+    isNullOrUndefined,
+    isNumber,
+    isString,
+    isSymbol,
+    isUndefined,
+    isRegExp,
+    isObject,
+    isDate,
+    isError,
+    isFunction,
+    isPrimitive,
+    isBuffer,
+    log,
+    _extend,
+    promisify,
+    callbackify
+}
