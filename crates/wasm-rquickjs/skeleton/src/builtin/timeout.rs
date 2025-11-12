@@ -1,7 +1,6 @@
-use crate::internal::{format_caught_error, sleep};
+use crate::internal::{format_caught_error};
 use rquickjs::function::Args;
 use rquickjs::{CatchResultExt, Ctx, Persistent, Value};
-use std::time::Duration;
 
 // Native functions for the timeout implementation
 #[rquickjs::module]
@@ -79,10 +78,10 @@ async fn scheduled_task(
                 )
             });
     } else {
-        let duration = Duration::from_millis(delay as u64);
+        let duration = wstd::time::Duration::from_millis(delay as u64);
 
         loop {
-            sleep(duration).await;
+            wstd::task::sleep(duration).await;
 
             run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
                 .catch(&ctx)

@@ -8,8 +8,8 @@ pub mod native_module {
 use futures::SinkExt;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_concurrency::stream::IntoStream;
-use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::{
+use golem_wasi_http::header::{HeaderName, HeaderValue};
+use golem_wasi_http::{
     Body, CustomRequestBodyWriter, CustomRequestExecution, Method, Request, StreamError, Url,
     Version,
 };
@@ -18,6 +18,7 @@ use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, JsLifetime, TypedArray};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use wstd::runtime::AsyncPollable;
 
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
@@ -119,15 +120,7 @@ impl HttpRequest {
     }
 
     pub fn init_send(&mut self) {
-        let js_state = crate::internal::get_js_state();
-        let reactor = js_state
-            .reactor
-            .borrow()
-            .as_ref()
-            .expect("http send is called from outside of an async call")
-            .clone();
-
-        let client = reqwest::ClientBuilder::new(reactor)
+        let client = golem_wasi_http::ClientBuilder::new()
             .build()
             .expect("Failed to create HTTP client");
 
@@ -179,15 +172,7 @@ impl HttpRequest {
     }
 
     pub async fn simple_send(&mut self) -> HttpResponse {
-        let js_state = crate::internal::get_js_state();
-        let reactor = js_state
-            .reactor
-            .borrow()
-            .as_ref()
-            .expect("http send is called from outside of an async call")
-            .clone();
-
-        let client = reqwest::ClientBuilder::new(reactor)
+        let client = golem_wasi_http::ClientBuilder::new()
             .build()
             .expect("Failed to create HTTP client");
 
@@ -250,10 +235,10 @@ impl WrappedRequestBodyWriter {
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct HttpResponse {
     #[qjs(skip_trace)]
-    response: Option<reqwest::Response>,
+    response: Option<golem_wasi_http::Response>,
     headers: Vec<Vec<String>>,
     #[qjs(skip_trace)]
-    status: reqwest::StatusCode,
+    status: golem_wasi_http::StatusCode,
 }
 
 impl Default for HttpResponse {
@@ -269,12 +254,12 @@ impl HttpResponse {
         Self {
             response: None,
             headers: Vec::new(),
-            status: reqwest::StatusCode::OK,
+            status: golem_wasi_http::StatusCode::OK,
         }
     }
 
     #[qjs(skip)]
-    pub fn from_response(response: reqwest::Response) -> Self {
+    pub fn from_response(response: golem_wasi_http::Response) -> Self {
         let headers = response
             .headers()
             .iter()
@@ -356,9 +341,9 @@ impl HttpResponse {
 pub struct ResponseBodyStream {
     #[qjs(skip_trace)]
     stream: Option<(
-        reqwest::InputStream,
-        reqwest::IncomingBody,
-        reqwest::Response,
+        golem_wasi_http::InputStream,
+        golem_wasi_http::IncomingBody,
+        golem_wasi_http::Response,
     )>,
 }
 
@@ -381,14 +366,7 @@ impl ResponseBodyStream {
         if let Some((stream, _body, _response)) = &mut self.stream {
             const CHUNK_SIZE: u64 = 4096;
             let pollable = stream.subscribe();
-            let js_state = crate::internal::get_js_state();
-            let reactor = js_state
-                .reactor
-                .borrow()
-                .as_ref()
-                .expect("http pull is called from outside of an async call")
-                .clone();
-            reactor.wait_for(pollable).await;
+            AsyncPollable::new(pollable).wait_for().await;
 
             match stream.read(CHUNK_SIZE) {
                 Ok(chunk) => {
