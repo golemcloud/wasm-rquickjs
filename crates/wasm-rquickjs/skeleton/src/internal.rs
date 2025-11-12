@@ -12,15 +12,13 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
-use wasi::clocks::monotonic_clock::subscribe_duration;
-use wasi_async_runtime::{Reactor, block_on};
+use wstd::runtime::block_on;
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
 pub struct JsState {
-    pub reactor: RefCell<Option<Reactor>>,
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
     pub last_resource_id: AtomicUsize,
@@ -38,7 +36,7 @@ impl Default for JsState {
 
 impl JsState {
     pub fn new() -> Self {
-        block_on(|_reactor| async {
+        block_on(async {
             let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
             let ctx = AsyncContext::full(&rt)
                 .await
@@ -123,7 +121,6 @@ impl JsState {
 
             let last_resource_id = AtomicUsize::new(1);
             Self {
-                reactor: RefCell::new(None),
                 rt,
                 ctx,
                 last_resource_id,
@@ -151,10 +148,9 @@ pub fn get_js_state() -> &'static JsState {
 pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     let js_state = get_js_state();
 
-    block_on(|reactor| async move {
+    block_on(async move {
         use futures::StreamExt;
 
-        js_state.reactor.replace(Some(reactor));
         if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
             let resource_dropper = async move {
                 while let Some(resource_id) = resource_drop_queue_rx.next().await {
@@ -513,14 +509,6 @@ pub fn enqueue_drop_js_resource(resource_id: usize) {
         .resource_drop_queue_tx
         .unbounded_send(resource_id)
         .expect("Failed to enqueue resource drop");
-}
-
-pub async fn sleep(duration: Duration) {
-    let js_state = get_js_state();
-    let reactor = js_state.reactor.borrow().clone().unwrap();
-
-    let pollable = subscribe_duration(duration.as_nanos() as u64);
-    reactor.wait_for(pollable).await;
 }
 
 async fn drop_js_resource(resource_id: usize) {
