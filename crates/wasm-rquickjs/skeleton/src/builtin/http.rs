@@ -198,6 +198,12 @@ pub struct WrappedRequestBodyWriter {
     writer: Option<CustomRequestBodyWriter>,
 }
 
+impl Default for WrappedRequestBodyWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[rquickjs::methods(rename_all = "camelCase")]
 impl WrappedRequestBodyWriter {
     #[qjs(constructor)]
@@ -347,6 +353,12 @@ pub struct ResponseBodyStream {
     )>,
 }
 
+impl Default for ResponseBodyStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[rquickjs::methods(rename_all = "camelCase")]
 impl ResponseBodyStream {
     #[qjs(constructor)]
@@ -405,6 +417,12 @@ pub struct BodySink {
     receiver: Option<UnboundedReceiver<Vec<u8>>>,
 }
 
+impl Default for BodySink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[rquickjs::methods(rename_all = "camelCase")]
 impl BodySink {
     #[qjs(constructor)]
@@ -423,6 +441,7 @@ impl BodySink {
             .expect("BodySink receiver has already been taken")
     }
 
+    #[allow(clippy::await_holding_refcell_ref)]
     pub async fn write(&self, chunk: TypedArray<'_, u8>) {
         let mut sender = self.sender.borrow_mut();
         sender

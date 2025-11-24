@@ -8,11 +8,9 @@ use rquickjs::{
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
-use std::time::Duration;
 use wstd::runtime::block_on;
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
@@ -27,8 +25,6 @@ pub struct JsState {
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
-    next_tick_queue:
-        RefCell<VecDeque<Box<dyn FnOnce() -> Pin<Box<dyn Future<Output=()> + 'static>>>>>,
 }
 
 impl Default for JsState {
@@ -131,46 +127,8 @@ impl JsState {
                 resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
                 abort_handles: RefCell::new(HashMap::new()),
                 last_abort_id: AtomicUsize::new(0),
-                next_tick_queue: RefCell::new(VecDeque::new()),
             }
         })
-    }
-
-    pub fn add_next_tick_callback(
-        &self,
-        callback: Box<dyn FnOnce() -> Pin<Box<dyn Future<Output=()> + 'static>>>,
-    ) {
-        self.next_tick_queue.borrow_mut().push_back(callback);
-    }
-
-    fn pop_next_tick_callback(
-        &self,
-    ) -> Option<Box<dyn FnOnce() -> Pin<Box<dyn Future<Output=()> + 'static>>>> {
-        let result = self.next_tick_queue.borrow_mut().pop_front();
-        result
-    }
-
-    pub async fn idle(&self) {
-        let mut n;
-
-        loop {
-            n = 0;
-
-            while let Some(f) = self.pop_next_tick_callback() {
-                println!("** CALLING NEXT_TICK CALLBACK");
-                f().await;
-                n += 1;
-            }
-
-            println!("** CALLING RT.IDLE");
-            self.rt.idle().await;
-
-            println!("** IDLE DONE {n}");
-
-            if n == 0 {
-                break;
-            }
-        }
     }
 }
 
@@ -192,7 +150,6 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     block_on(async move {
         use futures::StreamExt;
 
-        println!("async_exported_function start");
         if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
             let resource_dropper = async move {
                 while let Some(resource_id) = resource_drop_queue_rx.next().await {
@@ -214,8 +171,6 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
             js_state
                 .resource_drop_queue_rx
                 .replace(Some(resource_drop_queue_rx));
-
-            println!("async_exported_function end");
 
             result
         } else {
@@ -254,7 +209,7 @@ where
                 .map(|e| crate::wrappers::JsResult(Err(e)))
         },
     )
-        .await
+    .await
 }
 
 async fn call_js_export_internal<A, R, FR, TME>(
@@ -306,7 +261,6 @@ where
                 if value.is_promise() {
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<R> ();
-                    println!("promise future await start");
 
                     match promise_future.await {
                         Ok(result) => {
@@ -331,15 +285,13 @@ where
                 }
                 else {
                     (map_result)(
-                        R::from_js(&ctx, value).expect(&format!("Unexpected result value for exported function {path}", path=function_path.join(".")))
+                        R::from_js(&ctx, value).unwrap_or_else(|_| panic!("Unexpected result value for exported function {path}", path=function_path.join(".")))
                     )
                 }
             }
         }
     }).await;
-    println!("async_with finished, before idle");
-    js_state.idle().await;
-    println!("after idle");
+    js_state.rt.idle().await;
     result
 }
 
@@ -393,7 +345,7 @@ where
             }
         }
     }).await;
-    js_state.idle().await;
+    js_state.rt.idle().await;
     result
 }
 
@@ -423,7 +375,7 @@ where
         |a| a,
         |_, _| None,
     )
-        .await
+    .await
 }
 
 pub async fn call_js_resource_method_returning_result<A, R, E>(
@@ -451,7 +403,7 @@ where
                 .map(|e| crate::wrappers::JsResult(Err(e)))
         },
     )
-        .await
+    .await
 }
 
 async fn call_js_resource_method_internal<A, R, FR, TME>(
@@ -539,15 +491,13 @@ where
                     }
                 }
                 else {
-                    map_result(R::from_js(&ctx, value).expect(
-                        &format!("Unexpected result value for method {name} in exported class {path}",
-                                path=resource_path.join(".")
-                        )))
+                    map_result(R::from_js(&ctx, value).unwrap_or_else(|_| panic!("Unexpected result value for method {name} in exported class {path}",
+                                path=resource_path.join("."))))
                 }
             }
         }
     }).await;
-    js_state.idle().await;
+    js_state.rt.idle().await;
     result
 }
 
@@ -569,8 +519,8 @@ async fn drop_js_resource(resource_id: usize) {
             panic!("Failed to delete resource {resource_id}: {e:?}");
         }
     })
-        .await;
-    js_state.idle().await;
+    .await;
+    js_state.rt.idle().await;
 }
 
 fn call_with_this<'js, A, R>(
@@ -697,11 +647,11 @@ pub fn format_js_exception(exc: &Value) -> String {
     try_format_js_error(exc)
         .or_else(|| try_format_tagged_error(exc))
         .unwrap_or_else(|| {
-            let formatted_exc = pretty_stringify_or_debug_print(&exc);
+            let formatted_exc = pretty_stringify_or_debug_print(exc);
             if formatted_exc.contains("\n") {
-                format!("JavaScript exception:\n{formatted_exc}", )
+                format!("JavaScript exception:\n{formatted_exc}",)
             } else {
-                format!("JavaScript exception: {formatted_exc}", )
+                format!("JavaScript exception: {formatted_exc}",)
             }
         })
 }
@@ -729,7 +679,7 @@ pub fn try_format_tagged_error(err: &Value) -> Option<String> {
     let obj = err.as_object()?;
     let tag: Option<String> = obj.get("tag").ok();
     let val: Option<Value> = obj.get("val").ok();
-    let val = val.and_then(|v| (!v.is_undefined()).then(|| v));
+    let val = val.and_then(|v| (!v.is_undefined()).then_some(v));
 
     match (tag, val) {
         (Some(tag), Some(val)) => {

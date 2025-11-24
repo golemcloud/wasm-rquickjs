@@ -58,13 +58,14 @@ pub mod native_module {
             let bytes = content.as_bytes();
             let path = Path::new(&path);
             if let Some(parent) = path.parent()
-                && let Err(err) = std::fs::create_dir_all(parent) {
-                    return Some(format!(
-                        "Failed to create directory {}: {}",
-                        parent.display(),
-                        err
-                    ));
-                }
+                && let Err(err) = std::fs::create_dir_all(parent)
+            {
+                return Some(format!(
+                    "Failed to create directory {}: {}",
+                    parent.display(),
+                    err
+                ));
+            }
             if let Err(err) = std::fs::write(path, bytes) {
                 Some(format!("Failed to write file {path:?}: {err}"))
             } else {
@@ -78,13 +79,14 @@ pub mod native_module {
         if let Some(bytes) = content.as_bytes() {
             let path = Path::new(&path);
             if let Some(parent) = path.parent()
-                && let Err(err) = std::fs::create_dir_all(parent) {
-                    return Some(format!(
-                        "Failed to create directory {}: {}",
-                        parent.display(),
-                        err
-                    ));
-                }
+                && let Err(err) = std::fs::create_dir_all(parent)
+            {
+                return Some(format!(
+                    "Failed to create directory {}: {}",
+                    parent.display(),
+                    err
+                ));
+            }
             if let Err(err) = std::fs::write(path, bytes) {
                 Some(format!("Failed to write file {path:?}: {err}"))
             } else {

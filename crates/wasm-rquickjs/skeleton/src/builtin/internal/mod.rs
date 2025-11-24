@@ -46,7 +46,10 @@ pub fn module_loader() -> BuiltinLoader {
             "__wasm_rquickjs_builtin/internal/validators",
             include_str!("validators.js"),
         )
-        .with_module("__wasm_rquickjs_builtin/internal/binding/util", include_str!("binding/util.js"))
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/binding/util",
+            include_str!("binding/util.js"),
+        )
         .with_module(
             "__wasm_rquickjs_builtin/internal/streams/add-abort-signal",
             include_str!("streams/add-abort-signal.js"),

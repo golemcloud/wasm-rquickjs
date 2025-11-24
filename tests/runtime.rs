@@ -885,7 +885,7 @@ async fn node_stream1(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow
         invoke_and_capture_output(compiled.wasm_path(), None, "test-node-stream1", &[]).await;
     let r = r?;
 
-    assert_eq!(r, Some(Val::String("Good moring".to_string())));
+    assert_eq!(r, Some(Val::String("Good morning!".to_string())));
 
     Ok(())
 }
