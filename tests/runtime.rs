@@ -938,7 +938,8 @@ async fn timeout_2(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
 
 #[test]
 async fn timeout_3(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "use-next-tick", &[]).await;
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "use-next-tick", &[]).await;
     let _ = r?;
 
     assert_eq!(
