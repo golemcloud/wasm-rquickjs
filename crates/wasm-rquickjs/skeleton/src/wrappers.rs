@@ -8,6 +8,7 @@ const RESULT_ERR: &str = "err";
 
 /// rquickjs supports passing tuples as arguments but only up to 8 elements. This wrapper
 /// provides support up to 26 elements.
+#[allow(dead_code)]
 pub struct JsArgs<T>(pub T);
 
 macro_rules! impl_into_args {
@@ -76,6 +77,7 @@ impl_into_args!(
 /// The Result is encoded in an object with two fields:
 /// - `tag`: a string that is either "ok" or "err", indicating the result type.
 /// - `val`: the value of the result, which can be either the success value or the error value.
+#[allow(dead_code)]
 pub struct JsResult<Ok, Err>(pub Result<Ok, Err>);
 
 impl<'js, Ok: IntoJs<'js>, Err: IntoJs<'js>> IntoJs<'js> for JsResult<Ok, Err> {
@@ -118,6 +120,7 @@ impl<'js, Ok: FromJs<'js>, Err: FromJs<'js>> FromJs<'js> for JsResult<Ok, Err> {
 }
 
 // Wrapper type that forces the js type to be a bigint instead of the default number which can loose some bits due to
+#[allow(dead_code)]
 pub struct BigIntWrapper<T>(pub T);
 
 impl<'js> IntoJs<'js> for BigIntWrapper<u64> {
@@ -150,6 +153,7 @@ impl<'js> FromJs<'js> for BigIntWrapper<i64> {
     }
 }
 
+#[allow(dead_code)]
 pub struct UInt8Array(pub Vec<u8>);
 
 impl<'js> IntoJs<'js> for UInt8Array {

@@ -1,0 +1,7 @@
+package quickjs:crypto;
+
+world crypto {
+  export new-uuids: func() -> tuple<string, string>;
+  export random-s8: func(count: u32) -> list<s8>;
+  export random-u32: func(count: u32) -> list<u32>;
+}

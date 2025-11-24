@@ -12,6 +12,7 @@ use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
+use std::time::Duration;
 use wstd::runtime::block_on;
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
@@ -306,7 +307,7 @@ where
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<R> ();
                     println!("promise future await start");
-                    
+
                     match promise_future.await {
                         Ok(result) => {
                             map_result(result)
@@ -706,7 +707,13 @@ pub fn format_js_exception(exc: &Value) -> String {
 }
 
 pub fn try_format_js_error(err: &Value) -> Option<String> {
+    let error_ctor: Object = err.ctx().globals().get("Error").ok()?;
     let obj = err.as_object()?;
+
+    if !obj.is_instance_of(error_ctor) {
+        return None;
+    }
+
     let message: Option<String> = obj.get("message").ok();
     let stack: Option<String> = obj.get("stack").ok();
 

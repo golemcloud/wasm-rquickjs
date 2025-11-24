@@ -122,6 +122,12 @@ fn compiled_url() -> CompiledTest {
     CompiledTest::new(path, false).expect("Failed to compile url")
 }
 
+#[test_dep(tagged_as = "crypto")]
+fn compiled_crypto() -> CompiledTest {
+    let path = Utf8Path::new("examples/crypto");
+    CompiledTest::new(path, false).expect("Failed to compile crypto")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -1133,4 +1139,98 @@ async fn url_test4(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::
         }
     );
     Ok(())
+}
+
+#[test]
+async fn web_crypto_random_uuid(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "new-uuids", &[]).await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::Tuple(vals)) => {
+            let strings = vals
+                .into_iter()
+                .filter_map(|v| match v {
+                    Val::String(s) => Some(s),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(strings.len(), 2);
+
+            strings
+                .into_iter()
+                .map(|s| uuid::Uuid::parse_str(&s))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected tuple result")),
+    }
+}
+
+#[test]
+async fn web_crypto_random_s8(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "random-s8", &[Val::U32(10)]).await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::List(vals)) => {
+            let bytes = vals
+                .into_iter()
+                .filter_map(|v| match v {
+                    Val::S8(b) => Some(b),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(bytes.len(), 10);
+            assert!(
+                bytes.iter().any(|b| b != &bytes[0]),
+                "There should be some different bytes in the list"
+            );
+
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected list<s8> result")),
+    }
+}
+
+#[test]
+async fn web_crypto_random_u32(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "random-u32", &[Val::U32(10)]).await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::List(vals)) => {
+            let numbers = vals
+                .into_iter()
+                .filter_map(|v| match v {
+                    Val::U32(n) => Some(n),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(numbers.len(), 10);
+            assert!(
+                numbers.iter().any(|b| b != &numbers[0]),
+                "There should be some different numbers in the list"
+            );
+
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected list<u32> result")),
+    }
 }

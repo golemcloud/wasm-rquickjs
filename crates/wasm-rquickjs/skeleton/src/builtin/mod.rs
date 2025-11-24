@@ -25,6 +25,7 @@ mod string_decoder;
 mod timeout;
 mod url;
 mod util;
+mod web_crypto;
 mod webstreams;
 
 pub fn add_module_resolvers(
@@ -64,7 +65,9 @@ pub fn add_module_resolvers(
             .with_module("stream")
             .with_module("stream/promises")
             .with_module("node:string_decoder")
-            .with_module("string_decoder"),
+            .with_module("string_decoder")
+            .with_module("__wasm_rquickjs_builtin/web_crypto_native")
+            .with_module("__wasm_rquickjs_builtin/web_crypto"),
     )
 }
 
@@ -96,7 +99,11 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
             )
-            .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module),
+            .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
+            .with_module(
+                "__wasm_rquickjs_builtin/web_crypto_native",
+                web_crypto::js_native_module,
+            ),
         rquickjs::loader::BuiltinLoader::default()
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
             .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
@@ -123,7 +130,12 @@ pub fn module_loader() -> (
             .with_module("node:stream/promises", stream::STREAM_PROMISES_JS)
             .with_module("stream/promises", stream::STREAM_PROMISES_JS)
             .with_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
-            .with_module("string_decoder", string_decoder::STRING_DECODER_JS),
+            .with_module("string_decoder", string_decoder::STRING_DECODER_JS)
+            .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
+            .with_module(
+                "__wasm_rquickjs_builtin/web_crypto",
+                web_crypto::WEB_CRYPTO_JS,
+            ),
         internal::module_loader(),
     )
 }
@@ -136,6 +148,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", webstreams::WIRE_JS).unwrap();
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
     writeln!(result, "{}", url::WIRE_JS).unwrap();
+    writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
 
     result
 }

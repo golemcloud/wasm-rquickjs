@@ -326,22 +326,50 @@ declare module 'wasi:filesystem/types@0.2.3' {
    * Note: This was called `filestat` in earlier versions of WASI.
    */
   export type DescriptorStat = {
+    /** File type. */
     type: DescriptorType;
+    /** Number of hard links to the file. */
     linkCount: LinkCount;
+    /**
+     * For regular files, the file size in bytes. For symbolic links, the
+     * length in bytes of the pathname contained in the symbolic link.
+     */
     size: Filesize;
+    /**
+     * Last data access timestamp.
+     * If the `option` is none, the platform doesn't maintain an access
+     * timestamp for this file.
+     */
     dataAccessTimestamp?: Datetime;
+    /**
+     * Last data modification timestamp.
+     * If the `option` is none, the platform doesn't maintain a
+     * modification timestamp for this file.
+     */
     dataModificationTimestamp?: Datetime;
+    /**
+     * Last file status-change timestamp.
+     * If the `option` is none, the platform doesn't maintain a
+     * status-change timestamp for this file.
+     */
     statusChangeTimestamp?: Datetime;
   };
   /**
    * When setting a timestamp, this gives the value to set it to.
    */
-  export type NewTimestamp = {
+  export type NewTimestamp = 
+  /** Leave the timestamp set to its previous value. */
+  {
     tag: 'no-change'
   } |
+  /**
+   * Set the timestamp to the current time of the system clock associated
+   * with the filesystem.
+   */
   {
     tag: 'now'
   } |
+  /** Set the timestamp to the given value. */
   {
     tag: 'timestamp'
     val: Datetime
@@ -350,7 +378,9 @@ declare module 'wasi:filesystem/types@0.2.3' {
    * A directory entry.
    */
   export type DirectoryEntry = {
+    /** The type of the file referred to by this directory entry. */
     type: DescriptorType;
+    /** The name of the object. */
     name: string;
   };
   /**
@@ -369,7 +399,9 @@ declare module 'wasi:filesystem/types@0.2.3' {
    * 128-bit integer type.
    */
   export type MetadataHashValue = {
+    /** 64 bits of a 128-bit hash value. */
     lower: bigint;
+    /** Another 64 bits of a 128-bit hash value. */
     upper: bigint;
   };
   export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };

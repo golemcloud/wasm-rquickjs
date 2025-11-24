@@ -403,7 +403,8 @@ declare module 'wasi:http/types@0.2.3' {
   /**
    * This type corresponds to HTTP standard Methods.
    */
-  export type Method = {
+  export type Method = 
+  {
     tag: 'get'
   } |
   {
@@ -437,7 +438,8 @@ declare module 'wasi:http/types@0.2.3' {
   /**
    * This type corresponds to HTTP standard Related Schemes.
    */
-  export type Scheme = {
+  export type Scheme = 
+  {
     tag: 'HTTP'
   } |
   {
@@ -472,7 +474,8 @@ declare module 'wasi:http/types@0.2.3' {
    * These cases are inspired by the IANA HTTP Proxy Error Types:
    *   <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
    */
-  export type ErrorCode = {
+  export type ErrorCode = 
+  {
     tag: 'DNS-timeout'
   } |
   {
@@ -600,6 +603,13 @@ declare module 'wasi:http/types@0.2.3' {
   {
     tag: 'configuration-error'
   } |
+  /**
+   * This is a catch-all error for anything that doesn't fit cleanly into a
+   * more specific case. It also includes an optional string for an
+   * unstructured description of the error. Users should not depend on the
+   * string for diagnosing errors, as it's not required to be consistent
+   * between implementations.
+   */
   {
     tag: 'internal-error'
     val: string | undefined
@@ -608,12 +618,26 @@ declare module 'wasi:http/types@0.2.3' {
    * This type enumerates the different kinds of errors that may occur when
    * setting or appending to a `fields` resource.
    */
-  export type HeaderError = {
+  export type HeaderError = 
+  /**
+   * This error indicates that a `field-name` or `field-value` was
+   * syntactically invalid when used with an operation that sets headers in a
+   * `fields`.
+   */
+  {
     tag: 'invalid-syntax'
   } |
+  /**
+   * This error indicates that a forbidden `field-name` was used when trying
+   * to set a header in a `fields`.
+   */
   {
     tag: 'forbidden'
   } |
+  /**
+   * This error indicates that the operation on the `fields` was not
+   * permitted because the fields are immutable.
+   */
   {
     tag: 'immutable'
   };
