@@ -2,4 +2,5 @@ package quickjs:streams;
 
 world streams {
   export test1: func();
+  export test-node-stream1: func() -> string;
 }

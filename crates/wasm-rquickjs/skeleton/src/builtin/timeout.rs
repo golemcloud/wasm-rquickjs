@@ -1,4 +1,4 @@
-use crate::internal::{format_caught_error};
+use crate::internal::format_caught_error;
 use rquickjs::function::Args;
 use rquickjs::{CatchResultExt, Ctx, Persistent, Value};
 
@@ -72,10 +72,7 @@ async fn scheduled_task(
         run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
             .catch(&ctx)
             .unwrap_or_else(|e| {
-                panic!(
-                    "Failed to run scheduled task:\n{}",
-                    format_caught_error(e)
-                )
+                panic!("Failed to run scheduled task:\n{}", format_caught_error(e))
             });
     } else {
         let duration = wstd::time::Duration::from_millis(delay as u64);
@@ -86,10 +83,7 @@ async fn scheduled_task(
             run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
                 .catch(&ctx)
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to run scheduled task:\n{}",
-                        format_caught_error(e)
-                    )
+                    panic!("Failed to run scheduled task:\n{}", format_caught_error(e))
                 });
 
             if !periodic {

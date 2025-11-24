@@ -11,7 +11,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::atomic::AtomicUsize;
-use std::time::Duration;
 use wstd::runtime::block_on;
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
@@ -262,6 +261,7 @@ where
                 if value.is_promise() {
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<R> ();
+
                     match promise_future.await {
                         Ok(result) => {
                             map_result(result)
@@ -285,7 +285,7 @@ where
                 }
                 else {
                     (map_result)(
-                        R::from_js(&ctx, value).expect(&format!("Unexpected result value for exported function {path}", path=function_path.join(".")))
+                        R::from_js(&ctx, value).unwrap_or_else(|err| panic!("Unexpected result value for exported function {path}: {err}", path=function_path.join(".")))
                     )
                 }
             }
@@ -491,10 +491,8 @@ where
                     }
                 }
                 else {
-                    map_result(R::from_js(&ctx, value).expect(
-                        &format!("Unexpected result value for method {name} in exported class {path}",
-                                path=resource_path.join(".")
-                        )))
+                    map_result(R::from_js(&ctx, value).unwrap_or_else(|err| panic!("Unexpected result value for method {name} in exported class {path}: {err}",
+                                path=resource_path.join("."))))
                 }
             }
         }
@@ -649,7 +647,7 @@ pub fn format_js_exception(exc: &Value) -> String {
     try_format_js_error(exc)
         .or_else(|| try_format_tagged_error(exc))
         .unwrap_or_else(|| {
-            let formatted_exc = pretty_stringify_or_debug_print(&exc);
+            let formatted_exc = pretty_stringify_or_debug_print(exc);
             if formatted_exc.contains("\n") {
                 format!("JavaScript exception:\n{formatted_exc}",)
             } else {
@@ -681,7 +679,7 @@ pub fn try_format_tagged_error(err: &Value) -> Option<String> {
     let obj = err.as_object()?;
     let tag: Option<String> = obj.get("tag").ok();
     let val: Option<Value> = obj.get("val").ok();
-    let val = val.and_then(|v| (!v.is_undefined()).then(|| v));
+    let val = val.and_then(|v| (!v.is_undefined()).then_some(v));
 
     match (tag, val) {
         (Some(tag), Some(val)) => {

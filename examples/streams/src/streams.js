@@ -1,3 +1,5 @@
+import {Readable} from 'stream';
+
 class TimestampSource {
     #interval
     #counter = 0
@@ -29,7 +31,7 @@ async function concatStringStream(stream) {
     while (true) {
         // The `read()` method returns a promise that
         // resolves when a value has been received.
-        const { done, value } = await reader.read();
+        const {done, value} = await reader.read();
         // Result objects contain two properties:
         // `done`  - `true` if the stream has already given you all its data.
         // `value` - Some data. Always `undefined` when `done` is `true`.
@@ -46,3 +48,16 @@ async function test1Impl() {
 }
 
 export const test1 = test1Impl;
+
+export async function testNodeStream1() {
+    async function readableToString2(readable) {
+        let result = '';
+        for await (const chunk of readable) {
+            result += chunk;
+        }
+        return result;
+    }
+
+    const readable = Readable.from('Good morning!', {encoding: 'utf8'});
+    return await readableToString2(readable);
+}

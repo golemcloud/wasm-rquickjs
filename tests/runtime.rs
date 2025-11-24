@@ -880,6 +880,17 @@ async fn streams(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Res
 }
 
 #[test]
+async fn node_stream1(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-node-stream1", &[]).await;
+    let r = r?;
+
+    assert_eq!(r, Some(Val::String("Good morning!".to_string())));
+
+    Ok(())
+}
+
+#[test]
 async fn timeout_1(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
     let _ = r?;
@@ -921,6 +932,28 @@ async fn timeout_2(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
     for i in 0..1000 {
         assert!(output.contains(&format!("test {i}")));
     }
+
+    Ok(())
+}
+
+#[test]
+async fn timeout_3(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "use-next-tick", &[]).await;
+    let _ = r?;
+
+    assert_eq!(
+        output,
+        indoc!(
+            r#"
+            start
+            end
+            nextTick callback 1
+            nextTick callback 2
+            setImmediate callback 1
+        "#
+        )
+    );
 
     Ok(())
 }

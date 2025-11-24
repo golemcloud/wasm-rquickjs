@@ -10,6 +10,8 @@ use std::fs;
 use std::io::Write;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
@@ -208,7 +210,10 @@ impl TestInstance {
                 .ok_or_else(|| anyhow!("Function {function_name} not found"))?,
         };
 
-        self.perform_invoke(func, args).await
+        match timeout(Duration::from_secs(120), self.perform_invoke(func, args)).await {
+            Ok(result) => result,
+            Err(_) => Err(anyhow!("Function {function_name} timed out")),
+        }
     }
 
     async fn perform_invoke(&mut self, func: Func, args: &[Val]) -> anyhow::Result<Vec<Val>> {

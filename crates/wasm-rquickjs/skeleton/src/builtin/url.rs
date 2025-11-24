@@ -44,12 +44,10 @@ pub mod native_module {
         pub fn set_hash(&mut self, value: String) {
             if value.is_empty() {
                 self.url.set_fragment(None);
+            } else if let Some(s) = value.strip_prefix('#') {
+                self.url.set_fragment(Some(s));
             } else {
-                if value.starts_with('#') {
-                    self.url.set_fragment(Some(&value[1..]));
-                } else {
-                    self.url.set_fragment(Some(&value));
-                }
+                self.url.set_fragment(Some(&value));
             }
         }
 
@@ -74,46 +72,37 @@ pub mod native_module {
             if value.is_empty() {
                 let _ = self.url.set_host(None);
                 Ok(())
-            } else {
-                if let Some((host, port_str)) = value.rsplit_once(':') {
-                    if let Err(err) = self.url.set_host(Some(host)) {
-                        Err(ctx.throw(
-                            Exception::from_message(
-                                ctx.clone(),
-                                &format!("Failed to set URL host: {err}"),
-                            )
-                            .unwrap()
-                            .into(),
-                        ))
-                    } else {
-                        if let Ok(port) = port_str.parse::<u16>() {
-                            let _ = self.url.set_port(Some(port));
-                            Ok(())
-                        } else {
-                            Err(ctx.throw(
-                                Exception::from_message(
-                                    ctx.clone(),
-                                    "Failed to set URL host: invalid port",
-                                )
-                                .unwrap()
-                                .into(),
-                            ))
-                        }
-                    }
+            } else if let Some((host, port_str)) = value.rsplit_once(':') {
+                if let Err(err) = self.url.set_host(Some(host)) {
+                    Err(ctx.throw(
+                        Exception::from_message(
+                            ctx.clone(),
+                            &format!("Failed to set URL host: {err}"),
+                        )
+                        .unwrap()
+                        .into(),
+                    ))
+                } else if let Ok(port) = port_str.parse::<u16>() {
+                    let _ = self.url.set_port(Some(port));
+                    Ok(())
                 } else {
-                    if let Err(err) = self.url.set_host(Some(&value)) {
-                        Err(ctx.throw(
-                            Exception::from_message(
-                                ctx.clone(),
-                                &format!("Failed to set URL host: {err}"),
-                            )
-                            .unwrap()
-                            .into(),
-                        ))
-                    } else {
-                        Ok(())
-                    }
+                    Err(ctx.throw(
+                        Exception::from_message(
+                            ctx.clone(),
+                            "Failed to set URL host: invalid port",
+                        )
+                        .unwrap()
+                        .into(),
+                    ))
                 }
+            } else if let Err(err) = self.url.set_host(Some(&value)) {
+                Err(ctx.throw(
+                    Exception::from_message(ctx.clone(), &format!("Failed to set URL host: {err}"))
+                        .unwrap()
+                        .into(),
+                ))
+            } else {
+                Ok(())
             }
         }
 
@@ -258,12 +247,10 @@ pub mod native_module {
         pub fn set_search(&mut self, value: String) {
             if value.is_empty() {
                 self.url.set_query(None);
+            } else if let Some(s) = value.strip_prefix('?') {
+                self.url.set_query(Some(s));
             } else {
-                if value.starts_with('?') {
-                    self.url.set_query(Some(&value[1..]));
-                } else {
-                    self.url.set_query(Some(&value));
-                }
+                self.url.set_query(Some(&value));
             }
         }
 
@@ -285,6 +272,7 @@ pub mod native_module {
         }
 
         #[qjs(rename = "toString")]
+        #[allow(clippy::inherent_to_string)]
         pub fn to_string(&self) -> String {
             self.get_href()
         }
@@ -337,12 +325,10 @@ fn parse_url_with_base(
             },
             Err(err) => Err(format!("Failed to parse base URL: {err}")),
         }
+    } else if let Some(err) = err {
+        Err(format!("Failed to parse URL: {err}"))
     } else {
-        if let Some(err) = err {
-            Err(format!("Failed to parse URL: {err}"))
-        } else {
-            Err("Missing base URL".to_string())
-        }
+        Err("Missing base URL".to_string())
     }
 }
 

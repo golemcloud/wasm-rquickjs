@@ -156,7 +156,7 @@ async fn js_returns_wrong_type(
 
     assert!(result.is_err());
     assert!(stderr.contains(
-        r#"Unexpected result value for exported function fun6: FromJs { from: "string", to: "f64", message: None }"#
+        r#"Unexpected result value for exported function fun6: Error converting from js 'string' into type 'f64'"#
     ));
 
     Ok(())
@@ -300,7 +300,7 @@ async fn method_with_wrong_return_type_in_js_class(
 
     assert!(result.is_err());
     assert!(stderr.contains(indoc!(
-        r#"Unexpected result value for method m3 in exported class api3.Res3: FromJs { from: "string", to: "f64", message: None }"#
+        r#"Unexpected result value for method m3 in exported class api3.Res3: Error converting from js 'string' into type 'f64'"#
     )));
     Ok(())
 }
