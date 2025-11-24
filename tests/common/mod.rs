@@ -12,7 +12,6 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::timeout;
-use tokio_util::future::FutureExt;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};

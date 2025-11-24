@@ -285,7 +285,7 @@ where
                 }
                 else {
                     (map_result)(
-                        R::from_js(&ctx, value).unwrap_or_else(|_| panic!("Unexpected result value for exported function {path}", path=function_path.join(".")))
+                        R::from_js(&ctx, value).unwrap_or_else(|err| panic!("Unexpected result value for exported function {path}: {err}", path=function_path.join(".")))
                     )
                 }
             }
@@ -491,7 +491,7 @@ where
                     }
                 }
                 else {
-                    map_result(R::from_js(&ctx, value).unwrap_or_else(|_| panic!("Unexpected result value for method {name} in exported class {path}",
+                    map_result(R::from_js(&ctx, value).unwrap_or_else(|err| panic!("Unexpected result value for method {name} in exported class {path}: {err}",
                                 path=resource_path.join("."))))
                 }
             }
