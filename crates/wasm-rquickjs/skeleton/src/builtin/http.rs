@@ -32,6 +32,7 @@ pub struct HttpRequest {
     #[qjs(skip_trace)]
     version: Version,
     mode: String,
+    referer: String,
     #[qjs(skip_trace)]
     body: Option<Body>,
     #[qjs(skip_trace)]
@@ -46,6 +47,7 @@ impl Default for HttpRequest {
             headers: HashMap::new(),
             version: Version::HTTP_11,
             mode: "cors".to_string(),
+            referer: "about:client".to_string(),
             body: None,
             execution: None,
         }
@@ -61,6 +63,7 @@ impl HttpRequest {
         headers: HashMap<String, String>,
         version: String,
         mode: String,
+        referer: String,
     ) -> Self {
         let url: Url = url.parse().expect("failed to parse url");
         let method: Method = method.parse().expect("failed to parse method");
@@ -87,6 +90,7 @@ impl HttpRequest {
             headers: hdrs,
             version,
             mode,
+            referer,
             body: None,
             execution: None,
         }
@@ -128,6 +132,11 @@ impl HttpRequest {
         self.mode.clone()
     }
 
+    #[qjs(get)]
+    pub fn referer(&self) -> String {
+        self.referer.clone()
+    }
+
     pub fn init_send(&mut self) {
         let client = golem_wasi_http::ClientBuilder::new()
             .build()
@@ -138,6 +147,16 @@ impl HttpRequest {
         *request.version_mut() = self.version;
         for (name, value) in &self.headers {
             request.headers_mut().insert(name.clone(), value.clone());
+        }
+
+        // Set Referer header if referer is not empty
+        if !self.referer.is_empty() && self.referer != "about:client" {
+            let referer_header = HeaderValue::from_str(&self.referer)
+                .expect("failed to parse referer value");
+            request.headers_mut().insert(
+                HeaderName::from_bytes(b"referer").expect("failed to create referer header name"),
+                referer_header,
+            );
         }
 
         self.execution = Some(client.execute_custom(request).expect("HTTP request failed"));
@@ -202,6 +221,16 @@ impl HttpRequest {
         *request.version_mut() = self.version;
         for (name, value) in &self.headers {
             request.headers_mut().insert(name.clone(), value.clone());
+        }
+
+        // Set Referer header if referer is not empty
+        if !self.referer.is_empty() && self.referer != "about:client" {
+            let referer_header = HeaderValue::from_str(&self.referer)
+                .expect("failed to parse referer value");
+            request.headers_mut().insert(
+                HeaderName::from_bytes(b"referer").expect("failed to create referer header name"),
+                referer_header,
+            );
         }
 
         *request.body_mut() = self.body.take();

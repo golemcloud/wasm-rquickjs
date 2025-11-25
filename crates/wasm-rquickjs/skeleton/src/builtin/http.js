@@ -11,7 +11,7 @@ export async function fetch(resource, options = {}) {
     let url;
 
     if (typeof resource === 'object' && resource instanceof Request) {
-        const method = resource.method.toUpperCase();
+         const method = resource.method.toUpperCase();
         const headers = resource.headers;
         if (!headers.has('Accept')) {
             headers.set('Accept', '*/*');
@@ -22,12 +22,14 @@ export async function fetch(resource, options = {}) {
         }
         let version = options.version || 'HTTP/1.1';
         let mode = options.mode || resource.mode;
+        let referer = options.referer || resource.referrer;
         request = new httpNative.HttpRequest(
             resource.url,
             method,
             rawHeaders,
             version,
-            mode
+            mode,
+            referer
         )
         resource._bodyUsed = true;
         body = resource._body;
@@ -49,8 +51,8 @@ export async function fetch(resource, options = {}) {
 
         let version = options.version || 'HTTP/1.1';
         let mode = options.mode || 'cors';
+        let referer = options.referer || 'about:client';
 
-        // TODO: options.referer
         // TODO: options.credentials
         // TODO: options.cache
 
@@ -59,7 +61,8 @@ export async function fetch(resource, options = {}) {
             method,
             rawHeaders,
             version,
-            mode
+            mode,
+            referer
         )
 
         body = options.body || '';

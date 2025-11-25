@@ -10,4 +10,7 @@ declare module 'fetch' {
   export function test8(port: number): Promise<void>;
   export function test9(port: number): Promise<void>;
   export function test10(port: number): Promise<void>;
+  export function test11(port: number): Promise<void>;
+  export function test12(port: number): Promise<void>;
+  export function test13(port: number): Promise<void>;
 }
