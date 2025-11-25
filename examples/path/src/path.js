@@ -108,14 +108,61 @@ export const testParseFormat = () => {
         assert(p.ext === '.txt', "parse ext");
         assert(p.name === 'file', "parse name");
 
-        const f = path.format({
+        const f1 = path.format({
             root: '/',
             dir: '/home/user/dir',
             base: 'file.txt',
             ext: '.txt',
             name: 'file'
         });
-        assert(f === '/home/user/dir/file.txt', "format 1");
+        assert(f1 === '/home/user/dir/file.txt', "format 1");
+
+        const f2 = path.format({
+            root: '/',
+            base: 'file.txt',
+            ext: 'ignored'
+        });
+        assert(f2 === '/file.txt', "format 2");
+
+        const f3 = path.format({
+            root: '/',
+            name: 'file',
+            ext: '.txt'
+        });
+        assert(f3 === '/file.txt', "format 3");
+
+        const f4 = path.format({
+            root: '/',
+            name: 'file',
+            ext: 'txt'
+        });
+        assert(f4 === '/file.txt', "format 4");
+
+        return true;
+    } catch (e) {
+        console.error(e);
+        return false;
+    }
+};
+
+export const testDelimiter = () => {
+    try {
+        assert(path.delimiter === ':', "delimiter");
+        return true;
+    } catch (e) {
+        console.error(e);
+        return false;
+    }
+};
+
+export const testSep = () => {
+    try {
+        assert(path.sep === '/', "sep");
+        const parts = 'foo/bar/baz'.split(path.sep);
+        assert(parts.length === 3, "sep split length");
+        assert(parts[0] === 'foo', "sep split 0");
+        assert(parts[1] === 'bar', "sep split 1");
+        assert(parts[2] === 'baz', "sep split 2");
         return true;
     } catch (e) {
         console.error(e);

@@ -10,4 +10,6 @@ world path {
   export test-relative: func() -> bool;
   export test-resolve: func() -> bool;
   export test-parse-format: func() -> bool;
+  export test-delimiter: func() -> bool;
+  export test-sep: func() -> bool;
 }

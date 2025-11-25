@@ -12,7 +12,7 @@ import {
     resolve as resolveNative,
     parse as parseNative,
     format as formatNative,
-    create_parsed_path as createParsedPath,
+    ParsedPath,
 } from "__wasm_rquickjs_builtin/path_native";
 
 // Match a path against a glob pattern
@@ -60,12 +60,13 @@ function format(pathObject) {
     // If we passed a ParsedPath instance from parseNative, we can probably pass it back.
     // However, to be safe and support plain objects, we create a new ParsedPath instance.
     
-    const pp = createParsedPath();
-    if (pathObject.root !== undefined) pp.root = String(pathObject.root);
-    if (pathObject.dir !== undefined) pp.dir = String(pathObject.dir);
-    if (pathObject.base !== undefined) pp.base = String(pathObject.base);
-    if (pathObject.ext !== undefined) pp.ext = String(pathObject.ext);
-    if (pathObject.name !== undefined) pp.name = String(pathObject.name);
+    const root = pathObject.root !== undefined ? String(pathObject.root) : "";
+    const dir = pathObject.dir !== undefined ? String(pathObject.dir) : "";
+    const base = pathObject.base !== undefined ? String(pathObject.base) : "";
+    const ext = pathObject.ext !== undefined ? String(pathObject.ext) : "";
+    const name = pathObject.name !== undefined ? String(pathObject.name) : "";
+
+    const pp = new ParsedPath(root, dir, base, ext, name);
     
     return formatNative(pp);
 }

@@ -1,32 +1,41 @@
 use rquickjs::JsLifetime;
 use rquickjs::class::Trace;
 
-// Result type for parse function
-#[derive(JsLifetime, Trace, Clone, Default)]
-#[rquickjs::class]
-pub struct ParsedPath {
-    #[qjs(get, set)]
-    pub root: String,
-    #[qjs(get, set)]
-    pub dir: String,
-    #[qjs(get, set)]
-    pub base: String,
-    #[qjs(get, set)]
-    pub ext: String,
-    #[qjs(get, set)]
-    pub name: String,
-}
-
 // Native functions for the node:path implementation (POSIX only)
 #[rquickjs::module]
 pub mod native_module {
-    use super::ParsedPath;
     use rquickjs::prelude::*;
+    use rquickjs::{JsLifetime, class::Trace};
     use std::path::Path;
 
-    #[rquickjs::function]
-    pub fn create_parsed_path() -> ParsedPath {
-        ParsedPath::default()
+    // Result type for parse function
+    #[derive(JsLifetime, Trace, Clone, Default)]
+    #[rquickjs::class]
+    pub struct ParsedPath {
+        #[qjs(get, set)]
+        pub root: String,
+        #[qjs(get, set)]
+        pub dir: String,
+        #[qjs(get, set)]
+        pub base: String,
+        #[qjs(get, set)]
+        pub ext: String,
+        #[qjs(get, set)]
+        pub name: String,
+    }
+
+    #[rquickjs::methods]
+    impl ParsedPath {
+        #[qjs(constructor)]
+        pub fn new(root: String, dir: String, base: String, ext: String, name: String) -> Self {
+            Self {
+                root,
+                dir,
+                base,
+                ext,
+                name,
+            }
+        }
     }
 
     #[rquickjs::function]
@@ -270,7 +279,12 @@ pub mod native_module {
         let base = if !path_obj.base.is_empty() {
             path_obj.base.clone()
         } else {
-            format!("{}{}", path_obj.name, path_obj.ext)
+            let ext = if !path_obj.ext.is_empty() && !path_obj.ext.starts_with('.') {
+                format!(".{}", path_obj.ext)
+            } else {
+                path_obj.ext.clone()
+            };
+            format!("{}{}", path_obj.name, ext)
         };
 
         if dir.is_empty() {

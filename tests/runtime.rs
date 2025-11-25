@@ -1323,3 +1323,21 @@ async fn path_test_parse_format(#[tagged_as("path")] compiled_test: &CompiledTes
     Ok(())
 }
 
+#[test]
+async fn path_test_delimiter(#[tagged_as("path")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(compiled_test.wasm_path(), None, "test-delimiter", &[]).await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn path_test_sep(#[tagged_as("path")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(compiled_test.wasm_path(), None, "test-sep", &[]).await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
