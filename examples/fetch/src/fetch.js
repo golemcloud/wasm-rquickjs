@@ -384,3 +384,42 @@ export async function test15(port) {
     const data4 = await response4.json();
     console.log(`Test 4 referer sent: '${data4.referer}'`);
 }
+
+export async function test16(port) {
+    console.log("fetch test 16 (credentials option with fetch)");
+    
+    const baseUrl = `http://localhost:${port}`;
+    
+    // Test 1: credentials "omit" (should not send any credentials headers)
+    console.log("Test 1: credentials 'omit'");
+    const request1 = new Request(`${baseUrl}/echo-credentials`, {
+        method: "POST",
+        credentials: "omit"
+    });
+    console.log(`Request 1 credentials: '${request1.credentials}'`);
+    const response1 = await fetch(request1);
+    const data1 = await response1.json();
+    console.log(`Test 1 authorization: '${data1.authorization}', cookie: '${data1.cookie}'`);
+    
+    // Test 2: credentials "same-origin" (default, would send credentials if available)
+    console.log("Test 2: credentials 'same-origin'");
+    const request2 = new Request(`${baseUrl}/echo-credentials`, {
+        method: "POST",
+        credentials: "same-origin"
+    });
+    console.log(`Request 2 credentials: '${request2.credentials}'`);
+    const response2 = await fetch(request2);
+    const data2 = await response2.json();
+    console.log(`Test 2 authorization: '${data2.authorization}', cookie: '${data2.cookie}'`);
+    
+    // Test 3: credentials "include" (would send credentials even for cross-origin)
+    console.log("Test 3: credentials 'include'");
+    const request3 = new Request(`${baseUrl}/echo-credentials`, {
+        method: "POST",
+        credentials: "include"
+    });
+    console.log(`Request 3 credentials: '${request3.credentials}'`);
+    const response3 = await fetch(request3);
+    const data3 = await response3.json();
+    console.log(`Test 3 authorization: '${data3.authorization}', cookie: '${data3.cookie}'`);
+}

@@ -499,6 +499,22 @@ async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
+async fn fetch_16(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test16", &[Val::U16(port)]).await;
+    let _ = r?;
+
+    assert!(output.contains("fetch test 16 (credentials option with fetch)"));
+    assert!(output.contains("Test 1: credentials 'omit'"));
+    assert!(output.contains("Test 2: credentials 'same-origin'"));
+    assert!(output.contains("Test 3: credentials 'include'"));
+
+    Ok(())
+}
+
+#[test]
 async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 

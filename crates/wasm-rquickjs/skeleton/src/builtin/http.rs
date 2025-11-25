@@ -34,6 +34,7 @@ pub struct HttpRequest {
     mode: String,
     referer: String,
     referrer_policy: String,
+    credentials: String,
     #[qjs(skip_trace)]
     body: Option<Body>,
     #[qjs(skip_trace)]
@@ -50,6 +51,7 @@ impl Default for HttpRequest {
             mode: "cors".to_string(),
             referer: "about:client".to_string(),
             referrer_policy: "strict-origin-when-cross-origin".to_string(),
+            credentials: "same-origin".to_string(),
             body: None,
             execution: None,
         }
@@ -67,6 +69,7 @@ impl HttpRequest {
         mode: String,
         referer: String,
         referrer_policy: String,
+        credentials: String,
     ) -> Self {
         let url: Url = url.parse().expect("failed to parse url");
         let method: Method = method.parse().expect("failed to parse method");
@@ -95,6 +98,7 @@ impl HttpRequest {
             mode,
             referer,
             referrer_policy,
+            credentials,
             body: None,
             execution: None,
         }
@@ -144,6 +148,11 @@ impl HttpRequest {
     #[qjs(get, rename = "referrerPolicy")]
     pub fn referrer_policy(&self) -> String {
         self.referrer_policy.clone()
+    }
+
+    #[qjs(get)]
+    pub fn credentials(&self) -> String {
+        self.credentials.clone()
     }
 
     pub fn init_send(&mut self) {

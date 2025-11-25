@@ -17,4 +17,5 @@ world fetch {
   export test13: func(port: u16);
   export test14: func(port: u16);
   export test15: func(port: u16);
+  export test16: func(port: u16);
 }

@@ -144,6 +144,25 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                         "referer": referer
                     }))
                 }),
+            )
+            .route(
+                "/echo-credentials",
+                post(async move |headers: HeaderMap| {
+                    let authorization = headers
+                        .get("authorization")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    let cookie = headers
+                        .get("cookie")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    Json(serde_json::json!({
+                        "authorization": authorization,
+                        "cookie": cookie
+                    }))
+                }),
             );
 
         axum::serve(listener, router).await.unwrap();
