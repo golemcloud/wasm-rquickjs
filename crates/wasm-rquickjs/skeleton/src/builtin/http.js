@@ -59,8 +59,6 @@ export async function fetch(resource, options = {}) {
             version
         )
 
-        // TODO: URLSearchParams support
-
         body = options.body || '';
         url = resource;
     }
@@ -80,6 +78,9 @@ export async function fetch(resource, options = {}) {
             request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
         } else if (body instanceof Uint8Array) {
             request.uint8ArrayBody(body);
+        } else if (body instanceof URLSearchParams) {
+            request.addHeader('Content-Type', 'application/x-www-form-urlencoded');
+            request.stringBody(body.toString());
         } else if (typeof body === 'string' || body instanceof String) {
             request.stringBody(body);
         } else {
@@ -355,23 +356,24 @@ export class Request {
             return blob.stream();
         } else if (this._body instanceof Blob) {
             return this._body.stream();
+        } else if (this._body instanceof URLSearchParams) {
+            const blob = new Blob([this._body.toString()]);
+            return blob.stream();
+        } else if (this._body instanceof ArrayBuffer) {
+            const blob = new Blob([this._body]);
+            return blob.stream();
+        } else if (this._body instanceof DataView) {
+            const blob = new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
+            return blob.stream();
+        } else if (this._body instanceof Uint8Array) {
+            const blob = new Blob([this._body]);
+            return blob.stream();
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            const blob = new Blob([this._body]);
+            return blob.stream();
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                const blob = new Blob([this._body]);
-                return blob.stream();
-            } else if (this._body instanceof DataView) {
-                const blob = new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
-                return blob.stream();
-            } else if (this._body instanceof Uint8Array) {
-                const blob = new Blob([this._body]);
-                return blob.stream();
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                const blob = new Blob([this._body]);
-                return blob.stream();
-            } else {
-                console.warn('Unsupported body type');
-                return new Blob([]).stream();
-            }
+            console.warn('Unsupported body type');
+            return new Blob([]).stream();
         }
     }
 
@@ -448,19 +450,19 @@ export class Request {
             return blob.arrayBuffer();
         } else if (this._body instanceof Blob) {
             return this._body.arrayBuffer();
+        } else if (this._body instanceof URLSearchParams) {
+            return new TextEncoder().encode(this._body.toString()).buffer;
+        } else if (this._body instanceof ArrayBuffer) {
+            return this._body;
+        } else if (this._body instanceof DataView) {
+            return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
+        } else if (this._body instanceof Uint8Array) {
+            return this._body.buffer;
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            return new TextEncoder().encode(this._body).buffer;
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                return this._body;
-            } else if (this._body instanceof DataView) {
-                return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
-            } else if (this._body instanceof Uint8Array) {
-                return this._body.buffer;
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                new TextEncoder().encode(this._body).buffer;
-            } else {
-                console.warn('Unsupported body type');
-                return new ArrayBuffer(0);
-            }
+            console.warn('Unsupported body type');
+            return new ArrayBuffer(0);
         }
     }
 
@@ -473,19 +475,19 @@ export class Request {
             return blob;
         } else if (this._body instanceof Blob) {
             return this._body;
+        } else if (this._body instanceof URLSearchParams) {
+            return new Blob([this._body.toString()]);
+        } else if (this._body instanceof ArrayBuffer) {
+            return new Blob([this._body]);
+        } else if (this._body instanceof DataView) {
+            return new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
+        } else if (this._body instanceof Uint8Array) {
+            return new Blob([this._body]);
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            return new Blob([this._body]);
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                return new Blob([this._body]);
-            } else if (this._body instanceof DataView) {
-                return new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
-            } else if (this._body instanceof Uint8Array) {
-                return new Blob([this._body]);
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                return new Blob([this._body]);
-            } else {
-                console.warn('Unsupported body type');
-                return new Blob([]);
-            }
+            console.warn('Unsupported body type');
+            return new Blob([]);
         }
     }
 
@@ -498,19 +500,19 @@ export class Request {
             return blob.bytes();
         } else if (this._body instanceof Blob) {
             return this._body.bytes();
+        } else if (this._body instanceof URLSearchParams) {
+            return new TextEncoder().encode(this._body.toString());
+        } else if (this._body instanceof ArrayBuffer) {
+            return new Uint8Array(this._body);
+        } else if (this._body instanceof DataView) {
+            return new Uint8Array(this._body.buffer, this._body.byteOffset, this._body.byteLength);
+        } else if (this._body instanceof Uint8Array) {
+            return this._body;
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            return new TextEncoder().encode(this._body);
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                return new Uint8Array(this._body);
-            } else if (this._body instanceof DataView) {
-                return new Uint8Array(this._body.buffer, this._body.byteOffset, this._body.byteLength);
-            } else if (this._body instanceof Uint8Array) {
-                return this._body;
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                new TextEncoder().encode(this._body);
-            } else {
-                console.warn('Unsupported body type');
-                return new Uint8Array(0);
-            }
+            console.warn('Unsupported body type');
+            return new Uint8Array(0);
         }
     }
 
