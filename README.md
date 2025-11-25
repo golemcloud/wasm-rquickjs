@@ -352,11 +352,44 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `writeFile`
 - `writeFileSync`
 
+### `node:path`
+- `sep`
+- `delimiter`
+- `basename`
+- `dirname`
+- `extname`
+- `isAbsolute`
+- `join`
+- `normalize`
+- `relative`
+- `resolve`
+- `parse`
+- `format`
+- `matchesGlob`
+- `toNamespacedPath`
+- `posix`
+
 ### `node:process`
 - `argv`
 - `argv0`
 - `env`
 - `cwd`
+
+### `node:stream`
+- `_uint8ArrayToBuffer`
+- `addAbortSignal`
+- `compose`
+- `destroy`
+- `Duplex`
+- `finished`
+- `isDisturbed`
+- `_isUint8Array`
+- `PassThrough`
+- `pipeline`
+- `Readable`
+- `Stream`
+- `Transform`
+- `Writable`
 
 ### `base64-js`
 - `byteLength`
