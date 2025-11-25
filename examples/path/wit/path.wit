@@ -1,0 +1,13 @@
+package quickjs:path;
+
+world path {
+  export test-basename: func() -> bool;
+  export test-dirname: func() -> bool;
+  export test-extname: func() -> bool;
+  export test-is-absolute: func() -> bool;
+  export test-join: func() -> bool;
+  export test-normalize: func() -> bool;
+  export test-relative: func() -> bool;
+  export test-resolve: func() -> bool;
+  export test-parse-format: func() -> bool;
+}
