@@ -52,6 +52,10 @@ cargo test
 mv Cargo.toml Cargo.toml_
 ```
 
+### Runtime tests
+To test the builtin module of the skeleton, first define an example in `examples`, consisting of a pair of a JS file and a WIT interface,
+and then add one or more tests in `tests/runtime.rs` that use the example.
+
 ### Cleaning Skeleton Build Artifacts
 
 After compiling the skeleton for testing, **always clean its build artifacts** before compiling the main `wasm-rquickjs` crate:

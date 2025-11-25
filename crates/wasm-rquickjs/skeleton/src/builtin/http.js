@@ -59,7 +59,6 @@ export async function fetch(resource, options = {}) {
             version
         )
 
-        // TODO: DataView support
         // TODO: URLSearchParams support
 
         body = options.body || '';
@@ -76,6 +75,9 @@ export async function fetch(resource, options = {}) {
     } else {
         if (body instanceof ArrayBuffer) {
             request.arrayBufferBody(body);
+        } else if (body instanceof DataView) {
+            // Convert DataView to Uint8Array with the correct byte range
+            request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
         } else if (body instanceof Uint8Array) {
             request.uint8ArrayBody(body);
         } else if (typeof body === 'string' || body instanceof String) {
@@ -357,6 +359,9 @@ export class Request {
             if (this._body instanceof ArrayBuffer) {
                 const blob = new Blob([this._body]);
                 return blob.stream();
+            } else if (this._body instanceof DataView) {
+                const blob = new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
+                return blob.stream();
             } else if (this._body instanceof Uint8Array) {
                 const blob = new Blob([this._body]);
                 return blob.stream();
@@ -446,6 +451,8 @@ export class Request {
         } else {
             if (this._body instanceof ArrayBuffer) {
                 return this._body;
+            } else if (this._body instanceof DataView) {
+                return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
             } else if (this._body instanceof Uint8Array) {
                 return this._body.buffer;
             } else if (typeof this._body === 'string' || this._body instanceof String) {
@@ -469,6 +476,8 @@ export class Request {
         } else {
             if (this._body instanceof ArrayBuffer) {
                 return new Blob([this._body]);
+            } else if (this._body instanceof DataView) {
+                return new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
             } else if (this._body instanceof Uint8Array) {
                 return new Blob([this._body]);
             } else if (typeof this._body === 'string' || this._body instanceof String) {
@@ -492,6 +501,8 @@ export class Request {
         } else {
             if (this._body instanceof ArrayBuffer) {
                 return new Uint8Array(this._body);
+            } else if (this._body instanceof DataView) {
+                return new Uint8Array(this._body.buffer, this._body.byteOffset, this._body.byteLength);
             } else if (this._body instanceof Uint8Array) {
                 return this._body;
             } else if (typeof this._body === 'string' || this._body instanceof String) {
