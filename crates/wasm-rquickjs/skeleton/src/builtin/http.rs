@@ -31,6 +31,7 @@ pub struct HttpRequest {
     headers: HashMap<HeaderName, HeaderValue>,
     #[qjs(skip_trace)]
     version: Version,
+    mode: String,
     #[qjs(skip_trace)]
     body: Option<Body>,
     #[qjs(skip_trace)]
@@ -44,6 +45,7 @@ impl Default for HttpRequest {
             url: Url::parse("http://localhost").expect("failed to parse default URL"),
             headers: HashMap::new(),
             version: Version::HTTP_11,
+            mode: "cors".to_string(),
             body: None,
             execution: None,
         }
@@ -58,6 +60,7 @@ impl HttpRequest {
         method: String,
         headers: HashMap<String, String>,
         version: String,
+        mode: String,
     ) -> Self {
         let url: Url = url.parse().expect("failed to parse url");
         let method: Method = method.parse().expect("failed to parse method");
@@ -83,6 +86,7 @@ impl HttpRequest {
             method,
             headers: hdrs,
             version,
+            mode,
             body: None,
             execution: None,
         }
@@ -117,6 +121,11 @@ impl HttpRequest {
             HeaderName::from_bytes(name.as_bytes()).expect("failed to parse header name");
         let header_value = HeaderValue::from_str(&value).expect("failed to parse header value");
         self.headers.insert(header_name, header_value);
+    }
+
+    #[qjs(get)]
+    pub fn mode(&self) -> String {
+        self.mode.clone()
     }
 
     pub fn init_send(&mut self) {
@@ -172,6 +181,18 @@ impl HttpRequest {
     }
 
     pub async fn simple_send(&mut self) -> HttpResponse {
+        // Validate mode constraints
+        if self.mode == "no-cors" {
+            let method_str = self.method.to_string().to_uppercase();
+            if !matches!(method_str.as_str(), "GET" | "HEAD" | "POST") {
+                panic!("no-cors mode only allows GET, HEAD, or POST methods");
+            }
+        } else if self.mode == "navigate" {
+            panic!("navigate mode is not supported in WASM context");
+        } else if !matches!(self.mode.as_str(), "cors" | "same-origin") {
+            panic!("Unsupported request mode: {}", self.mode);
+        }
+
         let client = golem_wasi_http::ClientBuilder::new()
             .build()
             .expect("Failed to create HTTP client");
@@ -187,7 +208,14 @@ impl HttpRequest {
 
         let response = client.execute(request).await.expect("HTTP request failed");
 
-        HttpResponse::from_response(response)
+        let mut http_response = HttpResponse::from_response(response);
+        
+        // For no-cors mode, make the response opaque
+        if self.mode == "no-cors" {
+            http_response.make_opaque();
+        }
+
+        http_response
     }
 }
 
@@ -245,6 +273,7 @@ pub struct HttpResponse {
     headers: Vec<Vec<String>>,
     #[qjs(skip_trace)]
     status: golem_wasi_http::StatusCode,
+    is_opaque: bool,
 }
 
 impl Default for HttpResponse {
@@ -261,6 +290,7 @@ impl HttpResponse {
             response: None,
             headers: Vec::new(),
             status: golem_wasi_http::StatusCode::OK,
+            is_opaque: false,
         }
     }
 
@@ -283,7 +313,16 @@ impl HttpResponse {
             response: Some(response),
             headers,
             status,
+            is_opaque: false,
         }
+    }
+
+    #[qjs(skip)]
+    pub fn make_opaque(&mut self) {
+        self.is_opaque = true;
+        // For opaque responses, clear headers and set status to 0
+        self.headers.clear();
+        self.status = golem_wasi_http::StatusCode::OK; // Will report as 0 when is_opaque is true
     }
 
     #[qjs(get)]
@@ -293,7 +332,11 @@ impl HttpResponse {
 
     #[qjs(get)]
     pub fn status(&self) -> u16 {
-        self.status.as_u16()
+        if self.is_opaque {
+            0
+        } else {
+            self.status.as_u16()
+        }
     }
 
     #[qjs(get, rename = "statusText")]

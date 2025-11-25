@@ -21,11 +21,13 @@ export async function fetch(resource, options = {}) {
             rawHeaders[name] = value;
         }
         let version = options.version || 'HTTP/1.1';
+        let mode = options.mode || resource.mode;
         request = new httpNative.HttpRequest(
             resource.url,
             method,
             rawHeaders,
-            version
+            version,
+            mode
         )
         resource._bodyUsed = true;
         body = resource._body;
@@ -46,8 +48,8 @@ export async function fetch(resource, options = {}) {
         }
 
         let version = options.version || 'HTTP/1.1';
+        let mode = options.mode || 'cors';
 
-        // TODO: options.mode
         // TODO: options.referer
         // TODO: options.credentials
         // TODO: options.cache
@@ -56,7 +58,8 @@ export async function fetch(resource, options = {}) {
             resource,
             method,
             rawHeaders,
-            version
+            version,
+            mode
         )
 
         body = options.body || '';
