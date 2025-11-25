@@ -239,3 +239,28 @@ export async function test10(port) {
     await dumpResponse(response1);
     await dumpResponse(response2);
 }
+
+export async function test11(port) {
+    console.log("fetch test 11 (DataView)");
+    
+    // Create a DataView from an ArrayBuffer containing JSON data
+    const buffer = new ArrayBuffer(39);
+    const view = new DataView(buffer);
+    const jsonData = JSON.stringify({title: "foo", body: "bar", userId: 1});
+    
+    // Fill the DataView with the JSON string bytes
+    for (let i = 0; i < jsonData.length; i++) {
+        view.setUint8(i, jsonData.charCodeAt(i));
+    }
+    
+    // Send the DataView as a request body
+    const response = await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: view
+    });
+    
+    await dumpResponse(response);
+}

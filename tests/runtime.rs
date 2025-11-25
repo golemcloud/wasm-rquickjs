@@ -624,6 +624,27 @@ async fn fetch_10(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
+async fn fetch_11(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test11", &[Val::U16(port)]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 11 (DataView)"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/todos: 201 Created (ok=true)\n"
+    )));
+    assert!(output.contains(
+        "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
+    ));
+
+    Ok(())
+}
+
+#[test]
 async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, _) = invoke_and_capture_output(
         compiled.wasm_path(),
