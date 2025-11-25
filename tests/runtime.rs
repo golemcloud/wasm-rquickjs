@@ -645,6 +645,46 @@ async fn fetch_11(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
+async fn fetch_12(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test12", &[Val::U16(port)]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 12 (URLSearchParams)"));
+    assert!(output.contains("URLSearchParams toString: title=foo&body=bar&userId=1"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/form-echo: 200 OK (ok=true)"
+    )));
+    assert!(output.contains("\"body\":\"title=foo&body=bar&userId=1\""));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_13(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test13", &[Val::U16(port)]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 13 (URLSearchParams in Request)"));
+    assert!(output.contains("Request body used: false"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/form-echo: 200 OK (ok=true)"
+    )));
+    assert!(output.contains("\"body\":\"name=John&email=john%40example.com\""));
+
+    Ok(())
+}
+
+#[test]
 async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, _) = invoke_and_capture_output(
         compiled.wasm_path(),

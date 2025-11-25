@@ -264,3 +264,45 @@ export async function test11(port) {
     
     await dumpResponse(response);
 }
+
+export async function test12(port) {
+    console.log("fetch test 12 (URLSearchParams)");
+    
+    // Create URLSearchParams with form data
+    const params = new URLSearchParams();
+    params.append('title', 'foo');
+    params.append('body', 'bar');
+    params.append('userId', '1');
+    
+    console.log(`URLSearchParams toString: ${params.toString()}`);
+    
+    // Send URLSearchParams as request body
+    const response = await fetch(`http://localhost:${port}/form-echo`, {
+        method: "POST",
+        body: params
+    });
+    
+    await dumpResponse(response);
+}
+
+export async function test13(port) {
+    console.log("fetch test 13 (URLSearchParams in Request)");
+    
+    // Create URLSearchParams
+    const params = new URLSearchParams();
+    params.append('name', 'John');
+    params.append('email', 'john@example.com');
+    
+    // Create a Request with URLSearchParams body
+    const request = new Request(`http://localhost:${port}/form-echo`, {
+        method: "POST",
+        body: params
+    });
+    
+    console.log(`Request body used: ${request.bodyUsed}`);
+    
+    // Use the request in fetch
+    const response = await fetch(request);
+    
+    await dumpResponse(response);
+}

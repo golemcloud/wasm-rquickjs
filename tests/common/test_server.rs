@@ -120,6 +120,16 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
 
                     Json(parts)
                 }),
+            )
+            .route(
+                "/form-echo",
+                post(async move |body: Bytes| {
+                    let body_str = String::from_utf8(body.to_vec()).unwrap_or_default();
+                    Json(serde_json::json!({
+                        "body": body_str,
+                        "type": "application/x-www-form-urlencoded"
+                    }))
+                }),
             );
 
         axum::serve(listener, router).await.unwrap();
