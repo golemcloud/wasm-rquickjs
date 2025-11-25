@@ -27,6 +27,7 @@ export async function fetch(resource, options = {}) {
         let referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
         let cache = options.cache || resource.cache;
         credentials = options.credentials || resource.credentials;
+        let redirect = options.redirect || resource.redirect || 'follow';
         request = new httpNative.HttpRequest(
             resource.url,
             method,
@@ -36,7 +37,7 @@ export async function fetch(resource, options = {}) {
             referer,
             referrerPolicy,
             credentials,
-            cache
+            redirect
         )
         resource._bodyUsed = true;
         body = resource._body;
@@ -62,6 +63,7 @@ export async function fetch(resource, options = {}) {
         let referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
         let cache = options.cache || 'default';
         credentials = options.credentials || 'same-origin';
+        let redirect = options.redirect || 'follow';
 
         request = new httpNative.HttpRequest(
             resource,
@@ -72,7 +74,7 @@ export async function fetch(resource, options = {}) {
             referer,
             referrerPolicy,
             credentials,
-            cache
+            redirect
         )
 
         body = options.body || '';
@@ -104,7 +106,7 @@ export async function fetch(resource, options = {}) {
         }
 
         const nativeResponse = await request.simpleSend();
-        return new Response(nativeResponse, url, credentials);
+        return new Response(nativeResponse, request.url, credentials);
     }
 }
 
@@ -194,7 +196,7 @@ export class Response {
     }
 
     get redirected() {
-        return false; // TODO: support redirects
+        return this.nativeResponse.redirected;
     }
 
     // TODO: prop type

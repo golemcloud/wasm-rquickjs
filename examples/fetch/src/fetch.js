@@ -441,3 +441,52 @@ export async function test16(port) {
     const setCookie3 = response3.headers.get('set-cookie');
     console.log(`Test 3 set-cookie: '${setCookie3 || ''}'`);
 }
+
+export async function test17(port) {
+    console.log("fetch test 17 (redirect: follow)");
+    const response = await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`);
+    console.log(`Status: ${response.status}`);
+    console.log(`Redirected: ${response.redirected}`);
+    if (response.status === 200 && response.redirected) {
+        console.log("Redirect followed successfully");
+    } else {
+        console.log("Redirect failed");
+    }
+    await dumpResponse(response);
+}
+
+export async function test18(port) {
+    console.log("fetch test 18 (redirect: manual)");
+    const response = await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
+        redirect: 'manual'
+    });
+    console.log(`Status: ${response.status}`);
+    console.log(`Redirected: ${response.redirected}`);
+    if (response.status === 0 && !response.redirected) {
+         console.log("Manual redirect handled correctly");
+    } else {
+         console.log("Manual redirect failed");
+    }
+}
+
+export async function test19(port) {
+    console.log("fetch test 19 (redirect: error)");
+    try {
+        await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
+            redirect: 'error'
+        });
+        console.log("Error: Should have thrown exception");
+    } catch (e) {
+        console.log("Caught expected error for redirect: error");
+    }
+}
+
+export async function test20(port) {
+    console.log("fetch test 20 (redirect loop)");
+    try {
+        await fetch(`http://localhost:${port}/redirect-loop`);
+        console.log("Error: Should have thrown exception for loop");
+    } catch (e) {
+        console.log("Caught expected error for loop");
+    }
+}

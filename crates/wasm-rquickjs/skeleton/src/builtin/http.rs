@@ -15,7 +15,7 @@ use golem_wasi_http::{
 };
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
-use rquickjs::{ArrayBuffer, Ctx, JsLifetime, TypedArray};
+use rquickjs::{ArrayBuffer, Ctx, Exception, JsLifetime, TypedArray};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use wstd::runtime::AsyncPollable;
@@ -35,10 +35,15 @@ pub struct HttpRequest {
     referer: String,
     referrer_policy: String,
     credentials: String,
+    redirect_policy: String,
     #[qjs(skip_trace)]
     body: Option<Body>,
     #[qjs(skip_trace)]
+    body_bytes: Option<Vec<u8>>,
+    #[qjs(skip_trace)]
     execution: Option<CustomRequestExecution>,
+    #[qjs(skip_trace)]
+    redirect_count: usize,
 }
 
 impl Default for HttpRequest {
@@ -52,8 +57,11 @@ impl Default for HttpRequest {
             referer: "about:client".to_string(),
             referrer_policy: "strict-origin-when-cross-origin".to_string(),
             credentials: "same-origin".to_string(),
+            redirect_policy: "follow".to_string(),
             body: None,
+            body_bytes: None,
             execution: None,
+            redirect_count: 0,
         }
     }
 }
@@ -70,6 +78,7 @@ impl HttpRequest {
         referer: String,
         referrer_policy: String,
         credentials: String,
+        redirect_policy: String,
     ) -> Self {
         let url: Url = url.parse().expect("failed to parse url");
         let method: Method = method.parse().expect("failed to parse method");
@@ -99,13 +108,16 @@ impl HttpRequest {
             referer,
             referrer_policy,
             credentials,
+            redirect_policy,
             body: None,
+            body_bytes: None,
             execution: None,
+            redirect_count: 0,
         }
     }
 
     pub fn array_buffer_body(&mut self, body: ArrayBuffer<'_>) {
-        self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
+        self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
     }
 
     pub fn readable_stream_body(&mut self) -> BodySink {
@@ -121,11 +133,11 @@ impl HttpRequest {
     }
 
     pub fn string_body(&mut self, body: String) {
-        self.body = Some(Body::from(body));
+        self.body_bytes = Some(body.into_bytes());
     }
 
     pub fn uint8_array_body(&mut self, body: rquickjs::TypedArray<'_, u8>) {
-        self.body = body.as_bytes().map(|b| Body::from(b.to_vec()));
+        self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
     }
 
     pub fn add_header(&mut self, name: String, value: String) {
@@ -153,6 +165,16 @@ impl HttpRequest {
     #[qjs(get)]
     pub fn credentials(&self) -> String {
         self.credentials.clone()
+    }
+
+    #[qjs(get)]
+    pub fn url(&self) -> String {
+        self.url.to_string()
+    }
+
+    #[qjs(get)]
+    pub fn redirect(&self) -> String {
+        self.redirect_policy.clone()
     }
 
     pub fn init_send(&mut self) {
@@ -222,57 +244,154 @@ impl HttpRequest {
         }
     }
 
-    pub async fn simple_send(&mut self) -> HttpResponse {
+    pub async fn simple_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
         // Validate mode constraints
         if self.mode == "no-cors" {
             let method_str = self.method.to_string().to_uppercase();
             if !matches!(method_str.as_str(), "GET" | "HEAD" | "POST") {
-                panic!("no-cors mode only allows GET, HEAD, or POST methods");
+                return Err(Exception::throw_message(
+                    &ctx,
+                    "no-cors mode only allows GET, HEAD, or POST methods",
+                ));
             }
         } else if self.mode == "navigate" {
-            panic!("navigate mode is not supported in WASM context");
+            return Err(Exception::throw_message(
+                &ctx,
+                "navigate mode is not supported in WASM context",
+            ));
         } else if !matches!(self.mode.as_str(), "cors" | "same-origin") {
-            panic!("Unsupported request mode: {}", self.mode);
+            return Err(Exception::throw_message(
+                &ctx,
+                &format!("Unsupported request mode: {}", self.mode),
+            ));
         }
 
-        let client = golem_wasi_http::ClientBuilder::new()
-            .build()
-            .expect("Failed to create HTTP client");
+        let max_redirects = 20;
+        let mut current_redirects = 0;
 
-        let mut request = Request::new(self.method.clone(), self.url.clone());
+        loop {
+            let client = golem_wasi_http::ClientBuilder::new()
+                .build()
+                .expect("Failed to create HTTP client");
 
-        *request.version_mut() = self.version;
-        for (name, value) in &self.headers {
-            request.headers_mut().insert(name.clone(), value.clone());
+            let mut request = Request::new(self.method.clone(), self.url.clone());
+
+            *request.version_mut() = self.version;
+            for (name, value) in &self.headers {
+                request.headers_mut().insert(name.clone(), value.clone());
+            }
+
+            // Apply credentials filtering based on credentials mode
+            apply_credentials_filtering(request.headers_mut(), &self.credentials, &self.url);
+
+            // Apply referrer policy and set Referer header if appropriate
+            if let Some(referer_header_value) =
+                apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
+            {
+                let referer_header = HeaderValue::from_str(&referer_header_value)
+                    .expect("failed to parse referer value");
+                request.headers_mut().insert(
+                    HeaderName::from_bytes(b"referer")
+                        .expect("failed to create referer header name"),
+                    referer_header,
+                );
+            }
+
+            if let Some(body_bytes) = &self.body_bytes {
+                *request.body_mut() = Some(Body::from(body_bytes.clone()));
+            } else if let Some(_) = &self.body {
+                // NOTE: if the request body was not buffered, we were only able to use it once
+                // not for followed redirects.
+                *request.body_mut() = self.body.take();
+            }
+
+            let response = client.execute(request).await.expect("HTTP request failed");
+
+            let is_redirection = response.status().is_redirection();
+            let status_code = response.status().as_u16();
+
+            // Check for redirect
+            if self.redirect_policy == "follow"
+                && is_redirection
+                && status_code != 304
+                && status_code != 305
+                && status_code != 306
+            {
+                if current_redirects >= max_redirects {
+                    return Err(Exception::throw_message(
+                        &ctx,
+                        "Maximum number of redirects exceeded",
+                    ));
+                }
+
+                let location = response
+                    .headers()
+                    .get(&HeaderName::from_bytes(b"location").unwrap());
+                if let Some(location) = location {
+                    let location_str = location.to_str().unwrap_or("");
+                    // Resolve location against current URL
+                    match Url::parse(location_str).or_else(|_| self.url.join(location_str)) {
+                        Ok(new_url) => {
+                            // Check if we need to change method/body
+                            // 303 See Other -> GET, drop body
+                            // 301 Moved Permanently, 302 Found -> if POST, change to GET, drop body
+                            let mut new_method = self.method.clone();
+                            let mut drop_body = false;
+
+                            if status_code == 303 {
+                                new_method = Method::GET;
+                                drop_body = true;
+                            } else if (status_code == 301 || status_code == 302)
+                                && self.method == Method::POST
+                            {
+                                new_method = Method::GET;
+                                drop_body = true;
+                            }
+
+                            self.redirect_count += 1;
+                            current_redirects += 1;
+                            self.url = new_url;
+                            self.method = new_method;
+                            if drop_body {
+                                self.body = None;
+                            }
+                            // loop again
+                            continue;
+                        }
+                        Err(_) => {
+                            // Failed to parse location, just return the redirect response
+                        }
+                    }
+                }
+            } else if self.redirect_policy == "error"
+                && is_redirection
+                && status_code != 304
+                && status_code != 305
+                && status_code != 306
+            {
+                return Err(Exception::throw_message(&ctx, "Unexpected redirect"));
+            }
+
+            let mut http_response = HttpResponse::from_response(response);
+            http_response.set_redirected(current_redirects > 0);
+
+            if self.redirect_policy == "manual"
+                && is_redirection
+                && status_code != 304
+                && status_code != 305
+                && status_code != 306
+            {
+                http_response.make_opaque();
+                return Ok(http_response);
+            }
+
+            // For no-cors mode, make the response opaque
+            if self.mode == "no-cors" {
+                http_response.make_opaque();
+            }
+
+            return Ok(http_response);
         }
-
-        // Apply credentials filtering based on credentials mode
-        apply_credentials_filtering(request.headers_mut(), &self.credentials, &self.url);
-
-        // Apply referrer policy and set Referer header if appropriate
-        if let Some(referer_header_value) =
-            apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
-        {
-            let referer_header = HeaderValue::from_str(&referer_header_value)
-                .expect("failed to parse referer value");
-            request.headers_mut().insert(
-                HeaderName::from_bytes(b"referer").expect("failed to create referer header name"),
-                referer_header,
-            );
-        }
-
-        *request.body_mut() = self.body.take();
-
-        let response = client.execute(request).await.expect("HTTP request failed");
-
-        let mut http_response = HttpResponse::from_response(response);
-
-        // For no-cors mode, make the response opaque
-        if self.mode == "no-cors" {
-            http_response.make_opaque();
-        }
-
-        http_response
     }
 }
 
@@ -331,6 +450,7 @@ pub struct HttpResponse {
     #[qjs(skip_trace)]
     status: golem_wasi_http::StatusCode,
     is_opaque: bool,
+    redirected: bool,
 }
 
 impl Default for HttpResponse {
@@ -348,6 +468,7 @@ impl HttpResponse {
             headers: Vec::new(),
             status: golem_wasi_http::StatusCode::OK,
             is_opaque: false,
+            redirected: false,
         }
     }
 
@@ -371,6 +492,7 @@ impl HttpResponse {
             headers,
             status,
             is_opaque: false,
+            redirected: false,
         }
     }
 
@@ -380,6 +502,16 @@ impl HttpResponse {
         // For opaque responses, clear headers and set status to 0
         self.headers.clear();
         self.status = golem_wasi_http::StatusCode::OK; // Will report as 0 when is_opaque is true
+    }
+
+    #[qjs(get)]
+    pub fn redirected(&self) -> bool {
+        self.redirected
+    }
+
+    #[qjs(skip)]
+    pub fn set_redirected(&mut self, redirected: bool) {
+        self.redirected = redirected;
     }
 
     #[qjs(get)]

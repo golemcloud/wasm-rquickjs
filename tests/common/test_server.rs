@@ -166,6 +166,19 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                         })),
                     )
                 }),
+            )
+            .route(
+                "/redirect-to",
+                get(async move |query: axum::extract::Query<RedirectParams>| {
+                    let status = StatusCode::from_u16(query.status).unwrap_or(StatusCode::FOUND);
+                    (status, [("Location", query.url.clone())]).into_response()
+                }),
+            )
+            .route(
+                "/redirect-loop",
+                get(async move || {
+                    (StatusCode::FOUND, [("Location", "/redirect-loop")]).into_response()
+                }),
             );
 
         axum::serve(listener, router).await.unwrap();
@@ -190,6 +203,12 @@ struct NewTodo {
     user_id: u64,
     title: String,
     body: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RedirectParams {
+    url: String,
+    status: u16,
 }
 
 #[derive(Default)]

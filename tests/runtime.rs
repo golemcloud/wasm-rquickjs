@@ -520,6 +520,37 @@ async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyh
 }
 
 #[test]
+async fn fetch_redirects(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    // Test 17: Redirect follow
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test17", &[Val::U16(port)]).await;
+    let _ = r?;
+    assert!(output.contains("Redirect followed successfully"));
+
+    // Test 18: Redirect manual
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test18", &[Val::U16(port)]).await;
+    let _ = r?;
+    assert!(output.contains("Manual redirect handled correctly"));
+
+    // Test 19: Redirect error
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test19", &[Val::U16(port)]).await;
+    let _ = r?;
+    assert!(output.contains("Caught expected error for redirect: error"));
+
+    // Test 20: Redirect loop
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test20", &[Val::U16(port)]).await;
+    let _ = r?;
+    assert!(output.contains("Caught expected error for loop"));
+
+    Ok(())
+}
+
+#[test]
 async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
