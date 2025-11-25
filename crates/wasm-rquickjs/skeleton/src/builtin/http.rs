@@ -33,6 +33,7 @@ pub struct HttpRequest {
     version: Version,
     mode: String,
     referer: String,
+    referrer_policy: String,
     #[qjs(skip_trace)]
     body: Option<Body>,
     #[qjs(skip_trace)]
@@ -48,6 +49,7 @@ impl Default for HttpRequest {
             version: Version::HTTP_11,
             mode: "cors".to_string(),
             referer: "about:client".to_string(),
+            referrer_policy: "strict-origin-when-cross-origin".to_string(),
             body: None,
             execution: None,
         }
@@ -64,6 +66,7 @@ impl HttpRequest {
         version: String,
         mode: String,
         referer: String,
+        referrer_policy: String,
     ) -> Self {
         let url: Url = url.parse().expect("failed to parse url");
         let method: Method = method.parse().expect("failed to parse method");
@@ -91,6 +94,7 @@ impl HttpRequest {
             version,
             mode,
             referer,
+            referrer_policy,
             body: None,
             execution: None,
         }
@@ -137,6 +141,11 @@ impl HttpRequest {
         self.referer.clone()
     }
 
+    #[qjs(get, rename = "referrerPolicy")]
+    pub fn referrer_policy(&self) -> String {
+        self.referrer_policy.clone()
+    }
+
     pub fn init_send(&mut self) {
         let client = golem_wasi_http::ClientBuilder::new()
             .build()
@@ -149,9 +158,11 @@ impl HttpRequest {
             request.headers_mut().insert(name.clone(), value.clone());
         }
 
-        // Set Referer header if referer is not empty
-        if !self.referer.is_empty() && self.referer != "about:client" {
-            let referer_header = HeaderValue::from_str(&self.referer)
+        // Apply referrer policy and set Referer header if appropriate
+        if let Some(referer_header_value) =
+            apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
+        {
+            let referer_header = HeaderValue::from_str(&referer_header_value)
                 .expect("failed to parse referer value");
             request.headers_mut().insert(
                 HeaderName::from_bytes(b"referer").expect("failed to create referer header name"),
@@ -223,9 +234,11 @@ impl HttpRequest {
             request.headers_mut().insert(name.clone(), value.clone());
         }
 
-        // Set Referer header if referer is not empty
-        if !self.referer.is_empty() && self.referer != "about:client" {
-            let referer_header = HeaderValue::from_str(&self.referer)
+        // Apply referrer policy and set Referer header if appropriate
+        if let Some(referer_header_value) =
+            apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
+        {
+            let referer_header = HeaderValue::from_str(&referer_header_value)
                 .expect("failed to parse referer value");
             request.headers_mut().insert(
                 HeaderName::from_bytes(b"referer").expect("failed to create referer header name"),
@@ -531,6 +544,131 @@ impl BodySink {
         let sender = self.sender.borrow();
         sender.close_channel();
     }
+}
+
+/// Determines the referer value to send based on the policy, origin, and destination
+fn apply_referrer_policy(
+    policy: &str,
+    referer: &str,
+    request_url: &Url,
+) -> Option<String> {
+    // Policy: no-referrer - never send
+    if policy == "no-referrer" {
+        return None;
+    }
+
+    // If referer is empty string (explicitly set to omit), don't send
+    if referer.is_empty() {
+        return None;
+    }
+
+    // If referer is "about:client", don't send the literal value
+    if referer == "about:client" {
+        return None;
+    }
+
+    // Parse the referer URL
+    let referer_url = match Url::parse(referer) {
+        Ok(url) => url,
+        Err(_) => return None, // Invalid referer URL, don't send
+    };
+
+    // Extract origins and schemes
+    let request_origin = extract_origin(request_url);
+    let referer_origin = extract_origin(&referer_url);
+    let is_same_origin = request_origin == referer_origin;
+    let is_downgrade = is_https_to_http(&referer_url, request_url);
+
+    // Apply policy rules
+    match policy {
+        // no-referrer-when-downgrade: send full, except HTTPS->HTTP
+        "no-referrer-when-downgrade" => {
+            if is_downgrade {
+                None
+            } else {
+                Some(referer.to_string())
+            }
+        }
+        // origin: always send origin only
+        "origin" => Some(referer_origin),
+        // origin-when-cross-origin: full for same-origin, origin for cross-origin
+        "origin-when-cross-origin" => {
+            if is_same_origin {
+                Some(referer.to_string())
+            } else {
+                Some(referer_origin)
+            }
+        }
+        // same-origin: full for same-origin, none for cross-origin
+        "same-origin" => {
+            if is_same_origin {
+                Some(referer.to_string())
+            } else {
+                None
+            }
+        }
+        // strict-origin: origin only, none for HTTPS->HTTP
+        "strict-origin" => {
+            if is_downgrade {
+                None
+            } else {
+                Some(referer_origin)
+            }
+        }
+        // strict-origin-when-cross-origin (default): full for same-origin, origin for cross-origin, none for HTTPS->HTTP
+        "strict-origin-when-cross-origin" | "" => {
+            if is_downgrade {
+                None
+            } else if is_same_origin {
+                Some(referer.to_string())
+            } else {
+                Some(referer_origin)
+            }
+        }
+        // unsafe-url: always send full URL
+        "unsafe-url" => Some(referer.to_string()),
+        // Unknown policy defaults to strict-origin-when-cross-origin
+        _ => {
+            if is_downgrade {
+                None
+            } else if is_same_origin {
+                Some(referer.to_string())
+            } else {
+                Some(referer_origin)
+            }
+        }
+    }
+}
+
+/// Extracts the origin (scheme + host) from a URL
+fn extract_origin(url: &Url) -> String {
+    match (url.scheme(), url.host_str()) {
+        (scheme, Some(host)) => {
+            // Include port if it's not the default for the scheme
+            if let Some(port) = url.port() {
+                let default_port = match scheme {
+                    "http" => 80,
+                    "https" => 443,
+                    _ => 0,
+                };
+                if port != default_port {
+                    format!("{}://{}:{}", scheme, host, port)
+                } else {
+                    format!("{}://{}", scheme, host)
+                }
+            } else {
+                format!("{}://{}", scheme, host)
+            }
+        }
+        _ => String::new(),
+    }
+}
+
+/// Checks if the request is an HTTPS->HTTP downgrade
+fn is_https_to_http(from_url: &Url, to_url: &Url) -> bool {
+    let from_scheme = from_url.scheme();
+    let to_scheme = to_url.scheme();
+    from_scheme == "https" && to_scheme == "http"
 }
 
 // JS functions for the console implementation
