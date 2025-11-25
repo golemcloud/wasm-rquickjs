@@ -685,6 +685,49 @@ async fn fetch_13(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
+async fn fetch_14(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test14", &[Val::U16(port)]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 14 (referrer with fetch)"));
+    assert!(output.contains("Test 1 referer sent: ''"));
+    assert!(output.contains(&format!(
+        "Test 2 referer sent: 'http://localhost:{port}/source'"
+    )));
+    assert!(output.contains("Test 3 referer sent: ''"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_15(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test15", &[Val::U16(port)]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 15 (referrerPolicy with fetch)"));
+    assert!(output.contains("Test 1 referer sent: ''"));
+    assert!(output.contains(&format!("Test 2 referer sent: 'http://localhost:{port}'")));
+    assert!(output.contains(&format!(
+        "Test 3 referer sent: 'http://localhost:{port}/source'"
+    )));
+    assert!(output.contains(&format!(
+        "Test 4 referer sent: 'http://localhost:{port}/source'"
+    )));
+
+    Ok(())
+}
+
+#[test]
 async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, _) = invoke_and_capture_output(
         compiled.wasm_path(),

@@ -22,7 +22,7 @@ export async function fetch(resource, options = {}) {
         }
         let version = options.version || 'HTTP/1.1';
         let mode = options.mode || resource.mode;
-        let referer = options.referer || resource.referrer;
+        let referer = options.referrer || resource.referrer;
         let referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
         request = new httpNative.HttpRequest(
             resource.url,
@@ -53,7 +53,7 @@ export async function fetch(resource, options = {}) {
 
         let version = options.version || 'HTTP/1.1';
         let mode = options.mode || 'cors';
-        let referer = options.referer || 'about:client';
+        let referrer = options.referrer || 'about:client';
         let referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
 
         // TODO: options.credentials
@@ -65,7 +65,7 @@ export async function fetch(resource, options = {}) {
             rawHeaders,
             version,
             mode,
-            referer,
+            referrer,
             referrerPolicy
         )
 
@@ -352,7 +352,9 @@ export class Request {
             this._url = input;
             this._headers = new Headers(options.headers || {});
             this._bodyUsed = false;
-            this._options = options;
+            this._options = {
+                ...options,
+            };
             this._body = options.body;
         }
     }

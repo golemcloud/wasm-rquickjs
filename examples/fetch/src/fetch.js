@@ -306,3 +306,81 @@ export async function test13(port) {
     
     await dumpResponse(response);
 }
+
+export async function test14(port) {
+    console.log("fetch test 14 (referrer with fetch)");
+    
+    // Test 1: default referrer with default policy (about:client should not send header)
+    console.log("Test 1: default referrer");
+    const response1 = await fetch(`http://localhost:${port}/echo-referer`, {
+        method: "POST"
+    });
+    const data1 = await response1.json();
+    console.log(`Test 1 referer sent: '${data1.referer}'`);
+    
+    // Test 2: custom referrer with default policy (strict-origin-when-cross-origin)
+    // Since this is same-origin, it should send the full referrer URL
+    console.log("Test 2: custom referrer");
+    const response2 = await fetch(`http://localhost:${port}/echo-referer`, {
+        method: "POST",
+        referrer: `http://localhost:${port}/source`
+    });
+    const data2 = await response2.json();
+    console.log(`Test 2 referer sent: '${data2.referer}'`);
+    
+    // Test 3: empty referrer (explicitly omit header)
+    console.log("Test 3: empty referrer");
+    const response3 = await fetch(`http://localhost:${port}/echo-referer`, {
+        method: "POST",
+        referrer: ""
+    });
+    const data3 = await response3.json();
+    console.log(`Test 3 referer sent: '${data3.referer}'`);
+}
+
+export async function test15(port) {
+    console.log("fetch test 15 (referrerPolicy with fetch)");
+    
+    const baseUrl = `http://localhost:${port}`;
+    const sourceUrl = `${baseUrl}/source`;
+    
+    // Test 1: no-referrer policy (should never send Referer header)
+    console.log("Test 1: no-referrer policy");
+    const response1 = await fetch(`${baseUrl}/echo-referer`, {
+        method: "POST",
+        referrer: sourceUrl,
+        referrerPolicy: "no-referrer"
+    });
+    const data1 = await response1.json();
+    console.log(`Test 1 referer sent: '${data1.referer}'`);
+    
+    // Test 2: origin policy (should send origin only)
+    console.log("Test 2: origin policy");
+    const response2 = await fetch(`${baseUrl}/echo-referer`, {
+        method: "POST",
+        referrer: sourceUrl,
+        referrerPolicy: "origin"
+    });
+    const data2 = await response2.json();
+    console.log(`Test 2 referer sent: '${data2.referer}'`);
+    
+    // Test 3: origin-when-cross-origin (same-origin, so sends full)
+    console.log("Test 3: origin-when-cross-origin policy (same-origin)");
+    const response3 = await fetch(`${baseUrl}/echo-referer`, {
+        method: "POST",
+        referrer: sourceUrl,
+        referrerPolicy: "origin-when-cross-origin"
+    });
+    const data3 = await response3.json();
+    console.log(`Test 3 referer sent: '${data3.referer}'`);
+    
+    // Test 4: strict-origin-when-cross-origin (default, same-origin sends full)
+    console.log("Test 4: strict-origin-when-cross-origin policy (default)");
+    const response4 = await fetch(`${baseUrl}/echo-referer`, {
+        method: "POST",
+        referrer: sourceUrl,
+        referrerPolicy: "strict-origin-when-cross-origin"
+    });
+    const data4 = await response4.json();
+    console.log(`Test 4 referer sent: '${data4.referer}'`);
+}

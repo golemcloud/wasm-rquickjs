@@ -1,5 +1,6 @@
 use axum::body::Body;
 use axum::extract::{Multipart, Path};
+use axum::http::HeaderMap;
 use axum::response::{AppendHeaders, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -128,6 +129,19 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                     Json(serde_json::json!({
                         "body": body_str,
                         "type": "application/x-www-form-urlencoded"
+                    }))
+                }),
+            )
+            .route(
+                "/echo-referer",
+                post(async move |headers: HeaderMap| {
+                    let referer = headers
+                        .get("referer")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    Json(serde_json::json!({
+                        "referer": referer
                     }))
                 }),
             );
