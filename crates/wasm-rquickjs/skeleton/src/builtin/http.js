@@ -25,6 +25,7 @@ export async function fetch(resource, options = {}) {
         let mode = options.mode || resource.mode;
         let referer = options.referrer || resource.referrer;
         let referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
+        let cache = options.cache || resource.cache;
         credentials = options.credentials || resource.credentials;
         request = new httpNative.HttpRequest(
             resource.url,
@@ -34,7 +35,8 @@ export async function fetch(resource, options = {}) {
             mode,
             referer,
             referrerPolicy,
-            credentials
+            credentials,
+            cache
         )
         resource._bodyUsed = true;
         body = resource._body;
@@ -58,9 +60,8 @@ export async function fetch(resource, options = {}) {
         let mode = options.mode || 'cors';
         let referer = options.referrer || 'about:client';
         let referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
+        let cache = options.cache || 'default';
         credentials = options.credentials || 'same-origin';
-
-        // TODO: options.cache
 
         request = new httpNative.HttpRequest(
             resource,
@@ -70,7 +71,8 @@ export async function fetch(resource, options = {}) {
             mode,
             referer,
             referrerPolicy,
-            credentials
+            credentials,
+            cache
         )
 
         body = options.body || '';
