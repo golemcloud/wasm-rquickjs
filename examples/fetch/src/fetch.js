@@ -490,3 +490,22 @@ export async function test20(port) {
         console.log("Caught expected error for loop");
     }
 }
+
+export async function test21(port) {
+    console.log("fetch test 21 (redirect with body)");
+    const blob = new Blob(["hello world"], {type: "text/plain"});
+    
+    // Redirect using 307 to preserve POST and body
+    const target = `/echo`;
+    const response = await fetch(`http://localhost:${port}/redirect-to?url=${target}&status=307`, {
+        method: 'POST',
+        body: blob,
+        redirect: 'follow'
+    });
+    
+    console.log(`Status: ${response.status}`);
+    console.log(`Redirected: ${response.redirected}`);
+    
+    const text = await response.text();
+    console.log(`Body: ${text}`);
+}

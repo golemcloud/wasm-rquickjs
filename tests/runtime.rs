@@ -547,6 +547,14 @@ async fn fetch_redirects(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyho
     let _ = r?;
     assert!(output.contains("Caught expected error for loop"));
 
+    // Test 21: Redirect with body (307)
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test21", &[Val::U16(port)]).await;
+    let _ = r?;
+    assert!(output.contains("Status: 200"));
+    assert!(output.contains("Redirected: true"));
+    assert!(output.contains("Body: hello world"));
+
     Ok(())
 }
 

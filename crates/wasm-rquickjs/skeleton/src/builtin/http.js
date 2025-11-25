@@ -6,67 +6,93 @@ import {formDataToBlob} from '__wasm_rquickjs_builtin/http_form_data';
 // Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
 
 export async function fetch(resource, options = {}) {
-    let request;
+    let method;
+    let rawHeaders = {};
+    let version = options.version || 'HTTP/1.1';
+    let mode;
+    let referer;
+    let referrerPolicy;
+    let credentials;
+    let redirect;
     let body;
     let url;
-    let credentials;
 
     if (typeof resource === 'object' && resource instanceof Request) {
-         const method = resource.method.toUpperCase();
+        method = resource.method.toUpperCase();
         const headers = resource.headers;
         if (!headers.has('Accept')) {
             headers.set('Accept', '*/*');
         }
-        let rawHeaders = {};
         for (const [name, value] of headers.entries()) {
             rawHeaders[name] = value;
         }
-        let version = options.version || 'HTTP/1.1';
-        let mode = options.mode || resource.mode;
-        let referer = options.referrer || resource.referrer;
-        let referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
-        let cache = options.cache || resource.cache;
+
+        mode = options.mode || resource.mode;
+        referer = options.referrer || resource.referrer;
+        referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
+        // let cache = options.cache || resource.cache; // cache not used in native yet
         credentials = options.credentials || resource.credentials;
-        let redirect = options.redirect || resource.redirect || 'follow';
-        request = new httpNative.HttpRequest(
-            resource.url,
-            method,
-            rawHeaders,
-            version,
-            mode,
-            referer,
-            referrerPolicy,
-            credentials,
-            redirect
-        )
+        redirect = options.redirect || resource.redirect || 'follow';
+
+        if (resource._bodyUsed) {
+            throw new TypeError("Request body is already used");
+        }
         resource._bodyUsed = true;
         body = resource._body;
         url = resource.url;
     } else {
-        let method = options.method || 'GET'
-        method = method.toUpperCase();
-
-        let headers = new Headers(options.headers || {});
-
+        method = (options.method || 'GET').toUpperCase();
+        const headers = new Headers(options.headers || {});
         if (!headers.has('Accept')) {
             headers.set('Accept', '*/*');
         }
-
-        let rawHeaders = {};
         for (const [name, value] of headers.entries()) {
             rawHeaders[name] = value;
         }
 
-        let version = options.version || 'HTTP/1.1';
-        let mode = options.mode || 'cors';
-        let referer = options.referrer || 'about:client';
-        let referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
-        let cache = options.cache || 'default';
+        mode = options.mode || 'cors';
+        referer = options.referrer || 'about:client';
+        referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
+        // let cache = options.cache || 'default';
         credentials = options.credentials || 'same-origin';
-        let redirect = options.redirect || 'follow';
+        redirect = options.redirect || 'follow';
 
-        request = new httpNative.HttpRequest(
-            resource,
+        body = options.body;
+        url = resource;
+    }
+
+    if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
+        let bodyCreator;
+        if (body instanceof ReadableStream) {
+            if (body.locked) throw new TypeError("ReadableStream is locked");
+            let used = false;
+            bodyCreator = () => {
+                if (used) throw new TypeError("Disturbed stream");
+                used = true;
+                return body;
+            };
+        } else if (body instanceof FormData) {
+            const blob = formDataToBlob(body);
+            // We update rawHeaders here to include Content-Type
+            if (blob.type && blob.type !== '') {
+                rawHeaders['content-type'] = blob.type;
+            }
+            bodyCreator = () => blob.stream();
+        } else if (body instanceof Blob) {
+            if (body.type && body.type !== '') {
+                rawHeaders['content-type'] = body.type;
+            }
+            bodyCreator = () => body.stream();
+        }
+
+        return await streamingRequest(
+            url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
+            bodyCreator
+        );
+    } else {
+        // Simple request
+        const request = new httpNative.HttpRequest(
+            url,
             method,
             rawHeaders,
             version,
@@ -75,24 +101,13 @@ export async function fetch(resource, options = {}) {
             referrerPolicy,
             credentials,
             redirect
-        )
+        );
 
-        body = options.body || '';
-        url = resource;
-    }
-
-    if (body instanceof ReadableStream) {
-        return await streamingRequest(request, url, body, credentials);
-    } else if (body instanceof FormData) {
-        const blob = formDataToBlob(body);
-        return await blobRequestBody(request, url, blob, credentials);
-    } else if (body instanceof Blob) {
-        return await blobRequestBody(request, url, body, credentials);
-    } else {
-        if (body instanceof ArrayBuffer) {
+        if (!body) {
+            // no body
+        } else if (body instanceof ArrayBuffer) {
             request.arrayBufferBody(body);
         } else if (body instanceof DataView) {
-            // Convert DataView to Uint8Array with the correct byte range
             request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
         } else if (body instanceof Uint8Array) {
             request.uint8ArrayBody(body);
@@ -112,30 +127,150 @@ export async function fetch(resource, options = {}) {
 
 async function sendBody(bodyWriter, body) {
     const reader = body.getReader();
-    while (true) {
-        const {done, value} = await reader.read();
-        if (done) break;
-        await bodyWriter.writeRequestBodyChunk(value);
+    try {
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            await bodyWriter.writeRequestBodyChunk(value);
+        }
+    } finally {
+        // reader.releaseLock(); // Stream is consumed, no need to release lock usually
     }
     bodyWriter.finishBody();
 }
 
-async function streamingRequest(request, resource, body, credentials) {
-    request.initSend();
-    const bodyWriter = request.initRequestBody();
-    request.sendRequest();
+async function streamingRequest(
+    url, method, headers, version, mode, referer, referrerPolicy, credentials, redirect,
+    bodyCreator
+) {
+    let currentUrl = url;
+    let currentMethod = method;
+    let currentBodyCreator = bodyCreator;
+    let currentHeaders = {...headers};
 
-    const [nativeResponse, _] = await Promise.all([request.receiveResponse(), sendBody(bodyWriter, body)]);
+    const maxRedirects = 20;
+    let currentRedirects = 0;
 
-    return new Response(nativeResponse, resource, credentials);
-}
+    while (true) {
+        const request = new httpNative.HttpRequest(
+            currentUrl,
+            currentMethod,
+            currentHeaders,
+            version,
+            mode,
+            referer,
+            referrerPolicy,
+            credentials,
+            redirect
+        );
 
-async function blobRequestBody(request, resource, blob, credentials) {
-    const stream = blob.stream();
-    if (blob.type && blob.type !== '') {
-        request.addHeader('Content-Type', blob.type);
+        request.initSend();
+        const bodyWriter = request.initRequestBody();
+        request.sendRequest();
+
+        let bodyStream;
+        let bodyPromise;
+
+        if (currentBodyCreator && (currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
+            try {
+                bodyStream = currentBodyCreator();
+                bodyPromise = sendBody(bodyWriter, bodyStream);
+            } catch (e) {
+                // If we can't get the body stream (e.g. it was already used and we are redirecting), we fail.
+                throw e;
+            }
+        } else {
+            // Finish body immediately if no body or GET/HEAD
+            bodyWriter.finishBody();
+            bodyPromise = Promise.resolve();
+        }
+
+        const [nativeResponse, _] = await Promise.all([request.receiveResponse(), bodyPromise]);
+
+        const status = nativeResponse.status;
+
+        // Redirect logic
+        if (redirect === 'follow' && status >= 300 && status < 400 && status !== 304 && status !== 305 && status !== 306) {
+            if (currentRedirects >= maxRedirects) {
+                throw new Error("Maximum number of redirects exceeded");
+            }
+
+            const location = nativeResponse.headers.find(h => h[0].toLowerCase() === 'location');
+            if (location) {
+                const locationUrl = location[1];
+                try {
+                    // Resolve URL relative to current
+                    const newUrl = new URL(locationUrl, currentUrl).toString();
+                    
+                    // Handle method changes
+                    let newMethod = currentMethod;
+                    let dropBody = false;
+
+                    if (status === 303) {
+                        newMethod = 'GET';
+                        dropBody = true;
+                    } else if ((status === 301 || status === 302) && currentMethod === 'POST') {
+                        newMethod = 'GET';
+                        dropBody = true;
+                    }
+
+                    if (dropBody) {
+                        currentBodyCreator = null;
+                        // Remove Content headers
+                        delete currentHeaders['content-type'];
+                        delete currentHeaders['content-length'];
+                        delete currentHeaders['transfer-encoding'];
+                    }
+
+                    currentUrl = newUrl;
+                    currentMethod = newMethod;
+                    currentRedirects++;
+                    continue;
+                } catch (e) {
+                    // Invalid URL, assume not a redirect we can follow
+                }
+            }
+        } else if (redirect === 'error' && status >= 300 && status < 400 && status !== 304 && status !== 305 && status !== 306) {
+             throw new Error("Unexpected redirect");
+        }
+
+        const response = new Response(nativeResponse, currentUrl, credentials);
+        if (currentRedirects > 0) {
+            // We can't set .redirected on Response because it gets it from nativeResponse
+            // But nativeResponse is from the *last* request which returned 200 (or whatever).
+            // The native implementation of HttpRequest sets `redirected` on HttpResponse if it followed redirects *internally*.
+            // Here we follow manually. `nativeResponse` doesn't know about previous redirects.
+            // We need to patch `Response` or `HttpResponse`.
+            // `Response` gets `redirected` from `nativeResponse.redirected`.
+            // We can update `nativeResponse` using `set_redirected` if it was exposed?
+            // I exposed `set_redirected` in Rust but it is `#[qjs(skip)]`.
+            // I should expose it or handle it in JS Response.
+            // Response class:
+            // get redirected() { return this.nativeResponse.redirected; }
+            
+            // I can define a property on the Response instance to override it.
+            Object.defineProperty(response, 'redirected', {
+                value: true,
+                writable: false
+            });
+        }
+        
+        if (redirect === 'manual' && status >= 300 && status < 400 && status !== 304 && status !== 305 && status !== 306) {
+             // Opaque response for manual redirect
+             // Response class doesn't expose `make_opaque`.
+             // I can implement it in JS Response or assume caller handles it?
+             // Spec says: "type: opaque, status: 0".
+             // I can mock it.
+             // But nativeResponse is real response.
+             // I should probably implement `make_opaque` in Rust exposed to JS, or just wrap it.
+             // `Response` constructor uses `nativeResponse`.
+             
+             // For now, let's just return the response as is, but maybe `type` should be opaque.
+             // `Response.type` is not implemented in my `Response` class yet.
+        }
+
+        return response;
     }
-    return await streamingRequest(request, resource, stream, credentials);
 }
 
 export class Response {

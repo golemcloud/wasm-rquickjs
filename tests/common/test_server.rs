@@ -169,7 +169,7 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
             )
             .route(
                 "/redirect-to",
-                get(async move |query: axum::extract::Query<RedirectParams>| {
+                axum::routing::any(async move |query: axum::extract::Query<RedirectParams>| {
                     let status = StatusCode::from_u16(query.status).unwrap_or(StatusCode::FOUND);
                     (status, [("Location", query.url.clone())]).into_response()
                 }),
