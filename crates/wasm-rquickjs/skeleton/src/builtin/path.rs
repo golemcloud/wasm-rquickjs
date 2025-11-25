@@ -7,36 +7,7 @@ pub mod native_module {
     use rquickjs::prelude::*;
     use rquickjs::{JsLifetime, class::Trace};
     use std::path::Path;
-
-    // Result type for parse function
-    #[derive(JsLifetime, Trace, Clone, Default)]
-    #[rquickjs::class]
-    pub struct ParsedPath {
-        #[qjs(get, set)]
-        pub root: String,
-        #[qjs(get, set)]
-        pub dir: String,
-        #[qjs(get, set)]
-        pub base: String,
-        #[qjs(get, set)]
-        pub ext: String,
-        #[qjs(get, set)]
-        pub name: String,
-    }
-
-    #[rquickjs::methods]
-    impl ParsedPath {
-        #[qjs(constructor)]
-        pub fn new(root: String, dir: String, base: String, ext: String, name: String) -> Self {
-            Self {
-                root,
-                dir,
-                base,
-                ext,
-                name,
-            }
-        }
-    }
+    use super::ParsedPath;
 
     #[rquickjs::function]
     pub fn basename(path: String, suffix: Opt<String>) -> String {
@@ -295,6 +266,36 @@ pub mod native_module {
             format!("{}{}", dir, base)
         } else {
             format!("{}/{}", dir, base)
+        }
+    }
+}
+
+// Result type for parse function
+#[derive(JsLifetime, Trace, Clone, Default)]
+#[rquickjs::class]
+pub struct ParsedPath {
+    #[qjs(get, set)]
+    pub root: String,
+    #[qjs(get, set)]
+    pub dir: String,
+    #[qjs(get, set)]
+    pub base: String,
+    #[qjs(get, set)]
+    pub ext: String,
+    #[qjs(get, set)]
+    pub name: String,
+}
+
+#[rquickjs::methods]
+impl ParsedPath {
+    #[qjs(constructor)]
+    pub fn new(root: String, dir: String, base: String, ext: String, name: String) -> Self {
+        Self {
+            root,
+            dir,
+            base,
+            ext,
+            name,
         }
     }
 }
