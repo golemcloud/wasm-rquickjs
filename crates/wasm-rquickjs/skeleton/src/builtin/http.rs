@@ -167,6 +167,9 @@ impl HttpRequest {
             request.headers_mut().insert(name.clone(), value.clone());
         }
 
+        // Apply credentials filtering based on credentials mode
+        apply_credentials_filtering(request.headers_mut(), &self.credentials, &self.url);
+
         // Apply referrer policy and set Referer header if appropriate
         if let Some(referer_header_value) =
             apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
@@ -243,6 +246,9 @@ impl HttpRequest {
             request.headers_mut().insert(name.clone(), value.clone());
         }
 
+        // Apply credentials filtering based on credentials mode
+        apply_credentials_filtering(request.headers_mut(), &self.credentials, &self.url);
+
         // Apply referrer policy and set Referer header if appropriate
         if let Some(referer_header_value) =
             apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
@@ -260,7 +266,7 @@ impl HttpRequest {
         let response = client.execute(request).await.expect("HTTP request failed");
 
         let mut http_response = HttpResponse::from_response(response);
-        
+
         // For no-cors mode, make the response opaque
         if self.mode == "no-cors" {
             http_response.make_opaque();
@@ -556,11 +562,7 @@ impl BodySink {
 }
 
 /// Determines the referer value to send based on the policy, origin, and destination
-fn apply_referrer_policy(
-    policy: &str,
-    referer: &str,
-    request_url: &Url,
-) -> Option<String> {
+fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Option<String> {
     // Policy: no-referrer - never send
     if policy == "no-referrer" {
         return None;
@@ -678,6 +680,35 @@ fn is_https_to_http(from_url: &Url, to_url: &Url) -> bool {
     let from_scheme = from_url.scheme();
     let to_scheme = to_url.scheme();
     from_scheme == "https" && to_scheme == "http"
+}
+
+/// Applies credentials filtering based on the credentials mode and origin policy
+/// According to fetch spec:
+/// - "omit": Never send credentials
+/// - "same-origin": Send credentials only for same-origin requests
+/// - "include": Always send credentials
+fn apply_credentials_filtering(
+    headers: &mut golem_wasi_http::header::HeaderMap,
+    credentials: &str,
+    _request_url: &Url,
+) {
+    match credentials {
+        "omit" => {
+            // Remove Authorization and Cookie headers
+            headers.remove(&HeaderName::from_bytes(b"authorization").expect("valid header name"));
+            headers.remove(&HeaderName::from_bytes(b"cookie").expect("valid header name"));
+        }
+        "same-origin" | "include" => {
+            // Keep all headers as-is for these modes
+            // In a full browser context, "same-origin" would only send credentials for same-origin,
+            // but in WASM we don't have the referrer context to determine origin properly.
+        }
+        _ => {
+            // Unknown credentials mode, default to omit for safety
+            headers.remove(&HeaderName::from_bytes(b"authorization").expect("valid header name"));
+            headers.remove(&HeaderName::from_bytes(b"cookie").expect("valid header name"));
+        }
+    }
 }
 
 // JS functions for the console implementation

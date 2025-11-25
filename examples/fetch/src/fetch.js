@@ -390,36 +390,54 @@ export async function test16(port) {
     
     const baseUrl = `http://localhost:${port}`;
     
-    // Test 1: credentials "omit" (should not send any credentials headers)
+    // Test 1: credentials "omit" (should not send any credentials headers and should filter Set-Cookie)
     console.log("Test 1: credentials 'omit'");
     const request1 = new Request(`${baseUrl}/echo-credentials`, {
         method: "POST",
-        credentials: "omit"
+        credentials: "omit",
+        headers: {
+            "Authorization": "Bearer test-token",
+            "Cookie": "session=test-session-id"
+        }
     });
     console.log(`Request 1 credentials: '${request1.credentials}'`);
     const response1 = await fetch(request1);
     const data1 = await response1.json();
     console.log(`Test 1 authorization: '${data1.authorization}', cookie: '${data1.cookie}'`);
+    const setCookie1 = response1.headers.get('set-cookie');
+    console.log(`Test 1 set-cookie: '${setCookie1 || ''}'`);
     
-    // Test 2: credentials "same-origin" (default, would send credentials if available)
+    // Test 2: credentials "same-origin" (default, should send credentials for same-origin and preserve Set-Cookie)
     console.log("Test 2: credentials 'same-origin'");
     const request2 = new Request(`${baseUrl}/echo-credentials`, {
         method: "POST",
-        credentials: "same-origin"
+        credentials: "same-origin",
+        headers: {
+            "Authorization": "Bearer test-token",
+            "Cookie": "session=test-session-id"
+        }
     });
     console.log(`Request 2 credentials: '${request2.credentials}'`);
     const response2 = await fetch(request2);
     const data2 = await response2.json();
     console.log(`Test 2 authorization: '${data2.authorization}', cookie: '${data2.cookie}'`);
+    const setCookie2 = response2.headers.get('set-cookie');
+    console.log(`Test 2 set-cookie: '${setCookie2 || ''}'`);
     
-    // Test 3: credentials "include" (would send credentials even for cross-origin)
+    // Test 3: credentials "include" (should send credentials for all requests and preserve Set-Cookie)
     console.log("Test 3: credentials 'include'");
     const request3 = new Request(`${baseUrl}/echo-credentials`, {
         method: "POST",
-        credentials: "include"
+        credentials: "include",
+        headers: {
+            "Authorization": "Bearer test-token",
+            "Cookie": "session=test-session-id"
+        }
     });
     console.log(`Request 3 credentials: '${request3.credentials}'`);
     const response3 = await fetch(request3);
     const data3 = await response3.json();
     console.log(`Test 3 authorization: '${data3.authorization}', cookie: '${data3.cookie}'`);
+    const setCookie3 = response3.headers.get('set-cookie');
+    console.log(`Test 3 set-cookie: '${setCookie3 || ''}'`);
 }

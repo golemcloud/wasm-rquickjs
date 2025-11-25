@@ -499,22 +499,6 @@ async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_16(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
-
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test16", &[Val::U16(port)]).await;
-    let _ = r?;
-
-    assert!(output.contains("fetch test 16 (credentials option with fetch)"));
-    assert!(output.contains("Test 1: credentials 'omit'"));
-    assert!(output.contains("Test 2: credentials 'same-origin'"));
-    assert!(output.contains("Test 3: credentials 'include'"));
-
-    Ok(())
-}
-
-#[test]
 async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
@@ -739,6 +723,44 @@ async fn fetch_15(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
     assert!(output.contains(&format!(
         "Test 4 referer sent: 'http://localhost:{port}/source'"
     )));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_16(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test16", &[Val::U16(port)]).await;
+    let _ = r?;
+
+    assert!(output.contains("fetch test 16 (credentials option with fetch)"));
+    assert!(output.contains("Test 1: credentials 'omit'"));
+    // With "omit", credentials headers should NOT be sent
+    assert!(output.contains("Test 1 authorization: '', cookie: ''"));
+    // With "omit", Set-Cookie headers should be filtered from response
+    assert!(output.contains("Test 1 set-cookie: ''"));
+
+    assert!(output.contains("Test 2: credentials 'same-origin'"));
+    // With "same-origin", credentials headers SHOULD be sent for same-origin requests
+    assert!(
+        output.contains(
+            "Test 2 authorization: 'Bearer test-token', cookie: 'session=test-session-id'"
+        )
+    );
+    // With "same-origin", Set-Cookie headers should be preserved
+    assert!(output.contains("Test 2 set-cookie: 'test-cookie=test-value'"));
+
+    assert!(output.contains("Test 3: credentials 'include'"));
+    // With "include", credentials headers SHOULD always be sent
+    assert!(
+        output.contains(
+            "Test 3 authorization: 'Bearer test-token', cookie: 'session=test-session-id'"
+        )
+    );
+    // With "include", Set-Cookie headers should be preserved
+    assert!(output.contains("Test 3 set-cookie: 'test-cookie=test-value'"));
 
     Ok(())
 }

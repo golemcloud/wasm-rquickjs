@@ -158,10 +158,13 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                         .and_then(|h| h.to_str().ok())
                         .unwrap_or("")
                         .to_string();
-                    Json(serde_json::json!({
-                        "authorization": authorization,
-                        "cookie": cookie
-                    }))
+                    (
+                        AppendHeaders([(header::SET_COOKIE, "test-cookie=test-value")]),
+                        Json(serde_json::json!({
+                            "authorization": authorization,
+                            "cookie": cookie
+                        })),
+                    )
                 }),
             );
 

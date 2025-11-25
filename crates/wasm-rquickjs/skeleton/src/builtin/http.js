@@ -9,6 +9,7 @@ export async function fetch(resource, options = {}) {
     let request;
     let body;
     let url;
+    let credentials;
 
     if (typeof resource === 'object' && resource instanceof Request) {
          const method = resource.method.toUpperCase();
@@ -24,7 +25,7 @@ export async function fetch(resource, options = {}) {
         let mode = options.mode || resource.mode;
         let referer = options.referrer || resource.referrer;
         let referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
-        let credentials = options.credentials || resource.credentials;
+        credentials = options.credentials || resource.credentials;
         request = new httpNative.HttpRequest(
             resource.url,
             method,
@@ -55,9 +56,9 @@ export async function fetch(resource, options = {}) {
 
         let version = options.version || 'HTTP/1.1';
         let mode = options.mode || 'cors';
-        let referrer = options.referrer || 'about:client';
+        let referer = options.referrer || 'about:client';
         let referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
-        let credentials = options.credentials || 'same-origin';
+        credentials = options.credentials || 'same-origin';
 
         // TODO: options.cache
 
@@ -67,7 +68,7 @@ export async function fetch(resource, options = {}) {
             rawHeaders,
             version,
             mode,
-            referrer,
+            referer,
             referrerPolicy,
             credentials
         )
@@ -77,12 +78,12 @@ export async function fetch(resource, options = {}) {
     }
 
     if (body instanceof ReadableStream) {
-        return await streamingRequest(request, url, body);
+        return await streamingRequest(request, url, body, credentials);
     } else if (body instanceof FormData) {
         const blob = formDataToBlob(body);
-        return await blobRequestBody(request, url, blob);
+        return await blobRequestBody(request, url, blob, credentials);
     } else if (body instanceof Blob) {
-        return await blobRequestBody(request, url, body);
+        return await blobRequestBody(request, url, body, credentials);
     } else {
         if (body instanceof ArrayBuffer) {
             request.arrayBufferBody(body);
@@ -101,7 +102,7 @@ export async function fetch(resource, options = {}) {
         }
 
         const nativeResponse = await request.simpleSend();
-        return new Response(nativeResponse, url);
+        return new Response(nativeResponse, url, credentials);
     }
 }
 
@@ -115,29 +116,30 @@ async function sendBody(bodyWriter, body) {
     bodyWriter.finishBody();
 }
 
-async function streamingRequest(request, resource, body) {
+async function streamingRequest(request, resource, body, credentials) {
     request.initSend();
     const bodyWriter = request.initRequestBody();
     request.sendRequest();
 
     const [nativeResponse, _] = await Promise.all([request.receiveResponse(), sendBody(bodyWriter, body)]);
 
-    return new Response(nativeResponse, resource);
+    return new Response(nativeResponse, resource, credentials);
 }
 
-async function blobRequestBody(request, resource, blob) {
+async function blobRequestBody(request, resource, blob, credentials) {
     const stream = blob.stream();
     if (blob.type && blob.type !== '') {
         request.addHeader('Content-Type', blob.type);
     }
-    return await streamingRequest(request, resource, stream);
+    return await streamingRequest(request, resource, stream, credentials);
 }
 
 export class Response {
-    constructor(nativeResponse, url) {
+    constructor(nativeResponse, url, credentials) {
         this.nativeResponse = nativeResponse;
         this.url = url;
         this.bodyUsed = false;
+        this._credentials = credentials || 'same-origin';
     }
 
     get status() {
@@ -176,6 +178,10 @@ export class Response {
         const rawHeaders = this.nativeResponse.headers;
         let result = new Headers();
         for (const [name, value] of rawHeaders) {
+            // Filter out Set-Cookie headers when credentials is 'omit'
+            if (this._credentials === 'omit' && name.toLowerCase() === 'set-cookie') {
+                continue;
+            }
             result.set(name, value);
         }
         return result;
