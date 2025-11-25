@@ -7,7 +7,8 @@ pub mod native_module {
     use rquickjs::prelude::*;
     use rquickjs::{JsLifetime, class::Trace};
     use std::path::Path;
-    use super::ParsedPath;
+
+    pub use super::ParsedPath;
 
     #[rquickjs::function]
     pub fn basename(path: String, suffix: Opt<String>) -> String {
