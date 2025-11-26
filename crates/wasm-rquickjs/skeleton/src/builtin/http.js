@@ -172,15 +172,9 @@ async function streamingRequest(
         let bodyPromise;
 
         if (currentBodyCreator && (currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
-            try {
-                bodyStream = currentBodyCreator();
-                bodyPromise = sendBody(bodyWriter, bodyStream);
-            } catch (e) {
-                // If we can't get the body stream (e.g. it was already used and we are redirecting), we fail.
-                throw e;
-            }
+            bodyStream = currentBodyCreator();
+            bodyPromise = sendBody(bodyWriter, bodyStream);
         } else {
-            // Finish body immediately if no body or GET/HEAD
             bodyWriter.finishBody();
             bodyPromise = Promise.resolve();
         }
@@ -188,9 +182,13 @@ async function streamingRequest(
         const [nativeResponse, _] = await Promise.all([request.receiveResponse(), bodyPromise]);
 
         const status = nativeResponse.status;
+        const isRedirectStatus = status >= 300 && status < 400 && // is redirect
+            status !== 304 && // NOT MODIFIED
+            status !== 305 && // USE PROXY
+            status !== 306; // SWITCH PROXY
 
         // Redirect logic
-        if (redirect === 'follow' && status >= 300 && status < 400 && status !== 304 && status !== 305 && status !== 306) {
+        if (redirect === 'follow' && isRedirectStatus) {
             if (currentRedirects >= maxRedirects) {
                 throw new Error("Maximum number of redirects exceeded");
             }
@@ -198,75 +196,44 @@ async function streamingRequest(
             const location = nativeResponse.headers.find(h => h[0].toLowerCase() === 'location');
             if (location) {
                 const locationUrl = location[1];
-                try {
-                    // Resolve URL relative to current
-                    const newUrl = new URL(locationUrl, currentUrl).toString();
-                    
-                    // Handle method changes
-                    let newMethod = currentMethod;
-                    let dropBody = false;
+                const newUrl = new URL(locationUrl, currentUrl).toString();
 
-                    if (status === 303) {
-                        newMethod = 'GET';
-                        dropBody = true;
-                    } else if ((status === 301 || status === 302) && currentMethod === 'POST') {
-                        newMethod = 'GET';
-                        dropBody = true;
-                    }
+                // Handle method changes
+                let newMethod = currentMethod;
+                let dropBody = false;
 
-                    if (dropBody) {
-                        currentBodyCreator = null;
-                        // Remove Content headers
-                        delete currentHeaders['content-type'];
-                        delete currentHeaders['content-length'];
-                        delete currentHeaders['transfer-encoding'];
-                    }
-
-                    currentUrl = newUrl;
-                    currentMethod = newMethod;
-                    currentRedirects++;
-                    continue;
-                } catch (e) {
-                    // Invalid URL, assume not a redirect we can follow
+                if (status === 303) { // SEE OTHER
+                    newMethod = 'GET';
+                    dropBody = true;
+                } else if ((status === 301 /* MOVED PERMANENTLY */ || status === 302 /* FOUND */) && currentMethod === 'POST') {
+                    newMethod = 'GET';
+                    dropBody = true;
                 }
+
+                if (dropBody) {
+                    currentBodyCreator = null;
+                    // Remove Content headers
+                    delete currentHeaders['content-type'];
+                    delete currentHeaders['content-length'];
+                    delete currentHeaders['transfer-encoding'];
+                }
+
+                currentUrl = newUrl;
+                currentMethod = newMethod;
+                currentRedirects++;
+                continue;
             }
-        } else if (redirect === 'error' && status >= 300 && status < 400 && status !== 304 && status !== 305 && status !== 306) {
-             throw new Error("Unexpected redirect");
+        } else if (redirect === 'error' && isRedirectStatus) {
+            throw new Error("Unexpected redirect");
         }
 
         const response = new Response(nativeResponse, currentUrl, credentials);
         if (currentRedirects > 0) {
-            // We can't set .redirected on Response because it gets it from nativeResponse
-            // But nativeResponse is from the *last* request which returned 200 (or whatever).
-            // The native implementation of HttpRequest sets `redirected` on HttpResponse if it followed redirects *internally*.
-            // Here we follow manually. `nativeResponse` doesn't know about previous redirects.
-            // We need to patch `Response` or `HttpResponse`.
-            // `Response` gets `redirected` from `nativeResponse.redirected`.
-            // We can update `nativeResponse` using `set_redirected` if it was exposed?
-            // I exposed `set_redirected` in Rust but it is `#[qjs(skip)]`.
-            // I should expose it or handle it in JS Response.
-            // Response class:
-            // get redirected() { return this.nativeResponse.redirected; }
-            
-            // I can define a property on the Response instance to override it.
-            Object.defineProperty(response, 'redirected', {
-                value: true,
-                writable: false
-            });
+            response.nativeResponse.redirected = true;
         }
-        
-        if (redirect === 'manual' && status >= 300 && status < 400 && status !== 304 && status !== 305 && status !== 306) {
-             // Opaque response for manual redirect
-             // Response class doesn't expose `make_opaque`.
-             // I can implement it in JS Response or assume caller handles it?
-             // Spec says: "type: opaque, status: 0".
-             // I can mock it.
-             // But nativeResponse is real response.
-             // I should probably implement `make_opaque` in Rust exposed to JS, or just wrap it.
-             // `Response` constructor uses `nativeResponse`.
-             
-             // For now, let's just return the response as is, but maybe `type` should be opaque.
-             // `Response.type` is not implemented in my `Response` class yet.
+
+        if (redirect === 'manual' && isRedirectStatus) {
+            response.nativeResponse.makeOpaque();
         }
 
         return response;
@@ -334,7 +301,18 @@ export class Response {
         return this.nativeResponse.redirected;
     }
 
-    // TODO: prop type
+    get type() {
+        if (this.nativeResponse.isOpaque) {
+            if (this.nativeResponse.redirected) {
+                return 'opaqueredirect';
+            } else {
+                return 'opaque';
+            }
+        } else {
+            // TODO: other types
+            return 'basic';
+        }
+    }
 
     // TODO: static error()
     // TODO: static redirect()

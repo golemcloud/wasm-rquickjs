@@ -309,14 +309,11 @@ impl HttpRequest {
 
             let is_redirection = response.status().is_redirection();
             let status_code = response.status().as_u16();
+            let is_supported_redirection =
+                is_redirection && status_code != 304 && status_code != 305 && status_code != 306;
 
             // Check for redirect
-            if self.redirect_policy == "follow"
-                && is_redirection
-                && status_code != 304
-                && status_code != 305
-                && status_code != 306
-            {
+            if self.redirect_policy == "follow" && is_supported_redirection {
                 if current_redirects >= max_redirects {
                     return Err(Exception::throw_message(
                         &ctx,
@@ -329,12 +326,8 @@ impl HttpRequest {
                     .get(&HeaderName::from_bytes(b"location").unwrap());
                 if let Some(location) = location {
                     let location_str = location.to_str().unwrap_or("");
-                    // Resolve location against current URL
                     match Url::parse(location_str).or_else(|_| self.url.join(location_str)) {
                         Ok(new_url) => {
-                            // Check if we need to change method/body
-                            // 303 See Other -> GET, drop body
-                            // 301 Moved Permanently, 302 Found -> if POST, change to GET, drop body
                             let mut new_method = self.method.clone();
                             let mut drop_body = false;
 
@@ -363,24 +356,14 @@ impl HttpRequest {
                         }
                     }
                 }
-            } else if self.redirect_policy == "error"
-                && is_redirection
-                && status_code != 304
-                && status_code != 305
-                && status_code != 306
-            {
+            } else if self.redirect_policy == "error" && is_supported_redirection {
                 return Err(Exception::throw_message(&ctx, "Unexpected redirect"));
             }
 
             let mut http_response = HttpResponse::from_response(response);
             http_response.set_redirected(current_redirects > 0);
 
-            if self.redirect_policy == "manual"
-                && is_redirection
-                && status_code != 304
-                && status_code != 305
-                && status_code != 306
-            {
+            if self.redirect_policy == "manual" && is_supported_redirection {
                 http_response.make_opaque();
                 return Ok(http_response);
             }
@@ -496,7 +479,7 @@ impl HttpResponse {
         }
     }
 
-    #[qjs(skip)]
+    #[qjs(rename = "makeOpaque")]
     pub fn make_opaque(&mut self) {
         self.is_opaque = true;
         // For opaque responses, clear headers and set status to 0
@@ -509,7 +492,7 @@ impl HttpResponse {
         self.redirected
     }
 
-    #[qjs(skip)]
+    #[qjs(set, rename = "redirected")]
     pub fn set_redirected(&mut self, redirected: bool) {
         self.redirected = redirected;
     }
@@ -526,6 +509,11 @@ impl HttpResponse {
         } else {
             self.status.as_u16()
         }
+    }
+
+    #[qjs(get)]
+    pub fn is_opaque(&self) -> bool {
+        self.is_opaque
     }
 
     #[qjs(get, rename = "statusText")]
