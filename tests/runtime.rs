@@ -944,6 +944,100 @@ async fn fetch_with_credentials(
 }
 
 #[test]
+async fn fetch_response_clone_basic(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-basic",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 22 (response clone - basic)"));
+    assert!(output.contains("Basic clone test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_clone_streaming_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-streaming-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 23 (response clone - streaming body)"));
+    assert!(output.contains("Original status: 200"));
+    assert!(output.contains("Cloned status: 200"));
+    assert!(output.contains("Streaming clone test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_clone_reuse_bodies(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-reuse-bodies",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 24 (response clone - reuse bodies)"));
+    assert!(output.contains("All clones have matching bodies"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_clone_headers(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-headers",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 25 (response clone - headers preservation)"));
+    assert!(output.contains("Headers preserved in clone"));
+
+    Ok(())
+}
+
+#[test]
 async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, _) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -1781,16 +1875,16 @@ async fn response_static_json_with_headers(
                 })
                 .ok_or_else(|| anyhow!("No content-type field found"))?;
 
-            let custom_header = vals
-                .iter()
-                .find(|(k, _)| k == "custom-header")
-                .and_then(|(_, v)| match v {
-                    Val::Option(Some(val)) => match &**val {
-                        Val::String(s) => Some(s.clone()),
+            let custom_header =
+                vals.iter()
+                    .find(|(k, _)| k == "custom-header")
+                    .and_then(|(_, v)| match v {
+                        Val::Option(Some(val)) => match &**val {
+                            Val::String(s) => Some(s.clone()),
+                            _ => None,
+                        },
                         _ => None,
-                    },
-                    _ => None,
-                });
+                    });
 
             assert_eq!(content_type, "application/json");
             assert_eq!(custom_header, Some("CustomValue".to_string()));
@@ -1834,8 +1928,16 @@ async fn response_static_redirect_invalid_status(
                 })
                 .ok_or_else(|| anyhow!("No error field found"))?;
 
-            assert!(success, "Should have caught the error. Error message: {}", error);
-            assert!(error.contains("RangeError"), "Should throw RangeError, got: {}", error);
+            assert!(
+                success,
+                "Should have caught the error. Error message: {}",
+                error
+            );
+            assert!(
+                error.contains("RangeError"),
+                "Should throw RangeError, got: {}",
+                error
+            );
             Ok(())
         }
         _ => Err(anyhow!("Expected record result")),

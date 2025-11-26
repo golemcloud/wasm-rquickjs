@@ -1,3 +1,5 @@
+import { Buffer } from "buffer";
+
 async function dumpResponse(response) {
     console.log(`Response from ${response.url}: ${response.status} ${response.statusText} (ok=${response.ok})`);
     console.log(`Headers:`);
@@ -242,17 +244,17 @@ export async function fetchWithRequestObject(port) {
 
 export async function postWithDataViewBody(port) {
     console.log("fetch test 11 (DataView)");
-    
+
     // Create a DataView from an ArrayBuffer containing JSON data
     const buffer = new ArrayBuffer(39);
     const view = new DataView(buffer);
     const jsonData = JSON.stringify({title: "foo", body: "bar", userId: 1});
-    
+
     // Fill the DataView with the JSON string bytes
     for (let i = 0; i < jsonData.length; i++) {
         view.setUint8(i, jsonData.charCodeAt(i));
     }
-    
+
     // Send the DataView as a request body
     const response = await fetch(`http://localhost:${port}/todos`, {
         method: "POST",
@@ -261,55 +263,55 @@ export async function postWithDataViewBody(port) {
         },
         body: view
     });
-    
+
     await dumpResponse(response);
 }
 
 export async function postWithUrlSearchParams(port) {
     console.log("fetch test 12 (URLSearchParams)");
-    
+
     // Create URLSearchParams with form data
     const params = new URLSearchParams();
     params.append('title', 'foo');
     params.append('body', 'bar');
     params.append('userId', '1');
-    
+
     console.log(`URLSearchParams toString: ${params.toString()}`);
-    
+
     // Send URLSearchParams as request body
     const response = await fetch(`http://localhost:${port}/form-echo`, {
         method: "POST",
         body: params
     });
-    
+
     await dumpResponse(response);
 }
 
 export async function requestWithUrlSearchParams(port) {
     console.log("fetch test 13 (URLSearchParams in Request)");
-    
+
     // Create URLSearchParams
     const params = new URLSearchParams();
     params.append('name', 'John');
     params.append('email', 'john@example.com');
-    
+
     // Create a Request with URLSearchParams body
     const request = new Request(`http://localhost:${port}/form-echo`, {
         method: "POST",
         body: params
     });
-    
+
     console.log(`Request body used: ${request.bodyUsed}`);
-    
+
     // Use the request in fetch
     const response = await fetch(request);
-    
+
     await dumpResponse(response);
 }
 
 export async function fetchWithReferrer(port) {
     console.log("fetch test 14 (referrer with fetch)");
-    
+
     // Test 1: default referrer with default policy (about:client should not send header)
     console.log("Test 1: default referrer");
     const response1 = await fetch(`http://localhost:${port}/echo-referer`, {
@@ -317,7 +319,7 @@ export async function fetchWithReferrer(port) {
     });
     const data1 = await response1.json();
     console.log(`Test 1 referer sent: '${data1.referer}'`);
-    
+
     // Test 2: custom referrer with default policy (strict-origin-when-cross-origin)
     // Since this is same-origin, it should send the full referrer URL
     console.log("Test 2: custom referrer");
@@ -327,7 +329,7 @@ export async function fetchWithReferrer(port) {
     });
     const data2 = await response2.json();
     console.log(`Test 2 referer sent: '${data2.referer}'`);
-    
+
     // Test 3: empty referrer (explicitly omit header)
     console.log("Test 3: empty referrer");
     const response3 = await fetch(`http://localhost:${port}/echo-referer`, {
@@ -340,10 +342,10 @@ export async function fetchWithReferrer(port) {
 
 export async function fetchWithReferrerPolicy(port) {
     console.log("fetch test 15 (referrerPolicy with fetch)");
-    
+
     const baseUrl = `http://localhost:${port}`;
     const sourceUrl = `${baseUrl}/source`;
-    
+
     // Test 1: no-referrer policy (should never send Referer header)
     console.log("Test 1: no-referrer policy");
     const response1 = await fetch(`${baseUrl}/echo-referer`, {
@@ -353,7 +355,7 @@ export async function fetchWithReferrerPolicy(port) {
     });
     const data1 = await response1.json();
     console.log(`Test 1 referer sent: '${data1.referer}'`);
-    
+
     // Test 2: origin policy (should send origin only)
     console.log("Test 2: origin policy");
     const response2 = await fetch(`${baseUrl}/echo-referer`, {
@@ -363,7 +365,7 @@ export async function fetchWithReferrerPolicy(port) {
     });
     const data2 = await response2.json();
     console.log(`Test 2 referer sent: '${data2.referer}'`);
-    
+
     // Test 3: origin-when-cross-origin (same-origin, so sends full)
     console.log("Test 3: origin-when-cross-origin policy (same-origin)");
     const response3 = await fetch(`${baseUrl}/echo-referer`, {
@@ -373,7 +375,7 @@ export async function fetchWithReferrerPolicy(port) {
     });
     const data3 = await response3.json();
     console.log(`Test 3 referer sent: '${data3.referer}'`);
-    
+
     // Test 4: strict-origin-when-cross-origin (default, same-origin sends full)
     console.log("Test 4: strict-origin-when-cross-origin policy (default)");
     const response4 = await fetch(`${baseUrl}/echo-referer`, {
@@ -387,9 +389,9 @@ export async function fetchWithReferrerPolicy(port) {
 
 export async function fetchWithCredentials(port) {
     console.log("fetch test 16 (credentials option with fetch)");
-    
+
     const baseUrl = `http://localhost:${port}`;
-    
+
     // Test 1: credentials "omit" (should not send any credentials headers and should filter Set-Cookie)
     console.log("Test 1: credentials 'omit'");
     const request1 = new Request(`${baseUrl}/echo-credentials`, {
@@ -406,7 +408,7 @@ export async function fetchWithCredentials(port) {
     console.log(`Test 1 authorization: '${data1.authorization}', cookie: '${data1.cookie}'`);
     const setCookie1 = response1.headers.get('set-cookie');
     console.log(`Test 1 set-cookie: '${setCookie1 || ''}'`);
-    
+
     // Test 2: credentials "same-origin" (default, should send credentials for same-origin and preserve Set-Cookie)
     console.log("Test 2: credentials 'same-origin'");
     const request2 = new Request(`${baseUrl}/echo-credentials`, {
@@ -423,7 +425,7 @@ export async function fetchWithCredentials(port) {
     console.log(`Test 2 authorization: '${data2.authorization}', cookie: '${data2.cookie}'`);
     const setCookie2 = response2.headers.get('set-cookie');
     console.log(`Test 2 set-cookie: '${setCookie2 || ''}'`);
-    
+
     // Test 3: credentials "include" (should send credentials for all requests and preserve Set-Cookie)
     console.log("Test 3: credentials 'include'");
     const request3 = new Request(`${baseUrl}/echo-credentials`, {
@@ -463,9 +465,9 @@ export async function redirectManual(port) {
     console.log(`Status: ${response.status}`);
     console.log(`Redirected: ${response.redirected}`);
     if (response.status === 0 && !response.redirected) {
-         console.log("Manual redirect handled correctly");
+        console.log("Manual redirect handled correctly");
     } else {
-         console.log("Manual redirect failed");
+        console.log("Manual redirect failed");
     }
 }
 
@@ -494,7 +496,7 @@ export async function redirectLoop(port) {
 export async function postWithRedirect(port) {
     console.log("fetch test 21 (redirect with body)");
     const blob = new Blob(["hello world"], {type: "text/plain"});
-    
+
     // Redirect using 307 to preserve POST and body
     const target = `/echo`;
     const response = await fetch(`http://localhost:${port}/redirect-to?url=${target}&status=307`, {
@@ -502,10 +504,167 @@ export async function postWithRedirect(port) {
         body: blob,
         redirect: 'follow'
     });
-    
+
     console.log(`Status: ${response.status}`);
     console.log(`Redirected: ${response.redirected}`);
-    
+
     const text = await response.text();
     console.log(`Body: ${text}`);
+}
+
+export async function responseCloneBasic(port) {
+    console.log("fetch test 22 (response clone - basic)");
+
+    // First POST to create a todo
+    await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "clone test",
+            body: "test body",
+            userId: 1
+        })
+    });
+
+    const response = await fetch(`http://localhost:${port}/todos/0`);
+
+    console.log(`Original status: ${response.status}`);
+    console.log(`Original ok: ${response.ok}`);
+
+    try {
+        const cloned = response.clone();
+        console.log(`Cloned status: ${cloned.status}`);
+        console.log(`Cloned ok: ${cloned.ok}`);
+
+        // Read body from cloned response
+        const clonedData = await cloned.json();
+        console.log(`Cloned body id: ${clonedData.id}`);
+
+        // Original response body can still be read
+        const originalData = await response.json();
+        console.log(`Original body id: ${originalData.id}`);
+
+        if (originalData.id === clonedData.id &&
+            cloned.status === response.status &&
+            cloned.ok === response.ok
+        ) {
+            console.log("Basic clone test passed");
+        }
+    } catch (e) {
+        console.log("Clone error:", e.message);
+    }
+}
+
+export async function responseCloneStreamingBody(port) {
+    console.log("fetch test 23 (response clone - streaming body)");
+    const response = await fetch(`http://localhost:${port}/todos-stream`);
+
+    console.log(`Original status: ${response.status}`);
+
+    const cloned = response.clone();
+
+    console.log(`Cloned status: ${cloned.status}`);
+
+    let clonedBytesData = [];
+    for await (const chunk of cloned.body) {
+        for (const byte of chunk) {
+            clonedBytesData.push(byte);
+        }
+    }
+
+    let originalBytesData = [];
+    for await (const chunk of response.body) {
+        for (const byte of chunk) {
+            originalBytesData.push(byte);
+        }
+    }
+
+    const clonedBytes = new Uint8Array(clonedBytesData);
+    const originalBytes = new Uint8Array(originalBytesData);
+
+    console.log(`Cloned body: ${clonedBytes}`);
+    console.log(`Original body: ${originalBytes}`);
+
+    if (Buffer.compare(clonedBytes, originalBytes) === 0) {
+        console.log("Streaming clone test passed");
+    }
+}
+
+export async function responseCloneReuseBodies(port) {
+    console.log("fetch test 24 (response clone - reuse bodies)");
+
+    // First POST to create a todo
+    await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "reuse bodies test",
+            body: "test body",
+            userId: 1
+        })
+    });
+
+    const response = await fetch(`http://localhost:${port}/todos/0`);
+
+    try {
+        const clone1 = response.clone();
+        const clone2 = response.clone();
+
+        // Read all three bodies
+        const originalBody = await response.json();
+        const clone1Body = await clone1.json();
+        const clone2Body = await clone2.json();
+
+        console.log(`Original id: ${originalBody.id}`);
+        console.log(`Clone1 id: ${clone1Body.id}`);
+        console.log(`Clone2 id: ${clone2Body.id}`);
+
+        if (originalBody.id === clone1Body.id && clone1Body.id === clone2Body.id) {
+            console.log("All clones have matching bodies");
+        }
+    } catch (e) {
+        console.log("Clone reuse bodies error:", e.message);
+    }
+}
+
+export async function responseCloneHeaders(port) {
+    console.log("fetch test 25 (response clone - headers preservation)");
+
+    // First POST to create a todo
+    await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "headers test",
+            body: "test body",
+            userId: 1
+        })
+    });
+
+    const response = await fetch(`http://localhost:${port}/todos/0`);
+
+    try {
+        const originalContentType = response.headers.get("content-type");
+        const cloned = response.clone();
+        const clonedContentType = cloned.headers.get("content-type");
+
+        console.log(`Original content-type: ${originalContentType}`);
+        console.log(`Cloned content-type: ${clonedContentType}`);
+
+        // Consume both
+        await response.text();
+        await cloned.text();
+
+        if (originalContentType === clonedContentType) {
+            console.log("Headers preserved in clone");
+        }
+    } catch (e) {
+        console.log("Clone headers error:", e.message);
+    }
 }

@@ -850,7 +850,7 @@ impl HttpResponse {
                     Ok(ResponseBodyStream {
                         stream: Some(BodySource::SharedNative {
                             shared_stream: Rc::new(RefCell::new(shared_stream)),
-                            position: 0
+                            position: 0,
                         }),
                     })
                 } else if let Some(stream) = &shared.stream {
@@ -866,7 +866,7 @@ impl HttpResponse {
                         Ok(ResponseBodyStream {
                             stream: Some(BodySource::SharedNative {
                                 shared_stream: stream.clone(),
-                                position: 0
+                                position: 0,
                             }),
                         })
                     }

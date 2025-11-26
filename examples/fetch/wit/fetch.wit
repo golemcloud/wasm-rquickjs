@@ -23,4 +23,8 @@ world fetch {
   export redirect-error: func(port: u16);
   export redirect-loop: func(port: u16);
   export post-with-redirect: func(port: u16);
-}
+  export response-clone-basic: func(port: u16);
+  export response-clone-streaming-body: func(port: u16);
+  export response-clone-reuse-bodies: func(port: u16);
+  export response-clone-headers: func(port: u16);
+  }
