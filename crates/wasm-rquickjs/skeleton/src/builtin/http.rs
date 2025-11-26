@@ -257,7 +257,8 @@ impl Default for HttpRequest {
 #[rquickjs::methods(rename_all = "camelCase")]
 impl HttpRequest {
     #[qjs(constructor)]
-    pub fn new(
+    pub fn new<'js>(
+        ctx: Ctx<'js>,
         url: String,
         method: String,
         headers: HashMap<String, String>,
@@ -267,27 +268,30 @@ impl HttpRequest {
         referrer_policy: ReferrerPolicy,
         credentials: CredentialsMode,
         redirect_policy: RedirectPolicy,
-    ) -> Self {
-        let url: Url = url.parse().expect("failed to parse url");
-        let method: Method = method.parse().expect("failed to parse method");
+    ) -> rquickjs::Result<Self> {
+        let url: Url = url.parse()
+            .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
+        let method: Method = method.parse()
+            .map_err(|_| Exception::throw_message(&ctx, "failed to parse method"))?;
         let version = match version.as_str() {
             "HTTP/0.9" => Version::HTTP_09,
             "HTTP/1.0" => Version::HTTP_10,
             "HTTP/1.1" => Version::HTTP_11,
             "HTTP/2.0" => Version::HTTP_2,
             "HTTP/3.0" => Version::HTTP_3,
-            _ => panic!("Unsupported HTTP version: {version}"),
+            _ => return Err(Exception::throw_message(&ctx, &format!("Unsupported HTTP version: {version}"))),
         };
 
         let mut hdrs = HashMap::new();
         for (key, value) in headers {
-            let header_name =
-                HeaderName::from_bytes(key.as_bytes()).expect("failed to parse header name");
-            let header_value = HeaderValue::from_str(&value).expect("failed to parse header value");
+            let header_name = HeaderName::from_bytes(key.as_bytes())
+                .map_err(|_| Exception::throw_message(&ctx, "failed to parse header name"))?;
+            let header_value = HeaderValue::from_str(&value)
+                .map_err(|_| Exception::throw_message(&ctx, "failed to parse header value"))?;
             hdrs.insert(header_name, header_value);
         }
 
-        HttpRequest {
+        Ok(HttpRequest {
             url,
             method,
             headers: hdrs,
@@ -301,23 +305,23 @@ impl HttpRequest {
             body_bytes: None,
             execution: None,
             redirect_count: 0,
-        }
+        })
     }
 
     pub fn array_buffer_body(&mut self, body: ArrayBuffer<'_>) {
         self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
     }
 
-    pub fn readable_stream_body(&mut self) -> BodySink {
+    pub fn readable_stream_body<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<BodySink> {
         use futures::StreamExt;
 
         let mut body_sink = BodySink::new();
-        let receiver = body_sink.take_receiver();
+        let receiver = body_sink.take_receiver(ctx)?;
 
         let stream = receiver.into_stream().map(Ok);
         let body = Body::from_stream(stream);
         self.body = Some(body);
-        body_sink
+        Ok(body_sink)
     }
 
     pub fn string_body(&mut self, body: String) {
@@ -328,11 +332,13 @@ impl HttpRequest {
         self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
     }
 
-    pub fn add_header(&mut self, name: String, value: String) {
-        let header_name =
-            HeaderName::from_bytes(name.as_bytes()).expect("failed to parse header name");
-        let header_value = HeaderValue::from_str(&value).expect("failed to parse header value");
+    pub fn add_header<'js>(&mut self, ctx: Ctx<'js>, name: String, value: String) -> rquickjs::Result<()> {
+        let header_name = HeaderName::from_bytes(name.as_bytes())
+            .map_err(|_| Exception::throw_message(&ctx, "failed to parse header name"))?;
+        let header_value = HeaderValue::from_str(&value)
+            .map_err(|_| Exception::throw_message(&ctx, "failed to parse header value"))?;
         self.headers.insert(header_name, header_value);
+        Ok(())
     }
 
     #[qjs(get)]
@@ -365,10 +371,10 @@ impl HttpRequest {
         self.redirect_policy
     }
 
-    pub fn init_send(&mut self) {
+    pub fn init_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
         let client = golem_wasi_http::ClientBuilder::new()
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|_| Exception::throw_message(&ctx, "Failed to create HTTP client"))?;
 
         let mut request = Request::new(self.method.clone(), self.url.clone());
 
@@ -385,50 +391,54 @@ impl HttpRequest {
             apply_referrer_policy(self.referrer_policy, &self.referer, &self.url)
         {
             let referer_header = HeaderValue::from_str(&referer_header_value)
-                .expect("failed to parse referer value");
+                .map_err(|_| Exception::throw_message(&ctx, "failed to parse referer value"))?;
             request.headers_mut().insert(
-                HeaderName::from_bytes(b"referer").expect("failed to create referer header name"),
+                HeaderName::from_bytes(b"referer")
+                    .map_err(|_| Exception::throw_message(&ctx, "failed to create referer header name"))?,
                 referer_header,
             );
         }
 
-        self.execution = Some(client.execute_custom(request).expect("HTTP request failed"));
+        self.execution = Some(client.execute_custom(request)
+            .map_err(|_| Exception::throw_message(&ctx, "HTTP request failed"))?);
+        Ok(())
     }
 
-    pub fn send_request(&mut self) {
+    pub fn send_request<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
         if let Some(execution) = self.execution.as_mut() {
             execution
                 .send_request()
-                .expect("Failed to send HTTP request");
+                .map_err(|_| Exception::throw_message(&ctx, "Failed to send HTTP request"))?;
+            Ok(())
         } else {
-            panic!("HTTP request has not been initialized for sending");
+            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
         }
     }
 
-    pub fn init_request_body(&mut self) -> WrappedRequestBodyWriter {
+    pub fn init_request_body<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<WrappedRequestBodyWriter> {
         if let Some(execution) = self.execution.as_mut() {
             let writer = execution
                 .init_request_body()
-                .expect("Failed to init HTTP request body");
+                .map_err(|_| Exception::throw_message(&ctx, "Failed to init HTTP request body"))?;
 
-            WrappedRequestBodyWriter {
+            Ok(WrappedRequestBodyWriter {
                 writer: Some(writer),
-            }
+            })
         } else {
-            panic!("HTTP request has not been initialized for sending");
+            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
         }
     }
 
-    pub async fn receive_response(&mut self) -> HttpResponse {
+    pub async fn receive_response<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
         if let Some(execution) = self.execution.take() {
             let response = execution
                 .receive_response()
                 .await
-                .expect("Failed to receive HTTP response");
+                .map_err(|_| Exception::throw_message(&ctx, "Failed to receive HTTP response"))?;
 
-            HttpResponse::from_response(response)
+            Ok(HttpResponse::from_response(response))
         } else {
-            panic!("HTTP request has not been initialized for sending");
+            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
         }
     }
 
@@ -460,7 +470,7 @@ impl HttpRequest {
         loop {
             let client = golem_wasi_http::ClientBuilder::new()
                 .build()
-                .expect("Failed to create HTTP client");
+                .map_err(|_| Exception::throw_message(&ctx, "Failed to create HTTP client"))?;
 
             let mut request = Request::new(self.method.clone(), self.url.clone());
 
@@ -477,10 +487,10 @@ impl HttpRequest {
                 apply_referrer_policy(self.referrer_policy, &self.referer, &self.url)
             {
                 let referer_header = HeaderValue::from_str(&referer_header_value)
-                    .expect("failed to parse referer value");
+                    .map_err(|_| Exception::throw_message(&ctx, "failed to parse referer value"))?;
                 request.headers_mut().insert(
                     HeaderName::from_bytes(b"referer")
-                        .expect("failed to create referer header name"),
+                        .map_err(|_| Exception::throw_message(&ctx, "failed to create referer header name"))?,
                     referer_header,
                 );
             }
@@ -493,7 +503,8 @@ impl HttpRequest {
                 *request.body_mut() = self.body.take();
             }
 
-            let response = client.execute(request).await.expect("HTTP request failed");
+            let response = client.execute(request).await
+                .map_err(|_| Exception::throw_message(&ctx, "HTTP request failed"))?;
 
             let is_redirection = response.status().is_redirection();
             let status_code = response.status().as_u16();
@@ -586,28 +597,29 @@ impl WrappedRequestBodyWriter {
         WrappedRequestBodyWriter { writer: None }
     }
 
-    pub async fn write_request_body_chunk(&mut self, chunk: TypedArray<'_, u8>) {
+    pub async fn write_request_body_chunk<'js>(&mut self, ctx: Ctx<'js>, chunk: TypedArray<'_, u8>) -> rquickjs::Result<()> {
         if let Some(writer) = self.writer.as_mut() {
+            let bytes = chunk
+                .as_bytes()
+                .ok_or_else(|| Exception::throw_message(&ctx, "the UInt8Array passed to the HTTP request is detached"))?;
             writer
-                .write_body_chunk(
-                    chunk
-                        .as_bytes()
-                        .expect("the UInt8Array passed to the HTTP request is detached"),
-                )
+                .write_body_chunk(bytes)
                 .await
-                .expect("Failed to write HTTP request body chunk");
+                .map_err(|_| Exception::throw_message(&ctx, "Failed to write HTTP request body chunk"))?;
+            Ok(())
         } else {
-            panic!("HTTP request has not been initialized for sending");
+            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
         }
     }
 
-    pub fn finish_body(&mut self) {
+    pub fn finish_body<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
         if let Some(writer) = self.writer.take() {
             writer
                 .finish_body()
-                .expect("Failed to init HTTP request body");
+                .map_err(|_| Exception::throw_message(&ctx, "Failed to init HTTP request body"))?;
+            Ok(())
         } else {
-            panic!("HTTP request has not been initialized for sending");
+            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
         }
     }
 }
@@ -716,53 +728,55 @@ impl HttpResponse {
             .to_string()
     }
 
-    pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> ArrayBuffer<'js> {
+    pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ArrayBuffer<'js>> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         let bytes = match source {
             ResponseBodySource::Bytes(body_bytes) => body_bytes,
             ResponseBodySource::Native(response) => response
                 .bytes()
                 .await
-                .expect("failed to read response body")
+                .map_err(|_| Exception::throw_message(&ctx, "failed to read response body"))?
                 .to_vec(),
             ResponseBodySource::Consumed => {
-                panic!("The response has already been consumed")
+                return Err(Exception::throw_message(&ctx, "The response has already been consumed"))
             }
         };
 
-        ArrayBuffer::new(ctx, bytes).expect("failed to create ArrayBuffer from response body")
+        let ctx_clone = ctx.clone();
+        ArrayBuffer::new(ctx, bytes).map_err(move |_| Exception::throw_message(&ctx_clone, "failed to create ArrayBuffer from response body"))
     }
 
-    pub fn stream(&mut self) -> ResponseBodyStream {
+    pub fn stream<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ResponseBodyStream> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
-            ResponseBodySource::Bytes(body_bytes) => ResponseBodyStream {
+            ResponseBodySource::Bytes(body_bytes) => Ok(ResponseBodyStream {
                 stream: Some(BodySource::Bytes(std::io::Cursor::new(body_bytes))),
-            },
+            }),
             ResponseBodySource::Native(mut response) => {
                 let (stream, body) = response.get_raw_input_stream();
 
-                ResponseBodyStream {
+                Ok(ResponseBodyStream {
                     stream: Some(BodySource::Native(stream, body, response)),
-                }
+                })
             }
             ResponseBodySource::Consumed => {
-                panic!("The response has already been consumed")
+                Err(Exception::throw_message(&ctx, "The response has already been consumed"))
             }
         }
     }
 
-    pub async fn text(&mut self) -> String {
+    pub async fn text<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<String> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
             ResponseBodySource::Bytes(body_bytes) => {
-                String::from_utf8_lossy(&body_bytes).to_string()
+                Ok(String::from_utf8_lossy(&body_bytes).to_string())
             }
             ResponseBodySource::Native(response) => {
-                response.text().await.expect("failed to read response body")
+                response.text().await
+                    .map_err(|_| Exception::throw_message(&ctx, "failed to read response body"))
             }
             ResponseBodySource::Consumed => {
-                panic!("The response has already been consumed")
+                Err(Exception::throw_message(&ctx, "The response has already been consumed"))
             }
         }
     }
@@ -893,9 +907,10 @@ impl ResponseBodyStream {
 
                 match stream.read(CHUNK_SIZE) {
                     Ok(chunk) => {
-                        let js_array = TypedArray::new_copy(ctx.clone(), chunk)
-                            .expect("Failed to create TypedArray from response body chunk");
-                        List((Some(js_array), None))
+                        match TypedArray::new_copy(ctx.clone(), chunk) {
+                            Ok(js_array) => List((Some(js_array), None)),
+                            Err(_) => List((None, Some("Failed to create TypedArray from response body chunk".to_string())))
+                        }
                     }
                     Err(StreamError::Closed) => {
                         // No more data to read, close the stream
@@ -920,9 +935,10 @@ impl ResponseBodyStream {
                         List((None, None))
                     }
                     Ok(n) => {
-                        let js_array = TypedArray::new_copy(ctx.clone(), &buf[..n])
-                            .expect("Failed to create TypedArray from response body chunk");
-                        List((Some(js_array), None))
+                        match TypedArray::new_copy(ctx.clone(), &buf[..n]) {
+                            Ok(js_array) => List((Some(js_array), None)),
+                            Err(_) => List((None, Some("Failed to create TypedArray from response body chunk".to_string())))
+                        }
                     }
                     Err(err) => {
                         List((None, Some(format!("Failed to read response body: {}", err))))
@@ -964,24 +980,23 @@ impl BodySink {
     }
 
     #[qjs(skip)]
-    pub fn take_receiver(&mut self) -> UnboundedReceiver<Vec<u8>> {
+    pub fn take_receiver<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<UnboundedReceiver<Vec<u8>>> {
         self.receiver
             .take()
-            .expect("BodySink receiver has already been taken")
+            .ok_or_else(|| Exception::throw_message(&ctx, "BodySink receiver has already been taken"))
     }
 
     #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn write(&self, chunk: TypedArray<'_, u8>) {
+    pub async fn write<'js>(&self, ctx: Ctx<'js>, chunk: TypedArray<'_, u8>) -> rquickjs::Result<()> {
         let mut sender = self.sender.borrow_mut();
+        let bytes = chunk
+            .as_bytes()
+            .ok_or_else(|| Exception::throw_message(&ctx, "the UInt8Array passed to the BodySink is detached"))?;
         sender
-            .send(
-                chunk
-                    .as_bytes()
-                    .expect("the UInt8Array passed to the BodySink is detached")
-                    .to_vec(),
-            )
+            .send(bytes.to_vec())
             .await
-            .expect("Failed to send chunk to BodySink");
+            .map_err(|_| Exception::throw_message(&ctx, "Failed to send chunk to BodySink"))?;
+        Ok(())
     }
 
     pub fn close(&self) {
