@@ -1,26 +1,26 @@
 package quickjs:fetch;
 
 world fetch {
-  export test1: func(port: u16);
-  export test2: func(port: u16);
-  export test3: func(port: u16);
-  export test4: func(port: u16);
-  export test4-buffered: func(port: u16);
-  export test5: func(port: u16);
-  export test6: func(port: u16);
-  export test7: func();
-  export test8: func(port: u16);
-  export test9: func(port: u16);
-  export test10: func(port: u16);
-  export test11: func(port: u16);
-  export test12: func(port: u16);
-  export test13: func(port: u16);
-  export test14: func(port: u16);
-  export test15: func(port: u16);
-  export test16: func(port: u16);
-  export test17: func(port: u16);
-  export test18: func(port: u16);
-  export test19: func(port: u16);
-  export test20: func(port: u16);
-  export test21: func(port: u16);
+  export post-json-and-get: func(port: u16);
+  export post-and-get-as-array-buffer: func(port: u16);
+  export streaming-response-body: func(port: u16);
+  export pipe-response-body-to-request: func(port: u16);
+  export pipe-buffered-response-body-to-request: func(port: u16);
+  export concurrent-post-and-get: func(port: u16);
+  export post-with-slow-streaming-body: func(port: u16);
+  export blob-operations: func();
+  export post-with-blob-body: func(port: u16);
+  export post-form-data-with-files: func(port: u16);
+  export fetch-with-request-object: func(port: u16);
+  export post-with-data-view-body: func(port: u16);
+  export post-with-url-search-params: func(port: u16);
+  export request-with-url-search-params: func(port: u16);
+  export fetch-with-referrer: func(port: u16);
+  export fetch-with-referrer-policy: func(port: u16);
+  export fetch-with-credentials: func(port: u16);
+  export redirect-follow: func(port: u16);
+  export redirect-manual: func(port: u16);
+  export redirect-error: func(port: u16);
+  export redirect-loop: func(port: u16);
+  export post-with-redirect: func(port: u16);
 }

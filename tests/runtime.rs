@@ -424,11 +424,11 @@ async fn export_from_inner_package(
 }
 
 #[test]
-async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_json_and_get(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-json-and-get", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -445,11 +445,11 @@ async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_and_get_as_array_buffer(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-and-get-as-array-buffer", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert_eq!(
@@ -466,11 +466,11 @@ async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_streaming_response_body(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test3", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "streaming-response-body", &[Val::U16(port)]).await;
     let _ = r?;
 
     let chunk_count = output
@@ -483,11 +483,11 @@ async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_pipe_response_body_to_request(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "pipe-response-body-to-request", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -499,13 +499,13 @@ async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_pipe_buffered_response_body_to_request(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
-        "test4-buffered",
+        "pipe-buffered-response-body-to-request",
         &[Val::U16(port)],
     )
     .await;
@@ -523,33 +523,33 @@ async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyh
 async fn fetch_redirects(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    // Test 17: Redirect follow
+    // Test: Redirect follow
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test17", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "redirect-follow", &[Val::U16(port)]).await;
     let _ = r?;
     assert!(output.contains("Redirect followed successfully"));
 
-    // Test 18: Redirect manual
+    // Test: Redirect manual
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test18", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "redirect-manual", &[Val::U16(port)]).await;
     let _ = r?;
     assert!(output.contains("Manual redirect handled correctly"));
 
-    // Test 19: Redirect error
+    // Test: Redirect error
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test19", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "redirect-error", &[Val::U16(port)]).await;
     let _ = r?;
     assert!(output.contains("Caught expected error for redirect: error"));
 
-    // Test 20: Redirect loop
+    // Test: Redirect loop
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test20", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "redirect-loop", &[Val::U16(port)]).await;
     let _ = r?;
     assert!(output.contains("Caught expected error for loop"));
 
-    // Test 21: Redirect with body (307)
+    // Test: Redirect with body (307)
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test21", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-with-redirect", &[Val::U16(port)]).await;
     let _ = r?;
     assert!(output.contains("Status: 200"));
     assert!(output.contains("Redirected: true"));
@@ -559,11 +559,11 @@ async fn fetch_redirects(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyho
 }
 
 #[test]
-async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_concurrent_post_and_get(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "concurrent-post-and-get", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains("200 '{\"id\":0,\""));
@@ -576,11 +576,11 @@ async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_6(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_with_slow_streaming_body(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test6", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-with-slow-streaming-body", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -594,8 +594,8 @@ async fn fetch_6(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test7", &[]).await;
+async fn fetch_blob_operations(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "blob-operations", &[]).await;
     let _ = r?;
 
     assert!(output.contains("Blob text: hello, world"));
@@ -608,10 +608,10 @@ async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_with_blob_body(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-with-blob-body", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -625,10 +625,10 @@ async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_9(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_form_data_with_files(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test9", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-form-data-with-files", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -640,11 +640,11 @@ async fn fetch_9(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_10(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_with_request_object(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test10", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "fetch-with-request-object", &[Val::U16(port)]).await;
     let _ = r?;
 
     println!("{output}");
@@ -663,11 +663,11 @@ async fn fetch_10(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
-async fn fetch_11(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_with_data_view_body(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test11", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-with-data-view-body", &[Val::U16(port)]).await;
     let _ = r?;
 
     println!("{output}");
@@ -684,11 +684,11 @@ async fn fetch_11(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
-async fn fetch_12(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_with_url_search_params(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test12", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "post-with-url-search-params", &[Val::U16(port)]).await;
     let _ = r?;
 
     println!("{output}");
@@ -704,11 +704,11 @@ async fn fetch_12(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
-async fn fetch_13(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_request_with_url_search_params(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test13", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "request-with-url-search-params", &[Val::U16(port)]).await;
     let _ = r?;
 
     println!("{output}");
@@ -724,11 +724,11 @@ async fn fetch_13(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
-async fn fetch_14(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_with_referrer(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test14", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "fetch-with-referrer", &[Val::U16(port)]).await;
     let _ = r?;
 
     println!("{output}");
@@ -744,11 +744,11 @@ async fn fetch_14(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
-async fn fetch_15(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_with_referrer_policy(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test15", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "fetch-with-referrer-policy", &[Val::U16(port)]).await;
     let _ = r?;
 
     println!("{output}");
@@ -767,11 +767,11 @@ async fn fetch_15(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
 }
 
 #[test]
-async fn fetch_16(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_with_credentials(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test16", &[Val::U16(port)]).await;
+        invoke_and_capture_output(compiled.wasm_path(), None, "fetch-with-credentials", &[Val::U16(port)]).await;
     let _ = r?;
 
     assert!(output.contains("fetch test 16 (credentials option with fetch)"));

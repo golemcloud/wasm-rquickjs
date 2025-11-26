@@ -9,7 +9,7 @@ async function dumpResponse(response) {
     console.log(`Body: ${JSON.stringify(data)}`);
 }
 
-export async function test1(port) {
+export async function postJsonAndGet(port) {
     console.log("fetch test 1");
     const response1 = await fetch(`http://localhost:${port}/todos`, {
         method: "POST",
@@ -29,7 +29,7 @@ export async function test1(port) {
     await dumpResponse(response2);
 }
 
-export async function test2(port) {
+export async function postAndGetAsArrayBuffer(port) {
     console.log("fetch test 2");
 
     await fetch(`http://localhost:${port}/todos`, {
@@ -49,7 +49,7 @@ export async function test2(port) {
     console.log(`Response body as ArrayBuffer:`, data);
 }
 
-export async function test3(port) {
+export async function streamingResponseBody(port) {
     console.log("fetch test 3");
     const response = await fetch(`http://localhost:${port}/todos-stream`);
     for await (const chunk of response.body) {
@@ -58,7 +58,7 @@ export async function test3(port) {
     }
 }
 
-export async function test4(port) {
+export async function pipeResponseBodyToRequest(port) {
     console.log("fetch test 4");
     const response1 = await fetch(`http://localhost:${port}/todos-stream`);
     const response2 = await fetch(`http://localhost:${port}/echo`, {
@@ -69,7 +69,7 @@ export async function test4(port) {
     await dumpResponse(response2);
 }
 
-export async function test4Buffered(port) {
+export async function pipeBufferedResponseBodyToRequest(port) {
     console.log("fetch test 4 (buffered)");
     const response1 = await fetch(`http://localhost:${port}/todos-stream`);
 
@@ -83,7 +83,7 @@ export async function test4Buffered(port) {
     await dumpResponse(response2);
 }
 
-export async function test5(port) {
+export async function concurrentPostAndGet(port) {
     async function test(i) {
         let response1 = await fetch(`http://localhost:${port}/todos`, {
             method: "POST",
@@ -140,7 +140,7 @@ class SlowRequestBodySource {
     }
 }
 
-export async function test6(port) {
+export async function postWithSlowStreamingBody(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const stream = new ReadableStream(new SlowRequestBodySource(body));
     const response = await fetch(`http://localhost:${port}/todos`, {
@@ -153,7 +153,7 @@ export async function test6(port) {
     await dumpResponse(response);
 }
 
-export async function test7() {
+export async function blobOperations() {
     const blob = new Blob(['hello, world'])
 
     const text = await blob.text();
@@ -189,7 +189,7 @@ export async function test7() {
     console.log("done");
 }
 
-export async function test8(port) {
+export async function postWithBlobBody(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const blob = new Blob([body], {type: "application/json"});
     const response = await fetch(`http://localhost:${port}/todos`, {
@@ -199,7 +199,7 @@ export async function test8(port) {
     await dumpResponse(response);
 }
 
-export async function test9(port) {
+export async function postFormDataWithFiles(port) {
     let body = new Uint8Array([123, 34, 116, 105, 116, 108, 101, 34, 58, 34, 102, 111, 111, 34, 44, 34, 98, 111, 100, 121, 34, 58, 34, 98, 97, 114, 34, 44, 34, 117, 115, 101, 114, 73, 100, 34, 58, 49, 125]);
     const stream = new ReadableStream(new SlowRequestBodySource(body));
     const formData = new FormData()
@@ -218,7 +218,7 @@ export async function test9(port) {
 }
 
 
-export async function test10(port) {
+export async function fetchWithRequestObject(port) {
     console.log("fetch test 10");
     const request1 = new Request(`http://localhost:${port}/todos`, {
         method: "POST",
@@ -240,7 +240,7 @@ export async function test10(port) {
     await dumpResponse(response2);
 }
 
-export async function test11(port) {
+export async function postWithDataViewBody(port) {
     console.log("fetch test 11 (DataView)");
     
     // Create a DataView from an ArrayBuffer containing JSON data
@@ -265,7 +265,7 @@ export async function test11(port) {
     await dumpResponse(response);
 }
 
-export async function test12(port) {
+export async function postWithUrlSearchParams(port) {
     console.log("fetch test 12 (URLSearchParams)");
     
     // Create URLSearchParams with form data
@@ -285,7 +285,7 @@ export async function test12(port) {
     await dumpResponse(response);
 }
 
-export async function test13(port) {
+export async function requestWithUrlSearchParams(port) {
     console.log("fetch test 13 (URLSearchParams in Request)");
     
     // Create URLSearchParams
@@ -307,7 +307,7 @@ export async function test13(port) {
     await dumpResponse(response);
 }
 
-export async function test14(port) {
+export async function fetchWithReferrer(port) {
     console.log("fetch test 14 (referrer with fetch)");
     
     // Test 1: default referrer with default policy (about:client should not send header)
@@ -338,7 +338,7 @@ export async function test14(port) {
     console.log(`Test 3 referer sent: '${data3.referer}'`);
 }
 
-export async function test15(port) {
+export async function fetchWithReferrerPolicy(port) {
     console.log("fetch test 15 (referrerPolicy with fetch)");
     
     const baseUrl = `http://localhost:${port}`;
@@ -385,7 +385,7 @@ export async function test15(port) {
     console.log(`Test 4 referer sent: '${data4.referer}'`);
 }
 
-export async function test16(port) {
+export async function fetchWithCredentials(port) {
     console.log("fetch test 16 (credentials option with fetch)");
     
     const baseUrl = `http://localhost:${port}`;
@@ -442,7 +442,7 @@ export async function test16(port) {
     console.log(`Test 3 set-cookie: '${setCookie3 || ''}'`);
 }
 
-export async function test17(port) {
+export async function redirectFollow(port) {
     console.log("fetch test 17 (redirect: follow)");
     const response = await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`);
     console.log(`Status: ${response.status}`);
@@ -455,7 +455,7 @@ export async function test17(port) {
     await dumpResponse(response);
 }
 
-export async function test18(port) {
+export async function redirectManual(port) {
     console.log("fetch test 18 (redirect: manual)");
     const response = await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
         redirect: 'manual'
@@ -469,7 +469,7 @@ export async function test18(port) {
     }
 }
 
-export async function test19(port) {
+export async function redirectError(port) {
     console.log("fetch test 19 (redirect: error)");
     try {
         await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
@@ -481,7 +481,7 @@ export async function test19(port) {
     }
 }
 
-export async function test20(port) {
+export async function redirectLoop(port) {
     console.log("fetch test 20 (redirect loop)");
     try {
         await fetch(`http://localhost:${port}/redirect-loop`);
@@ -491,7 +491,7 @@ export async function test20(port) {
     }
 }
 
-export async function test21(port) {
+export async function postWithRedirect(port) {
     console.log("fetch test 21 (redirect with body)");
     const blob = new Blob(["hello world"], {type: "text/plain"});
     
