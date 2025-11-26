@@ -241,11 +241,12 @@ async function streamingRequest(
 }
 
 export class Response {
-    constructor(nativeResponse, url, credentials) {
+    constructor(nativeResponse, url, credentials, isError = false) {
         this.nativeResponse = nativeResponse;
         this.url = url;
         this.bodyUsed = false;
         this._credentials = credentials || 'same-origin';
+        this._isError = isError;
     }
 
     get status() {
@@ -302,21 +303,22 @@ export class Response {
     }
 
     get type() {
-        if (this.nativeResponse.isOpaque) {
+        if (this._isError) {
+            return 'error';
+        } else if (this.nativeResponse.isOpaque) {
             if (this.nativeResponse.redirected) {
                 return 'opaqueredirect';
             } else {
                 return 'opaque';
             }
         } else {
-            // TODO: other types
             return 'basic';
         }
     }
 
     static error() {
         const nativeResponse = httpNative.HttpResponse.error();
-        return new Response(nativeResponse, 'about:blank', 'omit');
+        return new Response(nativeResponse, 'about:blank', 'omit', true);
     }
 
     static redirect(url, status = 302) {
@@ -340,7 +342,14 @@ export class Response {
         return new Response(nativeResponse, 'about:blank', 'omit');
     }
 
-    // TODO: clone()
+    clone() {
+        if (this.bodyUsed) {
+            throw new TypeError('Response body is already consumed');
+        }
+
+        return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
+    }
+
     // TODO: formData()
 
     async arrayBuffer() {
@@ -350,7 +359,7 @@ export class Response {
     }
 
     async blob() {
-        new Blob([await this.arrayBuffer()], {type: this.headers.get('Content-Type') || ''});
+        return new Blob([await this.arrayBuffer()], {type: this.headers.get('Content-Type') || ''});
     }
 
     async bytes() {

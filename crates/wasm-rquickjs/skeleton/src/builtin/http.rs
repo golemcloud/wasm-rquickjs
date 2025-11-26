@@ -616,14 +616,12 @@ impl WrappedRequestBodyWriter {
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct HttpResponse {
     #[qjs(skip_trace)]
-    response: Option<golem_wasi_http::Response>,
+    body_source: ResponseBodySource,
     headers: Vec<Vec<String>>,
     #[qjs(skip_trace)]
     status: golem_wasi_http::StatusCode,
     is_opaque: bool,
     redirected: bool,
-    #[qjs(skip_trace)]
-    body_bytes: Option<Vec<u8>>,
 }
 
 impl Default for HttpResponse {
@@ -637,12 +635,11 @@ impl HttpResponse {
     #[qjs(constructor)]
     pub fn new() -> Self {
         Self {
-            response: None,
+            body_source: ResponseBodySource::Consumed,
             headers: Vec::new(),
             status: golem_wasi_http::StatusCode::OK,
             is_opaque: false,
             redirected: false,
-            body_bytes: None,
         }
     }
 
@@ -662,12 +659,11 @@ impl HttpResponse {
         let status = response.status();
 
         HttpResponse {
-            response: Some(response),
+            body_source: ResponseBodySource::Native(response),
             headers,
             status,
             is_opaque: false,
             redirected: false,
-            body_bytes: None,
         }
     }
 
@@ -721,63 +717,65 @@ impl HttpResponse {
     }
 
     pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> ArrayBuffer<'js> {
-        let bytes = if let Some(body_bytes) = self.body_bytes.take() {
-            body_bytes
-        } else {
-            self.response
-                .take()
-                .expect("The response has already been consumed")
+        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
+        let bytes = match source {
+            ResponseBodySource::Bytes(body_bytes) => body_bytes,
+            ResponseBodySource::Native(response) => response
                 .bytes()
                 .await
                 .expect("failed to read response body")
-                .to_vec()
+                .to_vec(),
+            ResponseBodySource::Consumed => {
+                panic!("The response has already been consumed")
+            }
         };
 
         ArrayBuffer::new(ctx, bytes).expect("failed to create ArrayBuffer from response body")
     }
 
     pub fn stream(&mut self) -> ResponseBodyStream {
-        if let Some(body_bytes) = self.body_bytes.take() {
-            return ResponseBodyStream {
+        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
+        match source {
+            ResponseBodySource::Bytes(body_bytes) => ResponseBodyStream {
                 stream: Some(BodySource::Bytes(std::io::Cursor::new(body_bytes))),
-            };
-        }
+            },
+            ResponseBodySource::Native(mut response) => {
+                let (stream, body) = response.get_raw_input_stream();
 
-        let mut response = self
-            .response
-            .take()
-            .expect("The response has already been consumed");
-
-        let (stream, body) = response.get_raw_input_stream();
-
-        ResponseBodyStream {
-            stream: Some(BodySource::Native(stream, body, response)),
+                ResponseBodyStream {
+                    stream: Some(BodySource::Native(stream, body, response)),
+                }
+            }
+            ResponseBodySource::Consumed => {
+                panic!("The response has already been consumed")
+            }
         }
     }
 
     pub async fn text(&mut self) -> String {
-        if let Some(body_bytes) = self.body_bytes.take() {
-            return String::from_utf8_lossy(&body_bytes).to_string();
+        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
+        match source {
+            ResponseBodySource::Bytes(body_bytes) => {
+                String::from_utf8_lossy(&body_bytes).to_string()
+            }
+            ResponseBodySource::Native(response) => {
+                response.text().await.expect("failed to read response body")
+            }
+            ResponseBodySource::Consumed => {
+                panic!("The response has already been consumed")
+            }
         }
-
-        self.response
-            .take()
-            .expect("The response has already been consumed")
-            .text()
-            .await
-            .expect("failed to read response body")
     }
 
     /// Create an error response
     #[qjs(static)]
     pub fn error() -> Self {
         Self {
-            response: None,
+            body_source: ResponseBodySource::Consumed,
             headers: Vec::new(),
             status: golem_wasi_http::StatusCode::INTERNAL_SERVER_ERROR,
             is_opaque: false,
             redirected: false,
-            body_bytes: None,
         }
     }
 
@@ -785,26 +783,24 @@ impl HttpResponse {
     #[qjs(static)]
     pub fn redirect(url: String, status: Option<u16>) -> Self {
         let status_code = status
-            .and_then(golem_wasi_http::StatusCode::from_u16)
+            .and_then(|code| golem_wasi_http::StatusCode::from_u16(code).ok())
             .unwrap_or(golem_wasi_http::StatusCode::FOUND);
 
         let headers = vec![vec!["location".to_string(), url]];
 
         Self {
-            response: None,
+            body_source: ResponseBodySource::Consumed,
             headers,
             status: status_code,
             is_opaque: false,
             redirected: false,
-            body_bytes: None,
         }
     }
 
     /// Create a JSON response
     #[qjs(static)]
     pub fn json<'js>(data: ArrayBuffer<'js>, status: u16) -> Self {
-        let status_code = status
-            .and_then(golem_wasi_http::StatusCode::from_u16)
+        let status_code = golem_wasi_http::StatusCode::from_u16(status)
             .unwrap_or(golem_wasi_http::StatusCode::OK);
 
         let headers = vec![vec![
@@ -813,14 +809,39 @@ impl HttpResponse {
         ]];
 
         Self {
-            response: None,
+            body_source: ResponseBodySource::Bytes(
+                data.as_bytes().map(|b| b.to_vec()).unwrap_or_default(),
+            ),
             headers,
             status: status_code,
             is_opaque: false,
             redirected: false,
-            body_bytes: Some(data.as_bytes().map(|b| b.to_vec()).unwrap_or_default()),
         }
     }
+
+    pub fn clone(&self) -> Self {
+        Self {
+            body_source: match &self.body_source {
+                ResponseBodySource::Bytes(bytes) => ResponseBodySource::Bytes(bytes.clone()),
+                ResponseBodySource::Native(_) => ResponseBodySource::Consumed, // TODO
+                ResponseBodySource::Consumed => ResponseBodySource::Consumed,
+            },
+            headers: self.headers.clone(),
+            status: self.status,
+            is_opaque: self.is_opaque,
+            redirected: self.redirected,
+        }
+    }
+}
+
+/// Represents the source of response body data
+pub enum ResponseBodySource {
+    /// Response from native HTTP call
+    Native(golem_wasi_http::Response),
+    /// Buffered response body as bytes
+    Bytes(Vec<u8>),
+    /// Response has been consumed
+    Consumed,
 }
 
 pub enum BodySource {
