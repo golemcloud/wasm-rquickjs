@@ -314,9 +314,31 @@ export class Response {
         }
     }
 
-    // TODO: static error()
-    // TODO: static redirect()
-    // TODO: static json()
+    static error() {
+        const nativeResponse = httpNative.HttpResponse.error();
+        return new Response(nativeResponse, 'about:blank', 'omit');
+    }
+
+    static redirect(url, status = 302) {
+        if (![301, 302, 303, 307, 308].includes(status)) {
+            throw new RangeError("Invalid redirect status code");
+        }
+        const nativeResponse = httpNative.HttpResponse.redirect(url, status);
+        return new Response(nativeResponse, url, 'omit');
+    }
+
+    static json(data, init = {}) {
+        const json = JSON.stringify(data);
+        const bytes = new TextEncoder().encode(json);
+        const nativeResponse = httpNative.HttpResponse.json(bytes.buffer, init.status || 200);
+        if (init.headers) {
+            const headers = new Headers(init.headers);
+            for (const [key, value] of headers.entries()) {
+                nativeResponse.addHeader(key, value);
+            }
+        }
+        return new Response(nativeResponse, 'about:blank', 'omit');
+    }
 
     // TODO: clone()
     // TODO: formData()
@@ -367,12 +389,12 @@ function normalizeValue(value) {
 
 // Build a destructive iterator for the value list
 function iteratorFor(items) {
-    var iterator = {
+    let iterator = {
         next: function () {
-            var value = items.shift()
+            const value = items.shift()
             return {done: value === undefined, value: value}
         }
-    }
+    };
 
     iterator[Symbol.iterator] = function () {
         return iterator

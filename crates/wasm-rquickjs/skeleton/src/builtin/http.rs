@@ -622,6 +622,8 @@ pub struct HttpResponse {
     status: golem_wasi_http::StatusCode,
     is_opaque: bool,
     redirected: bool,
+    #[qjs(skip_trace)]
+    body_bytes: Option<Vec<u8>>,
 }
 
 impl Default for HttpResponse {
@@ -640,6 +642,7 @@ impl HttpResponse {
             status: golem_wasi_http::StatusCode::OK,
             is_opaque: false,
             redirected: false,
+            body_bytes: None,
         }
     }
 
@@ -664,6 +667,7 @@ impl HttpResponse {
             status,
             is_opaque: false,
             redirected: false,
+            body_bytes: None,
         }
     }
 
@@ -690,6 +694,10 @@ impl HttpResponse {
         self.headers.clone()
     }
 
+    pub fn add_header(&mut self, name: String, value: String) {
+        self.headers.push(vec![name, value]);
+    }
+
     #[qjs(get)]
     pub fn status(&self) -> u16 {
         if self.is_opaque {
@@ -713,18 +721,28 @@ impl HttpResponse {
     }
 
     pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> ArrayBuffer<'js> {
-        let bytes = self
-            .response
-            .take()
-            .expect("The response has already been consumed")
-            .bytes()
-            .await
-            .expect("failed to read response body");
+        let bytes = if let Some(body_bytes) = self.body_bytes.take() {
+            body_bytes
+        } else {
+            self.response
+                .take()
+                .expect("The response has already been consumed")
+                .bytes()
+                .await
+                .expect("failed to read response body")
+                .to_vec()
+        };
 
         ArrayBuffer::new(ctx, bytes).expect("failed to create ArrayBuffer from response body")
     }
 
     pub fn stream(&mut self) -> ResponseBodyStream {
+        if let Some(body_bytes) = self.body_bytes.take() {
+            return ResponseBodyStream {
+                stream: Some(BodySource::Bytes(std::io::Cursor::new(body_bytes))),
+            };
+        }
+
         let mut response = self
             .response
             .take()
@@ -733,11 +751,15 @@ impl HttpResponse {
         let (stream, body) = response.get_raw_input_stream();
 
         ResponseBodyStream {
-            stream: Some((stream, body, response)),
+            stream: Some(BodySource::Native(stream, body, response)),
         }
     }
 
     pub async fn text(&mut self) -> String {
+        if let Some(body_bytes) = self.body_bytes.take() {
+            return String::from_utf8_lossy(&body_bytes).to_string();
+        }
+
         self.response
             .take()
             .expect("The response has already been consumed")
@@ -745,6 +767,69 @@ impl HttpResponse {
             .await
             .expect("failed to read response body")
     }
+
+    /// Create an error response
+    #[qjs(static)]
+    pub fn error() -> Self {
+        Self {
+            response: None,
+            headers: Vec::new(),
+            status: golem_wasi_http::StatusCode::INTERNAL_SERVER_ERROR,
+            is_opaque: false,
+            redirected: false,
+            body_bytes: None,
+        }
+    }
+
+    /// Create a redirect response
+    #[qjs(static)]
+    pub fn redirect(url: String, status: Option<u16>) -> Self {
+        let status_code = status
+            .and_then(golem_wasi_http::StatusCode::from_u16)
+            .unwrap_or(golem_wasi_http::StatusCode::FOUND);
+
+        let headers = vec![vec!["location".to_string(), url]];
+
+        Self {
+            response: None,
+            headers,
+            status: status_code,
+            is_opaque: false,
+            redirected: false,
+            body_bytes: None,
+        }
+    }
+
+    /// Create a JSON response
+    #[qjs(static)]
+    pub fn json<'js>(data: ArrayBuffer<'js>, status: u16) -> Self {
+        let status_code = status
+            .and_then(golem_wasi_http::StatusCode::from_u16)
+            .unwrap_or(golem_wasi_http::StatusCode::OK);
+
+        let headers = vec![vec![
+            "content-type".to_string(),
+            "application/json".to_string(),
+        ]];
+
+        Self {
+            response: None,
+            headers,
+            status: status_code,
+            is_opaque: false,
+            redirected: false,
+            body_bytes: Some(data.as_bytes().map(|b| b.to_vec()).unwrap_or_default()),
+        }
+    }
+}
+
+pub enum BodySource {
+    Native(
+        golem_wasi_http::InputStream,
+        golem_wasi_http::IncomingBody,
+        golem_wasi_http::Response,
+    ),
+    Bytes(std::io::Cursor<Vec<u8>>),
 }
 
 /// Implements a source for ReadableStream reading the response body
@@ -754,11 +839,7 @@ impl HttpResponse {
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct ResponseBodyStream {
     #[qjs(skip_trace)]
-    stream: Option<(
-        golem_wasi_http::InputStream,
-        golem_wasi_http::IncomingBody,
-        golem_wasi_http::Response,
-    )>,
+    stream: Option<BodySource>,
 }
 
 impl Default for ResponseBodyStream {
@@ -783,35 +864,54 @@ impl ResponseBodyStream {
         &mut self,
         ctx: Ctx<'js>,
     ) -> List<(Option<TypedArray<'js, u8>>, Option<String>)> {
-        if let Some((stream, _body, _response)) = &mut self.stream {
-            const CHUNK_SIZE: u64 = 4096;
-            let pollable = stream.subscribe();
-            AsyncPollable::new(pollable).wait_for().await;
+        match &mut self.stream {
+            Some(BodySource::Native(stream, _body, _response)) => {
+                const CHUNK_SIZE: u64 = 4096;
+                let pollable = stream.subscribe();
+                AsyncPollable::new(pollable).wait_for().await;
 
-            match stream.read(CHUNK_SIZE) {
-                Ok(chunk) => {
-                    let js_array = TypedArray::new_copy(ctx.clone(), chunk)
-                        .expect("Failed to create TypedArray from response body chunk");
-                    List((Some(js_array), None))
-                }
-                Err(StreamError::Closed) => {
-                    // No more data to read, close the stream
-                    self.stream = None; // Mark the response as consumed
-                    List((None, None))
-                }
-                Err(StreamError::LastOperationFailed(err)) => List((
-                    None,
-                    Some(format!(
-                        "Failed to read response body: {}",
-                        err.to_debug_string()
+                match stream.read(CHUNK_SIZE) {
+                    Ok(chunk) => {
+                        let js_array = TypedArray::new_copy(ctx.clone(), chunk)
+                            .expect("Failed to create TypedArray from response body chunk");
+                        List((Some(js_array), None))
+                    }
+                    Err(StreamError::Closed) => {
+                        // No more data to read, close the stream
+                        self.stream = None; // Mark the response as consumed
+                        List((None, None))
+                    }
+                    Err(StreamError::LastOperationFailed(err)) => List((
+                        None,
+                        Some(format!(
+                            "Failed to read response body: {}",
+                            err.to_debug_string()
+                        )),
                     )),
-                )),
+                }
             }
-        } else {
-            List((
+            Some(BodySource::Bytes(cursor)) => {
+                let mut buf = [0u8; 4096];
+                match std::io::Read::read(cursor, &mut buf) {
+                    Ok(0) => {
+                        // EOF
+                        self.stream = None;
+                        List((None, None))
+                    }
+                    Ok(n) => {
+                        let js_array = TypedArray::new_copy(ctx.clone(), &buf[..n])
+                            .expect("Failed to create TypedArray from response body chunk");
+                        List((Some(js_array), None))
+                    }
+                    Err(err) => {
+                        List((None, Some(format!("Failed to read response body: {}", err))))
+                    }
+                }
+            }
+            None => List((
                 None,
                 Some("Response body stream has already been consumed".to_string()),
-            ))
+            )),
         }
     }
 }
