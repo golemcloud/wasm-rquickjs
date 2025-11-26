@@ -18,6 +18,7 @@ use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::{Rc, Weak};
 use wstd::runtime::AsyncPollable;
 
 /// Request mode - defines the cross-origin behavior
@@ -269,9 +270,11 @@ impl HttpRequest {
         credentials: CredentialsMode,
         redirect_policy: RedirectPolicy,
     ) -> rquickjs::Result<Self> {
-        let url: Url = url.parse()
+        let url: Url = url
+            .parse()
             .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
-        let method: Method = method.parse()
+        let method: Method = method
+            .parse()
             .map_err(|_| Exception::throw_message(&ctx, "failed to parse method"))?;
         let version = match version.as_str() {
             "HTTP/0.9" => Version::HTTP_09,
@@ -279,7 +282,12 @@ impl HttpRequest {
             "HTTP/1.1" => Version::HTTP_11,
             "HTTP/2.0" => Version::HTTP_2,
             "HTTP/3.0" => Version::HTTP_3,
-            _ => return Err(Exception::throw_message(&ctx, &format!("Unsupported HTTP version: {version}"))),
+            _ => {
+                return Err(Exception::throw_message(
+                    &ctx,
+                    &format!("Unsupported HTTP version: {version}"),
+                ));
+            }
         };
 
         let mut hdrs = HashMap::new();
@@ -332,7 +340,12 @@ impl HttpRequest {
         self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
     }
 
-    pub fn add_header<'js>(&mut self, ctx: Ctx<'js>, name: String, value: String) -> rquickjs::Result<()> {
+    pub fn add_header<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        name: String,
+        value: String,
+    ) -> rquickjs::Result<()> {
         let header_name = HeaderName::from_bytes(name.as_bytes())
             .map_err(|_| Exception::throw_message(&ctx, "failed to parse header name"))?;
         let header_value = HeaderValue::from_str(&value)
@@ -393,14 +406,18 @@ impl HttpRequest {
             let referer_header = HeaderValue::from_str(&referer_header_value)
                 .map_err(|_| Exception::throw_message(&ctx, "failed to parse referer value"))?;
             request.headers_mut().insert(
-                HeaderName::from_bytes(b"referer")
-                    .map_err(|_| Exception::throw_message(&ctx, "failed to create referer header name"))?,
+                HeaderName::from_bytes(b"referer").map_err(|_| {
+                    Exception::throw_message(&ctx, "failed to create referer header name")
+                })?,
                 referer_header,
             );
         }
 
-        self.execution = Some(client.execute_custom(request)
-            .map_err(|_| Exception::throw_message(&ctx, "HTTP request failed"))?);
+        self.execution = Some(
+            client
+                .execute_custom(request)
+                .map_err(|_| Exception::throw_message(&ctx, "HTTP request failed"))?,
+        );
         Ok(())
     }
 
@@ -411,11 +428,17 @@ impl HttpRequest {
                 .map_err(|_| Exception::throw_message(&ctx, "Failed to send HTTP request"))?;
             Ok(())
         } else {
-            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
+            Err(Exception::throw_message(
+                &ctx,
+                "HTTP request has not been initialized for sending",
+            ))
         }
     }
 
-    pub fn init_request_body<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<WrappedRequestBodyWriter> {
+    pub fn init_request_body<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+    ) -> rquickjs::Result<WrappedRequestBodyWriter> {
         if let Some(execution) = self.execution.as_mut() {
             let writer = execution
                 .init_request_body()
@@ -425,7 +448,10 @@ impl HttpRequest {
                 writer: Some(writer),
             })
         } else {
-            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
+            Err(Exception::throw_message(
+                &ctx,
+                "HTTP request has not been initialized for sending",
+            ))
         }
     }
 
@@ -438,7 +464,10 @@ impl HttpRequest {
 
             Ok(HttpResponse::from_response(response))
         } else {
-            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
+            Err(Exception::throw_message(
+                &ctx,
+                "HTTP request has not been initialized for sending",
+            ))
         }
     }
 
@@ -489,8 +518,9 @@ impl HttpRequest {
                 let referer_header = HeaderValue::from_str(&referer_header_value)
                     .map_err(|_| Exception::throw_message(&ctx, "failed to parse referer value"))?;
                 request.headers_mut().insert(
-                    HeaderName::from_bytes(b"referer")
-                        .map_err(|_| Exception::throw_message(&ctx, "failed to create referer header name"))?,
+                    HeaderName::from_bytes(b"referer").map_err(|_| {
+                        Exception::throw_message(&ctx, "failed to create referer header name")
+                    })?,
                     referer_header,
                 );
             }
@@ -503,7 +533,9 @@ impl HttpRequest {
                 *request.body_mut() = self.body.take();
             }
 
-            let response = client.execute(request).await
+            let response = client
+                .execute(request)
+                .await
                 .map_err(|_| Exception::throw_message(&ctx, "HTTP request failed"))?;
 
             let is_redirection = response.status().is_redirection();
@@ -597,18 +629,27 @@ impl WrappedRequestBodyWriter {
         WrappedRequestBodyWriter { writer: None }
     }
 
-    pub async fn write_request_body_chunk<'js>(&mut self, ctx: Ctx<'js>, chunk: TypedArray<'_, u8>) -> rquickjs::Result<()> {
+    pub async fn write_request_body_chunk<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        chunk: TypedArray<'_, u8>,
+    ) -> rquickjs::Result<()> {
         if let Some(writer) = self.writer.as_mut() {
-            let bytes = chunk
-                .as_bytes()
-                .ok_or_else(|| Exception::throw_message(&ctx, "the UInt8Array passed to the HTTP request is detached"))?;
-            writer
-                .write_body_chunk(bytes)
-                .await
-                .map_err(|_| Exception::throw_message(&ctx, "Failed to write HTTP request body chunk"))?;
+            let bytes = chunk.as_bytes().ok_or_else(|| {
+                Exception::throw_message(
+                    &ctx,
+                    "the UInt8Array passed to the HTTP request is detached",
+                )
+            })?;
+            writer.write_body_chunk(bytes).await.map_err(|_| {
+                Exception::throw_message(&ctx, "Failed to write HTTP request body chunk")
+            })?;
             Ok(())
         } else {
-            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
+            Err(Exception::throw_message(
+                &ctx,
+                "HTTP request has not been initialized for sending",
+            ))
         }
     }
 
@@ -619,7 +660,10 @@ impl WrappedRequestBodyWriter {
                 .map_err(|_| Exception::throw_message(&ctx, "Failed to init HTTP request body"))?;
             Ok(())
         } else {
-            Err(Exception::throw_message(&ctx, "HTTP request has not been initialized for sending"))
+            Err(Exception::throw_message(
+                &ctx,
+                "HTTP request has not been initialized for sending",
+            ))
         }
     }
 }
@@ -737,13 +781,40 @@ impl HttpResponse {
                 .await
                 .map_err(|_| Exception::throw_message(&ctx, "failed to read response body"))?
                 .to_vec(),
+            ResponseBodySource::Shared(shared) => {
+                let mut shared = shared.borrow_mut();
+                if let Some(response) = shared.response.take() {
+                    // Native response was not read yet, read it now
+                    let bytes = response
+                        .bytes()
+                        .await
+                        .map_err(|_| {
+                            Exception::throw_message(&ctx, "failed to read response body")
+                        })?
+                        .to_vec();
+                    shared.buffer = bytes.clone();
+                    shared.finished = true;
+                    bytes
+                } else {
+                    // Response already read and buffered
+                    shared.buffer.clone()
+                }
+            }
             ResponseBodySource::Consumed => {
-                return Err(Exception::throw_message(&ctx, "The response has already been consumed"))
+                return Err(Exception::throw_message(
+                    &ctx,
+                    "The response has already been consumed",
+                ));
             }
         };
 
         let ctx_clone = ctx.clone();
-        ArrayBuffer::new(ctx, bytes).map_err(move |_| Exception::throw_message(&ctx_clone, "failed to create ArrayBuffer from response body"))
+        ArrayBuffer::new(ctx, bytes).map_err(move |_| {
+            Exception::throw_message(
+                &ctx_clone,
+                "failed to create ArrayBuffer from response body",
+            )
+        })
     }
 
     pub fn stream<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ResponseBodyStream> {
@@ -756,12 +827,61 @@ impl HttpResponse {
                 let (stream, body) = response.get_raw_input_stream();
 
                 Ok(ResponseBodyStream {
-                    stream: Some(BodySource::Native(stream, body, response)),
+                    stream: Some(BodySource::Native {
+                        stream,
+                        body,
+                        response,
+                    }),
                 })
             }
-            ResponseBodySource::Consumed => {
-                Err(Exception::throw_message(&ctx, "The response has already been consumed"))
+            ResponseBodySource::Shared(rc_shared) => {
+                let mut shared = rc_shared.borrow_mut();
+                if let Some(mut response) = shared.response.take() {
+                    let (stream, body) = response.get_raw_input_stream();
+
+                    let shared_stream = SharedStream {
+                        stream,
+                        body,
+                        response,
+                        shared: Rc::downgrade(&rc_shared),
+                    };
+
+                    // Read the body into the buffer as it is consumed
+                    Ok(ResponseBodyStream {
+                        stream: Some(BodySource::SharedNative {
+                            shared_stream: Rc::new(RefCell::new(shared_stream)),
+                            position: 0
+                        }),
+                    })
+                } else if let Some(stream) = &shared.stream {
+                    if shared.finished {
+                        // Response was streaming but now finished
+                        Ok(ResponseBodyStream {
+                            stream: Some(BodySource::Bytes(std::io::Cursor::new(
+                                shared.buffer.clone(),
+                            ))),
+                        })
+                    } else {
+                        // Response is still streaming
+                        Ok(ResponseBodyStream {
+                            stream: Some(BodySource::SharedNative {
+                                shared_stream: stream.clone(),
+                                position: 0
+                            }),
+                        })
+                    }
+                } else {
+                    Ok(ResponseBodyStream {
+                        stream: Some(BodySource::Bytes(std::io::Cursor::new(
+                            shared.buffer.clone(),
+                        ))),
+                    })
+                }
             }
+            ResponseBodySource::Consumed => Err(Exception::throw_message(
+                &ctx,
+                "The response has already been consumed",
+            )),
         }
     }
 
@@ -771,13 +891,27 @@ impl HttpResponse {
             ResponseBodySource::Bytes(body_bytes) => {
                 Ok(String::from_utf8_lossy(&body_bytes).to_string())
             }
-            ResponseBodySource::Native(response) => {
-                response.text().await
-                    .map_err(|_| Exception::throw_message(&ctx, "failed to read response body"))
+            ResponseBodySource::Native(response) => response
+                .text()
+                .await
+                .map_err(|_| Exception::throw_message(&ctx, "failed to read response body")),
+            ResponseBodySource::Shared(shared) => {
+                let mut shared = shared.borrow_mut();
+                if let Some(response) = shared.response.take() {
+                    let text = response.text().await.map_err(|_| {
+                        Exception::throw_message(&ctx, "failed to read response body")
+                    })?;
+                    shared.buffer = text.clone().into_bytes();
+                    shared.finished = true;
+                    Ok(text)
+                } else {
+                    Ok(String::from_utf8_lossy(&shared.buffer).to_string())
+                }
             }
-            ResponseBodySource::Consumed => {
-                Err(Exception::throw_message(&ctx, "The response has already been consumed"))
-            }
+            ResponseBodySource::Consumed => Err(Exception::throw_message(
+                &ctx,
+                "The response has already been consumed",
+            )),
         }
     }
 
@@ -833,19 +967,57 @@ impl HttpResponse {
         }
     }
 
-    pub fn clone(&self) -> Self {
+    pub fn clone(&mut self) -> Self {
+        let body_source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
+        let (cloned_body_source, updated_body_source) = match body_source {
+            ResponseBodySource::Bytes(bytes) => (
+                ResponseBodySource::Bytes(bytes.clone()),
+                ResponseBodySource::Bytes(bytes),
+            ),
+            ResponseBodySource::Native(response) => {
+                let shared = Rc::new(RefCell::new(SharedResponse {
+                    response: Some(response),
+                    stream: None,
+                    buffer: Vec::new(),
+                    finished: false,
+                }));
+                (
+                    ResponseBodySource::Shared(shared.clone()),
+                    ResponseBodySource::Shared(shared),
+                )
+            }
+            ResponseBodySource::Shared(shared) => (
+                ResponseBodySource::Shared(shared.clone()),
+                ResponseBodySource::Shared(shared),
+            ),
+            ResponseBodySource::Consumed => {
+                (ResponseBodySource::Consumed, ResponseBodySource::Consumed)
+            }
+        };
+        let _ = std::mem::replace(&mut self.body_source, updated_body_source);
         Self {
-            body_source: match &self.body_source {
-                ResponseBodySource::Bytes(bytes) => ResponseBodySource::Bytes(bytes.clone()),
-                ResponseBodySource::Native(_) => ResponseBodySource::Consumed, // TODO
-                ResponseBodySource::Consumed => ResponseBodySource::Consumed,
-            },
+            body_source: cloned_body_source,
             headers: self.headers.clone(),
             status: self.status,
             is_opaque: self.is_opaque,
             redirected: self.redirected,
         }
     }
+}
+
+pub struct SharedResponse {
+    response: Option<golem_wasi_http::Response>,
+    stream: Option<Rc<RefCell<SharedStream>>>,
+    buffer: Vec<u8>,
+    finished: bool,
+}
+
+#[allow(dead_code)]
+pub struct SharedStream {
+    stream: golem_wasi_http::InputStream,
+    body: golem_wasi_http::IncomingBody,
+    response: golem_wasi_http::Response,
+    shared: Weak<RefCell<SharedResponse>>,
 }
 
 /// Represents the source of response body data
@@ -856,14 +1028,20 @@ pub enum ResponseBodySource {
     Bytes(Vec<u8>),
     /// Response has been consumed
     Consumed,
+    /// Shared response body with buffering
+    Shared(Rc<RefCell<SharedResponse>>),
 }
 
 pub enum BodySource {
-    Native(
-        golem_wasi_http::InputStream,
-        golem_wasi_http::IncomingBody,
-        golem_wasi_http::Response,
-    ),
+    Native {
+        stream: golem_wasi_http::InputStream,
+        body: golem_wasi_http::IncomingBody,
+        response: golem_wasi_http::Response,
+    },
+    SharedNative {
+        shared_stream: Rc<RefCell<SharedStream>>,
+        position: usize,
+    },
     Bytes(std::io::Cursor<Vec<u8>>),
 }
 
@@ -899,57 +1077,180 @@ impl ResponseBodyStream {
         &mut self,
         ctx: Ctx<'js>,
     ) -> List<(Option<TypedArray<'js, u8>>, Option<String>)> {
-        match &mut self.stream {
-            Some(BodySource::Native(stream, _body, _response)) => {
+        let (result, stream) = match self.stream.take() {
+            Some(BodySource::Native {
+                stream,
+                body,
+                response,
+            }) => {
                 const CHUNK_SIZE: u64 = 4096;
                 let pollable = stream.subscribe();
                 AsyncPollable::new(pollable).wait_for().await;
 
                 match stream.read(CHUNK_SIZE) {
-                    Ok(chunk) => {
-                        match TypedArray::new_copy(ctx.clone(), chunk) {
-                            Ok(js_array) => List((Some(js_array), None)),
-                            Err(_) => List((None, Some("Failed to create TypedArray from response body chunk".to_string())))
-                        }
-                    }
+                    Ok(chunk) => match TypedArray::new_copy(ctx.clone(), chunk) {
+                        Ok(js_array) => (
+                            List((Some(js_array), None)),
+                            Some(BodySource::Native {
+                                stream,
+                                body,
+                                response,
+                            }),
+                        ),
+                        Err(_) => (
+                            List((
+                                None,
+                                Some(
+                                    "Failed to create TypedArray from response body chunk"
+                                        .to_string(),
+                                ),
+                            )),
+                            Some(BodySource::Native {
+                                stream,
+                                body,
+                                response,
+                            }),
+                        ),
+                    },
                     Err(StreamError::Closed) => {
                         // No more data to read, close the stream
-                        self.stream = None; // Mark the response as consumed
-                        List((None, None))
+                        drop(stream);
+                        drop(body);
+                        drop(response);
+                        (List((None, None)), None)
                     }
-                    Err(StreamError::LastOperationFailed(err)) => List((
-                        None,
-                        Some(format!(
-                            "Failed to read response body: {}",
-                            err.to_debug_string()
+                    Err(StreamError::LastOperationFailed(err)) => (
+                        List((
+                            None,
+                            Some(format!(
+                                "Failed to read response body: {}",
+                                err.to_debug_string()
+                            )),
                         )),
-                    )),
+                        Some(BodySource::Native {
+                            stream,
+                            body,
+                            response,
+                        }),
+                    ),
                 }
             }
-            Some(BodySource::Bytes(cursor)) => {
-                let mut buf = [0u8; 4096];
-                match std::io::Read::read(cursor, &mut buf) {
-                    Ok(0) => {
-                        // EOF
-                        self.stream = None;
-                        List((None, None))
-                    }
-                    Ok(n) => {
-                        match TypedArray::new_copy(ctx.clone(), &buf[..n]) {
-                            Ok(js_array) => List((Some(js_array), None)),
-                            Err(_) => List((None, Some("Failed to create TypedArray from response body chunk".to_string())))
+            Some(BodySource::SharedNative {
+                shared_stream: rc_shared_stream,
+                position,
+            }) => {
+                let shared_stream = rc_shared_stream.borrow();
+                let shared = shared_stream
+                    .shared
+                    .upgrade()
+                    .expect("Shared stream has been dropped");
+                let mut shared = shared.borrow_mut();
+                let buffer_len = shared.buffer.len();
+
+                if position < buffer_len {
+                    let chunk = &shared.buffer[position..];
+                    let chunk_len = chunk.len();
+                    let chunk_array = TypedArray::new_copy(ctx.clone(), chunk).unwrap();
+                    (
+                        List((Some(chunk_array), None)),
+                        Some(BodySource::SharedNative {
+                            shared_stream: rc_shared_stream.clone(),
+                            position: position + chunk_len,
+                        }),
+                    )
+                } else {
+                    if shared.finished {
+                        (List((None, None)), None)
+                    } else {
+                        const CHUNK_SIZE: u64 = 4096;
+                        let pollable = shared_stream.stream.subscribe();
+                        AsyncPollable::new(pollable).wait_for().await;
+
+                        match shared_stream.stream.read(CHUNK_SIZE) {
+                            Ok(chunk) => {
+                                let chunk_len = chunk.len();
+                                shared.buffer.extend_from_slice(&chunk);
+
+                                match TypedArray::new_copy(ctx.clone(), chunk) {
+                                    Ok(js_array) => {
+                                        (List((Some(js_array), None)), Some(BodySource::SharedNative {
+                            shared_stream: rc_shared_stream.clone(),
+                            position: position + chunk_len,
+                        }))
+                                    },
+                                    Err(_) => (List((
+                                        None,
+                                        Some(
+                                            "Failed to create TypedArray from response body chunk"
+                                                .to_string(),
+                                        ),
+                                    )), Some(BodySource::SharedNative {
+                            shared_stream: rc_shared_stream.clone(),
+                            position: position + chunk_len,
+                        })),
+                                }
+                            }
+                            Err(StreamError::Closed) => {
+                                // No more data to read, close the stream
+                                shared.finished = true;
+                                (List((None, None)), None)
+                            }
+                            Err(StreamError::LastOperationFailed(err)) => (
+                                List((
+                                    None,
+                                    Some(format!(
+                                        "Failed to read response body: {}",
+                                        err.to_debug_string()
+                                    )),
+                                )),
+                                Some(BodySource::SharedNative {
+                                    shared_stream: rc_shared_stream.clone(),
+                                    position: position,
+                                }),
+                            ),
                         }
                     }
-                    Err(err) => {
-                        List((None, Some(format!("Failed to read response body: {}", err))))
-                    }
                 }
             }
-            None => List((
+            Some(BodySource::Bytes(mut cursor)) => {
+                let mut buf = [0u8; 4096];
+                match std::io::Read::read(&mut cursor, &mut buf) {
+                    Ok(0) => {
+                        // EOF
+                        (List((None, None)), None)
+                    }
+                    Ok(n) => match TypedArray::new_copy(ctx.clone(), &buf[..n]) {
+                        Ok(js_array) => (
+                            List((Some(js_array), None)),
+                            Some(BodySource::Bytes(cursor)),
+                        ),
+                        Err(_) => (
+                            List((
+                                None,
+                                Some(
+                                    "Failed to create TypedArray from response body chunk"
+                                        .to_string(),
+                                ),
+                            )),
+                            Some(BodySource::Bytes(cursor)),
+                        ),
+                    },
+                    Err(err) => (
+                        List((None, Some(format!("Failed to read response body: {}", err)))),
+                        Some(BodySource::Bytes(cursor)),
+                    ),
+                }
+            }
+            None => (
+                List((
+                    None,
+                    Some("Response body stream has already been consumed".to_string()),
+                )),
                 None,
-                Some("Response body stream has already been consumed".to_string()),
-            )),
-        }
+            ),
+        };
+        self.stream = stream;
+        result
     }
 }
 
@@ -980,18 +1281,25 @@ impl BodySink {
     }
 
     #[qjs(skip)]
-    pub fn take_receiver<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<UnboundedReceiver<Vec<u8>>> {
-        self.receiver
-            .take()
-            .ok_or_else(|| Exception::throw_message(&ctx, "BodySink receiver has already been taken"))
+    pub fn take_receiver<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+    ) -> rquickjs::Result<UnboundedReceiver<Vec<u8>>> {
+        self.receiver.take().ok_or_else(|| {
+            Exception::throw_message(&ctx, "BodySink receiver has already been taken")
+        })
     }
 
     #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn write<'js>(&self, ctx: Ctx<'js>, chunk: TypedArray<'_, u8>) -> rquickjs::Result<()> {
+    pub async fn write<'js>(
+        &self,
+        ctx: Ctx<'js>,
+        chunk: TypedArray<'_, u8>,
+    ) -> rquickjs::Result<()> {
         let mut sender = self.sender.borrow_mut();
-        let bytes = chunk
-            .as_bytes()
-            .ok_or_else(|| Exception::throw_message(&ctx, "the UInt8Array passed to the BodySink is detached"))?;
+        let bytes = chunk.as_bytes().ok_or_else(|| {
+            Exception::throw_message(&ctx, "the UInt8Array passed to the BodySink is detached")
+        })?;
         sender
             .send(bytes.to_vec())
             .await
