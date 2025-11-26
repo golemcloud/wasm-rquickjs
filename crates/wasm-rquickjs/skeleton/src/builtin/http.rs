@@ -15,10 +15,198 @@ use golem_wasi_http::{
 };
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
-use rquickjs::{ArrayBuffer, Ctx, Exception, JsLifetime, TypedArray};
+use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use wstd::runtime::AsyncPollable;
+
+/// Request mode - defines the cross-origin behavior
+#[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
+pub enum RequestMode {
+    /// Standard CORS mode
+    Cors,
+    /// No CORS restrictions, limited to GET/HEAD/POST
+    NoCors,
+    /// Same-origin only
+    SameOrigin,
+    /// Navigation mode (not supported in WASM context)
+    Navigate,
+}
+
+impl RequestMode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            RequestMode::Cors => "cors",
+            RequestMode::NoCors => "no-cors",
+            RequestMode::SameOrigin => "same-origin",
+            RequestMode::Navigate => "navigate",
+        }
+    }
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "cors" => Ok(RequestMode::Cors),
+            "no-cors" => Ok(RequestMode::NoCors),
+            "same-origin" => Ok(RequestMode::SameOrigin),
+            "navigate" => Ok(RequestMode::Navigate),
+            _ => Err(format!("Unknown request mode: {}", s)),
+        }
+    }
+}
+
+impl<'js> FromJs<'js> for RequestMode {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let s = String::from_js(ctx, value)?;
+        RequestMode::from_str(&s).map_err(|e| Exception::throw_message(ctx, &e))
+    }
+}
+
+impl<'js> IntoJs<'js> for RequestMode {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        self.as_str().into_js(ctx)
+    }
+}
+
+/// Referrer policy - controls how referer header is sent
+#[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
+pub enum ReferrerPolicy {
+    NoReferrer,
+    NoReferrerWhenDowngrade,
+    SameOrigin,
+    Origin,
+    OriginWhenCrossOrigin,
+    StrictOrigin,
+    StrictOriginWhenCrossOrigin,
+    UnsafeUrl,
+}
+
+impl ReferrerPolicy {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ReferrerPolicy::NoReferrer => "no-referrer",
+            ReferrerPolicy::NoReferrerWhenDowngrade => "no-referrer-when-downgrade",
+            ReferrerPolicy::SameOrigin => "same-origin",
+            ReferrerPolicy::Origin => "origin",
+            ReferrerPolicy::OriginWhenCrossOrigin => "origin-when-cross-origin",
+            ReferrerPolicy::StrictOrigin => "strict-origin",
+            ReferrerPolicy::StrictOriginWhenCrossOrigin => "strict-origin-when-cross-origin",
+            ReferrerPolicy::UnsafeUrl => "unsafe-url",
+        }
+    }
+
+    fn from_str(s: &str) -> Self {
+        match s {
+            "no-referrer" => ReferrerPolicy::NoReferrer,
+            "no-referrer-when-downgrade" => ReferrerPolicy::NoReferrerWhenDowngrade,
+            "same-origin" => ReferrerPolicy::SameOrigin,
+            "origin" => ReferrerPolicy::Origin,
+            "origin-when-cross-origin" => ReferrerPolicy::OriginWhenCrossOrigin,
+            "strict-origin" => ReferrerPolicy::StrictOrigin,
+            "strict-origin-when-cross-origin" | "" => ReferrerPolicy::StrictOriginWhenCrossOrigin,
+            "unsafe-url" => ReferrerPolicy::UnsafeUrl,
+            _ => ReferrerPolicy::StrictOriginWhenCrossOrigin, // Default
+        }
+    }
+}
+
+impl<'js> FromJs<'js> for ReferrerPolicy {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let s = String::from_js(ctx, value)?;
+        Ok(ReferrerPolicy::from_str(&s))
+    }
+}
+
+impl<'js> IntoJs<'js> for ReferrerPolicy {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        self.as_str().into_js(ctx)
+    }
+}
+
+/// Credentials mode - controls how cookies and auth headers are handled
+#[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
+pub enum CredentialsMode {
+    /// Never send credentials
+    Omit,
+    /// Send credentials only for same-origin requests
+    SameOrigin,
+    /// Always send credentials
+    Include,
+}
+
+impl CredentialsMode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            CredentialsMode::Omit => "omit",
+            CredentialsMode::SameOrigin => "same-origin",
+            CredentialsMode::Include => "include",
+        }
+    }
+
+    fn from_str(s: &str) -> Self {
+        match s {
+            "omit" => CredentialsMode::Omit,
+            "same-origin" => CredentialsMode::SameOrigin,
+            "include" => CredentialsMode::Include,
+            _ => CredentialsMode::Omit, // Default for safety
+        }
+    }
+}
+
+impl<'js> FromJs<'js> for CredentialsMode {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let s = String::from_js(ctx, value)?;
+        Ok(CredentialsMode::from_str(&s))
+    }
+}
+
+impl<'js> IntoJs<'js> for CredentialsMode {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        self.as_str().into_js(ctx)
+    }
+}
+
+/// Redirect policy - controls how redirects are handled
+#[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
+pub enum RedirectPolicy {
+    /// Follow redirects automatically
+    Follow,
+    /// Throw an error on redirect
+    Error,
+    /// Return the redirect response manually
+    Manual,
+}
+
+impl RedirectPolicy {
+    fn as_str(&self) -> &'static str {
+        match self {
+            RedirectPolicy::Follow => "follow",
+            RedirectPolicy::Error => "error",
+            RedirectPolicy::Manual => "manual",
+        }
+    }
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "follow" => Ok(RedirectPolicy::Follow),
+            "error" => Ok(RedirectPolicy::Error),
+            "manual" => Ok(RedirectPolicy::Manual),
+            _ => Err(format!("Unknown redirect policy: {}", s)),
+        }
+    }
+}
+
+impl<'js> FromJs<'js> for RedirectPolicy {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let s = String::from_js(ctx, value)?;
+        RedirectPolicy::from_str(&s).map_err(|e| Exception::throw_message(ctx, &e))
+    }
+}
+
+impl<'js> IntoJs<'js> for RedirectPolicy {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        self.as_str().into_js(ctx)
+    }
+}
 
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
@@ -31,11 +219,11 @@ pub struct HttpRequest {
     headers: HashMap<HeaderName, HeaderValue>,
     #[qjs(skip_trace)]
     version: Version,
-    mode: String,
+    mode: RequestMode,
     referer: String,
-    referrer_policy: String,
-    credentials: String,
-    redirect_policy: String,
+    referrer_policy: ReferrerPolicy,
+    credentials: CredentialsMode,
+    redirect_policy: RedirectPolicy,
     #[qjs(skip_trace)]
     body: Option<Body>,
     #[qjs(skip_trace)]
@@ -53,11 +241,11 @@ impl Default for HttpRequest {
             url: Url::parse("http://localhost").expect("failed to parse default URL"),
             headers: HashMap::new(),
             version: Version::HTTP_11,
-            mode: "cors".to_string(),
+            mode: RequestMode::Cors,
             referer: "about:client".to_string(),
-            referrer_policy: "strict-origin-when-cross-origin".to_string(),
-            credentials: "same-origin".to_string(),
-            redirect_policy: "follow".to_string(),
+            referrer_policy: ReferrerPolicy::StrictOriginWhenCrossOrigin,
+            credentials: CredentialsMode::SameOrigin,
+            redirect_policy: RedirectPolicy::Follow,
             body: None,
             body_bytes: None,
             execution: None,
@@ -74,11 +262,11 @@ impl HttpRequest {
         method: String,
         headers: HashMap<String, String>,
         version: String,
-        mode: String,
+        mode: RequestMode,
         referer: String,
-        referrer_policy: String,
-        credentials: String,
-        redirect_policy: String,
+        referrer_policy: ReferrerPolicy,
+        credentials: CredentialsMode,
+        redirect_policy: RedirectPolicy,
     ) -> Self {
         let url: Url = url.parse().expect("failed to parse url");
         let method: Method = method.parse().expect("failed to parse method");
@@ -148,8 +336,8 @@ impl HttpRequest {
     }
 
     #[qjs(get)]
-    pub fn mode(&self) -> String {
-        self.mode.clone()
+    pub fn mode(&self) -> RequestMode {
+        self.mode
     }
 
     #[qjs(get)]
@@ -158,13 +346,13 @@ impl HttpRequest {
     }
 
     #[qjs(get, rename = "referrerPolicy")]
-    pub fn referrer_policy(&self) -> String {
-        self.referrer_policy.clone()
+    pub fn referrer_policy(&self) -> ReferrerPolicy {
+        self.referrer_policy
     }
 
     #[qjs(get)]
-    pub fn credentials(&self) -> String {
-        self.credentials.clone()
+    pub fn credentials(&self) -> CredentialsMode {
+        self.credentials
     }
 
     #[qjs(get)]
@@ -173,8 +361,8 @@ impl HttpRequest {
     }
 
     #[qjs(get)]
-    pub fn redirect(&self) -> String {
-        self.redirect_policy.clone()
+    pub fn redirect(&self) -> RedirectPolicy {
+        self.redirect_policy
     }
 
     pub fn init_send(&mut self) {
@@ -190,11 +378,11 @@ impl HttpRequest {
         }
 
         // Apply credentials filtering based on credentials mode
-        apply_credentials_filtering(request.headers_mut(), &self.credentials, &self.url);
+        apply_credentials_filtering(request.headers_mut(), self.credentials, &self.url);
 
         // Apply referrer policy and set Referer header if appropriate
         if let Some(referer_header_value) =
-            apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
+            apply_referrer_policy(self.referrer_policy, &self.referer, &self.url)
         {
             let referer_header = HeaderValue::from_str(&referer_header_value)
                 .expect("failed to parse referer value");
@@ -246,7 +434,7 @@ impl HttpRequest {
 
     pub async fn simple_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
         // Validate mode constraints
-        if self.mode == "no-cors" {
+        if self.mode == RequestMode::NoCors {
             let method_str = self.method.to_string().to_uppercase();
             if !matches!(method_str.as_str(), "GET" | "HEAD" | "POST") {
                 return Err(Exception::throw_message(
@@ -254,15 +442,15 @@ impl HttpRequest {
                     "no-cors mode only allows GET, HEAD, or POST methods",
                 ));
             }
-        } else if self.mode == "navigate" {
+        } else if self.mode == RequestMode::Navigate {
             return Err(Exception::throw_message(
                 &ctx,
                 "navigate mode is not supported in WASM context",
             ));
-        } else if !matches!(self.mode.as_str(), "cors" | "same-origin") {
+        } else if !matches!(self.mode, RequestMode::Cors | RequestMode::SameOrigin) {
             return Err(Exception::throw_message(
                 &ctx,
-                &format!("Unsupported request mode: {}", self.mode),
+                &format!("Unsupported request mode: {}", self.mode.as_str()),
             ));
         }
 
@@ -282,11 +470,11 @@ impl HttpRequest {
             }
 
             // Apply credentials filtering based on credentials mode
-            apply_credentials_filtering(request.headers_mut(), &self.credentials, &self.url);
+            apply_credentials_filtering(request.headers_mut(), self.credentials, &self.url);
 
             // Apply referrer policy and set Referer header if appropriate
             if let Some(referer_header_value) =
-                apply_referrer_policy(&self.referrer_policy, &self.referer, &self.url)
+                apply_referrer_policy(self.referrer_policy, &self.referer, &self.url)
             {
                 let referer_header = HeaderValue::from_str(&referer_header_value)
                     .expect("failed to parse referer value");
@@ -313,7 +501,7 @@ impl HttpRequest {
                 is_redirection && status_code != 304 && status_code != 305 && status_code != 306;
 
             // Check for redirect
-            if self.redirect_policy == "follow" && is_supported_redirection {
+            if self.redirect_policy == RedirectPolicy::Follow && is_supported_redirection {
                 if current_redirects >= max_redirects {
                     return Err(Exception::throw_message(
                         &ctx,
@@ -356,20 +544,20 @@ impl HttpRequest {
                         }
                     }
                 }
-            } else if self.redirect_policy == "error" && is_supported_redirection {
+            } else if self.redirect_policy == RedirectPolicy::Error && is_supported_redirection {
                 return Err(Exception::throw_message(&ctx, "Unexpected redirect"));
             }
 
             let mut http_response = HttpResponse::from_response(response);
             http_response.set_redirected(current_redirects > 0);
 
-            if self.redirect_policy == "manual" && is_supported_redirection {
+            if self.redirect_policy == RedirectPolicy::Manual && is_supported_redirection {
                 http_response.make_opaque();
                 return Ok(http_response);
             }
 
             // For no-cors mode, make the response opaque
-            if self.mode == "no-cors" {
+            if self.mode == RequestMode::NoCors {
                 http_response.make_opaque();
             }
 
@@ -682,9 +870,13 @@ impl BodySink {
 }
 
 /// Determines the referer value to send based on the policy, origin, and destination
-fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Option<String> {
+fn apply_referrer_policy(
+    policy: ReferrerPolicy,
+    referer: &str,
+    request_url: &Url,
+) -> Option<String> {
     // Policy: no-referrer - never send
-    if policy == "no-referrer" {
+    if policy == ReferrerPolicy::NoReferrer {
         return None;
     }
 
@@ -713,7 +905,7 @@ fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Opti
     // Apply policy rules
     match policy {
         // no-referrer-when-downgrade: send full, except HTTPS->HTTP
-        "no-referrer-when-downgrade" => {
+        ReferrerPolicy::NoReferrerWhenDowngrade => {
             if is_downgrade {
                 None
             } else {
@@ -721,9 +913,9 @@ fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Opti
             }
         }
         // origin: always send origin only
-        "origin" => Some(referer_origin),
+        ReferrerPolicy::Origin => Some(referer_origin),
         // origin-when-cross-origin: full for same-origin, origin for cross-origin
-        "origin-when-cross-origin" => {
+        ReferrerPolicy::OriginWhenCrossOrigin => {
             if is_same_origin {
                 Some(referer.to_string())
             } else {
@@ -731,7 +923,7 @@ fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Opti
             }
         }
         // same-origin: full for same-origin, none for cross-origin
-        "same-origin" => {
+        ReferrerPolicy::SameOrigin => {
             if is_same_origin {
                 Some(referer.to_string())
             } else {
@@ -739,7 +931,7 @@ fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Opti
             }
         }
         // strict-origin: origin only, none for HTTPS->HTTP
-        "strict-origin" => {
+        ReferrerPolicy::StrictOrigin => {
             if is_downgrade {
                 None
             } else {
@@ -747,7 +939,7 @@ fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Opti
             }
         }
         // strict-origin-when-cross-origin (default): full for same-origin, origin for cross-origin, none for HTTPS->HTTP
-        "strict-origin-when-cross-origin" | "" => {
+        ReferrerPolicy::StrictOriginWhenCrossOrigin => {
             if is_downgrade {
                 None
             } else if is_same_origin {
@@ -757,17 +949,9 @@ fn apply_referrer_policy(policy: &str, referer: &str, request_url: &Url) -> Opti
             }
         }
         // unsafe-url: always send full URL
-        "unsafe-url" => Some(referer.to_string()),
-        // Unknown policy defaults to strict-origin-when-cross-origin
-        _ => {
-            if is_downgrade {
-                None
-            } else if is_same_origin {
-                Some(referer.to_string())
-            } else {
-                Some(referer_origin)
-            }
-        }
+        ReferrerPolicy::UnsafeUrl => Some(referer.to_string()),
+        // no-referrer should already be handled above
+        ReferrerPolicy::NoReferrer => None,
     }
 }
 
@@ -804,29 +988,24 @@ fn is_https_to_http(from_url: &Url, to_url: &Url) -> bool {
 
 /// Applies credentials filtering based on the credentials mode and origin policy
 /// According to fetch spec:
-/// - "omit": Never send credentials
-/// - "same-origin": Send credentials only for same-origin requests
-/// - "include": Always send credentials
+/// - Omit: Never send credentials
+/// - SameOrigin: Send credentials only for same-origin requests
+/// - Include: Always send credentials
 fn apply_credentials_filtering(
     headers: &mut golem_wasi_http::header::HeaderMap,
-    credentials: &str,
+    credentials: CredentialsMode,
     _request_url: &Url,
 ) {
     match credentials {
-        "omit" => {
+        CredentialsMode::Omit => {
             // Remove Authorization and Cookie headers
             headers.remove(&HeaderName::from_bytes(b"authorization").expect("valid header name"));
             headers.remove(&HeaderName::from_bytes(b"cookie").expect("valid header name"));
         }
-        "same-origin" | "include" => {
+        CredentialsMode::SameOrigin | CredentialsMode::Include => {
             // Keep all headers as-is for these modes
             // In a full browser context, "same-origin" would only send credentials for same-origin,
             // but in WASM we don't have the referrer context to determine origin properly.
-        }
-        _ => {
-            // Unknown credentials mode, default to omit for safety
-            headers.remove(&HeaderName::from_bytes(b"authorization").expect("valid header name"));
-            headers.remove(&HeaderName::from_bytes(b"cookie").expect("valid header name"));
         }
     }
 }
