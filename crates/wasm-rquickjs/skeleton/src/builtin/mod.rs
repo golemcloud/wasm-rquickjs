@@ -19,6 +19,7 @@ mod http {
 mod eventemitter;
 mod ieee754;
 mod internal;
+mod path;
 mod process;
 mod stream;
 mod string_decoder;
@@ -56,6 +57,9 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/process_native")
             .with_module("node:process")
             .with_module("process")
+            .with_module("__wasm_rquickjs_builtin/path_native")
+            .with_module("node:path")
+            .with_module("path")
             .with_module("__wasm_rquickjs_builtin/url_native")
             .with_module("__wasm_rquickjs_builtin/url")
             .with_module("node:events")
@@ -99,6 +103,7 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
             )
+            .with_module("__wasm_rquickjs_builtin/path_native", path::js_native_module)
             .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto_native",
@@ -122,6 +127,8 @@ pub fn module_loader() -> (
             .with_module("fs", fs::FS_JS)
             .with_module("node:process", process::PROCESS_JS)
             .with_module("process", process::PROCESS_JS)
+            .with_module("node:path", path::PATH_JS)
+            .with_module("path", path::PATH_JS)
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module("node:events", eventemitter::EVENTEMITTER_JS)
             .with_module("events", eventemitter::EVENTEMITTER_JS)
