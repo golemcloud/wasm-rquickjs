@@ -6,6 +6,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use http::{StatusCode, header};
+use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
@@ -178,6 +179,35 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                 "/redirect-loop",
                 get(async move || {
                     (StatusCode::FOUND, [("Location", "/redirect-loop")]).into_response()
+                }),
+            )
+            .route(
+                "/form-response",
+                get(|| async {
+                    let boundary = "WebKitFormBoundary7MA4YWxkTrZu0gW";
+                    let body = formatdoc! {
+                    "--{boundary}
+                     Content-Disposition: form-data; name=\"username\"
+
+                     john_doe
+                     --{boundary}
+                     Content-Disposition: form-data; name=\"email\"
+
+                     john@example.com
+                     --{boundary}
+                     Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"
+                     Content-Type: text/plain
+
+                     Hello World
+                     --{boundary}--"};
+                    (
+                        [(
+                            "Content-Type",
+                            format!("multipart/form-data; boundary={}", boundary),
+                        )],
+                        body,
+                    )
+                        .into_response()
                 }),
             );
 

@@ -27,4 +27,5 @@ world fetch {
   export response-clone-streaming-body: func(port: u16);
   export response-clone-reuse-bodies: func(port: u16);
   export response-clone-headers: func(port: u16);
+  export response-form-data: func(port: u16);
   }

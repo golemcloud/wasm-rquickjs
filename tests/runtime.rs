@@ -1038,6 +1038,34 @@ async fn fetch_response_clone_headers(
 }
 
 #[test]
+async fn fetch_response_form_data(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-form-data",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("response-form-data test"));
+    assert!(output.contains("Response status: 200"));
+    assert!(output.contains("Response Content-Type: multipart/form-data"));
+    assert!(output.contains("username: john_doe"));
+    assert!(output.contains("email: john@example.com"));
+    assert!(output.contains("file: File(test.txt"));
+    assert!(output.contains("response-form-data test completed"));
+
+    Ok(())
+}
+
+#[test]
 async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, _) = invoke_and_capture_output(
         compiled.wasm_path(),

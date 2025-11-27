@@ -668,3 +668,25 @@ export async function responseCloneHeaders(port) {
         console.log("Clone headers error:", e.message);
     }
 }
+
+export async function responseFormData(port) {
+    console.log("response-form-data test");
+
+    const response = await fetch(`http://localhost:${port}/form-response`);
+    console.log(`Response status: ${response.status}`);
+    console.log(`Response Content-Type: ${response.headers.get('Content-Type')}`);
+
+    // Parse the form data from the response
+    const responseFormData = await response.formData();
+    console.log(`Parsed FormData entries:`);
+    for (const [name, value] of responseFormData.entries()) {
+        if (value instanceof File) {
+            const content = await value.text();
+            console.log(`  ${name}: File(${value.name}, size=${content.length}, type=${value.type})`);
+        } else {
+            console.log(`  ${name}: ${value}`);
+        }
+    }
+
+    console.log("response-form-data test completed");
+}

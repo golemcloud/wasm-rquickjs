@@ -350,7 +350,23 @@ export class Response {
         return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
     }
 
-    // TODO: formData()
+    async formData() {
+        const contentType = this.headers.get('Content-Type');
+        if (!contentType || !contentType.includes('multipart/form-data')) {
+            throw new TypeError('Response is not multipart/form-data');
+        }
+
+        const boundaryMatch = contentType.match(/boundary=([^;]+)/);
+        if (!boundaryMatch) {
+            throw new TypeError('Content-Type header missing boundary');
+        }
+
+        const boundary = boundaryMatch[1].replace(/"/g, '').trim();
+        const bodyBuffer = await this.arrayBuffer();
+        const bodyString = new TextDecoder().decode(bodyBuffer);
+
+        return parseMultipartFormData(bodyString, boundary);
+    }
 
     async arrayBuffer() {
         let result = await this.nativeResponse.arrayBuffer();
@@ -746,4 +762,77 @@ async function streamToBlob(stream) {
     }
 
     return new Blob(chunks);
+}
+
+function parseMultipartFormData(bodyString, boundary) {
+    const formData = new FormData();
+    const boundaryDelimiter = `--${boundary}`;
+    const parts = bodyString.split(boundaryDelimiter);
+
+    // Skip first empty part (before first boundary) and last part (after closing boundary)
+    for (let i = 1; i < parts.length - 1; i++) {
+        const part = parts[i];
+
+        // Remove leading \r\n
+        let cleanPart = part.startsWith('\r\n') ? part.slice(2) : part;
+        if (cleanPart.startsWith('\n')) {
+            cleanPart = cleanPart.slice(1);
+        }
+
+        // Find the double CRLF that separates headers from body
+        const headerEndIndex = cleanPart.indexOf('\r\n\r\n');
+        if (headerEndIndex === -1) {
+            // Try with just \n\n
+            const headerEndIndexLF = cleanPart.indexOf('\n\n');
+            if (headerEndIndexLF === -1) {
+                continue;
+            }
+            const headers = cleanPart.substring(0, headerEndIndexLF);
+            let body = cleanPart.substring(headerEndIndexLF + 2);
+            // Remove trailing \r\n or \n
+            if (body.endsWith('\r\n')) {
+                body = body.slice(0, -2);
+            } else if (body.endsWith('\n')) {
+                body = body.slice(0, -1);
+            }
+            addPartToFormData(formData, headers, body);
+        } else {
+            const headers = cleanPart.substring(0, headerEndIndex);
+            let body = cleanPart.substring(headerEndIndex + 4);
+            // Remove trailing \r\n
+            if (body.endsWith('\r\n')) {
+                body = body.slice(0, -2);
+            }
+            addPartToFormData(formData, headers, body);
+        }
+    }
+
+    return formData;
+}
+
+function addPartToFormData(formData, headers, body) {
+    // Parse Content-Disposition header
+    const dispositionMatch = headers.match(/Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]+)")?/i);
+    if (!dispositionMatch) {
+        return;
+    }
+
+    const fieldName = dispositionMatch[1];
+    const filename = dispositionMatch[2];
+
+    // Check if this is a file upload (has filename) or regular form field
+    if (filename) {
+        // This is a file - extract Content-Type if available
+        const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
+        const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
+
+        // Convert body string to Uint8Array for binary data
+        const bodyBytes = new TextEncoder().encode(body);
+        const blob = new Blob([bodyBytes], {type: contentType});
+        const file = new File([blob], filename, {type: contentType});
+        formData.append(fieldName, file);
+    } else {
+        // Regular form field - append as string
+        formData.append(fieldName, body);
+    }
 }
