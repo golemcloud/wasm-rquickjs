@@ -1,5 +1,15 @@
 # $schema: https://schema.golem.cloud/app/golem/1.2.4/golem.schema.json
 
+app: wasm-rquickjs-skeleton
+
+environments:
+  local:
+    server: local
+    componentPresets: debug
+  cloud:
+    server: cloud
+    componentPresets: release
+
 components:
   root:package:
     profiles:
