@@ -6,78 +6,114 @@ import {formDataToBlob} from '__wasm_rquickjs_builtin/http_form_data';
 // Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
 
 export async function fetch(resource, options = {}) {
-    let request;
+    let method;
+    let rawHeaders = {};
+    let version = options.version || 'HTTP/1.1';
+    let mode;
+    let referer;
+    let referrerPolicy;
+    let credentials;
+    let redirect;
     let body;
     let url;
 
     if (typeof resource === 'object' && resource instanceof Request) {
-        const method = resource.method.toUpperCase();
+        method = resource.method.toUpperCase();
         const headers = resource.headers;
         if (!headers.has('Accept')) {
             headers.set('Accept', '*/*');
         }
-        let rawHeaders = {};
         for (const [name, value] of headers.entries()) {
             rawHeaders[name] = value;
         }
-        let version = options.version || 'HTTP/1.1';
-        request = new httpNative.HttpRequest(
-            resource.url,
-            method,
-            rawHeaders,
-            version
-        )
+
+        mode = options.mode || resource.mode;
+        referer = options.referrer || resource.referrer;
+        referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
+        // let cache = options.cache || resource.cache; // cache not used in native yet
+        credentials = options.credentials || resource.credentials;
+        redirect = options.redirect || resource.redirect || 'follow';
+
+        if (resource._bodyUsed) {
+            throw new TypeError("Request body is already used");
+        }
         resource._bodyUsed = true;
         body = resource._body;
         url = resource.url;
     } else {
-        let method = options.method || 'GET'
-        method = method.toUpperCase();
-
-        let headers = new Headers(options.headers || {});
-
+        method = (options.method || 'GET').toUpperCase();
+        const headers = new Headers(options.headers || {});
         if (!headers.has('Accept')) {
             headers.set('Accept', '*/*');
         }
-
-        let rawHeaders = {};
         for (const [name, value] of headers.entries()) {
             rawHeaders[name] = value;
         }
 
-        let version = options.version || 'HTTP/1.1';
+        mode = options.mode || 'cors';
+        referer = options.referrer || 'about:client';
+        referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
+        // let cache = options.cache || 'default';
+        credentials = options.credentials || 'same-origin';
+        redirect = options.redirect || 'follow';
 
-        // TODO: options.mode
-        // TODO: options.referer
-        // TODO: options.credentials
-        // TODO: options.cache
-
-        request = new httpNative.HttpRequest(
-            resource,
-            method,
-            rawHeaders,
-            version
-        )
-
-        // TODO: DataView support
-        // TODO: URLSearchParams support
-
-        body = options.body || '';
+        body = options.body;
         url = resource;
     }
 
-    if (body instanceof ReadableStream) {
-        return await streamingRequest(request, url, body);
-    } else if (body instanceof FormData) {
-        const blob = formDataToBlob(body);
-        return await blobRequestBody(request, url, blob);
-    } else if (body instanceof Blob) {
-        return await blobRequestBody(request, url, body);
+    if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
+        let bodyCreator;
+        if (body instanceof ReadableStream) {
+            if (body.locked) throw new TypeError("ReadableStream is locked");
+            let used = false;
+            bodyCreator = () => {
+                if (used) throw new TypeError("Disturbed stream");
+                used = true;
+                return body;
+            };
+        } else if (body instanceof FormData) {
+            const blob = formDataToBlob(body);
+            // We update rawHeaders here to include Content-Type
+            if (blob.type && blob.type !== '') {
+                rawHeaders['content-type'] = blob.type;
+            }
+            bodyCreator = () => blob.stream();
+        } else if (body instanceof Blob) {
+            if (body.type && body.type !== '') {
+                rawHeaders['content-type'] = body.type;
+            }
+            bodyCreator = () => body.stream();
+        }
+
+        return await streamingRequest(
+            url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
+            bodyCreator
+        );
     } else {
-        if (body instanceof ArrayBuffer) {
+        // Simple request
+        const request = new httpNative.HttpRequest(
+            url,
+            method,
+            rawHeaders,
+            version,
+            mode,
+            referer,
+            referrerPolicy,
+            credentials,
+            redirect
+        );
+
+        if (!body) {
+            // no body
+        } else if (body instanceof ArrayBuffer) {
             request.arrayBufferBody(body);
+        } else if (body instanceof DataView) {
+            request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
         } else if (body instanceof Uint8Array) {
             request.uint8ArrayBody(body);
+        } else if (body instanceof URLSearchParams) {
+            request.addHeader('Content-Type', 'application/x-www-form-urlencoded');
+            request.stringBody(body.toString());
         } else if (typeof body === 'string' || body instanceof String) {
             request.stringBody(body);
         } else {
@@ -85,43 +121,132 @@ export async function fetch(resource, options = {}) {
         }
 
         const nativeResponse = await request.simpleSend();
-        return new Response(nativeResponse, url);
+        return new Response(nativeResponse, request.url, credentials);
     }
 }
 
 async function sendBody(bodyWriter, body) {
     const reader = body.getReader();
-    while (true) {
-        const {done, value} = await reader.read();
-        if (done) break;
-        await bodyWriter.writeRequestBodyChunk(value);
+    try {
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            await bodyWriter.writeRequestBodyChunk(value);
+        }
+    } finally {
+        // reader.releaseLock(); // Stream is consumed, no need to release lock usually
     }
     bodyWriter.finishBody();
 }
 
-async function streamingRequest(request, resource, body) {
-    request.initSend();
-    const bodyWriter = request.initRequestBody();
-    request.sendRequest();
+async function streamingRequest(
+    url, method, headers, version, mode, referer, referrerPolicy, credentials, redirect,
+    bodyCreator
+) {
+    let currentUrl = url;
+    let currentMethod = method;
+    let currentBodyCreator = bodyCreator;
+    let currentHeaders = {...headers};
 
-    const [nativeResponse, _] = await Promise.all([request.receiveResponse(), sendBody(bodyWriter, body)]);
+    const maxRedirects = 20;
+    let currentRedirects = 0;
 
-    return new Response(nativeResponse, resource);
-}
+    while (true) {
+        const request = new httpNative.HttpRequest(
+            currentUrl,
+            currentMethod,
+            currentHeaders,
+            version,
+            mode,
+            referer,
+            referrerPolicy,
+            credentials,
+            redirect
+        );
 
-async function blobRequestBody(request, resource, blob) {
-    const stream = blob.stream();
-    if (blob.type && blob.type !== '') {
-        request.addHeader('Content-Type', blob.type);
+        request.initSend();
+        const bodyWriter = request.initRequestBody();
+        request.sendRequest();
+
+        let bodyStream;
+        let bodyPromise;
+
+        if (currentBodyCreator && (currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
+            bodyStream = currentBodyCreator();
+            bodyPromise = sendBody(bodyWriter, bodyStream);
+        } else {
+            bodyWriter.finishBody();
+            bodyPromise = Promise.resolve();
+        }
+
+        const [nativeResponse, _] = await Promise.all([request.receiveResponse(), bodyPromise]);
+
+        const status = nativeResponse.status;
+        const isRedirectStatus = status >= 300 && status < 400 && // is redirect
+            status !== 304 && // NOT MODIFIED
+            status !== 305 && // USE PROXY
+            status !== 306; // SWITCH PROXY
+
+        // Redirect logic
+        if (redirect === 'follow' && isRedirectStatus) {
+            if (currentRedirects >= maxRedirects) {
+                throw new Error("Maximum number of redirects exceeded");
+            }
+
+            const location = nativeResponse.headers.find(h => h[0].toLowerCase() === 'location');
+            if (location) {
+                const locationUrl = location[1];
+                const newUrl = new URL(locationUrl, currentUrl).toString();
+
+                // Handle method changes
+                let newMethod = currentMethod;
+                let dropBody = false;
+
+                if (status === 303) { // SEE OTHER
+                    newMethod = 'GET';
+                    dropBody = true;
+                } else if ((status === 301 /* MOVED PERMANENTLY */ || status === 302 /* FOUND */) && currentMethod === 'POST') {
+                    newMethod = 'GET';
+                    dropBody = true;
+                }
+
+                if (dropBody) {
+                    currentBodyCreator = null;
+                    // Remove Content headers
+                    delete currentHeaders['content-type'];
+                    delete currentHeaders['content-length'];
+                    delete currentHeaders['transfer-encoding'];
+                }
+
+                currentUrl = newUrl;
+                currentMethod = newMethod;
+                currentRedirects++;
+                continue;
+            }
+        } else if (redirect === 'error' && isRedirectStatus) {
+            throw new Error("Unexpected redirect");
+        }
+
+        const response = new Response(nativeResponse, currentUrl, credentials);
+        if (currentRedirects > 0) {
+            response.nativeResponse.redirected = true;
+        }
+
+        if (redirect === 'manual' && isRedirectStatus) {
+            response.nativeResponse.makeOpaque();
+        }
+
+        return response;
     }
-    return await streamingRequest(request, resource, stream);
 }
 
 export class Response {
-    constructor(nativeResponse, url) {
+    constructor(nativeResponse, url, credentials, isError = false) {
         this.nativeResponse = nativeResponse;
         this.url = url;
         this.bodyUsed = false;
+        this._credentials = credentials || 'same-origin';
+        this._isError = isError;
     }
 
     get status() {
@@ -160,6 +285,10 @@ export class Response {
         const rawHeaders = this.nativeResponse.headers;
         let result = new Headers();
         for (const [name, value] of rawHeaders) {
+            // Filter out Set-Cookie headers when credentials is 'omit'
+            if (this._credentials === 'omit' && name.toLowerCase() === 'set-cookie') {
+                continue;
+            }
             result.set(name, value);
         }
         return result;
@@ -170,17 +299,74 @@ export class Response {
     }
 
     get redirected() {
-        return false; // TODO: support redirects
+        return this.nativeResponse.redirected;
     }
 
-    // TODO: prop type
+    get type() {
+        if (this._isError) {
+            return 'error';
+        } else if (this.nativeResponse.isOpaque) {
+            if (this.nativeResponse.redirected) {
+                return 'opaqueredirect';
+            } else {
+                return 'opaque';
+            }
+        } else {
+            return 'basic';
+        }
+    }
 
-    // TODO: static error()
-    // TODO: static redirect()
-    // TODO: static json()
+    static error() {
+        const nativeResponse = httpNative.HttpResponse.error();
+        return new Response(nativeResponse, 'about:blank', 'omit', true);
+    }
 
-    // TODO: clone()
-    // TODO: formData()
+    static redirect(url, status = 302) {
+        if (![301, 302, 303, 307, 308].includes(status)) {
+            throw new RangeError("Invalid redirect status code");
+        }
+        const nativeResponse = httpNative.HttpResponse.redirect(url, status);
+        return new Response(nativeResponse, url, 'omit');
+    }
+
+    static json(data, init = {}) {
+        const json = JSON.stringify(data);
+        const bytes = new TextEncoder().encode(json);
+        const nativeResponse = httpNative.HttpResponse.json(bytes.buffer, init.status || 200);
+        if (init.headers) {
+            const headers = new Headers(init.headers);
+            for (const [key, value] of headers.entries()) {
+                nativeResponse.addHeader(key, value);
+            }
+        }
+        return new Response(nativeResponse, 'about:blank', 'omit');
+    }
+
+    clone() {
+        if (this.bodyUsed) {
+            throw new TypeError('Response body is already consumed');
+        }
+
+        return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
+    }
+
+    async formData() {
+        const contentType = this.headers.get('Content-Type');
+        if (!contentType || !contentType.includes('multipart/form-data')) {
+            throw new TypeError('Response is not multipart/form-data');
+        }
+
+        const boundaryMatch = contentType.match(/boundary=([^;]+)/);
+        if (!boundaryMatch) {
+            throw new TypeError('Content-Type header missing boundary');
+        }
+
+        const boundary = boundaryMatch[1].replace(/"/g, '').trim();
+        const bodyBuffer = await this.arrayBuffer();
+        const bodyString = new TextDecoder().decode(bodyBuffer);
+
+        return parseMultipartFormData(bodyString, boundary);
+    }
 
     async arrayBuffer() {
         let result = await this.nativeResponse.arrayBuffer();
@@ -189,7 +375,7 @@ export class Response {
     }
 
     async blob() {
-        new Blob([await this.arrayBuffer()], {type: this.headers.get('Content-Type') || ''});
+        return new Blob([await this.arrayBuffer()], {type: this.headers.get('Content-Type') || ''});
     }
 
     async bytes() {
@@ -228,12 +414,12 @@ function normalizeValue(value) {
 
 // Build a destructive iterator for the value list
 function iteratorFor(items) {
-    var iterator = {
+    let iterator = {
         next: function () {
-            var value = items.shift()
+            const value = items.shift()
             return {done: value === undefined, value: value}
         }
-    }
+    };
 
     iterator[Symbol.iterator] = function () {
         return iterator
@@ -339,7 +525,9 @@ export class Request {
             this._url = input;
             this._headers = new Headers(options.headers || {});
             this._bodyUsed = false;
-            this._options = options;
+            this._options = {
+                ...options,
+            };
             this._body = options.body;
         }
     }
@@ -353,20 +541,24 @@ export class Request {
             return blob.stream();
         } else if (this._body instanceof Blob) {
             return this._body.stream();
+        } else if (this._body instanceof URLSearchParams) {
+            const blob = new Blob([this._body.toString()]);
+            return blob.stream();
+        } else if (this._body instanceof ArrayBuffer) {
+            const blob = new Blob([this._body]);
+            return blob.stream();
+        } else if (this._body instanceof DataView) {
+            const blob = new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
+            return blob.stream();
+        } else if (this._body instanceof Uint8Array) {
+            const blob = new Blob([this._body]);
+            return blob.stream();
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            const blob = new Blob([this._body]);
+            return blob.stream();
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                const blob = new Blob([this._body]);
-                return blob.stream();
-            } else if (this._body instanceof Uint8Array) {
-                const blob = new Blob([this._body]);
-                return blob.stream();
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                const blob = new Blob([this._body]);
-                return blob.stream();
-            } else {
-                console.warn('Unsupported body type');
-                return new Blob([]).stream();
-            }
+            console.warn('Unsupported body type');
+            return new Blob([]).stream();
         }
     }
 
@@ -443,17 +635,19 @@ export class Request {
             return blob.arrayBuffer();
         } else if (this._body instanceof Blob) {
             return this._body.arrayBuffer();
+        } else if (this._body instanceof URLSearchParams) {
+            return new TextEncoder().encode(this._body.toString()).buffer;
+        } else if (this._body instanceof ArrayBuffer) {
+            return this._body;
+        } else if (this._body instanceof DataView) {
+            return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
+        } else if (this._body instanceof Uint8Array) {
+            return this._body.buffer;
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            return new TextEncoder().encode(this._body).buffer;
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                return this._body;
-            } else if (this._body instanceof Uint8Array) {
-                return this._body.buffer;
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                new TextEncoder().encode(this._body).buffer;
-            } else {
-                console.warn('Unsupported body type');
-                return new ArrayBuffer(0);
-            }
+            console.warn('Unsupported body type');
+            return new ArrayBuffer(0);
         }
     }
 
@@ -466,17 +660,19 @@ export class Request {
             return blob;
         } else if (this._body instanceof Blob) {
             return this._body;
+        } else if (this._body instanceof URLSearchParams) {
+            return new Blob([this._body.toString()]);
+        } else if (this._body instanceof ArrayBuffer) {
+            return new Blob([this._body]);
+        } else if (this._body instanceof DataView) {
+            return new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
+        } else if (this._body instanceof Uint8Array) {
+            return new Blob([this._body]);
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            return new Blob([this._body]);
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                return new Blob([this._body]);
-            } else if (this._body instanceof Uint8Array) {
-                return new Blob([this._body]);
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                return new Blob([this._body]);
-            } else {
-                console.warn('Unsupported body type');
-                return new Blob([]);
-            }
+            console.warn('Unsupported body type');
+            return new Blob([]);
         }
     }
 
@@ -489,17 +685,19 @@ export class Request {
             return blob.bytes();
         } else if (this._body instanceof Blob) {
             return this._body.bytes();
+        } else if (this._body instanceof URLSearchParams) {
+            return new TextEncoder().encode(this._body.toString());
+        } else if (this._body instanceof ArrayBuffer) {
+            return new Uint8Array(this._body);
+        } else if (this._body instanceof DataView) {
+            return new Uint8Array(this._body.buffer, this._body.byteOffset, this._body.byteLength);
+        } else if (this._body instanceof Uint8Array) {
+            return this._body;
+        } else if (typeof this._body === 'string' || this._body instanceof String) {
+            return new TextEncoder().encode(this._body);
         } else {
-            if (this._body instanceof ArrayBuffer) {
-                return new Uint8Array(this._body);
-            } else if (this._body instanceof Uint8Array) {
-                return this._body;
-            } else if (typeof this._body === 'string' || this._body instanceof String) {
-                new TextEncoder().encode(this._body);
-            } else {
-                console.warn('Unsupported body type');
-                return new Uint8Array(0);
-            }
+            console.warn('Unsupported body type');
+            return new Uint8Array(0);
         }
     }
 
@@ -564,4 +762,77 @@ async function streamToBlob(stream) {
     }
 
     return new Blob(chunks);
+}
+
+function parseMultipartFormData(bodyString, boundary) {
+    const formData = new FormData();
+    const boundaryDelimiter = `--${boundary}`;
+    const parts = bodyString.split(boundaryDelimiter);
+
+    // Skip first empty part (before first boundary) and last part (after closing boundary)
+    for (let i = 1; i < parts.length - 1; i++) {
+        const part = parts[i];
+
+        // Remove leading \r\n
+        let cleanPart = part.startsWith('\r\n') ? part.slice(2) : part;
+        if (cleanPart.startsWith('\n')) {
+            cleanPart = cleanPart.slice(1);
+        }
+
+        // Find the double CRLF that separates headers from body
+        const headerEndIndex = cleanPart.indexOf('\r\n\r\n');
+        if (headerEndIndex === -1) {
+            // Try with just \n\n
+            const headerEndIndexLF = cleanPart.indexOf('\n\n');
+            if (headerEndIndexLF === -1) {
+                continue;
+            }
+            const headers = cleanPart.substring(0, headerEndIndexLF);
+            let body = cleanPart.substring(headerEndIndexLF + 2);
+            // Remove trailing \r\n or \n
+            if (body.endsWith('\r\n')) {
+                body = body.slice(0, -2);
+            } else if (body.endsWith('\n')) {
+                body = body.slice(0, -1);
+            }
+            addPartToFormData(formData, headers, body);
+        } else {
+            const headers = cleanPart.substring(0, headerEndIndex);
+            let body = cleanPart.substring(headerEndIndex + 4);
+            // Remove trailing \r\n
+            if (body.endsWith('\r\n')) {
+                body = body.slice(0, -2);
+            }
+            addPartToFormData(formData, headers, body);
+        }
+    }
+
+    return formData;
+}
+
+function addPartToFormData(formData, headers, body) {
+    // Parse Content-Disposition header
+    const dispositionMatch = headers.match(/Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]+)")?/i);
+    if (!dispositionMatch) {
+        return;
+    }
+
+    const fieldName = dispositionMatch[1];
+    const filename = dispositionMatch[2];
+
+    // Check if this is a file upload (has filename) or regular form field
+    if (filename) {
+        // This is a file - extract Content-Type if available
+        const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
+        const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
+
+        // Convert body string to Uint8Array for binary data
+        const bodyBytes = new TextEncoder().encode(body);
+        const blob = new Blob([bodyBytes], {type: contentType});
+        const file = new File([blob], filename, {type: contentType});
+        formData.append(fieldName, file);
+    } else {
+        // Regular form field - append as string
+        formData.append(fieldName, body);
+    }
 }

@@ -128,6 +128,12 @@ fn compiled_crypto() -> CompiledTest {
     CompiledTest::new(path, false).expect("Failed to compile crypto")
 }
 
+#[test_dep(tagged_as = "response_static")]
+fn compiled_response_static() -> CompiledTest {
+    let path = Utf8Path::new("examples/response-static");
+    CompiledTest::new(path, true).expect("Failed to compile response-static")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -424,11 +430,18 @@ async fn export_from_inner_package(
 }
 
 #[test]
-async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_json_and_get(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-json-and-get",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -445,11 +458,18 @@ async fn fetch_1(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_and_get_as_array_buffer(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-and-get-as-array-buffer",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     assert_eq!(
@@ -466,11 +486,18 @@ async fn fetch_2(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_streaming_response_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test3", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "streaming-response-body",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     let chunk_count = output
@@ -483,29 +510,15 @@ async fn fetch_3(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_4(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
-
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[Val::U16(port)]).await;
-    let _ = r?;
-
-    assert!(output.contains(&format!(
-        "Response from http://localhost:{port}/echo: 200 OK (ok=true)"
-    )));
-    assert!(output.contains("Body: [{\"id\":"));
-
-    Ok(())
-}
-
-#[test]
-async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_pipe_response_body_to_request(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
-        "test4-buffered",
+        "pipe-response-body-to-request",
         &[Val::U16(port)],
     )
     .await;
@@ -520,11 +533,105 @@ async fn fetch_4_buffered(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyh
 }
 
 #[test]
-async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_pipe_buffered_response_body_to_request(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "pipe-buffered-response-body-to-request",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/echo: 200 OK (ok=true)"
+    )));
+    assert!(output.contains("Body: [{\"id\":"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_redirects(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    // Test: Redirect follow
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "redirect-follow",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+    assert!(output.contains("Redirect followed successfully"));
+
+    // Test: Redirect manual
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "redirect-manual",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+    assert!(output.contains("Manual redirect handled correctly"));
+
+    // Test: Redirect error
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "redirect-error",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+    assert!(output.contains("Caught expected error for redirect: error"));
+
+    // Test: Redirect loop
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "redirect-loop",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+    assert!(output.contains("Caught expected error for loop"));
+
+    // Test: Redirect with body (307)
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-redirect",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+    assert!(output.contains("Status: 200"));
+    assert!(output.contains("Redirected: true"));
+    assert!(output.contains("Body: hello world"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_concurrent_post_and_get(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "concurrent-post-and-get",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     assert!(output.contains("200 '{\"id\":0,\""));
@@ -537,11 +644,18 @@ async fn fetch_5(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_6(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_with_slow_streaming_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test6", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-slow-streaming-body",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -555,8 +669,11 @@ async fn fetch_6(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test7", &[]).await;
+async fn fetch_blob_operations(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "blob-operations", &[]).await;
     let _ = r?;
 
     assert!(output.contains("Blob text: hello, world"));
@@ -569,10 +686,17 @@ async fn fetch_7(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_with_blob_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test8", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-blob-body",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -586,10 +710,17 @@ async fn fetch_8(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_9(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_post_form_data_with_files(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test9", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-form-data-with-files",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     assert!(output.contains(&format!(
@@ -601,11 +732,18 @@ async fn fetch_9(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resul
 }
 
 #[test]
-async fn fetch_10(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_with_request_object(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test10", &[Val::U16(port)]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-with-request-object",
+        &[Val::U16(port)],
+    )
+    .await;
     let _ = r?;
 
     println!("{output}");
@@ -619,6 +757,310 @@ async fn fetch_10(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Resu
     assert!(output.contains(
         "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
     ));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_post_with_data_view_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-data-view-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 11 (DataView)"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/todos: 201 Created (ok=true)\n"
+    )));
+    assert!(output.contains(
+        "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
+    ));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_post_with_url_search_params(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-url-search-params",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 12 (URLSearchParams)"));
+    assert!(output.contains("URLSearchParams toString: title=foo&body=bar&userId=1"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/form-echo: 200 OK (ok=true)"
+    )));
+    assert!(output.contains("\"body\":\"title=foo&body=bar&userId=1\""));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_request_with_url_search_params(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "request-with-url-search-params",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 13 (URLSearchParams in Request)"));
+    assert!(output.contains("Request body used: false"));
+    assert!(output.contains(&format!(
+        "Response from http://localhost:{port}/form-echo: 200 OK (ok=true)"
+    )));
+    assert!(output.contains("\"body\":\"name=John&email=john%40example.com\""));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_with_referrer(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-with-referrer",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 14 (referrer with fetch)"));
+    assert!(output.contains("Test 1 referer sent: ''"));
+    assert!(output.contains(&format!(
+        "Test 2 referer sent: 'http://localhost:{port}/source'"
+    )));
+    assert!(output.contains("Test 3 referer sent: ''"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_with_referrer_policy(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-with-referrer-policy",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 15 (referrerPolicy with fetch)"));
+    assert!(output.contains("Test 1 referer sent: ''"));
+    assert!(output.contains(&format!("Test 2 referer sent: 'http://localhost:{port}'")));
+    assert!(output.contains(&format!(
+        "Test 3 referer sent: 'http://localhost:{port}/source'"
+    )));
+    assert!(output.contains(&format!(
+        "Test 4 referer sent: 'http://localhost:{port}/source'"
+    )));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_with_credentials(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-with-credentials",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    assert!(output.contains("fetch test 16 (credentials option with fetch)"));
+    assert!(output.contains("Test 1: credentials 'omit'"));
+    // With "omit", credentials headers should NOT be sent
+    assert!(output.contains("Test 1 authorization: '', cookie: ''"));
+    // With "omit", Set-Cookie headers should be filtered from response
+    assert!(output.contains("Test 1 set-cookie: ''"));
+
+    assert!(output.contains("Test 2: credentials 'same-origin'"));
+    // With "same-origin", credentials headers SHOULD be sent for same-origin requests
+    assert!(
+        output.contains(
+            "Test 2 authorization: 'Bearer test-token', cookie: 'session=test-session-id'"
+        )
+    );
+    // With "same-origin", Set-Cookie headers should be preserved
+    assert!(output.contains("Test 2 set-cookie: 'test-cookie=test-value'"));
+
+    assert!(output.contains("Test 3: credentials 'include'"));
+    // With "include", credentials headers SHOULD always be sent
+    assert!(
+        output.contains(
+            "Test 3 authorization: 'Bearer test-token', cookie: 'session=test-session-id'"
+        )
+    );
+    // With "include", Set-Cookie headers should be preserved
+    assert!(output.contains("Test 3 set-cookie: 'test-cookie=test-value'"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_clone_basic(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-basic",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 22 (response clone - basic)"));
+    assert!(output.contains("Basic clone test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_clone_streaming_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-streaming-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 23 (response clone - streaming body)"));
+    assert!(output.contains("Original status: 200"));
+    assert!(output.contains("Cloned status: 200"));
+    assert!(output.contains("Streaming clone test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_clone_reuse_bodies(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-reuse-bodies",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 24 (response clone - reuse bodies)"));
+    assert!(output.contains("All clones have matching bodies"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_clone_headers(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-clone-headers",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 25 (response clone - headers preservation)"));
+    assert!(output.contains("Headers preserved in clone"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_form_data(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-form-data",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("response-form-data test"));
+    assert!(output.contains("Response status: 200"));
+    assert!(output.contains("Response Content-Type: multipart/form-data"));
+    assert!(output.contains("username: john_doe"));
+    assert!(output.contains("email: john@example.com"));
+    assert!(output.contains("file: File(test.txt"));
+    assert!(output.contains("response-form-data test completed"));
 
     Ok(())
 }
@@ -1233,6 +1675,342 @@ async fn web_crypto_random_u32(
             Ok(())
         }
         _ => Err(anyhow!("Expected list<u32> result")),
+    }
+}
+
+#[test]
+async fn response_static_error(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-error",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    // Response.error() should have status 500 (INTERNAL_SERVER_ERROR)
+    match result {
+        Some(Val::Record(vals)) => {
+            let status = vals
+                .iter()
+                .find(|(k, _)| k == "status")
+                .and_then(|(_, v)| match v {
+                    Val::U16(s) => Some(*s),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No status field found"))?;
+
+            assert_eq!(status, 500, "error() should have status 500");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
+    }
+}
+
+#[test]
+async fn response_static_redirect(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-redirect",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    // Response.redirect() should have status 301
+    match result {
+        Some(Val::Record(vals)) => {
+            let status = vals
+                .iter()
+                .find(|(k, _)| k == "status")
+                .and_then(|(_, v)| match v {
+                    Val::U16(s) => Some(*s),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No status field found"))?;
+
+            let location = vals
+                .iter()
+                .find(|(k, _)| k == "location")
+                .and_then(|(_, v)| match v {
+                    Val::Option(Some(val)) => match &**val {
+                        Val::String(s) => Some(s.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No location field found"))?;
+
+            assert_eq!(status, 301, "redirect(url, 301) should have status 301");
+            assert_eq!(location, "https://example.com/new-path");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
+    }
+}
+
+#[test]
+async fn response_static_redirect_default(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-redirect-default",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    // Response.redirect() should default to status 302
+    match result {
+        Some(Val::Record(vals)) => {
+            let status = vals
+                .iter()
+                .find(|(k, _)| k == "status")
+                .and_then(|(_, v)| match v {
+                    Val::U16(s) => Some(*s),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No status field found"))?;
+
+            assert_eq!(status, 302, "redirect() should default to status 302");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
+    }
+}
+
+#[test]
+async fn response_static_json(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-json",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::Record(vals)) => {
+            let status = vals
+                .iter()
+                .find(|(k, _)| k == "status")
+                .and_then(|(_, v)| match v {
+                    Val::U16(s) => Some(*s),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No status field found"))?;
+
+            let content_type = vals
+                .iter()
+                .find(|(k, _)| k == "content-type")
+                .and_then(|(_, v)| match v {
+                    Val::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No content-type field found"))?;
+
+            let text = vals
+                .iter()
+                .find(|(k, _)| k == "text")
+                .and_then(|(_, v)| match v {
+                    Val::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No text field found"))?;
+
+            assert_eq!(status, 200);
+            assert_eq!(content_type, "application/json");
+            assert!(text.contains("Hello, World!"));
+            assert!(text.contains("count"));
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
+    }
+}
+
+#[test]
+async fn response_static_json_custom_status(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-json-custom-status",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::Record(vals)) => {
+            let status = vals
+                .iter()
+                .find(|(k, _)| k == "status")
+                .and_then(|(_, v)| match v {
+                    Val::U16(s) => Some(*s),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No status field found"))?;
+
+            assert_eq!(
+                status, 404,
+                "json() with init.status should set that status"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
+    }
+}
+
+#[test]
+async fn response_static_json_with_headers(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-json-with-headers",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::Record(vals)) => {
+            let content_type = vals
+                .iter()
+                .find(|(k, _)| k == "content-type")
+                .and_then(|(_, v)| match v {
+                    Val::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No content-type field found"))?;
+
+            let custom_header =
+                vals.iter()
+                    .find(|(k, _)| k == "custom-header")
+                    .and_then(|(_, v)| match v {
+                        Val::Option(Some(val)) => match &**val {
+                            Val::String(s) => Some(s.clone()),
+                            _ => None,
+                        },
+                        _ => None,
+                    });
+
+            assert_eq!(content_type, "application/json");
+            assert_eq!(custom_header, Some("CustomValue".to_string()));
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
+    }
+}
+
+#[test]
+async fn response_static_redirect_invalid_status(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-redirect-invalid-status",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::Record(vals)) => {
+            let success = vals
+                .iter()
+                .find(|(k, _)| k == "success")
+                .and_then(|(_, v)| match v {
+                    Val::Bool(b) => Some(*b),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No success field found"))?;
+
+            let error = vals
+                .iter()
+                .find(|(k, _)| k == "error")
+                .and_then(|(_, v)| match v {
+                    Val::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No error field found"))?;
+
+            assert!(
+                success,
+                "Should have caught the error. Error message: {}",
+                error
+            );
+            assert!(
+                error.contains("RangeError"),
+                "Should throw RangeError, got: {}",
+                error
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
+    }
+}
+
+#[test]
+async fn response_static_json_string(
+    #[tagged_as("response_static")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("example:response-static/response-exports"),
+        "test-response-json-string",
+        &[],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::Record(vals)) => {
+            let content_type = vals
+                .iter()
+                .find(|(k, _)| k == "content-type")
+                .and_then(|(_, v)| match v {
+                    Val::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No content-type field found"))?;
+
+            let text = vals
+                .iter()
+                .find(|(k, _)| k == "text")
+                .and_then(|(_, v)| match v {
+                    Val::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow!("No text field found"))?;
+
+            assert_eq!(content_type, "application/json");
+            assert!(text.contains("name"));
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected record result")),
     }
 }
 

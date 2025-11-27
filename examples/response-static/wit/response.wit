@@ -1,0 +1,47 @@
+package example:response-static;
+
+interface response-exports {
+    record response-result {
+        status: u16,
+        status-text: string,
+        ok: bool,
+        type-field: string,
+        location: option<string>,
+    }
+
+    test-response-error: func() -> response-result;
+    test-response-redirect: func() -> response-result;
+    test-response-redirect-default: func() -> response-result;
+    
+    record response-json-result {
+        status: u16,
+        status-text: string,
+        content-type: string,
+        text: string,
+    }
+    
+    test-response-json: func() -> response-json-result;
+    test-response-json-custom-status: func() -> response-json-result;
+    test-response-json-string: func() -> response-json-result;
+
+    record response-json-headers-result {
+        status: u16,
+        status-text: string,
+        content-type: string,
+        text: string,
+        custom-header: option<string>,
+    }
+
+    test-response-json-with-headers: func() -> response-json-headers-result;
+
+    record redirect-invalid-result {
+        success: bool,
+        error: string,
+    }
+
+    test-response-redirect-invalid-status: func() -> redirect-invalid-result;
+}
+
+world response-static {
+    export response-exports;
+}

@@ -1,10 +1,12 @@
 use axum::body::Body;
 use axum::extract::{Multipart, Path};
+use axum::http::HeaderMap;
 use axum::response::{AppendHeaders, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
 use http::{StatusCode, header};
+use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
@@ -120,6 +122,93 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
 
                     Json(parts)
                 }),
+            )
+            .route(
+                "/form-echo",
+                post(async move |body: Bytes| {
+                    let body_str = String::from_utf8(body.to_vec()).unwrap_or_default();
+                    Json(serde_json::json!({
+                        "body": body_str,
+                        "type": "application/x-www-form-urlencoded"
+                    }))
+                }),
+            )
+            .route(
+                "/echo-referer",
+                post(async move |headers: HeaderMap| {
+                    let referer = headers
+                        .get("referer")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    Json(serde_json::json!({
+                        "referer": referer
+                    }))
+                }),
+            )
+            .route(
+                "/echo-credentials",
+                post(async move |headers: HeaderMap| {
+                    let authorization = headers
+                        .get("authorization")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    let cookie = headers
+                        .get("cookie")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    (
+                        AppendHeaders([(header::SET_COOKIE, "test-cookie=test-value")]),
+                        Json(serde_json::json!({
+                            "authorization": authorization,
+                            "cookie": cookie
+                        })),
+                    )
+                }),
+            )
+            .route(
+                "/redirect-to",
+                axum::routing::any(async move |query: axum::extract::Query<RedirectParams>| {
+                    let status = StatusCode::from_u16(query.status).unwrap_or(StatusCode::FOUND);
+                    (status, [("Location", query.url.clone())]).into_response()
+                }),
+            )
+            .route(
+                "/redirect-loop",
+                get(async move || {
+                    (StatusCode::FOUND, [("Location", "/redirect-loop")]).into_response()
+                }),
+            )
+            .route(
+                "/form-response",
+                get(|| async {
+                    let boundary = "WebKitFormBoundary7MA4YWxkTrZu0gW";
+                    let body = formatdoc! {
+                    "--{boundary}
+                     Content-Disposition: form-data; name=\"username\"
+
+                     john_doe
+                     --{boundary}
+                     Content-Disposition: form-data; name=\"email\"
+
+                     john@example.com
+                     --{boundary}
+                     Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"
+                     Content-Type: text/plain
+
+                     Hello World
+                     --{boundary}--"};
+                    (
+                        [(
+                            "Content-Type",
+                            format!("multipart/form-data; boundary={}", boundary),
+                        )],
+                        body,
+                    )
+                        .into_response()
+                }),
             );
 
         axum::serve(listener, router).await.unwrap();
@@ -144,6 +233,12 @@ struct NewTodo {
     user_id: u64,
     title: String,
     body: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RedirectParams {
+    url: String,
+    status: u16,
 }
 
 #[derive(Default)]
