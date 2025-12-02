@@ -12,7 +12,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn get_env() -> HashMap<String, String> {
-        std::env::vars().collect()
+        HashMap::from_iter(wasi::cli::environment::get_environment())
     }
 
     #[rquickjs::function]
