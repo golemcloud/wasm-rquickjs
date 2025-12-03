@@ -16,12 +16,6 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn get_env_var(key: String) -> Option<String> {
-        let map = get_env();
-        map.get(&key).cloned()
-    }
-
-    #[rquickjs::function]
     pub fn next_tick<'js>(ctx: Ctx<'js>, function: Function<'js>, args: Vec<Value<'js>>) {
         let mut js_args = Args::new(ctx, args.len());
         js_args
