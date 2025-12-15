@@ -302,11 +302,11 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
 
     let lines = output.lines().collect::<Vec<_>>();
     let (output, timer_output) = lines.split_at(lines.len() - 3);
-    let output = output.join("\n");
+    let output_str = output.join("\n");
     let timer_output = timer_output.join("\n");
 
     assert_eq!(
-        output,
+        output_str,
         formatdoc!(
             r#"
     default: 1
@@ -354,7 +354,17 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
      0        │ Tyrone     │
      1        │ Janet      │
      2        │ Maria      │
-    ========================"#,
+    ========================
+    --- Map Examples ---
+    Empty map: Map(0) {{}}
+    Simple map: Map(3) {{ 'name' => 'John', 'age' => 30, 'city' => 'New York' }}
+    Map with mixed keys: Map(3) {{ 'string' => 'value', 42 => 'number key', {{ key: 'obj' }} => 'object key' }}
+    Map with object values: Map(2) {{ 'user' => {{ name: 'Alice', age: 25 }}, 'config' => {{ debug: true, timeout: 5000 }} }}
+    Map with array values: Map(2) {{ 'colors' => [ 'red', 'green', 'blue' ], 'numbers' => [ 1, 2, 3, 4, 5 ] }}
+    --- Map in dir() ---
+    Map(3) {{ 'name' => 'John', 'age' => 30, 'city' => 'New York' }}
+    --- Map in inspect() ---
+    Map(2) {{ 'user' => {{ name: 'Alice', age: 25 }}, 'config' => {{ debug: true, timeout: 5000 }} }}"#,
             colored = "{ key: \u{1b}[32m'value'\u{1b}[39m, nested: { a: \u{1b}[33m1\u{1b}[39m, b: \u{1b}[33m2\u{1b}[39m } }"
         )
     );

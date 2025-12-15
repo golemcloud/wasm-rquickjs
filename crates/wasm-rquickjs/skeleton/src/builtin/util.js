@@ -227,7 +227,8 @@ function formatValue(ctx, value, recurseTimes) {
     }
 
     // Some type of object without properties can be shortcutted.
-    if (keys.length === 0) {
+    // But Maps need special handling since they don't have enumerable properties
+    if (keys.length === 0 && !isMap(value)) {
         if (isFunction(value)) {
             var name = value.name ? ': ' + value.name : '';
             return ctx.stylize('[Function' + name + ']', 'special');
@@ -238,12 +239,14 @@ function formatValue(ctx, value, recurseTimes) {
         if (isDate(value)) {
             return ctx.stylize(Date.prototype.toString.call(value), 'date');
         }
-        if (isMap(value)) {
-            return ctx.stylize('Map(0)', 'special');
-        }
         if (isError(value)) {
             return formatError(value);
         }
+    }
+    
+    // Handle empty Maps
+    if (isMap(value) && value.size === 0) {
+        return ctx.stylize('Map(0) {}', 'special');
     }
 
     var base = '', array = false, braces = ['{', '}'];
@@ -272,7 +275,8 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Make maps with properties first say the map size
     if (isMap(value)) {
-        base = ' Map(' + value.size + ')';
+        base = 'Map(' + value.size + ')';
+        braces = [' { ', ' }'];
     }
 
     // Make error with message first say the error
@@ -280,7 +284,7 @@ function formatValue(ctx, value, recurseTimes) {
         base = ' ' + formatError(value);
     }
 
-    if (keys.length === 0 && (!array || value.length == 0)) {
+    if (keys.length === 0 && (!array || value.length == 0) && !isMap(value)) {
         return braces[0] + base + braces[1];
     }
 
@@ -450,24 +454,35 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
 
 
 function reduceToSingleString(output, base, braces) {
-    var numLinesEst = 0;
-    var length = output.reduce(function(prev, cur) {
-        numLinesEst++;
-        if (cur.indexOf('\n') >= 0) numLinesEst++;
-        return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
-    }, 0);
+     var numLinesEst = 0;
+     var length = output.reduce(function(prev, cur) {
+         numLinesEst++;
+         if (cur.indexOf('\n') >= 0) numLinesEst++;
+         return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
+     }, 0);
 
-    if (length > 60) {
-        return braces[0] +
-            (base === '' ? '' : base + '\n ') +
-            ' ' +
-            output.join(',\n  ') +
-            ' ' +
-            braces[1];
-    }
+     // Special handling for Maps where base starts with 'Map('
+     var isMap = base && base.indexOf('Map(') === 0;
+     
+     if (length > 60) {
+         if (isMap) {
+             return base + ' { ' +
+                 output.join(', ') +
+                 ' }';
+         }
+         return braces[0] +
+             (base === '' ? '' : base + '\n ') +
+             ' ' +
+             output.join(',\n  ') +
+             ' ' +
+             braces[1];
+     }
 
-    return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
-}
+     if (isMap) {
+         return base + ' { ' + output.join(', ') + ' }';
+     }
+     return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
+ }
 
 export function isArray(ar) {
     return Array.isArray(ar);
