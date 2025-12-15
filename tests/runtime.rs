@@ -364,7 +364,20 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
     --- Map in dir() ---
     Map(3) {{ 'name' => 'John', 'age' => 30, 'city' => 'New York' }}
     --- Map in inspect() ---
-    Map(2) {{ 'user' => {{ name: 'Alice', age: 25 }}, 'config' => {{ debug: true, timeout: 5000 }} }}"#,
+    Map(2) {{ 'user' => {{ name: 'Alice', age: 25 }}, 'config' => {{ debug: true, timeout: 5000 }} }}
+    --- Set Examples ---
+    Empty set: Set(0) {{}}
+    Simple set: Set(3) {{ 'apple', 'banana', 'cherry' }}
+    Set with mixed types: Set(4) {{ 'string', 42, {{ key: 'obj' }}, [ 1, 2, 3 ] }}
+    Set with objects: Set(2) {{ {{ name: 'Alice', age: 25 }}, {{ name: 'Bob', age: 30 }} }}
+    --- Set in dir() ---
+    Set(3) {{ 'apple', 'banana', 'cherry' }}
+    --- Set in inspect() ---
+    Set(2) {{ {{ name: 'Alice', age: 25 }}, {{ name: 'Bob', age: 30 }} }}
+    --- WeakSet Examples ---
+    WeakSet: WeakSet {{ <items unknown> }}
+    --- WeakMap Examples ---
+    WeakMap: WeakMap {{ <items unknown> }}"#,
             colored = "{ key: \u{1b}[32m'value'\u{1b}[39m, nested: { a: \u{1b}[33m1\u{1b}[39m, b: \u{1b}[33m2\u{1b}[39m } }"
         )
     );

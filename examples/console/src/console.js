@@ -80,6 +80,54 @@ function runImpl() {
     console.log("--- Map in inspect() ---");
     console.log(util.inspect(nestedMap, { depth: 2 }));
     
+    // Set examples
+    console.log("--- Set Examples ---");
+    
+    const emptySet = new Set();
+    console.log("Empty set:", emptySet);
+    
+    const simpleSet = new Set();
+    simpleSet.add("apple");
+    simpleSet.add("banana");
+    simpleSet.add("cherry");
+    console.log("Simple set:", simpleSet);
+    
+    const mixedSet = new Set();
+    mixedSet.add("string");
+    mixedSet.add(42);
+    mixedSet.add({ key: "obj" });
+    mixedSet.add([1, 2, 3]);
+    console.log("Set with mixed types:", mixedSet);
+    
+    const nestedSet = new Set();
+    nestedSet.add({ name: "Alice", age: 25 });
+    nestedSet.add({ name: "Bob", age: 30 });
+    console.log("Set with objects:", nestedSet);
+    
+    console.log("--- Set in dir() ---");
+    console.dir(simpleSet, { colors: false });
+    
+    console.log("--- Set in inspect() ---");
+    console.log(util.inspect(nestedSet, { depth: 2 }));
+    
+    // WeakSet examples
+    console.log("--- WeakSet Examples ---");
+    const weakSet = new WeakSet();
+    const obj1 = { id: 1 };
+    const obj2 = { id: 2 };
+    weakSet.add(obj1);
+    weakSet.add(obj2);
+    console.log("WeakSet:", weakSet);
+    
+    // WeakMap examples
+    console.log("--- WeakMap Examples ---");
+    const weakMap = new WeakMap();
+    const key1 = { name: "Alice" };
+    const key2 = { name: "Bob" };
+    weakMap.set(key1, "value1");
+    weakMap.set(key2, "value2");
+    console.log("WeakMap:", weakMap);
+    
     console.time("time-test");
     setTimeout(() => {
         console.timeLog("time-test", "after 1 second");
