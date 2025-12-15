@@ -238,6 +238,9 @@ function formatValue(ctx, value, recurseTimes) {
         if (isDate(value)) {
             return ctx.stylize(Date.prototype.toString.call(value), 'date');
         }
+        if (isMap(value)) {
+            return ctx.stylize('Map(0)', 'special');
+        }
         if (isError(value)) {
             return formatError(value);
         }
@@ -267,6 +270,11 @@ function formatValue(ctx, value, recurseTimes) {
         base = ' ' + Date.prototype.toUTCString.call(value);
     }
 
+    // Make maps with properties first say the map size
+    if (isMap(value)) {
+        base = ' Map(' + value.size + ')';
+    }
+
     // Make error with message first say the error
     if (isError(value)) {
         base = ' ' + formatError(value);
@@ -289,6 +297,8 @@ function formatValue(ctx, value, recurseTimes) {
     var output;
     if (array) {
         output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
+    } else if (isMap(value)) {
+        output = formatMap(ctx, value, recurseTimes);
     } else {
         output = keys.map(function(key) {
             return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
@@ -326,23 +336,58 @@ function formatError(value) {
 
 
 function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
-    var output = [];
-    for (var i = 0, l = value.length; i < l; ++i) {
-        if (hasOwnProperty(value, String(i))) {
-            output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-                String(i), true));
-        } else {
-            output.push('');
-        }
-    }
-    keys.forEach(function(key) {
-        if (!key.match(/^\d+$/)) {
-            output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-                key, true));
-        }
-    });
-    return output;
-}
+     var output = [];
+     for (var i = 0, l = value.length; i < l; ++i) {
+         if (hasOwnProperty(value, String(i))) {
+             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+                 String(i), true));
+         } else {
+             output.push('');
+         }
+     }
+     keys.forEach(function(key) {
+         if (!key.match(/^\d+$/)) {
+             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+                 key, true));
+         }
+     });
+     return output;
+ }
+
+
+ function formatMap(ctx, value, recurseTimes) {
+     var output = [];
+     var entries = value.entries();
+     var entry;
+     while (!(entry = entries.next()).done) {
+         var key = entry.value[0];
+         var val = entry.value[1];
+         var keyStr, valStr;
+         
+         if (ctx.seen.indexOf(key) < 0) {
+             if (isNull(recurseTimes)) {
+                 keyStr = formatValue(ctx, key, null);
+             } else {
+                 keyStr = formatValue(ctx, key, recurseTimes - 1);
+             }
+         } else {
+             keyStr = ctx.stylize('[Circular]', 'special');
+         }
+         
+         if (ctx.seen.indexOf(val) < 0) {
+             if (isNull(recurseTimes)) {
+                 valStr = formatValue(ctx, val, null);
+             } else {
+                 valStr = formatValue(ctx, val, recurseTimes - 1);
+             }
+         } else {
+             valStr = ctx.stylize('[Circular]', 'special');
+         }
+         
+         output.push(keyStr + ' => ' + valStr);
+     }
+     return output;
+ }
 
 
 function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
@@ -464,13 +509,17 @@ export function isObject(arg) {
     return typeof arg === 'object' && arg !== null;
 }
 export function isDate(d) {
-    return isObject(d) && objectToString(d) === '[object Date]';
-}
+     return isObject(d) && objectToString(d) === '[object Date]';
+ }
 
-export function isError(e) {
-    return isObject(e) &&
-        (objectToString(e) === '[object Error]' || e instanceof Error);
-}
+ export function isMap(m) {
+     return isObject(m) && objectToString(m) === '[object Map]';
+ }
+
+ export function isError(e) {
+     return isObject(e) &&
+         (objectToString(e) === '[object Error]' || e instanceof Error);
+ }
 
 export function isFunction(arg) {
     return typeof arg === 'function';
@@ -640,27 +689,28 @@ export function callbackify(original) {
 }
 
 export default {
-    format,
-    deprecate,
-    debuglog,
-    inspect,
-    isArray,
-    isBoolean,
-    isNull,
-    isNullOrUndefined,
-    isNumber,
-    isString,
-    isSymbol,
-    isUndefined,
-    isRegExp,
-    isObject,
-    isDate,
-    isError,
-    isFunction,
-    isPrimitive,
-    isBuffer,
-    log,
-    _extend,
-    promisify,
-    callbackify
-}
+     format,
+     deprecate,
+     debuglog,
+     inspect,
+     isArray,
+     isBoolean,
+     isNull,
+     isNullOrUndefined,
+     isNumber,
+     isString,
+     isSymbol,
+     isUndefined,
+     isRegExp,
+     isObject,
+     isDate,
+     isMap,
+     isError,
+     isFunction,
+     isPrimitive,
+     isBuffer,
+     log,
+     _extend,
+     promisify,
+     callbackify
+ }
