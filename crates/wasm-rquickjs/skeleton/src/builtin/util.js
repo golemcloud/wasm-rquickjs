@@ -227,7 +227,8 @@ function formatValue(ctx, value, recurseTimes) {
     }
 
     // Some type of object without properties can be shortcutted.
-    if (keys.length === 0) {
+    // But Maps, Sets, WeakMaps, WeakSets need special handling since they don't have enumerable properties
+    if (keys.length === 0 && !isMap(value) && !isSet(value) && !isWeakMap(value) && !isWeakSet(value)) {
         if (isFunction(value)) {
             var name = value.name ? ': ' + value.name : '';
             return ctx.stylize('[Function' + name + ']', 'special');
@@ -241,6 +242,26 @@ function formatValue(ctx, value, recurseTimes) {
         if (isError(value)) {
             return formatError(value);
         }
+    }
+    
+    // Handle empty Maps
+    if (isMap(value) && value.size === 0) {
+        return ctx.stylize('Map(0) {}', 'special');
+    }
+    
+    // Handle empty Sets
+    if (isSet(value) && value.size === 0) {
+        return ctx.stylize('Set(0) {}', 'special');
+    }
+    
+    // Handle WeakSets
+    if (isWeakSet(value)) {
+        return ctx.stylize('WeakSet { <items unknown> }', 'special');
+    }
+    
+    // Handle WeakMaps
+    if (isWeakMap(value)) {
+        return ctx.stylize('WeakMap { <items unknown> }', 'special');
     }
 
     var base = '', array = false, braces = ['{', '}'];
@@ -267,12 +288,24 @@ function formatValue(ctx, value, recurseTimes) {
         base = ' ' + Date.prototype.toUTCString.call(value);
     }
 
+    // Make maps with properties first say the map size
+    if (isMap(value)) {
+        base = 'Map(' + value.size + ')';
+        braces = [' { ', ' }'];
+    }
+
+    // Make sets with properties first say the set size
+    if (isSet(value)) {
+        base = 'Set(' + value.size + ')';
+        braces = [' { ', ' }'];
+    }
+
     // Make error with message first say the error
     if (isError(value)) {
         base = ' ' + formatError(value);
     }
 
-    if (keys.length === 0 && (!array || value.length == 0)) {
+    if (keys.length === 0 && (!array || value.length == 0) && !isMap(value) && !isSet(value)) {
         return braces[0] + base + braces[1];
     }
 
@@ -289,6 +322,10 @@ function formatValue(ctx, value, recurseTimes) {
     var output;
     if (array) {
         output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
+    } else if (isMap(value)) {
+        output = formatMap(ctx, value, recurseTimes);
+    } else if (isSet(value)) {
+        output = formatSet(ctx, value, recurseTimes);
     } else {
         output = keys.map(function(key) {
             return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
@@ -326,23 +363,82 @@ function formatError(value) {
 
 
 function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
-    var output = [];
-    for (var i = 0, l = value.length; i < l; ++i) {
-        if (hasOwnProperty(value, String(i))) {
-            output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-                String(i), true));
-        } else {
-            output.push('');
-        }
-    }
-    keys.forEach(function(key) {
-        if (!key.match(/^\d+$/)) {
-            output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-                key, true));
-        }
-    });
-    return output;
-}
+     var output = [];
+     for (var i = 0, l = value.length; i < l; ++i) {
+         if (hasOwnProperty(value, String(i))) {
+             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+                 String(i), true));
+         } else {
+             output.push('');
+         }
+     }
+     keys.forEach(function(key) {
+         if (!key.match(/^\d+$/)) {
+             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+                 key, true));
+         }
+     });
+     return output;
+ }
+
+
+ function formatMap(ctx, value, recurseTimes) {
+     var output = [];
+     var entries = value.entries();
+     var entry;
+     while (!(entry = entries.next()).done) {
+         var key = entry.value[0];
+         var val = entry.value[1];
+         var keyStr, valStr;
+         
+         if (ctx.seen.indexOf(key) < 0) {
+             if (isNull(recurseTimes)) {
+                 keyStr = formatValue(ctx, key, null);
+             } else {
+                 keyStr = formatValue(ctx, key, recurseTimes - 1);
+             }
+         } else {
+             keyStr = ctx.stylize('[Circular]', 'special');
+         }
+         
+         if (ctx.seen.indexOf(val) < 0) {
+             if (isNull(recurseTimes)) {
+                 valStr = formatValue(ctx, val, null);
+             } else {
+                 valStr = formatValue(ctx, val, recurseTimes - 1);
+             }
+         } else {
+             valStr = ctx.stylize('[Circular]', 'special');
+         }
+         
+         output.push(keyStr + ' => ' + valStr);
+     }
+     return output;
+ }
+
+
+ function formatSet(ctx, value, recurseTimes) {
+     var output = [];
+     var values = value.values();
+     var item;
+     while (!(item = values.next()).done) {
+         var val = item.value;
+         var valStr;
+         
+         if (ctx.seen.indexOf(val) < 0) {
+             if (isNull(recurseTimes)) {
+                 valStr = formatValue(ctx, val, null);
+             } else {
+                 valStr = formatValue(ctx, val, recurseTimes - 1);
+             }
+         } else {
+             valStr = ctx.stylize('[Circular]', 'special');
+         }
+         
+         output.push(valStr);
+     }
+     return output;
+ }
 
 
 function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
@@ -405,24 +501,35 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
 
 
 function reduceToSingleString(output, base, braces) {
-    var numLinesEst = 0;
-    var length = output.reduce(function(prev, cur) {
-        numLinesEst++;
-        if (cur.indexOf('\n') >= 0) numLinesEst++;
-        return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
-    }, 0);
+     var numLinesEst = 0;
+     var length = output.reduce(function(prev, cur) {
+         numLinesEst++;
+         if (cur.indexOf('\n') >= 0) numLinesEst++;
+         return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
+     }, 0);
 
-    if (length > 60) {
-        return braces[0] +
-            (base === '' ? '' : base + '\n ') +
-            ' ' +
-            output.join(',\n  ') +
-            ' ' +
-            braces[1];
-    }
+     // Special handling for Maps and Sets where base starts with 'Map(' or 'Set('
+     var isMaporSet = base && (base.indexOf('Map(') === 0 || base.indexOf('Set(') === 0);
+     
+     if (length > 60) {
+         if (isMaporSet) {
+             return base + ' { ' +
+                 output.join(', ') +
+                 ' }';
+         }
+         return braces[0] +
+             (base === '' ? '' : base + '\n ') +
+             ' ' +
+             output.join(',\n  ') +
+             ' ' +
+             braces[1];
+     }
 
-    return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
-}
+     if (isMaporSet) {
+         return base + ' { ' + output.join(', ') + ' }';
+     }
+     return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
+ }
 
 export function isArray(ar) {
     return Array.isArray(ar);
@@ -464,13 +571,29 @@ export function isObject(arg) {
     return typeof arg === 'object' && arg !== null;
 }
 export function isDate(d) {
-    return isObject(d) && objectToString(d) === '[object Date]';
-}
+     return isObject(d) && objectToString(d) === '[object Date]';
+ }
 
-export function isError(e) {
-    return isObject(e) &&
-        (objectToString(e) === '[object Error]' || e instanceof Error);
-}
+ export function isMap(m) {
+     return isObject(m) && objectToString(m) === '[object Map]';
+ }
+
+ export function isSet(s) {
+     return isObject(s) && objectToString(s) === '[object Set]';
+ }
+
+ export function isWeakMap(wm) {
+     return isObject(wm) && objectToString(wm) === '[object WeakMap]';
+ }
+
+ export function isWeakSet(ws) {
+     return isObject(ws) && objectToString(ws) === '[object WeakSet]';
+ }
+
+ export function isError(e) {
+     return isObject(e) &&
+         (objectToString(e) === '[object Error]' || e instanceof Error);
+ }
 
 export function isFunction(arg) {
     return typeof arg === 'function';
@@ -640,27 +763,31 @@ export function callbackify(original) {
 }
 
 export default {
-    format,
-    deprecate,
-    debuglog,
-    inspect,
-    isArray,
-    isBoolean,
-    isNull,
-    isNullOrUndefined,
-    isNumber,
-    isString,
-    isSymbol,
-    isUndefined,
-    isRegExp,
-    isObject,
-    isDate,
-    isError,
-    isFunction,
-    isPrimitive,
-    isBuffer,
-    log,
-    _extend,
-    promisify,
-    callbackify
-}
+     format,
+     deprecate,
+     debuglog,
+     inspect,
+     isArray,
+     isBoolean,
+     isNull,
+     isNullOrUndefined,
+     isNumber,
+     isString,
+     isSymbol,
+     isUndefined,
+     isRegExp,
+     isObject,
+     isDate,
+     isMap,
+     isSet,
+     isWeakMap,
+     isWeakSet,
+     isError,
+     isFunction,
+     isPrimitive,
+     isBuffer,
+     log,
+     _extend,
+     promisify,
+     callbackify
+ }
