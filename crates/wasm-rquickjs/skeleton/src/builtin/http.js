@@ -934,6 +934,10 @@ export class XMLHttpRequest {
          // Timeout
          this.timeout = 0;
          this._timeoutId = null;
+
+         // Event listeners (for addEventListener/removeEventListener)
+         this._listeners = {};
+         this._aborted = false;
      }
 
      open(method, url, async = true, username = '', password = '') {
@@ -950,6 +954,7 @@ export class XMLHttpRequest {
          this._requestBody = null;
          this._responseHeaders = {};
          this._sent = false;
+         this._aborted = false;
 
          this._setReadyState(this.OPENED);
      }
@@ -994,14 +999,12 @@ export class XMLHttpRequest {
          if (this.timeout > 0) {
              this._timeoutId = setTimeout(() => {
                  this._timeoutId = null;
-                 if (this.readyState !== this.DONE) {
+                 if (this.readyState !== this.DONE && !this._aborted) {
+                     this._aborted = true;
                      this._abortController?.abort();
                      this._setReadyState(this.DONE);
                      this._dispatchEvent('timeout');
                      this._dispatchEvent('loadend');
-                     if (this.ontimeout) {
-                         this.ontimeout();
-                     }
                  }
              }, this.timeout);
          }
@@ -1053,6 +1056,9 @@ export class XMLHttpRequest {
 
              const response = await fetch(this._url, fetchOptions);
 
+             // If aborted, don't process response
+             if (this._aborted) return;
+
              // Clear timeout if request completed
              if (this._timeoutId) {
                  clearTimeout(this._timeoutId);
@@ -1098,11 +1104,9 @@ export class XMLHttpRequest {
              // Update readyState to DONE
              this._setReadyState(this.DONE);
 
-             // Dispatch load event
+             // Dispatch load and loadend events
              this._dispatchEvent('load');
-             if (this.onload) {
-                 this.onload();
-             }
+             this._dispatchEvent('loadend');
          } catch (error) {
              // Clear timeout on error
              if (this._timeoutId) {
@@ -1111,40 +1115,32 @@ export class XMLHttpRequest {
              }
 
              // Check if error is due to abort
-             if (error instanceof DOMException && error.name === 'AbortError') {
-                 this._setReadyState(this.DONE);
-                 this._dispatchEvent('abort');
-                 if (this.onabort) {
-                     this.onabort();
-                 }
+             if (this._aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+                 // Abort was already handled by abort() method
+                 return;
              } else {
                  this.status = 0;
                  this.statusText = '';
                  this._setReadyState(this.DONE);
                  this._dispatchEvent('error');
-                 if (this.onerror) {
-                     this.onerror();
-                 }
-             }
-         } finally {
-             // Always dispatch loadend
-             this._dispatchEvent('loadend');
-             if (this.onloadend) {
-                 this.onloadend();
+                 this._dispatchEvent('loadend');
              }
          }
      }
 
      abort() {
+         this._aborted = true;
          if (this._abortController) {
              this._abortController.abort();
          }
-         this._sent = false;
-         this._setReadyState(this.UNSENT);
-         this._dispatchEvent('abort');
-         if (this.onabort) {
-             this.onabort();
+         if (this._timeoutId) {
+             clearTimeout(this._timeoutId);
+             this._timeoutId = null;
          }
+         this._sent = false;
+         this._setReadyState(this.DONE);
+         this._dispatchEvent('abort');
+         this._dispatchEvent('loadend');
      }
 
      getResponseHeader(name) {
@@ -1188,14 +1184,60 @@ export class XMLHttpRequest {
          if (this.readyState !== state) {
              this.readyState = state;
              this._dispatchEvent('readystatechange');
-             if (this.onreadystatechange) {
-                 this.onreadystatechange();
-             }
          }
      }
 
      _dispatchEvent(eventType) {
-         // In a full implementation, this would dispatch proper Event objects
-         // For now, we just call the handlers directly
+         const evt = { type: eventType, target: this, currentTarget: this };
+
+         // Call property handler (e.g., onreadystatechange, onerror, etc.)
+         const propertyHandler = this['on' + eventType];
+         if (typeof propertyHandler === 'function') {
+             try {
+                 propertyHandler.call(this, evt);
+             } catch (e) {
+                 queueMicrotask(() => { throw e; });
+             }
+         }
+
+         // Call registered event listeners
+         const listeners = this._listeners[eventType];
+         if (listeners) {
+             // Copy to avoid mutation during iteration
+             const listenersCopy = [...listeners];
+             for (const { listener, once } of listenersCopy) {
+                 try {
+                     listener.call(this, evt);
+                 } catch (e) {
+                     queueMicrotask(() => { throw e; });
+                 }
+                 if (once) {
+                     this.removeEventListener(eventType, listener);
+                 }
+             }
+         }
+     }
+
+     addEventListener(type, listener, options = {}) {
+         if (typeof listener !== 'function') return;
+         if (!this._listeners[type]) {
+             this._listeners[type] = [];
+         }
+         this._listeners[type].push({
+             listener,
+             once: !!(options && options.once)
+         });
+     }
+
+     removeEventListener(type, listener) {
+         if (!this._listeners[type]) return;
+         this._listeners[type] = this._listeners[type].filter(l => l.listener !== listener);
+     }
+
+     dispatchEvent(event) {
+         if (event && event.type) {
+             this._dispatchEvent(event.type);
+         }
+         return true;
      }
  }

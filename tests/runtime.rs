@@ -2896,3 +2896,27 @@ async fn xhr_basic_auth(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::
 
     Ok(())
 }
+
+#[test]
+async fn xhr_status_is_number(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "status-is-number",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 13: status is number"));
+    assert!(output.contains("Status typeof: number"));
+    assert!(output.contains("Status is number: true"));
+    assert!(output.contains("Status === 200: true"));
+    assert!(output.contains("Status >= 200 && status < 300: true"));
+
+    Ok(())
+}

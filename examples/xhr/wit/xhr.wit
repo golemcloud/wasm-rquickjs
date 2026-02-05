@@ -1,0 +1,17 @@
+package quickjs:xhr;
+
+world xhr {
+  export simple-get: func(port: u16);
+  export simple-post: func(port: u16);
+  export set-request-headers: func(port: u16);
+  export get-response-headers: func(port: u16);
+  export response-types: func(port: u16);
+  export readystate-events: func(port: u16);
+  export error-handling: func(port: u16);
+  export abort-request: func(port: u16);
+  export timeout-handling: func(port: u16);
+  export request-with-basic-auth: func(port: u16);
+  export post-with-form-data: func(port: u16);
+  export post-with-json-body: func(port: u16);
+  export status-is-number: func(port: u16);
+}

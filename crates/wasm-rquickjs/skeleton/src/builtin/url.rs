@@ -6,7 +6,7 @@ use url::Url;
 pub mod native_module {
     use rquickjs::class::Trace;
     use rquickjs::prelude::*;
-    use rquickjs::{Ctx, Exception, JsLifetime};
+    use rquickjs::{Ctx, Exception, JsLifetime, Value};
     use url::Url;
 
     #[derive(JsLifetime, Trace)]
