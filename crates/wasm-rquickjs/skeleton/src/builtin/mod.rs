@@ -84,6 +84,7 @@ pub fn add_module_resolvers(
             .with_module("string_decoder")
             .with_module("__wasm_rquickjs_builtin/web_crypto_native")
             .with_module("__wasm_rquickjs_builtin/web_crypto")
+            .with_module("crypto")
             .with_module("__wasm_rquickjs_builtin/structured_clone"),
     )
 }
@@ -112,10 +113,7 @@ pub fn module_loader() -> (
                 encoding::js_native_module,
             )
             .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
-            .with_module(
-                "__wasm_rquickjs_builtin/os_native",
-                os::js_native_module,
-            )
+            .with_module("__wasm_rquickjs_builtin/os_native", os::js_native_module)
             .with_module(
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
@@ -130,7 +128,10 @@ pub fn module_loader() -> (
                 web_crypto::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
-            .with_module("__wasm_rquickjs_builtin/abort_controller", abort_controller::ABORT_CONTROLLER_JS)
+            .with_module(
+                "__wasm_rquickjs_builtin/abort_controller",
+                abort_controller::ABORT_CONTROLLER_JS,
+            )
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
             .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
             .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
@@ -170,6 +171,7 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/web_crypto",
                 web_crypto::WEB_CRYPTO_JS,
             )
+            .with_module("crypto", web_crypto::WEB_CRYPTO_JS)
             .with_module(
                 "__wasm_rquickjs_builtin/structured_clone",
                 structured_clone::STRUCTURED_CLONE_JS,
