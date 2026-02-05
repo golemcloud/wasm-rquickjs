@@ -2550,3 +2550,39 @@ async fn abort_controller_duplicate_listeners(#[tagged_as("abort_controller")] c
 
     Ok(())
 }
+
+#[test]
+async fn fetch_abort_already_aborted(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-fetch-abort-already-aborted",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Testing fetch with already-aborted signal"));
+    assert!(output.contains("Caught abort error"));
+    assert!(output.contains("test-fetch-abort-already-aborted passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_abort_during_request(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-fetch-abort-during-request",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Testing fetch with signal aborted during request"));
+    assert!(output.contains("Aborting fetch"));
+    assert!(output.contains("Caught abort error"));
+    assert!(output.contains("Result: aborted"));
+    assert!(output.contains("test-fetch-abort-during-request passed"));
+
+    Ok(())
+}

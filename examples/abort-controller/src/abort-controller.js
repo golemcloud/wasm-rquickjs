@@ -212,3 +212,42 @@ export function testDuplicateListeners() {
     console.log('Handler call count:', callCount);
     console.log('test-duplicate-listeners passed');
 }
+
+export async function testFetchAbortAlreadyAborted() {
+    console.log('Testing fetch with already-aborted signal');
+    const signal = AbortSignal.abort('Pre-aborted');
+    
+    try {
+        await fetch('http://example.com', { signal });
+        console.log('ERROR: fetch should have thrown');
+    } catch (e) {
+        console.log('Caught abort error:', e.message || e);
+        console.log('test-fetch-abort-already-aborted passed');
+    }
+}
+
+export async function testFetchAbortDuringRequest() {
+    console.log('Testing fetch with signal aborted during request');
+    const controller = new AbortController();
+    
+    // Start a fetch and abort it shortly after
+    const fetchPromise = fetch('http://example.com:12345/slow', { signal: controller.signal })
+        .then(r => {
+            console.log('ERROR: fetch should have been aborted');
+            return 'completed';
+        })
+        .catch(e => {
+            console.log('Caught abort error:', e.message || e);
+            return 'aborted';
+        });
+    
+    // Give fetch a moment to start, then abort
+    setTimeout(() => {
+        console.log('Aborting fetch');
+        controller.abort('User cancelled');
+    }, 10);
+    
+    const result = await fetchPromise;
+    console.log('Result:', result);
+    console.log('test-fetch-abort-during-request passed');
+}

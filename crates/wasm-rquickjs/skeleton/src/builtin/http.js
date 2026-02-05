@@ -1,5 +1,6 @@
 import * as httpNative from '__wasm_rquickjs_builtin/http_native'
 import {formDataToBlob} from '__wasm_rquickjs_builtin/http_form_data';
+import {DOMException} from '__wasm_rquickjs_builtin/abort_controller';
 
 // Partially based on the implementation in wasmedge-quickjs
 // Partially based on https://github.com/JakeChampion/fetch/blob/main/fetch.js
@@ -16,6 +17,7 @@ export async function fetch(resource, options = {}) {
     let redirect;
     let body;
     let url;
+    let signal;
 
     if (typeof resource === 'object' && resource instanceof Request) {
         method = resource.method.toUpperCase();
@@ -33,6 +35,7 @@ export async function fetch(resource, options = {}) {
         // let cache = options.cache || resource.cache; // cache not used in native yet
         credentials = options.credentials || resource.credentials;
         redirect = options.redirect || resource.redirect || 'follow';
+        signal = options.signal || resource.signal;
 
         if (resource._bodyUsed) {
             throw new TypeError("Request body is already used");
@@ -56,6 +59,7 @@ export async function fetch(resource, options = {}) {
         // let cache = options.cache || 'default';
         credentials = options.credentials || 'same-origin';
         redirect = options.redirect || 'follow';
+        signal = options.signal;
 
         body = options.body;
         // Convert URL objects to strings
@@ -66,6 +70,13 @@ export async function fetch(resource, options = {}) {
         }
     }
 
+    // Check if signal is already aborted
+    if (signal && signal.aborted) {
+        throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+    }
+
+    // Create the fetch promise
+    let fetchPromise;
     if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
         let bodyCreator;
         if (body instanceof ReadableStream) {
@@ -90,7 +101,7 @@ export async function fetch(resource, options = {}) {
             bodyCreator = () => body.stream();
         }
 
-        return await streamingRequest(
+        fetchPromise = streamingRequest(
             url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
             bodyCreator
         );
@@ -125,9 +136,36 @@ export async function fetch(resource, options = {}) {
             console.warn('Unsupported body type');
         }
 
-        const nativeResponse = await request.simpleSend();
-        return new Response(nativeResponse, request.url, credentials);
+        fetchPromise = (async () => {
+            const nativeResponse = await request.simpleSend();
+            return new Response(nativeResponse, request.url, credentials);
+        })();
     }
+
+    // If signal is provided, wrap the promise to support abort
+    if (signal) {
+        fetchPromise = abortableFetch(fetchPromise, signal);
+    }
+
+    return await fetchPromise;
+}
+
+function abortableFetch(fetchPromise, signal) {
+    // Create a race between the fetch and the abort signal
+    return Promise.race([
+        fetchPromise,
+        new Promise((_, reject) => {
+            // If signal is already aborted, this won't execute
+            if (signal.aborted) {
+                reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
+            } else {
+                // Listen for abort event
+                signal.addEventListener('abort', () => {
+                    reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
+                });
+            }
+        })
+    ]);
 }
 
 async function sendBody(bodyWriter, body) {

@@ -15,4 +15,6 @@ world abort-controller {
   export test-abort-idempotent: func();
   export test-abort-no-reason: func();
   export test-duplicate-listeners: func();
+  export test-fetch-abort-already-aborted: func();
+  export test-fetch-abort-during-request: func();
 }
