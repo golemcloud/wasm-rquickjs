@@ -92,3 +92,6 @@ pub mod native_module {
 
 // JS functions for the os implementation
 pub const OS_JS: &str = include_str!("os.js");
+
+// Re-export for aliases
+pub const REEXPORT_JS: &str = r#"export * from 'node:os'; export { default } from 'node:os';"#;

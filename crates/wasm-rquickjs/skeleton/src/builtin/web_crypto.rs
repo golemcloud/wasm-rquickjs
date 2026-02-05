@@ -82,6 +82,9 @@ fn randomize_typed_array<V>(array: TypedArray<V>) {
 // JS functions for the crypto implementation
 pub const WEB_CRYPTO_JS: &str = include_str!("web-crypto.js");
 
+// Re-export for aliases
+pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/web_crypto';"#;
+
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_web_crypto from '__wasm_rquickjs_builtin/web_crypto';

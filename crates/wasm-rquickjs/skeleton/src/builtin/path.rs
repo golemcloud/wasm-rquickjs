@@ -302,3 +302,6 @@ impl ParsedPath {
 
 // JS functions for the path implementation
 pub const PATH_JS: &str = include_str!("path.js");
+
+// Re-export for aliases
+pub const REEXPORT_JS: &str = r#"export * from 'node:path'; export { default } from 'node:path';"#;

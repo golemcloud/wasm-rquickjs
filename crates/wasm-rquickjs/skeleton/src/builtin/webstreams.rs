@@ -1,6 +1,9 @@
 // JS functions for the web streams implementation
 pub const WEBSTREAMS_JS: &str = include_str!("web-streams-polyfill-4.1.0.js");
 
+// Re-export for aliases
+pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/streams';"#;
+
 // JS code wiring the web streams module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_streams from '__wasm_rquickjs_builtin/streams';

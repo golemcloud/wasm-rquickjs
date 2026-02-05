@@ -132,3 +132,7 @@ pub mod native_module {
 pub const FS_JS: &str = include_str!("fs.js");
 
 pub const FS_PROMISES_JS: &str = include_str!("fs_promises.js");
+
+// Re-exports for aliases
+pub const REEXPORT_JS: &str = r#"export * from 'node:fs'; export { default } from 'node:fs';"#;
+pub const REEXPORT_PROMISES_JS: &str = r#"export * from 'node:fs/promises'; export { default } from 'node:fs/promises';"#;
