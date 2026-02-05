@@ -25,6 +25,7 @@ mod path;
 mod process;
 mod stream;
 mod string_decoder;
+mod structured_clone;
 mod timeout;
 mod url;
 mod util;
@@ -77,7 +78,8 @@ pub fn add_module_resolvers(
             .with_module("node:string_decoder")
             .with_module("string_decoder")
             .with_module("__wasm_rquickjs_builtin/web_crypto_native")
-            .with_module("__wasm_rquickjs_builtin/web_crypto"),
+            .with_module("__wasm_rquickjs_builtin/web_crypto")
+            .with_module("__wasm_rquickjs_builtin/structured_clone"),
     )
 }
 
@@ -158,6 +160,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto",
                 web_crypto::WEB_CRYPTO_JS,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/structured_clone",
+                structured_clone::STRUCTURED_CLONE_JS,
             ),
         internal::module_loader(),
     )
@@ -175,6 +181,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", url::WIRE_JS).unwrap();
     writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
     writeln!(result, "{}", process::WIRE_JS).unwrap();
+    writeln!(result, "{}", structured_clone::WIRE_JS).unwrap();
 
     result
 }

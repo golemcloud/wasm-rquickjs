@@ -152,6 +152,12 @@ fn compiled_os() -> CompiledTest {
     CompiledTest::new(path, true).expect("Failed to compile os")
 }
 
+#[test_dep(tagged_as = "structured_clone")]
+fn compiled_structured_clone() -> CompiledTest {
+    let path = Utf8Path::new("examples/structured-clone");
+    CompiledTest::new(path, true).expect("Failed to compile structured-clone")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -1600,16 +1606,16 @@ async fn url_test3(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::
 
 #[test]
 async fn url_test4(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
-     let (r, output) =
-         invoke_and_capture_output(compiled_test.wasm_path(), None, "test4", &[]).await;
-     let _ = r?;
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test4", &[]).await;
+    let _ = r?;
 
-     println!("Output:\n{}", output);
+    println!("Output:\n{}", output);
 
-     assert_eq!(
-         output,
-         indoc! {
-             r#"https:
+    assert_eq!(
+        output,
+        indoc! {
+            r#"https:
             test
             pass
             example.com
@@ -1620,21 +1626,21 @@ async fn url_test4(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::
             URLUtils.searchParams
             https://test:pass@example.com:1234/path?query=URLUtils.searchParams&topic=api#fragment
             "#
-         }
-     );
-     Ok(())
+        }
+    );
+    Ok(())
 }
 
 #[test]
 async fn url_test5(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
-     let (r, output) =
-         invoke_and_capture_output(compiled_test.wasm_path(), None, "test5", &[]).await;
-     let r = r?;
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test5", &[]).await;
+    let r = r?;
 
-     println!("Output:\n{}", output);
+    println!("Output:\n{}", output);
 
-     assert_eq!(r, Some(Val::Bool(true)));
-     Ok(())
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
 }
 
 #[test]
@@ -2929,32 +2935,231 @@ async fn xhr_status_is_number(#[tagged_as("xhr")] compiled: &CompiledTest) -> an
 
 #[test]
 async fn os_eol_constant(#[tagged_as("os")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (result, _output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test",
-        &[],
-    )
-    .await;
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test", &[]).await;
     let result = result?;
 
     // The result should be a JSON string with os module test results
     if let Some(Val::String(json_str)) = result {
         let result_obj: serde_json::Value = serde_json::from_str(&json_str)?;
-        
+
         // Verify that EOL constant exists and is a string
-        assert!(result_obj["hasEOL"].as_bool().unwrap_or(false), "os.EOL should exist");
-        assert!(result_obj["canImportAsOs"].as_bool().unwrap_or(false), "os module should be importable");
-        
+        assert!(
+            result_obj["hasEOL"].as_bool().unwrap_or(false),
+            "os.EOL should exist"
+        );
+        assert!(
+            result_obj["canImportAsOs"].as_bool().unwrap_or(false),
+            "os module should be importable"
+        );
+
         // Verify key functions exist
-        assert!(result_obj["hasArch"].as_bool().unwrap_or(false), "os.arch should exist");
-        assert!(result_obj["hasPlatform"].as_bool().unwrap_or(false), "os.platform should exist");
-        assert!(result_obj["hasHostname"].as_bool().unwrap_or(false), "os.hostname should exist");
-        assert!(result_obj["hasUptime"].as_bool().unwrap_or(false), "os.uptime should exist");
-        assert!(result_obj["hasHomedir"].as_bool().unwrap_or(false), "os.homedir should exist");
-        assert!(result_obj["hasTmpdir"].as_bool().unwrap_or(false), "os.tmpdir should exist");
+        assert!(
+            result_obj["hasArch"].as_bool().unwrap_or(false),
+            "os.arch should exist"
+        );
+        assert!(
+            result_obj["hasPlatform"].as_bool().unwrap_or(false),
+            "os.platform should exist"
+        );
+        assert!(
+            result_obj["hasHostname"].as_bool().unwrap_or(false),
+            "os.hostname should exist"
+        );
+        assert!(
+            result_obj["hasUptime"].as_bool().unwrap_or(false),
+            "os.uptime should exist"
+        );
+        assert!(
+            result_obj["hasHomedir"].as_bool().unwrap_or(false),
+            "os.homedir should exist"
+        );
+        assert!(
+            result_obj["hasTmpdir"].as_bool().unwrap_or(false),
+            "os.tmpdir should exist"
+        );
     } else {
         anyhow::bail!("Expected string result from test function");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_primitives(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-primitives", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(s.contains("number: true"), "number cloning failed");
+        assert!(s.contains("string: true"), "string cloning failed");
+        assert!(s.contains("boolean: true"), "boolean cloning failed");
+        assert!(s.contains("null: true"), "null cloning failed");
+        assert!(s.contains("undefined: true"), "undefined cloning failed");
+        assert!(s.contains("bigint: true"), "bigint cloning failed");
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_objects(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-objects", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("object different ref: true"),
+            "object should be cloned by value"
+        );
+        assert!(s.contains("object.a: true"), "object.a should be cloned");
+        assert!(s.contains("object.b: true"), "object.b should be cloned");
+        assert!(
+            s.contains("nested different ref: true"),
+            "nested object should be cloned"
+        );
+        assert!(
+            s.contains("mutation isolated: true"),
+            "mutation should be isolated"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_arrays(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-arrays", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("array different ref: true"),
+            "array should be cloned by value"
+        );
+        assert!(
+            s.contains("array length: true"),
+            "array length should match"
+        );
+        assert!(
+            s.contains("typed array different ref: true"),
+            "typed array should be cloned"
+        );
+        assert!(
+            s.contains("typed array length: true"),
+            "typed array length should match"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_collections(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-collections", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("map different ref: true"),
+            "map should be cloned"
+        );
+        assert!(s.contains("map size: true"), "map size should match");
+        assert!(
+            s.contains("set different ref: true"),
+            "set should be cloned"
+        );
+        assert!(s.contains("set size: true"), "set size should match");
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_special_types(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-special-types", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("date different ref: true"),
+            "date should be cloned"
+        );
+        assert!(s.contains("date value: true"), "date value should match");
+        assert!(
+            s.contains("regex different ref: true"),
+            "regex should be cloned"
+        );
+        assert!(
+            s.contains("regex source: true"),
+            "regex source should match"
+        );
+        assert!(s.contains("regex flags: true"), "regex flags should match");
+        assert!(
+            s.contains("error different ref: true"),
+            "error should be cloned"
+        );
+        assert!(
+            s.contains("error message: true"),
+            "error message should match"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_circular_refs(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-circular-refs", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("circular clone different ref: true"),
+            "circular ref should be cloned"
+        );
+        assert!(
+            s.contains("circular self ref: true"),
+            "circular self ref should be preserved"
+        );
+        assert!(
+            s.contains("circular array different ref: true"),
+            "circular array should be cloned"
+        );
+        assert!(
+            s.contains("circular array self ref: true"),
+            "circular array self ref should be preserved"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
     }
 
     Ok(())

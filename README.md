@@ -318,6 +318,12 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `TextDecoderStream`
 - `TextEncoderStream`
 
+#### Structured Clone
+
+Implemented by https://github.com/ungap/structured-clone
+
+- `structuredClone`
+
 ### `node:util`
 - `format`
 - `deprecate`
@@ -1055,5 +1061,6 @@ The builtin JS modules are based on the work of several other projects:
 - [FormData](https://github.com/jimmywarting/FormData)
 - [ieee754](https://github.com/feross/ieee754)
 - [url-search-params-polyfill](https://github.com/jerrybendy/url-search-params-polyfill)
+- [structured-clone](https://github.com/ungap/structured-clone)
 - [wasmedge-quickjs](https://github.com/second-state/wasmedge-quickjs)
 - [web-streams-polyfill](https://github.com/MattiasBuelens/web-streams-polyfill)

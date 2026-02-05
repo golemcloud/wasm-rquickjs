@@ -1,0 +1,10 @@
+package quickjs:structured-clone;
+
+world structured-clone {
+  export test-primitives: func() -> string;
+  export test-objects: func() -> string;
+  export test-arrays: func() -> string;
+  export test-collections: func() -> string;
+  export test-special-types: func() -> string;
+  export test-circular-refs: func() -> string;
+}
