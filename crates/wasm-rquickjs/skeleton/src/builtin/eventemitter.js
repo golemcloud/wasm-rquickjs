@@ -335,4 +335,4 @@ EventEmitter.EventEmitter = EventEmitter;
 //
 export { EventEmitter };
 
-export default { EventEmitter };
+export default EventEmitter;
