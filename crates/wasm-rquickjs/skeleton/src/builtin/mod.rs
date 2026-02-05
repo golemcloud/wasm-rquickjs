@@ -204,6 +204,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
     writeln!(result, "{}", process::WIRE_JS).unwrap();
     writeln!(result, "{}", structured_clone::WIRE_JS).unwrap();
+    writeln!(result, "{}", module::WIRE_JS).unwrap();
 
     result
 }

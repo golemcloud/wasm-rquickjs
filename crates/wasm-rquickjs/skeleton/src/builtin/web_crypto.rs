@@ -1,6 +1,5 @@
 use rand::RngCore;
 use rquickjs::TypedArray;
-use sha2::{Digest, Sha256};
 use std::slice;
 
 // Native functions for the crypto implementation
