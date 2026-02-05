@@ -3,6 +3,7 @@ use std::fmt::Write;
 mod abort_controller;
 mod base64;
 mod buffer;
+mod child_process;
 mod console;
 mod encoding;
 mod fs;
@@ -54,6 +55,8 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/fs_native")
             .with_module("node:fs")
             .with_module("fs")
+            .with_module("node:fs/promises")
+            .with_module("fs/promises")
             .with_module("node:buffer")
             .with_module("buffer")
             .with_module("base64-js")
@@ -61,6 +64,8 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/os_native")
             .with_module("node:os")
             .with_module("os")
+            .with_module("node:child_process")
+            .with_module("child_process")
             .with_module("__wasm_rquickjs_builtin/process_native")
             .with_module("node:process")
             .with_module("process")
@@ -141,8 +146,12 @@ pub fn module_loader() -> (
             .with_module("buffer", buffer::BUFFER_JS)
             .with_module("node:fs", fs::FS_JS)
             .with_module("fs", fs::FS_JS)
+            .with_module("node:fs/promises", fs::FS_PROMISES_JS)
+            .with_module("fs/promises", fs::FS_PROMISES_JS)
             .with_module("node:os", os::OS_JS)
             .with_module("os", os::OS_JS)
+            .with_module("node:child_process", child_process::CHILD_PROCESS_JS)
+            .with_module("child_process", child_process::CHILD_PROCESS_JS)
             .with_module("node:process", process::PROCESS_JS)
             .with_module("process", process::PROCESS_JS)
             .with_module("node:path", path::PATH_JS)

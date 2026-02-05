@@ -96,7 +96,17 @@ pub mod native_module {
             Some("The typed array has been detached".to_string())
         }
     }
+
+    #[rquickjs::function]
+    pub fn unlink(path: String) -> Option<String> {
+        match std::fs::remove_file(Path::new(&path)) {
+            Ok(_) => None,
+            Err(err) => Some(format!("Failed to unlink {path:?}: {err}")),
+        }
+    }
 }
 
 // JS functions for the fs implementation
 pub const FS_JS: &str = include_str!("fs.js");
+
+pub const FS_PROMISES_JS: &str = include_str!("fs_promises.js");
