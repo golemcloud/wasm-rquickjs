@@ -59,6 +59,7 @@ pub const WIRE_JS: &str = r#"
         globalThis.setInterval = __wasm_rquickjs_timeout.setInterval;
         globalThis.clearTimeout = __wasm_rquickjs_timeout.clearTimeout;
         globalThis.clearInterval = __wasm_rquickjs_timeout.clearTimeout;
+        globalThis.clearImmediate = __wasm_rquickjs_timeout.clearTimeout;
     "#;
 
 async fn scheduled_task(

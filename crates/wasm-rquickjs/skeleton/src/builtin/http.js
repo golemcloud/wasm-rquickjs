@@ -58,7 +58,12 @@ export async function fetch(resource, options = {}) {
         redirect = options.redirect || 'follow';
 
         body = options.body;
-        url = resource;
+        // Convert URL objects to strings
+        if (typeof resource === 'object' && resource instanceof URL) {
+            url = resource.toString();
+        } else {
+            url = resource;
+        }
     }
 
     if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
@@ -507,7 +512,7 @@ export class Headers {
     }
 
     [Symbol.iterator]() {
-        this.entries()
+        return this.entries()
     }
 }
 

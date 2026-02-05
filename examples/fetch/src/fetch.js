@@ -690,3 +690,132 @@ export async function responseFormData(port) {
 
     console.log("response-form-data test completed");
 }
+
+export async function headersIterator(port) {
+    console.log("fetch test 26 (Headers iterator)");
+
+    const response = await fetch(`http://localhost:${port}/todos/0`);
+    
+    // Test Symbol.iterator on response headers
+    console.log("Testing Headers Symbol.iterator:");
+    let iteratorCount = 0;
+    for (const [name, value] of response.headers) {
+        console.log(`  Header: ${name} = ${value}`);
+        iteratorCount++;
+    }
+    console.log(`Total headers via Symbol.iterator: ${iteratorCount}`);
+
+    // Verify it matches entries()
+    let entriesCount = 0;
+    for (const [name, value] of response.headers.entries()) {
+        entriesCount++;
+    }
+    console.log(`Total headers via entries(): ${entriesCount}`);
+    
+    if (iteratorCount === entriesCount) {
+        console.log("Symbol.iterator test passed");
+    } else {
+        console.log("Symbol.iterator test FAILED");
+    }
+}
+
+export async function headersConstructorIterator(port) {
+    console.log("fetch test 27 (Headers constructor iterator)");
+
+    // Create Headers from object
+    const headers1 = new Headers({
+        'x-custom-1': 'value1',
+        'x-custom-2': 'value2',
+        'x-custom-3': 'value3'
+    });
+
+    // Test iteration via Symbol.iterator
+    console.log("Testing Headers constructor with for-of loop:");
+    let count1 = 0;
+    for (const [name, value] of headers1) {
+        console.log(`  Header: ${name} = ${value}`);
+        count1++;
+    }
+    console.log(`Total headers from for-of loop: ${count1}`);
+
+    // Test with entries()
+    let count2 = 0;
+    for (const [name, value] of headers1.entries()) {
+        count2++;
+    }
+    console.log(`Total headers from entries(): ${count2}`);
+
+    if (count1 === count2 && count1 === 3) {
+        console.log("Headers constructor iterator test passed");
+    } else {
+        console.log("Headers constructor iterator test FAILED");
+    }
+}
+
+export async function fetchWithUrlObject(port) {
+    console.log("fetch test 28 (URL object parameter)");
+    
+    // First POST to create a todo
+    await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "url_object_test",
+            body: "test body",
+            userId: 1
+        })
+    });
+    
+    const url = new URL(`http://localhost:${port}/todos/0`);
+    const response = await fetch(url);
+
+    console.log(`URL object test: status=${response.status}`);
+    assert_eq(response.status, 200);
+    
+    const data = await response.json();
+    console.log(`URL object fetch successful: ${JSON.stringify(data)}`);
+}
+
+export async function postWithUrlObject(port) {
+    console.log("fetch test 29 (POST with URL object)");
+    const url = new URL(`http://localhost:${port}/todos`);
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "url_object_test",
+            body: "testing URL object parameter",
+            userId: 1
+        })
+    });
+
+    console.log(`POST with URL object: status=${response.status}`);
+    assert_eq(response.status, 201);
+    
+    const data = await response.json();
+    console.log(`POST with URL object successful: title=${data.title}`);
+}
+
+export async function fetchUrlObjectWithQueryParams(port) {
+    console.log("fetch test 30 (URL object with query parameters)");
+    const url = new URL(`http://localhost:${port}/todos`);
+    url.searchParams.append('_limit', '1');
+    url.searchParams.append('_sort', 'id');
+    
+    const response = await fetch(url);
+    console.log(`URL with query params: status=${response.status}`);
+    assert_eq(response.status, 200);
+    
+    const data = await response.json();
+    console.log(`Fetched ${Array.isArray(data) ? data.length : 1} item(s) with URL query params`);
+}
+
+function assert_eq(a, b) {
+    if (a !== b) {
+        throw new Error(`Assertion failed: ${a} !== ${b}`);
+    }
+}

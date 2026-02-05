@@ -29,3 +29,8 @@ pub mod native_module {
 
 // JS functions for the process implementation
 pub const PROCESS_JS: &str = include_str!("process.js");
+
+pub const WIRE_JS: &str = r#"
+        import * as __wasm_rquickjs_process from 'node:process';
+        globalThis.process = __wasm_rquickjs_process;
+    "#;

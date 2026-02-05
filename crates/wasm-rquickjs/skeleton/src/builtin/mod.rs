@@ -103,7 +103,10 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
             )
-            .with_module("__wasm_rquickjs_builtin/path_native", path::js_native_module)
+            .with_module(
+                "__wasm_rquickjs_builtin/path_native",
+                path::js_native_module,
+            )
             .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto_native",
@@ -149,6 +152,7 @@ pub fn module_loader() -> (
 
 pub fn wire_builtins() -> String {
     let mut result = String::new();
+    writeln!(result, "{}", buffer::WIRE_JS).unwrap();
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();
     writeln!(result, "{}", http::WIRE_JS).unwrap();
@@ -156,6 +160,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
     writeln!(result, "{}", url::WIRE_JS).unwrap();
     writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
+    writeln!(result, "{}", process::WIRE_JS).unwrap();
 
     result
 }

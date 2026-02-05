@@ -28,4 +28,9 @@ world fetch {
   export response-clone-reuse-bodies: func(port: u16);
   export response-clone-headers: func(port: u16);
   export response-form-data: func(port: u16);
+  export headers-iterator: func(port: u16);
+  export headers-constructor-iterator: func(port: u16);
+  export fetch-with-url-object: func(port: u16);
+  export post-with-url-object: func(port: u16);
+  export fetch-url-object-with-query-params: func(port: u16);
   }

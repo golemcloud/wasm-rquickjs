@@ -2170,3 +2170,129 @@ async fn path_test_sep(#[tagged_as("path")] compiled_test: &CompiledTest) -> any
     assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn fetch_headers_iterator(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "headers-iterator",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 26 (Headers iterator)"));
+    assert!(output.contains("Testing Headers Symbol.iterator:"));
+    assert!(output.contains("Total headers via Symbol.iterator:"));
+    assert!(output.contains("Total headers via entries():"));
+    assert!(output.contains("Symbol.iterator test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_headers_constructor_iterator(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "headers-constructor-iterator",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 27 (Headers constructor iterator)"));
+    assert!(output.contains("Testing Headers constructor with for-of loop:"));
+    assert!(output.contains("x-custom-1 = value1"));
+    assert!(output.contains("x-custom-2 = value2"));
+    assert!(output.contains("x-custom-3 = value3"));
+    assert!(output.contains("Total headers from for-of loop: 3"));
+    assert!(output.contains("Total headers from entries(): 3"));
+    assert!(output.contains("Headers constructor iterator test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_with_url_object(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-with-url-object",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 28 (URL object parameter)"));
+    assert!(output.contains(&format!("URL object test: status=200")));
+    assert!(output.contains("URL object fetch successful:"));
+
+    Ok(())
+}
+
+#[test]
+async fn post_with_url_object(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-url-object",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 29 (POST with URL object)"));
+    assert!(output.contains("POST with URL object: status=201"));
+    assert!(output.contains("POST with URL object successful: title=url_object_test"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_url_object_with_query_params(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-url-object-with-query-params",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 30 (URL object with query parameters)"));
+    assert!(output.contains("URL with query params: status=200"));
+    assert!(output.contains("Fetched"));
+    assert!(output.contains("item(s) with URL query params"));
+
+    Ok(())
+}
