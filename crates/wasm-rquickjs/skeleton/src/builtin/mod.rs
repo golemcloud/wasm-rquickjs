@@ -1,5 +1,6 @@
 use std::fmt::Write;
 
+mod abort_controller;
 mod base64;
 mod buffer;
 mod console;
@@ -34,6 +35,7 @@ pub fn add_module_resolvers(
 ) -> rquickjs::loader::BuiltinResolver {
     internal::add_to_resolver(
         resolver
+            .with_module("__wasm_rquickjs_builtin/abort_controller")
             .with_module("__wasm_rquickjs_builtin/console_native")
             .with_module("__wasm_rquickjs_builtin/console")
             .with_module("__wasm_rquickjs_builtin/timeout_native")
@@ -113,6 +115,7 @@ pub fn module_loader() -> (
                 web_crypto::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
+            .with_module("__wasm_rquickjs_builtin/abort_controller", abort_controller::ABORT_CONTROLLER_JS)
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
             .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
             .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
@@ -152,6 +155,7 @@ pub fn module_loader() -> (
 
 pub fn wire_builtins() -> String {
     let mut result = String::new();
+    writeln!(result, "{}", abort_controller::WIRE_JS).unwrap();
     writeln!(result, "{}", buffer::WIRE_JS).unwrap();
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();

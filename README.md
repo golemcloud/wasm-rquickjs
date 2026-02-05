@@ -305,6 +305,11 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `clearInterval`
 - `setImmediate`
 
+#### Abort Controller
+
+- `AbortController`
+- `AbortSignal`
+- `DOMException`
 
 #### Encoding
 
@@ -1039,7 +1044,8 @@ There are a few important things to keep in mind when working on the project:
 ## Acknowledgements
 
 The builtin JS modules are based on the work of several other projects:
- 
+  
+- [abortcontroller-polyfill](https://github.com/mo/abortcontroller-polyfill)
 - [base64-js](https://github.com/beatgammit/base64-js)
 - [buffer](https://github.com/feross/buffer)
 - [consoleTable](https://github.com/ronnyKJ/consoleTable)

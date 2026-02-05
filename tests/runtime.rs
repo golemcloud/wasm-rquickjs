@@ -134,6 +134,12 @@ fn compiled_response_static() -> CompiledTest {
     CompiledTest::new(path, true).expect("Failed to compile response-static")
 }
 
+#[test_dep(tagged_as = "abort_controller")]
+fn compiled_abort_controller() -> CompiledTest {
+    let path = Utf8Path::new("examples/abort-controller");
+    CompiledTest::new(path, true).expect("Failed to compile abort-controller")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -2293,6 +2299,114 @@ async fn fetch_url_object_with_query_params(
     assert!(output.contains("URL with query params: status=200"));
     assert!(output.contains("Fetched"));
     assert!(output.contains("item(s) with URL query params"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_basic(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-basic",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Created AbortController"));
+    assert!(output.contains("Signal aborted (before abort): false"));
+    assert!(output.contains("Signal aborted (after abort): true"));
+    assert!(output.contains("test-abort-basic passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_signal_static(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-signal",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Created aborted signal"));
+    assert!(output.contains("Signal aborted: true"));
+    assert!(output.contains("Signal reason: Custom abort reason"));
+    assert!(output.contains("test-abort-signal passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_signal_timeout(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-timeout",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Created timeout signal (10ms)"));
+    assert!(output.contains("Signal aborted (immediately): false"));
+    assert!(output.contains("test-abort-timeout passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_event(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-event",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Added abort event listener"));
+    assert!(output.contains("Abort event fired"));
+    assert!(output.contains("Event fired: true"));
+    assert!(output.contains("test-abort-event passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_reason(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-reason",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Signal reason (before abort): undefined"));
+    assert!(output.contains("Signal reason message: Custom error"));
+    assert!(output.contains("Reasons match: true"));
+    assert!(output.contains("test-abort-reason passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_multiple_listeners(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-multiple-listeners",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Added 2 abort event listeners"));
+    assert!(output.contains("Listener 1 fired"));
+    assert!(output.contains("Listener 2 fired"));
+    assert!(output.contains("Both listeners called: true"));
+    assert!(output.contains("test-abort-multiple-listeners passed"));
 
     Ok(())
 }
