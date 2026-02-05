@@ -25,6 +25,7 @@ class AbortSignal {
         this.aborted = false;
         this.reason = undefined;
         this._listeners = [];
+        this._onabort = null;
     }
 
     static abort(reason) {
@@ -44,6 +45,20 @@ class AbortSignal {
             }
         }, milliseconds);
         return signal;
+    }
+
+    get onabort() {
+        return this._onabort;
+    }
+
+    set onabort(handler) {
+        this._onabort = handler;
+    }
+
+    throwIfAborted() {
+        if (this.aborted) {
+            throw this.reason;
+        }
     }
 
     addEventListener(type, listener, options) {
@@ -74,6 +89,15 @@ class AbortSignal {
 
     dispatchEvent(event) {
         event.target = this;
+        
+        // Call onabort handler if set
+        if (this._onabort && event.type === 'abort') {
+            try {
+                this._onabort.call(this, event);
+            } catch (e) {
+                // Ignore errors in onabort handler
+            }
+        }
         
         const listenersToCall = [...this._listeners];
         

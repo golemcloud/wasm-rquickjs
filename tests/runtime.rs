@@ -2410,3 +2410,143 @@ async fn abort_controller_multiple_listeners(#[tagged_as("abort_controller")] co
 
     Ok(())
 }
+
+#[test]
+async fn abort_controller_throw_if_aborted(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-throw-if-aborted",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("throwIfAborted: Caught error: Custom reason"));
+    assert!(output.contains("test-throw-if-aborted passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_throw_if_aborted_not_aborted(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-throw-if-aborted-not-aborted",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("throwIfAborted: Did not throw (correct)"));
+    assert!(output.contains("throwIfAborted when not aborted - threw: false"));
+    assert!(output.contains("test-throw-if-aborted-not-aborted passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_onabort_handler(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-onabort-handler",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Set onabort handler"));
+    assert!(output.contains("onabort handler fired"));
+    assert!(output.contains("onabort called: true"));
+    assert!(output.contains("test-onabort-handler passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_once_option(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-once-option",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Added listener with once: true"));
+    assert!(output.contains("Listener called"));
+    assert!(output.contains("After first abort, call count: 1"));
+    assert!(output.contains("test-once-option passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_remove_event_listener(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-remove-event-listener",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Added listener"));
+    assert!(output.contains("Removed listener"));
+    assert!(output.contains("After abort, listener called: false"));
+    assert!(output.contains("test-remove-event-listener passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_idempotent(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-idempotent",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("First abort"));
+    assert!(output.contains("Second abort"));
+    assert!(output.contains("Listener called: 1 times"));
+    assert!(output.contains("Reasons match (should stay same): true"));
+    assert!(output.contains("test-abort-idempotent passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_no_reason(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-no-reason",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Abort without reason - reason type: DOMException"));
+    assert!(output.contains("Abort without reason - reason name: AbortError"));
+    assert!(output.contains("test-abort-no-reason passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_duplicate_listeners(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-duplicate-listeners",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Added same handler twice"));
+    assert!(output.contains("Handler call count: 1"));
+    assert!(output.contains("test-duplicate-listeners passed"));
+
+    Ok(())
+}

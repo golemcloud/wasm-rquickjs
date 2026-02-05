@@ -86,3 +86,129 @@ export function testAbortMultipleListeners() {
     console.log('Both listeners called:', listener1Called && listener2Called);
     console.log('test-abort-multiple-listeners passed');
 }
+
+export function testThrowIfAborted() {
+    const controller = new AbortController();
+    
+    controller.abort('Custom reason');
+    
+    try {
+        controller.signal.throwIfAborted();
+        console.log('throwIfAborted: ERROR - should have thrown');
+    } catch (e) {
+        console.log('throwIfAborted: Caught error:', e);
+        console.log('test-throw-if-aborted passed');
+    }
+}
+
+export function testThrowIfAbortedNotAborted() {
+    const controller = new AbortController();
+    let threw = false;
+    
+    try {
+        controller.signal.throwIfAborted();
+        console.log('throwIfAborted: Did not throw (correct)');
+    } catch (e) {
+        threw = true;
+    }
+    
+    console.log('throwIfAborted when not aborted - threw:', threw);
+    console.log('test-throw-if-aborted-not-aborted passed');
+}
+
+export function testOnabortHandler() {
+    const controller = new AbortController();
+    let onabortCalled = false;
+    
+    controller.signal.onabort = () => {
+        console.log('onabort handler fired');
+        onabortCalled = true;
+    };
+    
+    console.log('Set onabort handler');
+    controller.abort();
+    console.log('onabort called:', onabortCalled);
+    console.log('test-onabort-handler passed');
+}
+
+export function testOnceOption() {
+    const controller = new AbortController();
+    let callCount = 0;
+    
+    controller.signal.addEventListener('abort', () => {
+        callCount++;
+        console.log('Listener called');
+    }, { once: true });
+    
+    console.log('Added listener with once: true');
+    controller.abort();
+    console.log('After first abort, call count:', callCount);
+    console.log('test-once-option passed');
+}
+
+export function testRemoveEventListener() {
+    const controller = new AbortController();
+    let listenerCalled = false;
+    
+    const handler = () => {
+        listenerCalled = true;
+    };
+    
+    controller.signal.addEventListener('abort', handler);
+    console.log('Added listener');
+    
+    controller.signal.removeEventListener('abort', handler);
+    console.log('Removed listener');
+    
+    controller.abort();
+    console.log('After abort, listener called:', listenerCalled);
+    console.log('test-remove-event-listener passed');
+}
+
+export function testAbortIdempotent() {
+    const controller = new AbortController();
+    let callCount = 0;
+    
+    controller.signal.addEventListener('abort', () => {
+        callCount++;
+    });
+    
+    console.log('First abort');
+    controller.abort('reason1');
+    const reason1 = controller.signal.reason;
+    
+    console.log('Second abort');
+    controller.abort('reason2');
+    const reason2 = controller.signal.reason;
+    
+    console.log('Listener called:', callCount, 'times');
+    console.log('Reasons match (should stay same):', reason1 === reason2);
+    console.log('test-abort-idempotent passed');
+}
+
+export function testAbortNoReason() {
+    const controller = new AbortController();
+    
+    controller.abort();
+    
+    console.log('Abort without reason - reason type:', controller.signal.reason?.constructor?.name);
+    console.log('Abort without reason - reason name:', controller.signal.reason?.name);
+    console.log('test-abort-no-reason passed');
+}
+
+export function testDuplicateListeners() {
+    const controller = new AbortController();
+    let callCount = 0;
+    
+    const handler = () => {
+        callCount++;
+    };
+    
+    controller.signal.addEventListener('abort', handler);
+    controller.signal.addEventListener('abort', handler);
+    console.log('Added same handler twice');
+    
+    controller.abort();
+    console.log('Handler call count:', callCount);
+    console.log('test-duplicate-listeners passed');
+}
