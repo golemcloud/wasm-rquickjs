@@ -1,0 +1,5 @@
+package quickjs:os;
+
+world os {
+  export test: func() -> string;
+}

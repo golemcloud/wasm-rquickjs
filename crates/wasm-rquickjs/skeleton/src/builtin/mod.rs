@@ -20,6 +20,7 @@ mod http {
 mod eventemitter;
 mod ieee754;
 mod internal;
+mod os;
 mod path;
 mod process;
 mod stream;
@@ -56,6 +57,9 @@ pub fn add_module_resolvers(
             .with_module("buffer")
             .with_module("base64-js")
             .with_module("ieee754")
+            .with_module("__wasm_rquickjs_builtin/os_native")
+            .with_module("node:os")
+            .with_module("os")
             .with_module("__wasm_rquickjs_builtin/process_native")
             .with_module("node:process")
             .with_module("process")
@@ -102,6 +106,10 @@ pub fn module_loader() -> (
             )
             .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
             .with_module(
+                "__wasm_rquickjs_builtin/os_native",
+                os::js_native_module,
+            )
+            .with_module(
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
             )
@@ -131,6 +139,8 @@ pub fn module_loader() -> (
             .with_module("buffer", buffer::BUFFER_JS)
             .with_module("node:fs", fs::FS_JS)
             .with_module("fs", fs::FS_JS)
+            .with_module("node:os", os::OS_JS)
+            .with_module("os", os::OS_JS)
             .with_module("node:process", process::PROCESS_JS)
             .with_module("process", process::PROCESS_JS)
             .with_module("node:path", path::PATH_JS)
