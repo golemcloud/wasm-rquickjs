@@ -47,15 +47,32 @@ export const test3 = () => {
 }
 
 export const test4 = () => {
-    const url = new URL("https://test:pass@example.com:1234/path?query=URLUtils.searchParams&topic=api#fragment");
-    console.log(url.protocol);
-    console.log(url.username);
-    console.log(url.password);
-    console.log(url.hostname);
-    console.log(url.port);
-    console.log(url.pathname);
-    console.log(url.hash);
-    console.log(url.searchParams.get("topic"));
-    console.log(url.searchParams.get("query"));
-    console.log(url.href);
+     const url = new URL("https://test:pass@example.com:1234/path?query=URLUtils.searchParams&topic=api#fragment");
+     console.log(url.protocol);
+     console.log(url.username);
+     console.log(url.password);
+     console.log(url.hostname);
+     console.log(url.port);
+     console.log(url.pathname);
+     console.log(url.hash);
+     console.log(url.searchParams.get("topic"));
+     console.log(url.searchParams.get("query"));
+     console.log(url.href);
+}
+
+export const test5 = () => {
+     // Test URL constructor with undefined as second parameter
+     // Should behave the same as calling new URL(absoluteUrl)
+     const url = new URL("https://example.com/path?query=value#fragment", undefined);
+     console.log(url.protocol); // "https:"
+     console.log(url.hostname); // "example.com"
+     console.log(url.pathname); // "/path"
+     console.log(url.search); // "?query=value"
+     console.log(url.hash); // "#fragment"
+     
+     return url.protocol === "https:" && 
+            url.hostname === "example.com" && 
+            url.pathname === "/path" &&
+            url.search === "?query=value" &&
+            url.hash === "#fragment";
 }

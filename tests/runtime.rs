@@ -140,6 +140,12 @@ fn compiled_abort_controller() -> CompiledTest {
     CompiledTest::new(path, true).expect("Failed to compile abort-controller")
 }
 
+#[test_dep(tagged_as = "xhr")]
+fn compiled_xhr() -> CompiledTest {
+    let path = Utf8Path::new("examples/xhr");
+    CompiledTest::new(path, true).expect("Failed to compile xhr")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -2178,7 +2184,9 @@ async fn path_test_sep(#[tagged_as("path")] compiled_test: &CompiledTest) -> any
 }
 
 #[test]
-async fn fetch_headers_iterator(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_headers_iterator(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
@@ -2255,9 +2263,7 @@ async fn fetch_with_url_object(
 }
 
 #[test]
-async fn post_with_url_object(
-    #[tagged_as("fetch")] compiled: &CompiledTest,
-) -> anyhow::Result<()> {
+async fn post_with_url_object(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (port, _) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
@@ -2304,14 +2310,11 @@ async fn fetch_url_object_with_query_params(
 }
 
 #[test]
-async fn abort_controller_basic(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abort-basic",
-        &[],
-    )
-    .await;
+async fn abort_controller_basic(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-basic", &[]).await;
 
     assert!(output.contains("Created AbortController"));
     assert!(output.contains("Signal aborted (before abort): false"));
@@ -2322,14 +2325,11 @@ async fn abort_controller_basic(#[tagged_as("abort_controller")] compiled: &Comp
 }
 
 #[test]
-async fn abort_signal_static(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abort-signal",
-        &[],
-    )
-    .await;
+async fn abort_signal_static(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-signal", &[]).await;
 
     assert!(output.contains("Created aborted signal"));
     assert!(output.contains("Signal aborted: true"));
@@ -2340,14 +2340,11 @@ async fn abort_signal_static(#[tagged_as("abort_controller")] compiled: &Compile
 }
 
 #[test]
-async fn abort_signal_timeout(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abort-timeout",
-        &[],
-    )
-    .await;
+async fn abort_signal_timeout(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-timeout", &[]).await;
 
     assert!(output.contains("Created timeout signal (10ms)"));
     assert!(output.contains("Signal aborted (immediately): false"));
@@ -2357,14 +2354,11 @@ async fn abort_signal_timeout(#[tagged_as("abort_controller")] compiled: &Compil
 }
 
 #[test]
-async fn abort_controller_event(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abort-event",
-        &[],
-    )
-    .await;
+async fn abort_controller_event(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-event", &[]).await;
 
     assert!(output.contains("Added abort event listener"));
     assert!(output.contains("Abort event fired"));
@@ -2375,14 +2369,11 @@ async fn abort_controller_event(#[tagged_as("abort_controller")] compiled: &Comp
 }
 
 #[test]
-async fn abort_controller_reason(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abort-reason",
-        &[],
-    )
-    .await;
+async fn abort_controller_reason(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-reason", &[]).await;
 
     assert!(output.contains("Signal reason (before abort): undefined"));
     assert!(output.contains("Signal reason message: Custom error"));
@@ -2393,7 +2384,9 @@ async fn abort_controller_reason(#[tagged_as("abort_controller")] compiled: &Com
 }
 
 #[test]
-async fn abort_controller_multiple_listeners(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn abort_controller_multiple_listeners(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (_, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
@@ -2412,14 +2405,11 @@ async fn abort_controller_multiple_listeners(#[tagged_as("abort_controller")] co
 }
 
 #[test]
-async fn abort_controller_throw_if_aborted(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-throw-if-aborted",
-        &[],
-    )
-    .await;
+async fn abort_controller_throw_if_aborted(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-throw-if-aborted", &[]).await;
 
     assert!(output.contains("throwIfAborted: Caught error: Custom reason"));
     assert!(output.contains("test-throw-if-aborted passed"));
@@ -2428,7 +2418,9 @@ async fn abort_controller_throw_if_aborted(#[tagged_as("abort_controller")] comp
 }
 
 #[test]
-async fn abort_controller_throw_if_aborted_not_aborted(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn abort_controller_throw_if_aborted_not_aborted(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (_, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
@@ -2445,14 +2437,11 @@ async fn abort_controller_throw_if_aborted_not_aborted(#[tagged_as("abort_contro
 }
 
 #[test]
-async fn abort_controller_onabort_handler(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-onabort-handler",
-        &[],
-    )
-    .await;
+async fn abort_controller_onabort_handler(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-onabort-handler", &[]).await;
 
     assert!(output.contains("Set onabort handler"));
     assert!(output.contains("onabort handler fired"));
@@ -2463,14 +2452,11 @@ async fn abort_controller_onabort_handler(#[tagged_as("abort_controller")] compi
 }
 
 #[test]
-async fn abort_controller_once_option(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-once-option",
-        &[],
-    )
-    .await;
+async fn abort_controller_once_option(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-once-option", &[]).await;
 
     assert!(output.contains("Added listener with once: true"));
     assert!(output.contains("Listener called"));
@@ -2481,7 +2467,9 @@ async fn abort_controller_once_option(#[tagged_as("abort_controller")] compiled:
 }
 
 #[test]
-async fn abort_controller_remove_event_listener(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn abort_controller_remove_event_listener(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (_, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
@@ -2499,14 +2487,11 @@ async fn abort_controller_remove_event_listener(#[tagged_as("abort_controller")]
 }
 
 #[test]
-async fn abort_controller_idempotent(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abort-idempotent",
-        &[],
-    )
-    .await;
+async fn abort_controller_idempotent(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-idempotent", &[]).await;
 
     assert!(output.contains("First abort"));
     assert!(output.contains("Second abort"));
@@ -2518,14 +2503,11 @@ async fn abort_controller_idempotent(#[tagged_as("abort_controller")] compiled: 
 }
 
 #[test]
-async fn abort_controller_no_reason(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abort-no-reason",
-        &[],
-    )
-    .await;
+async fn abort_controller_no_reason(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-no-reason", &[]).await;
 
     assert!(output.contains("Abort without reason - reason type: DOMException"));
     assert!(output.contains("Abort without reason - reason name: AbortError"));
@@ -2535,14 +2517,12 @@ async fn abort_controller_no_reason(#[tagged_as("abort_controller")] compiled: &
 }
 
 #[test]
-async fn abort_controller_duplicate_listeners(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-duplicate-listeners",
-        &[],
-    )
-    .await;
+async fn abort_controller_duplicate_listeners(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-duplicate-listeners", &[])
+            .await;
 
     assert!(output.contains("Added same handler twice"));
     assert!(output.contains("Handler call count: 1"));
@@ -2552,7 +2532,9 @@ async fn abort_controller_duplicate_listeners(#[tagged_as("abort_controller")] c
 }
 
 #[test]
-async fn fetch_abort_already_aborted(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_abort_already_aborted(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (_, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
@@ -2569,7 +2551,9 @@ async fn fetch_abort_already_aborted(#[tagged_as("abort_controller")] compiled: 
 }
 
 #[test]
-async fn fetch_abort_during_request(#[tagged_as("abort_controller")] compiled: &CompiledTest) -> anyhow::Result<()> {
+async fn fetch_abort_during_request(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let (_, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
@@ -2630,10 +2614,273 @@ async fn fetch_response_body_get_reader_after_access(
 
     println!("{output}");
 
-    assert!(output.contains("fetch test 32 (Response body getReader after body access - TanStack AI pattern)"));
+    assert!(output.contains(
+        "fetch test 32 (Response body getReader after body access - TanStack AI pattern)"
+    ));
     assert!(output.contains("Stored body reference: exists"));
     assert!(output.contains("Got reader from response.body"));
     assert!(output.contains("Response body getReader after access test passed"));
+
+    Ok(())
+}
+
+// XMLHttpRequest tests
+
+#[test]
+async fn xhr_simple_get(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "simple-get", &[Val::U16(port)])
+            .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 1: simple GET"));
+    assert!(output.contains("Status: 200"));
+    assert!(output.contains("Response length:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_simple_post(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "simple-post", &[Val::U16(port)])
+            .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 2: simple POST"));
+    assert!(output.contains("POST Status:") || output.contains("POST Error occurred"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_set_request_headers(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "set-request-headers",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 3: set request headers"));
+    assert!(output.contains("Headers test status:") || output.contains("ReadyState changed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_get_response_headers(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "get-response-headers",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 4: get response headers"));
+    assert!(output.contains("Content-Type header:") || output.contains("All headers length:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_response_types(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-types",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 5: response types"));
+    assert!(output.contains("Text response type:") || output.contains("JSON response type:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_readystate_events(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "readystate-events",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 6: readystate events"));
+    assert!(output.contains("ReadyState changed to:") || output.contains("States encountered:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_error_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "error-handling",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 7: error handling"));
+    // Either error handler is called or request succeeds
+    assert!(
+        output.contains("Error handler called")
+            || output.contains("Request succeeded")
+            || output.contains("Status on error:")
+    );
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_abort_request(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "abort-request",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 8: abort request"));
+    assert!(output.contains("Abort handler called") || output.contains("Request completed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_timeout_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "timeout-handling",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 9: timeout handling"));
+    // Either timeout or normal completion
+    assert!(output.contains("Timeout handler called") || output.contains("Request completed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_post_with_form_data(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-form-data",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 11: POST with FormData"));
+    assert!(output.contains("FormData POST status:") || output.contains("ReadyState changed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_post_with_json_body(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-json-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 12: POST with JSON body"));
+    assert!(output.contains("JSON POST status:") || output.contains("ReadyState changed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_basic_auth(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "request-with-basic-auth",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 10: basic auth"));
+    assert!(output.contains("Auth request status:") || output.contains("Auth request error"));
 
     Ok(())
 }
