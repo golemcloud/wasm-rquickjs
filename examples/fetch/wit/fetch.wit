@@ -33,4 +33,6 @@ world fetch {
   export fetch-with-url-object: func(port: u16);
   export post-with-url-object: func(port: u16);
   export fetch-url-object-with-query-params: func(port: u16);
+  export request-body-get-reader-after-access: func(port: u16);
+  export response-body-get-reader-after-access: func(port: u16);
   }

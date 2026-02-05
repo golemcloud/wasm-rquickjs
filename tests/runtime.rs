@@ -2586,3 +2586,54 @@ async fn fetch_abort_during_request(#[tagged_as("abort_controller")] compiled: &
 
     Ok(())
 }
+
+#[test]
+async fn fetch_request_body_get_reader_after_access(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "request-body-get-reader-after-access",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 31 (Request body getReader after body access)"));
+    assert!(output.contains("Stored body reference: exists"));
+    assert!(output.contains("Got reader from request.body"));
+    assert!(output.contains("Body content: test body content"));
+    assert!(output.contains("Request body getReader after access test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_body_get_reader_after_access(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-body-get-reader-after-access",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 32 (Response body getReader after body access - TanStack AI pattern)"));
+    assert!(output.contains("Stored body reference: exists"));
+    assert!(output.contains("Got reader from response.body"));
+    assert!(output.contains("Response body getReader after access test passed"));
+
+    Ok(())
+}

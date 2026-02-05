@@ -814,6 +814,105 @@ export async function fetchUrlObjectWithQueryParams(port) {
     console.log(`Fetched ${Array.isArray(data) ? data.length : 1} item(s) with URL query params`);
 }
 
+export async function requestBodyGetReaderAfterAccess(port) {
+    console.log("fetch test 31 (Request body getReader after body access)");
+    
+    // Create a request with a body
+    const request = new Request(`http://localhost:${port}/echo`, {
+        method: "POST",
+        body: "test body content"
+    });
+    
+    // First, access request.body and store it (but don't consume it)
+    const storedBody = request.body;
+    console.log(`Stored body reference: ${storedBody !== null ? 'exists' : 'null'}`);
+    
+    // Now try to use getReader on the original request's body
+    // This should work and NOT give a "body already consumed" error
+    const reader = request.body.getReader();
+    console.log(`Got reader from request.body`);
+    
+    // Read the body content
+    let chunks = [];
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    
+    // Combine chunks and decode
+    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+    }
+    
+    const bodyText = new TextDecoder().decode(combined);
+    console.log(`Body content: ${bodyText}`);
+    
+    assert_eq(bodyText, "test body content");
+    console.log("Request body getReader after access test passed");
+}
+
+export async function responseBodyGetReaderAfterAccess(port) {
+    console.log("fetch test 32 (Response body getReader after body access - TanStack AI pattern)");
+    
+    // First POST to create a todo so we have something to GET
+    await fetch(`http://localhost:${port}/todos`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            title: "test",
+            body: "test body",
+            userId: 1
+        })
+    });
+    
+    // Fetch a response (simulating what TanStack AI does)
+    const response = await fetch(`http://localhost:${port}/todos/0`);
+    
+    // This is the TanStack AI pattern that fails:
+    // 1. First, access response.body and store it (but don't consume it)
+    const storedBody = response.body;
+    console.log(`Stored body reference: ${storedBody !== null ? 'exists' : 'null'}`);
+    
+    // 2. Now try to use getReader on the original response's body
+    // This should work and NOT give a "body already consumed" error
+    // TanStack AI does: const reader = response.body?.getReader()
+    const reader = response.body.getReader();
+    console.log(`Got reader from response.body`);
+    
+    // 3. Read the body content (like TanStack AI's readStreamLines)
+    let chunks = [];
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    
+    // Combine chunks and decode
+    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+    }
+    
+    const bodyText = new TextDecoder().decode(combined);
+    console.log(`Body content: ${bodyText}`);
+    
+    // Verify we got valid JSON
+    const parsed = JSON.parse(bodyText);
+    console.log(`Parsed id: ${parsed.id}`);
+    
+    console.log("Response body getReader after access test passed");
+}
+
 function assert_eq(a, b) {
     if (a !== b) {
         throw new Error(`Assertion failed: ${a} !== ${b}`);
