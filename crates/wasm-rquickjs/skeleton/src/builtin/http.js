@@ -301,8 +301,10 @@ export class Response {
     }
 
     get body() {
-        let nativeStreamSource = this.nativeResponse.stream();
-        this.bodyUsed = true;
+        let nativeStreamSourceSlot = {
+            nativeStreamSource: undefined
+        };
+        let response = this;
         return new ReadableStream({
             start() {
             },
@@ -310,8 +312,13 @@ export class Response {
                 return "bytes";
             },
             async pull(controller) {
+                if (nativeStreamSourceSlot.nativeStreamSource === undefined) {
+                    nativeStreamSourceSlot.nativeStreamSource = response.nativeResponse.stream();
+                    response.bodyUsed = true;
+                }
+
                 // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
-                const [next, err] = await nativeStreamSource.pull();
+                const [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull();
                 if (err !== undefined) {
                     console.error("Error reading response body stream:", err);
                     controller.error(err);
