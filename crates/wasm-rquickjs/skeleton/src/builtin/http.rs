@@ -1472,4 +1472,5 @@ pub const WIRE_JS: &str = r#"
         globalThis.Blob = __wasm_rquickjs_http_blob.Blob;
         globalThis.File = __wasm_rquickjs_http_blob.File;
         globalThis.FormData = __wasm_rquickjs_http_form_data.FormData;
+        globalThis.XMLHttpRequest = __wasm_rquickjs_http.XMLHttpRequest;
     "#;

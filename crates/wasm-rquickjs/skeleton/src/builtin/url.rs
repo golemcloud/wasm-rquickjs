@@ -6,7 +6,7 @@ use url::Url;
 pub mod native_module {
     use rquickjs::class::Trace;
     use rquickjs::prelude::*;
-    use rquickjs::{Ctx, Exception, JsLifetime, Value};
+    use rquickjs::{Ctx, Exception, JsLifetime};
     use url::Url;
 
     #[derive(JsLifetime, Trace)]
@@ -19,8 +19,10 @@ pub mod native_module {
     #[rquickjs::methods(rename_all = "camelCase")]
     impl JsUrl {
          #[qjs(constructor)]
-         pub fn new(url: String, base_url: Opt<String>, ctx: Ctx<'_>) -> rquickjs::Result<Self> {
-             match super::parse_url(url, base_url) {
+         pub fn new(url: String, base_url: Opt<Option<String>>, ctx: Ctx<'_>) -> rquickjs::Result<Self> {
+             let base = Opt(base_url.0.flatten());
+             
+             match super::parse_url(url, base) {
                  Ok(url) => Ok(Self { url }),
                  Err(err) => Err(ctx.throw(
                      Exception::from_message(ctx.clone(), &format!("Invalid URL: {err}"))
