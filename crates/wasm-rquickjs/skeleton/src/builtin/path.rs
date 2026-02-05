@@ -5,7 +5,6 @@ use rquickjs::class::Trace;
 #[rquickjs::module]
 pub mod native_module {
     use rquickjs::prelude::*;
-    use rquickjs::{JsLifetime, class::Trace};
     use std::path::Path;
 
     pub use super::ParsedPath;

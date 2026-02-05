@@ -18,17 +18,17 @@ pub mod native_module {
 
     #[rquickjs::methods(rename_all = "camelCase")]
     impl JsUrl {
-        #[qjs(constructor)]
-        pub fn new(url: String, base_url: Opt<String>, ctx: Ctx<'_>) -> rquickjs::Result<Self> {
-            match super::parse_url(url, base_url) {
-                Ok(url) => Ok(Self { url }),
-                Err(err) => Err(ctx.throw(
-                    Exception::from_message(ctx.clone(), &format!("Invalid URL: {err}"))
-                        .unwrap()
-                        .into(),
-                )),
-            }
-        }
+         #[qjs(constructor)]
+         pub fn new(url: String, base_url: Opt<String>, ctx: Ctx<'_>) -> rquickjs::Result<Self> {
+             match super::parse_url(url, base_url) {
+                 Ok(url) => Ok(Self { url }),
+                 Err(err) => Err(ctx.throw(
+                     Exception::from_message(ctx.clone(), &format!("Invalid URL: {err}"))
+                         .unwrap()
+                         .into(),
+                 )),
+             }
+         }
 
         /// The hash property of the URL interface is a string containing a "#" followed by the fragment identifier of the URL.
         /// If the URL does not have a fragment identifier, this property contains an empty string, "".

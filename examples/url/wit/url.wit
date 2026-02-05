@@ -5,4 +5,5 @@ world url {
   export test2: func() -> bool;
   export test3: func();
   export test4: func();
+  export test5: func() -> bool;
 }
