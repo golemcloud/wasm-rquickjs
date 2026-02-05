@@ -1,5 +1,7 @@
 import * as httpNative from '__wasm_rquickjs_builtin/http_native'
 import {formDataToBlob} from '__wasm_rquickjs_builtin/http_form_data';
+import {DOMException} from '__wasm_rquickjs_builtin/abort_controller';
+import * as base64 from 'base64-js';
 
 // Partially based on the implementation in wasmedge-quickjs
 // Partially based on https://github.com/JakeChampion/fetch/blob/main/fetch.js
@@ -16,6 +18,7 @@ export async function fetch(resource, options = {}) {
     let redirect;
     let body;
     let url;
+    let signal;
 
     if (typeof resource === 'object' && resource instanceof Request) {
         method = resource.method.toUpperCase();
@@ -33,6 +36,7 @@ export async function fetch(resource, options = {}) {
         // let cache = options.cache || resource.cache; // cache not used in native yet
         credentials = options.credentials || resource.credentials;
         redirect = options.redirect || resource.redirect || 'follow';
+        signal = options.signal || resource.signal;
 
         if (resource._bodyUsed) {
             throw new TypeError("Request body is already used");
@@ -56,11 +60,24 @@ export async function fetch(resource, options = {}) {
         // let cache = options.cache || 'default';
         credentials = options.credentials || 'same-origin';
         redirect = options.redirect || 'follow';
+        signal = options.signal;
 
         body = options.body;
-        url = resource;
+        // Convert URL objects to strings
+        if (typeof resource === 'object' && resource instanceof URL) {
+            url = resource.toString();
+        } else {
+            url = resource;
+        }
     }
 
+    // Check if signal is already aborted
+    if (signal && signal.aborted) {
+        throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+    }
+
+    // Create the fetch promise
+    let fetchPromise;
     if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
         let bodyCreator;
         if (body instanceof ReadableStream) {
@@ -85,7 +102,7 @@ export async function fetch(resource, options = {}) {
             bodyCreator = () => body.stream();
         }
 
-        return await streamingRequest(
+        fetchPromise = streamingRequest(
             url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
             bodyCreator
         );
@@ -120,9 +137,36 @@ export async function fetch(resource, options = {}) {
             console.warn('Unsupported body type');
         }
 
-        const nativeResponse = await request.simpleSend();
-        return new Response(nativeResponse, request.url, credentials);
+        fetchPromise = (async () => {
+            const nativeResponse = await request.simpleSend();
+            return new Response(nativeResponse, request.url, credentials);
+        })();
     }
+
+    // If signal is provided, wrap the promise to support abort
+    if (signal) {
+        fetchPromise = abortableFetch(fetchPromise, signal);
+    }
+
+    return await fetchPromise;
+}
+
+function abortableFetch(fetchPromise, signal) {
+    // Create a race between the fetch and the abort signal
+    return Promise.race([
+        fetchPromise,
+        new Promise((_, reject) => {
+            // If signal is already aborted, this won't execute
+            if (signal.aborted) {
+                reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
+            } else {
+                // Listen for abort event
+                signal.addEventListener('abort', () => {
+                    reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
+                });
+            }
+        })
+    ]);
 }
 
 async function sendBody(bodyWriter, body) {
@@ -258,8 +302,10 @@ export class Response {
     }
 
     get body() {
-        let nativeStreamSource = this.nativeResponse.stream();
-        this.bodyUsed = true;
+        let nativeStreamSourceSlot = {
+            nativeStreamSource: undefined
+        };
+        let response = this;
         return new ReadableStream({
             start() {
             },
@@ -267,8 +313,13 @@ export class Response {
                 return "bytes";
             },
             async pull(controller) {
+                if (nativeStreamSourceSlot.nativeStreamSource === undefined) {
+                    nativeStreamSourceSlot.nativeStreamSource = response.nativeResponse.stream();
+                    response.bodyUsed = true;
+                }
+
                 // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
-                const [next, err] = await nativeStreamSource.pull();
+                const [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull();
                 if (err !== undefined) {
                     console.error("Error reading response body stream:", err);
                     controller.error(err);
@@ -507,7 +558,7 @@ export class Headers {
     }
 
     [Symbol.iterator]() {
-        this.entries()
+        return this.entries()
     }
 }
 
@@ -811,28 +862,382 @@ function parseMultipartFormData(bodyString, boundary) {
 }
 
 function addPartToFormData(formData, headers, body) {
-    // Parse Content-Disposition header
-    const dispositionMatch = headers.match(/Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]+)")?/i);
-    if (!dispositionMatch) {
-        return;
-    }
+     // Parse Content-Disposition header
+     const dispositionMatch = headers.match(/Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]+)")?/i);
+     if (!dispositionMatch) {
+         return;
+     }
+ 
+     const fieldName = dispositionMatch[1];
+     const filename = dispositionMatch[2];
+ 
+     // Check if this is a file upload (has filename) or regular form field
+     if (filename) {
+         // This is a file - extract Content-Type if available
+         const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
+         const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
+ 
+         // Convert body string to Uint8Array for binary data
+         const bodyBytes = new TextEncoder().encode(body);
+         const blob = new Blob([bodyBytes], {type: contentType});
+         const file = new File([blob], filename, {type: contentType});
+         formData.append(fieldName, file);
+     } else {
+         // Regular form field - append as string
+         formData.append(fieldName, body);
+     }
+ }
 
-    const fieldName = dispositionMatch[1];
-    const filename = dispositionMatch[2];
+// XMLHttpRequest implementation based on fetch API
+// MDN Spec: https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest
 
-    // Check if this is a file upload (has filename) or regular form field
-    if (filename) {
-        // This is a file - extract Content-Type if available
-        const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
-        const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
+export class XMLHttpRequest {
+     constructor() {
+         // ReadyState constants
+         this.UNSENT = 0;
+         this.OPENED = 1;
+         this.HEADERS_RECEIVED = 2;
+         this.LOADING = 3;
+         this.DONE = 4;
 
-        // Convert body string to Uint8Array for binary data
-        const bodyBytes = new TextEncoder().encode(body);
-        const blob = new Blob([bodyBytes], {type: contentType});
-        const file = new File([blob], filename, {type: contentType});
-        formData.append(fieldName, file);
-    } else {
-        // Regular form field - append as string
-        formData.append(fieldName, body);
-    }
-}
+         // State management
+         this.readyState = this.UNSENT;
+         this.status = 0;
+         this.statusText = '';
+         this.response = null;
+         this.responseText = '';
+         this.responseType = '';
+         this.responseURL = '';
+
+         // Request properties
+         this._method = '';
+         this._url = '';
+         this._async = true;
+         this._username = '';
+         this._password = '';
+         this._requestHeaders = {};
+         this._requestBody = null;
+         this._abortController = null;
+         this._responseHeaders = {};
+         this._sent = false;
+
+         // Event handlers
+         this.onreadystatechange = null;
+         this.onload = null;
+         this.onerror = null;
+         this.onabort = null;
+         this.onloadstart = null;
+         this.onprogress = null;
+         this.onloadend = null;
+         this.ontimeout = null;
+
+         // Timeout
+         this.timeout = 0;
+         this._timeoutId = null;
+
+         // Event listeners (for addEventListener/removeEventListener)
+         this._listeners = {};
+         this._aborted = false;
+     }
+
+     open(method, url, async = true, username = '', password = '') {
+         if (this.readyState !== this.UNSENT && this._sent) {
+             throw new Error('XMLHttpRequest: cannot open connection when request is already sent');
+         }
+
+         this._method = method.toUpperCase();
+         this._url = url;
+         this._async = async;
+         this._username = username;
+         this._password = password;
+         this._requestHeaders = {};
+         this._requestBody = null;
+         this._responseHeaders = {};
+         this._sent = false;
+         this._aborted = false;
+
+         this._setReadyState(this.OPENED);
+     }
+
+     setRequestHeader(name, value) {
+         if (this.readyState !== this.OPENED) {
+             throw new Error('XMLHttpRequest: cannot set header when not in OPENED state');
+         }
+         if (this._sent) {
+             throw new Error('XMLHttpRequest: cannot set header after send');
+         }
+
+         // Normalize header name
+         const normalizedName = String(name);
+         this._requestHeaders[normalizedName] = String(value);
+     }
+
+     send(body = null) {
+         if (this.readyState !== this.OPENED) {
+             throw new Error('XMLHttpRequest: cannot send when not in OPENED state');
+         }
+         if (this._sent) {
+             throw new Error('XMLHttpRequest: cannot send request twice');
+         }
+
+         this._sent = true;
+         this._requestBody = body;
+
+         // Dispatch loadstart event
+         this._dispatchEvent('loadstart');
+
+         // Execute the fetch request
+         if (this._async) {
+             this._sendAsync();
+         } else {
+             // Note: Synchronous XHR is not practical in WASM/async context
+             // We simulate it by using synchronous-like behavior, but this is not true synchronous
+             this._sendAsync();
+         }
+
+         // Set timeout if specified
+         if (this.timeout > 0) {
+             this._timeoutId = setTimeout(() => {
+                 this._timeoutId = null;
+                 if (this.readyState !== this.DONE && !this._aborted) {
+                     this._aborted = true;
+                     this._abortController?.abort();
+                     this._setReadyState(this.DONE);
+                     this._dispatchEvent('timeout');
+                     this._dispatchEvent('loadend');
+                 }
+             }, this.timeout);
+         }
+     }
+
+     async _sendAsync() {
+         try {
+             // Prepare fetch options
+             const fetchOptions = {
+                 method: this._method,
+                 headers: this._requestHeaders,
+             };
+
+             // Add credentials if provided
+             if (this._username || this._password) {
+                 // Note: Basic auth implementation
+                 const credentialsStr = `${this._username}:${this._password}`;
+                 const credentialsBytes = new TextEncoder().encode(credentialsStr);
+                 const credentialsB64 = base64.fromByteArray(credentialsBytes);
+                 fetchOptions.headers['Authorization'] = `Basic ${credentialsB64}`;
+             }
+
+             // Add body if present and not a GET/HEAD request
+             if (this._requestBody && this._method !== 'GET' && this._method !== 'HEAD') {
+                 if (typeof this._requestBody === 'string') {
+                     fetchOptions.body = this._requestBody;
+                 } else if (this._requestBody instanceof Blob) {
+                     fetchOptions.body = this._requestBody;
+                 } else if (this._requestBody instanceof FormData) {
+                     fetchOptions.body = this._requestBody;
+                 } else if (this._requestBody instanceof ArrayBuffer) {
+                     fetchOptions.body = this._requestBody;
+                 } else if (this._requestBody instanceof Uint8Array) {
+                     fetchOptions.body = this._requestBody;
+                 } else if (this._requestBody instanceof URLSearchParams) {
+                     fetchOptions.body = this._requestBody;
+                 } else {
+                     fetchOptions.body = String(this._requestBody);
+                 }
+             }
+
+             // Create abort controller for abort support
+             this._abortController = new AbortController();
+             fetchOptions.signal = this._abortController.signal;
+
+             // Update readyState to HEADERS_RECEIVED (once fetch completes header phase)
+             // Note: fetch doesn't have a true headers-received event, so we approximate
+             this._setReadyState(this.HEADERS_RECEIVED);
+
+             const response = await fetch(this._url, fetchOptions);
+
+             // If aborted, don't process response
+             if (this._aborted) return;
+
+             // Clear timeout if request completed
+             if (this._timeoutId) {
+                 clearTimeout(this._timeoutId);
+                 this._timeoutId = null;
+             }
+
+             // Parse response headers
+             this._parseResponseHeaders(response);
+
+             // Update status and statusText
+             this.status = response.status;
+             this.statusText = response.statusText;
+             this.responseURL = response.url;
+
+             // Update readyState to LOADING
+             this._setReadyState(this.LOADING);
+
+             // Handle different response types
+             let responseData;
+             if (this.responseType === '' || this.responseType === 'text') {
+                 responseData = await response.text();
+                 this.response = responseData;
+                 this.responseText = responseData;
+             } else if (this.responseType === 'arraybuffer') {
+                 responseData = await response.arrayBuffer();
+                 this.response = responseData;
+             } else if (this.responseType === 'blob') {
+                 responseData = await response.blob();
+                 this.response = responseData;
+             } else if (this.responseType === 'json') {
+                 responseData = await response.json();
+                 this.response = responseData;
+             } else if (this.responseType === 'document') {
+                 // Not fully supported in WASM, return as text
+                 responseData = await response.text();
+                 this.response = responseData;
+             } else {
+                 responseData = await response.text();
+                 this.response = responseData;
+                 this.responseText = responseData;
+             }
+
+             // Update readyState to DONE
+             this._setReadyState(this.DONE);
+
+             // Dispatch load and loadend events
+             this._dispatchEvent('load');
+             this._dispatchEvent('loadend');
+         } catch (error) {
+             // Clear timeout on error
+             if (this._timeoutId) {
+                 clearTimeout(this._timeoutId);
+                 this._timeoutId = null;
+             }
+
+             // Check if error is due to abort
+             if (this._aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+                 // Abort was already handled by abort() method
+                 return;
+             } else {
+                 this.status = 0;
+                 this.statusText = '';
+                 this._setReadyState(this.DONE);
+                 this._dispatchEvent('error');
+                 this._dispatchEvent('loadend');
+             }
+         }
+     }
+
+     abort() {
+         this._aborted = true;
+         if (this._abortController) {
+             this._abortController.abort();
+         }
+         if (this._timeoutId) {
+             clearTimeout(this._timeoutId);
+             this._timeoutId = null;
+         }
+         this._sent = false;
+         this._setReadyState(this.DONE);
+         this._dispatchEvent('abort');
+         this._dispatchEvent('loadend');
+     }
+
+     getResponseHeader(name) {
+         if (this.readyState < this.HEADERS_RECEIVED) {
+             return null;
+         }
+         const lowerName = name.toLowerCase();
+         for (const [key, value] of Object.entries(this._responseHeaders)) {
+             if (key.toLowerCase() === lowerName) {
+                 return value;
+             }
+         }
+         return null;
+     }
+
+     getAllResponseHeaders() {
+         if (this.readyState < this.HEADERS_RECEIVED) {
+             return '';
+         }
+         let headerString = '';
+         for (const [name, value] of Object.entries(this._responseHeaders)) {
+             headerString += `${name}: ${value}\r\n`;
+         }
+         return headerString;
+     }
+
+     overrideMimeType(mimeType) {
+         // In a real implementation, this would affect how the response is parsed
+         // For now, we store it but don't use it
+         this._mimeType = mimeType;
+     }
+
+     _parseResponseHeaders(response) {
+         this._responseHeaders = {};
+         for (const [name, value] of response.headers.entries()) {
+             this._responseHeaders[name] = value;
+         }
+     }
+
+     _setReadyState(state) {
+         if (this.readyState !== state) {
+             this.readyState = state;
+             this._dispatchEvent('readystatechange');
+         }
+     }
+
+     _dispatchEvent(eventType) {
+         const evt = { type: eventType, target: this, currentTarget: this };
+
+         // Call property handler (e.g., onreadystatechange, onerror, etc.)
+         const propertyHandler = this['on' + eventType];
+         if (typeof propertyHandler === 'function') {
+             try {
+                 propertyHandler.call(this, evt);
+             } catch (e) {
+                 queueMicrotask(() => { throw e; });
+             }
+         }
+
+         // Call registered event listeners
+         const listeners = this._listeners[eventType];
+         if (listeners) {
+             // Copy to avoid mutation during iteration
+             const listenersCopy = [...listeners];
+             for (const { listener, once } of listenersCopy) {
+                 try {
+                     listener.call(this, evt);
+                 } catch (e) {
+                     queueMicrotask(() => { throw e; });
+                 }
+                 if (once) {
+                     this.removeEventListener(eventType, listener);
+                 }
+             }
+         }
+     }
+
+     addEventListener(type, listener, options = {}) {
+         if (typeof listener !== 'function') return;
+         if (!this._listeners[type]) {
+             this._listeners[type] = [];
+         }
+         this._listeners[type].push({
+             listener,
+             once: !!(options && options.once)
+         });
+     }
+
+     removeEventListener(type, listener) {
+         if (!this._listeners[type]) return;
+         this._listeners[type] = this._listeners[type].filter(l => l.listener !== listener);
+     }
+
+     dispatchEvent(event) {
+         if (event && event.type) {
+             this._dispatchEvent(event.type);
+         }
+         return true;
+     }
+ }

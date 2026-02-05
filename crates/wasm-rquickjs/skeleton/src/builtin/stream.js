@@ -28,15 +28,38 @@ function _uint8ArrayToBuffer(chunk) {
     );
 }
 
+// Create wrapper functions to allow adding properties to imported functions
+function pipelineWrapper(...args) {
+    return pipeline(...args);
+}
+Object.defineProperty(pipelineWrapper, customPromisify, {
+    configurable: true,
+    enumerable: true,
+    get() {
+        return promises.pipeline;
+    },
+});
+
+function finishedWrapper(...args) {
+    return eos(...args);
+}
+Object.defineProperty(finishedWrapper, customPromisify, {
+    configurable: true,
+    enumerable: true,
+    get() {
+        return promises.finished;
+    },
+});
+
 Stream.isDisturbed = isDisturbed;
 Stream.Readable = Readable;
 Stream.Writable = Writable;
 Stream.Duplex = Duplex;
 Stream.Transform = Transform;
 Stream.PassThrough = PassThrough;
-Stream.pipeline = pipeline;
+Stream.pipeline = pipelineWrapper;
 Stream.addAbortSignal = addAbortSignal;
-Stream.finished = eos;
+Stream.finished = finishedWrapper;
 Stream.destroy = destroyer;
 Stream.compose = compose;
 
@@ -45,20 +68,6 @@ Object.defineProperty(Stream, "promises", {
     enumerable: true,
     get() {
         return promises;
-    },
-});
-
-Object.defineProperty(pipeline, customPromisify, {
-    enumerable: true,
-    get() {
-        return promises.pipeline;
-    },
-});
-
-Object.defineProperty(eos, customPromisify, {
-    enumerable: true,
-    get() {
-        return promises.finished;
     },
 });
 
@@ -74,11 +83,11 @@ export {
     compose,
     destroyer as destroy,
     Duplex,
-    eos as finished,
+    finishedWrapper as finished,
     isDisturbed,
     isUint8Array as _isUint8Array,
     PassThrough,
-    pipeline,
+    pipelineWrapper as pipeline,
     Readable,
     Stream,
     Transform,

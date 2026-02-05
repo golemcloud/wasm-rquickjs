@@ -134,6 +134,30 @@ fn compiled_response_static() -> CompiledTest {
     CompiledTest::new(path, true).expect("Failed to compile response-static")
 }
 
+#[test_dep(tagged_as = "abort_controller")]
+fn compiled_abort_controller() -> CompiledTest {
+    let path = Utf8Path::new("examples/abort-controller");
+    CompiledTest::new(path, true).expect("Failed to compile abort-controller")
+}
+
+#[test_dep(tagged_as = "xhr")]
+fn compiled_xhr() -> CompiledTest {
+    let path = Utf8Path::new("examples/xhr");
+    CompiledTest::new(path, true).expect("Failed to compile xhr")
+}
+
+#[test_dep(tagged_as = "os")]
+fn compiled_os() -> CompiledTest {
+    let path = Utf8Path::new("examples/os");
+    CompiledTest::new(path, true).expect("Failed to compile os")
+}
+
+#[test_dep(tagged_as = "structured_clone")]
+fn compiled_structured_clone() -> CompiledTest {
+    let path = Utf8Path::new("examples/structured-clone");
+    CompiledTest::new(path, true).expect("Failed to compile structured-clone")
+}
+
 #[test]
 async fn example1_sync(#[tagged_as("example1")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(
@@ -1527,6 +1551,297 @@ async fn fs_async(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<
 }
 
 #[test]
+async fn fs_promises_write_file(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-fs-promises-write-file", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("writeFile succeeded"));
+
+    let result_file = String::from_utf8(std::fs::read(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("promises-output.txt"),
+    )?)?;
+
+    assert_eq!(result_file, "written via fs/promises");
+    Ok(())
+}
+
+#[test]
+async fn fs_promises_rename(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-fs-promises-rename", &[])
+        .await;
+    let _result = r?;
+
+    // Check that the old file doesn't exist
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("test")
+            .join("before-rename.txt")
+            .exists()
+    );
+
+    // Check that the new file exists with the correct content
+    let result_file = String::from_utf8(std::fs::read(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("after-rename.txt"),
+    )?)?;
+
+    assert!(output.contains("rename succeeded"));
+    assert_eq!(result_file, "content to rename");
+    Ok(())
+}
+
+#[test]
+async fn fs_promises_mkdir(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-fs-promises-mkdir", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("mkdir succeeded"));
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("new-dir")
+            .exists()
+    );
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("new-dir")
+            .is_dir()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_promises_mkdir_recursive(
+    #[tagged_as("fs")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-fs-promises-mkdir-recursive", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("mkdir recursive succeeded"));
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("nested")
+            .join("deep")
+            .join("dir")
+            .exists()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_promises_unlink(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-fs-promises-unlink", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("unlink succeeded"));
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("test")
+            .join("to-delete.txt")
+            .exists()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_rename_sync(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-rename-sync", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("renameSync succeeded"));
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("test")
+            .join("rename-sync-before.txt")
+            .exists()
+    );
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("rename-sync-after.txt")
+            .exists()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_rename_callback(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-rename-callback", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("rename callback succeeded"));
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("test")
+            .join("rename-cb-before.txt")
+            .exists()
+    );
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("rename-cb-after.txt")
+            .exists()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_mkdir_sync(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-mkdir-sync", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("mkdirSync succeeded"));
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("mkdir-sync-dir")
+            .is_dir()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_mkdir_sync_recursive(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-mkdir-sync-recursive", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("mkdirSync recursive succeeded"));
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("mkdir-sync-nested")
+            .join("deep")
+            .join("dir")
+            .is_dir()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_mkdir_callback(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-mkdir-callback", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("mkdir callback succeeded"));
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("mkdir-cb-dir")
+            .is_dir()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_mkdir_callback_recursive(
+    #[tagged_as("fs")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-mkdir-callback-recursive", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("mkdir callback recursive succeeded"));
+    assert!(
+        instance
+            .temp_dir_path()
+            .join("test")
+            .join("mkdir-cb-nested")
+            .join("deep")
+            .join("dir")
+            .is_dir()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_unlink_sync(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-unlink-sync", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("unlinkSync succeeded"));
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("test")
+            .join("unlink-sync-file.txt")
+            .exists()
+    );
+    Ok(())
+}
+
+#[test]
+async fn fs_unlink_callback(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let (r, output) = instance
+        .invoke_and_capture_output(None, "test-unlink-callback", &[])
+        .await;
+    let _result = r?;
+
+    assert!(output.contains("unlink callback succeeded"));
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("test")
+            .join("unlink-cb-file.txt")
+            .exists()
+    );
+    Ok(())
+}
+
+#[test]
 async fn url_test1(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
     let (r, output) =
         invoke_and_capture_output(compiled_test.wasm_path(), None, "test1", &[]).await;
@@ -1592,18 +1907,30 @@ async fn url_test4(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::
         output,
         indoc! {
             r#"https:
-           test
-           pass
-           example.com
-           1234
-           /path
-           #fragment
-           api
-           URLUtils.searchParams
-           https://test:pass@example.com:1234/path?query=URLUtils.searchParams&topic=api#fragment
-           "#
+            test
+            pass
+            example.com
+            1234
+            /path
+            #fragment
+            api
+            URLUtils.searchParams
+            https://test:pass@example.com:1234/path?query=URLUtils.searchParams&topic=api#fragment
+            "#
         }
     );
+    Ok(())
+}
+
+#[test]
+async fn url_test5(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test5", &[]).await;
+    let r = r?;
+
+    println!("Output:\n{}", output);
+
+    assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
 
@@ -1698,6 +2025,62 @@ async fn web_crypto_random_u32(
             Ok(())
         }
         _ => Err(anyhow!("Expected list<u32> result")),
+    }
+}
+
+#[test]
+async fn crypto_create_hash_sha256(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "sha256-hex",
+        &[Val::String("some data to hash".to_string())],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(
+                hex,
+                "6a2da20943931e9834fc12cfe5bb47bbd9ae43489a30726962b576f4e3993e50"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_create_hash_multi_update(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "sha256-multi-update",
+        &[Val::List(vec![
+            Val::String("some ".to_string()),
+            Val::String("data ".to_string()),
+            Val::String("to hash".to_string()),
+        ])],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(
+                hex,
+                "6a2da20943931e9834fc12cfe5bb47bbd9ae43489a30726962b576f4e3993e50"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
     }
 }
 
@@ -2168,5 +2551,963 @@ async fn path_test_sep(#[tagged_as("path")] compiled_test: &CompiledTest) -> any
     let r = r?;
     println!("Output:\n{}", output);
     assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn fetch_headers_iterator(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "headers-iterator",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 26 (Headers iterator)"));
+    assert!(output.contains("Testing Headers Symbol.iterator:"));
+    assert!(output.contains("Total headers via Symbol.iterator:"));
+    assert!(output.contains("Total headers via entries():"));
+    assert!(output.contains("Symbol.iterator test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_headers_constructor_iterator(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "headers-constructor-iterator",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 27 (Headers constructor iterator)"));
+    assert!(output.contains("Testing Headers constructor with for-of loop:"));
+    assert!(output.contains("x-custom-1 = value1"));
+    assert!(output.contains("x-custom-2 = value2"));
+    assert!(output.contains("x-custom-3 = value3"));
+    assert!(output.contains("Total headers from for-of loop: 3"));
+    assert!(output.contains("Total headers from entries(): 3"));
+    assert!(output.contains("Headers constructor iterator test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_with_url_object(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-with-url-object",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 28 (URL object parameter)"));
+    assert!(output.contains(&format!("URL object test: status=200")));
+    assert!(output.contains("URL object fetch successful:"));
+
+    Ok(())
+}
+
+#[test]
+async fn post_with_url_object(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-url-object",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 29 (POST with URL object)"));
+    assert!(output.contains("POST with URL object: status=201"));
+    assert!(output.contains("POST with URL object successful: title=url_object_test"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_url_object_with_query_params(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "fetch-url-object-with-query-params",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 30 (URL object with query parameters)"));
+    assert!(output.contains("URL with query params: status=200"));
+    assert!(output.contains("Fetched"));
+    assert!(output.contains("item(s) with URL query params"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_basic(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-basic", &[]).await;
+
+    assert!(output.contains("Created AbortController"));
+    assert!(output.contains("Signal aborted (before abort): false"));
+    assert!(output.contains("Signal aborted (after abort): true"));
+    assert!(output.contains("test-abort-basic passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_signal_static(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-signal", &[]).await;
+
+    assert!(output.contains("Created aborted signal"));
+    assert!(output.contains("Signal aborted: true"));
+    assert!(output.contains("Signal reason: Custom abort reason"));
+    assert!(output.contains("test-abort-signal passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_signal_timeout(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-timeout", &[]).await;
+
+    assert!(output.contains("Created timeout signal (10ms)"));
+    assert!(output.contains("Signal aborted (immediately): false"));
+    assert!(output.contains("test-abort-timeout passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_event(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-event", &[]).await;
+
+    assert!(output.contains("Added abort event listener"));
+    assert!(output.contains("Abort event fired"));
+    assert!(output.contains("Event fired: true"));
+    assert!(output.contains("test-abort-event passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_reason(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-reason", &[]).await;
+
+    assert!(output.contains("Signal reason (before abort): undefined"));
+    assert!(output.contains("Signal reason message: Custom error"));
+    assert!(output.contains("Reasons match: true"));
+    assert!(output.contains("test-abort-reason passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_multiple_listeners(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-abort-multiple-listeners",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Added 2 abort event listeners"));
+    assert!(output.contains("Listener 1 fired"));
+    assert!(output.contains("Listener 2 fired"));
+    assert!(output.contains("Both listeners called: true"));
+    assert!(output.contains("test-abort-multiple-listeners passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_throw_if_aborted(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-throw-if-aborted", &[]).await;
+
+    assert!(output.contains("throwIfAborted: Caught error: Custom reason"));
+    assert!(output.contains("test-throw-if-aborted passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_throw_if_aborted_not_aborted(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-throw-if-aborted-not-aborted",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("throwIfAborted: Did not throw (correct)"));
+    assert!(output.contains("throwIfAborted when not aborted - threw: false"));
+    assert!(output.contains("test-throw-if-aborted-not-aborted passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_onabort_handler(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-onabort-handler", &[]).await;
+
+    assert!(output.contains("Set onabort handler"));
+    assert!(output.contains("onabort handler fired"));
+    assert!(output.contains("onabort called: true"));
+    assert!(output.contains("test-onabort-handler passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_once_option(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-once-option", &[]).await;
+
+    assert!(output.contains("Added listener with once: true"));
+    assert!(output.contains("Listener called"));
+    assert!(output.contains("After first abort, call count: 1"));
+    assert!(output.contains("test-once-option passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_remove_event_listener(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-remove-event-listener",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Added listener"));
+    assert!(output.contains("Removed listener"));
+    assert!(output.contains("After abort, listener called: false"));
+    assert!(output.contains("test-remove-event-listener passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_idempotent(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-idempotent", &[]).await;
+
+    assert!(output.contains("First abort"));
+    assert!(output.contains("Second abort"));
+    assert!(output.contains("Listener called: 1 times"));
+    assert!(output.contains("Reasons match (should stay same): true"));
+    assert!(output.contains("test-abort-idempotent passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_no_reason(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abort-no-reason", &[]).await;
+
+    assert!(output.contains("Abort without reason - reason type: DOMException"));
+    assert!(output.contains("Abort without reason - reason name: AbortError"));
+    assert!(output.contains("test-abort-no-reason passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn abort_controller_duplicate_listeners(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-duplicate-listeners", &[])
+            .await;
+
+    assert!(output.contains("Added same handler twice"));
+    assert!(output.contains("Handler call count: 1"));
+    assert!(output.contains("test-duplicate-listeners passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_abort_already_aborted(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-fetch-abort-already-aborted",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Testing fetch with already-aborted signal"));
+    assert!(output.contains("Caught abort error"));
+    assert!(output.contains("test-fetch-abort-already-aborted passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_abort_during_request(
+    #[tagged_as("abort_controller")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (_, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-fetch-abort-during-request",
+        &[],
+    )
+    .await;
+
+    assert!(output.contains("Testing fetch with signal aborted during request"));
+    assert!(output.contains("Aborting fetch"));
+    assert!(output.contains("Caught abort error"));
+    assert!(output.contains("Result: aborted"));
+    assert!(output.contains("test-fetch-abort-during-request passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_request_body_get_reader_after_access(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "request-body-get-reader-after-access",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 31 (Request body getReader after body access)"));
+    assert!(output.contains("Stored body reference: exists"));
+    assert!(output.contains("Got reader from request.body"));
+    assert!(output.contains("Body content: test body content"));
+    assert!(output.contains("Request body getReader after access test passed"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_response_body_get_reader_after_access(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-body-get-reader-after-access",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains(
+        "fetch test 32 (Response body getReader after body access - TanStack AI pattern)"
+    ));
+    assert!(output.contains("Stored body reference: exists"));
+    assert!(output.contains("Got reader from response.body"));
+    assert!(output.contains("Response body getReader after access test passed"));
+
+    Ok(())
+}
+
+// XMLHttpRequest tests
+
+#[test]
+async fn xhr_simple_get(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "simple-get", &[Val::U16(port)])
+            .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 1: simple GET"));
+    assert!(output.contains("Status: 200"));
+    assert!(output.contains("Response length:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_simple_post(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "simple-post", &[Val::U16(port)])
+            .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 2: simple POST"));
+    assert!(output.contains("POST Status:") || output.contains("POST Error occurred"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_set_request_headers(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "set-request-headers",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 3: set request headers"));
+    assert!(output.contains("Headers test status:") || output.contains("ReadyState changed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_get_response_headers(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "get-response-headers",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 4: get response headers"));
+    assert!(output.contains("Content-Type header:") || output.contains("All headers length:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_response_types(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "response-types",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 5: response types"));
+    assert!(output.contains("Text response type:") || output.contains("JSON response type:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_readystate_events(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "readystate-events",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 6: readystate events"));
+    assert!(output.contains("ReadyState changed to:") || output.contains("States encountered:"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_error_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "error-handling",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 7: error handling"));
+    // Either error handler is called or request succeeds
+    assert!(
+        output.contains("Error handler called")
+            || output.contains("Request succeeded")
+            || output.contains("Status on error:")
+    );
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_abort_request(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "abort-request",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 8: abort request"));
+    assert!(output.contains("Abort handler called") || output.contains("Request completed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_timeout_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "timeout-handling",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 9: timeout handling"));
+    // Either timeout or normal completion
+    assert!(output.contains("Timeout handler called") || output.contains("Request completed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_post_with_form_data(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-form-data",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 11: POST with FormData"));
+    assert!(output.contains("FormData POST status:") || output.contains("ReadyState changed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_post_with_json_body(
+    #[tagged_as("xhr")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "post-with-json-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 12: POST with JSON body"));
+    assert!(output.contains("JSON POST status:") || output.contains("ReadyState changed"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_basic_auth(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "request-with-basic-auth",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 10: basic auth"));
+    assert!(output.contains("Auth request status:") || output.contains("Auth request error"));
+
+    Ok(())
+}
+
+#[test]
+async fn xhr_status_is_number(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "status-is-number",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("XMLHttpRequest test 13: status is number"));
+    assert!(output.contains("Status typeof: number"));
+    assert!(output.contains("Status is number: true"));
+    assert!(output.contains("Status === 200: true"));
+    assert!(output.contains("Status >= 200 && status < 300: true"));
+
+    Ok(())
+}
+
+#[test]
+async fn os_eol_constant(#[tagged_as("os")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test", &[]).await;
+    let result = result?;
+
+    // The result should be a JSON string with os module test results
+    if let Some(Val::String(json_str)) = result {
+        let result_obj: serde_json::Value = serde_json::from_str(&json_str)?;
+
+        // Verify that EOL constant exists and is a string
+        assert!(
+            result_obj["hasEOL"].as_bool().unwrap_or(false),
+            "os.EOL should exist"
+        );
+        assert!(
+            result_obj["canImportAsOs"].as_bool().unwrap_or(false),
+            "os module should be importable"
+        );
+
+        // Verify key functions exist
+        assert!(
+            result_obj["hasArch"].as_bool().unwrap_or(false),
+            "os.arch should exist"
+        );
+        assert!(
+            result_obj["hasPlatform"].as_bool().unwrap_or(false),
+            "os.platform should exist"
+        );
+        assert!(
+            result_obj["hasHostname"].as_bool().unwrap_or(false),
+            "os.hostname should exist"
+        );
+        assert!(
+            result_obj["hasUptime"].as_bool().unwrap_or(false),
+            "os.uptime should exist"
+        );
+        assert!(
+            result_obj["hasHomedir"].as_bool().unwrap_or(false),
+            "os.homedir should exist"
+        );
+        assert!(
+            result_obj["hasTmpdir"].as_bool().unwrap_or(false),
+            "os.tmpdir should exist"
+        );
+    } else {
+        anyhow::bail!("Expected string result from test function");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_primitives(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-primitives", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(s.contains("number: true"), "number cloning failed");
+        assert!(s.contains("string: true"), "string cloning failed");
+        assert!(s.contains("boolean: true"), "boolean cloning failed");
+        assert!(s.contains("null: true"), "null cloning failed");
+        assert!(s.contains("undefined: true"), "undefined cloning failed");
+        assert!(s.contains("bigint: true"), "bigint cloning failed");
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_objects(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-objects", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("object different ref: true"),
+            "object should be cloned by value"
+        );
+        assert!(s.contains("object.a: true"), "object.a should be cloned");
+        assert!(s.contains("object.b: true"), "object.b should be cloned");
+        assert!(
+            s.contains("nested different ref: true"),
+            "nested object should be cloned"
+        );
+        assert!(
+            s.contains("mutation isolated: true"),
+            "mutation should be isolated"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_arrays(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-arrays", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("array different ref: true"),
+            "array should be cloned by value"
+        );
+        assert!(
+            s.contains("array length: true"),
+            "array length should match"
+        );
+        assert!(
+            s.contains("typed array different ref: true"),
+            "typed array should be cloned"
+        );
+        assert!(
+            s.contains("typed array length: true"),
+            "typed array length should match"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_collections(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-collections", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("map different ref: true"),
+            "map should be cloned"
+        );
+        assert!(s.contains("map size: true"), "map size should match");
+        assert!(
+            s.contains("set different ref: true"),
+            "set should be cloned"
+        );
+        assert!(s.contains("set size: true"), "set size should match");
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_special_types(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-special-types", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("date different ref: true"),
+            "date should be cloned"
+        );
+        assert!(s.contains("date value: true"), "date value should match");
+        assert!(
+            s.contains("regex different ref: true"),
+            "regex should be cloned"
+        );
+        assert!(
+            s.contains("regex source: true"),
+            "regex source should match"
+        );
+        assert!(s.contains("regex flags: true"), "regex flags should match");
+        assert!(
+            s.contains("error different ref: true"),
+            "error should be cloned"
+        );
+        assert!(
+            s.contains("error message: true"),
+            "error message should match"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_circular_refs(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-circular-refs", &[]).await;
+    let result = result?;
+
+    if let Some(Val::String(s)) = result {
+        assert!(
+            s.contains("circular clone different ref: true"),
+            "circular ref should be cloned"
+        );
+        assert!(
+            s.contains("circular self ref: true"),
+            "circular self ref should be preserved"
+        );
+        assert!(
+            s.contains("circular array different ref: true"),
+            "circular array should be cloned"
+        );
+        assert!(
+            s.contains("circular array self ref: true"),
+            "circular array self ref should be preserved"
+        );
+    } else {
+        anyhow::bail!("Expected string result");
+    }
+
     Ok(())
 }

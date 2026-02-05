@@ -6,11 +6,24 @@ use std::slice;
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     use rquickjs::TypedArray;
+    use sha2::{Digest, Sha256};
 
     #[rquickjs::function]
     pub fn random_uuid_v4_string() -> String {
         let uuid = uuid::Uuid::new_v4();
         uuid.to_string()
+    }
+
+    #[rquickjs::function]
+    pub fn sha256_digest<'js>(data: TypedArray<'js, u8>) -> Vec<u8> {
+        if let Some(raw) = data.as_raw() {
+            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            let mut hasher = Sha256::new();
+            hasher.update(slice);
+            hasher.finalize().to_vec()
+        } else {
+            Vec::new()
+        }
     }
 
     #[rquickjs::function]
@@ -68,6 +81,9 @@ fn randomize_typed_array<V>(array: TypedArray<V>) {
 
 // JS functions for the crypto implementation
 pub const WEB_CRYPTO_JS: &str = include_str!("web-crypto.js");
+
+// Re-export for aliases
+pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/web_crypto';"#;
 
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"

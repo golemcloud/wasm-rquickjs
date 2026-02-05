@@ -1,7 +1,9 @@
 use std::fmt::Write;
 
+mod abort_controller;
 mod base64;
 mod buffer;
+mod child_process;
 mod console;
 mod encoding;
 mod fs;
@@ -18,11 +20,14 @@ mod http {
 
 mod eventemitter;
 mod ieee754;
+mod module;
 mod internal;
+mod os;
 mod path;
 mod process;
 mod stream;
 mod string_decoder;
+mod structured_clone;
 mod timeout;
 mod url;
 mod util;
@@ -34,6 +39,7 @@ pub fn add_module_resolvers(
 ) -> rquickjs::loader::BuiltinResolver {
     internal::add_to_resolver(
         resolver
+            .with_module("__wasm_rquickjs_builtin/abort_controller")
             .with_module("__wasm_rquickjs_builtin/console_native")
             .with_module("__wasm_rquickjs_builtin/console")
             .with_module("__wasm_rquickjs_builtin/timeout_native")
@@ -50,10 +56,19 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/fs_native")
             .with_module("node:fs")
             .with_module("fs")
+            .with_module("node:fs/promises")
+            .with_module("fs/promises")
             .with_module("node:buffer")
             .with_module("buffer")
             .with_module("base64-js")
             .with_module("ieee754")
+            .with_module("__wasm_rquickjs_builtin/os_native")
+            .with_module("node:os")
+            .with_module("os")
+            .with_module("node:child_process")
+            .with_module("child_process")
+            .with_module("node:module")
+            .with_module("module")
             .with_module("__wasm_rquickjs_builtin/process_native")
             .with_module("node:process")
             .with_module("process")
@@ -66,12 +81,18 @@ pub fn add_module_resolvers(
             .with_module("events")
             .with_module("node:stream")
             .with_module("node:stream/promises")
+            .with_module("node:stream/web")
             .with_module("stream")
             .with_module("stream/promises")
+            .with_module("stream/web")
+            .with_module("web-streams-polyfill")
             .with_module("node:string_decoder")
             .with_module("string_decoder")
             .with_module("__wasm_rquickjs_builtin/web_crypto_native")
-            .with_module("__wasm_rquickjs_builtin/web_crypto"),
+            .with_module("__wasm_rquickjs_builtin/web_crypto")
+            .with_module("node:crypto")
+            .with_module("crypto")
+            .with_module("__wasm_rquickjs_builtin/structured_clone"),
     )
 }
 
@@ -99,49 +120,74 @@ pub fn module_loader() -> (
                 encoding::js_native_module,
             )
             .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
+            .with_module("__wasm_rquickjs_builtin/os_native", os::js_native_module)
             .with_module(
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
             )
-            .with_module("__wasm_rquickjs_builtin/path_native", path::js_native_module)
+            .with_module(
+                "__wasm_rquickjs_builtin/path_native",
+                path::js_native_module,
+            )
             .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto_native",
                 web_crypto::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
+            .with_module(
+                "__wasm_rquickjs_builtin/abort_controller",
+                abort_controller::ABORT_CONTROLLER_JS,
+            )
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
             .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
             .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
             .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
             .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
             .with_module("__wasm_rquickjs_builtin/streams", webstreams::WEBSTREAMS_JS)
+            .with_module("node:stream/web", webstreams::REEXPORT_JS)
+            .with_module("stream/web", webstreams::REEXPORT_JS)
+            .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)
             .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
             .with_module("node:util", util::UTIL_JS)
-            .with_module("util", util::UTIL_JS)
+            .with_module("util", util::REEXPORT_JS)
             .with_module("base64-js", base64::BASE64_JS)
             .with_module("ieee754", ieee754::IEEE754_JS)
             .with_module("node:buffer", buffer::BUFFER_JS)
-            .with_module("buffer", buffer::BUFFER_JS)
+            .with_module("buffer", buffer::REEXPORT_JS)
             .with_module("node:fs", fs::FS_JS)
-            .with_module("fs", fs::FS_JS)
+            .with_module("fs", fs::REEXPORT_JS)
+            .with_module("node:fs/promises", fs::FS_PROMISES_JS)
+            .with_module("fs/promises", fs::REEXPORT_PROMISES_JS)
+            .with_module("node:os", os::OS_JS)
+            .with_module("os", os::REEXPORT_JS)
+            .with_module("node:child_process", child_process::CHILD_PROCESS_JS)
+            .with_module("child_process", child_process::REEXPORT_JS)
+            .with_module("node:module", module::MODULE_JS)
+            .with_module("module", module::REEXPORT_JS)
             .with_module("node:process", process::PROCESS_JS)
-            .with_module("process", process::PROCESS_JS)
+            .with_module("process", process::REEXPORT_JS)
             .with_module("node:path", path::PATH_JS)
-            .with_module("path", path::PATH_JS)
+            .with_module("path", path::REEXPORT_JS)
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module("node:events", eventemitter::EVENTEMITTER_JS)
-            .with_module("events", eventemitter::EVENTEMITTER_JS)
+            .with_module("events", eventemitter::REEXPORT_JS)
             .with_module("node:stream", stream::STREAM_JS)
-            .with_module("stream", stream::STREAM_JS)
+            .with_module("stream", stream::REEXPORT_JS)
             .with_module("node:stream/promises", stream::STREAM_PROMISES_JS)
-            .with_module("stream/promises", stream::STREAM_PROMISES_JS)
+            .with_module("stream/promises", stream::REEXPORT_PROMISES_JS)
             .with_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
-            .with_module("string_decoder", string_decoder::STRING_DECODER_JS)
+            .with_module("string_decoder", string_decoder::REEXPORT_JS)
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto",
                 web_crypto::WEB_CRYPTO_JS,
+            )
+            .with_module("node:crypto", web_crypto::REEXPORT_JS)
+            .with_module("crypto", web_crypto::REEXPORT_JS)
+            .with_module(
+                "__wasm_rquickjs_builtin/structured_clone",
+                structured_clone::STRUCTURED_CLONE_JS,
             ),
         internal::module_loader(),
     )
@@ -149,6 +195,8 @@ pub fn module_loader() -> (
 
 pub fn wire_builtins() -> String {
     let mut result = String::new();
+    writeln!(result, "{}", abort_controller::WIRE_JS).unwrap();
+    writeln!(result, "{}", buffer::WIRE_JS).unwrap();
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();
     writeln!(result, "{}", http::WIRE_JS).unwrap();
@@ -156,6 +204,9 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
     writeln!(result, "{}", url::WIRE_JS).unwrap();
     writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
+    writeln!(result, "{}", process::WIRE_JS).unwrap();
+    writeln!(result, "{}", structured_clone::WIRE_JS).unwrap();
+    writeln!(result, "{}", module::WIRE_JS).unwrap();
 
     result
 }

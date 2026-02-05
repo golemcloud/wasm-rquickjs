@@ -26,4 +26,11 @@ declare module 'fetch' {
   export function responseCloneReuseBodies(port: number): Promise<void>;
   export function responseCloneHeaders(port: number): Promise<void>;
   export function responseFormData(port: number): Promise<void>;
+  export function headersIterator(port: number): Promise<void>;
+  export function headersConstructorIterator(port: number): Promise<void>;
+  export function fetchWithUrlObject(port: number): Promise<void>;
+  export function postWithUrlObject(port: number): Promise<void>;
+  export function fetchUrlObjectWithQueryParams(port: number): Promise<void>;
+  export function requestBodyGetReaderAfterAccess(port: number): Promise<void>;
+  export function responseBodyGetReaderAfterAccess(port: number): Promise<void>;
 }
