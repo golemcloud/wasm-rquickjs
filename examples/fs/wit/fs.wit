@@ -3,4 +3,17 @@ package quickjs:fs;
 world fs {
   export run-async: func();
   export run: func();
+  export test-fs-promises-write-file: func();
+  export test-fs-promises-rename: func();
+  export test-fs-promises-mkdir: func();
+  export test-fs-promises-mkdir-recursive: func();
+  export test-fs-promises-unlink: func();
+  export test-rename-sync: func();
+  export test-rename-callback: func();
+  export test-mkdir-sync: func();
+  export test-mkdir-sync-recursive: func();
+  export test-mkdir-callback: func();
+  export test-mkdir-callback-recursive: func();
+  export test-unlink-sync: func();
+  export test-unlink-callback: func();
 }

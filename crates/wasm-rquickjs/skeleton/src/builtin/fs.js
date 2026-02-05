@@ -113,9 +113,65 @@ export function unlink(path, callback) {
     const error = native.unlink(path);
     if (error !== undefined) {
         callback(error);
+    } else {
+        callback();
     }
 }
 
+
+export function renameSync(oldPath, newPath) {
+    // TODO: support Buffer and URL as path
+
+    const error = native.rename(oldPath, newPath);
+    if (error !== undefined) {
+        throw new Error(error);
+    }
+}
+
+export function rename(oldPath, newPath, callback) {
+    // TODO: support Buffer and URL as path
+
+    // NOTE: no async rename on WASI p2
+    const error = native.rename(oldPath, newPath);
+    if (error !== undefined) {
+        callback(error);
+    } else {
+        callback();
+    }
+}
+
+export function mkdirSync(path, options) {
+    // TODO: support Buffer and URL as path
+
+    let recursive = false;
+    if (options && options.recursive) {
+        recursive = true;
+    }
+
+    const error = native.mkdir(path, recursive);
+    if (error !== undefined) {
+        throw new Error(error);
+    }
+}
+
+export function mkdir(path, optionsOrCallback, callback) {
+    // TODO: support Buffer and URL as path
+
+    let recursive = false;
+    if (typeof optionsOrCallback === 'function') {
+        callback = optionsOrCallback;
+    } else if (optionsOrCallback && optionsOrCallback.recursive) {
+        recursive = true;
+    }
+
+    // NOTE: no async mkdir on WASI p2
+    const error = native.mkdir(path, recursive);
+    if (error !== undefined) {
+        callback(error);
+    } else {
+        callback();
+    }
+}
 
 export default {
     readFile,
@@ -123,5 +179,9 @@ export default {
     writeFile,
     writeFileSync,
     unlink,
-    unlinkSync
+    unlinkSync,
+    rename,
+    renameSync,
+    mkdir,
+    mkdirSync
 };
