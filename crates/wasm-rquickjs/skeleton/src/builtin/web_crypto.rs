@@ -1,16 +1,30 @@
 use rand::RngCore;
 use rquickjs::TypedArray;
+use sha2::{Digest, Sha256};
 use std::slice;
 
 // Native functions for the crypto implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     use rquickjs::TypedArray;
+    use sha2::{Digest, Sha256};
 
     #[rquickjs::function]
     pub fn random_uuid_v4_string() -> String {
         let uuid = uuid::Uuid::new_v4();
         uuid.to_string()
+    }
+
+    #[rquickjs::function]
+    pub fn sha256_digest<'js>(data: TypedArray<'js, u8>) -> Vec<u8> {
+        if let Some(raw) = data.as_raw() {
+            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            let mut hasher = Sha256::new();
+            hasher.update(slice);
+            hasher.finalize().to_vec()
+        } else {
+            Vec::new()
+        }
     }
 
     #[rquickjs::function]

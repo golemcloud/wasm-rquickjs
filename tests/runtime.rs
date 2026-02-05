@@ -2029,6 +2029,62 @@ async fn web_crypto_random_u32(
 }
 
 #[test]
+async fn crypto_create_hash_sha256(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "sha256-hex",
+        &[Val::String("some data to hash".to_string())],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(
+                hex,
+                "6a2da20943931e9834fc12cfe5bb47bbd9ae43489a30726962b576f4e3993e50"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_create_hash_multi_update(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "sha256-multi-update",
+        &[Val::List(vec![
+            Val::String("some ".to_string()),
+            Val::String("data ".to_string()),
+            Val::String("to hash".to_string()),
+        ])],
+    )
+    .await;
+
+    let result = result?;
+
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(
+                hex,
+                "6a2da20943931e9834fc12cfe5bb47bbd9ae43489a30726962b576f4e3993e50"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
 async fn response_static_error(
     #[tagged_as("response_static")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

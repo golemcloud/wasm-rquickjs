@@ -20,6 +20,7 @@ mod http {
 
 mod eventemitter;
 mod ieee754;
+mod module;
 mod internal;
 mod os;
 mod path;
@@ -66,6 +67,8 @@ pub fn add_module_resolvers(
             .with_module("os")
             .with_module("node:child_process")
             .with_module("child_process")
+            .with_module("node:module")
+            .with_module("module")
             .with_module("__wasm_rquickjs_builtin/process_native")
             .with_module("node:process")
             .with_module("process")
@@ -78,12 +81,15 @@ pub fn add_module_resolvers(
             .with_module("events")
             .with_module("node:stream")
             .with_module("node:stream/promises")
+            .with_module("node:stream/web")
             .with_module("stream")
             .with_module("stream/promises")
+            .with_module("stream/web")
             .with_module("node:string_decoder")
             .with_module("string_decoder")
             .with_module("__wasm_rquickjs_builtin/web_crypto_native")
             .with_module("__wasm_rquickjs_builtin/web_crypto")
+            .with_module("node:crypto")
             .with_module("crypto")
             .with_module("__wasm_rquickjs_builtin/structured_clone"),
     )
@@ -138,6 +144,8 @@ pub fn module_loader() -> (
             .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
             .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
             .with_module("__wasm_rquickjs_builtin/streams", webstreams::WEBSTREAMS_JS)
+            .with_module("node:stream/web", webstreams::WEBSTREAMS_JS)
+            .with_module("stream/web", webstreams::WEBSTREAMS_JS)
             .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
             .with_module("node:util", util::UTIL_JS)
             .with_module("util", util::UTIL_JS)
@@ -153,6 +161,8 @@ pub fn module_loader() -> (
             .with_module("os", os::OS_JS)
             .with_module("node:child_process", child_process::CHILD_PROCESS_JS)
             .with_module("child_process", child_process::CHILD_PROCESS_JS)
+            .with_module("node:module", module::MODULE_JS)
+            .with_module("module", module::MODULE_JS)
             .with_module("node:process", process::PROCESS_JS)
             .with_module("process", process::PROCESS_JS)
             .with_module("node:path", path::PATH_JS)
@@ -171,6 +181,7 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/web_crypto",
                 web_crypto::WEB_CRYPTO_JS,
             )
+            .with_module("node:crypto", web_crypto::WEB_CRYPTO_JS)
             .with_module("crypto", web_crypto::WEB_CRYPTO_JS)
             .with_module(
                 "__wasm_rquickjs_builtin/structured_clone",
