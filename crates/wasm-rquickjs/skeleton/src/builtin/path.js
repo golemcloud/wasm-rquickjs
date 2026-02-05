@@ -92,6 +92,10 @@ const posix = {
     toNamespacedPath,
 };
 
+// Placeholder to satisfy the node:path exports but we don't have
+// a win32 path implementation at the moment
+const win32 = posix;
+
 // Export all path functions
 export {
     sep,
@@ -109,4 +113,24 @@ export {
     matchesGlob,
     toNamespacedPath,
     posix,
+    win32
+};
+
+export default {
+    sep,
+    delimiter,
+    basename,
+    dirname,
+    extname,
+    isAbsolute,
+    join,
+    normalize,
+    relative,
+    resolve,
+    parse,
+    format,
+    matchesGlob,
+    toNamespacedPath,
+    posix,
+    win32
 };

@@ -101,3 +101,10 @@ export function writeFileSync(path, data, options) {
         }
     }
 }
+
+export default {
+    readFile,
+    readFileSync,
+    writeFile,
+    writeFileSync
+};
