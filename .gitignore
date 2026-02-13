@@ -3,3 +3,4 @@
 tmp
 target
 .DS_Store
+tests/node_compat/suite

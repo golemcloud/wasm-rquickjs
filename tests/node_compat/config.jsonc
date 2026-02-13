@@ -1,0 +1,29 @@
+{
+  // Node.js version these tests were vendored from
+  "nodeVersion": "22.14.0",
+
+  // Tests listed here are expected to pass.
+  // Each key is a path relative to the suite/ directory.
+  // Value is an object with optional configuration:
+  //   "skip": true        - skip this test (with optional "reason")
+  //   "flaky": true       - retry up to 3 times before failing
+  //   "reason": "..."     - explanation for skip/flaky marking
+  //
+  // Only tests listed here will be run by the test harness.
+  // Unlisted tests are ignored (not run, not reported).
+
+  "tests": {
+    // === node:path tests ===
+    // Pure string operations, no I/O — highest likelihood of passing
+    "parallel/test-path-basename.js": {},
+    "parallel/test-path-dirname.js": {},
+    "parallel/test-path-extname.js": {},
+    "parallel/test-path-join.js": {},
+    "parallel/test-path-isabsolute.js": {},
+    "parallel/test-path-normalize.js": {},
+    "parallel/test-path-parse-format.js": {},
+    "parallel/test-path-relative.js": {},
+    "parallel/test-path-resolve.js": {},
+    "parallel/test-path-zero-length-strings.js": {}
+  }
+}
