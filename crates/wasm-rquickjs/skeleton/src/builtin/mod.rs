@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 mod abort_controller;
+mod assert;
 mod base64;
 mod buffer;
 mod child_process;
@@ -65,6 +66,10 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/os_native")
             .with_module("node:os")
             .with_module("os")
+            .with_module("node:assert")
+            .with_module("assert")
+            .with_module("node:assert/strict")
+            .with_module("assert/strict")
             .with_module("node:child_process")
             .with_module("child_process")
             .with_module("node:module")
@@ -161,6 +166,10 @@ pub fn module_loader() -> (
             .with_module("fs/promises", fs::REEXPORT_PROMISES_JS)
             .with_module("node:os", os::OS_JS)
             .with_module("os", os::REEXPORT_JS)
+            .with_module("node:assert", assert::ASSERT_JS)
+            .with_module("assert", assert::REEXPORT_JS)
+            .with_module("node:assert/strict", assert::ASSERT_STRICT_JS)
+            .with_module("assert/strict", assert::REEXPORT_STRICT_JS)
             .with_module("node:child_process", child_process::CHILD_PROCESS_JS)
             .with_module("child_process", child_process::REEXPORT_JS)
             .with_module("node:module", module::MODULE_JS)
