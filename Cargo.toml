@@ -59,6 +59,10 @@ harness = false
 name = "errors"
 harness = false
 
+[[test]]
+name = "node_compat"
+harness = false
+
 [workspace]
 exclude = [
     "crates/wasm-rquickjs/skeleton",
