@@ -452,7 +452,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     report.push_str("# Node.js v22 Compatibility Report\n\n");
     report.push_str(&format!(
         "Generated: {} | Runtime: {:.0}s | Engine: wasm-rquickjs (QuickJS)\n\n",
-        chrono_like_now(),
+        now_date(),
         total_elapsed.as_secs_f64()
     ));
 
@@ -645,18 +645,6 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn chrono_like_now() -> String {
-    // Simple timestamp without chrono dependency
-    use std::time::SystemTime;
-    let duration = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = duration.as_secs();
-    let days = secs / 86400;
-    // Approximate date - good enough for a report timestamp
-    let years = 1970 + (days / 365);
-    let remaining_days = days % 365;
-    let month = remaining_days / 30 + 1;
-    let day = remaining_days % 30 + 1;
-    format!("{years}-{month:02}-{day:02}")
+fn now_date() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
 }
