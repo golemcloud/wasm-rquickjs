@@ -1,0 +1,13 @@
+package quickjs:cjs-require;
+
+world cjs-require {
+  export test-require-builtin: func() -> bool;
+  export test-require-relative: func() -> bool;
+  export test-require-directory: func() -> bool;
+  export test-require-circular: func() -> bool;
+  export test-require-cache: func() -> bool;
+  export test-create-require: func() -> bool;
+  export test-require-json: func() -> bool;
+  export test-require-module-exports-function: func() -> bool;
+  export test-require-module-not-found: func() -> bool;
+}
