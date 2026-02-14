@@ -51,6 +51,34 @@
       "skip": true,
       "reason": "requires ../common/fixtures module"
     },
-    "parallel/test-path-zero-length-strings.js": {}
+    "parallel/test-path-zero-length-strings.js": {},
+
+    // === node:assert tests ===
+    "parallel/test-assert.js": {},
+    "parallel/test-assert-async.js": {},
+    "parallel/test-assert-builtins-not-read-from-filesystem.js": {},
+    "parallel/test-assert-calltracker-calls.js": {},
+    "parallel/test-assert-calltracker-getCalls.js": {},
+    "parallel/test-assert-calltracker-report.js": {},
+    "parallel/test-assert-calltracker-verify.js": {},
+    "parallel/test-assert-checktag.js": {
+      "skip": true,
+      "reason": "QuickJS globalThis/process lack V8 internal type tags; notDeepEqual cannot distinguish faked copies"
+    },
+    "parallel/test-assert-deep-with-error.js": {},
+    "parallel/test-assert-deep.js": {},
+    "parallel/test-assert-esm-cjs-message-verify.js": {},
+    "parallel/test-assert-fail-deprecation.js": {},
+    "parallel/test-assert-fail.js": {},
+    "parallel/test-assert-first-line.js": {},
+    "parallel/test-assert-if-error.js": {},
+    "parallel/test-assert-objects.js": {},
+    "parallel/test-assert-typedarray-deepequal.js": {},
+
+    // === node:querystring tests ===
+    "parallel/test-querystring.js": {},
+    "parallel/test-querystring-escape.js": {},
+    "parallel/test-querystring-multichar-separator.js": {},
+    "parallel/test-querystring-maxKeys-non-finite.js": {}
   }
 }

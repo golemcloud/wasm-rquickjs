@@ -13,19 +13,80 @@ class AssertionError extends Error {
         if (options.message != null) {
             message = String(options.message);
         } else {
-            var actualStr = inspect(actual, { depth: 2 });
-            var expectedStr = inspect(expected, { depth: 2 });
-            if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
-            if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
-
-            if (operator === 'deepStrictEqual' || operator === 'strictEqual') {
-                message = 'Expected values to be strictly equal:\n\n' + actualStr + ' !== ' + expectedStr + '\n';
-            } else if (operator === 'deepEqual') {
-                message = 'Expected values to be loosely deep-equal:\n\n' + actualStr + ' != ' + expectedStr + '\n';
-            } else if (operator === 'notDeepStrictEqual' || operator === 'notStrictEqual') {
-                message = 'Expected values to not be strictly equal:\n\n' + actualStr + '\n';
+            if (operator === 'deepStrictEqual' || operator === 'deepEqual') {
+                var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                var actualLines = actualInsp.split('\n');
+                var expectedLines = expectedInsp.split('\n');
+                var header = operator === 'deepStrictEqual'
+                    ? 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n'
+                    : 'Expected values to be loosely deep-equal:\n\n';
+                // Diff generation
+                var m = actualLines.length;
+                var n = expectedLines.length;
+                var diffLines = [];
+                if (m * n > 100000) {
+                    // Fallback for very large inputs: simple line-by-line
+                    var maxLen = Math.max(m, n);
+                    for (var di = 0; di < maxLen; di++) {
+                        var aLine = di < m ? actualLines[di] : undefined;
+                        var eLine = di < n ? expectedLines[di] : undefined;
+                        if (aLine === eLine) {
+                            diffLines.push('  ' + aLine);
+                        } else {
+                            if (aLine !== undefined) diffLines.push('+ ' + aLine);
+                            if (eLine !== undefined) diffLines.push('- ' + eLine);
+                        }
+                    }
+                } else {
+                    // LCS-based diff
+                    var dp = new Array(m + 1);
+                    for (var i = 0; i <= m; i++) {
+                        dp[i] = new Array(n + 1);
+                        for (var j = 0; j <= n; j++) dp[i][j] = 0;
+                    }
+                    for (var i = 1; i <= m; i++) {
+                        for (var j = 1; j <= n; j++) {
+                            if (actualLines[i - 1] === expectedLines[j - 1]) {
+                                dp[i][j] = dp[i - 1][j - 1] + 1;
+                            } else {
+                                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                            }
+                        }
+                    }
+                    var ai = m, ei = n;
+                    var rawDiff = [];
+                    while (ai > 0 || ei > 0) {
+                        if (ai > 0 && ei > 0 && actualLines[ai - 1] === expectedLines[ei - 1]) {
+                            rawDiff.push({ type: ' ', line: actualLines[ai - 1] });
+                            ai--; ei--;
+                        } else if (ei > 0 && (ai === 0 || dp[ai][ei - 1] >= dp[ai - 1][ei])) {
+                            rawDiff.push({ type: '-', line: expectedLines[ei - 1] });
+                            ei--;
+                        } else {
+                            rawDiff.push({ type: '+', line: actualLines[ai - 1] });
+                            ai--;
+                        }
+                    }
+                    rawDiff.reverse();
+                    for (var di = 0; di < rawDiff.length; di++) {
+                        diffLines.push(rawDiff[di].type + ' ' + rawDiff[di].line);
+                    }
+                }
+                message = header + diffLines.join('\n') + '\n';
             } else {
-                message = actualStr + ' ' + operator + ' ' + expectedStr;
+                var actualStr = inspect(actual, { depth: 2 });
+                var expectedStr = inspect(expected, { depth: 2 });
+                if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
+                if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
+
+                if (operator === 'strictEqual') {
+                    message = 'Expected values to be strictly equal:\n\n' + actualStr + ' !== ' + expectedStr + '\n';
+                } else if (operator === 'notDeepStrictEqual' || operator === 'notStrictEqual') {
+                    message = 'Expected values to not be strictly equal:\n\n' + actualStr + '\n';
+                } else {
+                    message = actualStr + ' ' + operator + ' ' + expectedStr;
+                }
             }
         }
 
@@ -34,12 +95,16 @@ class AssertionError extends Error {
         this.actual = actual;
         this.expected = expected;
         this.operator = operator;
-        this.generatedMessage = !options.message;
+        this.generatedMessage = 'generatedMessage' in options ? options.generatedMessage : !options.message;
         this.code = 'ERR_ASSERTION';
         this.name = 'AssertionError';
 
         if (typeof Error.captureStackTrace === 'function') {
             Error.captureStackTrace(this, options.stackStartFn || this.constructor);
+        }
+        // QuickJS stacks don't include the error message; prepend it to match Node.js format
+        if (typeof this.stack === 'string' && !this.stack.includes(message)) {
+            this.stack = this.name + ': ' + message + '\n' + this.stack;
         }
     }
 
@@ -66,14 +131,33 @@ function innerFail(obj) {
     throw new AssertionError(obj);
 }
 
-function fail(actual, expected, message, operator) {
+function fail(actual, expected, message, operator, stackStartFn) {
     if (arguments.length === 0) {
-        message = 'Failed';
-    } else if (arguments.length === 1) {
-        message = actual;
-        actual = undefined;
-        expected = undefined;
-        operator = undefined;
+        innerFail({
+            actual: undefined,
+            expected: undefined,
+            message: 'Failed',
+            operator: 'fail',
+            generatedMessage: true,
+            stackStartFn: fail
+        });
+        return;
+    }
+    if (arguments.length === 1) {
+        var msg1 = processMessage(actual, undefined, undefined);
+        if (msg1 instanceof Error) throw msg1;
+        innerFail({
+            actual: undefined,
+            expected: undefined,
+            message: msg1,
+            operator: 'fail',
+            stackStartFn: fail
+        });
+        return;
+    }
+    // 2+ args (deprecated path)
+    if (arguments.length === 2) {
+        operator = '!=';
     }
     var msg = processMessage(message, actual, expected);
     if (msg instanceof Error) throw msg;
@@ -82,7 +166,8 @@ function fail(actual, expected, message, operator) {
         expected: expected,
         message: msg,
         operator: operator || 'fail',
-        stackStartFn: fail
+        generatedMessage: !message,
+        stackStartFn: stackStartFn || fail
     });
 }
 
@@ -244,7 +329,10 @@ function objEquiv(a, b, strict, memo) {
         // Fall through to compare additional properties on the boxed object
     }
 
-    if (a instanceof Date && b instanceof Date) {
+    var aIsDate = Object.prototype.toString.call(a) === '[object Date]';
+    var bIsDate = Object.prototype.toString.call(b) === '[object Date]';
+    if (aIsDate || bIsDate) {
+        if (!aIsDate || !bIsDate) return false;
         return a.getTime() === b.getTime();
     }
 
@@ -267,7 +355,15 @@ function objEquiv(a, b, strict, memo) {
         return true;
     }
 
-    if (a instanceof ArrayBuffer && b instanceof ArrayBuffer) {
+    var aIsArrayBuffer = a instanceof ArrayBuffer;
+    var bIsArrayBuffer = b instanceof ArrayBuffer;
+    var aIsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && a instanceof SharedArrayBuffer;
+    var bIsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
+
+    if (aIsArrayBuffer || bIsArrayBuffer || aIsSharedArrayBuffer || bIsSharedArrayBuffer) {
+        // ArrayBuffer and SharedArrayBuffer are distinct types — never equal to each other
+        if (aIsArrayBuffer !== bIsArrayBuffer) return false;
+        if (aIsSharedArrayBuffer !== bIsSharedArrayBuffer) return false;
         if (a.byteLength !== b.byteLength) return false;
         var viewA = new Uint8Array(a);
         var viewB = new Uint8Array(b);
@@ -280,6 +376,15 @@ function objEquiv(a, b, strict, memo) {
     if (isView(a) && isView(b)) {
         if (a.byteLength !== b.byteLength) return false;
         if (strict && a.constructor !== b.constructor) return false;
+        // For non-strict mode with float arrays, compare values (not bytes)
+        // so that +0 and -0 are treated as equal
+        if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
+            if (a.length !== b.length) return false;
+            for (var i = 0; i < a.length; i++) {
+                if (a[i] != b[i]) return false;
+            }
+            return true;
+        }
         var ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
         var ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
         for (var i = 0; i < ua.length; i++) {
@@ -569,10 +674,45 @@ function innerPartialDeepEqual(actual, expected) {
         return true;
     }
 
-    if (expected instanceof Date && actual instanceof Date)
+    var expIsDate = Object.prototype.toString.call(expected) === '[object Date]';
+    var actIsDate = Object.prototype.toString.call(actual) === '[object Date]';
+    if (expIsDate || actIsDate) {
+        if (!expIsDate || !actIsDate) return false;
         return expected.getTime() === actual.getTime();
+    }
     if (expected instanceof RegExp && actual instanceof RegExp)
         return expected.source === actual.source && expected.flags === actual.flags;
+
+    // ArrayBuffer / SharedArrayBuffer: must be same type, actual must have >= expected byteLength content
+    var expIsAB = expected instanceof ArrayBuffer;
+    var actIsAB = actual instanceof ArrayBuffer;
+    var expIsSAB = typeof SharedArrayBuffer !== 'undefined' && expected instanceof SharedArrayBuffer;
+    var actIsSAB = typeof SharedArrayBuffer !== 'undefined' && actual instanceof SharedArrayBuffer;
+    if (expIsAB || expIsSAB) {
+        if (expIsAB !== actIsAB || expIsSAB !== actIsSAB) return false;
+        if (actual.byteLength !== expected.byteLength) return false;
+        var va = new Uint8Array(actual);
+        var ve = new Uint8Array(expected);
+        for (var i = 0; i < ve.length; i++) {
+            if (va[i] !== ve[i]) return false;
+        }
+        return true;
+    }
+
+    // Typed array views: must be same constructor type
+    var expIsView = ArrayBuffer.isView ? ArrayBuffer.isView(expected) : (expected && expected.buffer instanceof ArrayBuffer);
+    var actIsView = ArrayBuffer.isView ? ArrayBuffer.isView(actual) : (actual && actual.buffer instanceof ArrayBuffer);
+    if (expIsView) {
+        if (!actIsView) return false;
+        if (expected.constructor !== actual.constructor) return false;
+        if (actual.byteLength !== expected.byteLength) return false;
+        var uea = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
+        var uee = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
+        for (var i = 0; i < uee.length; i++) {
+            if (uea[i] !== uee[i]) return false;
+        }
+        return true;
+    }
 
     var keys = Object.keys(expected);
     for (var i = 0; i < keys.length; i++) {
@@ -611,6 +751,18 @@ function expectedException(actual, expected, message, fn) {
         if (result === true) {
             return { pass: true, message: message };
         }
+        if (result) {
+            var valName = expected.name || 'validate';
+            throw new AssertionError({
+                actual: actual,
+                expected: expected,
+                message: 'The "' + valName + '" validation function is expected to ' +
+                         "return \"true\". Received " + inspect(result) +
+                         '\n\nCaught error:\n\n' + (actual instanceof Error ? actual.constructor.name + ': ' + actual.message : inspect(actual)),
+                operator: fn ? fn.name : 'throws',
+                stackStartFn: fn || expectedException
+            });
+        }
         return { pass: false, message: message };
     }
 
@@ -623,10 +775,27 @@ function expectedException(actual, expected, message, fn) {
     }
 
     if (typeof expected === 'object' && expected !== null) {
+        // Guard against non-object actual
+        if (typeof actual !== 'object' || actual === null) {
+            return { pass: false, message: message };
+        }
+
         var keys = Object.keys(expected);
+
+        // If expected is an Error instance, auto-include 'name' and 'message'
+        if (expected instanceof Error) {
+            if (keys.indexOf('name') === -1) keys.push('name');
+            if (keys.indexOf('message') === -1) keys.push('message');
+        }
+
         for (var i = 0; i < keys.length; i++) {
             var key = keys[i];
-            if (key === 'message' && expected[key] instanceof RegExp) {
+            // Require property presence on actual
+            if (!(key in actual)) {
+                return { pass: false, message: message };
+            }
+            // RegExp matching: if expected[key] is RegExp and actual[key] is string, test it
+            if (expected[key] instanceof RegExp && typeof actual[key] === 'string') {
                 if (!expected[key].test(actual[key])) return { pass: false, message: message };
             } else if (!innerDeepEqual(actual[key], expected[key], true, undefined)) {
                 return { pass: false, message: message };
@@ -813,14 +982,16 @@ function ifError(value) {
         var newErr = new AssertionError({
             actual: value,
             expected: null,
-            message: 'ifError got unwanted exception: ' + (typeof value === 'object' && value.message ? value.message : inspect(value)),
+            message: 'ifError got unwanted exception: ' + (
+                value instanceof Error
+                    ? (value.message || value.name)
+                    : (typeof value === 'object' && value !== null && 'message' in value
+                        ? value.message
+                        : inspect(value))
+            ),
             operator: 'ifError',
             stackStartFn: ifError
         });
-        var origStack = value instanceof Error ? value.stack : '';
-        if (origStack) {
-            newErr.stack = newErr.stack + '\n\nOriginal error:\n' + origStack;
-        }
         throw newErr;
     }
 }
@@ -873,14 +1044,190 @@ function doesNotMatch(string, regexp, message) {
     }
 }
 
-// Deprecated CallTracker stub
+// CallTracker implementation
 class CallTracker {
-    constructor() {}
-    calls(fn, exact) { return fn || function() {}; }
-    getCalls() { return []; }
-    report() { return []; }
-    reset() {}
-    verify() {}
+    constructor() {
+        this._trackedFunctions = [];
+    }
+
+    calls(fn, exact) {
+        if (typeof globalThis.process !== 'undefined' && globalThis.process._exiting) {
+            var exitErr = new Error('Cannot call CallTracker methods during process exit handler');
+            exitErr.code = 'ERR_UNAVAILABLE_DURING_EXIT';
+            throw exitErr;
+        }
+        if (typeof fn === 'number') {
+            exact = fn;
+            fn = undefined;
+        }
+        if (fn === undefined) {
+            fn = function() {};
+        }
+        if (typeof fn !== 'function') {
+            var err = new TypeError('The "fn" argument must be of type function. Received type ' + typeof fn);
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (exact === undefined) {
+            exact = 1;
+        }
+        if (typeof exact !== 'number') {
+            var err = new TypeError('The "exact" argument must be of type number. Received type ' + typeof exact);
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (!Number.isInteger(exact) || exact < 0) {
+            var err = new RangeError('The value of "exact" is out of range. It must be a non-negative integer. Received ' + exact);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+
+        var callRecords = [];
+        var tracking = {
+            fn: fn,
+            expected: exact,
+            callRecords: callRecords,
+            name: fn.name || 'anonymous'
+        };
+
+        var wrapper = function() {
+            callRecords.push({
+                arguments: Array.prototype.slice.call(arguments),
+                thisArg: this === globalThis ? undefined : this
+            });
+            return fn.apply(this, arguments);
+        };
+
+        // Copy own properties from the original function.
+        // Use Object.create(null) for descriptors to avoid prototype pollution
+        // (e.g. Object.prototype.get being set can confuse Object.defineProperty).
+        var ownKeys = Object.getOwnPropertyNames(fn);
+        for (var i = 0; i < ownKeys.length; i++) {
+            var key = ownKeys[i];
+            if (key === 'length' || key === 'name' || key === 'prototype') continue;
+            var desc = Object.getOwnPropertyDescriptor(fn, key);
+            if (desc) {
+                var cleanDesc = Object.create(null);
+                if (Object.prototype.hasOwnProperty.call(desc, 'value')) {
+                    cleanDesc.value = desc.value;
+                    cleanDesc.writable = desc.writable;
+                } else {
+                    if (Object.prototype.hasOwnProperty.call(desc, 'get')) cleanDesc.get = desc.get;
+                    if (Object.prototype.hasOwnProperty.call(desc, 'set')) cleanDesc.set = desc.set;
+                }
+                cleanDesc.enumerable = desc.enumerable;
+                cleanDesc.configurable = desc.configurable;
+                Object.defineProperty(wrapper, key, cleanDesc);
+            }
+        }
+
+        // Handle the length property specially
+        if (Object.prototype.hasOwnProperty.call(fn, 'length')) {
+            var lengthDesc = Object.getOwnPropertyDescriptor(fn, 'length');
+            if (lengthDesc && Object.prototype.hasOwnProperty.call(lengthDesc, 'value')) {
+                var cleanLenDesc = Object.create(null);
+                cleanLenDesc.value = lengthDesc.value;
+                cleanLenDesc.writable = false;
+                cleanLenDesc.enumerable = false;
+                cleanLenDesc.configurable = true;
+                Object.defineProperty(wrapper, 'length', cleanLenDesc);
+            } else if (lengthDesc && Object.prototype.hasOwnProperty.call(lengthDesc, 'get')) {
+                var cleanLenDesc2 = Object.create(null);
+                cleanLenDesc2.get = lengthDesc.get;
+                if (Object.prototype.hasOwnProperty.call(lengthDesc, 'set')) cleanLenDesc2.set = lengthDesc.set;
+                cleanLenDesc2.enumerable = lengthDesc.enumerable;
+                cleanLenDesc2.configurable = lengthDesc.configurable;
+                Object.defineProperty(wrapper, 'length', cleanLenDesc2);
+            }
+        } else {
+            // fn doesn't have own 'length', remove it from wrapper too
+            delete wrapper.length;
+        }
+
+        tracking.wrapper = wrapper;
+        this._trackedFunctions.push(tracking);
+
+        return wrapper;
+    }
+
+    getCalls(fn) {
+        var tracking = this._findTracking(fn);
+        if (!tracking) {
+            var err = new TypeError('The "fn" argument is not a tracked function');
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        var result = tracking.callRecords.map(function(record) {
+            return Object.freeze({
+                arguments: Object.freeze(Array.prototype.slice.call(record.arguments)),
+                thisArg: record.thisArg
+            });
+        });
+        return Object.freeze(result);
+    }
+
+    report() {
+        var result = [];
+        for (var i = 0; i < this._trackedFunctions.length; i++) {
+            var t = this._trackedFunctions[i];
+            var actual = t.callRecords.length;
+            if (actual !== t.expected) {
+                result.push({
+                    message: 'Expected the ' + t.name + ' function to be executed ' +
+                             t.expected + ' time(s) but was executed ' + actual + ' time(s).',
+                    actual: actual,
+                    expected: t.expected,
+                    operator: t.name,
+                    stack: new Error().stack
+                });
+            }
+        }
+        return result;
+    }
+
+    reset(fn) {
+        if (fn !== undefined) {
+            var tracking = this._findTracking(fn);
+            if (!tracking) {
+                var err = new TypeError('The "fn" argument is not a tracked function');
+                err.code = 'ERR_INVALID_ARG_VALUE';
+                throw err;
+            }
+            tracking.callRecords.length = 0;
+        } else {
+            for (var i = 0; i < this._trackedFunctions.length; i++) {
+                this._trackedFunctions[i].callRecords.length = 0;
+            }
+        }
+    }
+
+    verify() {
+        var errors = this.report();
+        if (errors.length === 0) return;
+        if (errors.length === 1) {
+            throw new AssertionError({
+                message: errors[0].message,
+                actual: errors[0].actual,
+                expected: errors[0].expected,
+                operator: errors[0].operator
+            });
+        }
+        throw new AssertionError({
+            message: 'Functions were not called the expected number of times',
+            actual: errors,
+            expected: [],
+            operator: 'verify'
+        });
+    }
+
+    _findTracking(fn) {
+        for (var i = 0; i < this._trackedFunctions.length; i++) {
+            if (this._trackedFunctions[i].wrapper === fn) {
+                return this._trackedFunctions[i];
+            }
+        }
+        return null;
+    }
 }
 
 // --- Wire up the main assert function ---

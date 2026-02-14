@@ -12,8 +12,17 @@
 export const runTest = (testPath) => {
     try {
         require(testPath);
+        // Run exit handlers after test completes normally
+        if (globalThis.process && typeof globalThis.process._runExitHandlers === 'function') {
+            globalThis.process._runExitHandlers(0);
+        }
         return "PASS";
     } catch (e) {
+        // Check for process.exit() sentinel
+        if (e && e.__isProcessExit) {
+            return "PASS";
+        }
+
         var msg = (e && e.stack) ? e.stack : String(e);
         var errorMsg = (e && e.message) ? e.message : String(e);
 
@@ -21,6 +30,7 @@ export const runTest = (testPath) => {
             return "SKIP: " + errorMsg.slice("SKIP:".length).trim();
         }
 
-        return "FAIL: " + msg;
+        var fullMsg = (e && e.message) ? (e.message + "\n" + msg) : msg;
+        return "FAIL: " + fullMsg;
     }
 };

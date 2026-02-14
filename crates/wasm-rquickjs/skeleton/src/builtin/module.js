@@ -14,40 +14,69 @@ import * as processModule from 'node:process';
 import * as assert from 'node:assert';
 import * as assertStrict from 'node:assert/strict';
 import * as fsPromises from 'node:fs/promises';
+import * as nodeTest from 'node:test';
+import * as querystring from 'node:querystring';
+import * as vm from 'node:vm';
+
+// CJS require() should return the default export (the "module object") when one
+// exists, not the ESM namespace wrapper.  When the default export is a function
+// or object, named exports are also attached to it so that both
+// `require('mod')()` and `const { namedExport } = require('mod')` work — this
+// mirrors Node.js CJS/ESM interop behaviour.
+function cjsExport(ns) {
+    if (!ns || ns.default === undefined) return ns;
+    var def = ns.default;
+    if (typeof def === 'function' || (typeof def === 'object' && def !== null)) {
+        var keys = Object.keys(ns);
+        for (var i = 0; i < keys.length; i++) {
+            var k = keys[i];
+            if (k !== 'default' && !(k in def)) {
+                def[k] = ns[k];
+            }
+        }
+    }
+    return def;
+}
 
 const builtinModules = {
-    'path': pathModule,
-    'node:path': pathModule,
-    'fs': fsModule,
-    'node:fs': fsModule,
-    'fs/promises': fsPromises,
-    'node:fs/promises': fsPromises,
-    'util': util,
-    'node:util': util,
-    'buffer': buffer,
-    'node:buffer': buffer,
-    'os': os,
-    'node:os': os,
-    'events': events,
-    'node:events': events,
-    'stream': stream,
-    'node:stream': stream,
-    'stream/promises': streamPromises,
-    'node:stream/promises': streamPromises,
-    'stream/web': streamWeb,
-    'node:stream/web': streamWeb,
-    'crypto': crypto,
-    'node:crypto': crypto,
-    'child_process': child_process,
-    'node:child_process': child_process,
-    'string_decoder': string_decoder,
-    'node:string_decoder': string_decoder,
-    'process': processModule,
-    'node:process': processModule,
-    'assert': assert,
-    'node:assert': assert,
-    'assert/strict': assertStrict,
-    'node:assert/strict': assertStrict,
+    'path': cjsExport(pathModule),
+    'node:path': cjsExport(pathModule),
+    'fs': cjsExport(fsModule),
+    'node:fs': cjsExport(fsModule),
+    'fs/promises': cjsExport(fsPromises),
+    'node:fs/promises': cjsExport(fsPromises),
+    'util': cjsExport(util),
+    'node:util': cjsExport(util),
+    'buffer': cjsExport(buffer),
+    'node:buffer': cjsExport(buffer),
+    'os': cjsExport(os),
+    'node:os': cjsExport(os),
+    'events': cjsExport(events),
+    'node:events': cjsExport(events),
+    'stream': cjsExport(stream),
+    'node:stream': cjsExport(stream),
+    'stream/promises': cjsExport(streamPromises),
+    'node:stream/promises': cjsExport(streamPromises),
+    'stream/web': cjsExport(streamWeb),
+    'node:stream/web': cjsExport(streamWeb),
+    'crypto': cjsExport(crypto),
+    'node:crypto': cjsExport(crypto),
+    'child_process': cjsExport(child_process),
+    'node:child_process': cjsExport(child_process),
+    'string_decoder': cjsExport(string_decoder),
+    'node:string_decoder': cjsExport(string_decoder),
+    'process': cjsExport(processModule),
+    'node:process': cjsExport(processModule),
+    'assert': cjsExport(assert),
+    'node:assert': cjsExport(assert),
+    'assert/strict': cjsExport(assertStrict),
+    'node:assert/strict': cjsExport(assertStrict),
+    'test': cjsExport(nodeTest),
+    'node:test': cjsExport(nodeTest),
+    'querystring': cjsExport(querystring),
+    'node:querystring': cjsExport(querystring),
+    'vm': cjsExport(vm),
+    'node:vm': cjsExport(vm),
 };
 
 // Self-reference will be added after the module object is created (see bottom of file)

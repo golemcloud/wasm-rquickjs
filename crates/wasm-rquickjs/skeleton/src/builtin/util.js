@@ -126,6 +126,8 @@ export function inspect(obj, opts) {
     if (isUndefined(ctx.colors)) ctx.colors = false;
     if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
     if (ctx.colors) ctx.stylize = stylizeWithColor;
+    ctx.compact = opts && opts.compact !== undefined ? opts.compact : true;
+    ctx.sorted = opts && opts.sorted || false;
     return formatValue(ctx, obj, ctx.depth);
 }
 
@@ -191,7 +193,10 @@ function arrayToHash(array) {
 function formatValue(ctx, value, recurseTimes) {
     // Provide a hook for user-specified inspect functions.
     // Check that value is an object with an inspect function on it
-    if (ctx.customInspect &&
+    // Skip custom inspect for TypedArrays/Buffers — use built-in formatting
+    var skipCustomInspect = value && ArrayBuffer.isView(value) && !(value instanceof DataView);
+    if (!skipCustomInspect &&
+        ctx.customInspect &&
         value &&
         isFunction(value.inspect) &&
         // Filter out the util module, it's inspect function is special
@@ -213,7 +218,18 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Look up the keys of the object.
     var keys = Object.keys(value);
+
+    // For TypedArrays, filter out numeric index keys (handled separately)
+    var isTypedArrKeys = ArrayBuffer.isView(value) && !(value instanceof DataView);
+    if (isTypedArrKeys) {
+        keys = keys.filter(function(key) { return !key.match(/^\d+$/); });
+    }
+
     var visibleKeys = arrayToHash(keys);
+
+    if (ctx.sorted) {
+        keys.sort();
+    }
 
     if (ctx.showHidden) {
         keys = Object.getOwnPropertyNames(value);
@@ -223,21 +239,38 @@ function formatValue(ctx, value, recurseTimes) {
     // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
     if (isError(value)
         && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
-        return formatError(value);
+        keys = keys.filter(function(key) {
+            return key !== 'message' && key !== 'description';
+        });
+        if (hasOwnProperty(value, 'cause') && keys.indexOf('cause') === -1) {
+            keys.push('cause');
+        }
+        visibleKeys = arrayToHash(keys);
+        if (keys.length === 0) {
+            return formatError(value);
+        }
+    }
+
+    // For errors, ensure 'cause' is included in keys if present and formatted with brackets
+    if (isError(value) && hasOwnProperty(value, 'cause')) {
+        if (keys.indexOf('cause') === -1) {
+            keys.push('cause');
+        }
+        delete visibleKeys['cause'];
     }
 
     // Some type of object without properties can be shortcutted.
     // But Maps, Sets, WeakMaps, WeakSets need special handling since they don't have enumerable properties
-    if (keys.length === 0 && !isMap(value) && !isSet(value) && !isWeakMap(value) && !isWeakSet(value)) {
+    if (keys.length === 0 && !isMap(value) && !isSet(value) && !isWeakMap(value) && !isWeakSet(value) && !isTypedArrKeys) {
         if (isFunction(value)) {
-            var name = value.name ? ': ' + value.name : '';
+            var name = value.name ? ': ' + value.name : ' (anonymous)';
             return ctx.stylize('[Function' + name + ']', 'special');
         }
         if (isRegExp(value)) {
             return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
         }
         if (isDate(value)) {
-            return ctx.stylize(Date.prototype.toString.call(value), 'date');
+            return ctx.stylize(Date.prototype.toISOString.call(value), 'date');
         }
         if (isError(value)) {
             return formatError(value);
@@ -264,17 +297,32 @@ function formatValue(ctx, value, recurseTimes) {
         return ctx.stylize('WeakMap { <items unknown> }', 'special');
     }
 
-    var base = '', array = false, braces = ['{', '}'];
+    var base = '', array = false, typedArray = false, braces = ['{', '}'];
+
+    // Detect TypedArray/Buffer before generic object handling
+    var isTypedArr = ArrayBuffer.isView(value) && !(value instanceof DataView);
+    var isBuf = typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(value);
 
     // Make Array say that they are Array
-    if (isArray(value)) {
+    if (isArray(value) && !isTypedArr) {
         array = true;
         braces = ['[', ']'];
     }
 
+    // TypedArray / Buffer formatting
+    if (isTypedArr) {
+        typedArray = true;
+        var typedName = value.constructor ? value.constructor.name : 'TypedArray';
+        if (isBuf) {
+            braces = ['Buffer(' + value.length + ') [Uint8Array] [', ']'];
+        } else {
+            braces = [typedName + '(' + value.length + ') [', ']'];
+        }
+    }
+
     // Make functions say that they are functions
     if (isFunction(value)) {
-        var n = value.name ? ': ' + value.name : '';
+        var n = value.name ? ': ' + value.name : ' (anonymous)';
         base = ' [Function' + n + ']';
     }
 
@@ -285,7 +333,7 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Make dates with properties first say the date
     if (isDate(value)) {
-        base = ' ' + Date.prototype.toUTCString.call(value);
+        base = ' ' + Date.prototype.toISOString.call(value);
     }
 
     // Make maps with properties first say the map size
@@ -302,11 +350,24 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Make error with message first say the error
     if (isError(value)) {
-        base = ' ' + formatError(value);
+        braces = [formatError(value) + ' {', '}'];
+        base = '';
     }
 
-    if (keys.length === 0 && (!array || value.length == 0) && !isMap(value) && !isSet(value)) {
+    // Show constructor name for non-plain objects (like fake Date, custom classes)
+    if (base === '' && !array && !typedArray && !isError(value)) {
+        var ctor = value.constructor;
+        if (ctor && ctor.name && ctor.name !== 'Object') {
+            braces = [ctor.name + ' {', '}'];
+        }
+    }
+
+    if (keys.length === 0 && (!array || value.length == 0) && !isMap(value) && !isSet(value) && !typedArray) {
         return braces[0] + base + braces[1];
+    }
+
+    if (typedArray && value.length === 0 && keys.length === 0) {
+        return braces[0] + braces[1];
     }
 
     if (recurseTimes < 0) {
@@ -320,7 +381,9 @@ function formatValue(ctx, value, recurseTimes) {
     ctx.seen.push(value);
 
     var output;
-    if (array) {
+    if (typedArray) {
+        output = formatTypedArray(ctx, value, recurseTimes, visibleKeys, keys);
+    } else if (array) {
         output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
     } else if (isMap(value)) {
         output = formatMap(ctx, value, recurseTimes);
@@ -334,7 +397,7 @@ function formatValue(ctx, value, recurseTimes) {
 
     ctx.seen.pop();
 
-    return reduceToSingleString(output, base, braces);
+    return reduceToSingleString(output, base, braces, ctx);
 }
 
 
@@ -381,6 +444,20 @@ function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
      return output;
  }
 
+
+ function formatTypedArray(ctx, value, recurseTimes, visibleKeys, keys) {
+     var output = [];
+     for (var i = 0; i < value.length; i++) {
+         output.push(ctx.stylize(String(value[i]), 'number'));
+     }
+     // Add non-index own properties
+     keys.forEach(function(key) {
+         if (!key.match(/^\d+$/)) {
+             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys, key, true));
+         }
+     });
+     return output;
+ }
 
  function formatMap(ctx, value, recurseTimes) {
      var output = [];
@@ -471,8 +548,8 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
                         return '  ' + line;
                     }).join('\n').slice(2);
                 } else {
-                    str = '\n' + str.split('\n').map(function(line) {
-                        return '   ' + line;
+                    str = str.split('\n').map(function(line, idx) {
+                        return idx === 0 ? line : '  ' + line;
                     }).join('\n');
                 }
             }
@@ -500,7 +577,7 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
 }
 
 
-function reduceToSingleString(output, base, braces) {
+function reduceToSingleString(output, base, braces, ctx) {
      var numLinesEst = 0;
      var length = output.reduce(function(prev, cur) {
          numLinesEst++;
@@ -511,19 +588,18 @@ function reduceToSingleString(output, base, braces) {
      // Special handling for Maps and Sets where base starts with 'Map(' or 'Set('
      var isMaporSet = base && (base.indexOf('Map(') === 0 || base.indexOf('Set(') === 0);
      
-     if (length > 60) {
-         if (isMaporSet) {
-             return base + ' { ' +
-                 output.join(', ') +
-                 ' }';
-         }
-         return braces[0] +
-             (base === '' ? '' : base + '\n ') +
-             ' ' +
-             output.join(',\n  ') +
-             ' ' +
-             braces[1];
-     }
+     if ((ctx && ctx.compact === false) || length > 60) {
+          if (isMaporSet) {
+              return base + ' { ' +
+                  output.join(', ') +
+                  ' }';
+          }
+          return braces[0] +
+              '\n  ' +
+              output.join(',\n  ') +
+              '\n' +
+              braces[1];
+      }
 
      if (isMaporSet) {
          return base + ' { ' + output.join(', ') + ' }';

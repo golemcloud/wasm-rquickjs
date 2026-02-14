@@ -22,16 +22,19 @@ mod http {
 mod eventemitter;
 mod ieee754;
 mod module;
+mod node_test;
 mod internal;
 mod os;
 mod path;
 mod process;
+mod querystring;
 mod stream;
 mod string_decoder;
 mod structured_clone;
 mod timeout;
 mod url;
 mod util;
+mod vm;
 mod web_crypto;
 mod webstreams;
 
@@ -70,8 +73,12 @@ pub fn add_module_resolvers(
             .with_module("assert")
             .with_module("node:assert/strict")
             .with_module("assert/strict")
+            .with_module("node:querystring")
+            .with_module("querystring")
             .with_module("node:child_process")
             .with_module("child_process")
+            .with_module("node:test")
+            .with_module("test")
             .with_module("node:module")
             .with_module("module")
             .with_module("__wasm_rquickjs_builtin/process_native")
@@ -97,6 +104,10 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/web_crypto")
             .with_module("node:crypto")
             .with_module("crypto")
+            .with_module("__wasm_rquickjs_builtin/vm_native")
+            .with_module("__wasm_rquickjs_builtin/vm")
+            .with_module("node:vm")
+            .with_module("vm")
             .with_module("__wasm_rquickjs_builtin/structured_clone"),
     )
 }
@@ -138,6 +149,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto_native",
                 web_crypto::js_native_module,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/vm_native",
+                vm::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
             .with_module(
@@ -170,8 +185,12 @@ pub fn module_loader() -> (
             .with_module("assert", assert::REEXPORT_JS)
             .with_module("node:assert/strict", assert::ASSERT_STRICT_JS)
             .with_module("assert/strict", assert::REEXPORT_STRICT_JS)
+            .with_module("node:querystring", querystring::QUERYSTRING_JS)
+            .with_module("querystring", querystring::REEXPORT_JS)
             .with_module("node:child_process", child_process::CHILD_PROCESS_JS)
             .with_module("child_process", child_process::REEXPORT_JS)
+            .with_module("node:test", node_test::TEST_JS)
+            .with_module("test", node_test::REEXPORT_JS)
             .with_module("node:module", module::MODULE_JS)
             .with_module("module", module::REEXPORT_JS)
             .with_module("node:process", process::PROCESS_JS)
@@ -194,6 +213,9 @@ pub fn module_loader() -> (
             )
             .with_module("node:crypto", web_crypto::REEXPORT_JS)
             .with_module("crypto", web_crypto::REEXPORT_JS)
+            .with_module("__wasm_rquickjs_builtin/vm", vm::VM_JS)
+            .with_module("node:vm", vm::REEXPORT_JS)
+            .with_module("vm", vm::REEXPORT_JS)
             .with_module(
                 "__wasm_rquickjs_builtin/structured_clone",
                 structured_clone::STRUCTURED_CLONE_JS,
@@ -216,6 +238,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", process::WIRE_JS).unwrap();
     writeln!(result, "{}", structured_clone::WIRE_JS).unwrap();
     writeln!(result, "{}", module::WIRE_JS).unwrap();
+    writeln!(result, "globalThis.global = globalThis;").unwrap();
 
     result
 }

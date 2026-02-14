@@ -150,24 +150,24 @@ fn setup_test_files(instance: &TestInstance, test_rel_path: &str) -> anyhow::Res
     Ok(())
 }
 
-// --- Tests ---
+// --- Test runner ---
 
-#[test]
-async fn node_compat_path(
-    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+async fn run_node_compat_suite(
+    runner: &CompiledTest,
+    prefix: &str,
 ) -> anyhow::Result<()> {
     let config = load_config("tests/node_compat/config.jsonc")?;
-    let path_tests = config.tests_matching("test-path");
+    let tests = config.tests_matching(prefix);
 
     assert!(
-        !path_tests.is_empty(),
-        "No test-path tests found in config.jsonc"
+        !tests.is_empty(),
+        "No {prefix} tests found in config.jsonc"
     );
 
     let mut results: BTreeMap<String, String> = BTreeMap::new();
     let mut failures = Vec::new();
 
-    for entry in &path_tests {
+    for entry in &tests {
         if entry.skip {
             let reason = entry.reason.as_deref().unwrap_or("no reason");
             println!("  {} ... SKIP ({})", entry.path, reason);
@@ -236,8 +236,7 @@ async fn node_compat_path(
         }
     }
 
-    // Summary
-    let total = path_tests.len();
+    let total = tests.len();
     let passed = results.values().filter(|v| *v == "PASS").count();
     let skipped = results.values().filter(|v| v.starts_with("SKIP")).count();
     let failed = failures.len();
@@ -248,4 +247,27 @@ async fn node_compat_path(
     }
 
     Ok(())
+}
+
+// --- Tests ---
+
+#[test]
+async fn node_compat_path(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-path").await
+}
+
+#[test]
+async fn node_compat_assert(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-assert").await
+}
+
+#[test]
+async fn node_compat_querystring(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-querystring").await
 }

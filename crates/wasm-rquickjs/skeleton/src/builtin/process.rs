@@ -4,6 +4,19 @@ pub mod native_module {
     use rquickjs::function::Args;
     use rquickjs::{Ctx, Function, Value};
     use std::collections::HashMap;
+    use std::io::Write;
+
+    #[rquickjs::function]
+    pub fn write_stdout(data: String) {
+        let _ = std::io::stdout().write_all(data.as_bytes());
+        let _ = std::io::stdout().flush();
+    }
+
+    #[rquickjs::function]
+    pub fn write_stderr(data: String) {
+        let _ = std::io::stderr().write_all(data.as_bytes());
+        let _ = std::io::stderr().flush();
+    }
 
     #[rquickjs::function]
     pub fn get_args() -> Vec<String> {
@@ -34,6 +47,6 @@ pub const PROCESS_JS: &str = include_str!("process.js");
 pub const REEXPORT_JS: &str = r#"export * from 'node:process'; export { default } from 'node:process';"#;
 
 pub const WIRE_JS: &str = r#"
-        import * as __wasm_rquickjs_process from 'node:process';
+        import __wasm_rquickjs_process from 'node:process';
         globalThis.process = __wasm_rquickjs_process;
     "#;
