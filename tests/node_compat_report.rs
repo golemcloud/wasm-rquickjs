@@ -403,9 +403,15 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     for (i, test_path) in test_files.iter().enumerate() {
         let test_start = Instant::now();
-        let result = match runner.run_test(test_path).await {
-            Ok(r) => r,
-            Err(e) => TestResult::Error(format!("{e:#}")),
+        let result = match tokio::time::timeout(
+            Duration::from_secs(60),
+            runner.run_test(test_path),
+        )
+        .await
+        {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
+            Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
         };
 
         let elapsed = test_start.elapsed();
@@ -423,7 +429,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             TestResult::Fail(msg) => {
                 fail_count += 1;
                 let short_msg = if msg.len() > 120 {
-                    format!("{}...", &msg[..120])
+                    format!("{}...", truncate_str(msg, 120))
                 } else {
                     msg.clone()
                 };
@@ -432,7 +438,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             TestResult::Error(msg) => {
                 error_count += 1;
                 let short_msg = if msg.len() > 120 {
-                    format!("{}...", &msg[..120])
+                    format!("{}...", truncate_str(msg, 120))
                 } else {
                     msg.clone()
                 };
@@ -547,7 +553,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         for (path, result) in &failures {
             if let TestResult::Fail(msg) = result {
                 let short = if msg.len() > 200 {
-                    format!("{}...", &msg[..200])
+                    format!("{}...", truncate_str(msg, 200))
                 } else {
                     msg.clone()
                 };
@@ -573,7 +579,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         for (path, result) in &errors {
             if let TestResult::Error(msg) = result {
                 let short = if msg.len() > 200 {
-                    format!("{}...", &msg[..200])
+                    format!("{}...", truncate_str(msg, 200))
                 } else {
                     msg.clone()
                 };
@@ -643,6 +649,17 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     // Don't fail the test - this is a report generator
     Ok(())
+}
+
+fn truncate_str(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
 }
 
 fn now_date() -> String {

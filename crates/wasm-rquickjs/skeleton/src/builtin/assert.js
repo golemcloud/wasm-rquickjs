@@ -3,7 +3,9 @@ import { inspect, innerDeepEqual } from 'node:util';
 class AssertionError extends Error {
     constructor(options) {
         if (typeof options !== 'object' || options === null) {
-            options = { message: options };
+            var err = new TypeError('The "options" argument must be of type object.' + invalidArgTypeHelper(options));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
         }
         var message;
         var actual = options.actual;
@@ -11,11 +13,27 @@ class AssertionError extends Error {
         var operator = options.operator || 'fail';
 
         try {
-        if (operator === 'deepEqual' || operator === 'notDeepEqual') {
+        if (operator === 'deepEqual') {
                 var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
                 var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
                 message = 'Expected values to be loosely deep-equal:\n\n' +
                     actualInsp + '\n\nshould loosely deep-equal\n\n' + expectedInsp;
+        } else if (operator === 'notDeepEqual') {
+                var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                if (actualInsp === expectedInsp) {
+                    var base2 = 'Expected "actual" not to be loosely deep-equal to:';
+                    var lines2 = actualInsp.split('\n');
+                    if (lines2.length > 50) {
+                        lines2 = lines2.slice(0, 46);
+                        lines2.push('...');
+                        message = base2 + '\n\n' + lines2.join('\n') + '\n';
+                    } else {
+                        message = base2 + '\n\n' + lines2.join('\n');
+                    }
+                } else {
+                    message = actualInsp + '\n\nshould not loosely deep-equal\n\n' + expectedInsp;
+                }
         } else if (operator === 'deepStrictEqual') {
                 var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
                 var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
@@ -251,26 +269,34 @@ class AssertionError extends Error {
         return 'AssertionError [ERR_ASSERTION]: ' + this.message;
     }
 
-    inspect(depth, opts) {
-        // Truncate long actual/expected values for display
-        var truncLen = 512;
-        var obj = Object.assign({}, this);
-        if (typeof obj.actual === 'string' && obj.actual.length > truncLen) {
-            obj.actual = obj.actual.slice(0, truncLen - 3) + '...';
+    inspect(depth, ctx) {
+        var kMaxLongStringLength = 512;
+        // addEllipsis helper
+        function addEllipsis(string) {
+            var lines = string.split('\n', 11);
+            if (lines.length > 10) {
+                lines.length = 10;
+                return lines.join('\n') + '\n...';
+            } else if (string.length > kMaxLongStringLength) {
+                return string.slice(kMaxLongStringLength) + '...';
+            }
+            return string;
         }
-        if (typeof obj.expected === 'string' && obj.expected.length > truncLen) {
-            obj.expected = obj.expected.slice(0, truncLen - 3) + '...';
+        // Temporarily truncate long string actual/expected
+        var tmpActual = this.actual;
+        var tmpExpected = this.expected;
+        if (typeof this.actual === 'string') {
+            this.actual = addEllipsis(this.actual);
         }
-        // Use a plain object representation with the error name
-        delete obj.name;
-        delete obj.message;
-        delete obj.stack;
-        var inspectOpts = Object.assign({}, opts, { depth: (depth === null ? null : depth - 1) });
-        var body = inspect(obj, inspectOpts);
-        // Remove outer braces
-        if (body.startsWith('{')) body = body.slice(1);
-        if (body.endsWith('}')) body = body.slice(0, -1);
-        return this.name + ' [' + this.code + ']: ' + this.message + body;
+        if (typeof this.expected === 'string') {
+            this.expected = addEllipsis(this.expected);
+        }
+        var inspectOpts = Object.assign({}, ctx || {}, { customInspect: false, depth: 0 });
+        var result = inspect(this, inspectOpts);
+        // Restore original values
+        this.actual = tmpActual;
+        this.expected = tmpExpected;
+        return result;
     }
 }
 
@@ -341,6 +367,16 @@ function fail(actual, expected, message, operator, stackStartFn) {
 }
 
 function ok(value, message) {
+    if (arguments.length === 0) {
+        innerFail({
+            actual: undefined,
+            expected: true,
+            message: 'No value argument passed to `assert.ok()`',
+            operator: '==',
+            generatedMessage: true,
+            stackStartFn: ok
+        });
+    }
     if (!value) {
         innerFail({
             actual: value,
@@ -353,7 +389,8 @@ function ok(value, message) {
 }
 
 function equal(actual, expected, message) {
-    if (actual != expected) {
+    // eslint-disable-next-line eqeqeq
+    if (actual != expected && !Object.is(actual, expected)) {
         innerFail({
             actual: actual,
             expected: expected,
@@ -365,7 +402,8 @@ function equal(actual, expected, message) {
 }
 
 function notEqual(actual, expected, message) {
-    if (actual == expected) {
+    // eslint-disable-next-line eqeqeq
+    if (actual == expected || Object.is(actual, expected)) {
         innerFail({
             actual: actual,
             expected: expected,
@@ -1114,8 +1152,8 @@ class CallTracker {
 
 // --- Wire up the main assert function ---
 
-var assert = function assert(value, message) {
-    ok(value, message);
+var assert = function assert() {
+    ok.apply(null, arguments);
 };
 
 assert.ok = ok;
@@ -1139,8 +1177,8 @@ assert.fail = fail;
 assert.AssertionError = AssertionError;
 assert.CallTracker = CallTracker;
 
-var strict = function strict(value, message) {
-    ok(value, message);
+var strict = function strict() {
+    ok.apply(null, arguments);
 };
 
 strict.ok = ok;

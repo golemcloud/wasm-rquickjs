@@ -19,6 +19,27 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+var _ObjectKeys = Object.keys;
+var _ObjectGetOwnPropertyNames = Object.getOwnPropertyNames;
+var _ObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+var _ObjectGetOwnPropertySymbols = Object.getOwnPropertySymbols;
+var _ObjectGetPrototypeOf = Object.getPrototypeOf;
+var _ObjectPrototypeToString = Object.prototype.toString;
+var _ObjectPrototypeHasOwnProperty = Object.prototype.hasOwnProperty;
+var _ObjectDefineProperty = Object.defineProperty;
+var _ObjectSetPrototypeOf = Object.setPrototypeOf;
+var _ObjectIs = Object.is;
+var _ArrayIsArray = Array.isArray;
+var _ArrayBufferIsView = ArrayBuffer.isView;
+var _JSONStringify = JSON.stringify;
+var _RegExpPrototypeToString = RegExp.prototype.toString;
+var _DatePrototypeToISOString = Date.prototype.toISOString;
+var _ErrorPrototypeToString = Error.prototype.toString;
+var _NumberIsInteger = Number.isInteger;
+var _NumberPrototypeValueOf = Number.prototype.valueOf;
+var _StringPrototypeValueOf = String.prototype.valueOf;
+var _BooleanPrototypeValueOf = Boolean.prototype.valueOf;
+
 var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors ||
     function getOwnPropertyDescriptors(obj) {
         var keys = Object.keys(obj);
@@ -29,44 +50,187 @@ var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors ||
         return descriptors;
     };
 
-var formatRegExp = /%[sdj%]/g;
-export const format = function(f) {
+var formatRegExp = /%[sdjifoOc%]/g;
+
+var _circularErrorMessage;
+try {
+    var _circObj = {}; _circObj._c = _circObj; JSON.stringify(_circObj);
+} catch(_circErr) {
+    _circularErrorMessage = _circErr.message.split('\n', 1)[0];
+}
+
+function _addNumericSeparator(intStr) {
+    var result = '';
+    var i = intStr.length;
+    var start = intStr.charAt(0) === '-' ? 1 : 0;
+    for (; i >= start + 4; i -= 3) {
+        result = '_' + intStr.slice(i - 3, i) + result;
+    }
+    return (i === intStr.length) ? intStr : intStr.slice(0, i) + result;
+}
+
+function _addNumericSeparatorEnd(intStr) {
+    var result = '';
+    var i = 0;
+    for (; i < intStr.length - 3; i += 3) {
+        result += intStr.slice(i, i + 3) + '_';
+    }
+    return (i === 0) ? intStr : result + intStr.slice(i);
+}
+
+function _formatNumberWithSep(num, sep) {
+    if (Object.is(num, -0)) return '-0';
+    var str = String(num);
+    if (!sep) return str;
+    if (!Number.isFinite(num) || str.indexOf('e') !== -1) return str;
+    var integer = Math.trunc(num);
+    var intStr = String(integer);
+    if (integer === num) {
+        return _addNumericSeparator(intStr);
+    }
+    if (Number.isNaN(num)) return intStr;
+    return _addNumericSeparator(intStr) + '.' +
+        _addNumericSeparatorEnd(str.slice(intStr.length + 1));
+}
+
+function _formatBigIntWithSep(bigint, sep) {
+    var str = String(bigint);
+    if (!sep) return str + 'n';
+    return _addNumericSeparator(str) + 'n';
+}
+
+function _tryStringify(arg) {
+    try {
+        return JSON.stringify(arg);
+    } catch(err) {
+        if (err.name === 'TypeError' && _circularErrorMessage &&
+            err.message.split('\n', 1)[0] === _circularErrorMessage) {
+            return '[Circular]';
+        }
+        throw err;
+    }
+}
+
+function formatWithInspectOptions(inspectOptions, f) {
+    var tempArgs = [];
+    for (var a = 2; a < arguments.length; a++) {
+        tempArgs.push(arguments[a]);
+    }
+    var args = tempArgs;
+    var len = args.length;
+
     if (!isString(f)) {
         var objects = [];
-        for (var i = 0; i < arguments.length; i++) {
-            objects.push(inspect(arguments[i]));
+        objects.push(typeof f !== 'string' ? inspect(f, inspectOptions) : f);
+        for (var i = 0; i < len; i++) {
+            objects.push(typeof args[i] !== 'string' ? inspect(args[i], inspectOptions) : args[i]);
         }
         return objects.join(' ');
     }
 
-    var i = 1;
-    var args = arguments;
-    var len = args.length;
+    var numSep = (inspectOptions && inspectOptions.numericSeparator !== undefined)
+        ? inspectOptions.numericSeparator
+        : (inspect.defaultOptions && inspect.defaultOptions.numericSeparator) || false;
+    var i = 0;
     var str = String(f).replace(formatRegExp, function(x) {
         if (x === '%%') return '%';
         if (i >= len) return x;
         switch (x) {
-            case '%s': return String(args[i++]);
-            case '%d': return Number(args[i++]);
-            case '%j':
-                try {
-                    return JSON.stringify(args[i++]);
-                } catch (_) {
-                    return '[Circular]';
+            case '%s': {
+                var val = args[i++];
+                if (typeof val === 'number') {
+                    return _formatNumberWithSep(val, numSep);
+                } else if (typeof val === 'bigint') {
+                    return _formatBigIntWithSep(val, numSep);
+                } else if (typeof val === 'object' && val !== null || typeof val === 'function') {
+                    var hasCustomToString = false;
+                    try {
+                        hasCustomToString = typeof val.toString === 'function' && val.toString !== Object.prototype.toString;
+                    } catch(e) {}
+                    if (hasCustomToString) {
+                        try {
+                            var result = String(val);
+                            if (result !== '[object Object]') {
+                                return result;
+                            }
+                        } catch(e) {}
+                    }
+                    return inspect(val, Object.assign({}, inspectOptions, { compact: 3, colors: false, depth: 0 }));
+                } else if (typeof val === 'symbol') {
+                    return val.toString();
                 }
+                return String(val);
+            }
+            case '%d': {
+                var val = args[i++];
+                if (typeof val === 'bigint') {
+                    return _formatBigIntWithSep(val, numSep);
+                } else if (typeof val === 'symbol') {
+                    return 'NaN';
+                }
+                return _formatNumberWithSep(Number(val), numSep);
+            }
+            case '%i': {
+                var val = args[i++];
+                if (typeof val === 'bigint') {
+                    return _formatBigIntWithSep(val, numSep);
+                } else if (typeof val === 'symbol') {
+                    return 'NaN';
+                }
+                return _formatNumberWithSep(parseInt(val), numSep);
+            }
+            case '%f': {
+                var val = args[i++];
+                if (typeof val === 'symbol') {
+                    return 'NaN';
+                }
+                if (typeof val === 'bigint') {
+                    return String(Number(val));
+                }
+                var num = parseFloat(val);
+                if (Object.is(num, -0)) return '-0';
+                return String(num);
+            }
+            case '%j':
+                return _tryStringify(args[i++]);
+            case '%o':
+                return inspect(args[i++], Object.assign({}, inspectOptions, { showHidden: true, showProxy: true, depth: 4 }));
+            case '%O':
+                return inspect(args[i++], Object.assign({}, inspectOptions, { depth: 4 }));
+            case '%c':
+                i++;
+                return '';
             default:
                 return x;
         }
     });
     for (var x = args[i]; i < len; x = args[++i]) {
-        if (isNull(x) || !isObject(x)) {
-            str += ' ' + x;
-        } else {
-            str += ' ' + inspect(x);
-        }
+        str += ' ' + (typeof x !== 'string' ? inspect(x, inspectOptions) : x);
     }
     return str;
+}
+
+export const format = function(f) {
+    if (arguments.length === 0) return '';
+    var args = [{}];
+    for (var i = 0; i < arguments.length; i++) {
+        args.push(arguments[i]);
+    }
+    return formatWithInspectOptions.apply(null, args);
 };
+
+export function formatWithOptions(inspectOptions) {
+    if (typeof inspectOptions !== 'object' || inspectOptions === null) {
+        var err = new TypeError('"inspectOptions" argument must be an object, got ' + typeof inspectOptions);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    var args = [inspectOptions];
+    for (var i = 1; i < arguments.length; i++) {
+        args.push(arguments[i]);
+    }
+    return formatWithInspectOptions.apply(null, args);
+}
 
 
 // Mark that a method should not be used.
@@ -128,7 +292,7 @@ export function inspect(obj, opts) {
     if (isUndefined(ctx.colors)) ctx.colors = false;
     if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
     if (ctx.colors) ctx.stylize = stylizeWithColor;
-    ctx.compact = opts && opts.compact !== undefined ? opts.compact : true;
+    ctx.compact = opts && opts.compact !== undefined ? opts.compact : 3;
     ctx.sorted = opts && opts.sorted || false;
     return formatValue(ctx, obj, ctx.depth);
 }
@@ -160,9 +324,11 @@ inspect.styles = {
     'string': 'green',
     'date': 'magenta',
     // "name": intentionally not styling
-    'regexp': 'red'
+    'regexp': 'red',
+    'symbol': 'green'
 };
 
+inspect.defaultOptions = {};
 
 function stylizeWithColor(str, styleType) {
     var style = inspect.styles[styleType];
@@ -204,7 +370,7 @@ function formatValue(ctx, value, recurseTimes) {
     // Provide a hook for user-specified inspect functions.
     // Check that value is an object with an inspect function on it
     // Skip custom inspect for TypedArrays/Buffers — use built-in formatting
-    var skipCustomInspect = value && ArrayBuffer.isView(value) && !(value instanceof DataView);
+    var skipCustomInspect = value && _ArrayBufferIsView(value) && !(value instanceof DataView);
     if (!skipCustomInspect &&
         ctx.customInspect &&
         value &&
@@ -227,10 +393,10 @@ function formatValue(ctx, value, recurseTimes) {
     }
 
     // Look up the keys of the object.
-    var keys = Object.keys(value);
+    var keys = _ObjectKeys(value);
 
     // For TypedArrays, filter out numeric index keys (handled separately)
-    var isTypedArrKeys = ArrayBuffer.isView(value) && !(value instanceof DataView);
+    var isTypedArrKeys = _ArrayBufferIsView(value) && !(value instanceof DataView);
     if (isTypedArrKeys) {
         keys = keys.filter(function(key) { return !key.match(/^\d+$/); });
     }
@@ -242,7 +408,24 @@ function formatValue(ctx, value, recurseTimes) {
     }
 
     if (ctx.showHidden) {
-        keys = Object.getOwnPropertyNames(value);
+        keys = _ObjectGetOwnPropertyNames(value);
+        // Also include getter/setter properties from prototype chain
+        if (ctx.getters) {
+            var proto = Object.getPrototypeOf(value);
+            while (proto && proto !== Object.prototype) {
+                var protoNames = Object.getOwnPropertyNames(proto);
+                for (var pi = 0; pi < protoNames.length; pi++) {
+                    var pn = protoNames[pi];
+                    if (pn !== 'constructor' && keys.indexOf(pn) === -1) {
+                        var pd = Object.getOwnPropertyDescriptor(proto, pn);
+                        if (pd && (pd.get || pd.set)) {
+                            keys.push(pn);
+                        }
+                    }
+                }
+                proto = Object.getPrototypeOf(proto);
+            }
+        }
     }
 
     // IE doesn't make error fields non-enumerable
@@ -277,10 +460,10 @@ function formatValue(ctx, value, recurseTimes) {
             return ctx.stylize('[Function' + name + ']', 'special');
         }
         if (isRegExp(value)) {
-            return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+            return ctx.stylize(_RegExpPrototypeToString.call(value), 'regexp');
         }
         if (isDate(value)) {
-            return ctx.stylize(Date.prototype.toISOString.call(value), 'date');
+            return ctx.stylize(_DatePrototypeToISOString.call(value), 'date');
         }
         if (isError(value)) {
             return formatError(value);
@@ -310,7 +493,7 @@ function formatValue(ctx, value, recurseTimes) {
     var base = '', array = false, typedArray = false, braces = ['{', '}'];
 
     // Detect TypedArray/Buffer before generic object handling
-    var isTypedArr = ArrayBuffer.isView(value) && !(value instanceof DataView);
+    var isTypedArr = _ArrayBufferIsView(value) && !(value instanceof DataView);
     var isBuf = typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(value);
 
     // Make Array say that they are Array
@@ -338,7 +521,7 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Make RegExps say that they are RegExps
     if (isRegExp(value)) {
-        var regStr = RegExp.prototype.toString.call(value);
+        var regStr = _RegExpPrototypeToString.call(value);
         var regCtor = value.constructor;
         if (regCtor && regCtor.name && regCtor.name !== 'RegExp') {
             base = ' ' + regCtor.name + ' ' + regStr;
@@ -349,7 +532,7 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Make dates with properties first say the date
     if (isDate(value)) {
-        var dateStr = Date.prototype.toISOString.call(value);
+        var dateStr = _DatePrototypeToISOString.call(value);
         var dateCtor = value.constructor;
         if (dateCtor && dateCtor.name && dateCtor.name !== 'Date') {
             base = ' ' + dateCtor.name + ' ' + dateStr;
@@ -378,8 +561,18 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Show constructor name for non-plain objects (like fake Date, custom classes)
     if (base === '' && !array && !typedArray && !isError(value)) {
+        var proto = _ObjectGetPrototypeOf(value);
         var ctor = value.constructor;
-        if (ctor && ctor.name && ctor.name !== 'Object') {
+        if (proto === null) {
+            var ctorName = ctor && ctor.name ? ctor.name : '';
+            var tag = value[Symbol.toStringTag];
+            if (!ctorName && tag) ctorName = tag;
+            if (ctorName) {
+                braces = ['[' + ctorName + ': null prototype] {', '}'];
+            } else {
+                braces = ['[Object: null prototype] {', '}'];
+            }
+        } else if (ctor && ctor.name && ctor.name !== 'Object') {
             braces = [ctor.name + ' {', '}'];
         }
     }
@@ -392,9 +585,11 @@ function formatValue(ctx, value, recurseTimes) {
         return braces[0] + braces[1];
     }
 
-    if (recurseTimes < 0) {
+    if (recurseTimes < 0 || ctx.seen.length > 50) {
         if (isRegExp(value)) {
-            return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+            return ctx.stylize(_RegExpPrototypeToString.call(value), 'regexp');
+        } else if (_ArrayIsArray(value)) {
+            return ctx.stylize('[Array]', 'special');
         } else {
             return ctx.stylize('[Object]', 'special');
         }
@@ -431,15 +626,33 @@ function formatPrimitive(ctx, value) {
     if (isUndefined(value))
         return ctx.stylize('undefined', 'undefined');
     if (isString(value)) {
-        var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
-            .replace(/'/g, "\\'")
-            .replace(/\\"/g, '"') + '\'';
-        return ctx.stylize(simple, 'string');
+        var strEsc = function(s) {
+            return '\'' + _JSONStringify(s).replace(/^"|"$/g, '')
+                .replace(/'/g, "\\'")
+                .replace(/\\"/g, '"') + '\'';
+        };
+        if (ctx.compact !== true &&
+            value.length > 5 &&
+            value.indexOf('\n') !== -1 &&
+            value.length > (ctx.breakLength || 80) - 4) {
+            var parts = value.split(/(?<=\n)/);
+            var joined = parts.map(function(part) {
+                return ctx.stylize(strEsc(part), 'string');
+            }).join(' +\n    ');
+            return joined;
+        }
+        return ctx.stylize(strEsc(value), 'string');
     }
-    if (isNumber(value))
+    if (isNumber(value)) {
+        if (Object.is(value, -0)) return ctx.stylize('-0', 'number');
         return ctx.stylize('' + value, 'number');
+    }
     if (isBoolean(value))
         return ctx.stylize('' + value, 'boolean');
+    if (typeof value === 'bigint')
+        return ctx.stylize(value + 'n', 'number');
+    if (typeof value === 'symbol')
+        return ctx.stylize(value.toString(), 'symbol');
     // For some reason typeof null is "object", so special case here.
     if (isNull(value))
         return ctx.stylize('null', 'null');
@@ -447,7 +660,7 @@ function formatPrimitive(ctx, value) {
 
 
 function formatError(value) {
-    return '[' + Error.prototype.toString.call(value) + ']';
+    return '[' + _ErrorPrototypeToString.call(value) + ']';
 }
 
 
@@ -546,12 +759,43 @@ function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
 
 function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
     var name, str, desc;
-    desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
+    desc = _ObjectGetOwnPropertyDescriptor(value, key);
+    if (!desc) {
+        // Look up prototype chain for getter/setter descriptors
+        var p = Object.getPrototypeOf(value);
+        while (p && !desc) {
+            desc = _ObjectGetOwnPropertyDescriptor(p, key);
+            p = Object.getPrototypeOf(p);
+        }
+        if (!desc) {
+            desc = { value: value[key] };
+        }
+    }
     if (desc.get) {
-        if (desc.set) {
-            str = ctx.stylize('[Getter/Setter]', 'special');
+        var label = desc.set ? 'Getter/Setter' : 'Getter';
+        if (ctx.getters === true || ctx.getters === 'get') {
+            try {
+                var getterVal = desc.get.call(value);
+                if (ctx.seen.indexOf(getterVal) >= 0) {
+                    str = ctx.stylize('[' + label + ']', 'special') + ' ' + ctx.stylize('[Circular *' + getCircularRef(ctx, getterVal) + ']', 'special');
+                } else {
+                    var valStr;
+                    if (isNull(recurseTimes)) {
+                        valStr = formatValue(ctx, getterVal, null);
+                    } else {
+                        valStr = formatValue(ctx, getterVal, recurseTimes - 1);
+                    }
+                    if (typeof getterVal === 'object' && getterVal !== null || typeof getterVal === 'function') {
+                        str = ctx.stylize('[' + label + ']', 'special') + ' ' + valStr;
+                    } else {
+                        str = ctx.stylize('[' + label + ': ' + valStr + ']', 'special');
+                    }
+                }
+            } catch(e) {
+                str = ctx.stylize('[' + label + ': <Inspection threw (' + e.message + ')>]', 'special');
+            }
         } else {
-            str = ctx.stylize('[Getter]', 'special');
+            str = ctx.stylize('[' + label + ']', 'special');
         }
     } else {
         if (desc.set) {
@@ -569,14 +813,19 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
                 str = formatValue(ctx, desc.value, recurseTimes - 1);
             }
             if (str.indexOf('\n') > -1) {
-                if (array) {
-                    str = str.split('\n').map(function(line) {
-                        return '  ' + line;
-                    }).join('\n').slice(2);
-                } else {
-                    str = str.split('\n').map(function(line, idx) {
-                        return idx === 0 ? line : '  ' + line;
-                    }).join('\n');
+                // Don't re-indent multi-line string concatenation format ('...' +\n    '...')
+                // as formatPrimitive already handles the indentation
+                var isMultiLineStringConcat = str.indexOf("' +\n") !== -1 || str.indexOf("\" +\n") !== -1;
+                if (!isMultiLineStringConcat) {
+                    if (array) {
+                        str = str.split('\n').map(function(line) {
+                            return '  ' + line;
+                        }).join('\n').slice(2);
+                    } else {
+                        str = str.split('\n').map(function(line, idx) {
+                            return idx === 0 ? line : '  ' + line;
+                        }).join('\n');
+                    }
                 }
             }
         } else {
@@ -587,7 +836,7 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
         if (array && key.match(/^\d+$/)) {
             return str;
         }
-        name = JSON.stringify('' + key);
+        name = _JSONStringify('' + key);
         if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
             name = name.slice(1, -1);
             name = ctx.stylize(name, 'name');
@@ -616,11 +865,17 @@ function reduceToSingleString(output, base, braces, ctx) {
      
      if ((ctx && ctx.compact === false) || length > 60) {
           if (isMaporSet) {
+              if (ctx && ctx.compact === false) {
+                  return base + ' {\n  ' +
+                      output.join(',\n  ') +
+                      '\n}';
+              }
               return base + ' { ' +
                   output.join(', ') +
                   ' }';
           }
-          return braces[0] + base +
+          var prefix = base ? base.replace(/^ /, '') + ' ' : '';
+          return prefix + braces[0] +
               '\n  ' +
               output.join(',\n  ') +
               '\n' +
@@ -634,7 +889,7 @@ function reduceToSingleString(output, base, braces, ctx) {
  }
 
 export function isArray(ar) {
-    return Array.isArray(ar);
+    return _ArrayIsArray(ar);
 }
 
 export function isBoolean(arg) {
@@ -715,7 +970,7 @@ export function isBuffer(arg) {
 }
 
 function objectToString(o) {
-    return Object.prototype.toString.call(o);
+    return _ObjectPrototypeToString.call(o);
 }
 
 
@@ -755,7 +1010,7 @@ export const _extend = function(origin, add) {
 };
 
 function hasOwnProperty(obj, prop) {
-    return Object.prototype.hasOwnProperty.call(obj, prop);
+    return _ObjectPrototypeHasOwnProperty.call(obj, prop);
 }
 
 var kCustomPromisifiedSymbol = typeof Symbol !== 'undefined' ? Symbol('util.promisify.custom') : undefined;
@@ -865,12 +1120,21 @@ export function callbackify(original) {
 }
 
 export function inherits(ctor, superCtor) {
-    if (ctor === undefined || ctor === null)
-        throw new TypeError('The "ctor" argument must be of type Function. Received ' + ctor);
-    if (superCtor === undefined || superCtor === null)
-        throw new TypeError('The "superCtor" argument must be of type Function. Received ' + superCtor);
-    if (superCtor.prototype === undefined)
-        throw new TypeError('The "superCtor.prototype" property must be of type Object. Received undefined');
+    if (ctor === undefined || ctor === null) {
+        var err = new TypeError('The "ctor" argument must be of type function. Received ' + ctor);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    if (superCtor === undefined || superCtor === null) {
+        var err = new TypeError('The "superCtor" argument must be of type function. Received ' + superCtor);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    if (superCtor.prototype === undefined) {
+        var err = new TypeError('The "superCtor.prototype" property must be of type object. Received undefined');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
     Object.defineProperty(ctor, 'super_', {
         value: superCtor,
         writable: true,
@@ -890,8 +1154,7 @@ function _isView(v) {
     return ArrayBuffer.isView(v);
 }
 
-function _isBoxed(val) {
-    var tag = Object.prototype.toString.call(val);
+function _isBoxedTag(tag) {
     return tag === '[object Number]' ||
            tag === '[object String]' ||
            tag === '[object Boolean]' ||
@@ -899,23 +1162,25 @@ function _isBoxed(val) {
            tag === '[object Symbol]';
 }
 
-function _unbox(val) {
-    var tag = Object.prototype.toString.call(val);
-    if (tag === '[object Number]') return Number.prototype.valueOf.call(val);
-    if (tag === '[object String]') return String.prototype.valueOf.call(val);
-    if (tag === '[object Boolean]') return Boolean.prototype.valueOf.call(val);
-    if (tag === '[object BigInt]') return Object(val).valueOf();
-    if (tag === '[object Symbol]') return Symbol.prototype.valueOf.call(val);
+function _unboxWithTag(val, tag) {
+    try {
+        if (tag === '[object Number]') return Number.prototype.valueOf.call(val);
+        if (tag === '[object String]') return String.prototype.valueOf.call(val);
+        if (tag === '[object Boolean]') return Boolean.prototype.valueOf.call(val);
+        if (tag === '[object BigInt]') return Object(val).valueOf();
+        if (tag === '[object Symbol]') return Symbol.prototype.valueOf.call(val);
+    } catch(e) {
+        try { return val.valueOf(); } catch(e2) {}
+    }
     return val;
 }
 
-function _isWeakColl(val) {
-    var tag = Object.prototype.toString.call(val);
+function _isWeakCollTag(tag) {
     return tag === '[object WeakMap]' || tag === '[object WeakSet]';
 }
 
-function _isPromiseLike(val) {
-    return Object.prototype.toString.call(val) === '[object Promise]';
+function _isPromiseLikeTag(tag) {
+    return tag === '[object Promise]';
 }
 
 function _isArrIdx(key, length) {
@@ -943,21 +1208,40 @@ function _deepObjEquiv(a, b, strict, memo) {
         return strict ? Object.is(a, b) : a == b;
     }
 
-    if (_isWeakColl(a) || _isWeakColl(b)) return false;
-    if (_isPromiseLike(a) || _isPromiseLike(b)) return false;
+    // Compute tags once to avoid repeated Object.prototype.toString.call (expensive in WASM/QuickJS)
+    var aTag = Object.prototype.toString.call(a);
+    var bTag = Object.prototype.toString.call(b);
+
+    if (_isWeakCollTag(aTag) || _isWeakCollTag(bTag)) return false;
+    if (_isPromiseLikeTag(aTag) || _isPromiseLikeTag(bTag)) return false;
 
     if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
         return false;
 
-    var aBoxed = _isBoxed(a);
-    var bBoxed = _isBoxed(b);
+    // Check type tags match - objects of different built-in types are never equal
+    if (a instanceof RegExp !== b instanceof RegExp) return false;
+    if (a instanceof Date !== b instanceof Date) return false;
+    if (a instanceof Map !== b instanceof Map) return false;
+    if (a instanceof Set !== b instanceof Set) return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (a instanceof Error !== b instanceof Error) return false;
+    var _aIsArgs = 'length' in a && 'callee' in a && !Array.isArray(a) && !(a instanceof Function);
+    var _bIsArgs = 'length' in b && 'callee' in b && !Array.isArray(b) && !(b instanceof Function);
+    if (_aIsArgs !== _bIsArgs) return false;
+    var aIsView = ArrayBuffer.isView(a) && !(a instanceof DataView);
+    var bIsView = ArrayBuffer.isView(b) && !(b instanceof DataView);
+    if (aIsView || bIsView) {
+        if (aIsView !== bIsView) return false;
+        if (!strict && aTag !== bTag) return false;
+    }
+
+    var aBoxed = _isBoxedTag(aTag);
+    var bBoxed = _isBoxedTag(bTag);
     if (aBoxed || bBoxed) {
         if (!aBoxed || !bBoxed) return false;
-        var aTag = Object.prototype.toString.call(a);
-        var bTag = Object.prototype.toString.call(b);
         if (aTag !== bTag) return false;
-        var aVal = _unbox(a);
-        var bVal = _unbox(b);
+        var aVal = _unboxWithTag(a, aTag);
+        var bVal = _unboxWithTag(b, bTag);
         if (aTag === '[object Number]') {
             if (!Object.is(aVal, bVal)) return false;
         } else {
@@ -965,8 +1249,8 @@ function _deepObjEquiv(a, b, strict, memo) {
         }
     }
 
-    var aIsDate = Object.prototype.toString.call(a) === '[object Date]';
-    var bIsDate = Object.prototype.toString.call(b) === '[object Date]';
+    var aIsDate = aTag === '[object Date]';
+    var bIsDate = bTag === '[object Date]';
     if (aIsDate || bIsDate) {
         if (!aIsDate || !bIsDate) return false;
         if (a.getTime() !== b.getTime()) return false;
@@ -1034,7 +1318,7 @@ function _deepObjEquiv(a, b, strict, memo) {
         if (strict) {
             if (a.constructor !== b.constructor) return false;
         } else {
-            if (Object.prototype.toString.call(a) !== Object.prototype.toString.call(b)) return false;
+            if (aTag !== bTag) return false;
         }
         if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
             if (a.length !== b.length) return false;
@@ -1057,15 +1341,26 @@ function _deepObjEquiv(a, b, strict, memo) {
             if (aK[i] !== bK[i]) return false;
             if (!_innerDeep(a[aK[i]], b[bK[i]], strict, memo)) return false;
         }
+        if (strict) {
+            var symA = _getEnumSymbols(a);
+            var symB = _getEnumSymbols(b);
+            if (symA.length !== symB.length) return false;
+            for (var i = 0; i < symA.length; i++) {
+                if (symB.indexOf(symA[i]) === -1) return false;
+                if (!_innerDeep(a[symA[i]], b[symA[i]], strict, memo)) return false;
+            }
+        }
         return true;
     }
 
     if (!memo) {
         memo = { a: [], b: [] };
     }
-    var idxA = memo.a.indexOf(a);
-    if (idxA !== -1 && memo.b[idxA] === b) {
-        return true;
+    // Check for cycles: if we've seen this exact pair (a, b), assume equal
+    for (var mi = 0; mi < memo.a.length; mi++) {
+        if (memo.a[mi] === a && memo.b[mi] === b) {
+            return true;
+        }
     }
     memo.a.push(a);
     memo.b.push(b);
@@ -1082,18 +1377,37 @@ function _deepObjEquiv(a, b, strict, memo) {
                 unmatchedA.push(i);
                 continue;
             }
-            var found = false;
-            for (var j = 0; j < bEntries.length; j++) {
-                if (matchedB[j]) continue;
-                var keysMatch = strict ? Object.is(aKey, bEntries[j][0]) : aKey == bEntries[j][0];
-                if (keysMatch) {
-                    if (!_innerDeep(aEntries[i][1], bEntries[j][1], strict, memo)) return false;
-                    matchedB[j] = true;
-                    found = true;
-                    break;
+            if (strict) {
+                // In strict mode, primitive keys must match via Object.is
+                var found = false;
+                for (var j = 0; j < bEntries.length; j++) {
+                    if (matchedB[j]) continue;
+                    if (Object.is(aKey, bEntries[j][0])) {
+                        if (!_innerDeep(aEntries[i][1], bEntries[j][1], strict, memo)) return false;
+                        matchedB[j] = true;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return false;
+            } else {
+                // In loose mode, try Object.is first; if value doesn't match or
+                // key not found, defer to the general matching pass
+                var found = false;
+                for (var j = 0; j < bEntries.length; j++) {
+                    if (matchedB[j]) continue;
+                    if (Object.is(aKey, bEntries[j][0])) {
+                        if (_innerDeep(aEntries[i][1], bEntries[j][1], strict, memo)) {
+                            matchedB[j] = true;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    unmatchedA.push(i);
                 }
             }
-            if (!found) return false;
         }
         for (var i = 0; i < unmatchedA.length; i++) {
             var ai = unmatchedA[i];
@@ -1101,13 +1415,26 @@ function _deepObjEquiv(a, b, strict, memo) {
             for (var j = 0; j < bEntries.length; j++) {
                 if (matchedB[j]) continue;
                 if (_innerDeep(aEntries[ai][0], bEntries[j][0], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
-                    if (!_innerDeep(aEntries[ai][1], bEntries[j][1], strict, memo)) return false;
-                    matchedB[j] = true;
-                    found = true;
-                    break;
+                    if (_innerDeep(aEntries[ai][1], bEntries[j][1], strict, memo)) {
+                        matchedB[j] = true;
+                        found = true;
+                        break;
+                    }
                 }
             }
             if (!found) return false;
+        }
+        // Check own properties on the Map objects
+        var mKeysA = Object.keys(a);
+        var mKeysB = Object.keys(b);
+        if (mKeysA.length !== mKeysB.length) return false;
+        if (mKeysA.length > 0) {
+            mKeysA.sort();
+            mKeysB.sort();
+            for (var i = 0; i < mKeysA.length; i++) {
+                if (mKeysA[i] !== mKeysB[i]) return false;
+                if (!_innerDeep(a[mKeysA[i]], b[mKeysB[i]], strict, memo)) return false;
+            }
         }
         return true;
     }
@@ -1119,10 +1446,13 @@ function _deepObjEquiv(a, b, strict, memo) {
         var unmatchedA = [];
         var usedB = new Array(arrB.length);
         for (var i = 0; i < arrA.length; i++) {
-            if (typeof arrA[i] !== 'object' || arrA[i] === null) {
-                if (b.has(arrA[i])) {
+            var val = arrA[i];
+            if (typeof val !== 'object' || val === null) {
+                if (b.has(val)) {
+                    // Use Object.is for marking used elements to avoid cross-matching
+                    // loosely-equal primitives (e.g., 0 matching false via ==)
                     for (var j = 0; j < arrB.length; j++) {
-                        if (!usedB[j] && (strict ? Object.is(arrA[i], arrB[j]) : arrA[i] == arrB[j])) {
+                        if (!usedB[j] && Object.is(val, arrB[j])) {
                             usedB[j] = true;
                             break;
                         }
@@ -1148,6 +1478,16 @@ function _deepObjEquiv(a, b, strict, memo) {
                 }
             }
             if (!found) return false;
+        }
+        // Check own properties on the Set objects
+        var sKeysA = Object.keys(a);
+        var sKeysB = Object.keys(b);
+        if (sKeysA.length !== sKeysB.length) return false;
+        sKeysA.sort();
+        sKeysB.sort();
+        for (var i = 0; i < sKeysA.length; i++) {
+            if (sKeysA[i] !== sKeysB[i]) return false;
+            if (!_innerDeep(a[sKeysA[i]], b[sKeysB[i]], strict, memo)) return false;
         }
         return true;
     }
@@ -1206,20 +1546,40 @@ function _deepObjEquiv(a, b, strict, memo) {
     return true;
 }
 
+var _deepCallCount = 0;
 function _innerDeep(a, b, strict, memo) {
-    if (strict ? Object.is(a, b) : a == b) return true;
-    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
-        if (!strict && a == b) return true;
+    _deepCallCount++;
+    if (_deepCallCount > 5000) {
+        _deepCallCount = 0;
         return false;
+    }
+    if (Object.is(a, b)) return true;
+    if (strict) {
+        // Strict mode: both must be objects to proceed to deep comparison
+        if (typeof a !== 'object' || typeof b !== 'object' ||
+            a === null || b === null) {
+            return false;
+        }
+    } else {
+        // Loose mode: if one is a primitive, only allow match if BOTH are primitives
+        if (a === null || typeof a !== 'object') {
+            return (b === null || typeof b !== 'object') &&
+                   (a == b || (a !== a && b !== b));
+        }
+        if (b === null || typeof b !== 'object') {
+            return false;
+        }
     }
     return _deepObjEquiv(a, b, strict, memo);
 }
 
 export function innerDeepEqual(a, b, strict, memo) {
+    _deepCallCount = 0;
     return _innerDeep(a, b, strict, memo);
 }
 
 export function isDeepStrictEqual(val1, val2) {
+    _deepCallCount = 0;
     return _innerDeep(val1, val2, true, undefined);
 }
 
@@ -1679,6 +2039,7 @@ function _storeOption(values, name, desc, value) {
 
 export default {
      format,
+     formatWithOptions,
      deprecate,
      debuglog,
      inspect,

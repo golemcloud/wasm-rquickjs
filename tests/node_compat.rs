@@ -1,6 +1,6 @@
 test_r::enable!();
 
-use crate::common::{CompiledTest, TestInstance};
+use crate::common::{CompiledTest, PreparedComponent, TestInstance};
 use camino::Utf8Path;
 use std::collections::BTreeMap;
 use std::fs;
@@ -164,6 +164,8 @@ async fn run_node_compat_suite(
         "No {prefix} tests found in config.jsonc"
     );
 
+    let prepared = PreparedComponent::new(runner.wasm_path())?;
+
     let mut results: BTreeMap<String, String> = BTreeMap::new();
     let mut failures = Vec::new();
 
@@ -175,7 +177,7 @@ async fn run_node_compat_suite(
             continue;
         }
 
-        let mut instance = TestInstance::new(runner.wasm_path()).await?;
+        let mut instance = TestInstance::from_prepared(&prepared).await?;
         setup_test_files(&instance, &entry.path)?;
 
         let guest_path = format!("/tests/{}", entry.path);

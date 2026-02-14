@@ -70,6 +70,38 @@ impl FeatureCombination {
     }
 }
 
+pub struct PreparedComponent {
+    engine: Engine,
+    linker: Linker<Host>,
+    component: Component,
+}
+
+impl PreparedComponent {
+    pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        let mut config = wasmtime::Config::default();
+        config.async_support(true);
+        config.wasm_component_model(true);
+        config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
+        config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
+        let engine = Engine::new(&config)?;
+        let mut linker: Linker<Host> = Linker::new(&engine);
+
+        wasmtime_wasi::p2::add_to_linker_with_options_async(
+            &mut linker,
+            &bindings::LinkOptions::default(),
+        )?;
+        wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+
+        let component = Component::from_file(&engine, wasm_path)?;
+
+        Ok(Self {
+            engine,
+            linker,
+            component,
+        })
+    }
+}
+
 #[allow(dead_code)]
 pub struct TestInstance {
     engine: Engine,
@@ -84,18 +116,11 @@ pub struct TestInstance {
 
 impl TestInstance {
     pub async fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let mut config = wasmtime::Config::default();
-        config.async_support(true);
-        config.wasm_component_model(true);
-        let engine = Engine::new(&config)?;
-        let mut linker: Linker<Host> = Linker::new(&engine);
+        let prepared = PreparedComponent::new(wasm_path)?;
+        Self::from_prepared(&prepared).await
+    }
 
-        wasmtime_wasi::p2::add_to_linker_with_options_async(
-            &mut linker,
-            &bindings::LinkOptions::default(),
-        )?;
-        wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
-
+    pub async fn from_prepared(prepared: &PreparedComponent) -> anyhow::Result<Self> {
         let stdout_file = NamedUtf8TempFile::new()?;
         let stderr_file = NamedUtf8TempFile::new()?;
 
@@ -119,15 +144,17 @@ impl TestInstance {
             wasi_http: Arc::new(http_ctx),
         };
 
-        let component = Component::from_file(&engine, wasm_path)?;
-        let mut store = Store::new(&engine, host);
+        let mut store = Store::new(&prepared.engine, host);
 
-        let instance = linker.instantiate_async(&mut store, &component).await?;
+        let instance = prepared
+            .linker
+            .instantiate_async(&mut store, &prepared.component)
+            .await?;
 
         Ok(Self {
-            engine,
-            linker,
-            component,
+            engine: prepared.engine.clone(),
+            linker: prepared.linker.clone(),
+            component: prepared.component.clone(),
             store,
             instance,
             stdout_file,
