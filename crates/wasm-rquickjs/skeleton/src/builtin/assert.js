@@ -85,18 +85,116 @@ class AssertionError extends Error {
                         diffLines.push(rawDiff[di].type + ' ' + rawDiff[di].line);
                     }
                 }
-                message = header + diffLines.join('\n') + '\n';
-            } else {
-                var actualStr = inspect(actual, { depth: 2 });
-                var expectedStr = inspect(expected, { depth: 2 });
-                if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
-                if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
-
-                if (operator === 'strictEqual') {
-                    message = 'Expected values to be strictly equal:\n\n' + actualStr + ' !== ' + expectedStr + '\n';
-                } else if (operator === 'notDeepStrictEqual' || operator === 'notStrictEqual') {
-                    message = 'Expected values to not be strictly equal:\n\n' + actualStr + '\n';
+                // Context collapsing: collapse runs of 8+ unchanged lines
+                var kNopLinesToCollapse = 5;
+                var collapsed = [];
+                var skipped = false;
+                var nopRun = [];
+                for (var ci = 0; ci < diffLines.length; ci++) {
+                    var dl = diffLines[ci];
+                    var isNop = dl.length >= 2 && dl[0] === ' ' && dl[1] === ' ';
+                    if (isNop) {
+                        nopRun.push(dl);
+                    } else {
+                        if (nopRun.length >= kNopLinesToCollapse + 3) {
+                            for (var ni = 0; ni < kNopLinesToCollapse; ni++) {
+                                collapsed.push(nopRun[ni]);
+                            }
+                            collapsed.push('...');
+                            collapsed.push(nopRun[nopRun.length - 1]);
+                            skipped = true;
+                        } else {
+                            for (var ni = 0; ni < nopRun.length; ni++) {
+                                collapsed.push(nopRun[ni]);
+                            }
+                        }
+                        nopRun = [];
+                        collapsed.push(dl);
+                    }
+                }
+                // Flush trailing NOP run
+                if (nopRun.length >= kNopLinesToCollapse + 3) {
+                    for (var ni = 0; ni < kNopLinesToCollapse; ni++) {
+                        collapsed.push(nopRun[ni]);
+                    }
+                    collapsed.push('...');
+                    collapsed.push(nopRun[nopRun.length - 1]);
+                    skipped = true;
                 } else {
+                    for (var ni = 0; ni < nopRun.length; ni++) {
+                        collapsed.push(nopRun[ni]);
+                    }
+                }
+                if (skipped) {
+                    header = header.replace('\n\n', '\n... Skipped lines\n\n');
+                }
+                message = header + collapsed.join('\n') + '\n';
+            } else {
+                if (operator === 'notDeepStrictEqual') {
+                    var actualInsp2 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                    var base2 = 'Expected "actual" not to be strictly deep-equal to:';
+                    var lines2 = actualInsp2.split('\n');
+                    // Truncate at ~50 lines
+                    if (lines2.length > 50) {
+                        lines2 = lines2.slice(0, 46);
+                        lines2.push('...');
+                        message = base2 + '\n\n' + lines2.join('\n') + '\n';
+                    } else if (lines2.length === 1) {
+                        message = base2 + (lines2[0].length > 5 ? '\n\n' : ' ') + lines2[0];
+                    } else {
+                        message = base2 + '\n\n' + lines2.join('\n') + '\n';
+                    }
+                } else if (operator === 'notStrictEqual') {
+                    var actualInsp2 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                    var base2 = 'Expected "actual" to be strictly unequal to:';
+                    var lines2 = actualInsp2.split('\n');
+                    if (lines2.length === 1) {
+                        message = base2 + (lines2[0].length > 5 ? '\n\n' : ' ') + lines2[0];
+                    } else {
+                        message = base2 + '\n\n' + lines2.join('\n') + '\n';
+                    }
+                } else if (operator === 'strictEqual') {
+                    var isObjCompare = (typeof actual === 'object' && actual !== null &&
+                        typeof expected === 'object' && expected !== null) ||
+                        (typeof actual === 'function' && typeof expected === 'function');
+                    if (isObjCompare) {
+                        var actualInsp3 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                        var expectedInsp3 = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                        message = 'Expected "actual" to be reference-equal to "expected":\n' +
+                            '+ actual - expected\n\n';
+                        var aLines3 = actualInsp3.split('\n');
+                        var eLines3 = expectedInsp3.split('\n');
+                        var maxLen3 = Math.max(aLines3.length, eLines3.length);
+                        var diffParts3 = [];
+                        for (var si = 0; si < maxLen3; si++) {
+                            var aL3 = si < aLines3.length ? aLines3[si] : undefined;
+                            var eL3 = si < eLines3.length ? eLines3[si] : undefined;
+                            if (aL3 !== undefined && eL3 !== undefined && aL3 === eL3) {
+                                diffParts3.push('  ' + aL3);
+                            } else {
+                                if (aL3 !== undefined) diffParts3.push('+ ' + aL3);
+                                if (eL3 !== undefined) diffParts3.push('- ' + eL3);
+                            }
+                        }
+                        message += diffParts3.join('\n') + '\n';
+                    } else {
+                        var actualStr = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                        var expectedStr = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                        var stringsLen = actualStr.length + expectedStr.length;
+                        if (typeof actual === 'string') stringsLen -= 2;
+                        if (typeof expected === 'string') stringsLen -= 2;
+                        if (stringsLen <= 12 && (actual !== 0 || expected !== 0)) {
+                            message = 'Expected values to be strictly equal:\n\n' + actualStr + ' !== ' + expectedStr + '\n';
+                        } else {
+                            message = 'Expected values to be strictly equal:\n+ actual - expected\n\n' +
+                                '+ ' + actualStr + '\n- ' + expectedStr + '\n';
+                        }
+                    }
+                } else {
+                    var actualStr = inspect(actual, { depth: 2 });
+                    var expectedStr = inspect(expected, { depth: 2 });
+                    if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
+                    if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
                     message = actualStr + ' ' + operator + ' ' + expectedStr;
                 }
             }
@@ -126,8 +224,16 @@ class AssertionError extends Error {
 }
 
 // Process message argument: supports string, Error, and message factory functions
+function isErrorLike(obj) {
+    return obj instanceof Error ||
+        (obj !== null && typeof obj === 'object' && 'message' in obj && 'name' in obj &&
+         typeof obj.message === 'string' && typeof obj.name === 'string' &&
+         (obj.constructor === Error || (obj.constructor && obj.constructor.prototype instanceof Error) ||
+          /Error$/.test(obj.name)));
+}
+
 function processMessage(message, actual, expected) {
-    if (message instanceof Error) return message;
+    if (isErrorLike(message)) return message;
     if (typeof message === 'function') {
         var result = message(actual, expected);
         if (typeof result === 'string') return result;
@@ -138,7 +244,7 @@ function processMessage(message, actual, expected) {
 
 function innerFail(obj) {
     var msg = processMessage(obj.message, obj.actual, obj.expected);
-    if (msg instanceof Error) throw msg;
+    if (isErrorLike(msg)) throw msg;
     obj.message = msg;
     throw new AssertionError(obj);
 }
@@ -157,7 +263,7 @@ function fail(actual, expected, message, operator, stackStartFn) {
     }
     if (arguments.length === 1) {
         var msg1 = processMessage(actual, undefined, undefined);
-        if (msg1 instanceof Error) throw msg1;
+        if (isErrorLike(msg1)) throw msg1;
         innerFail({
             actual: undefined,
             expected: undefined,
@@ -172,7 +278,7 @@ function fail(actual, expected, message, operator, stackStartFn) {
         operator = '!=';
     }
     var msg = processMessage(message, actual, expected);
-    if (msg instanceof Error) throw msg;
+    if (isErrorLike(msg)) throw msg;
     innerFail({
         actual: actual,
         expected: expected,
@@ -773,7 +879,14 @@ function expectedException(actual, expected, message, fn) {
             return { pass: true, message: message };
         }
         if (Error.isPrototypeOf(expected)) {
-            return { pass: false, message: message };
+            var expectedName = expected.name || 'unknown';
+            var actualName = (actual && actual.constructor && actual.constructor.name) || 'unknown';
+            var actualMsg = actual != null && typeof actual === 'object' && 'message' in actual
+                ? String(actual.message)
+                : String(actual);
+            var genMsg = 'The error is expected to be an instance of "' + expectedName +
+                '". Received "' + actualName + '"\n\nError message:\n\n' + actualMsg;
+            return { pass: false, message: message || genMsg };
         }
         var result = expected.call({}, actual);
         if (result === true) {
@@ -799,7 +912,9 @@ function expectedException(actual, expected, message, fn) {
         if (expected.test(str)) {
             return { pass: true, message: message };
         }
-        return { pass: false, message: message };
+        var regMsg = message || ('The input did not match the regular expression ' + expected + '. ' +
+            'Input:\n\n' + inspect(str) + '\n');
+        return { pass: false, message: regMsg };
     }
 
     if (typeof expected === 'object' && expected !== null) {
@@ -855,10 +970,19 @@ function throws(fn, error, message) {
     }
 
     if (!threw) {
+        var missingMsg = 'Missing expected exception';
+        if (typeof error === 'function' && error.name) {
+            missingMsg += ' (' + error.name + ')';
+        }
+        if (message) {
+            missingMsg += ': ' + message;
+        } else {
+            missingMsg += '.';
+        }
         innerFail({
             actual: undefined,
             expected: error,
-            message: message || 'Missing expected exception.',
+            message: missingMsg,
             operator: 'throws',
             stackStartFn: throws
         });
@@ -872,6 +996,7 @@ function throws(fn, error, message) {
                 expected: error,
                 message: result.message || 'The error did not match the expected value.',
                 operator: 'throws',
+                generatedMessage: !message,
                 stackStartFn: throws
             });
         }
@@ -894,10 +1019,15 @@ function doesNotThrow(fn, error, message) {
         if (error !== undefined) {
             var result = expectedException(e, error, message, doesNotThrow);
             if (result.pass) {
+                var actualMessage = e != null && typeof e === 'object' && 'message' in e
+                    ? String(e.message) : String(e);
+                var dntMsg = message
+                    ? 'Got unwanted exception: ' + message + '\nActual message: "' + actualMessage + '"'
+                    : 'Got unwanted exception.\nActual message: "' + actualMessage + '"';
                 innerFail({
                     actual: e,
                     expected: error,
-                    message: result.message || 'Got unwanted exception.',
+                    message: dntMsg,
                     operator: 'doesNotThrow',
                     stackStartFn: doesNotThrow
                 });
@@ -905,10 +1035,15 @@ function doesNotThrow(fn, error, message) {
             // Error was thrown but didn't match the expected type - rethrow
             throw e;
         } else {
+            var actualMessage = e != null && typeof e === 'object' && 'message' in e
+                ? String(e.message) : String(e);
+            var dntMsg = message
+                ? 'Got unwanted exception: ' + message + '\nActual message: "' + actualMessage + '"'
+                : 'Got unwanted exception.\nActual message: "' + actualMessage + '"';
             innerFail({
                 actual: e,
                 expected: error,
-                message: message || 'Got unwanted exception.',
+                message: dntMsg,
                 operator: 'doesNotThrow',
                 stackStartFn: doesNotThrow
             });
