@@ -16,6 +16,7 @@ import * as assertStrict from 'node:assert/strict';
 import * as fsPromises from 'node:fs/promises';
 import * as nodeTest from 'node:test';
 import * as querystring from 'node:querystring';
+import * as nodeUrl from 'node:url';
 import * as vm from 'node:vm';
 
 // CJS require() should return the default export (the "module object") when one
@@ -75,6 +76,8 @@ const builtinModules = {
     'node:test': cjsExport(nodeTest),
     'querystring': cjsExport(querystring),
     'node:querystring': cjsExport(querystring),
+    'url': cjsExport(nodeUrl),
+    'node:url': cjsExport(nodeUrl),
     'vm': cjsExport(vm),
     'node:vm': cjsExport(vm),
 };

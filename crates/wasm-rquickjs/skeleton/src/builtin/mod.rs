@@ -89,6 +89,8 @@ pub fn add_module_resolvers(
             .with_module("path")
             .with_module("__wasm_rquickjs_builtin/url_native")
             .with_module("__wasm_rquickjs_builtin/url")
+            .with_module("node:url")
+            .with_module("url")
             .with_module("node:events")
             .with_module("events")
             .with_module("node:stream")
@@ -198,6 +200,8 @@ pub fn module_loader() -> (
             .with_module("node:path", path::PATH_JS)
             .with_module("path", path::REEXPORT_JS)
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
+            .with_module("node:url", url::URL_JS)
+            .with_module("url", url::REEXPORT_JS)
             .with_module("node:events", eventemitter::EVENTEMITTER_JS)
             .with_module("events", eventemitter::REEXPORT_JS)
             .with_module("node:stream", stream::STREAM_JS)
@@ -206,7 +210,6 @@ pub fn module_loader() -> (
             .with_module("stream/promises", stream::REEXPORT_PROMISES_JS)
             .with_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
             .with_module("string_decoder", string_decoder::REEXPORT_JS)
-            .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto",
                 web_crypto::WEB_CRYPTO_JS,

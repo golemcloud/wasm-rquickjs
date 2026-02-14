@@ -271,3 +271,10 @@ async fn node_compat_querystring(
 ) -> anyhow::Result<()> {
     run_node_compat_suite(runner, "test-querystring").await
 }
+
+#[test]
+async fn node_compat_url(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-url").await
+}

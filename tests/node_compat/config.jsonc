@@ -79,6 +79,37 @@
     "parallel/test-querystring.js": {},
     "parallel/test-querystring-escape.js": {},
     "parallel/test-querystring-multichar-separator.js": {},
-    "parallel/test-querystring-maxKeys-non-finite.js": {}
+    "parallel/test-querystring-maxKeys-non-finite.js": {},
+
+    // === node:url tests ===
+    "parallel/test-url-fileurltopath.js": {},
+    "parallel/test-url-pathtofileurl.js": {},
+    "parallel/test-url-urltooptions.js": {},
+    "parallel/test-url-format-whatwg.js": {},
+    "parallel/test-url-format-invalid-input.js": {},
+    "parallel/test-url-domain-ascii-unicode.js": {
+      "skip": true,
+      "reason": "requires ICU/punycode support (hasIntl)"
+    },
+    "parallel/test-url-format.js": {
+      "skip": true,
+      "reason": "requires full legacy url.format with complex edge cases and hasIntl"
+    },
+    "parallel/test-url-parse-format.js": {
+      "skip": true,
+      "reason": "requires full legacy url.parse with complex edge cases and hasIntl"
+    },
+    "parallel/test-url-parse-invalid-input.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_URL error code and process.execPath/spawnPromisified"
+    },
+    "parallel/test-url-parse-query.js": {
+      "skip": true,
+      "reason": "requires full legacy url.parse with query string parsing and Url constructor"
+    },
+    "parallel/test-url-relative.js": {
+      "skip": true,
+      "reason": "requires full legacy url.resolveObject with complex edge cases"
+    }
   }
 }

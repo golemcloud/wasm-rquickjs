@@ -21,6 +21,15 @@ class AssertionError extends Error {
                 var header = operator === 'deepStrictEqual'
                     ? 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n'
                     : 'Expected values to be loosely deep-equal:\n\n';
+                // Check for comma disparity: lines differing only by trailing comma
+                var checkCommaDisparity = actual != null && typeof actual === 'object';
+                function linesEqual(a, b) {
+                    if (a === b) return true;
+                    if (checkCommaDisparity) {
+                        return (a + ',') === b || a === (b + ',');
+                    }
+                    return false;
+                }
                 // Diff generation
                 var m = actualLines.length;
                 var n = expectedLines.length;
@@ -31,8 +40,9 @@ class AssertionError extends Error {
                     for (var di = 0; di < maxLen; di++) {
                         var aLine = di < m ? actualLines[di] : undefined;
                         var eLine = di < n ? expectedLines[di] : undefined;
-                        if (aLine === eLine) {
-                            diffLines.push('  ' + aLine);
+                        if (aLine !== undefined && eLine !== undefined && linesEqual(aLine, eLine)) {
+                            var commonLine = checkCommaDisparity && !aLine.endsWith(',') ? eLine : aLine;
+                            diffLines.push('  ' + commonLine);
                         } else {
                             if (aLine !== undefined) diffLines.push('+ ' + aLine);
                             if (eLine !== undefined) diffLines.push('- ' + eLine);
@@ -47,7 +57,7 @@ class AssertionError extends Error {
                     }
                     for (var i = 1; i <= m; i++) {
                         for (var j = 1; j <= n; j++) {
-                            if (actualLines[i - 1] === expectedLines[j - 1]) {
+                            if (linesEqual(actualLines[i - 1], expectedLines[j - 1])) {
                                 dp[i][j] = dp[i - 1][j - 1] + 1;
                             } else {
                                 dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
@@ -57,8 +67,10 @@ class AssertionError extends Error {
                     var ai = m, ei = n;
                     var rawDiff = [];
                     while (ai > 0 || ei > 0) {
-                        if (ai > 0 && ei > 0 && actualLines[ai - 1] === expectedLines[ei - 1]) {
-                            rawDiff.push({ type: ' ', line: actualLines[ai - 1] });
+                        if (ai > 0 && ei > 0 && linesEqual(actualLines[ai - 1], expectedLines[ei - 1])) {
+                            var aItem = actualLines[ai - 1];
+                            var commonLine = checkCommaDisparity && !aItem.endsWith(',') ? expectedLines[ei - 1] : aItem;
+                            rawDiff.push({ type: ' ', line: commonLine });
                             ai--; ei--;
                         } else if (ei > 0 && (ai === 0 || dp[ai][ei - 1] >= dp[ai - 1][ei])) {
                             rawDiff.push({ type: '-', line: expectedLines[ei - 1] });
@@ -375,7 +387,13 @@ function objEquiv(a, b, strict, memo) {
 
     if (isView(a) && isView(b)) {
         if (a.byteLength !== b.byteLength) return false;
-        if (strict && a.constructor !== b.constructor) return false;
+        var aTag = Object.prototype.toString.call(a);
+        var bTag = Object.prototype.toString.call(b);
+        if (strict) {
+            if (a.constructor !== b.constructor) return false;
+        } else {
+            if (aTag !== bTag) return false;
+        }
         // For non-strict mode with float arrays, compare values (not bytes)
         // so that +0 and -0 are treated as equal
         if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
@@ -383,12 +401,22 @@ function objEquiv(a, b, strict, memo) {
             for (var i = 0; i < a.length; i++) {
                 if (a[i] != b[i]) return false;
             }
-            return true;
+        } else {
+            var ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+            var ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+            for (var i = 0; i < ua.length; i++) {
+                if (ua[i] !== ub[i]) return false;
+            }
         }
-        var ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-        var ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-        for (var i = 0; i < ua.length; i++) {
-            if (ua[i] !== ub[i]) return false;
+        // Also compare non-index own properties
+        var aKeys = Object.keys(a).filter(function(k) { return !k.match(/^\d+$/); });
+        var bKeys = Object.keys(b).filter(function(k) { return !k.match(/^\d+$/); });
+        if (aKeys.length !== bKeys.length) return false;
+        aKeys.sort();
+        bKeys.sort();
+        for (var i = 0; i < aKeys.length; i++) {
+            if (aKeys[i] !== bKeys[i]) return false;
+            if (!innerDeepEqual(a[aKeys[i]], b[bKeys[i]], strict, memo)) return false;
         }
         return true;
     }

@@ -76,3 +76,50 @@ export const test5 = () => {
             url.search === "?query=value" &&
             url.hash === "#fragment";
 }
+
+export const test6 = () => {
+     // Test node:url module imports
+     const url = require('node:url');
+
+     // Test fileURLToPath
+     const path1 = url.fileURLToPath('file:///foo/bar');
+     console.log('fileURLToPath:', path1);
+     if (path1 !== '/foo/bar') return false;
+
+     const path2 = url.fileURLToPath(new URL('file:///foo%20bar'));
+     console.log('fileURLToPath URL:', path2);
+     if (path2 !== '/foo bar') return false;
+
+     // Test pathToFileURL
+     const fileUrl = url.pathToFileURL('/foo/bar');
+     console.log('pathToFileURL:', fileUrl.href);
+     if (fileUrl.href !== 'file:///foo/bar') return false;
+
+     const fileUrl2 = url.pathToFileURL('/foo bar');
+     console.log('pathToFileURL space:', fileUrl2.href);
+     if (fileUrl2.href !== 'file:///foo%20bar') return false;
+
+     // Test urlToHttpOptions
+     const opts = url.urlToHttpOptions(new URL('http://user:pass@example.com:8080/path?q=1#hash'));
+     console.log('urlToHttpOptions:', JSON.stringify(opts));
+     if (opts.protocol !== 'http:') return false;
+     if (opts.hostname !== 'example.com') return false;
+     if (opts.port !== 8080) return false;
+     if (opts.auth !== 'user:pass') return false;
+     if (opts.pathname !== '/path') return false;
+     if (opts.path !== '/path?q=1') return false;
+
+     // Test format (WHATWG)
+     const formatted = url.format(new URL('http://user:pass@example.com/a?b=c#d'), { auth: false });
+     console.log('format no auth:', formatted);
+     if (formatted !== 'http://example.com/a?b=c#d') return false;
+
+     // Test Url class and parse
+     const parsed = url.parse('http://example.com/path?q=1#hash');
+     console.log('parse:', parsed.protocol, parsed.hostname, parsed.pathname);
+     if (parsed.protocol !== 'http:') return false;
+     if (parsed.hostname !== 'example.com') return false;
+     if (parsed.pathname !== '/path') return false;
+
+     return true;
+};

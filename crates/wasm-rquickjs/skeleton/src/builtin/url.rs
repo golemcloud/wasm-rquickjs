@@ -334,8 +334,12 @@ fn parse_url_with_base(
     }
 }
 
-// JS functions for the URL API implementation
+// JS implementation: URLSearchParams polyfill + node:url APIs
 pub const URL_JS: &str = include_str!("url.js");
+
+// Re-export for aliases
+pub const REEXPORT_JS: &str =
+    r#"export * from 'node:url'; export { default } from 'node:url';"#;
 
 // JS code wiring the URL module into the global context
 pub const WIRE_JS: &str = r#"
