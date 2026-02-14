@@ -278,3 +278,10 @@ async fn node_compat_url(
 ) -> anyhow::Result<()> {
     run_node_compat_suite(runner, "test-url").await
 }
+
+#[test]
+async fn node_compat_util(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-util").await
+}

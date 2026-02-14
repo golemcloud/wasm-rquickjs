@@ -1,4 +1,4 @@
-import { inspect } from 'node:util';
+import { inspect, innerDeepEqual } from 'node:util';
 
 class AssertionError extends Error {
     constructor(options) {
@@ -10,17 +10,18 @@ class AssertionError extends Error {
         var expected = options.expected;
         var operator = options.operator || 'fail';
 
-        if (options.message != null) {
-            message = String(options.message);
-        } else {
-            if (operator === 'deepStrictEqual' || operator === 'deepEqual') {
+        try {
+        if (operator === 'deepEqual' || operator === 'notDeepEqual') {
+                var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                message = 'Expected values to be loosely deep-equal:\n\n' +
+                    actualInsp + '\n\nshould loosely deep-equal\n\n' + expectedInsp;
+        } else if (operator === 'deepStrictEqual') {
                 var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
                 var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
                 var actualLines = actualInsp.split('\n');
                 var expectedLines = expectedInsp.split('\n');
-                var header = operator === 'deepStrictEqual'
-                    ? 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n'
-                    : 'Expected values to be loosely deep-equal:\n\n';
+                var header = 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n';
                 // Check for comma disparity: lines differing only by trailing comma
                 var checkCommaDisparity = actual != null && typeof actual === 'object';
                 function linesEqual(a, b) {
@@ -34,7 +35,7 @@ class AssertionError extends Error {
                 var m = actualLines.length;
                 var n = expectedLines.length;
                 var diffLines = [];
-                if (m * n > 100000) {
+                if (m > 500 || n > 500 || m * n > 100000) {
                     // Fallback for very large inputs: simple line-by-line
                     var maxLen = Math.max(m, n);
                     for (var di = 0; di < maxLen; di++) {
@@ -129,8 +130,7 @@ class AssertionError extends Error {
                     header = header.replace('\n\n', '\n... Skipped lines\n\n');
                 }
                 message = header + collapsed.join('\n') + '\n';
-            } else {
-                if (operator === 'notDeepStrictEqual') {
+        } else if (operator === 'notDeepStrictEqual') {
                     var actualInsp2 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
                     var base2 = 'Expected "actual" not to be strictly deep-equal to:';
                     var lines2 = actualInsp2.split('\n');
@@ -144,7 +144,7 @@ class AssertionError extends Error {
                     } else {
                         message = base2 + '\n\n' + lines2.join('\n') + '\n';
                     }
-                } else if (operator === 'notStrictEqual') {
+        } else if (operator === 'notStrictEqual') {
                     var actualInsp2 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
                     var base2 = 'Expected "actual" to be strictly unequal to:';
                     var lines2 = actualInsp2.split('\n');
@@ -153,7 +153,7 @@ class AssertionError extends Error {
                     } else {
                         message = base2 + '\n\n' + lines2.join('\n') + '\n';
                     }
-                } else if (operator === 'strictEqual') {
+        } else if (operator === 'strictEqual') {
                     var isObjCompare = (typeof actual === 'object' && actual !== null &&
                         typeof expected === 'object' && expected !== null) ||
                         (typeof actual === 'function' && typeof expected === 'function');
@@ -180,23 +180,52 @@ class AssertionError extends Error {
                     } else {
                         var actualStr = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
                         var expectedStr = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                        var aLines4 = actualStr.split('\n');
+                        var eLines4 = expectedStr.split('\n');
                         var stringsLen = actualStr.length + expectedStr.length;
                         if (typeof actual === 'string') stringsLen -= 2;
                         if (typeof expected === 'string') stringsLen -= 2;
-                        if (stringsLen <= 12 && (actual !== 0 || expected !== 0)) {
+                        var isSingleLine = aLines4.length === 1 && eLines4.length === 1;
+                        if (isSingleLine && stringsLen <= 12 && (actual !== 0 || expected !== 0)) {
                             message = 'Expected values to be strictly equal:\n\n' + actualStr + ' !== ' + expectedStr + '\n';
                         } else {
+                            var aPrefixed = aLines4.map(function(l) { return '+ ' + l; }).join('\n');
+                            var ePrefixed = eLines4.map(function(l) { return '- ' + l; }).join('\n');
                             message = 'Expected values to be strictly equal:\n+ actual - expected\n\n' +
-                                '+ ' + actualStr + '\n- ' + expectedStr + '\n';
+                                aPrefixed + '\n' + ePrefixed + '\n';
                         }
                     }
-                } else {
+        } else {
                     var actualStr = inspect(actual, { depth: 2 });
                     var expectedStr = inspect(expected, { depth: 2 });
                     if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
                     if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
                     message = actualStr + ' ' + operator + ' ' + expectedStr;
+        }
+
+        } catch (diffErr) {
+            // If diff generation fails (e.g., stack overflow on large/circular objects),
+            // fall back to a simple message
+            if (message == null) {
+                var actualStr = typeof actual === 'object' ? '[object]' : String(actual);
+                var expectedStr = typeof expected === 'object' ? '[object]' : String(expected);
+                if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
+                if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
+                message = actualStr + ' ' + operator + ' ' + expectedStr;
+            }
+        }
+
+        if (options.message != null) {
+            var userMsg = String(options.message);
+            if (message != null) {
+                var nnIdx = message.indexOf('\n\n');
+                if (nnIdx >= 0) {
+                    message = userMsg + '\n\n' + message.slice(nnIdx + 2);
+                } else {
+                    message = userMsg;
                 }
+            } else {
+                message = userMsg;
             }
         }
 
@@ -220,6 +249,28 @@ class AssertionError extends Error {
 
     toString() {
         return 'AssertionError [ERR_ASSERTION]: ' + this.message;
+    }
+
+    inspect(depth, opts) {
+        // Truncate long actual/expected values for display
+        var truncLen = 512;
+        var obj = Object.assign({}, this);
+        if (typeof obj.actual === 'string' && obj.actual.length > truncLen) {
+            obj.actual = obj.actual.slice(0, truncLen - 3) + '...';
+        }
+        if (typeof obj.expected === 'string' && obj.expected.length > truncLen) {
+            obj.expected = obj.expected.slice(0, truncLen - 3) + '...';
+        }
+        // Use a plain object representation with the error name
+        delete obj.name;
+        delete obj.message;
+        delete obj.stack;
+        var inspectOpts = Object.assign({}, opts, { depth: (depth === null ? null : depth - 1) });
+        var body = inspect(obj, inspectOpts);
+        // Remove outer braces
+        if (body.startsWith('{')) body = body.slice(1);
+        if (body.endsWith('}')) body = body.slice(0, -1);
+        return this.name + ' [' + this.code + ']: ' + this.message + body;
     }
 }
 
@@ -355,355 +406,8 @@ function isArguments(val) {
     return Object.prototype.toString.call(val) === '[object Arguments]';
 }
 
-function isView(arrbuf) {
-    if (ArrayBuffer.isView) return ArrayBuffer.isView(arrbuf);
-    return arrbuf && arrbuf.buffer instanceof ArrayBuffer;
-}
-
-function isBoxedPrimitive(val) {
-    var tag = Object.prototype.toString.call(val);
-    return tag === '[object Number]' ||
-           tag === '[object String]' ||
-           tag === '[object Boolean]' ||
-           tag === '[object BigInt]' ||
-           tag === '[object Symbol]';
-}
-
-function unboxPrimitive(val) {
-    var tag = Object.prototype.toString.call(val);
-    if (tag === '[object Number]') return Number.prototype.valueOf.call(val);
-    if (tag === '[object String]') return String.prototype.valueOf.call(val);
-    if (tag === '[object Boolean]') return Boolean.prototype.valueOf.call(val);
-    if (tag === '[object BigInt]') return Object(val).valueOf();
-    if (tag === '[object Symbol]') return Symbol.prototype.valueOf.call(val);
-    return val;
-}
-
-function isWeakCollection(val) {
-    var tag = Object.prototype.toString.call(val);
-    return tag === '[object WeakMap]' || tag === '[object WeakSet]';
-}
-
-function isPromiseLike(val) {
-    return Object.prototype.toString.call(val) === '[object Promise]';
-}
-
-function isArrayIndex(key, length) {
-    var num = Number(key);
-    return Number.isInteger(num) && num >= 0 && num < length;
-}
-
 function hasOwn(obj, prop) {
     return Object.prototype.hasOwnProperty.call(obj, prop);
-}
-
-function getEnumerableSymbols(obj) {
-    var symbols = Object.getOwnPropertySymbols(obj);
-    var result = [];
-    for (var i = 0; i < symbols.length; i++) {
-        var desc = Object.getOwnPropertyDescriptor(obj, symbols[i]);
-        if (desc && desc.enumerable) {
-            result.push(symbols[i]);
-        }
-    }
-    return result;
-}
-
-function objEquiv(a, b, strict, memo) {
-    if (a === null || a === undefined || b === null || b === undefined)
-        return false;
-
-    if (typeof a !== 'object' && typeof b !== 'object') {
-        return strict ? Object.is(a, b) : a == b;
-    }
-
-    // WeakMap, WeakSet: cannot enumerate, only reference-equal
-    if (isWeakCollection(a) || isWeakCollection(b)) return false;
-
-    // Promise: not deeply comparable
-    if (isPromiseLike(a) || isPromiseLike(b)) return false;
-
-    // Prototype check in strict mode
-    if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
-        return false;
-
-    // Boxed primitives: compare type tag and unboxed value
-    var aBoxed = isBoxedPrimitive(a);
-    var bBoxed = isBoxedPrimitive(b);
-    if (aBoxed || bBoxed) {
-        if (!aBoxed || !bBoxed) return false;
-        var aTag = Object.prototype.toString.call(a);
-        var bTag = Object.prototype.toString.call(b);
-        if (aTag !== bTag) return false;
-        var aVal = unboxPrimitive(a);
-        var bVal = unboxPrimitive(b);
-        if (aTag === '[object Number]') {
-            if (!Object.is(aVal, bVal)) return false;
-        } else if (aTag === '[object Symbol]') {
-            if (aVal !== bVal) return false;
-        } else {
-            if (aVal !== bVal) return false;
-        }
-        // Fall through to compare additional properties on the boxed object
-    }
-
-    var aIsDate = Object.prototype.toString.call(a) === '[object Date]';
-    var bIsDate = Object.prototype.toString.call(b) === '[object Date]';
-    if (aIsDate || bIsDate) {
-        if (!aIsDate || !bIsDate) return false;
-        return a.getTime() === b.getTime();
-    }
-
-    if (a instanceof RegExp && b instanceof RegExp) {
-        return a.source === b.source && a.flags === b.flags && a.lastIndex === b.lastIndex;
-    }
-
-    if (a instanceof Error && b instanceof Error) {
-        if (a.message !== b.message || a.name !== b.name) return false;
-        // Compare cause if present on either
-        var aHasCause = hasOwn(a, 'cause') || 'cause' in a;
-        var bHasCause = hasOwn(b, 'cause') || 'cause' in b;
-        if (aHasCause !== bHasCause) return false;
-        if (aHasCause && !innerDeepEqual(a.cause, b.cause, strict, memo)) return false;
-        // Compare errors property (AggregateError)
-        var aHasErrors = hasOwn(a, 'errors');
-        var bHasErrors = hasOwn(b, 'errors');
-        if (aHasErrors !== bHasErrors) return false;
-        if (aHasErrors && !innerDeepEqual(a.errors, b.errors, strict, memo)) return false;
-        return true;
-    }
-
-    var aIsArrayBuffer = a instanceof ArrayBuffer;
-    var bIsArrayBuffer = b instanceof ArrayBuffer;
-    var aIsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && a instanceof SharedArrayBuffer;
-    var bIsSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
-
-    if (aIsArrayBuffer || bIsArrayBuffer || aIsSharedArrayBuffer || bIsSharedArrayBuffer) {
-        // ArrayBuffer and SharedArrayBuffer are distinct types — never equal to each other
-        if (aIsArrayBuffer !== bIsArrayBuffer) return false;
-        if (aIsSharedArrayBuffer !== bIsSharedArrayBuffer) return false;
-        if (a.byteLength !== b.byteLength) return false;
-        var viewA = new Uint8Array(a);
-        var viewB = new Uint8Array(b);
-        for (var i = 0; i < viewA.length; i++) {
-            if (viewA[i] !== viewB[i]) return false;
-        }
-        return true;
-    }
-
-    if (isView(a) && isView(b)) {
-        if (a.byteLength !== b.byteLength) return false;
-        var aTag = Object.prototype.toString.call(a);
-        var bTag = Object.prototype.toString.call(b);
-        if (strict) {
-            if (a.constructor !== b.constructor) return false;
-        } else {
-            if (aTag !== bTag) return false;
-        }
-        // For non-strict mode with float arrays, compare values (not bytes)
-        // so that +0 and -0 are treated as equal
-        if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
-            if (a.length !== b.length) return false;
-            for (var i = 0; i < a.length; i++) {
-                if (a[i] != b[i]) return false;
-            }
-        } else {
-            var ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-            var ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-            for (var i = 0; i < ua.length; i++) {
-                if (ua[i] !== ub[i]) return false;
-            }
-        }
-        // Also compare non-index own properties
-        var aKeys = Object.keys(a).filter(function(k) { return !k.match(/^\d+$/); });
-        var bKeys = Object.keys(b).filter(function(k) { return !k.match(/^\d+$/); });
-        if (aKeys.length !== bKeys.length) return false;
-        aKeys.sort();
-        bKeys.sort();
-        for (var i = 0; i < aKeys.length; i++) {
-            if (aKeys[i] !== bKeys[i]) return false;
-            if (!innerDeepEqual(a[aKeys[i]], b[bKeys[i]], strict, memo)) return false;
-        }
-        return true;
-    }
-
-    // Circular reference detection
-    if (!memo) {
-        memo = { a: [], b: [] };
-    }
-    var idxA = memo.a.indexOf(a);
-    if (idxA !== -1 && memo.b[idxA] === b) {
-        return true;
-    }
-    memo.a.push(a);
-    memo.b.push(b);
-
-    if (a instanceof Map && b instanceof Map) {
-        if (a.size !== b.size) return false;
-        // Deep comparison of Map entries - supports object keys
-        var aEntries = Array.from(a.entries());
-        var bEntries = Array.from(b.entries());
-        // First pass: match primitive keys directly
-        var unmatchedA = [];
-        var matchedB = new Array(bEntries.length);
-        for (var i = 0; i < aEntries.length; i++) {
-            var aKey = aEntries[i][0];
-            if (typeof aKey === 'object' && aKey !== null) {
-                unmatchedA.push(i);
-                continue;
-            }
-            // Primitive key: find matching entry in b
-            var found = false;
-            for (var j = 0; j < bEntries.length; j++) {
-                if (matchedB[j]) continue;
-                var bKey = bEntries[j][0];
-                var keysMatch = strict ? Object.is(aKey, bKey) : aKey == bKey;
-                if (keysMatch) {
-                    if (!innerDeepEqual(aEntries[i][1], bEntries[j][1], strict, memo)) return false;
-                    matchedB[j] = true;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) return false;
-        }
-        // Second pass: match object keys with deep equality
-        for (var i = 0; i < unmatchedA.length; i++) {
-            var ai = unmatchedA[i];
-            var aKey = aEntries[ai][0];
-            var found = false;
-            for (var j = 0; j < bEntries.length; j++) {
-                if (matchedB[j]) continue;
-                if (innerDeepEqual(aKey, bEntries[j][0], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
-                    if (!innerDeepEqual(aEntries[ai][1], bEntries[j][1], strict, memo)) return false;
-                    matchedB[j] = true;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) return false;
-        }
-        return true;
-    }
-
-    if (a instanceof Set && b instanceof Set) {
-        if (a.size !== b.size) return false;
-        var arrA = Array.from(a);
-        var arrB = Array.from(b);
-        // Fast path: try direct membership first for primitives
-        var unmatchedA = [];
-        var usedB = new Array(arrB.length);
-        for (var i = 0; i < arrA.length; i++) {
-            if (typeof arrA[i] !== 'object' || arrA[i] === null) {
-                if (b.has(arrA[i])) {
-                    // Mark corresponding b entry as used
-                    for (var j = 0; j < arrB.length; j++) {
-                        if (!usedB[j] && (strict ? Object.is(arrA[i], arrB[j]) : arrA[i] == arrB[j])) {
-                            usedB[j] = true;
-                            break;
-                        }
-                    }
-                    continue;
-                }
-                if (!strict) {
-                    unmatchedA.push(i);
-                    continue;
-                }
-                return false;
-            }
-            unmatchedA.push(i);
-        }
-        // Deep compare remaining
-        for (var i = 0; i < unmatchedA.length; i++) {
-            var found = false;
-            for (var j = 0; j < arrB.length; j++) {
-                if (usedB[j]) continue;
-                if (innerDeepEqual(arrA[unmatchedA[i]], arrB[j], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
-                    usedB[j] = true;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) return false;
-        }
-        return true;
-    }
-
-    var isArrayA = Array.isArray(a);
-    var isArrayB = Array.isArray(b);
-
-    if (isArrayA !== isArrayB) return false;
-
-    if (isArrayA && isArrayB) {
-        if (a.length !== b.length) return false;
-        // In strict mode, check sparse array holes
-        for (var i = 0; i < a.length; i++) {
-            var aHas = hasOwn(a, i);
-            var bHas = hasOwn(b, i);
-            if (strict && aHas !== bHas) return false;
-            if (!innerDeepEqual(a[i], b[i], strict, memo)) return false;
-        }
-        // Check non-index string properties
-        var keysA = Object.keys(a).filter(function(k) { return !isArrayIndex(k, a.length); });
-        var keysB = Object.keys(b).filter(function(k) { return !isArrayIndex(k, b.length); });
-        if (keysA.length !== keysB.length) return false;
-        for (var i = 0; i < keysA.length; i++) {
-            if (!hasOwn(b, keysA[i])) return false;
-            if (!innerDeepEqual(a[keysA[i]], b[keysA[i]], strict, memo)) return false;
-        }
-        // Check Symbol properties in strict mode
-        if (strict) {
-            var symA = getEnumerableSymbols(a);
-            var symB = getEnumerableSymbols(b);
-            if (symA.length !== symB.length) return false;
-            for (var i = 0; i < symA.length; i++) {
-                if (symA[i] !== symB[i]) return false;
-                if (!innerDeepEqual(a[symA[i]], b[symA[i]], strict, memo)) return false;
-            }
-        }
-        return true;
-    }
-
-    // Plain objects
-    var ka = Object.keys(a);
-    var kb = Object.keys(b);
-
-    if (ka.length !== kb.length) return false;
-
-    ka.sort();
-    kb.sort();
-
-    for (var i = 0; i < ka.length; i++) {
-        if (ka[i] !== kb[i]) return false;
-    }
-
-    for (var i = 0; i < ka.length; i++) {
-        if (!innerDeepEqual(a[ka[i]], b[ka[i]], strict, memo)) return false;
-    }
-
-    // Check Symbol properties in strict mode
-    if (strict) {
-        var symA = getEnumerableSymbols(a);
-        var symB = getEnumerableSymbols(b);
-        if (symA.length !== symB.length) return false;
-        for (var i = 0; i < symA.length; i++) {
-            if (symA[i] !== symB[i]) return false;
-            if (!innerDeepEqual(a[symA[i]], b[symA[i]], strict, memo)) return false;
-        }
-    }
-
-    return true;
-}
-
-function innerDeepEqual(a, b, strict, memo) {
-    if (strict ? Object.is(a, b) : a == b) return true;
-
-    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
-        if (!strict && a == b) return true;
-        return false;
-    }
-
-    return objEquiv(a, b, strict, memo);
 }
 
 function deepEqual(actual, expected, message) {
@@ -950,9 +654,22 @@ function expectedException(actual, expected, message, fn) {
     return { pass: false, message: message };
 }
 
+function invalidArgTypeHelper(input) {
+    if (input == null) return ' Received ' + input;
+    if (typeof input === 'function') return ' Received function ' + input.name;
+    if (typeof input === 'object') {
+        var ctorName = input.constructor && input.constructor.name;
+        if (ctorName) return ' Received an instance of ' + ctorName;
+        return ' Received [object]';
+    }
+    return ' Received type ' + typeof input + ' (' + String(input) + ')';
+}
+
 function throws(fn, error, message) {
     if (typeof fn !== 'function') {
-        throw new TypeError('The "fn" argument must be of type Function');
+        var err = new TypeError('The "fn" argument must be of type function.' + invalidArgTypeHelper(fn));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
     }
 
     if (typeof error === 'string') {
@@ -1005,7 +722,9 @@ function throws(fn, error, message) {
 
 function doesNotThrow(fn, error, message) {
     if (typeof fn !== 'function') {
-        throw new TypeError('The "fn" argument must be of type Function');
+        var err = new TypeError('The "fn" argument must be of type function.' + invalidArgTypeHelper(fn));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
     }
 
     if (typeof error === 'string') {

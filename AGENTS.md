@@ -176,6 +176,16 @@ The workspace is configured in the root `Cargo.toml` with the following members:
 2. Build with `cargo build --release`
 3. Test with `cargo test --test compilation` or `cargo test --test runtime`
 
+## Regenerating DTS Goldenfiles
+
+The `dts` tests use the [goldenfile](https://github.com/calder/rust-goldenfile) crate to compare generated `.d.ts` output against checked-in golden files in `tests/goldenfiles/`. When the d.ts generation logic changes and the new output is correct, regenerate the goldenfiles by running:
+
+```bash
+UPDATE_GOLDENFILES=1 cargo test --test dts
+```
+
+This overwrites the golden files with the new output. Review the changes with `git diff` before committing to ensure they are intentional.
+
 ## Key Files
 
 - `src/main.rs` - CLI entry point

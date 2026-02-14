@@ -56,7 +56,10 @@
     // === node:assert tests ===
     "parallel/test-assert.js": {},
     "parallel/test-assert-async.js": {},
-    "parallel/test-assert-builtins-not-read-from-filesystem.js": {},
+    "parallel/test-assert-builtins-not-read-from-filesystem.js": {
+      "skip": true,
+      "reason": "requires child_process.spawnSync which is not available in WASM"
+    },
     "parallel/test-assert-calltracker-calls.js": {},
     "parallel/test-assert-calltracker-getCalls.js": {},
     "parallel/test-assert-calltracker-report.js": {},
@@ -67,10 +70,16 @@
     },
     "parallel/test-assert-deep-with-error.js": {},
     "parallel/test-assert-deep.js": {},
-    "parallel/test-assert-esm-cjs-message-verify.js": {},
+    "parallel/test-assert-esm-cjs-message-verify.js": {
+      "skip": true,
+      "reason": "requires process spawning (spawnPromisified) which is not available in WASM"
+    },
     "parallel/test-assert-fail-deprecation.js": {},
     "parallel/test-assert-fail.js": {},
-    "parallel/test-assert-first-line.js": {},
+    "parallel/test-assert-first-line.js": {
+      "skip": true,
+      "reason": "requires loading fixture files from filesystem which is not available in WASM"
+    },
     "parallel/test-assert-if-error.js": {},
     "parallel/test-assert-objects.js": {},
     "parallel/test-assert-typedarray-deepequal.js": {},
@@ -110,6 +119,95 @@
     "parallel/test-url-relative.js": {
       "skip": true,
       "reason": "requires full legacy url.resolveObject with complex edge cases"
+    },
+
+    // === node:util tests ===
+    "parallel/test-util-callbackify.js": {
+      "skip": true,
+      "reason": "requires child_process.execFile and common/fixtures for uncaught-exception tests"
+    },
+    "parallel/test-util-deprecate-invalid-code.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE error code from util.deprecate"
+    },
+    "parallel/test-util-deprecate.js": {
+      "skip": true,
+      "reason": "requires process.on('warning') and process.on('exit') hooks"
+    },
+    "parallel/test-util-emit-experimental-warning.js": {
+      "skip": true,
+      "reason": "requires internal/util and process.on('warning')"
+    },
+    "parallel/test-util-format.js": {},
+    "parallel/test-util-getcallsite.js": {
+      "skip": true,
+      "reason": "requires util.getCallSite which is not implemented"
+    },
+    "parallel/test-util-getcallsites.js": {
+      "skip": true,
+      "reason": "requires child_process.spawnSync, common/fixtures, and util.getCallSites"
+    },
+    "parallel/test-util-inherits.js": {},
+    "parallel/test-util-inspect-getters-accessing-this.js": {},
+    "parallel/test-util-inspect-long-running.js": {},
+    "parallel/test-util-inspect-namespace.js": {
+      "skip": true,
+      "reason": "requires experimental vm.SourceTextModule"
+    },
+    "parallel/test-util-inspect-proxy.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('util')"
+    },
+    "parallel/test-util-inspect.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/errors"
+    },
+    "parallel/test-util-internal.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('util')"
+    },
+    "parallel/test-util-isDeepStrictEqual.js": {},
+    "parallel/test-util-log.js": {
+      "skip": true,
+      "reason": "requires common/hijackstdio and process.stdout.writable"
+    },
+    "parallel/test-util-parse-env.js": {
+      "skip": true,
+      "reason": "requires util.parseEnv and common/fixtures"
+    },
+    "parallel/test-util-primordial-monkeypatching.js": {},
+    "parallel/test-util-promisify.js": {
+      "skip": true,
+      "reason": "requires --expose-internals (internal/util customPromisifyArgs)"
+    },
+    "parallel/test-util-sigint-watchdog.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('contextify')"
+    },
+    "parallel/test-util-sleep.js": {
+      "skip": true,
+      "reason": "requires internal/util sleep function"
+    },
+    "parallel/test-util-stripvtcontrolcharacters.js": {
+      "skip": true,
+      "reason": "requires util.stripVTControlCharacters which is not implemented"
+    },
+    "parallel/test-util-styletext.js": {
+      "skip": true,
+      "reason": "requires util.styleText and node:tty WriteStream"
+    },
+    "parallel/test-util-text-decoder.js": {},
+    "parallel/test-util-types-exists.js": {
+      "skip": true,
+      "reason": "requires util/types subpath module resolution"
+    },
+    "parallel/test-util-types.js": {
+      "skip": true,
+      "reason": "requires --expose-internals, internalBinding, and vm.SourceTextModule"
+    },
+    "parallel/test-util.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/errors"
     }
   }
 }

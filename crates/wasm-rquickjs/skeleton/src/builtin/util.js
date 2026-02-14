@@ -108,7 +108,9 @@ export function inspect(obj, opts) {
     // default options
     var ctx = {
         seen: [],
-        stylize: stylizeNoColor
+        stylize: stylizeNoColor,
+        circular: new Map(),
+        circularCounter: { value: 0 }
     };
     // legacy...
     if (arguments.length >= 3) ctx.depth = arguments[2];
@@ -189,6 +191,14 @@ function arrayToHash(array) {
     return hash;
 }
 
+
+function getCircularRef(ctx, value) {
+    if (!ctx.circular.has(value)) {
+        ctx.circularCounter.value++;
+        ctx.circular.set(value, ctx.circularCounter.value);
+    }
+    return ctx.circular.get(value);
+}
 
 function formatValue(ctx, value, recurseTimes) {
     // Provide a hook for user-specified inspect functions.
@@ -328,12 +338,24 @@ function formatValue(ctx, value, recurseTimes) {
 
     // Make RegExps say that they are RegExps
     if (isRegExp(value)) {
-        base = ' ' + RegExp.prototype.toString.call(value);
+        var regStr = RegExp.prototype.toString.call(value);
+        var regCtor = value.constructor;
+        if (regCtor && regCtor.name && regCtor.name !== 'RegExp') {
+            base = ' ' + regCtor.name + ' ' + regStr;
+        } else {
+            base = ' ' + regStr;
+        }
     }
 
     // Make dates with properties first say the date
     if (isDate(value)) {
-        base = ' ' + Date.prototype.toISOString.call(value);
+        var dateStr = Date.prototype.toISOString.call(value);
+        var dateCtor = value.constructor;
+        if (dateCtor && dateCtor.name && dateCtor.name !== 'Date') {
+            base = ' ' + dateCtor.name + ' ' + dateStr;
+        } else {
+            base = ' ' + dateStr;
+        }
     }
 
     // Make maps with properties first say the map size
@@ -397,7 +419,11 @@ function formatValue(ctx, value, recurseTimes) {
 
     ctx.seen.pop();
 
-    return reduceToSingleString(output, base, braces, ctx);
+    var result = reduceToSingleString(output, base, braces, ctx);
+    if (ctx.circular.has(value)) {
+        result = '<ref *' + ctx.circular.get(value) + '> ' + result;
+    }
+    return result;
 }
 
 
@@ -475,7 +501,7 @@ function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
                  keyStr = formatValue(ctx, key, recurseTimes - 1);
              }
          } else {
-             keyStr = ctx.stylize('[Circular]', 'special');
+             keyStr = ctx.stylize('[Circular *' + getCircularRef(ctx, key) + ']', 'special');
          }
          
          if (ctx.seen.indexOf(val) < 0) {
@@ -485,7 +511,7 @@ function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
                  valStr = formatValue(ctx, val, recurseTimes - 1);
              }
          } else {
-             valStr = ctx.stylize('[Circular]', 'special');
+             valStr = ctx.stylize('[Circular *' + getCircularRef(ctx, val) + ']', 'special');
          }
          
          output.push(keyStr + ' => ' + valStr);
@@ -509,7 +535,7 @@ function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
                  valStr = formatValue(ctx, val, recurseTimes - 1);
              }
          } else {
-             valStr = ctx.stylize('[Circular]', 'special');
+             valStr = ctx.stylize('[Circular *' + getCircularRef(ctx, val) + ']', 'special');
          }
          
          output.push(valStr);
@@ -554,7 +580,7 @@ function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
                 }
             }
         } else {
-            str = ctx.stylize('[Circular]', 'special');
+            str = ctx.stylize('[Circular *' + getCircularRef(ctx, desc.value) + ']', 'special');
         }
     }
     if (isUndefined(name)) {
@@ -594,7 +620,7 @@ function reduceToSingleString(output, base, braces, ctx) {
                   output.join(', ') +
                   ' }';
           }
-          return braces[0] +
+          return braces[0] + base +
               '\n  ' +
               output.join(',\n  ') +
               '\n' +
@@ -838,6 +864,819 @@ export function callbackify(original) {
     return callbackified;
 }
 
+export function inherits(ctor, superCtor) {
+    if (ctor === undefined || ctor === null)
+        throw new TypeError('The "ctor" argument must be of type Function. Received ' + ctor);
+    if (superCtor === undefined || superCtor === null)
+        throw new TypeError('The "superCtor" argument must be of type Function. Received ' + superCtor);
+    if (superCtor.prototype === undefined)
+        throw new TypeError('The "superCtor.prototype" property must be of type Object. Received undefined');
+    Object.defineProperty(ctor, 'super_', {
+        value: superCtor,
+        writable: true,
+        configurable: true,
+        enumerable: false
+    });
+    Object.setPrototypeOf(ctor.prototype, superCtor.prototype);
+}
+
+// Deep strict equality comparison (Node.js util.isDeepStrictEqual semantics)
+var _hasOwn = Object.prototype.hasOwnProperty;
+function _hasOwnProp(obj, prop) {
+    return _hasOwn.call(obj, prop);
+}
+
+function _isView(v) {
+    return ArrayBuffer.isView(v);
+}
+
+function _isBoxed(val) {
+    var tag = Object.prototype.toString.call(val);
+    return tag === '[object Number]' ||
+           tag === '[object String]' ||
+           tag === '[object Boolean]' ||
+           tag === '[object BigInt]' ||
+           tag === '[object Symbol]';
+}
+
+function _unbox(val) {
+    var tag = Object.prototype.toString.call(val);
+    if (tag === '[object Number]') return Number.prototype.valueOf.call(val);
+    if (tag === '[object String]') return String.prototype.valueOf.call(val);
+    if (tag === '[object Boolean]') return Boolean.prototype.valueOf.call(val);
+    if (tag === '[object BigInt]') return Object(val).valueOf();
+    if (tag === '[object Symbol]') return Symbol.prototype.valueOf.call(val);
+    return val;
+}
+
+function _isWeakColl(val) {
+    var tag = Object.prototype.toString.call(val);
+    return tag === '[object WeakMap]' || tag === '[object WeakSet]';
+}
+
+function _isPromiseLike(val) {
+    return Object.prototype.toString.call(val) === '[object Promise]';
+}
+
+function _isArrIdx(key, length) {
+    var num = Number(key);
+    return Number.isInteger(num) && num >= 0 && num < length;
+}
+
+function _getEnumSymbols(obj) {
+    var symbols = Object.getOwnPropertySymbols(obj);
+    var result = [];
+    for (var i = 0; i < symbols.length; i++) {
+        var desc = Object.getOwnPropertyDescriptor(obj, symbols[i]);
+        if (desc && desc.enumerable) {
+            result.push(symbols[i]);
+        }
+    }
+    return result;
+}
+
+function _deepObjEquiv(a, b, strict, memo) {
+    if (a === null || a === undefined || b === null || b === undefined)
+        return false;
+
+    if (typeof a !== 'object' && typeof b !== 'object') {
+        return strict ? Object.is(a, b) : a == b;
+    }
+
+    if (_isWeakColl(a) || _isWeakColl(b)) return false;
+    if (_isPromiseLike(a) || _isPromiseLike(b)) return false;
+
+    if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
+        return false;
+
+    var aBoxed = _isBoxed(a);
+    var bBoxed = _isBoxed(b);
+    if (aBoxed || bBoxed) {
+        if (!aBoxed || !bBoxed) return false;
+        var aTag = Object.prototype.toString.call(a);
+        var bTag = Object.prototype.toString.call(b);
+        if (aTag !== bTag) return false;
+        var aVal = _unbox(a);
+        var bVal = _unbox(b);
+        if (aTag === '[object Number]') {
+            if (!Object.is(aVal, bVal)) return false;
+        } else {
+            if (aVal !== bVal) return false;
+        }
+    }
+
+    var aIsDate = Object.prototype.toString.call(a) === '[object Date]';
+    var bIsDate = Object.prototype.toString.call(b) === '[object Date]';
+    if (aIsDate || bIsDate) {
+        if (!aIsDate || !bIsDate) return false;
+        if (a.getTime() !== b.getTime()) return false;
+        // In strict mode, also check constructor and own properties
+        if (strict && a.constructor !== b.constructor) return false;
+        var dKeysA = Object.keys(a);
+        var dKeysB = Object.keys(b);
+        if (dKeysA.length !== dKeysB.length) return false;
+        dKeysA.sort();
+        dKeysB.sort();
+        for (var i = 0; i < dKeysA.length; i++) {
+            if (dKeysA[i] !== dKeysB[i]) return false;
+            if (!_innerDeep(a[dKeysA[i]], b[dKeysB[i]], strict, memo)) return false;
+        }
+        return true;
+    }
+
+    if (a instanceof RegExp && b instanceof RegExp) {
+        if (a.source !== b.source || a.flags !== b.flags || a.lastIndex !== b.lastIndex) return false;
+        if (strict && a.constructor !== b.constructor) return false;
+        var rKeysA = Object.keys(a);
+        var rKeysB = Object.keys(b);
+        if (rKeysA.length !== rKeysB.length) return false;
+        rKeysA.sort();
+        rKeysB.sort();
+        for (var i = 0; i < rKeysA.length; i++) {
+            if (rKeysA[i] !== rKeysB[i]) return false;
+            if (!_innerDeep(a[rKeysA[i]], b[rKeysB[i]], strict, memo)) return false;
+        }
+        return true;
+    }
+
+    if (a instanceof Error && b instanceof Error) {
+        if (a.message !== b.message || a.name !== b.name) return false;
+        var aHasCause = _hasOwnProp(a, 'cause') || 'cause' in a;
+        var bHasCause = _hasOwnProp(b, 'cause') || 'cause' in b;
+        if (aHasCause !== bHasCause) return false;
+        if (aHasCause && !_innerDeep(a.cause, b.cause, strict, memo)) return false;
+        var aHasErrors = _hasOwnProp(a, 'errors');
+        var bHasErrors = _hasOwnProp(b, 'errors');
+        if (aHasErrors !== bHasErrors) return false;
+        if (aHasErrors && !_innerDeep(a.errors, b.errors, strict, memo)) return false;
+        return true;
+    }
+
+    var aIsAB = a instanceof ArrayBuffer;
+    var bIsAB = b instanceof ArrayBuffer;
+    var aIsSAB = typeof SharedArrayBuffer !== 'undefined' && a instanceof SharedArrayBuffer;
+    var bIsSAB = typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
+
+    if (aIsAB || bIsAB || aIsSAB || bIsSAB) {
+        if (aIsAB !== bIsAB) return false;
+        if (aIsSAB !== bIsSAB) return false;
+        if (a.byteLength !== b.byteLength) return false;
+        var vA = new Uint8Array(a);
+        var vB = new Uint8Array(b);
+        for (var i = 0; i < vA.length; i++) {
+            if (vA[i] !== vB[i]) return false;
+        }
+        return true;
+    }
+
+    if (_isView(a) && _isView(b)) {
+        if (a.byteLength !== b.byteLength) return false;
+        if (strict) {
+            if (a.constructor !== b.constructor) return false;
+        } else {
+            if (Object.prototype.toString.call(a) !== Object.prototype.toString.call(b)) return false;
+        }
+        if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
+            if (a.length !== b.length) return false;
+            for (var i = 0; i < a.length; i++) {
+                if (a[i] != b[i]) return false;
+            }
+        } else {
+            var ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+            var ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+            for (var i = 0; i < ua.length; i++) {
+                if (ua[i] !== ub[i]) return false;
+            }
+        }
+        var aK = Object.keys(a).filter(function(k) { return !k.match(/^\d+$/); });
+        var bK = Object.keys(b).filter(function(k) { return !k.match(/^\d+$/); });
+        if (aK.length !== bK.length) return false;
+        aK.sort();
+        bK.sort();
+        for (var i = 0; i < aK.length; i++) {
+            if (aK[i] !== bK[i]) return false;
+            if (!_innerDeep(a[aK[i]], b[bK[i]], strict, memo)) return false;
+        }
+        return true;
+    }
+
+    if (!memo) {
+        memo = { a: [], b: [] };
+    }
+    var idxA = memo.a.indexOf(a);
+    if (idxA !== -1 && memo.b[idxA] === b) {
+        return true;
+    }
+    memo.a.push(a);
+    memo.b.push(b);
+
+    if (a instanceof Map && b instanceof Map) {
+        if (a.size !== b.size) return false;
+        var aEntries = Array.from(a.entries());
+        var bEntries = Array.from(b.entries());
+        var unmatchedA = [];
+        var matchedB = new Array(bEntries.length);
+        for (var i = 0; i < aEntries.length; i++) {
+            var aKey = aEntries[i][0];
+            if (typeof aKey === 'object' && aKey !== null) {
+                unmatchedA.push(i);
+                continue;
+            }
+            var found = false;
+            for (var j = 0; j < bEntries.length; j++) {
+                if (matchedB[j]) continue;
+                var keysMatch = strict ? Object.is(aKey, bEntries[j][0]) : aKey == bEntries[j][0];
+                if (keysMatch) {
+                    if (!_innerDeep(aEntries[i][1], bEntries[j][1], strict, memo)) return false;
+                    matchedB[j] = true;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        for (var i = 0; i < unmatchedA.length; i++) {
+            var ai = unmatchedA[i];
+            var found = false;
+            for (var j = 0; j < bEntries.length; j++) {
+                if (matchedB[j]) continue;
+                if (_innerDeep(aEntries[ai][0], bEntries[j][0], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
+                    if (!_innerDeep(aEntries[ai][1], bEntries[j][1], strict, memo)) return false;
+                    matchedB[j] = true;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    if (a instanceof Set && b instanceof Set) {
+        if (a.size !== b.size) return false;
+        var arrA = Array.from(a);
+        var arrB = Array.from(b);
+        var unmatchedA = [];
+        var usedB = new Array(arrB.length);
+        for (var i = 0; i < arrA.length; i++) {
+            if (typeof arrA[i] !== 'object' || arrA[i] === null) {
+                if (b.has(arrA[i])) {
+                    for (var j = 0; j < arrB.length; j++) {
+                        if (!usedB[j] && (strict ? Object.is(arrA[i], arrB[j]) : arrA[i] == arrB[j])) {
+                            usedB[j] = true;
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                if (!strict) {
+                    unmatchedA.push(i);
+                    continue;
+                }
+                return false;
+            }
+            unmatchedA.push(i);
+        }
+        for (var i = 0; i < unmatchedA.length; i++) {
+            var found = false;
+            for (var j = 0; j < arrB.length; j++) {
+                if (usedB[j]) continue;
+                if (_innerDeep(arrA[unmatchedA[i]], arrB[j], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
+                    usedB[j] = true;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    var isArrayA = Array.isArray(a);
+    var isArrayB = Array.isArray(b);
+    if (isArrayA !== isArrayB) return false;
+
+    if (isArrayA && isArrayB) {
+        if (a.length !== b.length) return false;
+        for (var i = 0; i < a.length; i++) {
+            var aHas = _hasOwnProp(a, i);
+            var bHas = _hasOwnProp(b, i);
+            if (strict && aHas !== bHas) return false;
+            if (!_innerDeep(a[i], b[i], strict, memo)) return false;
+        }
+        var keysA = Object.keys(a).filter(function(k) { return !_isArrIdx(k, a.length); });
+        var keysB = Object.keys(b).filter(function(k) { return !_isArrIdx(k, b.length); });
+        if (keysA.length !== keysB.length) return false;
+        for (var i = 0; i < keysA.length; i++) {
+            if (!_hasOwnProp(b, keysA[i])) return false;
+            if (!_innerDeep(a[keysA[i]], b[keysA[i]], strict, memo)) return false;
+        }
+        if (strict) {
+            var symA = _getEnumSymbols(a);
+            var symB = _getEnumSymbols(b);
+            if (symA.length !== symB.length) return false;
+            for (var i = 0; i < symA.length; i++) {
+                if (symA[i] !== symB[i]) return false;
+                if (!_innerDeep(a[symA[i]], b[symA[i]], strict, memo)) return false;
+            }
+        }
+        return true;
+    }
+
+    var ka = Object.keys(a);
+    var kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    ka.sort();
+    kb.sort();
+    for (var i = 0; i < ka.length; i++) {
+        if (ka[i] !== kb[i]) return false;
+    }
+    for (var i = 0; i < ka.length; i++) {
+        if (!_innerDeep(a[ka[i]], b[ka[i]], strict, memo)) return false;
+    }
+    if (strict) {
+        var symA = _getEnumSymbols(a);
+        var symB = _getEnumSymbols(b);
+        if (symA.length !== symB.length) return false;
+        for (var i = 0; i < symA.length; i++) {
+            if (symA[i] !== symB[i]) return false;
+            if (!_innerDeep(a[symA[i]], b[symA[i]], strict, memo)) return false;
+        }
+    }
+    return true;
+}
+
+function _innerDeep(a, b, strict, memo) {
+    if (strict ? Object.is(a, b) : a == b) return true;
+    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+        if (!strict && a == b) return true;
+        return false;
+    }
+    return _deepObjEquiv(a, b, strict, memo);
+}
+
+export function innerDeepEqual(a, b, strict, memo) {
+    return _innerDeep(a, b, strict, memo);
+}
+
+export function isDeepStrictEqual(val1, val2) {
+    return _innerDeep(val1, val2, true, undefined);
+}
+
+var _toString = Object.prototype.toString.call.bind(Object.prototype.toString);
+
+export var types = {
+    isAnyArrayBuffer: function isAnyArrayBuffer(v) {
+        if (!v || typeof v !== 'object') return false;
+        var tag = _toString(v);
+        return tag === '[object ArrayBuffer]' || tag === '[object SharedArrayBuffer]';
+    },
+    isArrayBuffer: function isArrayBuffer(v) {
+        return v instanceof ArrayBuffer;
+    },
+    isArrayBufferView: function isArrayBufferView(v) {
+        return ArrayBuffer.isView(v);
+    },
+    isDataView: function isDataView(v) {
+        return v instanceof DataView;
+    },
+    isSharedArrayBuffer: function isSharedArrayBuffer(v) {
+        return typeof globalThis.SharedArrayBuffer !== 'undefined' && v instanceof SharedArrayBuffer;
+    },
+    isTypedArray: function isTypedArray(v) {
+        return ArrayBuffer.isView(v) && !(v instanceof DataView);
+    },
+    isUint8Array: function isUint8Array(v) {
+        return v instanceof Uint8Array;
+    },
+    isUint8ClampedArray: function isUint8ClampedArray(v) {
+        return v instanceof Uint8ClampedArray;
+    },
+    isUint16Array: function isUint16Array(v) {
+        return v instanceof Uint16Array;
+    },
+    isUint32Array: function isUint32Array(v) {
+        return v instanceof Uint32Array;
+    },
+    isInt8Array: function isInt8Array(v) {
+        return v instanceof Int8Array;
+    },
+    isInt16Array: function isInt16Array(v) {
+        return v instanceof Int16Array;
+    },
+    isInt32Array: function isInt32Array(v) {
+        return v instanceof Int32Array;
+    },
+    isFloat32Array: function isFloat32Array(v) {
+        return v instanceof Float32Array;
+    },
+    isFloat64Array: function isFloat64Array(v) {
+        return v instanceof Float64Array;
+    },
+    isBigInt64Array: function isBigInt64Array(v) {
+        return typeof globalThis.BigInt64Array !== 'undefined' && v instanceof BigInt64Array;
+    },
+    isBigUint64Array: function isBigUint64Array(v) {
+        return typeof globalThis.BigUint64Array !== 'undefined' && v instanceof BigUint64Array;
+    },
+    isFloat16Array: function isFloat16Array(v) {
+        return typeof globalThis.Float16Array !== 'undefined' && v instanceof Float16Array;
+    },
+    isDate: function isDate(v) {
+        return _toString(v) === '[object Date]';
+    },
+    isRegExp: function isRegExp(v) {
+        return _toString(v) === '[object RegExp]';
+    },
+    isMap: function isMap(v) {
+        return _toString(v) === '[object Map]';
+    },
+    isSet: function isSet(v) {
+        return _toString(v) === '[object Set]';
+    },
+    isWeakMap: function isWeakMap(v) {
+        return _toString(v) === '[object WeakMap]';
+    },
+    isWeakSet: function isWeakSet(v) {
+        return _toString(v) === '[object WeakSet]';
+    },
+    isPromise: function isPromise(v) {
+        return _toString(v) === '[object Promise]';
+    },
+    isNativeError: function isNativeError(v) {
+        return v instanceof Error;
+    },
+    isAsyncFunction: function isAsyncFunction(v) {
+        return _toString(v) === '[object AsyncFunction]';
+    },
+    isGeneratorFunction: function isGeneratorFunction(v) {
+        return _toString(v) === '[object GeneratorFunction]';
+    },
+    isGeneratorObject: function isGeneratorObject(v) {
+        return _toString(v) === '[object Generator]';
+    },
+    isStringObject: function isStringObject(v) {
+        return _toString(v) === '[object String]' && typeof v !== 'string';
+    },
+    isNumberObject: function isNumberObject(v) {
+        return _toString(v) === '[object Number]' && typeof v !== 'number';
+    },
+    isBooleanObject: function isBooleanObject(v) {
+        return _toString(v) === '[object Boolean]' && typeof v !== 'boolean';
+    },
+    isBigIntObject: function isBigIntObject(v) {
+        return _toString(v) === '[object BigInt]' && typeof v !== 'bigint';
+    },
+    isSymbolObject: function isSymbolObject(v) {
+        return _toString(v) === '[object Symbol]' && typeof v !== 'symbol';
+    },
+    isBoxedPrimitive: function isBoxedPrimitive(v) {
+        return types.isStringObject(v) || types.isNumberObject(v) ||
+            types.isBooleanObject(v) || types.isBigIntObject(v) ||
+            types.isSymbolObject(v);
+    },
+    isMapIterator: function isMapIterator(v) {
+        return _toString(v) === '[object Map Iterator]';
+    },
+    isSetIterator: function isSetIterator(v) {
+        return _toString(v) === '[object Set Iterator]';
+    },
+    isArgumentsObject: function isArgumentsObject(v) {
+        return _toString(v) === '[object Arguments]';
+    },
+    isModuleNamespaceObject: function isModuleNamespaceObject(v) {
+        return _toString(v) === '[object Module]';
+    },
+    isProxy: function isProxy() { return false; },
+    isExternal: function isExternal() { return false; },
+    isCryptoKey: function isCryptoKey() { return false; },
+    isKeyObject: function isKeyObject() { return false; }
+};
+
+// --- util.parseArgs() ---
+
+function _makeError(code, message) {
+    var err = new TypeError(message);
+    err.code = code;
+    return err;
+}
+
+function _findLongOption(optionName, options) {
+    if (options && Object.prototype.hasOwnProperty.call(options, optionName)) {
+        return optionName;
+    }
+    return null;
+}
+
+function _findShortOption(shortChar, options) {
+    if (!options) return null;
+    var keys = Object.keys(options);
+    for (var i = 0; i < keys.length; i++) {
+        var opt = options[keys[i]];
+        if (opt && opt.short === shortChar) {
+            return keys[i];
+        }
+    }
+    return null;
+}
+
+export function parseArgs(config) {
+    if (config === undefined) config = {};
+    if (typeof config !== 'object' || config === null) {
+        throw _makeError('ERR_INVALID_ARG_TYPE',
+            'The "config" argument must be of type object');
+    }
+
+    var args = config.args;
+    if (args === undefined) {
+        args = typeof process !== 'undefined' && process.argv ? process.argv.slice(2) : [];
+    }
+    if (!Array.isArray(args)) {
+        throw _makeError('ERR_INVALID_ARG_TYPE',
+            'The "args" argument must be an instance of Array');
+    }
+
+    var options = config.options || {};
+    var strict = config.strict !== undefined ? config.strict : true;
+    var allowPositionals = config.allowPositionals;
+    if (allowPositionals === undefined) {
+        allowPositionals = !strict;
+    }
+    var allowNegative = config.allowNegative || false;
+    var returnTokens = config.tokens || false;
+
+    // Validate options config
+    var optionKeys = Object.keys(options);
+    for (var oi = 0; oi < optionKeys.length; oi++) {
+        var optName = optionKeys[oi];
+        if (optName === '__proto__') {
+            throw _makeError('ERR_INVALID_ARG_VALUE',
+                "The property 'options.__proto__' is invalid. __proto__ is not allowed");
+        }
+        var desc = options[optName];
+        if (desc.type !== 'string' && desc.type !== 'boolean') {
+            throw _makeError('ERR_INVALID_ARG_VALUE',
+                "The property 'options." + optName + ".type' is invalid. " +
+                "Received '" + desc.type + "'");
+        }
+        if (desc.short !== undefined) {
+            if (typeof desc.short !== 'string' || desc.short.length !== 1) {
+                throw _makeError('ERR_INVALID_ARG_VALUE',
+                    "The property 'options." + optName + ".short' is invalid. " +
+                    "It must be a single character, received '" + desc.short + "'");
+            }
+        }
+    }
+
+    var values = Object.create(null);
+    var positionals = [];
+    var tokens = [];
+
+    // Apply defaults
+    for (var di = 0; di < optionKeys.length; di++) {
+        var defName = optionKeys[di];
+        var defDesc = options[defName];
+        if (defDesc.default !== undefined) {
+            values[defName] = defDesc.default;
+        } else if (defDesc.multiple) {
+            values[defName] = [];
+        }
+    }
+
+    var seenTerminator = false;
+    var index = 0;
+
+    while (index < args.length) {
+        var arg = args[index];
+
+        if (seenTerminator) {
+            if (strict && !allowPositionals) {
+                throw _makeError('ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL',
+                    "Unexpected argument '" + arg + "'. This command does not take positional arguments");
+            }
+            positionals.push(arg);
+            if (returnTokens) {
+                tokens.push({ kind: 'positional', value: arg, index: index });
+            }
+            index++;
+            continue;
+        }
+
+        // Option terminator
+        if (arg === '--') {
+            seenTerminator = true;
+            if (returnTokens) {
+                tokens.push({ kind: 'option-terminator', index: index });
+            }
+            index++;
+            continue;
+        }
+
+        // Long option
+        if (arg.length > 2 && arg.charAt(0) === '-' && arg.charAt(1) === '-') {
+            var eqIdx = arg.indexOf('=');
+            var longName, inlineValue;
+            if (eqIdx !== -1) {
+                longName = arg.slice(2, eqIdx);
+                inlineValue = arg.slice(eqIdx + 1);
+            } else {
+                longName = arg.slice(2);
+                inlineValue = undefined;
+            }
+
+            // Check for --no- negation
+            var isNegated = false;
+            var resolvedName = _findLongOption(longName, options);
+            if (resolvedName === null && allowNegative && longName.slice(0, 3) === 'no-') {
+                var positiveName = longName.slice(3);
+                var positiveResolved = _findLongOption(positiveName, options);
+                if (positiveResolved !== null && options[positiveResolved].type === 'boolean') {
+                    isNegated = true;
+                    resolvedName = positiveResolved;
+                    longName = positiveName;
+                }
+            }
+
+            if (resolvedName === null) {
+                if (strict) {
+                    throw _makeError('ERR_PARSE_ARGS_UNKNOWN_OPTION',
+                        "Unknown option '--" + longName + "'");
+                }
+                // In non-strict mode, treat unknown as boolean
+                var unknownVal = inlineValue !== undefined ? inlineValue : true;
+                if (typeof unknownVal === 'string' && unknownVal === '') unknownVal = '';
+                values[longName] = unknownVal;
+                if (returnTokens) {
+                    tokens.push({
+                        kind: 'option', name: longName, rawName: '--' + longName,
+                        value: typeof unknownVal === 'boolean' ? undefined : unknownVal,
+                        index: index
+                    });
+                }
+                index++;
+                continue;
+            }
+
+            var optDesc = options[resolvedName];
+
+            if (isNegated) {
+                if (inlineValue !== undefined) {
+                    if (strict) {
+                        throw _makeError('ERR_PARSE_ARGS_INVALID_OPTION_VALUE',
+                            "Option '--no-" + resolvedName + "' does not take an argument");
+                    }
+                }
+                _storeOption(values, resolvedName, optDesc, false);
+                if (returnTokens) {
+                    tokens.push({
+                        kind: 'option', name: resolvedName,
+                        rawName: '--no-' + resolvedName,
+                        value: undefined, index: index
+                    });
+                }
+                index++;
+                continue;
+            }
+
+            if (optDesc.type === 'boolean') {
+                if (inlineValue !== undefined && strict) {
+                    throw _makeError('ERR_PARSE_ARGS_INVALID_OPTION_VALUE',
+                        "Option '--" + resolvedName +
+                        "' does not take an argument");
+                }
+                _storeOption(values, resolvedName, optDesc, true);
+                if (returnTokens) {
+                    tokens.push({
+                        kind: 'option', name: resolvedName,
+                        rawName: '--' + resolvedName,
+                        value: undefined, index: index
+                    });
+                }
+            } else {
+                // string type
+                var strVal;
+                if (inlineValue !== undefined) {
+                    strVal = inlineValue;
+                } else if (index + 1 < args.length) {
+                    strVal = args[++index];
+                } else {
+                    if (strict) {
+                        throw _makeError('ERR_PARSE_ARGS_INVALID_OPTION_VALUE',
+                            "Option '--" + resolvedName +
+                            "' argument missing");
+                    }
+                    strVal = '';
+                }
+                _storeOption(values, resolvedName, optDesc, strVal);
+                if (returnTokens) {
+                    tokens.push({
+                        kind: 'option', name: resolvedName,
+                        rawName: '--' + resolvedName,
+                        value: strVal, index: index
+                    });
+                }
+            }
+            index++;
+            continue;
+        }
+
+        // Short option(s)
+        if (arg.length >= 2 && arg.charAt(0) === '-' && arg.charAt(1) !== '-') {
+            var shortGroup = arg.slice(1);
+            var si = 0;
+            while (si < shortGroup.length) {
+                var shortChar = shortGroup.charAt(si);
+                var shortResolved = _findShortOption(shortChar, options);
+
+                if (shortResolved === null) {
+                    if (strict) {
+                        throw _makeError('ERR_PARSE_ARGS_UNKNOWN_OPTION',
+                            "Unknown option '-" + shortChar + "'");
+                    }
+                    values[shortChar] = true;
+                    if (returnTokens) {
+                        tokens.push({
+                            kind: 'option', name: shortChar,
+                            rawName: '-' + shortChar,
+                            value: undefined, index: index
+                        });
+                    }
+                    si++;
+                    continue;
+                }
+
+                var shortDesc = options[shortResolved];
+
+                if (shortDesc.type === 'boolean') {
+                    _storeOption(values, shortResolved, shortDesc, true);
+                    if (returnTokens) {
+                        tokens.push({
+                            kind: 'option', name: shortResolved,
+                            rawName: '-' + shortChar,
+                            value: undefined, index: index
+                        });
+                    }
+                    si++;
+                } else {
+                    // string type — rest of group is the value, or next arg
+                    var shortVal;
+                    if (si + 1 < shortGroup.length) {
+                        shortVal = shortGroup.slice(si + 1);
+                    } else if (index + 1 < args.length) {
+                        shortVal = args[++index];
+                    } else {
+                        if (strict) {
+                            throw _makeError('ERR_PARSE_ARGS_INVALID_OPTION_VALUE',
+                                "Option '-" + shortChar +
+                                "' argument missing");
+                        }
+                        shortVal = '';
+                    }
+                    _storeOption(values, shortResolved, shortDesc, shortVal);
+                    if (returnTokens) {
+                        tokens.push({
+                            kind: 'option', name: shortResolved,
+                            rawName: '-' + shortChar,
+                            value: shortVal, index: index
+                        });
+                    }
+                    break; // consumed rest of group
+                }
+            }
+            index++;
+            continue;
+        }
+
+        // Positional
+        if (strict && !allowPositionals) {
+            throw _makeError('ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL',
+                "Unexpected argument '" + arg + "'. This command does not take positional arguments");
+        }
+        positionals.push(arg);
+        if (returnTokens) {
+            tokens.push({ kind: 'positional', value: arg, index: index });
+        }
+        index++;
+    }
+
+    var result = { values: values, positionals: positionals };
+    if (returnTokens) {
+        result.tokens = tokens;
+    }
+    return result;
+}
+
+function _storeOption(values, name, desc, value) {
+    if (desc.multiple) {
+        if (!Array.isArray(values[name])) {
+            values[name] = [];
+        }
+        values[name].push(value);
+    } else {
+        values[name] = value;
+    }
+}
+
 export default {
      format,
      deprecate,
@@ -865,5 +1704,9 @@ export default {
      log,
      _extend,
      promisify,
-     callbackify
+     callbackify,
+     inherits,
+     isDeepStrictEqual,
+     parseArgs,
+     types
  }
