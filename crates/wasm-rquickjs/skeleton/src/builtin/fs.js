@@ -1777,135 +1777,383 @@ export function unwatchFile(filename, listener) {
     // no-op
 }
 
-// --- Stream stubs ---
+// --- ReadStream / WriteStream ---
 
-export class ReadStream {
-    constructor(path, options) {
+let _readStreamProtoInited = false;
+
+export function ReadStream(path, options) {
+    if (!(this instanceof ReadStream)) return new ReadStream(path, options);
+
+    if (options !== undefined && options !== null && typeof options !== 'object' && typeof options !== 'string') {
+        const err = new TypeError('The "options" argument must be of type object or string. Received ' + describeType(options));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    if (typeof options === 'string') options = { encoding: options };
+    const opts = {};
+    if (options) {
+        for (const k in options) opts[k] = options[k];
+    }
+
+    if (!_readStreamProtoInited) {
         getStreamClasses();
-        // Mixin Readable prototype methods
-        Object.getOwnPropertyNames(_Readable.prototype).forEach(key => {
-            if (key !== 'constructor' && !(key in this)) {
-                this[key] = _Readable.prototype[key];
-            }
-        });
-        _Readable.call(this, options);
-        this.path = path;
-        this.fd = null;
-        this.flags = (options && options.flags) || 'r';
-        this.mode = (options && options.mode) || 0o666;
-        this.start = options && options.start;
-        this.end = options && options.end;
-        this.autoClose = options && options.autoClose !== false;
-        this.pos = this.start || 0;
-        this.bytesRead = 0;
-        this._opening = false;
-
-        queueMicrotask(() => this._openAndRead());
+        Object.setPrototypeOf(ReadStream.prototype, _Readable.prototype);
+        Object.setPrototypeOf(ReadStream, _Readable);
+        _readStreamProtoInited = true;
     }
 
-    _openAndRead() {
-        try {
-            this.fd = openSync(this.path, this.flags, this.mode);
-            this.emit('open', this.fd);
-            this.emit('ready');
-            this._doRead();
-        } catch (err) {
-            this.destroy(err);
+    this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd : null;
+    this.path = (this.fd != null && (path == null || path === undefined)) ? undefined : path;
+    this.flags = opts.flags || 'r';
+    this.mode = opts.mode || 0o666;
+
+    if (opts.highWaterMark === undefined) opts.highWaterMark = 64 * 1024;
+    opts.autoDestroy = opts.autoClose !== undefined ? opts.autoClose : true;
+    opts.emitClose = opts.emitClose !== undefined ? opts.emitClose : true;
+
+    this.start = opts.start;
+    this.end = opts.end !== undefined ? opts.end : Infinity;
+    this.pos = undefined;
+
+    if (this.start !== undefined) {
+        if (typeof this.start !== 'number') {
+            const err = new TypeError('The "start" argument must be of type number. Received ' + describeType(this.start));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (!Number.isInteger(this.start) || !Number.isSafeInteger(this.start)) {
+            const err = new RangeError(`The value of "start" is out of range. It must be an integer. Received ${this.start}`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+        if (this.start < 0) {
+            const err = new RangeError(`The value of "start" is out of range. It must be >= 0. Received ${this.start}`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+        this.pos = this.start;
+    }
+
+    if (this.end !== Infinity) {
+        if (typeof this.end !== 'number') {
+            const err = new TypeError('The "end" argument must be of type number. Received ' + describeType(this.end));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (!Number.isInteger(this.end) || !Number.isSafeInteger(this.end)) {
+            const err = new RangeError(`The value of "end" is out of range. It must be an integer. Received ${this.end}`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+        if (this.end < 0) {
+            const err = new RangeError(`The value of "end" is out of range. It must be >= 0. Received ${this.end}`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
         }
     }
 
-    _doRead() {
-        try {
-            const chunkSize = 16384;
-            const buf = getBuffer().alloc(chunkSize);
-            const bytesRead = readSync(this.fd, buf, 0, chunkSize, this.pos);
-            if (bytesRead === 0) {
-                this.push(null);
-                if (this.autoClose) {
-                    try { closeSync(this.fd); } catch {}
-                    this.emit('close');
-                }
-            } else {
-                this.bytesRead += bytesRead;
-                this.pos += bytesRead;
-                const chunk = buf.slice(0, bytesRead);
-                if (this.end !== undefined && this.pos > this.end) {
-                    const trim = this.pos - this.end - 1;
-                    this.push(chunk.slice(0, bytesRead - trim));
-                    this.push(null);
-                    if (this.autoClose) {
-                        try { closeSync(this.fd); } catch {}
-                        this.emit('close');
-                    }
-                } else {
-                    this.push(chunk);
-                    queueMicrotask(() => this._doRead());
-                }
-            }
-        } catch (err) {
-            this.destroy(err);
-        }
+    if (this.start !== undefined && this.start > this.end) {
+        const err = new RangeError(`The value of "start" is out of range. It must be <= "end" (here: ${this.end}). Received ${this.start}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
     }
 
-    _read() {
-        // Managed by _doRead
-    }
+    this.bytesRead = 0;
+    this._fs = opts.fs || _default;
+
+    _Readable.call(this, opts);
 }
 
-export class WriteStream {
-    constructor(path, options) {
-        getStreamClasses();
-        Object.getOwnPropertyNames(_Writable.prototype).forEach(key => {
-            if (key !== 'constructor' && !(key in this)) {
-                this[key] = _Writable.prototype[key];
-            }
-        });
-        _Writable.call(this, options);
-        this.path = path;
-        this.fd = null;
-        this.flags = (options && options.flags) || 'w';
-        this.mode = (options && options.mode) || 0o666;
-        this.autoClose = options && options.autoClose !== false;
-        this.pos = options && options.start;
-        this.bytesWritten = 0;
-        this._pending = true;
+ReadStream.prototype._construct = function(callback) {
+    if (typeof this.fd === 'number') {
+        callback();
+        this.emit('open', this.fd);
+        this.emit('ready');
+        return;
+    }
+    if (typeof this.open === 'function' && this.open !== ReadStream.prototype.open) {
+        this.open();
+        this.once('open', function() { callback(); });
+        return;
+    }
+    const self = this;
+    this._fs.open(this.path, this.flags, this.mode, function(err, fd) {
+        if (err) {
+            callback(err);
+        } else {
+            self.fd = fd;
+            callback();
+            self.emit('open', fd);
+            self.emit('ready');
+        }
+    });
+};
 
-        queueMicrotask(() => {
-            try {
-                this.fd = openSync(this.path, this.flags, this.mode);
-                this._pending = false;
-                this.emit('open', this.fd);
-                this.emit('ready');
-            } catch (err) {
-                this.destroy(err);
+ReadStream.prototype.open = function() {
+    const self = this;
+    this._fs.open(this.path, this.flags, this.mode, function(err, fd) {
+        if (err) {
+            if (self.autoClose) self.destroy();
+            self.emit('error', err);
+        } else {
+            self.fd = fd;
+            self.emit('open', fd);
+            self.emit('ready');
+        }
+    });
+};
+
+ReadStream.prototype._read = function(n) {
+    if (this.destroyed || this._readableState.errored) return;
+    let toRead = n;
+    if (this.end !== Infinity) {
+        const cur = this.pos !== undefined ? this.pos : this.bytesRead;
+        const remaining = this.end - cur + 1;
+        if (remaining <= 0) { this.push(null); return; }
+        toRead = Math.min(toRead, remaining);
+    }
+    if (toRead <= 0) { this.push(null); return; }
+
+    const buf = getBuffer().alloc(toRead);
+    const self = this;
+    this._fs.read(this.fd, buf, 0, toRead, this.pos, function(err, bytesRead, buffer) {
+        if (self.destroyed) return;
+        if (err) {
+            if (self.autoClose) {
+                self.destroy(err);
+            } else {
+                self.emit('error', err);
             }
-        });
+        } else if (bytesRead > 0) {
+            if (self.pos !== undefined) self.pos += bytesRead;
+            self.bytesRead += bytesRead;
+            self.push(bytesRead !== toRead ? buffer.slice(0, bytesRead) : buffer);
+        } else {
+            self.push(null);
+        }
+    });
+};
+
+ReadStream.prototype._destroy = function(err, cb) {
+    if (this.fd === null) { cb(err); return; }
+    const fd = this.fd;
+    this.fd = null;
+    this._fs.close(fd, function(er) {
+        cb(er || err);
+    });
+};
+
+ReadStream.prototype.close = function(cb) {
+    if (typeof cb === 'function') {
+        const stream = require('node:stream');
+        if (stream.finished) {
+            stream.finished(this, cb);
+        } else {
+            this.once('close', cb);
+        }
+    }
+    this.destroy();
+};
+
+Object.defineProperty(ReadStream.prototype, 'autoClose', {
+    get() { return this._readableState ? this._readableState.autoDestroy : true; },
+    set(val) { if (this._readableState) this._readableState.autoDestroy = val; }
+});
+
+Object.defineProperty(ReadStream.prototype, 'pending', {
+    get() { return this.fd === null; },
+    configurable: true
+});
+
+Object.defineProperty(ReadStream.prototype, 'closed', {
+    get() { return this._readableState ? this._readableState.closed : false; },
+    configurable: true
+});
+
+// --- WriteStream ---
+
+let _writeStreamProtoInited = false;
+
+export function WriteStream(path, options) {
+    if (!(this instanceof WriteStream)) return new WriteStream(path, options);
+
+    if (options !== undefined && options !== null && typeof options !== 'object' && typeof options !== 'string') {
+        const err = new TypeError('The "options" argument must be of type object or string. Received ' + describeType(options));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
     }
 
-    _write(chunk, encoding, callback) {
-        if (this._pending) {
-            this.once('ready', () => this._write(chunk, encoding, callback));
+    if (typeof options === 'string') options = { encoding: options };
+    const opts = {};
+    if (options) {
+        for (const k in options) opts[k] = options[k];
+    }
+
+    if (!_writeStreamProtoInited) {
+        getStreamClasses();
+        Object.setPrototypeOf(WriteStream.prototype, _Writable.prototype);
+        Object.setPrototypeOf(WriteStream, _Writable);
+        _writeStreamProtoInited = true;
+    }
+
+    this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd : null;
+    this.path = (this.fd != null && (path == null || path === undefined)) ? undefined : path;
+    this.flags = opts.flags || 'w';
+    this.mode = opts.mode || 0o666;
+
+    opts.autoDestroy = opts.autoClose !== undefined ? opts.autoClose : true;
+    opts.emitClose = opts.emitClose !== undefined ? opts.emitClose : true;
+
+    this.start = opts.start;
+    this.pos = undefined;
+
+    if (this.start !== undefined) {
+        if (typeof this.start !== 'number' || !Number.isInteger(this.start)) {
+            const err = new TypeError('The "start" argument must be of type number. Received ' + describeType(this.start));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (this.start < 0) {
+            const err = new RangeError(`The value of "start" is out of range. It must be >= 0. Received ${this.start}`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+        this.pos = this.start;
+    }
+
+    this.bytesWritten = 0;
+    this._flush = opts.flush === true;
+    validateFlush(opts.flush);
+    opts.decodeStrings = true;
+    this._fs = opts.fs || _default;
+
+    _Writable.call(this, opts);
+}
+
+WriteStream.prototype._construct = function(callback) {
+    if (typeof this.fd === 'number') {
+        callback();
+        this.emit('open', this.fd);
+        this.emit('ready');
+        return;
+    }
+    if (typeof this.open === 'function' && this.open !== WriteStream.prototype.open) {
+        this.open();
+        this.once('open', function() { callback(); });
+        return;
+    }
+    const self = this;
+    this._fs.open(this.path, this.flags, this.mode, function(err, fd) {
+        if (err) {
+            callback(err);
+        } else {
+            self.fd = fd;
+            callback();
+            self.emit('open', fd);
+            self.emit('ready');
+        }
+    });
+};
+
+WriteStream.prototype.open = function() {
+    const self = this;
+    this._fs.open(this.path, this.flags, this.mode, function(err, fd) {
+        if (err) {
+            if (self.autoClose) self.destroy();
+            self.emit('error', err);
+        } else {
+            self.fd = fd;
+            self.emit('open', fd);
+            self.emit('ready');
+        }
+    });
+};
+
+WriteStream.prototype._write = function(chunk, encoding, cb) {
+    const self = this;
+    this._fs.write(this.fd, chunk, 0, chunk.length, this.pos, function(err, bytesWritten) {
+        if (err) {
+            if (self.autoClose) self.destroy();
+            cb(err);
             return;
         }
-        try {
-            const buf = typeof chunk === 'string' ? getBuffer().from(chunk, encoding) : chunk;
-            const written = writeSync(this.fd, buf, 0, buf.length, this.pos);
-            this.bytesWritten += written;
-            if (this.pos !== undefined) this.pos += written;
-            callback();
-        } catch (err) {
-            callback(err);
-        }
-    }
+        self.bytesWritten += bytesWritten;
+        cb();
+    });
+    if (this.pos !== undefined) this.pos += chunk.length;
+};
 
-    _final(callback) {
-        if (this.autoClose && this.fd !== null) {
-            try { closeSync(this.fd); } catch {}
-            this.emit('close');
-        }
-        callback();
+WriteStream.prototype._writev = function(data, cb) {
+    const buffers = [];
+    let size = 0;
+    for (let i = 0; i < data.length; i++) {
+        buffers.push(data[i].chunk);
+        size += data[i].chunk.length;
     }
-}
+    const self = this;
+    this._fs.writev(this.fd, buffers, this.pos, function(err, bytesWritten) {
+        if (err) {
+            if (self.autoClose) self.destroy();
+            cb(err);
+            return;
+        }
+        self.bytesWritten += bytesWritten;
+        cb();
+    });
+    if (this.pos !== undefined) this.pos += size;
+};
+
+WriteStream.prototype._destroy = function(err, cb) {
+    if (this.fd === null) { cb(err); return; }
+    const fd = this.fd;
+    this.fd = null;
+    this._fs.close(fd, function(er) {
+        cb(er || err);
+    });
+};
+
+WriteStream.prototype._final = function(cb) {
+    if (this._flush && this.fd !== null) {
+        this._fs.fsync(this.fd, function(err) { cb(err); });
+    } else {
+        cb();
+    }
+};
+
+WriteStream.prototype.close = function(cb) {
+    if (typeof cb === 'function') {
+        const stream = require('node:stream');
+        if (this.closed) {
+            queueMicrotask(cb);
+            return;
+        }
+        if (stream.finished) {
+            stream.finished(this, cb);
+        } else {
+            this.once('close', cb);
+        }
+    }
+    if (!this.autoClose) {
+        this.on('finish', this.destroy.bind(this));
+    }
+    this.end();
+};
+
+Object.defineProperty(WriteStream.prototype, 'autoClose', {
+    get() { return this._writableState ? this._writableState.autoDestroy : true; },
+    set(val) { if (this._writableState) this._writableState.autoDestroy = val; }
+});
+
+Object.defineProperty(WriteStream.prototype, 'pending', {
+    get() { return this.fd === null; },
+    configurable: true
+});
+
+Object.defineProperty(WriteStream.prototype, 'closed', {
+    get() { return this._writableState ? this._writableState.closed : false; },
+    configurable: true
+});
 
 export function createReadStream(path, options) {
     return new ReadStream(path, options);

@@ -9,6 +9,26 @@
 //
 // The test does require('../common') which resolves naturally to /tests/common/index.js.
 
+// Drain pending microtasks/timers by yielding multiple times.
+// Many stream tests need several event loop turns to complete.
+// Uses increasing delays to handle both quick microtask chains and slower timers.
+function drainAsync() {
+    var p = Promise.resolve();
+    // First: 50 quick ticks for microtask chains
+    for (var i = 0; i < 50; i++) {
+        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 0); }); });
+    }
+    // Then: 10 longer ticks for setTimeout-based tests (e.g., 100ms timers)
+    for (var j = 0; j < 10; j++) {
+        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 50); }); });
+    }
+    // Final: 20 quick ticks for any remaining activity after timers
+    for (var k = 0; k < 20; k++) {
+        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 0); }); });
+    }
+    return p;
+}
+
 export const runTest = async (testPath) => {
     try {
         require(testPath);
@@ -17,6 +37,8 @@ export const runTest = async (testPath) => {
         if (testModule && typeof testModule._awaitPendingTests === 'function') {
             await testModule._awaitPendingTests();
         }
+        // Drain pending async operations (streams, timers, etc.)
+        await drainAsync();
         // Run exit handlers after test completes normally
         if (globalThis.process && typeof globalThis.process._runExitHandlers === 'function') {
             globalThis.process._runExitHandlers(0);
