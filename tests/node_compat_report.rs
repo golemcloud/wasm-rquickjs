@@ -112,6 +112,34 @@ impl SharedRunner {
         let dst_shim = common_dir.join("index.js");
         fs::copy(src_shim, &dst_shim)?;
 
+        // Copy additional common shims if they exist
+        for shim_name in &["tmpdir.js", "tick.js", "fixtures.js"] {
+            let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
+            if std::path::Path::new(&src_shim_extra).exists() {
+                let dst_shim_extra = common_dir.join(shim_name);
+                fs::copy(&src_shim_extra, &dst_shim_extra)?;
+            }
+        }
+
+        // Create /tmp directory for tmpdir shim
+        let tmp_dir = temp_dir.path().join("tmp");
+        fs::create_dir_all(&tmp_dir)?;
+
+        // Copy fixture data files for tests that use require('../common/fixtures')
+        let fixtures_src = std::path::Path::new("tests/node_compat/fixtures");
+        if fixtures_src.exists() {
+            let fixtures_dst = temp_dir.path().join("tests").join("fixtures");
+            fs::create_dir_all(&fixtures_dst)?;
+            for entry in fs::read_dir(fixtures_src)? {
+                let entry = entry?;
+                let src_path = entry.path();
+                if src_path.is_file() {
+                    let dst_path = fixtures_dst.join(entry.file_name().to_str().unwrap());
+                    fs::copy(&src_path, &dst_path)?;
+                }
+            }
+        }
+
         // Create store with fresh WASI context
         let ctx = WasiCtx::builder()
             .stdout(OutputFile::new(stdout_file.reopen()?))

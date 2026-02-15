@@ -191,6 +191,10 @@ The workspace is configured in the root `Cargo.toml` with the following members:
 2. Build with `cargo build --release`
 3. Test with `cargo test --test compilation` or `cargo test --test runtime`
 
+### Updating the Supported APIs Documentation
+
+When adding a new built-in API — such as a new Node.js-compatible module or a new exported function in an existing module — **always update the list of supported APIs in `README.md`** to reflect the change.
+
 ## Regenerating DTS Goldenfiles
 
 The `dts` tests use the [goldenfile](https://github.com/calder/rust-goldenfile) crate to compare generated `.d.ts` output against checked-in golden files in `tests/goldenfiles/`. When the d.ts generation logic changes and the new output is correct, regenerate the goldenfiles by running:
