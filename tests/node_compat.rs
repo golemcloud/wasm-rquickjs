@@ -272,6 +272,13 @@ async fn run_node_compat_suite(runner: &CompiledTest, prefix: &str) -> anyhow::R
 // --- Tests ---
 
 #[test]
+async fn node_compat_btoa_atob(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-btoa-atob").await
+}
+
+#[test]
 async fn node_compat_path(
     #[tagged_as("node_compat_runner")] runner: &CompiledTest,
 ) -> anyhow::Result<()> {

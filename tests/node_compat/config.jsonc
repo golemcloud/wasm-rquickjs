@@ -93,6 +93,9 @@
     },
     "parallel/test-assert-typedarray-deepequal.js": {},
 
+    // === btoa/atob tests ===
+    "parallel/test-btoa-atob.js": {},
+
     // === node:querystring tests ===
     "parallel/test-querystring.js": {},
     "parallel/test-querystring-escape.js": {},

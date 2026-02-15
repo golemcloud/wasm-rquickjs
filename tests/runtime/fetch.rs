@@ -57,7 +57,7 @@ async fn fetch_post_and_get_as_array_buffer(
         indoc!(
             r#"
         fetch test 2
-        Response body as ArrayBuffer: {}
+        Response body as ArrayBuffer: ArrayBuffer {}
     "#
         )
     );

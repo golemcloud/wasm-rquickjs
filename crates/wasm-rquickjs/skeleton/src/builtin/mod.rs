@@ -46,6 +46,7 @@ pub fn add_module_resolvers(
     internal::add_to_resolver(
         resolver
             .with_module("__wasm_rquickjs_builtin/abort_controller")
+            .with_module("__wasm_rquickjs_builtin/base64_native")
             .with_module("__wasm_rquickjs_builtin/console_native")
             .with_module("__wasm_rquickjs_builtin/console")
             .with_module("__wasm_rquickjs_builtin/timeout_native")
@@ -128,6 +129,10 @@ pub fn module_loader() -> (
 ) {
     (
         rquickjs::loader::ModuleLoader::default()
+            .with_module(
+                "__wasm_rquickjs_builtin/base64_native",
+                base64::js_native_module,
+            )
             .with_module(
                 "__wasm_rquickjs_builtin/console_native",
                 console::js_native_module,

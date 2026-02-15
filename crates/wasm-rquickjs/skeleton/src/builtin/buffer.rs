@@ -9,4 +9,6 @@ pub const WIRE_JS: &str = r#"
 
         globalThis.buffer = __wasm_rquickjs_buffer;
         globalThis.Buffer = __wasm_rquickjs_buffer.Buffer;
+        __wasm_rquickjs_buffer.default.atob = globalThis.atob;
+        __wasm_rquickjs_buffer.default.btoa = globalThis.btoa;
     "#;
