@@ -19,8 +19,7 @@ mod http {
     pub use super::http_disabled::*;
 }
 
-mod event_target;
-mod eventemitter;
+mod events;
 mod ieee754;
 mod module;
 mod node_test;
@@ -117,8 +116,7 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/vm")
             .with_module("node:vm")
             .with_module("vm")
-            .with_module("__wasm_rquickjs_builtin/structured_clone")
-            .with_module("__wasm_rquickjs_builtin/event_target"),
+            .with_module("__wasm_rquickjs_builtin/structured_clone"),
     )
 }
 
@@ -214,8 +212,8 @@ pub fn module_loader() -> (
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module("node:url", url::URL_JS)
             .with_module("url", url::REEXPORT_JS)
-            .with_module("node:events", eventemitter::EVENTEMITTER_JS)
-            .with_module("events", eventemitter::REEXPORT_JS)
+            .with_module("node:events", events::EVENTS_JS)
+            .with_module("events", events::REEXPORT_JS)
             .with_module("node:stream", stream::STREAM_JS)
             .with_module("stream", stream::REEXPORT_JS)
             .with_module("node:stream/promises", stream::STREAM_PROMISES_JS)
@@ -238,10 +236,6 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/structured_clone",
                 structured_clone::STRUCTURED_CLONE_JS,
-            )
-            .with_module(
-                "__wasm_rquickjs_builtin/event_target",
-                event_target::EVENT_TARGET_JS,
             ),
         internal::module_loader(),
     )
@@ -249,7 +243,7 @@ pub fn module_loader() -> (
 
 pub fn wire_builtins() -> String {
     let mut result = String::new();
-    writeln!(result, "{}", event_target::WIRE_JS).unwrap();
+    writeln!(result, "{}", events::WIRE_JS).unwrap();
     writeln!(result, "{}", abort_controller::WIRE_JS).unwrap();
     writeln!(result, "{}", base64::WIRE_JS).unwrap();
     writeln!(result, "{}", buffer::WIRE_JS).unwrap();

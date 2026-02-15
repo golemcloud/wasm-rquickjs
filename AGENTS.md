@@ -91,6 +91,8 @@ cargo test --test dts -- --nocapture
 cargo test --test errors -- --nocapture
 ```
 
+**Note:** The `compilation` tests only need to be run when the code generator (`crates/wasm-rquickjs/src/`) changes. Changes limited to the skeleton (`crates/wasm-rquickjs/skeleton/`) do not require running compilation tests.
+
 ### Running specific runtime test modules
 
 The full runtime test suite takes a long time. Prefer running specific submodules instead of the whole suite:

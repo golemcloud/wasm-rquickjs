@@ -1,3 +1,138 @@
+// Web platform Event, EventTarget, and CustomEvent implementations
+
+class Event {
+    constructor(type, eventInitDict = {}) {
+        this.type = String(type);
+        this.bubbles = !!eventInitDict.bubbles;
+        this.cancelable = !!eventInitDict.cancelable;
+        this.composed = !!eventInitDict.composed;
+        this.defaultPrevented = false;
+        this.target = null;
+        this.currentTarget = null;
+        this.eventPhase = 0; // Event.NONE
+        this.timeStamp = Date.now();
+        this.isTrusted = false;
+        this._stopPropagation = false;
+        this._stopImmediatePropagation = false;
+    }
+
+    composedPath() {
+        return this.target ? [this.target] : [];
+    }
+
+    preventDefault() {
+        if (this.cancelable) {
+            this.defaultPrevented = true;
+        }
+    }
+
+    stopPropagation() {
+        this._stopPropagation = true;
+    }
+
+    stopImmediatePropagation() {
+        this._stopImmediatePropagation = true;
+        this._stopPropagation = true;
+    }
+
+}
+
+Object.defineProperties(Event, {
+    NONE: { value: 0, writable: false, configurable: false, enumerable: true },
+    CAPTURING_PHASE: { value: 1, writable: false, configurable: false, enumerable: true },
+    AT_TARGET: { value: 2, writable: false, configurable: false, enumerable: true },
+    BUBBLING_PHASE: { value: 3, writable: false, configurable: false, enumerable: true },
+});
+
+Object.defineProperties(Event.prototype, {
+    NONE: { value: 0 },
+    CAPTURING_PHASE: { value: 1 },
+    AT_TARGET: { value: 2 },
+    BUBBLING_PHASE: { value: 3 },
+});
+
+class EventTarget {
+    constructor() {
+        this._listeners = Object.create(null);
+    }
+
+    addEventListener(type, listener, options) {
+        if (listener == null) return;
+
+        const capture = typeof options === 'boolean' ? options : !!(options && options.capture);
+        const once = !!(options && typeof options === 'object' && options.once);
+        const passive = !!(options && typeof options === 'object' && options.passive);
+        const signal = options && typeof options === 'object' ? options.signal : undefined;
+
+        if (signal && signal.aborted) return;
+
+        if (!this._listeners[type]) {
+            this._listeners[type] = [];
+        }
+
+        // No duplicates (same listener + same capture)
+        for (const entry of this._listeners[type]) {
+            if (entry.listener === listener && entry.capture === capture) return;
+        }
+
+        const entry = { listener, capture, once, passive };
+        this._listeners[type].push(entry);
+
+        if (signal) {
+            signal.addEventListener('abort', () => {
+                this.removeEventListener(type, listener, { capture });
+            }, { once: true });
+        }
+    }
+
+    removeEventListener(type, listener, options) {
+        if (!this._listeners[type]) return;
+
+        const capture = typeof options === 'boolean' ? options : !!(options && options.capture);
+        this._listeners[type] = this._listeners[type].filter(
+            e => e.listener !== listener || e.capture !== capture
+        );
+    }
+
+    dispatchEvent(event) {
+        if (!(event instanceof Event)) {
+            throw new TypeError("Failed to execute 'dispatchEvent': parameter 1 is not of type 'Event'.");
+        }
+
+        event.target = this;
+        event.currentTarget = this;
+
+        const list = this._listeners[event.type];
+        if (list) {
+            const handlers = list.slice();
+            for (const entry of handlers) {
+                if (event._stopImmediatePropagation) break;
+                try {
+                    if (typeof entry.listener === 'function') {
+                        entry.listener.call(this, event);
+                    } else if (entry.listener && typeof entry.listener.handleEvent === 'function') {
+                        entry.listener.handleEvent(event);
+                    }
+                } catch (e) {
+                    // Swallow errors in event listeners
+                }
+                if (entry.once) {
+                    this.removeEventListener(event.type, entry.listener, { capture: entry.capture });
+                }
+            }
+        }
+
+        return !event.defaultPrevented;
+    }
+}
+
+class CustomEvent extends Event {
+    constructor(type, eventInitDict = {}) {
+        super(type, eventInitDict);
+        this.detail = eventInitDict.detail !== undefined ? eventInitDict.detail : null;
+    }
+}
+
 // From https://github.com/primus/eventemitter3/
 
 'use strict';
@@ -5,58 +140,19 @@
 var has = Object.prototype.hasOwnProperty
     , prefix = '~';
 
-/**
- * Constructor to create a storage for our `EE` objects.
- * An `Events` instance is a plain object whose properties are event names.
- *
- * @constructor
- * @private
- */
 function Events() {}
 
-//
-// We try to not inherit from `Object.prototype`. In some engines creating an
-// instance in this way is faster than calling `Object.create(null)` directly.
-// If `Object.create(null)` is not supported we prefix the event names with a
-// character to make sure that the built-in object properties are not
-// overridden or used as an attack vector.
-//
 if (Object.create) {
     Events.prototype = Object.create(null);
-
-    //
-    // This hack is needed because the `__proto__` property is still inherited in
-    // some old browsers like Android 4, iPhone 5.1, Opera 11 and Safari 5.
-    //
     if (!new Events().__proto__) prefix = false;
 }
 
-/**
- * Representation of a single event listener.
- *
- * @param {Function} fn The listener function.
- * @param {*} context The context to invoke the listener with.
- * @param {Boolean} [once=false] Specify if the listener is a one-time listener.
- * @constructor
- * @private
- */
 function EE(fn, context, once) {
     this.fn = fn;
     this.context = context;
     this.once = once || false;
 }
 
-/**
- * Add a listener for a given event.
- *
- * @param {EventEmitter} emitter Reference to the `EventEmitter` instance.
- * @param {(String|Symbol)} event The event name.
- * @param {Function} fn The listener function.
- * @param {*} context The context to invoke the listener with.
- * @param {Boolean} once Specify if the listener is a one-time listener.
- * @returns {EventEmitter}
- * @private
- */
 function addListener(emitter, event, fn, context, once) {
     if (typeof fn !== 'function') {
         throw new TypeError('The listener must be a function');
@@ -72,37 +168,16 @@ function addListener(emitter, event, fn, context, once) {
     return emitter;
 }
 
-/**
- * Clear event by name.
- *
- * @param {EventEmitter} emitter Reference to the `EventEmitter` instance.
- * @param {(String|Symbol)} evt The Event name.
- * @private
- */
 function clearEvent(emitter, evt) {
     if (--emitter._eventsCount === 0) emitter._events = new Events();
     else delete emitter._events[evt];
 }
 
-/**
- * Minimal `EventEmitter` interface that is molded against the Node.js
- * `EventEmitter` interface.
- *
- * @constructor
- * @public
- */
 function EventEmitter() {
     this._events = new Events();
     this._eventsCount = 0;
 }
 
-/**
- * Return an array listing the events for which the emitter has registered
- * listeners.
- *
- * @returns {Array}
- * @public
- */
 EventEmitter.prototype.eventNames = function eventNames() {
     var names = []
         , events
@@ -121,13 +196,6 @@ EventEmitter.prototype.eventNames = function eventNames() {
     return names;
 };
 
-/**
- * Return the listeners registered for a given event.
- *
- * @param {(String|Symbol)} event The event name.
- * @returns {Array} The registered listeners.
- * @public
- */
 EventEmitter.prototype.listeners = function listeners(event) {
     var evt = prefix ? prefix + event : event
         , handlers = this._events[evt];
@@ -142,13 +210,6 @@ EventEmitter.prototype.listeners = function listeners(event) {
     return ee;
 };
 
-/**
- * Return the number of listeners listening to a given event.
- *
- * @param {(String|Symbol)} event The event name.
- * @returns {Number} The number of listeners.
- * @public
- */
 EventEmitter.prototype.listenerCount = function listenerCount(event, listener) {
     var evt = prefix ? prefix + event : event
         , listeners = this._events[evt];
@@ -166,13 +227,6 @@ EventEmitter.prototype.listenerCount = function listenerCount(event, listener) {
     return count;
 };
 
-/**
- * Calls each of the listeners registered for a given event.
- *
- * @param {(String|Symbol)} event The event name.
- * @returns {Boolean} `true` if the event had listeners, else `false`.
- * @public
- */
 EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
     var evt = prefix ? prefix + event : event;
 
@@ -225,42 +279,14 @@ EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
     return true;
 };
 
-/**
- * Add a listener for a given event.
- *
- * @param {(String|Symbol)} event The event name.
- * @param {Function} fn The listener function.
- * @param {*} [context=this] The context to invoke the listener with.
- * @returns {EventEmitter} `this`.
- * @public
- */
 EventEmitter.prototype.on = function on(event, fn, context) {
     return addListener(this, event, fn, context, false);
 };
 
-/**
- * Add a one-time listener for a given event.
- *
- * @param {(String|Symbol)} event The event name.
- * @param {Function} fn The listener function.
- * @param {*} [context=this] The context to invoke the listener with.
- * @returns {EventEmitter} `this`.
- * @public
- */
 EventEmitter.prototype.once = function once(event, fn, context) {
     return addListener(this, event, fn, context, true);
 };
 
-/**
- * Remove the listeners of a given event.
- *
- * @param {(String|Symbol)} event The event name.
- * @param {Function} fn Only remove the listeners that match this function.
- * @param {*} context Only remove the listeners that have this context.
- * @param {Boolean} once Only remove one-time listeners.
- * @returns {EventEmitter} `this`.
- * @public
- */
 EventEmitter.prototype.removeListener = function removeListener(event, fn, context, once) {
     var evt = prefix ? prefix + event : event;
 
@@ -291,9 +317,6 @@ EventEmitter.prototype.removeListener = function removeListener(event, fn, conte
             }
         }
 
-        //
-        // Reset the array, or remove it completely if we have no more listeners.
-        //
         if (events.length) this._events[evt] = events.length === 1 ? events[0] : events;
         else clearEvent(this, evt);
     }
@@ -301,13 +324,6 @@ EventEmitter.prototype.removeListener = function removeListener(event, fn, conte
     return this;
 };
 
-/**
- * Remove all listeners, or those of the specified event.
- *
- * @param {(String|Symbol)} [event] The event name.
- * @returns {EventEmitter} `this`.
- * @public
- */
 EventEmitter.prototype.removeAllListeners = function removeAllListeners(event) {
     var evt;
 
@@ -322,20 +338,10 @@ EventEmitter.prototype.removeAllListeners = function removeAllListeners(event) {
     return this;
 };
 
-//
-// Alias methods names because people roll like that.
-//
 EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
 EventEmitter.prototype.addListener = EventEmitter.prototype.on;
 
-//
-// Expose the prefix.
-//
 EventEmitter.prefixed = prefix;
-
-//
-// Additional instance methods for Node.js compatibility
-//
 
 EventEmitter.prototype.setMaxListeners = function setMaxListeners(n) {
     this._maxListeners = n;
@@ -398,10 +404,6 @@ EventEmitter.prototype.rawListeners = function rawListeners(event) {
 
     return ee;
 };
-
-//
-// Static utility methods for Node.js compatibility
-//
 
 EventEmitter.defaultMaxListeners = 10;
 EventEmitter.errorMonitor = Symbol('events.errorMonitor');
@@ -563,14 +565,8 @@ EventEmitter.addAbortListener = function(signal, listener) {
     };
 };
 
-//
-// Allow `EventEmitter` to be imported as module namespace.
-//
 EventEmitter.EventEmitter = EventEmitter;
 
-//
-// Expose the module.
-//
 var once = EventEmitter.once;
 var on = EventEmitter.on;
 var getEventListeners = EventEmitter.getEventListeners;
@@ -583,6 +579,9 @@ var captureRejections = EventEmitter.captureRejections;
 
 export {
     EventEmitter,
+    Event,
+    EventTarget,
+    CustomEvent,
     once,
     on,
     getEventListeners,
