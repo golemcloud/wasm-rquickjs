@@ -789,6 +789,15 @@ export function mkdirSync(path, options) {
 export function rmdirSync(path, options) {
     validatePath(path);
     if (options && options.recursive) {
+        const st = native.fs_stat(path);
+        if (!st.error && !st.stat.isDirectory) {
+            const err = new Error(`ENOTDIR: not a directory, rmdir '${path}'`);
+            err.code = 'ENOTDIR';
+            err.errno = -20;
+            err.syscall = 'rmdir';
+            err.path = path;
+            throw err;
+        }
         const error = native.fs_rm(path, true, false);
         if (error) throw createSystemError(error);
     } else {
@@ -1721,6 +1730,7 @@ export function createWriteStream(path, options) {
 // --- readv/writev stubs ---
 
 export function readv(fd, buffers, positionOrCallback, callback) {
+    validateFd(fd);
     let position = null;
     let cb;
     if (typeof positionOrCallback === 'function') {
@@ -1728,6 +1738,18 @@ export function readv(fd, buffers, positionOrCallback, callback) {
     } else {
         position = positionOrCallback;
         cb = callback;
+    }
+    if (!Array.isArray(buffers)) {
+        const err = new TypeError('The "buffers" argument must be an instance of Array. Received ' + describeType(buffers));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    for (const buf of buffers) {
+        if (!ArrayBuffer.isView(buf)) {
+            const err = new TypeError('The "buffers[n]" argument must be an instance of Buffer, TypedArray, or DataView. Received ' + describeType(buf));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
     }
     validateCallback(cb);
     queueMicrotask(() => {
@@ -1747,6 +1769,7 @@ export function readv(fd, buffers, positionOrCallback, callback) {
 }
 
 export function writev(fd, buffers, positionOrCallback, callback) {
+    validateFd(fd);
     let position = null;
     let cb;
     if (typeof positionOrCallback === 'function') {
@@ -1754,6 +1777,18 @@ export function writev(fd, buffers, positionOrCallback, callback) {
     } else {
         position = positionOrCallback;
         cb = callback;
+    }
+    if (!Array.isArray(buffers)) {
+        const err = new TypeError('The "buffers" argument must be an instance of Array. Received ' + describeType(buffers));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    for (const buf of buffers) {
+        if (!ArrayBuffer.isView(buf)) {
+            const err = new TypeError('The "buffers[n]" argument must be an instance of Buffer, TypedArray, or DataView. Received ' + describeType(buf));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
     }
     validateCallback(cb);
     queueMicrotask(() => {
@@ -1772,6 +1807,19 @@ export function writev(fd, buffers, positionOrCallback, callback) {
 }
 
 export function readvSync(fd, buffers, position) {
+    validateFd(fd);
+    if (!Array.isArray(buffers)) {
+        const err = new TypeError('The "buffers" argument must be an instance of Array. Received ' + describeType(buffers));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    for (const buf of buffers) {
+        if (!ArrayBuffer.isView(buf)) {
+            const err = new TypeError('The "buffers[n]" argument must be an instance of Buffer, TypedArray, or DataView. Received ' + describeType(buf));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+    }
     let totalRead = 0;
     let pos = position !== undefined ? position : null;
     for (const buf of buffers) {
@@ -1784,6 +1832,19 @@ export function readvSync(fd, buffers, position) {
 }
 
 export function writevSync(fd, buffers, position) {
+    validateFd(fd);
+    if (!Array.isArray(buffers)) {
+        const err = new TypeError('The "buffers" argument must be an instance of Array. Received ' + describeType(buffers));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    for (const buf of buffers) {
+        if (!ArrayBuffer.isView(buf)) {
+            const err = new TypeError('The "buffers[n]" argument must be an instance of Buffer, TypedArray, or DataView. Received ' + describeType(buf));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+    }
     let totalWritten = 0;
     let pos = position !== undefined ? position : null;
     for (const buf of buffers) {

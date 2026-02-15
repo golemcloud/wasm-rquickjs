@@ -637,22 +637,16 @@
       "skip": true,
       "reason": "requires fixtures module"
     },
-    "parallel/test-fs-readv-promises.js": {
-      "skip": true,
-      "reason": "requires fs.promises.open FileHandle.readv"
-    },
+    "parallel/test-fs-readv-promises.js": {},
     "parallel/test-fs-readv-promisify.js": {
       "skip": true,
       "reason": "requires util.promisify on fs.readv"
     },
     "parallel/test-fs-readv-sync.js": {
       "skip": true,
-      "reason": "readvSync returns 0 bytes read — readv implementation bug"
+      "reason": "zero-length read before readvSync causes subsequent reads to return 0 in WASI"
     },
-    "parallel/test-fs-readv.js": {
-      "skip": true,
-      "reason": "readv implementation does not properly read data"
-    },
+    "parallel/test-fs-readv.js": {},
     "parallel/test-fs-ready-event-stream.js": {
       "skip": true,
       "reason": "requires full ReadStream/WriteStream implementation"
@@ -690,20 +684,11 @@
       "reason": "requires --expose-internals and internal/fs/utils"
     },
     "parallel/test-fs-rmdir-recursive-sync-warns-not-found.js": {},
-    "parallel/test-fs-rmdir-recursive-sync-warns-on-file.js": {
-      "skip": true,
-      "reason": "rmdirSync with recursive deletes files instead of throwing ENOTDIR"
-    },
+    "parallel/test-fs-rmdir-recursive-sync-warns-on-file.js": {},
     "parallel/test-fs-rmdir-recursive-throws-not-found.js": {},
-    "parallel/test-fs-rmdir-recursive-throws-on-file.js": {
-      "skip": true,
-      "reason": "rmdirSync with recursive deletes files instead of throwing ENOTDIR"
-    },
+    "parallel/test-fs-rmdir-recursive-throws-on-file.js": {},
     "parallel/test-fs-rmdir-recursive-warns-not-found.js": {},
-    "parallel/test-fs-rmdir-recursive-warns-on-file.js": {
-      "skip": true,
-      "reason": "rmdir with recursive deletes files instead of throwing ENOTDIR"
-    },
+    "parallel/test-fs-rmdir-recursive-warns-on-file.js": {},
     "parallel/test-fs-rmdir-type-check.js": {
       "skip": true,
       "reason": "requires ERR_INVALID_ARG_TYPE validation"
@@ -1046,17 +1031,8 @@
       "skip": true,
       "reason": "requires full WriteStream implementation"
     },
-    "parallel/test-fs-writev.js": {
-      "skip": true,
-      "reason": "writev callback does not match expected behavior"
-    },
-    "parallel/test-fs-writev-promises.js": {
-      "skip": true,
-      "reason": "requires fs.promises.open FileHandle.writev"
-    },
-    "parallel/test-fs-writev-sync.js": {
-      "skip": true,
-      "reason": "writevSync buffer comparison fails — writev implementation bug"
-    }
+    "parallel/test-fs-writev.js": {},
+    "parallel/test-fs-writev-promises.js": {},
+    "parallel/test-fs-writev-sync.js": {}
   }
 }

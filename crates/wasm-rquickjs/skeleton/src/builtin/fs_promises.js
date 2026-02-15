@@ -252,6 +252,33 @@ export class FileHandle {
         }
     }
 
+    async readv(buffers, position) {
+        if (this._closed) throw new Error('file closed');
+        const fs = globalThis.require ? globalThis.require('node:fs') : null;
+        let totalRead = 0;
+        let pos = position !== undefined && position !== null ? position : null;
+        for (const buf of buffers) {
+            const bytesRead = fs ? fs.readSync(this._fd, buf, 0, buf.byteLength, pos) : 0;
+            totalRead += bytesRead;
+            if (pos !== null) pos += bytesRead;
+            if (bytesRead < buf.byteLength) break;
+        }
+        return { bytesRead: totalRead, buffers };
+    }
+
+    async writev(buffers, position) {
+        if (this._closed) throw new Error('file closed');
+        const fs = globalThis.require ? globalThis.require('node:fs') : null;
+        let totalWritten = 0;
+        let pos = position !== undefined && position !== null ? position : null;
+        for (const buf of buffers) {
+            const written = fs ? fs.writeSync(this._fd, buf, 0, buf.byteLength, pos) : 0;
+            totalWritten += written;
+            if (pos !== null) pos += written;
+        }
+        return { bytesWritten: totalWritten, buffers };
+    }
+
     async writeFile(data, options) {
         if (this._closed) throw new Error('file closed');
         if (typeof data === 'string') {
@@ -360,6 +387,15 @@ export async function mkdir(path, options) {
 
 export async function rmdir(path, options) {
     if (options && options.recursive) {
+        const st = native.fs_stat(path);
+        if (!st.error && !st.stat.isDirectory) {
+            const err = new Error(`ENOTDIR: not a directory, rmdir '${path}'`);
+            err.code = 'ENOTDIR';
+            err.errno = -20;
+            err.syscall = 'rmdir';
+            err.path = path;
+            throw err;
+        }
         const error = native.fs_rm(path, true, false);
         if (error) throw createSystemError(error);
     } else {
