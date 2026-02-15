@@ -1014,6 +1014,34 @@
       "reason": "requires --expose-internals and internal/event_target"
     },
 
+    // === node:crypto tests ===
+    "parallel/test-crypto-hash.js": {
+      "skip": true,
+      "reason": "requires stream interface on Hash (write/end/read), Hash() without new, XOF hash functions (shake128/256), and fixtures (sample.png)"
+    },
+    "parallel/test-crypto-hash-stream-pipe.js": {
+      "skip": true,
+      "reason": "requires stream interface on Hash (pipe/write/end/read)"
+    },
+    "parallel/test-crypto-classes.js": {
+      "skip": true,
+      "reason": "requires Hmac, Cipheriv, Decipheriv, Sign, Verify, DiffieHellman, DiffieHellmanGroup, ECDH classes"
+    },
+    "parallel/test-crypto-randomuuid.js": {
+      "skip": true,
+      "reason": "requires randomUUID options validation (disableEntropyCache, ERR_INVALID_ARG_TYPE)"
+    },
+    "parallel/test-crypto-randomfillsync-regression.js": {},
+    "parallel/test-crypto-from-binary.js": {},
+    "parallel/test-crypto-subtle-zero-length.js": {
+      "skip": true,
+      "reason": "requires Web Crypto subtle API (importKey, encrypt, decrypt, CryptoKey)"
+    },
+    "parallel/test-crypto-random.js": {
+      "skip": true,
+      "reason": "requires crypto.pseudoRandomBytes, randomFill with SharedArrayBuffer, and kMaxLength validation"
+    },
+
     // === AbortController tests ===
     "parallel/test-abortcontroller.js": {
       "skip": true,

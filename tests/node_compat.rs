@@ -328,3 +328,10 @@ async fn node_compat_aborted(
 ) -> anyhow::Result<()> {
     run_node_compat_suite(runner, "test-aborted").await
 }
+
+#[test]
+async fn node_compat_crypto(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-crypto").await
+}

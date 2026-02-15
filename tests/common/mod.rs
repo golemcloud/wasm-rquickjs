@@ -66,7 +66,7 @@ pub fn setup_node_compat_test_files(
     fs::copy(src_shim, &dst_shim)?;
 
     // Copy additional common shims if they exist
-    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js"] {
+    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js", "crypto.js"] {
         let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
         if std::path::Path::new(&src_shim_extra).exists() {
             let dst_shim_extra = common_dir.join(shim_name);
@@ -79,7 +79,7 @@ pub fn setup_node_compat_test_files(
     let test_common_dir = temp.join("test").join("common");
     fs::create_dir_all(&test_common_dir)?;
     fs::copy(src_shim, test_common_dir.join("index.js"))?;
-    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js"] {
+    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js", "crypto.js"] {
         let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
         if std::path::Path::new(&src_shim_extra).exists() {
             fs::copy(&src_shim_extra, test_common_dir.join(shim_name))?;
