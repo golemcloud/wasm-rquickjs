@@ -9,9 +9,14 @@
 //
 // The test does require('../common') which resolves naturally to /tests/common/index.js.
 
-export const runTest = (testPath) => {
+export const runTest = async (testPath) => {
     try {
         require(testPath);
+        // Await any pending async tests from node:test
+        var testModule = require('node:test');
+        if (testModule && typeof testModule._awaitPendingTests === 'function') {
+            await testModule._awaitPendingTests();
+        }
         // Run exit handlers after test completes normally
         if (globalThis.process && typeof globalThis.process._runExitHandlers === 'function') {
             globalThis.process._runExitHandlers(0);

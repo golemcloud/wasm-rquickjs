@@ -55,6 +55,7 @@ function TestContext(name, suite) {
     this._afterFns = [];
     this._beforeEachFns = [];
     this._afterEachFns = [];
+    this.mock = new MockTracker();
 }
 
 Object.defineProperty(TestContext.prototype, 'fullName', {
@@ -83,7 +84,57 @@ TestContext.prototype.todo = function (msg) {
 
 TestContext.prototype.test = function (name, optionsOrFn, maybeFn) {
     var parsed = parseTestArgs(name, optionsOrFn, maybeFn);
-    this._subtests.push(parsed);
+    var fn = parsed.fn;
+    var parentSuite = this._suite;
+
+    // Handle skip
+    if (parsed.options.skip === true || (typeof parsed.options.skip === 'string' && parsed.options.skip)) {
+        return Promise.resolve();
+    }
+
+    var childCtx = new TestContext(parsed.name, parentSuite);
+
+    var runSubtest = function () {
+        try {
+            var result;
+            if (fn.length >= 2) {
+                // done callback pattern
+                return new Promise(function (resolve, reject) {
+                    var done = function (err) {
+                        childCtx.mock.restoreAll();
+                        if (err) reject(err);
+                        else resolve();
+                    };
+                    try {
+                        fn.call(childCtx, childCtx, done);
+                    } catch (e) {
+                        childCtx.mock.restoreAll();
+                        reject(e);
+                    }
+                });
+            }
+
+            result = fn.call(childCtx, childCtx);
+            if (result && typeof result.then === 'function') {
+                return result.then(function () {
+                    childCtx.mock.restoreAll();
+                }, function (e) {
+                    childCtx.mock.restoreAll();
+                    throw e;
+                });
+            }
+            childCtx.mock.restoreAll();
+            return Promise.resolve();
+        } catch (e) {
+            childCtx.mock.restoreAll();
+            if (e instanceof SkipError) {
+                return Promise.resolve();
+            }
+            return Promise.reject(e);
+        }
+    };
+
+    return runSubtest();
 };
 
 TestContext.prototype.before = function (fn) {
@@ -180,6 +231,18 @@ function runTest(parsed, parentSuite) {
     var beforeEachFns = parentSuite ? parentSuite.collectBeforeEach() : [];
     var afterEachFns = parentSuite ? parentSuite.collectAfterEach() : [];
 
+    var runAfterEach = function () {
+        for (var j = 0; j < afterEachFns.length; j++) {
+            afterEachFns[j]();
+        }
+    };
+
+    var runAfterEachSafe = function () {
+        for (var k = 0; k < afterEachFns.length; k++) {
+            try { afterEachFns[k](); } catch (ignored) {}
+        }
+    };
+
     try {
         // Run beforeEach hooks
         for (var i = 0; i < beforeEachFns.length; i++) {
@@ -189,27 +252,43 @@ function runTest(parsed, parentSuite) {
         // Run the test function with ctx as both `this` and first argument
         var result = fn.call(ctx, ctx);
 
-        // If test returned a promise, we can't await it synchronously in CJS context.
-        // But QuickJS supports top-level await in modules... for CJS require() context
-        // we need to handle this. Actually QuickJS can handle promise synchronously
-        // in some contexts. Let's just check and handle.
+        // If test returned a promise, return an async result that can be awaited
         if (result && typeof result.then === 'function') {
-            // We'll handle this by returning a pending result marker
-            return { status: 'async', name: name, promise: result, ctx: ctx, isTodo: isTodo, afterEachFns: afterEachFns };
+            var asyncResult = result.then(function () {
+                ctx.mock.restoreAll();
+                runAfterEach();
+                if (isTodo) {
+                    return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
+                }
+                return { status: 'pass', name: name };
+            }, function (e) {
+                ctx.mock.restoreAll();
+                runAfterEachSafe();
+                if (e instanceof SkipError) {
+                    return { status: 'skip', name: name, message: e.message };
+                }
+                if (e instanceof TodoError) {
+                    return { status: 'todo', name: name, message: e.message };
+                }
+                if (isTodo) {
+                    return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
+                }
+                return { status: 'fail', name: name, error: e };
+            });
+            return { status: 'async', name: name, promise: asyncResult };
         }
 
         // Run subtests if any
         if (ctx._subtests.length > 0) {
             var subResult = runSubtests(ctx);
             if (subResult.failures > 0 && !isTodo) {
+                ctx.mock.restoreAll();
                 return { status: 'fail', name: name, error: subResult.error };
             }
         }
 
-        // Run afterEach hooks (own first, then parent's)
-        for (var j = 0; j < afterEachFns.length; j++) {
-            afterEachFns[j]();
-        }
+        ctx.mock.restoreAll();
+        runAfterEach();
 
         if (isTodo) {
             return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
@@ -217,10 +296,8 @@ function runTest(parsed, parentSuite) {
 
         return { status: 'pass', name: name };
     } catch (e) {
-        // Run afterEach hooks even on failure
-        for (var k = 0; k < afterEachFns.length; k++) {
-            try { afterEachFns[k](); } catch (ignored) {}
-        }
+        ctx.mock.restoreAll();
+        runAfterEachSafe();
 
         if (e instanceof SkipError) {
             return { status: 'skip', name: name, message: e.message };
@@ -336,9 +413,14 @@ function executeSuite(suite, isTodo) {
         }
 
         if (result.status === 'async' || result.status === 'async-suite') {
-            // Can't handle async in synchronous require() context — treat as failure
-            failures++;
-            errors.push(new Error('Async test "' + (result.name || '') + '" in synchronous context'));
+            var promise = result.promise;
+            if (promise) {
+                _pendingTestPromises.push(promise.then(function (resolved) {
+                    if (resolved && resolved.status === 'fail') {
+                        throw resolved.error || new Error('Test "' + resolved.name + '" failed');
+                    }
+                }));
+            }
             continue;
         }
 
@@ -379,6 +461,7 @@ function executeSuite(suite, isTodo) {
 
 var topLevelTests = [];
 var rootSuite = new SuiteContext('', null);
+var _pendingTestPromises = [];
 
 function flushTopLevel() {
     if (topLevelTests.length === 0) return;
@@ -397,9 +480,14 @@ function flushTopLevel() {
         }
 
         if (result.status === 'async' || result.status === 'async-suite') {
-            // Can't handle async in synchronous require() context
-            failures++;
-            errors.push(new Error('Async test "' + (result.name || '') + '" in synchronous context'));
+            var promise = result.promise;
+            if (promise) {
+                _pendingTestPromises.push(promise.then(function (resolved) {
+                    if (resolved && resolved.status === 'fail') {
+                        throw resolved.error || new Error('Test "' + resolved.name + '" failed');
+                    }
+                }));
+            }
             continue;
         }
 
@@ -432,6 +520,14 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
 
     // Top-level test — run immediately
     var result = runTest(parsed, rootSuite);
+    if (result.status === 'async') {
+        _pendingTestPromises.push(result.promise.then(function (resolved) {
+            if (resolved && resolved.status === 'fail') {
+                throw resolved.error || new Error('Test "' + resolved.name + '" failed');
+            }
+        }));
+        return;
+    }
     if (result.status === 'fail') {
         throw result.error;
     }
@@ -566,28 +662,101 @@ function afterEach(fn) {
     }
 }
 
-// --- Stubs for later phases ---
+// --- MockTracker ---
 
-var mock = {
-    fn: function (impl) {
-        var mockFn = impl || function () {};
-        return mockFn;
-    },
-    method: function (obj, methodName, impl) {
-        if (impl) {
-            obj[methodName] = impl;
+function MockTracker() {
+    this._mocks = [];
+}
+
+MockTracker.prototype.method = function (obj, methodName, implementation) {
+    var original = obj[methodName];
+    var callLog = [];
+    var mockInfo = { calls: callLog };
+
+    var wrapper = function () {
+        var args = Array.prototype.slice.call(arguments);
+        var callRecord = { arguments: args, result: undefined, error: undefined };
+        try {
+            var result;
+            if (implementation) {
+                result = implementation.apply(this, arguments);
+            } else {
+                result = original.apply(this, arguments);
+            }
+            callRecord.result = result;
+            callLog.push(callRecord);
+            return result;
+        } catch (e) {
+            callRecord.error = e;
+            callLog.push(callRecord);
+            throw e;
         }
-    },
-    getter: function () {},
-    setter: function () {},
-    reset: function () {},
-    restoreAll: function () {},
-    timers: { enable: function () {}, reset: function () {}, tick: function () {} }
+    };
+    wrapper.mock = mockInfo;
+
+    obj[methodName] = wrapper;
+    this._mocks.push({ obj: obj, methodName: methodName, original: original });
+
+    return wrapper;
 };
+
+MockTracker.prototype.fn = function (impl) {
+    var fn = impl || function () {};
+    var callLog = [];
+    var mockInfo = { calls: callLog };
+
+    var wrapper = function () {
+        var args = Array.prototype.slice.call(arguments);
+        var callRecord = { arguments: args, result: undefined, error: undefined };
+        try {
+            var result = fn.apply(this, arguments);
+            callRecord.result = result;
+            callLog.push(callRecord);
+            return result;
+        } catch (e) {
+            callRecord.error = e;
+            callLog.push(callRecord);
+            throw e;
+        }
+    };
+    wrapper.mock = mockInfo;
+    return wrapper;
+};
+
+MockTracker.prototype.restoreAll = function () {
+    for (var i = this._mocks.length - 1; i >= 0; i--) {
+        var m = this._mocks[i];
+        m.obj[m.methodName] = m.original;
+    }
+    this._mocks = [];
+};
+
+MockTracker.prototype.reset = function () {
+    for (var i = 0; i < this._mocks.length; i++) {
+        var m = this._mocks[i];
+        if (m.obj[m.methodName] && m.obj[m.methodName].mock) {
+            m.obj[m.methodName].mock.calls.length = 0;
+        }
+    }
+};
+
+MockTracker.prototype.getter = function () {};
+MockTracker.prototype.setter = function () {};
+MockTracker.prototype.timers = { enable: function () {}, reset: function () {}, tick: function () {} };
+
+var mock = new MockTracker();
 
 function run() {
     // Stub — no-op for now
     return { on: function () { return this; }, once: function () { return this; } };
+}
+
+async function _awaitPendingTests() {
+    while (_pendingTestPromises.length > 0) {
+        var promises = _pendingTestPromises;
+        _pendingTestPromises = [];
+        await Promise.all(promises);
+    }
 }
 
 export {
@@ -600,7 +769,8 @@ export {
     beforeEach,
     afterEach,
     mock,
-    run
+    run,
+    _awaitPendingTests
 };
 
 export default test;

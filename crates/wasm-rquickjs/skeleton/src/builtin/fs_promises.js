@@ -85,6 +85,14 @@ function createSystemError(errObj) {
     return err;
 }
 
+function validateFlush(flush) {
+    if (flush !== undefined && flush !== null && typeof flush !== 'boolean') {
+        const err = new TypeError('The "flush" argument must be of type boolean. Received ' + describeType(flush));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+}
+
 // --- FileHandle class ---
 
 export class FileHandle {
@@ -329,6 +337,9 @@ export async function writeFile(path, data, options) {
         return path.writeFile(data, options);
     }
 
+    const flush = options && typeof options === 'object' ? options.flush : undefined;
+    validateFlush(flush);
+
     let encoding;
     if (typeof options === 'string') {
         encoding = options;
@@ -347,12 +358,27 @@ export async function writeFile(path, data, options) {
     }
 
     if (error !== undefined) throw new Error(error);
+
+    if (flush === true) {
+        const fs = globalThis.require ? globalThis.require('node:fs') : null;
+        if (fs) {
+            const fd = fs.openSync(path, 'r');
+            try {
+                fs.fsyncSync(fd);
+            } finally {
+                fs.closeSync(fd);
+            }
+        }
+    }
 }
 
 export async function appendFile(path, data, options) {
     if (path instanceof FileHandle) {
         return path.appendFile(data, options);
     }
+
+    const flush = options && typeof options === 'object' ? options.flush : undefined;
+    validateFlush(flush);
 
     let error;
     if (typeof data === 'string') {
@@ -362,6 +388,18 @@ export async function appendFile(path, data, options) {
         error = native.fs_append_file(path, dataArray);
     }
     if (error) throw createSystemError(error);
+
+    if (flush === true) {
+        const fs = globalThis.require ? globalThis.require('node:fs') : null;
+        if (fs) {
+            const fd = fs.openSync(path, 'r');
+            try {
+                fs.fsyncSync(fd);
+            } finally {
+                fs.closeSync(fd);
+            }
+        }
+    }
 }
 
 export async function unlink(path) {

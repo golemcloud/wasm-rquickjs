@@ -202,6 +202,14 @@ function validateCallback(cb) {
     }
 }
 
+function validateFlush(flush) {
+    if (flush !== undefined && flush !== null && typeof flush !== 'boolean') {
+        const err = new TypeError('The "flush" argument must be of type boolean. Received ' + describeType(flush));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+}
+
 function validatePath(path, propName) {
     if (typeof path === 'string') {
         if (path.indexOf('\u0000') !== -1) {
@@ -395,6 +403,8 @@ export function writeFileSync(path, data, options) {
     if (typeof options === 'string') {
         options = {encoding: options};
     }
+    const flush = options ? options.flush : undefined;
+    validateFlush(flush);
     if (options && options.encoding && options.encoding !== '') {
         const error = native.write_file_with_encoding(path, options.encoding, data);
         if (error !== undefined) {
@@ -414,6 +424,14 @@ export function writeFileSync(path, data, options) {
             }
         }
     }
+    if (flush === true) {
+        const fd = openSync(path, 'r');
+        try {
+            _default.fsyncSync(fd);
+        } finally {
+            closeSync(fd);
+        }
+    }
 }
 
 export function appendFileSync(path, data, options) {
@@ -421,6 +439,8 @@ export function appendFileSync(path, data, options) {
     if (typeof options === 'string') {
         options = { encoding: options };
     }
+    const flush = options ? options.flush : undefined;
+    validateFlush(flush);
     let error;
     if (typeof data === 'string') {
         error = native.fs_append_file_string(path, data);
@@ -430,6 +450,14 @@ export function appendFileSync(path, data, options) {
     }
     if (error) {
         throw createSystemError(error);
+    }
+    if (flush === true) {
+        const fd = openSync(path, 'r');
+        try {
+            _default.fsyncSync(fd);
+        } finally {
+            closeSync(fd);
+        }
     }
 }
 
@@ -871,10 +899,21 @@ export function writeFile(path, data, optionsOrCallback, callback) {
         optionsOrCallback = {encoding: optionsOrCallback};
     }
     const opts = optionsOrCallback || {};
+    const flush = opts.flush;
+    validateFlush(flush);
     const cb = callback;
     queueMicrotask(() => {
         try {
-            writeFileSync(path, data, opts);
+            const writeOpts = flush !== undefined ? Object.assign({}, opts, { flush: undefined }) : opts;
+            writeFileSync(path, data, writeOpts);
+            if (flush === true) {
+                const fd = openSync(path, 'r');
+                _default.fsync(fd, (err) => {
+                    closeSync(fd);
+                    cb(err || null);
+                });
+                return;
+            }
             cb(null);
         } catch (err) {
             cb(err);
@@ -888,10 +927,22 @@ export function appendFile(path, data, optionsOrCallback, callback) {
         callback = optionsOrCallback;
         optionsOrCallback = {};
     }
+    const opts = optionsOrCallback || {};
+    const flush = opts.flush;
+    validateFlush(flush);
     const cb = callback;
     queueMicrotask(() => {
         try {
-            appendFileSync(path, data, optionsOrCallback);
+            const appendOpts = flush !== undefined ? Object.assign({}, opts, { flush: undefined }) : opts;
+            appendFileSync(path, data, appendOpts);
+            if (flush === true) {
+                const fd = openSync(path, 'r');
+                _default.fsync(fd, (err) => {
+                    closeSync(fd);
+                    cb(err || null);
+                });
+                return;
+            }
             cb(null);
         } catch (err) {
             cb(err);

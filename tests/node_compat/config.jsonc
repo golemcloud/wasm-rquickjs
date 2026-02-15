@@ -228,10 +228,7 @@
       "skip": true,
       "reason": "requires fixtures module and process.umask()"
     },
-    "parallel/test-fs-append-file-flush.js": {
-      "skip": true,
-      "reason": "requires flush option support in appendFile"
-    },
+    "parallel/test-fs-append-file-flush.js": {},
     "parallel/test-fs-append-file-sync.js": {
       "skip": true,
       "reason": "requires fixtures module and process.umask()"
@@ -922,10 +919,7 @@
       "reason": "requires ERR_OUT_OF_RANGE validation and large buffer allocation"
     },
     "parallel/test-fs-write-file-buffer.js": {},
-    "parallel/test-fs-write-file-flush.js": {
-      "skip": true,
-      "reason": "requires node:test mock.method and flush option support"
-    },
+    "parallel/test-fs-write-file-flush.js": {},
     "parallel/test-fs-write-file-invalid-path.js": {
       "skip": true,
       "reason": "requires process.platform check"
