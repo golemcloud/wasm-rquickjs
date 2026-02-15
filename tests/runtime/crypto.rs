@@ -399,3 +399,373 @@ async fn crypto_timing_safe_not_equal(
         _ => Err(anyhow!("Expected bool result")),
     }
 }
+
+#[test]
+async fn crypto_hmac_sha256(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "hmac-hex",
+        &[
+            Val::String("sha256".to_string()),
+            Val::String("secret-key".to_string()),
+            Val::String("some data to authenticate".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(
+                hex,
+                "8229597162d5857aefdf6d274e832044c98854a9968467cec03662038e9e45c3"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_hmac_sha1(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "hmac-hex",
+        &[
+            Val::String("sha1".to_string()),
+            Val::String("key".to_string()),
+            Val::String("The quick brown fox jumps over the lazy dog".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(hex, "de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_hmac_md5(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "hmac-hex",
+        &[
+            Val::String("md5".to_string()),
+            Val::String("key".to_string()),
+            Val::String("The quick brown fox jumps over the lazy dog".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(hex, "80070713463e7749b90c2dc24911e275");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_hmac_multi_update(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "hmac-multi-update",
+        &[
+            Val::String("sha256".to_string()),
+            Val::String("secret-key".to_string()),
+            Val::List(vec![
+                Val::String("some ".to_string()),
+                Val::String("data ".to_string()),
+                Val::String("to authenticate".to_string()),
+            ]),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(
+                hex,
+                "8229597162d5857aefdf6d274e832044c98854a9968467cec03662038e9e45c3"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_pbkdf2_sha256(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "pbkdf2-sha256-hex",
+        &[
+            Val::String("password".to_string()),
+            Val::String("salt".to_string()),
+            Val::U32(1000),
+            Val::U32(32),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex)) => {
+            assert_eq!(
+                hex,
+                "632c2812e46d4604102ba7618e9d6d7d2f8128f6266b4a03264d2a0460b7dcb3"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_scrypt(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "scrypt-hex",
+        &[
+            Val::String("password".to_string()),
+            Val::String("salt".to_string()),
+            Val::U32(32),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex)) => {
+            assert!(!hex.is_empty(), "scrypt should produce non-empty output");
+            assert_eq!(hex.len(), 64, "32 bytes = 64 hex chars");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_hkdf_sha256(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "hkdf-sha256-hex",
+        &[
+            Val::String("key-material".to_string()),
+            Val::String("salt".to_string()),
+            Val::String("info".to_string()),
+            Val::U32(32),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex)) => {
+            assert!(!hex.is_empty(), "hkdf should produce non-empty output");
+            assert_eq!(hex.len(), 64, "32 bytes = 64 hex chars");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_list_ciphers(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "list-ciphers", &[]).await;
+
+    let result = result?;
+    match result {
+        Some(Val::List(vals)) => {
+            let ciphers: Vec<String> = vals
+                .into_iter()
+                .filter_map(|v| match v {
+                    Val::String(s) => Some(s),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                ciphers.contains(&"aes-256-gcm".to_string()),
+                "Should contain aes-256-gcm"
+            );
+            assert!(
+                ciphers.contains(&"aes-256-cbc".to_string()),
+                "Should contain aes-256-cbc"
+            );
+            assert!(
+                ciphers.contains(&"chacha20-poly1305".to_string()),
+                "Should contain chacha20-poly1305"
+            );
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected list result")),
+    }
+}
+
+#[test]
+async fn crypto_aes_cbc_roundtrip(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "aes-cbc-roundtrip",
+        &[
+            Val::String("Hello, AES-CBC world!".to_string()),
+            Val::String("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+            Val::String("abcdef0123456789abcdef0123456789".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(decrypted)) => {
+            assert_eq!(decrypted, "Hello, AES-CBC world!");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_aes_ctr_roundtrip(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "aes-ctr-roundtrip",
+        &[
+            Val::String("Hello, AES-CTR world!".to_string()),
+            Val::String("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+            Val::String("abcdef0123456789abcdef0123456789".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(decrypted)) => {
+            assert_eq!(decrypted, "Hello, AES-CTR world!");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_aes_gcm_roundtrip(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "aes-gcm-roundtrip",
+        &[
+            Val::String("Hello, AES-GCM world!".to_string()),
+            Val::String("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+            Val::String("000000000000000000000000".to_string()),
+            Val::String("additional authenticated data".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(decrypted)) => {
+            assert_eq!(decrypted, "Hello, AES-GCM world!");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_chacha20_poly1305_roundtrip(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "chacha20-poly1305-roundtrip",
+        &[
+            Val::String("Hello, ChaCha20-Poly1305!".to_string()),
+            Val::String("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+            Val::String("000000000000000000000000".to_string()),
+            Val::String("aad data".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(decrypted)) => {
+            assert_eq!(decrypted, "Hello, ChaCha20-Poly1305!");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}
+
+#[test]
+async fn crypto_aes_gcm_encrypt_deterministic(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "aes-gcm-encrypt-hex",
+        &[
+            Val::String("test".to_string()),
+            Val::String("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()),
+            Val::String("000000000000000000000000".to_string()),
+        ],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::String(hex_result)) => {
+            assert!(hex_result.contains(':'), "Should contain ciphertext:tag separated by ':'");
+            let parts: Vec<&str> = hex_result.split(':').collect();
+            assert_eq!(parts.len(), 2);
+            assert!(!parts[0].is_empty(), "Ciphertext should not be empty");
+            assert_eq!(parts[1].len(), 32, "Auth tag should be 16 bytes = 32 hex chars");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected string result")),
+    }
+}

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use digest::Digest;
+use hmac::{Hmac, Mac};
 use md5::Md5;
 use ripemd::Ripemd160;
 use sha1::Sha1;
@@ -135,6 +136,685 @@ fn hash_copy_impl(id: u32) -> Option<u32> {
     })
 }
 
+enum HmacContext {
+    Md5(Hmac<Md5>),
+    Sha1(Hmac<Sha1>),
+    Sha224(Hmac<Sha224>),
+    Sha256(Hmac<Sha256>),
+    Sha384(Hmac<Sha384>),
+    Sha512(Hmac<Sha512>),
+    Sha3_256(Hmac<Sha3_256>),
+    Sha3_384(Hmac<Sha3_384>),
+    Sha3_512(Hmac<Sha3_512>),
+    Ripemd160(Hmac<Ripemd160>),
+}
+
+impl HmacContext {
+    fn update(&mut self, data: &[u8]) {
+        match self {
+            HmacContext::Md5(h) => h.update(data),
+            HmacContext::Sha1(h) => h.update(data),
+            HmacContext::Sha224(h) => h.update(data),
+            HmacContext::Sha256(h) => h.update(data),
+            HmacContext::Sha384(h) => h.update(data),
+            HmacContext::Sha512(h) => h.update(data),
+            HmacContext::Sha3_256(h) => h.update(data),
+            HmacContext::Sha3_384(h) => h.update(data),
+            HmacContext::Sha3_512(h) => h.update(data),
+            HmacContext::Ripemd160(h) => h.update(data),
+        }
+    }
+
+    fn finalize(self) -> Vec<u8> {
+        match self {
+            HmacContext::Md5(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha1(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha224(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha256(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha384(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha512(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha3_256(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha3_384(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Sha3_512(h) => h.finalize().into_bytes().to_vec(),
+            HmacContext::Ripemd160(h) => h.finalize().into_bytes().to_vec(),
+        }
+    }
+}
+
+fn create_hmac(algorithm: &str, key: &[u8]) -> Option<HmacContext> {
+    match algorithm {
+        "md5" => Some(HmacContext::Md5(<Hmac<Md5> as Mac>::new_from_slice(key).unwrap())),
+        "sha1" => Some(HmacContext::Sha1(<Hmac<Sha1> as Mac>::new_from_slice(key).unwrap())),
+        "sha224" => Some(HmacContext::Sha224(<Hmac<Sha224> as Mac>::new_from_slice(key).unwrap())),
+        "sha256" => Some(HmacContext::Sha256(<Hmac<Sha256> as Mac>::new_from_slice(key).unwrap())),
+        "sha384" => Some(HmacContext::Sha384(<Hmac<Sha384> as Mac>::new_from_slice(key).unwrap())),
+        "sha512" => Some(HmacContext::Sha512(<Hmac<Sha512> as Mac>::new_from_slice(key).unwrap())),
+        "sha3-256" => Some(HmacContext::Sha3_256(<Hmac<Sha3_256> as Mac>::new_from_slice(key).unwrap())),
+        "sha3-384" => Some(HmacContext::Sha3_384(<Hmac<Sha3_384> as Mac>::new_from_slice(key).unwrap())),
+        "sha3-512" => Some(HmacContext::Sha3_512(<Hmac<Sha3_512> as Mac>::new_from_slice(key).unwrap())),
+        "ripemd160" => Some(HmacContext::Ripemd160(<Hmac<Ripemd160> as Mac>::new_from_slice(key).unwrap())),
+        _ => None,
+    }
+}
+
+static HMAC_CONTEXTS: LazyLock<Mutex<HashMap<u32, HmacContext>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn hmac_init_impl(algorithm: &str, key: &[u8]) -> Option<u32> {
+    let algo = algorithm.to_lowercase();
+    create_hmac(&algo, key).map(|ctx| {
+        let id = next_id();
+        HMAC_CONTEXTS.lock().unwrap().insert(id, ctx);
+        id
+    })
+}
+
+fn hmac_update_impl(id: u32, data: &[u8]) -> bool {
+    if let Some(ctx) = HMAC_CONTEXTS.lock().unwrap().get_mut(&id) {
+        ctx.update(data);
+        true
+    } else {
+        false
+    }
+}
+
+fn hmac_final_impl(id: u32) -> Option<Vec<u8>> {
+    HMAC_CONTEXTS
+        .lock()
+        .unwrap()
+        .remove(&id)
+        .map(|h| h.finalize())
+}
+
+fn pbkdf2_derive_impl(algorithm: &str, password: &[u8], salt: &[u8], iterations: u32, keylen: u32) -> Option<Vec<u8>> {
+    let algo = algorithm.to_lowercase();
+    let mut result = vec![0u8; keylen as usize];
+    match algo.as_str() {
+        "md5" => pbkdf2::pbkdf2_hmac::<Md5>(password, salt, iterations, &mut result),
+        "sha1" => pbkdf2::pbkdf2_hmac::<Sha1>(password, salt, iterations, &mut result),
+        "sha224" => pbkdf2::pbkdf2_hmac::<Sha224>(password, salt, iterations, &mut result),
+        "sha256" => pbkdf2::pbkdf2_hmac::<Sha256>(password, salt, iterations, &mut result),
+        "sha384" => pbkdf2::pbkdf2_hmac::<Sha384>(password, salt, iterations, &mut result),
+        "sha512" => pbkdf2::pbkdf2_hmac::<Sha512>(password, salt, iterations, &mut result),
+        "sha3-256" => pbkdf2::pbkdf2_hmac::<Sha3_256>(password, salt, iterations, &mut result),
+        "sha3-384" => pbkdf2::pbkdf2_hmac::<Sha3_384>(password, salt, iterations, &mut result),
+        "sha3-512" => pbkdf2::pbkdf2_hmac::<Sha3_512>(password, salt, iterations, &mut result),
+        "ripemd160" => pbkdf2::pbkdf2_hmac::<Ripemd160>(password, salt, iterations, &mut result),
+        _ => return None,
+    }
+    Some(result)
+}
+
+fn hkdf_derive_impl(algorithm: &str, ikm: &[u8], salt: &[u8], info: &[u8], keylen: u32) -> Option<Vec<u8>> {
+    let algo = algorithm.to_lowercase();
+    let mut result = vec![0u8; keylen as usize];
+    macro_rules! do_hkdf {
+        ($hash:ty) => {{
+            let hk = hkdf::Hkdf::<$hash>::new(if salt.is_empty() { None } else { Some(salt) }, ikm);
+            hk.expand(info, &mut result).ok()?;
+        }};
+    }
+    match algo.as_str() {
+        "md5" => do_hkdf!(Md5),
+        "sha1" => do_hkdf!(Sha1),
+        "sha224" => do_hkdf!(Sha224),
+        "sha256" => do_hkdf!(Sha256),
+        "sha384" => do_hkdf!(Sha384),
+        "sha512" => do_hkdf!(Sha512),
+        "sha3-256" => do_hkdf!(Sha3_256),
+        "sha3-384" => do_hkdf!(Sha3_384),
+        "sha3-512" => do_hkdf!(Sha3_512),
+        "ripemd160" => do_hkdf!(Ripemd160),
+        _ => return None,
+    }
+    Some(result)
+}
+
+fn scrypt_derive_impl(password: &[u8], salt: &[u8], n: u32, r: u32, p: u32, keylen: u32) -> Option<Vec<u8>> {
+    // Node.js takes N directly; the Rust crate needs log2(N)
+    if n == 0 || (n & (n - 1)) != 0 {
+        return None; // N must be a power of 2
+    }
+    let log_n = (n as f64).log2() as u8;
+    // scrypt crate's Params::new requires len in 10..=64 but that field is only used
+    // for the password hasher, not the raw scrypt() function. We pass a valid dummy.
+    let params = scrypt::Params::new(log_n, r, p, keylen.max(10) as usize).ok()?;
+    let mut result = vec![0u8; keylen as usize];
+    scrypt::scrypt(password, salt, &params, &mut result).ok()?;
+    Some(result)
+}
+
+enum CipherContext {
+    // AEAD encrypt
+    Aes128GcmEnc {
+        cipher: aes_gcm::Aes128Gcm,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        tag: Option<Vec<u8>>,
+    },
+    Aes256GcmEnc {
+        cipher: aes_gcm::Aes256Gcm,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        tag: Option<Vec<u8>>,
+    },
+    ChaCha20Poly1305Enc {
+        cipher: chacha20poly1305::ChaCha20Poly1305,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        tag: Option<Vec<u8>>,
+    },
+    // AEAD decrypt
+    Aes128GcmDec {
+        cipher: aes_gcm::Aes128Gcm,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        expected_tag: Option<Vec<u8>>,
+    },
+    Aes256GcmDec {
+        cipher: aes_gcm::Aes256Gcm,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        expected_tag: Option<Vec<u8>>,
+    },
+    ChaCha20Poly1305Dec {
+        cipher: chacha20poly1305::ChaCha20Poly1305,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        expected_tag: Option<Vec<u8>>,
+    },
+    // CBC
+    Aes128CbcEnc {
+        enc: cbc::Encryptor<aes::Aes128>,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    Aes256CbcEnc {
+        enc: cbc::Encryptor<aes::Aes256>,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    Aes128CbcDec {
+        dec: cbc::Decryptor<aes::Aes128>,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    Aes256CbcDec {
+        dec: cbc::Decryptor<aes::Aes256>,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    // CTR
+    Aes128CtrCtx {
+        stream: ctr::Ctr128BE<aes::Aes128>,
+    },
+    Aes256CtrCtx {
+        stream: ctr::Ctr128BE<aes::Aes256>,
+    },
+}
+
+static CIPHER_CONTEXTS: LazyLock<Mutex<HashMap<u32, CipherContext>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Option<u32> {
+    use aes_gcm::KeyInit;
+    use cipher::KeyIvInit;
+
+    let ctx = match algorithm {
+        "aes-128-gcm" => {
+            if key.len() != 16 || iv.len() != 12 {
+                return None;
+            }
+            let cipher = aes_gcm::Aes128Gcm::new_from_slice(key).ok()?;
+            let mut nonce = [0u8; 12];
+            nonce.copy_from_slice(iv);
+            if decrypt {
+                CipherContext::Aes128GcmDec { cipher, nonce, aad: Vec::new(), buf: Vec::new(), expected_tag: None }
+            } else {
+                CipherContext::Aes128GcmEnc { cipher, nonce, aad: Vec::new(), buf: Vec::new(), tag: None }
+            }
+        }
+        "aes-256-gcm" => {
+            if key.len() != 32 || iv.len() != 12 {
+                return None;
+            }
+            let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).ok()?;
+            let mut nonce = [0u8; 12];
+            nonce.copy_from_slice(iv);
+            if decrypt {
+                CipherContext::Aes256GcmDec { cipher, nonce, aad: Vec::new(), buf: Vec::new(), expected_tag: None }
+            } else {
+                CipherContext::Aes256GcmEnc { cipher, nonce, aad: Vec::new(), buf: Vec::new(), tag: None }
+            }
+        }
+        "chacha20-poly1305" => {
+            if key.len() != 32 || iv.len() != 12 {
+                return None;
+            }
+            let cipher = chacha20poly1305::ChaCha20Poly1305::new_from_slice(key).ok()?;
+            let mut nonce = [0u8; 12];
+            nonce.copy_from_slice(iv);
+            if decrypt {
+                CipherContext::ChaCha20Poly1305Dec { cipher, nonce, aad: Vec::new(), buf: Vec::new(), expected_tag: None }
+            } else {
+                CipherContext::ChaCha20Poly1305Enc { cipher, nonce, aad: Vec::new(), buf: Vec::new(), tag: None }
+            }
+        }
+        "aes-128-cbc" => {
+            if key.len() != 16 || iv.len() != 16 {
+                return None;
+            }
+            if decrypt {
+                let dec = cbc::Decryptor::<aes::Aes128>::new_from_slices(key, iv).ok()?;
+                CipherContext::Aes128CbcDec { dec, tail: Vec::new(), auto_padding: true }
+            } else {
+                let enc = cbc::Encryptor::<aes::Aes128>::new_from_slices(key, iv).ok()?;
+                CipherContext::Aes128CbcEnc { enc, tail: Vec::new(), auto_padding: true }
+            }
+        }
+        "aes-256-cbc" => {
+            if key.len() != 32 || iv.len() != 16 {
+                return None;
+            }
+            if decrypt {
+                let dec = cbc::Decryptor::<aes::Aes256>::new_from_slices(key, iv).ok()?;
+                CipherContext::Aes256CbcDec { dec, tail: Vec::new(), auto_padding: true }
+            } else {
+                let enc = cbc::Encryptor::<aes::Aes256>::new_from_slices(key, iv).ok()?;
+                CipherContext::Aes256CbcEnc { enc, tail: Vec::new(), auto_padding: true }
+            }
+        }
+        "aes-128-ctr" => {
+            if key.len() != 16 || iv.len() != 16 {
+                return None;
+            }
+            let stream = ctr::Ctr128BE::<aes::Aes128>::new_from_slices(key, iv).ok()?;
+            CipherContext::Aes128CtrCtx { stream }
+        }
+        "aes-256-ctr" => {
+            if key.len() != 32 || iv.len() != 16 {
+                return None;
+            }
+            let stream = ctr::Ctr128BE::<aes::Aes256>::new_from_slices(key, iv).ok()?;
+            CipherContext::Aes256CtrCtx { stream }
+        }
+        _ => return None,
+    };
+    let id = next_id();
+    CIPHER_CONTEXTS.lock().unwrap().insert(id, ctx);
+    Some(id)
+}
+
+fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
+    use cipher::BlockDecryptMut;
+    use cipher::BlockEncryptMut;
+    use cipher::StreamCipher;
+
+    let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
+    let ctx = contexts.get_mut(&id)?;
+    match ctx {
+        // AEAD modes buffer everything until final
+        CipherContext::Aes128GcmEnc { buf, .. }
+        | CipherContext::Aes256GcmEnc { buf, .. }
+        | CipherContext::ChaCha20Poly1305Enc { buf, .. }
+        | CipherContext::Aes128GcmDec { buf, .. }
+        | CipherContext::Aes256GcmDec { buf, .. }
+        | CipherContext::ChaCha20Poly1305Dec { buf, .. } => {
+            buf.extend_from_slice(data);
+            Some(Vec::new())
+        }
+        // CBC encrypt: process full blocks, keep remainder in tail
+        CipherContext::Aes128CbcEnc { enc, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            let full_blocks = tail.len() / block_size;
+            if full_blocks == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = full_blocks * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        CipherContext::Aes256CbcEnc { enc, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            let full_blocks = tail.len() / block_size;
+            if full_blocks == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = full_blocks * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        // CBC decrypt: buffer and keep last block for final (padding)
+        CipherContext::Aes128CbcDec { dec, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            if tail.len() <= block_size {
+                return Some(Vec::new());
+            }
+            let blocks_to_process = (tail.len() / block_size) - 1;
+            if blocks_to_process == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = blocks_to_process * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        CipherContext::Aes256CbcDec { dec, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            if tail.len() <= block_size {
+                return Some(Vec::new());
+            }
+            let blocks_to_process = (tail.len() / block_size) - 1;
+            if blocks_to_process == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = blocks_to_process * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        // CTR: encrypt/decrypt in-place (XOR keystream)
+        CipherContext::Aes128CtrCtx { stream } => {
+            let mut output = data.to_vec();
+            stream.apply_keystream(&mut output);
+            Some(output)
+        }
+        CipherContext::Aes256CtrCtx { stream } => {
+            let mut output = data.to_vec();
+            stream.apply_keystream(&mut output);
+            Some(output)
+        }
+    }
+}
+
+fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
+    use aes_gcm::aead::AeadInPlace;
+    use cipher::BlockDecryptMut;
+    use cipher::BlockEncryptMut;
+
+    let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
+    let ctx = contexts.remove(&id)?;
+    match ctx {
+        // AEAD encrypt: encrypt-in-place, return ciphertext (tag stored separately)
+        CipherContext::Aes128GcmEnc { cipher, nonce, aad, mut buf, .. } => {
+            let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
+            let tag = cipher.encrypt_in_place_detached(nonce_ga, &aad, &mut buf).ok()?;
+            let done_ctx = CipherContext::Aes128GcmEnc {
+                cipher,
+                nonce,
+                aad: Vec::new(),
+                buf: Vec::new(),
+                tag: Some(tag.to_vec()),
+            };
+            contexts.insert(id, done_ctx);
+            Some(buf)
+        }
+        CipherContext::Aes256GcmEnc { cipher, nonce, aad, mut buf, .. } => {
+            let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
+            let tag = cipher.encrypt_in_place_detached(nonce_ga, &aad, &mut buf).ok()?;
+            let done_ctx = CipherContext::Aes256GcmEnc {
+                cipher,
+                nonce,
+                aad: Vec::new(),
+                buf: Vec::new(),
+                tag: Some(tag.to_vec()),
+            };
+            contexts.insert(id, done_ctx);
+            Some(buf)
+        }
+        CipherContext::ChaCha20Poly1305Enc { cipher, nonce, aad, mut buf, .. } => {
+            use chacha20poly1305::aead::AeadInPlace as _;
+            let nonce_ga = chacha20poly1305::Nonce::from_slice(&nonce);
+            let tag = cipher.encrypt_in_place_detached(nonce_ga, &aad, &mut buf).ok()?;
+            let done_ctx = CipherContext::ChaCha20Poly1305Enc {
+                cipher,
+                nonce,
+                aad: Vec::new(),
+                buf: Vec::new(),
+                tag: Some(tag.to_vec()),
+            };
+            contexts.insert(id, done_ctx);
+            Some(buf)
+        }
+        // AEAD decrypt: decrypt-in-place with tag verification
+        CipherContext::Aes128GcmDec { cipher, nonce, aad, mut buf, expected_tag } => {
+            let tag_bytes = expected_tag?;
+            let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
+            let tag = aes_gcm::Tag::from_slice(&tag_bytes);
+            cipher.decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag).ok()?;
+            Some(buf)
+        }
+        CipherContext::Aes256GcmDec { cipher, nonce, aad, mut buf, expected_tag } => {
+            let tag_bytes = expected_tag?;
+            let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
+            let tag = aes_gcm::Tag::from_slice(&tag_bytes);
+            cipher.decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag).ok()?;
+            Some(buf)
+        }
+        CipherContext::ChaCha20Poly1305Dec { cipher, nonce, aad, mut buf, expected_tag } => {
+            use chacha20poly1305::aead::AeadInPlace as _;
+            let tag_bytes = expected_tag?;
+            let nonce_ga = chacha20poly1305::Nonce::from_slice(&nonce);
+            let tag = chacha20poly1305::Tag::from_slice(&tag_bytes);
+            cipher.decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag).ok()?;
+            Some(buf)
+        }
+        // CBC encrypt final: PKCS7 pad and encrypt remaining
+        CipherContext::Aes128CbcEnc { mut enc, tail, auto_padding } => {
+            if auto_padding {
+                let block_size = 16;
+                let pad_len = block_size - (tail.len() % block_size);
+                let mut padded = tail;
+                padded.extend(vec![pad_len as u8; pad_len]);
+                let mut output = Vec::new();
+                for chunk in padded.chunks(block_size) {
+                    let mut block = aes::Block::default();
+                    block.copy_from_slice(chunk);
+                    enc.encrypt_block_mut(&mut block);
+                    output.extend_from_slice(&block);
+                }
+                Some(output)
+            } else {
+                if !tail.is_empty() {
+                    return None;
+                }
+                Some(Vec::new())
+            }
+        }
+        CipherContext::Aes256CbcEnc { mut enc, tail, auto_padding } => {
+            if auto_padding {
+                let block_size = 16;
+                let pad_len = block_size - (tail.len() % block_size);
+                let mut padded = tail;
+                padded.extend(vec![pad_len as u8; pad_len]);
+                let mut output = Vec::new();
+                for chunk in padded.chunks(block_size) {
+                    let mut block = aes::Block::default();
+                    block.copy_from_slice(chunk);
+                    enc.encrypt_block_mut(&mut block);
+                    output.extend_from_slice(&block);
+                }
+                Some(output)
+            } else {
+                if !tail.is_empty() {
+                    return None;
+                }
+                Some(Vec::new())
+            }
+        }
+        // CBC decrypt final: decrypt remaining block(s) and PKCS7 unpad
+        CipherContext::Aes128CbcDec { mut dec, tail, auto_padding } => {
+            let block_size = 16;
+            if tail.is_empty() {
+                return Some(Vec::new());
+            }
+            if tail.len() % block_size != 0 {
+                return None;
+            }
+            let mut output = Vec::new();
+            for chunk in tail.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            if auto_padding {
+                let pad_byte = *output.last()? as usize;
+                if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
+                    return None;
+                }
+                if !output[output.len() - pad_byte..].iter().all(|&b| b as usize == pad_byte) {
+                    return None;
+                }
+                output.truncate(output.len() - pad_byte);
+            }
+            Some(output)
+        }
+        CipherContext::Aes256CbcDec { mut dec, tail, auto_padding } => {
+            let block_size = 16;
+            if tail.is_empty() {
+                return Some(Vec::new());
+            }
+            if tail.len() % block_size != 0 {
+                return None;
+            }
+            let mut output = Vec::new();
+            for chunk in tail.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            if auto_padding {
+                let pad_byte = *output.last()? as usize;
+                if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
+                    return None;
+                }
+                if !output[output.len() - pad_byte..].iter().all(|&b| b as usize == pad_byte) {
+                    return None;
+                }
+                output.truncate(output.len() - pad_byte);
+            }
+            Some(output)
+        }
+        // CTR final: nothing to do
+        CipherContext::Aes128CtrCtx { .. } | CipherContext::Aes256CtrCtx { .. } => {
+            Some(Vec::new())
+        }
+    }
+}
+
+fn cipher_set_aad_impl(id: u32, aad_data: &[u8]) -> bool {
+    let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
+    if let Some(ctx) = contexts.get_mut(&id) {
+        match ctx {
+            CipherContext::Aes128GcmEnc { aad, .. }
+            | CipherContext::Aes256GcmEnc { aad, .. }
+            | CipherContext::ChaCha20Poly1305Enc { aad, .. }
+            | CipherContext::Aes128GcmDec { aad, .. }
+            | CipherContext::Aes256GcmDec { aad, .. }
+            | CipherContext::ChaCha20Poly1305Dec { aad, .. } => {
+                aad.extend_from_slice(aad_data);
+                true
+            }
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
+
+fn cipher_get_auth_tag_impl(id: u32) -> Option<Vec<u8>> {
+    let contexts = CIPHER_CONTEXTS.lock().unwrap();
+    match contexts.get(&id)? {
+        CipherContext::Aes128GcmEnc { tag, .. } => tag.clone(),
+        CipherContext::Aes256GcmEnc { tag, .. } => tag.clone(),
+        CipherContext::ChaCha20Poly1305Enc { tag, .. } => tag.clone(),
+        _ => None,
+    }
+}
+
+fn cipher_set_auth_tag_impl(id: u32, tag_data: &[u8]) -> bool {
+    let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
+    if let Some(ctx) = contexts.get_mut(&id) {
+        match ctx {
+            CipherContext::Aes128GcmDec { expected_tag, .. }
+            | CipherContext::Aes256GcmDec { expected_tag, .. }
+            | CipherContext::ChaCha20Poly1305Dec { expected_tag, .. } => {
+                *expected_tag = Some(tag_data.to_vec());
+                true
+            }
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
+
+fn cipher_set_auto_padding_impl(id: u32, enabled: bool) -> bool {
+    let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
+    if let Some(ctx) = contexts.get_mut(&id) {
+        match ctx {
+            CipherContext::Aes128CbcEnc { auto_padding, .. }
+            | CipherContext::Aes256CbcEnc { auto_padding, .. }
+            | CipherContext::Aes128CbcDec { auto_padding, .. }
+            | CipherContext::Aes256CbcDec { auto_padding, .. } => {
+                *auto_padding = enabled;
+                true
+            }
+            _ => true,
+        }
+    } else {
+        false
+    }
+}
+
+const SUPPORTED_CIPHERS: &[&str] = &[
+    "aes-128-cbc",
+    "aes-128-ctr",
+    "aes-128-gcm",
+    "aes-256-cbc",
+    "aes-256-ctr",
+    "aes-256-gcm",
+    "chacha20-poly1305",
+];
+
 // Native functions for the crypto implementation
 #[rquickjs::module(rename_vars = "camelCase")]
 pub mod native_module {
@@ -185,6 +865,36 @@ pub mod native_module {
             hasher.update(slice);
         }
         Some(hasher.finalize())
+    }
+
+    #[rquickjs::function]
+    pub fn hmac_init(algorithm: String, key: TypedArray<'_, u8>) -> Option<u32> {
+        if let Some(raw) = key.as_raw() {
+            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            super::hmac_init_impl(&algorithm, slice)
+        } else {
+            None
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn hmac_update(id: u32, data: TypedArray<'_, u8>) -> bool {
+        if let Some(raw) = data.as_raw() {
+            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            super::hmac_update_impl(id, slice)
+        } else {
+            false
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn hmac_final(id: u32) -> Option<Vec<u8>> {
+        super::hmac_final_impl(id)
+    }
+
+    #[rquickjs::function]
+    pub fn hmac_free(id: u32) {
+        super::HMAC_CONTEXTS.lock().unwrap().remove(&id);
     }
 
     #[rquickjs::function]
@@ -278,6 +988,124 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn randomize_biguint64_array(array: TypedArray<'_, u64>) {
         super::randomize_typed_array(array);
+    }
+
+    #[rquickjs::function]
+    pub fn pbkdf2_derive(
+        algorithm: String,
+        password: TypedArray<'_, u8>,
+        salt: TypedArray<'_, u8>,
+        iterations: u32,
+        keylen: u32,
+    ) -> Option<Vec<u8>> {
+        let password_slice = password.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        let salt_slice = salt.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::pbkdf2_derive_impl(&algorithm, password_slice, salt_slice, iterations, keylen)
+    }
+
+    #[rquickjs::function]
+    pub fn hkdf_derive(
+        algorithm: String,
+        ikm: TypedArray<'_, u8>,
+        salt: TypedArray<'_, u8>,
+        info: TypedArray<'_, u8>,
+        keylen: u32,
+    ) -> Option<Vec<u8>> {
+        let ikm_slice = ikm.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        let salt_slice = salt.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        let info_slice = info.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::hkdf_derive_impl(&algorithm, ikm_slice, salt_slice, info_slice, keylen)
+    }
+
+    #[rquickjs::function]
+    pub fn scrypt_derive(
+        password: TypedArray<'_, u8>,
+        salt: TypedArray<'_, u8>,
+        n: u32,
+        r: u32,
+        p: u32,
+        keylen: u32,
+    ) -> Option<Vec<u8>> {
+        let password_slice = password.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        let salt_slice = salt.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::scrypt_derive_impl(password_slice, salt_slice, n, r, p, keylen)
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_init(algorithm: String, key: TypedArray<'_, u8>, iv: TypedArray<'_, u8>, decrypt: bool) -> Option<u32> {
+        let key_slice = key.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        let iv_slice = iv.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::cipher_init_impl(&algorithm.to_lowercase(), key_slice, iv_slice, decrypt)
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_update(id: u32, data: TypedArray<'_, u8>) -> Option<Vec<u8>> {
+        let data_slice = data.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::cipher_update_impl(id, data_slice)
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_final(id: u32) -> Option<Vec<u8>> {
+        super::cipher_final_impl(id)
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_free(id: u32) {
+        super::CIPHER_CONTEXTS.lock().unwrap().remove(&id);
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_set_aad(id: u32, aad: TypedArray<'_, u8>) -> bool {
+        let aad_slice = aad.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::cipher_set_aad_impl(id, aad_slice)
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_get_auth_tag(id: u32) -> Option<Vec<u8>> {
+        super::cipher_get_auth_tag_impl(id)
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_set_auth_tag(id: u32, tag: TypedArray<'_, u8>) -> bool {
+        let tag_slice = tag.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::cipher_set_auth_tag_impl(id, tag_slice)
+    }
+
+    #[rquickjs::function]
+    pub fn cipher_set_auto_padding(id: u32, enabled: bool) -> bool {
+        super::cipher_set_auto_padding_impl(id, enabled)
+    }
+
+    #[rquickjs::function]
+    pub fn get_ciphers() -> Vec<String> {
+        super::SUPPORTED_CIPHERS
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 }
 

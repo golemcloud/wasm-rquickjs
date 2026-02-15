@@ -1025,7 +1025,11 @@
     },
     "parallel/test-crypto-classes.js": {
       "skip": true,
-      "reason": "requires Hmac, Cipheriv, Decipheriv, Sign, Verify, DiffieHellman, DiffieHellmanGroup, ECDH classes"
+      "reason": "requires Cipheriv, Decipheriv, Sign, Verify, DiffieHellman, DiffieHellmanGroup, ECDH classes"
+    },
+    "parallel/test-crypto-hmac.js": {
+      "skip": true,
+      "reason": "requires stream interface on Hmac (end/read), Hmac() without new, createSecretKey, digest() returning empty after finalization, and common.expectWarning"
     },
     "parallel/test-crypto-randomuuid.js": {
       "skip": true,

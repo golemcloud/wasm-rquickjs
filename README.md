@@ -411,7 +411,29 @@ Implemented by https://github.com/ungap/structured-clone
 - `read`
 - `write`
 
-### Crypto
+### `node:crypto`
+- `createHash`
+- `createHmac`
+- `hash`
+- `getHashes`
+- `getCiphers`
+- `getCurves`
+- `getFips`
+- `setFips`
+- `randomBytes`
+- `randomFillSync`
+- `randomFill`
+- `randomInt`
+- `randomUUID`
+- `timingSafeEqual`
+- `pbkdf2`
+- `pbkdf2Sync`
+- `scrypt`
+- `scryptSync`
+- `hkdf`
+- `hkdfSync`
+
+### Crypto (global)
 - `crypto.randomUUID`
 - `crypto.getRandomValues`
 

@@ -180,6 +180,55 @@ export function createHash(algorithm, options) {
     return new Hash(algorithm, options);
 }
 
+class Hmac {
+    constructor(algorithm, key, options) {
+        this._algorithm = normalizeHashAlgorithm(algorithm);
+        const keyBytes = toBytes(key);
+        const handle = webCryptoNative.hmac_init(this._algorithm, keyBytes);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Digest method not supported: ' + algorithm);
+            err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+            throw err;
+        }
+        this._handle = handle;
+        this._finalized = false;
+    }
+
+    update(data, inputEncoding) {
+        if (this._finalized) {
+            const err = new Error('Digest already called');
+            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+            throw err;
+        }
+        if (data === undefined || data === null) {
+            const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView.');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        const bytes = toBytes(data, inputEncoding);
+        webCryptoNative.hmac_update(this._handle, bytes);
+        return this;
+    }
+
+    digest(encoding) {
+        if (this._finalized) {
+            const err = new Error('Digest already called');
+            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+            throw err;
+        }
+        this._finalized = true;
+        const hmacBytes = webCryptoNative.hmac_final(this._handle);
+        const result = new Uint8Array(hmacBytes);
+        return encodeOutput(result, encoding);
+    }
+}
+
+export { Hmac };
+
+export function createHmac(algorithm, key, options) {
+    return new Hmac(algorithm, key, options);
+}
+
 export function hash(algorithm, data, outputEncoding) {
     const algo = normalizeHashAlgorithm(algorithm);
     const bytes = toBytes(data);
@@ -339,12 +388,288 @@ export function timingSafeEqual(a, b) {
     return result;
 }
 
+export function pbkdf2Sync(password, salt, iterations, keylen, digest) {
+    const algo = normalizeHashAlgorithm(digest);
+    const passwordBytes = toBytes(password);
+    const saltBytes = toBytes(salt);
+    const result = webCryptoNative.pbkdf2_derive(algo, passwordBytes, saltBytes, iterations, keylen);
+    if (result === null || result === undefined) {
+        const err = new Error('Invalid digest: ' + digest);
+        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+        throw err;
+    }
+    const buf = new Uint8Array(result);
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    return buf;
+}
+
+export function pbkdf2(password, salt, iterations, keylen, digest, callback) {
+    try {
+        const result = pbkdf2Sync(password, salt, iterations, keylen, digest);
+        queueMicrotask(() => callback(null, result));
+    } catch (err) {
+        queueMicrotask(() => callback(err));
+    }
+}
+
+export function scryptSync(password, salt, keylen, options) {
+    const passwordBytes = toBytes(password);
+    const saltBytes = toBytes(salt);
+    const N = (options && (options.N || options.cost)) || 16384;
+    const r = (options && (options.r || options.blockSize)) || 8;
+    const p = (options && (options.p || options.parallelization)) || 1;
+    const result = webCryptoNative.scrypt_derive(passwordBytes, saltBytes, N, r, p, keylen);
+    if (result === null || result === undefined) {
+        const err = new Error('Invalid scrypt parameters');
+        err.code = 'ERR_CRYPTO_SCRYPT_INVALID_PARAMETER';
+        throw err;
+    }
+    const buf = new Uint8Array(result);
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    return buf;
+}
+
+export function scrypt(password, salt, keylen, options, callback) {
+    if (typeof options === 'function') {
+        callback = options;
+        options = undefined;
+    }
+    try {
+        const result = scryptSync(password, salt, keylen, options);
+        queueMicrotask(() => callback(null, result));
+    } catch (err) {
+        queueMicrotask(() => callback(err));
+    }
+}
+
+export function hkdfSync(digest, ikm, salt, info, keylen) {
+    const algo = normalizeHashAlgorithm(digest);
+    const ikmBytes = toBytes(ikm);
+    const saltBytes = toBytes(salt);
+    const infoBytes = toBytes(info);
+    const result = webCryptoNative.hkdf_derive(algo, ikmBytes, saltBytes, infoBytes, keylen);
+    if (result === null || result === undefined) {
+        const err = new Error('Invalid digest: ' + digest);
+        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+        throw err;
+    }
+    const buf = new Uint8Array(result);
+    return buf.buffer;
+}
+
+export function hkdf(digest, ikm, salt, info, keylen, callback) {
+    try {
+        const result = hkdfSync(digest, ikm, salt, info, keylen);
+        queueMicrotask(() => callback(null, result));
+    } catch (err) {
+        queueMicrotask(() => callback(err));
+    }
+}
+
+const CIPHER_ALIASES = {
+    'aes-128-cbc': 'aes-128-cbc',
+    'aes-256-cbc': 'aes-256-cbc',
+    'aes-128-ctr': 'aes-128-ctr',
+    'aes-256-ctr': 'aes-256-ctr',
+    'aes-128-gcm': 'aes-128-gcm',
+    'aes-256-gcm': 'aes-256-gcm',
+    'chacha20-poly1305': 'chacha20-poly1305',
+};
+
+function normalizeCipherAlgorithm(algorithm) {
+    if (typeof algorithm !== 'string') {
+        const err = new TypeError('The "algorithm" argument must be of type string.');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    const normalized = CIPHER_ALIASES[algorithm.toLowerCase()];
+    if (!normalized) {
+        const err = new Error('Unknown cipher: ' + algorithm);
+        err.code = 'ERR_CRYPTO_UNKNOWN_CIPHER';
+        throw err;
+    }
+    return normalized;
+}
+
+class Cipheriv {
+    constructor(algorithm, key, iv, options) {
+        this._algorithm = normalizeCipherAlgorithm(algorithm);
+        const keyBytes = toBytes(key);
+        const ivBytes = toBytes(iv);
+        const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, false);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Invalid key length or IV length for cipher: ' + algorithm);
+            err.code = 'ERR_CRYPTO_INVALID_IV';
+            throw err;
+        }
+        this._handle = handle;
+        this._finalized = false;
+    }
+
+    update(data, inputEncoding, outputEncoding) {
+        if (this._finalized) {
+            const err = new Error('Attempting to use a finalized cipher');
+            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+            throw err;
+        }
+        const bytes = toBytes(data, inputEncoding);
+        const result = webCryptoNative.cipher_update(this._handle, bytes);
+        if (result === null || result === undefined) {
+            const err = new Error('Cipher update failed');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        const out = new Uint8Array(result);
+        return encodeOutput(out, outputEncoding);
+    }
+
+    final(outputEncoding) {
+        if (this._finalized) {
+            const err = new Error('Attempting to use a finalized cipher');
+            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+            throw err;
+        }
+        this._finalized = true;
+        const result = webCryptoNative.cipher_final(this._handle);
+        if (result === null || result === undefined) {
+            const err = new Error('Cipher final failed');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        const out = new Uint8Array(result);
+        return encodeOutput(out, outputEncoding);
+    }
+
+    setAAD(buffer, options) {
+        const bytes = toBytes(buffer);
+        const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
+        if (!ok) {
+            const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        return this;
+    }
+
+    getAuthTag() {
+        const result = webCryptoNative.cipher_get_auth_tag(this._handle);
+        if (result === null || result === undefined) {
+            const err = new Error('getAuthTag failed: not an AEAD cipher or final not called');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        const buf = new Uint8Array(result);
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+        }
+        return buf;
+    }
+
+    setAutoPadding(autoPadding) {
+        webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
+        return this;
+    }
+}
+
+export { Cipheriv };
+
+export function createCipheriv(algorithm, key, iv, options) {
+    return new Cipheriv(algorithm, key, iv, options);
+}
+
+class Decipheriv {
+    constructor(algorithm, key, iv, options) {
+        this._algorithm = normalizeCipherAlgorithm(algorithm);
+        const keyBytes = toBytes(key);
+        const ivBytes = toBytes(iv);
+        const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, true);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Invalid key length or IV length for decipher: ' + algorithm);
+            err.code = 'ERR_CRYPTO_INVALID_IV';
+            throw err;
+        }
+        this._handle = handle;
+        this._finalized = false;
+    }
+
+    update(data, inputEncoding, outputEncoding) {
+        if (this._finalized) {
+            const err = new Error('Attempting to use a finalized decipher');
+            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+            throw err;
+        }
+        const bytes = toBytes(data, inputEncoding);
+        const result = webCryptoNative.cipher_update(this._handle, bytes);
+        if (result === null || result === undefined) {
+            const err = new Error('Decipher update failed');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        const out = new Uint8Array(result);
+        return encodeOutput(out, outputEncoding);
+    }
+
+    final(outputEncoding) {
+        if (this._finalized) {
+            const err = new Error('Attempting to use a finalized decipher');
+            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+            throw err;
+        }
+        this._finalized = true;
+        const result = webCryptoNative.cipher_final(this._handle);
+        if (result === null || result === undefined) {
+            const err = new Error('Decipher final failed (possibly wrong key, IV, or auth tag)');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        const out = new Uint8Array(result);
+        return encodeOutput(out, outputEncoding);
+    }
+
+    setAAD(buffer, options) {
+        const bytes = toBytes(buffer);
+        const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
+        if (!ok) {
+            const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        return this;
+    }
+
+    setAuthTag(buffer) {
+        const bytes = toBytes(buffer);
+        const ok = webCryptoNative.cipher_set_auth_tag(this._handle, bytes);
+        if (!ok) {
+            const err = new Error('setAuthTag failed: not an AEAD decipher or invalid state');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        return this;
+    }
+
+    setAutoPadding(autoPadding) {
+        webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
+        return this;
+    }
+}
+
+export { Decipheriv };
+
+export function createDecipheriv(algorithm, key, iv, options) {
+    return new Decipheriv(algorithm, key, iv, options);
+}
+
 export function getHashes() {
     return webCryptoNative.get_hashes();
 }
 
 export function getCiphers() {
-    return [];
+    return webCryptoNative.get_ciphers();
 }
 
 export function getCurves() {
