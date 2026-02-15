@@ -1013,7 +1013,8 @@ function hasOwnProperty(obj, prop) {
     return _ObjectPrototypeHasOwnProperty.call(obj, prop);
 }
 
-var kCustomPromisifiedSymbol = typeof Symbol !== 'undefined' ? Symbol('util.promisify.custom') : undefined;
+var kCustomPromisifiedSymbol = typeof Symbol !== 'undefined' ? Symbol.for('nodejs.util.promisify.custom') : undefined;
+var kCustomPromisifyArgsSymbol = typeof Symbol !== 'undefined' ? Symbol.for('nodejs.util.promisify.customArgs') : undefined;
 
 export const promisify = function promisify(original) {
     if (typeof original !== 'function')
@@ -1030,6 +1031,8 @@ export const promisify = function promisify(original) {
         return fn;
     }
 
+    var argumentNames = kCustomPromisifyArgsSymbol ? original[kCustomPromisifyArgsSymbol] : undefined;
+
     function fn() {
         var promiseResolve, promiseReject;
         var promise = new Promise(function (resolve, reject) {
@@ -1041,11 +1044,17 @@ export const promisify = function promisify(original) {
         for (var i = 0; i < arguments.length; i++) {
             args.push(arguments[i]);
         }
-        args.push(function (err, value) {
+        args.push(function (err) {
             if (err) {
                 promiseReject(err);
+            } else if (argumentNames !== undefined && arguments.length > 2) {
+                var obj = {};
+                for (var j = 0; j < argumentNames.length; j++) {
+                    obj[argumentNames[j]] = arguments[j + 1];
+                }
+                promiseResolve(obj);
             } else {
-                promiseResolve(value);
+                promiseResolve(arguments[1]);
             }
         });
 

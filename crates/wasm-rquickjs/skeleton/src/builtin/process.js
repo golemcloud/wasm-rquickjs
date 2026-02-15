@@ -62,6 +62,12 @@ process.umask = function umask(mask) {
     return 0o022;
 };
 
+process.getuid = function getuid() { return 0; };
+process.getgid = function getgid() { return 0; };
+process.geteuid = function geteuid() { return 0; };
+process.getegid = function getegid() { return 0; };
+process.getgroups = function getgroups() { return [0]; };
+
 process.kill = function kill(pid, signal) {
     throw new Error('process.kill is not supported in WASI environment');
 };

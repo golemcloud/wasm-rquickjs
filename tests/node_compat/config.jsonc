@@ -217,6 +217,846 @@
     "parallel/test-util.js": {
       "skip": true,
       "reason": "requires --expose-internals and internal/errors"
+    },
+
+    // === node:fs tests ===
+    "parallel/test-fs-access.js": {
+      "skip": true,
+      "reason": "requires fixtures module and ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-append-file.js": {
+      "skip": true,
+      "reason": "requires fixtures module and process.umask()"
+    },
+    "parallel/test-fs-append-file-flush.js": {
+      "skip": true,
+      "reason": "requires flush option support in appendFile"
+    },
+    "parallel/test-fs-append-file-sync.js": {
+      "skip": true,
+      "reason": "requires fixtures module and process.umask()"
+    },
+    "parallel/test-fs-assert-encoding-error.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_VALUE with specific message format"
+    },
+    "parallel/test-fs-buffer.js": {
+      "skip": true,
+      "reason": "requires Buffer path arguments for fs operations"
+    },
+    "parallel/test-fs-buffertype-writesync.js": {},
+    "parallel/test-fs-chmod.js": {
+      "skip": true,
+      "reason": "requires detailed permission mode checking and ERR_INVALID_ARG_TYPE"
+    },
+    "parallel/test-fs-chmod-mask.js": {
+      "skip": true,
+      "reason": "requires process.umask() and stat mode checking"
+    },
+    "parallel/test-fs-chown-type-check.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation for chown arguments"
+    },
+    "parallel/test-fs-close.js": {},
+    "parallel/test-fs-close-errors.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation for fd argument"
+    },
+    "parallel/test-fs-constants.js": {},
+    "parallel/test-fs-copyfile.js": {
+      "skip": true,
+      "reason": "requires fixtures and COPYFILE_EXCL flag handling"
+    },
+    "parallel/test-fs-copyfile-respect-permissions.js": {
+      "skip": true,
+      "reason": "requires process.getuid and permission checks"
+    },
+    "parallel/test-fs-empty-readStream.js": {
+      "skip": true,
+      "reason": "requires ReadStream with events and fixtures"
+    },
+    "parallel/test-fs-error-messages.js": {
+      "skip": true,
+      "reason": "requires specific ENOENT error message format with path"
+    },
+    "parallel/test-fs-exists.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE for non-function callback"
+    },
+    "parallel/test-fs-existssync-false.js": {
+      "skip": true,
+      "reason": "creates paths exceeding WASI pre-opened file descriptor path length limits"
+    },
+    "parallel/test-fs-fchmod.js": {
+      "skip": true,
+      "reason": "requires detailed mode checking and ERR_INVALID_ARG_TYPE"
+    },
+    "parallel/test-fs-fchown.js": {
+      "skip": true,
+      "reason": "requires process.getuid()"
+    },
+    "parallel/test-fs-filehandle.js": {
+      "skip": true,
+      "reason": "requires fs.promises.open FileHandle with ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-filehandle-use-after-close.js": {
+      "skip": true,
+      "reason": "requires fs.promises.open FileHandle with specific error codes"
+    },
+    "parallel/test-fs-fmap.js": {
+      "skip": true,
+      "reason": "requires UV_FS_O_FILEMAP flag"
+    },
+    "parallel/test-fs-fsync.js": {
+      "skip": true,
+      "reason": "requires fixtures module (../common/fixtures)"
+    },
+    "parallel/test-fs-lchmod.js": {
+      "skip": true,
+      "reason": "platform-specific lchmod behavior"
+    },
+    "parallel/test-fs-lchown.js": {
+      "skip": true,
+      "reason": "requires process.getuid()"
+    },
+    "parallel/test-fs-link.js": {},
+    "parallel/test-fs-long-path.js": {
+      "skip": true,
+      "reason": "platform-specific long path handling"
+    },
+    "parallel/test-fs-make-callback.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE for callback validation"
+    },
+    "parallel/test-fs-makeStatsCallback.js": {
+      "skip": true,
+      "reason": "requires __filename and ERR_INVALID_ARG_TYPE"
+    },
+    "parallel/test-fs-mkdir.js": {
+      "skip": true,
+      "reason": "requires worker_threads module"
+    },
+    "parallel/test-fs-mkdir-mode-mask.js": {
+      "skip": true,
+      "reason": "mkdir does not preserve mode bits in WASI"
+    },
+    "parallel/test-fs-mkdir-recursive-eaccess.js": {
+      "skip": true,
+      "reason": "requires process.getuid()"
+    },
+    "parallel/test-fs-mkdir-rmdir.js": {},
+    "parallel/test-fs-mkdtemp.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-mkdtemp-prefix-check.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-non-number-arguments-throw.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE for non-number fd arguments"
+    },
+    "parallel/test-fs-null-bytes.js": {},
+    "parallel/test-fs-open.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_VALUE and ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-open-flags.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding"
+    },
+    "parallel/test-fs-open-mode-mask.js": {
+      "skip": true,
+      "reason": "openSync does not accept string mode argument"
+    },
+    "parallel/test-fs-open-no-close.js": {
+      "skip": true,
+      "reason": "requires process.on('exit') hooks"
+    },
+    "parallel/test-fs-open-numeric-flags.js": {},
+    "parallel/test-fs-opendir.js": {
+      "skip": true,
+      "reason": "requires ERR_DIR_CLOSED, ERR_DIR_CONCURRENT_OPERATION, ERR_INVALID_ARG_TYPE error codes"
+    },
+    "parallel/test-fs-operations-with-surrogate-pairs.js": {},
+    "parallel/test-fs-options-immutable.js": {
+      "skip": true,
+      "reason": "requires __filename and options immutability checking"
+    },
+    "parallel/test-fs-promises-exists.js": {},
+    "parallel/test-fs-promises-file-handle-aggregate-errors.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-promises-file-handle-append-file.js": {},
+    "parallel/test-fs-promises-file-handle-chmod.js": {},
+    "parallel/test-fs-promises-file-handle-close-errors.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-promises-file-handle-close.js": {
+      "skip": true,
+      "reason": "requires __filename for opening test file"
+    },
+    "parallel/test-fs-promises-file-handle-dispose.js": {
+      "skip": true,
+      "reason": "requires Symbol.asyncDispose and using syntax"
+    },
+    "parallel/test-fs-promises-file-handle-op-errors.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-promises-file-handle-read-worker.js": {
+      "skip": true,
+      "reason": "requires worker_threads module"
+    },
+    "parallel/test-fs-promises-file-handle-read.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-promises-file-handle-readFile.js": {
+      "skip": true,
+      "reason": "requires ../common/tick module"
+    },
+    "parallel/test-fs-promises-file-handle-stat.js": {},
+    "parallel/test-fs-promises-file-handle-stream.js": {
+      "skip": true,
+      "reason": "requires ReadStream/WriteStream from FileHandle"
+    },
+    "parallel/test-fs-promises-file-handle-sync.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-promises-file-handle-truncate.js": {},
+    "parallel/test-fs-promises-file-handle-write.js": {},
+    "parallel/test-fs-promises-file-handle-writeFile.js": {
+      "skip": true,
+      "reason": "requires AbortSignal support and ERR_INVALID_ARG_TYPE"
+    },
+    "parallel/test-fs-promises-readfile-empty.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-promises-readfile-with-fd.js": {},
+    "parallel/test-fs-promises-readfile.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-promises-watch.js": {
+      "skip": true,
+      "reason": "requires fs.promises.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-promises-write-optional-params.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE and ERR_OUT_OF_RANGE validation"
+    },
+    "parallel/test-fs-promises-writefile-typedarray.js": {},
+    "parallel/test-fs-promises-writefile-with-fd.js": {},
+    "parallel/test-fs-promises-writefile.js": {
+      "skip": true,
+      "reason": "requires AbortSignal support and ERR_INVALID_ARG_TYPE"
+    },
+    "parallel/test-fs-promises.js": {
+      "skip": true,
+      "reason": "requires __filename and comprehensive promises API validation"
+    },
+    "parallel/test-fs-promisified.js": {},
+    "parallel/test-fs-read-empty-buffer.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-read-file-assert-encoding.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_VALUE error code"
+    },
+    "parallel/test-fs-read-file-sync-hostname.js": {
+      "skip": true,
+      "reason": "requires /proc/sys/kernel/hostname (Linux-specific)"
+    },
+    "parallel/test-fs-read-file-sync.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-read-offset-null.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-read-optional-params.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-read-promises-optional-params.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-read-stream-autoClose.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-concurrent-reads.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-double-close.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-encoding.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-err.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-fd-leak.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-fd.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-file-handle.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-inherit.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-patch-open.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-pos.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-resume.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream-throw-type-error.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation"
+    },
+    "parallel/test-fs-read-stream.js": {
+      "skip": true,
+      "reason": "requires full ReadStream implementation and child_process"
+    },
+    "parallel/test-fs-read-type.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-read-zero-length.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-read.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-readdir.js": {
+      "skip": true,
+      "reason": "requires ENOTDIR error and ERR_INVALID_ARG_TYPE"
+    },
+    "parallel/test-fs-readdir-buffer.js": {
+      "skip": true,
+      "reason": "requires Buffer encoding for readdir"
+    },
+    "parallel/test-fs-readdir-pipe.js": {
+      "skip": true,
+      "reason": "requires /dev/null or /dev/stdin (not available in WASI)"
+    },
+    "parallel/test-fs-readdir-recursive.js": {
+      "skip": true,
+      "reason": "requires child_process.spawnSync"
+    },
+    "parallel/test-fs-readdir-stack-overflow.js": {
+      "skip": true,
+      "reason": "WASM stack overflow causes panic instead of JS RangeError"
+    },
+    "parallel/test-fs-readdir-types-symlinks.js": {},
+    "parallel/test-fs-readdir-types.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-readdir-ucs2.js": {
+      "skip": true,
+      "reason": "requires UCS-2 filename support"
+    },
+    "parallel/test-fs-readfile.js": {
+      "skip": true,
+      "reason": "uses wrong tmpdir require path (../../test/common/tmpdir)"
+    },
+    "parallel/test-fs-readfile-empty.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-readfile-eof.js": {
+      "skip": true,
+      "reason": "requires /proc filesystem (Linux-specific)"
+    },
+    "parallel/test-fs-readfile-error.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-readfile-fd.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-readfile-flags.js": {},
+    "parallel/test-fs-readfile-pipe-large.js": {
+      "skip": true,
+      "reason": "requires child_process.exec"
+    },
+    "parallel/test-fs-readfile-pipe.js": {
+      "skip": true,
+      "reason": "requires child_process.exec"
+    },
+    "parallel/test-fs-readfile-unlink.js": {},
+    "parallel/test-fs-readfile-zero-byte-liar.js": {
+      "skip": true,
+      "reason": "requires custom fs.fstat override to lie about size"
+    },
+    "parallel/test-fs-readfilesync-enoent.js": {
+      "skip": true,
+      "reason": "requires child_process.execSync"
+    },
+    "parallel/test-fs-readfilesync-pipe-large.js": {
+      "skip": true,
+      "reason": "requires child_process.execFileSync"
+    },
+    "parallel/test-fs-readlink-type-check.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-readSync-optional-params.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-readv-promises.js": {
+      "skip": true,
+      "reason": "requires fs.promises.open FileHandle.readv"
+    },
+    "parallel/test-fs-readv-promisify.js": {
+      "skip": true,
+      "reason": "requires util.promisify on fs.readv"
+    },
+    "parallel/test-fs-readv-sync.js": {
+      "skip": true,
+      "reason": "readvSync returns 0 bytes read — readv implementation bug"
+    },
+    "parallel/test-fs-readv.js": {
+      "skip": true,
+      "reason": "readv implementation does not properly read data"
+    },
+    "parallel/test-fs-ready-event-stream.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-realpath-buffer-encoding.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-realpath-native.js": {
+      "skip": true,
+      "reason": "requires __filename for realpath.native test"
+    },
+    "parallel/test-fs-realpath-on-substed-drive.js": {
+      "skip": true,
+      "reason": "Windows-specific subst drive test"
+    },
+    "parallel/test-fs-realpath-pipe.js": {
+      "skip": true,
+      "reason": "requires child_process.exec"
+    },
+    "parallel/test-fs-realpath.js": {
+      "skip": true,
+      "reason": "requires fixtures module and child_process"
+    },
+    "parallel/test-fs-rename-type-check.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-rm.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-rmdir-recursive.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-rmdir-recursive-sync-warns-not-found.js": {},
+    "parallel/test-fs-rmdir-recursive-sync-warns-on-file.js": {
+      "skip": true,
+      "reason": "rmdirSync with recursive deletes files instead of throwing ENOTDIR"
+    },
+    "parallel/test-fs-rmdir-recursive-throws-not-found.js": {},
+    "parallel/test-fs-rmdir-recursive-throws-on-file.js": {
+      "skip": true,
+      "reason": "rmdirSync with recursive deletes files instead of throwing ENOTDIR"
+    },
+    "parallel/test-fs-rmdir-recursive-warns-not-found.js": {},
+    "parallel/test-fs-rmdir-recursive-warns-on-file.js": {
+      "skip": true,
+      "reason": "rmdir with recursive deletes files instead of throwing ENOTDIR"
+    },
+    "parallel/test-fs-rmdir-type-check.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-sir-writes-alot.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-stat.js": {},
+    "parallel/test-fs-stat-bigint.js": {
+      "skip": true,
+      "reason": "requires bigint option for stat"
+    },
+    "parallel/test-fs-statfs.js": {
+      "skip": true,
+      "reason": "requires fs.statfs/statfsSync"
+    },
+    "parallel/test-fs-stream-construct-compat-error-read.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-stream-construct-compat-error-write.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-stream-construct-compat-graceful-fs.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-stream-construct-compat-old-node.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-stream-destroy-emit-error.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-stream-double-close.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-stream-fs-options.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-stream-options.js": {
+      "skip": true,
+      "reason": "requires full ReadStream/WriteStream implementation"
+    },
+    "parallel/test-fs-symlink-buffer-path.js": {
+      "skip": true,
+      "reason": "requires Buffer path for symlink"
+    },
+    "parallel/test-fs-symlink-dir.js": {
+      "skip": true,
+      "reason": "requires common.canCreateSymLink()"
+    },
+    "parallel/test-fs-symlink-dir-junction-relative.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-symlink-dir-junction.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-symlink-longpath.js": {},
+    "parallel/test-fs-symlink.js": {
+      "skip": true,
+      "reason": "requires fixtures module and common.canCreateSymLink()"
+    },
+    "parallel/test-fs-sync-fd-leak.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding"
+    },
+    "parallel/test-fs-syncwritestream.js": {
+      "skip": true,
+      "reason": "requires child_process.spawnSync"
+    },
+    "parallel/test-fs-timestamp-parsing-error.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-truncate.js": {
+      "skip": true,
+      "reason": "requires detailed truncate behavior with fd deprecation"
+    },
+    "parallel/test-fs-truncate-clear-file-zero.js": {},
+    "parallel/test-fs-truncate-fd.js": {
+      "skip": true,
+      "reason": "requires process.once('beforeExit') and deprecation warning"
+    },
+    "parallel/test-fs-truncate-sync.js": {
+      "skip": true,
+      "reason": "requires Buffer.equals method"
+    },
+    "parallel/test-fs-unlink-type-check.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-util-validateoffsetlength.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-utils-get-dirents.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internal/fs/utils"
+    },
+    "parallel/test-fs-utimes.js": {
+      "skip": true,
+      "reason": "requires fs._toUnixTimestamp and detailed utimes validation"
+    },
+    "parallel/test-fs-utimes-y2K38.js": {
+      "skip": true,
+      "reason": "requires process.arch for 32-bit detection"
+    },
+    "parallel/test-fs-watch.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-abort-signal.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-close-when-destroyed.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-encoding.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-enoent.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-file-enoent-after-deletion.js": {
+      "skip": true,
+      "reason": "requires fs.watchFile which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-add-file-to-new-folder.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-add-file-with-url.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-add-file.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-add-folder.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-assert-leaks.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-delete.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-linux-parallel-remove.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-promise.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-symlink.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-sync-write.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-update-file.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-validate.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-recursive-watch-file.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-ref-unref.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-stop-async.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watch-stop-sync.js": {
+      "skip": true,
+      "reason": "requires fs.watch which is not supported in WASI"
+    },
+    "parallel/test-fs-watchfile-bigint.js": {
+      "skip": true,
+      "reason": "requires fs.watchFile and --expose-internals"
+    },
+    "parallel/test-fs-watchfile-ref-unref.js": {
+      "skip": true,
+      "reason": "requires fs.watchFile which is not supported in WASI"
+    },
+    "parallel/test-fs-watchfile.js": {
+      "skip": true,
+      "reason": "requires fs.watchFile which is not supported in WASI"
+    },
+    "parallel/test-fs-whatwg-url.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-write.js": {
+      "skip": true,
+      "reason": "requires child_process.exec and process.on('exit')"
+    },
+    "parallel/test-fs-write-buffer.js": {},
+    "parallel/test-fs-write-buffer-large.js": {
+      "skip": true,
+      "reason": "requires ERR_OUT_OF_RANGE validation and large buffer allocation"
+    },
+    "parallel/test-fs-write-file-buffer.js": {},
+    "parallel/test-fs-write-file-flush.js": {
+      "skip": true,
+      "reason": "requires node:test mock.method and flush option support"
+    },
+    "parallel/test-fs-write-file-invalid-path.js": {
+      "skip": true,
+      "reason": "requires process.platform check"
+    },
+    "parallel/test-fs-write-file-sync.js": {
+      "skip": true,
+      "reason": "requires process.umask() and child_process"
+    },
+    "parallel/test-fs-write-file-typedarrays.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-write-file.js": {
+      "skip": true,
+      "reason": "requires fixtures module"
+    },
+    "parallel/test-fs-write-negativeoffset.js": {
+      "skip": true,
+      "reason": "requires ERR_OUT_OF_RANGE error code validation"
+    },
+    "parallel/test-fs-write-no-fd.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-write-optional-params.js": {
+      "skip": true,
+      "reason": "requires ERR_OUT_OF_RANGE and ERR_INVALID_ARG_TYPE validation"
+    },
+    "parallel/test-fs-write-reuse-callback.js": {
+      "skip": true,
+      "reason": "requires process.on('exit') hooks"
+    },
+    "parallel/test-fs-write-sigxfsz.js": {
+      "skip": true,
+      "reason": "requires child_process.exec"
+    },
+    "parallel/test-fs-write-stream-autoclose-option.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-change-open.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-close-without-callback.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-double-close.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-encoding.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-end.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-err.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-file-handle-2.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-file-handle.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-flush.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-fs.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream-patch-open.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation and child_process"
+    },
+    "parallel/test-fs-write-stream-throw-type-error.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-stream.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-write-sync.js": {},
+    "parallel/test-fs-write-sync-optional-params.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE and ERR_OUT_OF_RANGE validation"
+    },
+    "parallel/test-fs-writefile-with-fd.js": {
+      "skip": true,
+      "reason": "requires process.on('beforeExit') hooks"
+    },
+    "parallel/test-fs-writestream-open-write.js": {
+      "skip": true,
+      "reason": "requires full WriteStream implementation"
+    },
+    "parallel/test-fs-writev.js": {
+      "skip": true,
+      "reason": "writev callback does not match expected behavior"
+    },
+    "parallel/test-fs-writev-promises.js": {
+      "skip": true,
+      "reason": "requires fs.promises.open FileHandle.writev"
+    },
+    "parallel/test-fs-writev-sync.js": {
+      "skip": true,
+      "reason": "writevSync buffer comparison fails — writev implementation bug"
     }
   }
 }

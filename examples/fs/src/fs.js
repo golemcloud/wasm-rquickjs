@@ -22,7 +22,7 @@ export const run = () => {
 };
 
 export const runAsync = async () => {
-    readFile("input.txt", "utf8", (content, error) => {
+    readFile("input.txt", "utf8", (error, content) => {
         if (error) {
             console.error("Error reading file:", error);
             return;

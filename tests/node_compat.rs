@@ -147,6 +147,19 @@ fn setup_test_files(instance: &TestInstance, test_rel_path: &str) -> anyhow::Res
     let dst_shim = common_dir.join("index.js");
     fs::copy(src_shim, &dst_shim)?;
 
+    // Copy additional common shims if they exist
+    for shim_name in &["tmpdir.js", "tick.js"] {
+        let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
+        if std::path::Path::new(&src_shim_extra).exists() {
+            let dst_shim_extra = common_dir.join(shim_name);
+            fs::copy(&src_shim_extra, &dst_shim_extra)?;
+        }
+    }
+
+    // Create /tmp directory for tmpdir shim
+    let tmp_dir = temp.join("tmp");
+    fs::create_dir_all(&tmp_dir)?;
+
     Ok(())
 }
 
@@ -286,4 +299,11 @@ async fn node_compat_util(
     #[tagged_as("node_compat_runner")] runner: &CompiledTest,
 ) -> anyhow::Result<()> {
     run_node_compat_suite(runner, "test-util").await
+}
+
+#[test]
+async fn node_compat_fs(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-fs").await
 }

@@ -81,11 +81,24 @@ cargo test
 ```
 
 ### Build specific test harness
+
+Always pass `-- --nocapture` to `cargo test` so you can see the output.
+
 ```bash
-cargo test --test compilation
-cargo test --test runtime
-cargo test --test dts
-cargo test --test errors
+cargo test --test compilation -- --nocapture
+cargo test --test runtime -- --nocapture
+cargo test --test dts -- --nocapture
+cargo test --test errors -- --nocapture
+```
+
+### Running specific runtime test modules
+
+The full runtime test suite takes a long time. Prefer running specific submodules instead of the whole suite:
+
+```bash
+cargo test --test runtime url -- --nocapture
+cargo test --test runtime crypto -- --nocapture
+cargo test --test runtime fs -- --nocapture
 ```
 
 ### Generate code for a JavaScript module
@@ -185,6 +198,14 @@ UPDATE_GOLDENFILES=1 cargo test --test dts
 ```
 
 This overwrites the golden files with the new output. Review the changes with `git diff` before committing to ensure they are intentional.
+
+## Node.js Compatibility Tests
+
+The `tests/node_compat/` directory contains vendored Node.js test files used to verify our Node.js API compatibility. Important rules:
+
+- **Never modify vendored test files** in `tests/node_compat/suite/`. These are upstream Node.js tests fetched via `vendor.sh` and must remain unmodified.
+- **We only implement the public Node.js API.** Tests that exercise Node.js internals (internal modules, private APIs, implementation details) are out of scope. Only tests for the public-facing Node.js API surface are relevant.
+- The `config.jsonc` allowlist controls which tests are run. Add or remove entries there rather than modifying test files.
 
 ## Key Files
 
