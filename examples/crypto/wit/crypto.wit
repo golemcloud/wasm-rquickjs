@@ -6,4 +6,10 @@ world crypto {
   export random-u32: func(count: u32) -> list<u32>;
   export sha256-hex: func(input: string) -> string;
   export sha256-multi-update: func(parts: list<string>) -> string;
+  export hash-with-algorithm: func(algorithm: string, input: string) -> string;
+  export hash-one-shot: func(algorithm: string, input: string) -> string;
+  export list-hashes: func() -> list<string>;
+  export generate-random-bytes: func(size: u32) -> list<u8>;
+  export generate-random-int: func(min: s64, max: s64) -> s64;
+  export check-timing-safe-equal: func(a: string, b: string) -> bool;
 }

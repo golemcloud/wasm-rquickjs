@@ -25,7 +25,13 @@ logging = ["dep:wasi-logging"]
 rquickjs = { version = "0.9.0", default-features = false, features = ["futures", "bindgen", "loader", "macro"] }
 
 encoding_rs = "0.8.35"
+sha1 = "0.10"
 sha2 = "0.10"
+sha3 = "0.10"
+md-5 = "0.10"
+ripemd = "0.1"
+digest = "0.10"
+subtle = "2"
 futures = { version = "0.3.31", features = [] }
 futures-concurrency = "7.6.3"
 url = "2.5.7"
