@@ -1,6 +1,6 @@
 test_r::enable!();
 
-use crate::common::{CompiledTest, PreparedComponent, TestInstance};
+use crate::common::{CompiledTest, PreparedComponent, TestInstance, setup_node_compat_test_files};
 use camino::Utf8Path;
 use std::collections::BTreeMap;
 use std::fs;
@@ -128,54 +128,7 @@ fn load_config(path: &str) -> anyhow::Result<Config> {
 
 /// Copy a vendored test file and the common shim into the TestInstance's temp dir.
 fn setup_test_files(instance: &TestInstance, test_rel_path: &str) -> anyhow::Result<()> {
-    let temp = instance.temp_dir_path();
-
-    // Create directory structure: /tests/parallel/ and /tests/common/
-    let parallel_dir = temp.join("tests").join("parallel");
-    let common_dir = temp.join("tests").join("common");
-    fs::create_dir_all(&parallel_dir)?;
-    fs::create_dir_all(&common_dir)?;
-
-    // Copy the test file
-    let test_filename = test_rel_path.rsplit('/').next().unwrap_or(test_rel_path);
-    let src_test = format!("tests/node_compat/suite/{test_rel_path}");
-    let dst_test = parallel_dir.join(test_filename);
-    fs::copy(&src_test, &dst_test)?;
-
-    // Copy the common shim
-    let src_shim = "tests/node_compat/common-shim/index.js";
-    let dst_shim = common_dir.join("index.js");
-    fs::copy(src_shim, &dst_shim)?;
-
-    // Copy additional common shims if they exist
-    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js"] {
-        let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
-        if std::path::Path::new(&src_shim_extra).exists() {
-            let dst_shim_extra = common_dir.join(shim_name);
-            fs::copy(&src_shim_extra, &dst_shim_extra)?;
-        }
-    }
-
-    // Create /tmp directory for tmpdir shim
-    let tmp_dir = temp.join("tmp");
-    fs::create_dir_all(&tmp_dir)?;
-
-    // Copy fixture data files for tests that use require('../common/fixtures')
-    let fixtures_src = std::path::Path::new("tests/node_compat/fixtures");
-    if fixtures_src.exists() {
-        let fixtures_dst = temp.join("tests").join("fixtures");
-        fs::create_dir_all(&fixtures_dst)?;
-        for entry in fs::read_dir(fixtures_src)? {
-            let entry = entry?;
-            let src_path = entry.path();
-            if src_path.is_file() {
-                let dst_path = fixtures_dst.join(entry.file_name().to_str().unwrap());
-                fs::copy(&src_path, &dst_path)?;
-            }
-        }
-    }
-
-    Ok(())
+    setup_node_compat_test_files(instance.temp_dir_path(), test_rel_path)
 }
 
 // --- Test runner ---

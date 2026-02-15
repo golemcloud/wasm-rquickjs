@@ -312,6 +312,37 @@ export function Stats(devOrObj, mode, nlink, uid, gid, rdev, blksize, ino, size,
     this._isSymlink = statObj.isSymlink;
 }
 
+Stats.prototype._toBigInt = function() {
+    const s = new Stats({
+        dev: BigInt(this.dev),
+        ino: BigInt(this.ino),
+        mode: BigInt(this.mode),
+        nlink: BigInt(this.nlink),
+        uid: BigInt(this.uid),
+        gid: BigInt(this.gid),
+        rdev: BigInt(this.rdev),
+        size: BigInt(this.size),
+        blksize: BigInt(this.blksize),
+        blocks: BigInt(this.blocks),
+        atimeMs: BigInt(Math.trunc(this.atimeMs)),
+        mtimeMs: BigInt(Math.trunc(this.mtimeMs)),
+        ctimeMs: BigInt(Math.trunc(this.ctimeMs)),
+        birthtimeMs: BigInt(Math.trunc(this.birthtimeMs)),
+        isFile: this._isFile,
+        isDirectory: this._isDirectory,
+        isSymlink: this._isSymlink,
+    });
+    s.atime = this.atime;
+    s.mtime = this.mtime;
+    s.ctime = this.ctime;
+    s.birthtime = this.birthtime;
+    s.atimeNs = BigInt(Math.trunc(this.atimeMs)) * 1000000n;
+    s.mtimeNs = BigInt(Math.trunc(this.mtimeMs)) * 1000000n;
+    s.ctimeNs = BigInt(Math.trunc(this.ctimeMs)) * 1000000n;
+    s.birthtimeNs = BigInt(Math.trunc(this.birthtimeMs)) * 1000000n;
+    return s;
+};
+
 Stats.prototype.isFile = function() { return this._isFile; };
 Stats.prototype.isDirectory = function() { return this._isDirectory; };
 Stats.prototype.isSymbolicLink = function() { return this._isSymlink; };
@@ -409,6 +440,26 @@ export class Dir {
     }
 }
 
+const validEncodings = new Set([
+    'utf8', 'utf-8', 'ascii', 'base64', 'hex',
+    'latin1', 'binary', 'ucs2', 'ucs-2', 'utf16le', 'utf-16le',
+    'base64url',
+]);
+
+function validateEncoding(enc, name) {
+    if (enc === null || enc === undefined || enc === '') return;
+    if (typeof enc !== 'string') {
+        const err = new TypeError(`The "${name || 'encoding'}" argument must be of type string. Received ${describeType(enc)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    if (!validEncodings.has(enc.toLowerCase().replace('-', ''))) {
+        const err = new TypeError(`The argument '${name || 'encoding'}' is invalid. Received '${enc}'`);
+        err.code = 'ERR_INVALID_ARG_VALUE';
+        throw err;
+    }
+}
+
 function normalizeEncoding(enc) {
     if (!enc) return enc;
     const lower = enc.toLowerCase().replace('-', '');
@@ -416,6 +467,7 @@ function normalizeEncoding(enc) {
     if (lower === 'ascii') return 'ascii';
     if (lower === 'hex') return 'hex';
     if (lower === 'base64') return 'base64';
+    if (lower === 'base64url') return 'base64url';
     if (lower === 'latin1' || lower === 'binary') return 'latin1';
     if (lower === 'ucs2' || lower === 'utf16le') return 'utf16le';
     return enc;
@@ -428,6 +480,7 @@ export function readFileSync(path, options) {
     if (typeof options === 'string') {
         options = {encoding: options};
     }
+    if (options && options.encoding) validateEncoding(options.encoding, 'encoding');
     const encoding = options && options.encoding && options.encoding !== '' ? normalizeEncoding(options.encoding) : null;
 
     if (typeof path === 'number') {
@@ -511,6 +564,7 @@ export function appendFileSync(path, data, options) {
     if (typeof options === 'string') {
         options = { encoding: options };
     }
+    if (options && options.encoding) validateEncoding(options.encoding, 'encoding');
     const flush = options ? options.flush : undefined;
     validateFlush(flush);
     let error;
@@ -576,6 +630,8 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
         length = length !== undefined ? length : buffer.byteLength - offset;
         position = position !== undefined ? position : null;
     }
+
+    validateBuffer(buffer, 'buffer');
 
     const result = native.fs_read(fd, length, position);
     if (result.error) {
@@ -647,7 +703,8 @@ export function statSync(path, options) {
         }
         throw createSystemError(result.error);
     }
-    return new Stats(result.stat);
+    const s = new Stats(result.stat);
+    return (options && options.bigint) ? s._toBigInt() : s;
 }
 
 export function lstatSync(path, options) {
@@ -659,7 +716,8 @@ export function lstatSync(path, options) {
         }
         throw createSystemError(result.error);
     }
-    return new Stats(result.stat);
+    const s = new Stats(result.stat);
+    return (options && options.bigint) ? s._toBigInt() : s;
 }
 
 export function fstatSync(fd, options) {
@@ -668,7 +726,8 @@ export function fstatSync(fd, options) {
     if (result.error) {
         throw createSystemError(result.error);
     }
-    return new Stats(result.stat);
+    const s = new Stats(result.stat);
+    return (options && options.bigint) ? s._toBigInt() : s;
 }
 
 export function readdirSync(path, options) {
@@ -678,6 +737,17 @@ export function readdirSync(path, options) {
     const recursive = opts.recursive || false;
     const result = native.fs_readdir(path, withFileTypes);
     if (result.error) {
+        if (result.error.code === 'EIO') {
+            const st = native.fs_stat(path);
+            if (!st.error && st.stat.isFile) {
+                const err = new Error(`ENOTDIR: not a directory, scandir '${path}'`);
+                err.code = 'ENOTDIR';
+                err.errno = -20;
+                err.syscall = 'scandir';
+                err.path = path;
+                throw err;
+            }
+        }
         throw createSystemError(result.error);
     }
     if (withFileTypes) {
@@ -753,6 +823,9 @@ export function realpathSync(path, options) {
 realpathSync.native = realpathSync;
 
 export function truncateSync(path, len) {
+    if (typeof path === 'number') {
+        return ftruncateSync(path, len);
+    }
     validatePath(path);
     len = len !== undefined ? len : 0;
     const error = native.fs_truncate(path, len);
@@ -974,7 +1047,9 @@ export function readFile(path, optionsOrCallback, callback) {
         optionsOrCallback = {encoding: optionsOrCallback};
     }
     const opts = optionsOrCallback || {};
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding');
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = readFileSync(path, opts);
@@ -998,6 +1073,7 @@ export function writeFile(path, data, optionsOrCallback, callback) {
     const flush = opts.flush;
     validateFlush(flush);
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const writeOpts = flush !== undefined ? Object.assign({}, opts, { flush: undefined }) : opts;
@@ -1023,10 +1099,15 @@ export function appendFile(path, data, optionsOrCallback, callback) {
         callback = optionsOrCallback;
         optionsOrCallback = {};
     }
+    if (typeof optionsOrCallback === 'string') {
+        optionsOrCallback = {encoding: optionsOrCallback};
+    }
     const opts = optionsOrCallback || {};
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding');
     const flush = opts.flush;
     validateFlush(flush);
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const appendOpts = flush !== undefined ? Object.assign({}, opts, { flush: undefined }) : opts;
@@ -1242,6 +1323,7 @@ export function stat(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = statSync(path, optionsOrCallback);
@@ -1259,6 +1341,7 @@ export function lstat(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = lstatSync(path, optionsOrCallback);
@@ -1276,6 +1359,7 @@ export function fstat(fd, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = fstatSync(fd, optionsOrCallback);
@@ -1337,6 +1421,7 @@ export function readdir(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = readdirSync(path, optionsOrCallback);
@@ -1387,6 +1472,7 @@ export function realpath(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = realpathSync(path, optionsOrCallback);
@@ -1399,6 +1485,9 @@ export function realpath(path, optionsOrCallback, callback) {
 realpath.native = realpath;
 
 export function truncate(path, lenOrCallback, callback) {
+    if (typeof path === 'number') {
+        return ftruncate(path, lenOrCallback, callback);
+    }
     validatePath(path);
     let len = 0;
     let cb;
@@ -1480,6 +1569,7 @@ export function readlink(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = readlinkSync(path, optionsOrCallback);
@@ -1671,6 +1761,7 @@ export function rmdir(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             rmdirSync(path, optionsOrCallback);
@@ -1688,6 +1779,7 @@ export function rm(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             rmSync(path, optionsOrCallback);
@@ -1705,6 +1797,7 @@ export function mkdtemp(prefix, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = mkdtempSync(prefix, optionsOrCallback);
@@ -1721,6 +1814,7 @@ export function opendir(path, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             const result = opendirSync(path, optionsOrCallback);
@@ -2192,6 +2286,7 @@ export function readv(fd, buffers, positionOrCallback, callback) {
         try {
             let totalRead = 0;
             for (const buf of buffers) {
+                if (buf.byteLength === 0) continue;
                 const bytesRead = readSync(fd, buf, 0, buf.byteLength, position);
                 totalRead += bytesRead;
                 if (position !== null) position += bytesRead;
@@ -2259,6 +2354,7 @@ export function readvSync(fd, buffers, position) {
     let totalRead = 0;
     let pos = position !== undefined ? position : null;
     for (const buf of buffers) {
+        if (buf.byteLength === 0) continue;
         const bytesRead = readSync(fd, buf, 0, buf.byteLength, pos);
         totalRead += bytesRead;
         if (pos !== null) pos += bytesRead;
@@ -2321,6 +2417,7 @@ export function cp(src, dest, optionsOrCallback, callback) {
         optionsOrCallback = {};
     }
     const cb = callback;
+    validateCallback(cb);
     queueMicrotask(() => {
         try {
             cpSync(src, dest, optionsOrCallback);

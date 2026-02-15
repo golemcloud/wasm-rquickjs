@@ -21,6 +21,85 @@ use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
 use wasmtime_wasi::{DirPerms, FilePerms};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
+/// Recursively copy a directory and all its contents to a destination.
+pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyhow::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copy a vendored Node.js test file and common shims into a temp directory.
+///
+/// Sets up the directory layout expected by the node-compat-runner:
+/// - `/tests/parallel/<test_file>` — the test itself
+/// - `/tests/common/` and `/test/common/` — common shims (both paths used by vendored tests)
+/// - `/tmp/` — for tmpdir shim
+/// - `/tests/fixtures/` — fixture data files (recursively copied)
+pub fn setup_node_compat_test_files(
+    temp: &Utf8Path,
+    test_rel_path: &str,
+) -> anyhow::Result<()> {
+    // Create directory structure: /tests/parallel/ and /tests/common/
+    let parallel_dir = temp.join("tests").join("parallel");
+    let common_dir = temp.join("tests").join("common");
+    fs::create_dir_all(&parallel_dir)?;
+    fs::create_dir_all(&common_dir)?;
+
+    // Copy the test file
+    let test_filename = test_rel_path.rsplit('/').next().unwrap_or(test_rel_path);
+    let src_test = format!("tests/node_compat/suite/{test_rel_path}");
+    let dst_test = parallel_dir.join(test_filename);
+    fs::copy(&src_test, &dst_test)?;
+
+    // Copy the common shim
+    let src_shim = "tests/node_compat/common-shim/index.js";
+    let dst_shim = common_dir.join("index.js");
+    fs::copy(src_shim, &dst_shim)?;
+
+    // Copy additional common shims if they exist
+    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js"] {
+        let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
+        if std::path::Path::new(&src_shim_extra).exists() {
+            let dst_shim_extra = common_dir.join(shim_name);
+            fs::copy(&src_shim_extra, &dst_shim_extra)?;
+        }
+    }
+
+    // Some vendored tests use require('../../test/common/tmpdir') instead of
+    // require('../common/tmpdir'), so mirror shims into /test/common/ as well.
+    let test_common_dir = temp.join("test").join("common");
+    fs::create_dir_all(&test_common_dir)?;
+    fs::copy(src_shim, test_common_dir.join("index.js"))?;
+    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js"] {
+        let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
+        if std::path::Path::new(&src_shim_extra).exists() {
+            fs::copy(&src_shim_extra, test_common_dir.join(shim_name))?;
+        }
+    }
+
+    // Create /tmp directory for tmpdir shim
+    let tmp_dir = temp.join("tmp");
+    fs::create_dir_all(&tmp_dir)?;
+
+    // Copy fixture data files for tests that use require('../common/fixtures')
+    let fixtures_src = std::path::Path::new("tests/node_compat/fixtures");
+    if fixtures_src.exists() {
+        let fixtures_dst = temp.join("tests").join("fixtures");
+        copy_dir_recursive(fixtures_src, fixtures_dst.as_std_path())?;
+    }
+
+    Ok(())
+}
+
 pub fn collect_example_paths() -> anyhow::Result<Vec<Utf8PathBuf>> {
     let mut result = Vec::new();
     let paths = fs::read_dir("examples")?;

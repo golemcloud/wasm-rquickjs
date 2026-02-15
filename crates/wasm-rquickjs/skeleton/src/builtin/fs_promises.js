@@ -23,10 +23,11 @@ function getStats() {
     return _Stats;
 }
 
-function wrapStat(statObj) {
+function wrapStat(statObj, options) {
     const S = getStats();
-    if (S) return new S(statObj);
-    return statObj;
+    const s = S ? new S(statObj) : statObj;
+    if (options && options.bigint && s._toBigInt) return s._toBigInt();
+    return s;
 }
 
 // --- Constants (re-export from fs) ---
@@ -213,7 +214,7 @@ export class FileHandle {
         if (this._closed) throw new Error('file closed');
         const result = native.fs_fstat(this._fd);
         if (result.error) throw createSystemError(result.error);
-        return wrapStat(result.stat);
+        return wrapStat(result.stat, options);
     }
 
     async sync() {
@@ -452,13 +453,13 @@ export async function rm(path, options) {
 export async function stat(path, options) {
     const result = native.fs_stat(path);
     if (result.error) throw createSystemError(result.error);
-    return wrapStat(result.stat);
+    return wrapStat(result.stat, options);
 }
 
 export async function lstat(path, options) {
     const result = native.fs_lstat(path);
     if (result.error) throw createSystemError(result.error);
-    return wrapStat(result.stat);
+    return wrapStat(result.stat, options);
 }
 
 export async function readdir(path, options) {
