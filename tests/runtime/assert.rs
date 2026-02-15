@@ -71,7 +71,6 @@ async fn assert_test_deep_strict_equal(
 }
 
 #[test]
-#[ignore] // TODO: fix assert.throws - currently returns false due to incomplete error matching in assert.js
 async fn assert_test_throws(
     #[tagged_as("assert")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -157,7 +156,6 @@ async fn assert_test_strict_mode(
 }
 
 #[test]
-#[ignore] // TODO: fix AssertionError - currently returns false due to incomplete error property handling
 async fn assert_test_assertion_error(
     #[tagged_as("assert")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

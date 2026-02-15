@@ -246,7 +246,7 @@ export const testThrows = () => {
         caught = false;
         try { assert.throws(() => {}, 'custom message'); } catch (e) {
             caught = true;
-            if (e.message !== 'custom message') throw new Error('Expected custom message');
+            if (e.message !== 'Missing expected exception: custom message') throw new Error('Expected "Missing expected exception: custom message" but got: ' + e.message);
         }
         if (!caught) throw new Error('assert.throws with string message should have thrown');
 
@@ -424,7 +424,8 @@ export const testAssertionError = () => {
         if (err.actual !== 1) throw new Error('Expected actual 1 but got ' + err.actual);
         if (err.expected !== 2) throw new Error('Expected expected 2 but got ' + err.expected);
         if (err.operator !== 'strictEqual') throw new Error('Expected operator strictEqual but got ' + err.operator);
-        if (err.message !== 'values not equal') throw new Error('Expected message but got ' + err.message);
+        // Node.js appends the diff to the user message
+        if (!err.message.startsWith('values not equal')) throw new Error('Expected message to start with "values not equal" but got ' + err.message);
         if (err.code !== 'ERR_ASSERTION') throw new Error('Expected code ERR_ASSERTION but got ' + err.code);
         if (!(err instanceof Error)) throw new Error('Expected instance of Error');
         if (!(err instanceof AssertionError)) throw new Error('Expected instance of AssertionError');
