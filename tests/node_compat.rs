@@ -180,17 +180,11 @@ fn setup_test_files(instance: &TestInstance, test_rel_path: &str) -> anyhow::Res
 
 // --- Test runner ---
 
-async fn run_node_compat_suite(
-    runner: &CompiledTest,
-    prefix: &str,
-) -> anyhow::Result<()> {
+async fn run_node_compat_suite(runner: &CompiledTest, prefix: &str) -> anyhow::Result<()> {
     let config = load_config("tests/node_compat/config.jsonc")?;
     let tests = config.tests_matching(prefix);
 
-    assert!(
-        !tests.is_empty(),
-        "No {prefix} tests found in config.jsonc"
-    );
+    assert!(!tests.is_empty(), "No {prefix} tests found in config.jsonc");
 
     let prepared = PreparedComponent::new(runner.wasm_path())?;
 
@@ -211,11 +205,7 @@ async fn run_node_compat_suite(
         let guest_path = format!("/tests/{}", entry.path);
 
         let (result, stdout, stderr) = instance
-            .invoke_and_capture_output_with_stderr(
-                None,
-                "run-test",
-                &[Val::String(guest_path)],
-            )
+            .invoke_and_capture_output_with_stderr(None, "run-test", &[Val::String(guest_path)])
             .await;
 
         match result {
@@ -321,4 +311,60 @@ async fn node_compat_fs(
     #[tagged_as("node_compat_runner")] runner: &CompiledTest,
 ) -> anyhow::Result<()> {
     run_node_compat_suite(runner, "test-fs").await
+}
+
+#[test]
+async fn node_compat_timers(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-timers").await
+}
+
+#[test]
+async fn node_compat_events(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-events").await
+}
+
+#[test]
+async fn node_compat_event_target(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-event-target").await
+}
+
+#[test]
+async fn node_compat_eventtarget(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-eventtarget").await
+}
+
+#[test]
+async fn node_compat_eventsource(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-eventsource").await
+}
+
+#[test]
+async fn node_compat_abortcontroller(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-abortcontroller").await
+}
+
+#[test]
+async fn node_compat_abortsignal(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-abortsignal").await
+}
+
+#[test]
+async fn node_compat_aborted(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_suite(runner, "test-aborted").await
 }

@@ -12,19 +12,19 @@ test_r::enable!();
 
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
+use heck::ToSnakeCase;
 use std::collections::BTreeMap;
 use std::fs;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use test_r::test;
+use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{Component, Linker, ResourceTable, Val};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
 use wasmtime_wasi::{DirPerms, FilePerms};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
-use heck::ToSnakeCase;
-use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 
 // --- Host type (same as common/mod.rs) ---
 
@@ -103,10 +103,7 @@ impl SharedRunner {
         fs::create_dir_all(&parallel_dir)?;
         fs::create_dir_all(&common_dir)?;
 
-        let test_filename = test_rel_path
-            .rsplit('/')
-            .next()
-            .unwrap_or(test_rel_path);
+        let test_filename = test_rel_path.rsplit('/').next().unwrap_or(test_rel_path);
         let src_test = format!("tests/node_compat/suite/{test_rel_path}");
         let dst_test = parallel_dir.join(test_filename);
         fs::copy(&src_test, &dst_test)?;
@@ -147,21 +144,20 @@ impl SharedRunner {
         let args = [Val::String(guest_path)];
         let mut results = vec![Val::Bool(false)];
 
-        let invoke_result =
-            match func.call_async(&mut store, &args, &mut results).await {
-                Ok(()) => {
-                    let _ = func.post_return_async(&mut store).await;
-                    Ok(())
+        let invoke_result = match func.call_async(&mut store, &args, &mut results).await {
+            Ok(()) => {
+                let _ = func.post_return_async(&mut store).await;
+                Ok(())
+            }
+            Err(e) => {
+                let msg = format!("{e:#}");
+                if msg.contains("epoch") || msg.contains("interrupt") {
+                    Err(anyhow::anyhow!("Timeout (epoch deadline exceeded)"))
+                } else {
+                    Err(e)
                 }
-                Err(e) => {
-                    let msg = format!("{e:#}");
-                    if msg.contains("epoch") || msg.contains("interrupt") {
-                        Err(anyhow::anyhow!("Timeout (epoch deadline exceeded)"))
-                    } else {
-                        Err(e)
-                    }
-                }
-            };
+            }
+        };
 
         let _stdout = fs::read_to_string(&stdout_file).unwrap_or_default();
         let _stderr = fs::read_to_string(&stderr_file).unwrap_or_default();
@@ -179,9 +175,7 @@ impl SharedRunner {
                         Ok(TestResult::Fail(s.clone()))
                     }
                 }
-                other => Ok(TestResult::Fail(format!(
-                    "Unexpected return: {other:?}"
-                ))),
+                other => Ok(TestResult::Fail(format!("Unexpected return: {other:?}"))),
             },
             Err(e) => Ok(TestResult::Error(format!("{e:#}"))),
         }
@@ -306,7 +300,11 @@ fn classify_test(filename: &str) -> &str {
         "zlib"
     } else if name.starts_with("console") {
         "console"
-    } else if name.starts_with("timers") || name.starts_with("settimeout") || name.starts_with("setinterval") || name.starts_with("setimmediate") {
+    } else if name.starts_with("timers")
+        || name.starts_with("settimeout")
+        || name.starts_with("setinterval")
+        || name.starts_with("setimmediate")
+    {
         "timers"
     } else if name.starts_with("worker") || name.starts_with("worker-threads") {
         "worker_threads"
@@ -322,11 +320,19 @@ fn classify_test(filename: &str) -> &str {
         "dgram"
     } else if name.starts_with("tty") {
         "tty"
-    } else if name.starts_with("async-hooks") || name.starts_with("async-context") || name.starts_with("async-local-storage") {
+    } else if name.starts_with("async-hooks")
+        || name.starts_with("async-context")
+        || name.starts_with("async-local-storage")
+    {
         "async_hooks"
     } else if name.starts_with("inspector") || name.starts_with("debugger") {
         "inspector"
-    } else if name.starts_with("module") || name.starts_with("require") || name.starts_with("esm") || name.starts_with("cjs") || name.starts_with("loaders") {
+    } else if name.starts_with("module")
+        || name.starts_with("require")
+        || name.starts_with("esm")
+        || name.starts_with("cjs")
+        || name.starts_with("loaders")
+    {
         "module"
     } else if name.starts_with("perf") || name.starts_with("performance") {
         "perf_hooks"
@@ -340,15 +346,29 @@ fn classify_test(filename: &str) -> &str {
         "trace_events"
     } else if name.starts_with("runner") || name.starts_with("test-runner") {
         "test_runner"
-    } else if name.starts_with("abortcontroller") || name.starts_with("abortsignal") || name.starts_with("aborted") {
+    } else if name.starts_with("abortcontroller")
+        || name.starts_with("abortsignal")
+        || name.starts_with("aborted")
+    {
         "abort"
-    } else if name.starts_with("encoding") || name.starts_with("textdecoder") || name.starts_with("textencoder") {
+    } else if name.starts_with("encoding")
+        || name.starts_with("textdecoder")
+        || name.starts_with("textencoder")
+    {
         "encoding"
     } else if name.starts_with("blob") {
         "blob"
-    } else if name.starts_with("fetch") || name.starts_with("response") || name.starts_with("request") || name.starts_with("headers") {
+    } else if name.starts_with("fetch")
+        || name.starts_with("response")
+        || name.starts_with("request")
+        || name.starts_with("headers")
+    {
         "fetch"
-    } else if name.starts_with("readable") || name.starts_with("writable") || name.starts_with("transform") || name.starts_with("duplex") {
+    } else if name.starts_with("readable")
+        || name.starts_with("writable")
+        || name.starts_with("transform")
+        || name.starts_with("duplex")
+    {
         "stream"
     } else {
         "other"
@@ -403,16 +423,12 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     for (i, test_path) in test_files.iter().enumerate() {
         let test_start = Instant::now();
-        let result = match tokio::time::timeout(
-            Duration::from_secs(60),
-            runner.run_test(test_path),
-        )
-        .await
-        {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-            Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
-        };
+        let result =
+            match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path)).await {
+                Ok(Ok(r)) => r,
+                Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
+                Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
+            };
 
         let elapsed = test_start.elapsed();
         let filename = test_path.rsplit('/').next().unwrap_or(test_path);
@@ -420,7 +436,11 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         match &result {
             TestResult::Pass => {
                 pass_count += 1;
-                println!("[{:>4}/{total_tests}] PASS  {filename} ({:.1}s)", i + 1, elapsed.as_secs_f64());
+                println!(
+                    "[{:>4}/{total_tests}] PASS  {filename} ({:.1}s)",
+                    i + 1,
+                    elapsed.as_secs_f64()
+                );
             }
             TestResult::Skip(reason) => {
                 skip_count += 1;
@@ -617,10 +637,22 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     println!("\n============================================");
     println!("  Node.js v22 Compatibility Report Summary");
     println!("============================================");
-    println!("  ✅ PASS:  {pass_count:>5} ({:.1}%)", pass_count as f64 / total_tests as f64 * 100.0);
-    println!("  ⏭️  SKIP:  {skip_count:>5} ({:.1}%)", skip_count as f64 / total_tests as f64 * 100.0);
-    println!("  ❌ FAIL:  {fail_count:>5} ({:.1}%)", fail_count as f64 / total_tests as f64 * 100.0);
-    println!("  💥 ERROR: {error_count:>5} ({:.1}%)", error_count as f64 / total_tests as f64 * 100.0);
+    println!(
+        "  ✅ PASS:  {pass_count:>5} ({:.1}%)",
+        pass_count as f64 / total_tests as f64 * 100.0
+    );
+    println!(
+        "  ⏭️  SKIP:  {skip_count:>5} ({:.1}%)",
+        skip_count as f64 / total_tests as f64 * 100.0
+    );
+    println!(
+        "  ❌ FAIL:  {fail_count:>5} ({:.1}%)",
+        fail_count as f64 / total_tests as f64 * 100.0
+    );
+    println!(
+        "  💥 ERROR: {error_count:>5} ({:.1}%)",
+        error_count as f64 / total_tests as f64 * 100.0
+    );
     println!("  ─────────────────────────────────");
     println!("  Total:    {total_tests:>5}");
     println!("  Runtime:  {:.0}s", total_elapsed.as_secs_f64());

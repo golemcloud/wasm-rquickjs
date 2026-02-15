@@ -1,0 +1,53 @@
+const _setTimeout = globalThis.setTimeout;
+const _clearTimeout = globalThis.clearTimeout;
+
+export function setTimeout(delay, value, options) {
+    if (options && options.signal && options.signal.aborted) {
+        return Promise.reject(options.signal.reason);
+    }
+    return new Promise((resolve, reject) => {
+        const id = _setTimeout(() => {
+            if (onAbort) options.signal.removeEventListener('abort', onAbort);
+            resolve(value);
+        }, delay);
+        let onAbort;
+        if (options && options.signal) {
+            onAbort = () => {
+                _clearTimeout(id);
+                reject(options.signal.reason);
+            };
+            options.signal.addEventListener('abort', onAbort, { once: true });
+        }
+    });
+}
+
+export function setImmediate(value, options) {
+    return setTimeout(0, value, options);
+}
+
+export async function* setInterval(delay, value, options) {
+    if (options && options.signal && options.signal.aborted) {
+        throw options.signal.reason;
+    }
+    let aborted = false;
+    let rejectCurrent;
+    if (options && options.signal) {
+        options.signal.addEventListener('abort', () => {
+            aborted = true;
+            if (rejectCurrent) rejectCurrent(options.signal.reason);
+        }, { once: true });
+    }
+    while (!aborted) {
+        try {
+            await new Promise((resolve, reject) => {
+                rejectCurrent = reject;
+                _setTimeout(() => { rejectCurrent = null; resolve(); }, delay);
+            });
+            yield value;
+        } catch (e) {
+            throw e;
+        }
+    }
+}
+
+export default { setTimeout, setImmediate, setInterval };

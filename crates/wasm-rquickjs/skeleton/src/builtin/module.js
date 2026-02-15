@@ -18,6 +18,8 @@ import * as nodeTest from 'node:test';
 import * as querystring from 'node:querystring';
 import * as nodeUrl from 'node:url';
 import * as vm from 'node:vm';
+import * as timers from 'node:timers';
+import * as timersPromises from 'node:timers/promises';
 
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
@@ -80,6 +82,10 @@ const builtinModules = {
     'node:url': cjsExport(nodeUrl),
     'vm': cjsExport(vm),
     'node:vm': cjsExport(vm),
+    'timers': cjsExport(timers),
+    'node:timers': cjsExport(timers),
+    'timers/promises': cjsExport(timersPromises),
+    'node:timers/promises': cjsExport(timersPromises),
 };
 
 // Self-reference will be added after the module object is created (see bottom of file)

@@ -13,5 +13,6 @@ export function setImmediate(callback, ...args) {
 }
 
 export function clearTimeout(id) {
+    if (id == null || typeof id !== 'number') return;
     return timeoutNative.clear_schedule(id);
 }

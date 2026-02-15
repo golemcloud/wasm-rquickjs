@@ -32,9 +32,11 @@ var common = {
     // Call verification — simplified (no process.on('exit') hooks in WASM)
     mustCall: function(fn, exact) {
         if (typeof fn === 'number') {
-            return function(f) { return f || noop; };
+            exact = fn;
+            fn = noop;
         }
-        return fn || noop;
+        var wrapped = fn || noop;
+        return function() { return wrapped.apply(this, arguments); };
     },
     mustCallAtLeast: function(fn, minimum) {
         return fn || noop;

@@ -19,6 +19,7 @@ mod http {
     pub use super::http_disabled::*;
 }
 
+mod event_target;
 mod eventemitter;
 mod ieee754;
 mod module;
@@ -32,6 +33,7 @@ mod stream;
 mod string_decoder;
 mod structured_clone;
 mod timeout;
+mod timers;
 mod url;
 mod util;
 mod vm;
@@ -102,6 +104,10 @@ pub fn add_module_resolvers(
             .with_module("web-streams-polyfill")
             .with_module("node:string_decoder")
             .with_module("string_decoder")
+            .with_module("node:timers")
+            .with_module("timers")
+            .with_module("node:timers/promises")
+            .with_module("timers/promises")
             .with_module("__wasm_rquickjs_builtin/web_crypto_native")
             .with_module("__wasm_rquickjs_builtin/web_crypto")
             .with_module("node:crypto")
@@ -110,7 +116,8 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/vm")
             .with_module("node:vm")
             .with_module("vm")
-            .with_module("__wasm_rquickjs_builtin/structured_clone"),
+            .with_module("__wasm_rquickjs_builtin/structured_clone")
+            .with_module("__wasm_rquickjs_builtin/event_target"),
     )
 }
 
@@ -210,6 +217,10 @@ pub fn module_loader() -> (
             .with_module("stream/promises", stream::REEXPORT_PROMISES_JS)
             .with_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
             .with_module("string_decoder", string_decoder::REEXPORT_JS)
+            .with_module("node:timers", timers::TIMERS_JS)
+            .with_module("timers", timers::REEXPORT_JS)
+            .with_module("node:timers/promises", timers::TIMERS_PROMISES_JS)
+            .with_module("timers/promises", timers::REEXPORT_PROMISES_JS)
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto",
                 web_crypto::WEB_CRYPTO_JS,
@@ -222,6 +233,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/structured_clone",
                 structured_clone::STRUCTURED_CLONE_JS,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/event_target",
+                event_target::EVENT_TARGET_JS,
             ),
         internal::module_loader(),
     )
@@ -229,7 +244,9 @@ pub fn module_loader() -> (
 
 pub fn wire_builtins() -> String {
     let mut result = String::new();
+    writeln!(result, "{}", event_target::WIRE_JS).unwrap();
     writeln!(result, "{}", abort_controller::WIRE_JS).unwrap();
+    writeln!(result, "{}", base64::WIRE_JS).unwrap();
     writeln!(result, "{}", buffer::WIRE_JS).unwrap();
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();
