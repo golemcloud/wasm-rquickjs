@@ -42,6 +42,14 @@ chacha20poly1305 = "0.10"
 cbc = { version = "0.1", features = ["alloc"] }
 ctr = "0.9"
 cipher = "0.4"
+ed25519-dalek = { version = "2", default-features = false, features = ["rand_core", "pkcs8"] }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem"] }
+p384 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem"] }
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem"] }
+pkcs8 = { version = "0.10", default-features = false, features = ["pem", "alloc"] }
+elliptic-curve = { version = "0.13", default-features = false, features = ["sec1"] }
+ecdsa = { version = "0.16", default-features = false, features = ["signing", "verifying", "der"] }
+signature = "2"
 futures = { version = "0.3.31", features = [] }
 futures-concurrency = "7.6.3"
 url = "2.5.7"

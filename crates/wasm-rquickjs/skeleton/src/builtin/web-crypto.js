@@ -673,10 +673,62 @@ export function getCiphers() {
 }
 
 export function getCurves() {
-    return [];
+    return ['prime256v1', 'secp384r1', 'secp256k1'];
 }
 
-export const constants = {};
+export const constants = {
+    OPENSSL_VERSION_NUMBER: 0,
+    SSL_OP_ALL: 0,
+    SSL_OP_ALLOW_NO_DHE_KEX: 0,
+    SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION: 0,
+    SSL_OP_CIPHER_SERVER_PREFERENCE: 0,
+    SSL_OP_CISCO_ANYCONNECT: 0,
+    SSL_OP_COOKIE_EXCHANGE: 0,
+    SSL_OP_CRYPTOPRO_TLSEXT_BUG: 0,
+    SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS: 0,
+    SSL_OP_LEGACY_SERVER_CONNECT: 0,
+    SSL_OP_NO_COMPRESSION: 0,
+    SSL_OP_NO_ENCRYPT_THEN_MAC: 0,
+    SSL_OP_NO_QUERY_MTU: 0,
+    SSL_OP_NO_RENEGOTIATION: 0,
+    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION: 0,
+    SSL_OP_NO_SSLv2: 0,
+    SSL_OP_NO_SSLv3: 0,
+    SSL_OP_NO_TICKET: 0,
+    SSL_OP_NO_TLSv1: 0,
+    SSL_OP_NO_TLSv1_1: 0,
+    SSL_OP_NO_TLSv1_2: 0,
+    SSL_OP_NO_TLSv1_3: 0,
+    SSL_OP_PRIORITIZE_CHACHA: 0,
+    SSL_OP_TLS_ROLLBACK_BUG: 0,
+    ENGINE_METHOD_RSA: 0x0001,
+    ENGINE_METHOD_DSA: 0x0002,
+    ENGINE_METHOD_DH: 0x0004,
+    ENGINE_METHOD_RAND: 0x0008,
+    ENGINE_METHOD_EC: 0x0800,
+    ENGINE_METHOD_CIPHERS: 0x0040,
+    ENGINE_METHOD_DIGESTS: 0x0080,
+    ENGINE_METHOD_PKEY_METHS: 0x0200,
+    ENGINE_METHOD_PKEY_ASN1_METHS: 0x0400,
+    ENGINE_METHOD_ALL: 0xFFFF,
+    ENGINE_METHOD_NONE: 0x0000,
+    DH_CHECK_P_NOT_SAFE_PRIME: 0x02,
+    DH_CHECK_P_NOT_PRIME: 0x01,
+    DH_UNABLE_TO_CHECK_GENERATOR: 0x04,
+    DH_NOT_SUITABLE_GENERATOR: 0x08,
+    RSA_PKCS1_PADDING: 1,
+    RSA_SSLV23_PADDING: 2,
+    RSA_NO_PADDING: 3,
+    RSA_PKCS1_OAEP_PADDING: 4,
+    RSA_X931_PADDING: 5,
+    RSA_PKCS1_PSS_PADDING: 6,
+    RSA_PSS_SALTLEN_DIGEST: -1,
+    RSA_PSS_SALTLEN_MAX_SIGN: -2,
+    RSA_PSS_SALTLEN_AUTO: -2,
+    POINT_CONVERSION_COMPRESSED: 2,
+    POINT_CONVERSION_UNCOMPRESSED: 4,
+    POINT_CONVERSION_HYBRID: 6,
+};
 
 export function getFips() {
     return 0;
@@ -690,5 +742,509 @@ export function setFips(_val) {
 
 export const fips = false;
 
-export const subtle = {};
-export const webcrypto = { getRandomValues, subtle };
+// ===== KeyObject =====
+
+class KeyObject {
+    constructor(handle, type_) {
+        this._handle = handle;
+        this._type = type_;
+    }
+
+    get type() {
+        return this._type;
+    }
+
+    get asymmetricKeyType() {
+        if (this._type === 'secret') return undefined;
+        return webCryptoNative.key_asymmetric_type(this._handle);
+    }
+
+    export(options) {
+        if (!options) options = {};
+        if (this._type === 'secret') {
+            const raw = webCryptoNative.key_export(this._handle, 'der');
+            if (raw === null || raw === undefined) {
+                throw new Error('Failed to export secret key');
+            }
+            if (typeof Buffer !== 'undefined') {
+                return Buffer.from(raw);
+            }
+            return new Uint8Array(raw);
+        }
+        const format = options.format || (options.type ? 'pem' : 'der');
+        const result = webCryptoNative.key_export(this._handle, format);
+        if (result === null || result === undefined) {
+            throw new Error('Failed to export key');
+        }
+        if (format === 'pem') {
+            const decoder = new TextDecoder();
+            return decoder.decode(new Uint8Array(result));
+        }
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(result);
+        }
+        return new Uint8Array(result);
+    }
+}
+
+export { KeyObject };
+
+export function createPrivateKey(key) {
+    if (typeof key === 'string') {
+        const handle = webCryptoNative.create_private_key_pem(key);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Failed to parse private key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        return new KeyObject(handle, 'private');
+    }
+    if (key && typeof key === 'object') {
+        if (key instanceof KeyObject) {
+            if (key.type !== 'private') {
+                throw new Error('Cannot create private key from non-private KeyObject');
+            }
+            return key;
+        }
+        if (key.key !== undefined) {
+            return createPrivateKey(key.key);
+        }
+        const data = toBytes(key);
+        const handle = webCryptoNative.create_private_key_der(data);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Failed to parse private key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        return new KeyObject(handle, 'private');
+    }
+    const err = new TypeError('Invalid key argument');
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
+export function createPublicKey(key) {
+    if (typeof key === 'string') {
+        const handle = webCryptoNative.create_public_key_pem(key);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Failed to parse public key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        return new KeyObject(handle, 'public');
+    }
+    if (key && typeof key === 'object') {
+        if (key instanceof KeyObject) {
+            if (key.type === 'private') {
+                const pubHandle = webCryptoNative.create_public_key_from_private_key(key._handle);
+                if (pubHandle === null || pubHandle === undefined) {
+                    throw new Error('Failed to derive public key from private key');
+                }
+                return new KeyObject(pubHandle, 'public');
+            }
+            if (key.type === 'public') return key;
+            throw new Error('Cannot create public key from secret KeyObject');
+        }
+        if (key.key !== undefined) {
+            if (key.key instanceof KeyObject && key.key.type === 'private') {
+                const pubHandle = webCryptoNative.create_public_key_from_private_key(key.key._handle);
+                if (pubHandle === null || pubHandle === undefined) {
+                    throw new Error('Failed to derive public key from private key');
+                }
+                return new KeyObject(pubHandle, 'public');
+            }
+            return createPublicKey(key.key);
+        }
+        const data = toBytes(key);
+        const handle = webCryptoNative.create_public_key_der(data);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Failed to parse public key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        return new KeyObject(handle, 'public');
+    }
+    const err = new TypeError('Invalid key argument');
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
+export function createSecretKey(key, encoding) {
+    const data = toBytes(key, encoding);
+    const handle = webCryptoNative.create_secret_key_native(data);
+    return new KeyObject(handle, 'secret');
+}
+
+export function generateKeyPairSync(type_, options) {
+    options = options || {};
+    let namedCurve = null;
+    let algorithm = type_;
+    if (type_ === 'ec') {
+        namedCurve = options.namedCurve || options.curve;
+        if (!namedCurve) {
+            const err = new Error('namedCurve is required for EC key generation');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+    } else if (type_ === 'ed25519') {
+        algorithm = 'ed25519';
+    } else {
+        const err = new Error('Unsupported key type: ' + type_);
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
+    }
+
+    const result = webCryptoNative.generate_key_pair(algorithm, namedCurve);
+    if (result === null || result === undefined) {
+        const err = new Error('Key generation failed');
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
+    }
+
+    const privateKey = new KeyObject(result[0], 'private');
+    const publicKey = new KeyObject(result[1], 'public');
+
+    const pubFormat = options.publicKeyEncoding;
+    const privFormat = options.privateKeyEncoding;
+
+    let pub_ = publicKey;
+    let priv_ = privateKey;
+
+    if (pubFormat) {
+        pub_ = publicKey.export(pubFormat);
+    }
+    if (privFormat) {
+        priv_ = privateKey.export(privFormat);
+    }
+
+    return { publicKey: pub_, privateKey: priv_ };
+}
+
+export function generateKeyPair(type_, options, callback) {
+    try {
+        const result = generateKeyPairSync(type_, options);
+        queueMicrotask(() => callback(null, result.publicKey, result.privateKey));
+    } catch (err) {
+        queueMicrotask(() => callback(err));
+    }
+}
+
+// ===== Sign / Verify classes =====
+
+class Sign {
+    constructor(algorithm, options) {
+        this._algorithm = algorithm ? algorithm.toLowerCase() : null;
+        this._keySet = false;
+        this._handle = null;
+        this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
+    }
+
+    update(data, inputEncoding) {
+        if (this._handle !== null) {
+            const bytes = toBytes(data, inputEncoding);
+            webCryptoNative.sign_update(this._handle, bytes);
+        } else {
+            if (!this._pendingData) this._pendingData = [];
+            this._pendingData.push({ data, inputEncoding });
+        }
+        return this;
+    }
+
+    sign(privateKey, outputEncoding) {
+        let keyObj;
+        if (privateKey instanceof KeyObject) {
+            keyObj = privateKey;
+        } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
+            keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey.key);
+        } else {
+            keyObj = createPrivateKey(privateKey);
+        }
+
+        if (this._handle === null) {
+            const handle = webCryptoNative.sign_init(this._algorithmNormalized, keyObj._handle);
+            if (handle === null || handle === undefined) {
+                const err = new Error('Sign init failed');
+                err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+                throw err;
+            }
+            this._handle = handle;
+            if (this._pendingData) {
+                for (const { data, inputEncoding } of this._pendingData) {
+                    const bytes = toBytes(data, inputEncoding);
+                    webCryptoNative.sign_update(this._handle, bytes);
+                }
+                this._pendingData = null;
+            }
+        }
+
+        const result = webCryptoNative.sign_final_native(this._handle);
+        this._handle = null;
+        if (result === null || result === undefined) {
+            const err = new Error('Sign failed');
+            err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+            throw err;
+        }
+        const sig = new Uint8Array(result);
+        return encodeOutput(sig, outputEncoding);
+    }
+}
+
+export { Sign };
+
+export function createSign(algorithm) {
+    return new Sign(algorithm);
+}
+
+class Verify {
+    constructor(algorithm, options) {
+        this._algorithm = algorithm ? algorithm.toLowerCase() : null;
+        this._handle = null;
+        this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
+    }
+
+    update(data, inputEncoding) {
+        if (this._handle !== null) {
+            const bytes = toBytes(data, inputEncoding);
+            webCryptoNative.verify_update(this._handle, bytes);
+        } else {
+            if (!this._pendingData) this._pendingData = [];
+            this._pendingData.push({ data, inputEncoding });
+        }
+        return this;
+    }
+
+    verify(publicKey, signature, signatureEncoding) {
+        let keyObj;
+        if (publicKey instanceof KeyObject) {
+            keyObj = publicKey;
+        } else if (typeof publicKey === 'object' && publicKey !== null && publicKey.key !== undefined) {
+            keyObj = publicKey.key instanceof KeyObject ? publicKey.key : createPublicKey(publicKey.key);
+        } else {
+            keyObj = createPublicKey(publicKey);
+        }
+
+        if (this._handle === null) {
+            const handle = webCryptoNative.verify_init(this._algorithmNormalized, keyObj._handle);
+            if (handle === null || handle === undefined) {
+                const err = new Error('Verify init failed');
+                err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+                throw err;
+            }
+            this._handle = handle;
+            if (this._pendingData) {
+                for (const { data, inputEncoding } of this._pendingData) {
+                    const bytes = toBytes(data, inputEncoding);
+                    webCryptoNative.verify_update(this._handle, bytes);
+                }
+                this._pendingData = null;
+            }
+        }
+
+        const sigBytes = toBytes(signature, signatureEncoding);
+        const result = webCryptoNative.verify_final_native(this._handle, sigBytes);
+        this._handle = null;
+        if (result === null || result === undefined) {
+            return false;
+        }
+        return result;
+    }
+}
+
+export { Verify };
+
+export function createVerify(algorithm) {
+    return new Verify(algorithm);
+}
+
+function normalizeHashForSign(algorithm) {
+    if (!algorithm) return null;
+    const lower = algorithm.toLowerCase();
+    const mapped = HASH_ALIASES[lower];
+    if (mapped) return mapped;
+    return lower;
+}
+
+class SubtleCrypto {
+    async digest(algorithm, data) {
+        let algoName;
+        if (typeof algorithm === 'string') {
+            algoName = algorithm;
+        } else if (algorithm && typeof algorithm === 'object') {
+            algoName = algorithm.name;
+        } else {
+            throw new TypeError('Algorithm must be a string or an object with a name property');
+        }
+        const normalized = normalizeHashAlgorithm(algoName);
+        const bytes = toBytes(data);
+        const hashBytes = webCryptoNative.hash_one_shot(normalized, bytes);
+        return new Uint8Array(hashBytes).buffer;
+    }
+
+    async generateKey(algorithm, extractable, keyUsages) {
+        let algoName;
+        if (typeof algorithm === 'string') {
+            algoName = algorithm;
+        } else if (algorithm && typeof algorithm === 'object') {
+            algoName = algorithm.name;
+        } else {
+            throw new TypeError('Algorithm must be a string or an object with a name property');
+        }
+
+        const name = algoName.toUpperCase();
+        if (name === 'ED25519') {
+            const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+            return {
+                publicKey: new CryptoKey('public', { name: 'Ed25519' }, extractable, keyUsages.filter(u => u === 'verify'), publicKey),
+                privateKey: new CryptoKey('private', { name: 'Ed25519' }, extractable, keyUsages.filter(u => u === 'sign'), privateKey),
+            };
+        } else if (name === 'ECDSA') {
+            const curve = algorithm.namedCurve || 'P-256';
+            const curveMap = { 'P-256': 'prime256v1', 'P-384': 'secp384r1', 'P-256K': 'secp256k1' };
+            const nativeCurve = curveMap[curve] || curve;
+            const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: nativeCurve });
+            return {
+                publicKey: new CryptoKey('public', { name: 'ECDSA', namedCurve: curve }, extractable, keyUsages.filter(u => u === 'verify'), publicKey),
+                privateKey: new CryptoKey('private', { name: 'ECDSA', namedCurve: curve }, extractable, keyUsages.filter(u => u === 'sign'), privateKey),
+            };
+        } else if (name === 'HMAC') {
+            const hashAlgo = algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const length = algorithm.length || 256;
+            const keyBytes = randomBytes(length / 8);
+            const secretKey = createSecretKey(keyBytes);
+            return new CryptoKey('secret', { name: 'HMAC', hash: { name: hashName }, length }, extractable, keyUsages, secretKey);
+        }
+        throw new Error('Unsupported algorithm: ' + algoName);
+    }
+
+    async sign(algorithm, key, data) {
+        let algoName;
+        if (typeof algorithm === 'string') {
+            algoName = algorithm;
+        } else if (algorithm && typeof algorithm === 'object') {
+            algoName = algorithm.name;
+        } else {
+            throw new TypeError('Algorithm must be a string or an object with a name property');
+        }
+
+        const name = algoName.toUpperCase();
+        const bytes = toBytes(data);
+
+        if (name === 'ED25519') {
+            const sign = createSign(null);
+            sign.update(bytes);
+            const sig = sign.sign(key._keyObject);
+            return (sig instanceof Uint8Array ? sig : new Uint8Array(sig)).buffer;
+        } else if (name === 'ECDSA') {
+            const hashAlgo = algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const sign = createSign(normalized);
+            sign.update(bytes);
+            const sig = sign.sign(key._keyObject);
+            return (sig instanceof Uint8Array ? sig : new Uint8Array(sig)).buffer;
+        } else if (name === 'HMAC') {
+            const hashAlgo = key._algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const hmac = createHmac(normalized, key._keyObject.export());
+            hmac.update(bytes);
+            const result = hmac.digest();
+            return (result instanceof Uint8Array ? result : new Uint8Array(result)).buffer;
+        }
+        throw new Error('Unsupported algorithm: ' + algoName);
+    }
+
+    async verify(algorithm, key, signature, data) {
+        let algoName;
+        if (typeof algorithm === 'string') {
+            algoName = algorithm;
+        } else if (algorithm && typeof algorithm === 'object') {
+            algoName = algorithm.name;
+        } else {
+            throw new TypeError('Algorithm must be a string or an object with a name property');
+        }
+
+        const name = algoName.toUpperCase();
+        const dataBytes = toBytes(data);
+        const sigBytes = toBytes(signature);
+
+        if (name === 'ED25519') {
+            const verify = createVerify(null);
+            verify.update(dataBytes);
+            return verify.verify(key._keyObject, sigBytes);
+        } else if (name === 'ECDSA') {
+            const hashAlgo = algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const verify = createVerify(normalized);
+            verify.update(dataBytes);
+            return verify.verify(key._keyObject, sigBytes);
+        } else if (name === 'HMAC') {
+            const hashAlgo = key._algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const hmac = createHmac(normalized, key._keyObject.export());
+            hmac.update(dataBytes);
+            const expected = hmac.digest();
+            const expectedBytes = expected instanceof Uint8Array ? expected : new Uint8Array(expected);
+            if (sigBytes.length !== expectedBytes.length) return false;
+            const result = webCryptoNative.timing_safe_equal(sigBytes, expectedBytes);
+            return result === true;
+        }
+        throw new Error('Unsupported algorithm: ' + algoName);
+    }
+
+    async importKey(format, keyData, algorithm, extractable, keyUsages) {
+        let algoName;
+        if (typeof algorithm === 'string') {
+            algoName = algorithm;
+        } else if (algorithm && typeof algorithm === 'object') {
+            algoName = algorithm.name;
+        } else {
+            throw new TypeError('Algorithm must be a string or an object with a name property');
+        }
+
+        const name = algoName.toUpperCase();
+
+        if (format === 'raw') {
+            if (name === 'HMAC') {
+                const hashAlgo = algorithm.hash;
+                const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+                const data = toBytes(keyData);
+                const secretKey = createSecretKey(data);
+                return new CryptoKey('secret', { name: 'HMAC', hash: { name: hashName }, length: data.length * 8 }, extractable, keyUsages, secretKey);
+            }
+        }
+        throw new Error('Unsupported import format/algorithm: ' + format + '/' + algoName);
+    }
+
+    async exportKey(format, key) {
+        if (format === 'raw') {
+            if (key._type === 'secret') {
+                const exported = key._keyObject.export();
+                return (exported instanceof Uint8Array ? exported : new Uint8Array(exported)).buffer;
+            }
+        }
+        throw new Error('Unsupported export format: ' + format);
+    }
+}
+
+class CryptoKey {
+    constructor(type_, algorithm, extractable, usages, keyObject) {
+        this._type = type_;
+        this._algorithm = algorithm;
+        this._extractable = extractable;
+        this._usages = usages;
+        this._keyObject = keyObject;
+    }
+
+    get type() { return this._type; }
+    get algorithm() { return this._algorithm; }
+    get extractable() { return this._extractable; }
+    get usages() { return this._usages; }
+}
+
+const subtleCrypto = new SubtleCrypto();
+export { subtleCrypto as subtle };
+export const webcrypto = { getRandomValues, subtle: subtleCrypto, CryptoKey };

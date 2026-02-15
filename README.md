@@ -414,6 +414,16 @@ Implemented by https://github.com/ungap/structured-clone
 ### `node:crypto`
 - `createHash`
 - `createHmac`
+- `createCipheriv` (aes-128-cbc, aes-256-cbc, aes-128-ctr, aes-256-ctr, aes-128-gcm, aes-256-gcm, chacha20-poly1305)
+- `createDecipheriv` (aes-128-cbc, aes-256-cbc, aes-128-ctr, aes-256-ctr, aes-128-gcm, aes-256-gcm, chacha20-poly1305)
+- `createSign` (Ed25519, ECDSA with P-256, P-384, secp256k1)
+- `createVerify` (Ed25519, ECDSA with P-256, P-384, secp256k1)
+- `createPublicKey`
+- `createPrivateKey`
+- `createSecretKey`
+- `generateKeyPairSync` (ed25519, ec with prime256v1/P-256, secp384r1/P-384, secp256k1)
+- `generateKeyPair`
+- `KeyObject` (type, asymmetricKeyType, export)
 - `hash`
 - `getHashes`
 - `getCiphers`

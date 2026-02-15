@@ -23,4 +23,15 @@ world crypto {
   export aes-gcm-roundtrip: func(plaintext: string, key-hex: string, iv-hex: string, aad-text: string) -> string;
   export chacha20-poly1305-roundtrip: func(plaintext: string, key-hex: string, iv-hex: string, aad-text: string) -> string;
   export aes-gcm-encrypt-hex: func(plaintext: string, key-hex: string, iv-hex: string) -> string;
+  export ed25519-sign-verify: func(message: string) -> bool;
+  export ecdsa-p256-sign-verify: func(message: string) -> bool;
+  export ecdsa-secp256k1-sign-verify: func(message: string) -> bool;
+  export ed25519-key-type: func() -> string;
+  export ecdsa-p256-export-import-verify: func(message: string) -> bool;
+  export ed25519-wrong-key-verify: func(message: string) -> bool;
+  export list-curves: func() -> list<string>;
+  export get-constants: func() -> string;
+  export subtle-digest-sha256: func(input: string) -> string;
+  export subtle-sign-verify-hmac: func(message: string) -> bool;
+  export subtle-sign-verify-ed25519: func(message: string) -> bool;
 }

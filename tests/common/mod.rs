@@ -44,10 +44,7 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyho
 /// - `/tests/common/` and `/test/common/` — common shims (both paths used by vendored tests)
 /// - `/tmp/` — for tmpdir shim
 /// - `/tests/fixtures/` — fixture data files (recursively copied)
-pub fn setup_node_compat_test_files(
-    temp: &Utf8Path,
-    test_rel_path: &str,
-) -> anyhow::Result<()> {
+pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> anyhow::Result<()> {
     // Create directory structure: /tests/parallel/ and /tests/common/
     let parallel_dir = temp.join("tests").join("parallel");
     let common_dir = temp.join("tests").join("common");
