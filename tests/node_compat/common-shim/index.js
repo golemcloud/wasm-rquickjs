@@ -95,17 +95,19 @@ var common = {
 
     // Inspection helpers
     invalidArgTypeHelper: function(input) {
-        if (input == null) {
-            return ' Received ' + input;
-        }
-        if (typeof input === 'function') {
+        if (input === null) return ' Received null';
+        if (input === undefined) return ' Received undefined';
+        if (typeof input === 'function' && input.name) {
             return ' Received function ' + input.name;
         }
         if (typeof input === 'object') {
             if (input.constructor && input.constructor.name) {
                 return ' Received an instance of ' + input.constructor.name;
             }
-            return ' Received [object]';
+            return ' Received ' + (input + '');
+        }
+        if (typeof input === 'string') {
+            return ' Received type string (' + JSON.stringify(input) + ')';
         }
         return ' Received type ' + typeof input + ' (' + String(input) + ')';
     },

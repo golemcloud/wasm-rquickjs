@@ -248,17 +248,14 @@
     },
     "parallel/test-fs-chmod-mask.js": {
       "skip": true,
-      "reason": "requires process.umask() and stat mode checking"
+      "reason": "WASI does not preserve file mode bits"
     },
     "parallel/test-fs-chown-type-check.js": {
       "skip": true,
       "reason": "requires ERR_INVALID_ARG_TYPE validation for chown arguments"
     },
     "parallel/test-fs-close.js": {},
-    "parallel/test-fs-close-errors.js": {
-      "skip": true,
-      "reason": "requires ERR_INVALID_ARG_TYPE validation for fd argument"
-    },
+    "parallel/test-fs-close-errors.js": {},
     "parallel/test-fs-constants.js": {},
     "parallel/test-fs-copyfile.js": {
       "skip": true,
@@ -284,14 +281,8 @@
       "skip": true,
       "reason": "creates paths exceeding WASI pre-opened file descriptor path length limits"
     },
-    "parallel/test-fs-fchmod.js": {
-      "skip": true,
-      "reason": "requires detailed mode checking and ERR_INVALID_ARG_TYPE"
-    },
-    "parallel/test-fs-fchown.js": {
-      "skip": true,
-      "reason": "requires process.getuid()"
-    },
+    "parallel/test-fs-fchmod.js": {},
+    "parallel/test-fs-fchown.js": {},
     "parallel/test-fs-filehandle.js": {
       "skip": true,
       "reason": "requires fs.promises.open FileHandle with ERR_INVALID_ARG_TYPE validation"
@@ -312,10 +303,7 @@
       "skip": true,
       "reason": "platform-specific lchmod behavior"
     },
-    "parallel/test-fs-lchown.js": {
-      "skip": true,
-      "reason": "requires process.getuid()"
-    },
+    "parallel/test-fs-lchown.js": {},
     "parallel/test-fs-link.js": {},
     "parallel/test-fs-long-path.js": {
       "skip": true,
@@ -365,7 +353,7 @@
     },
     "parallel/test-fs-open-mode-mask.js": {
       "skip": true,
-      "reason": "openSync does not accept string mode argument"
+      "reason": "WASI does not preserve file mode bits"
     },
     "parallel/test-fs-open-no-close.js": {
       "skip": true,
@@ -421,20 +409,14 @@
       "skip": true,
       "reason": "requires ReadStream/WriteStream from FileHandle"
     },
-    "parallel/test-fs-promises-file-handle-sync.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-promises-file-handle-sync.js": {},
     "parallel/test-fs-promises-file-handle-truncate.js": {},
     "parallel/test-fs-promises-file-handle-write.js": {},
     "parallel/test-fs-promises-file-handle-writeFile.js": {
       "skip": true,
       "reason": "requires AbortSignal support and ERR_INVALID_ARG_TYPE"
     },
-    "parallel/test-fs-promises-readfile-empty.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-promises-readfile-empty.js": {},
     "parallel/test-fs-promises-readfile-with-fd.js": {},
     "parallel/test-fs-promises-readfile.js": {
       "skip": true,
@@ -461,7 +443,7 @@
     "parallel/test-fs-promisified.js": {},
     "parallel/test-fs-read-empty-buffer.js": {
       "skip": true,
-      "reason": "requires fixtures module"
+      "reason": "requires ERR_INVALID_ARG_VALUE for empty buffer in readSync"
     },
     "parallel/test-fs-read-file-assert-encoding.js": {
       "skip": true,
@@ -475,18 +457,9 @@
       "skip": true,
       "reason": "requires fixtures module"
     },
-    "parallel/test-fs-read-offset-null.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
-    "parallel/test-fs-read-optional-params.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
-    "parallel/test-fs-read-promises-optional-params.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-read-offset-null.js": {},
+    "parallel/test-fs-read-optional-params.js": {},
+    "parallel/test-fs-read-promises-optional-params.js": {},
     "parallel/test-fs-read-stream-autoClose.js": {
       "skip": true,
       "reason": "requires full ReadStream implementation"
@@ -545,16 +518,10 @@
     },
     "parallel/test-fs-read-type.js": {
       "skip": true,
-      "reason": "requires fixtures module"
+      "reason": "requires ERR_INVALID_ARG_TYPE for buffer validation and ERR_MISSING_ARGS"
     },
-    "parallel/test-fs-read-zero-length.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
-    "parallel/test-fs-read.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-read-zero-length.js": {},
+    "parallel/test-fs-read.js": {},
     "parallel/test-fs-readdir.js": {
       "skip": true,
       "reason": "requires ENOTDIR error and ERR_INVALID_ARG_TYPE"
@@ -588,10 +555,7 @@
       "skip": true,
       "reason": "uses wrong tmpdir require path (../../test/common/tmpdir)"
     },
-    "parallel/test-fs-readfile-empty.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-readfile-empty.js": {},
     "parallel/test-fs-readfile-eof.js": {
       "skip": true,
       "reason": "requires /proc filesystem (Linux-specific)"
@@ -600,10 +564,7 @@
       "skip": true,
       "reason": "requires fixtures module"
     },
-    "parallel/test-fs-readfile-fd.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-readfile-fd.js": {},
     "parallel/test-fs-readfile-flags.js": {},
     "parallel/test-fs-readfile-pipe-large.js": {
       "skip": true,
@@ -632,7 +593,7 @@
     },
     "parallel/test-fs-readSync-optional-params.js": {
       "skip": true,
-      "reason": "requires fixtures module"
+      "reason": "requires strict options parameter validation for Infinity/BigInt/Symbol in readSync"
     },
     "parallel/test-fs-readv-promises.js": {},
     "parallel/test-fs-readv-promisify.js": {
@@ -650,7 +611,7 @@
     },
     "parallel/test-fs-realpath-buffer-encoding.js": {
       "skip": true,
-      "reason": "requires fixtures module"
+      "reason": "requires realpath to work on WASI-mounted fixture directories"
     },
     "parallel/test-fs-realpath-native.js": {
       "skip": true,
@@ -668,10 +629,7 @@
       "skip": true,
       "reason": "requires fixtures module and child_process"
     },
-    "parallel/test-fs-rename-type-check.js": {
-      "skip": true,
-      "reason": "requires ERR_INVALID_ARG_TYPE validation"
-    },
+    "parallel/test-fs-rename-type-check.js": {},
     "parallel/test-fs-rm.js": {
       "skip": true,
       "reason": "requires --expose-internals and internal/fs/utils"
@@ -745,11 +703,11 @@
     },
     "parallel/test-fs-symlink-dir-junction-relative.js": {
       "skip": true,
-      "reason": "requires fixtures module"
+      "reason": "requires symlink support in WASI filesystem"
     },
     "parallel/test-fs-symlink-dir-junction.js": {
       "skip": true,
-      "reason": "requires fixtures module"
+      "reason": "requires symlink support in WASI filesystem"
     },
     "parallel/test-fs-symlink-longpath.js": {},
     "parallel/test-fs-symlink.js": {
@@ -781,10 +739,7 @@
       "skip": true,
       "reason": "requires Buffer.equals method"
     },
-    "parallel/test-fs-unlink-type-check.js": {
-      "skip": true,
-      "reason": "requires ERR_INVALID_ARG_TYPE validation"
-    },
+    "parallel/test-fs-unlink-type-check.js": {},
     "parallel/test-fs-util-validateoffsetlength.js": {
       "skip": true,
       "reason": "requires --expose-internals and internal/fs/utils"
@@ -928,14 +883,8 @@
       "skip": true,
       "reason": "requires process.umask() and child_process"
     },
-    "parallel/test-fs-write-file-typedarrays.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
-    "parallel/test-fs-write-file.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-write-file-typedarrays.js": {},
+    "parallel/test-fs-write-file.js": {},
     "parallel/test-fs-write-negativeoffset.js": {
       "skip": true,
       "reason": "requires ERR_OUT_OF_RANGE error code validation"

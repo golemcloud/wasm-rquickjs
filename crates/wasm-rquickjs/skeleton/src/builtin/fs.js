@@ -145,19 +145,25 @@ function getOptions(options, defaultOptions) {
 function describeType(value) {
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
+    if (typeof value === 'function' && value.name) return 'function ' + value.name;
     if (typeof value === 'object') {
         if (value.constructor && value.constructor.name) {
             return 'an instance of ' + value.constructor.name;
         }
-        return 'type object';
+        return value + '';
     }
-    if (typeof value === 'function') return 'function ' + (value.name || '');
+    if (typeof value === 'string') return 'type string (' + JSON.stringify(value) + ')';
     return 'type ' + typeof value + ' (' + String(value) + ')';
 }
 
 function validateInteger(value, name, min, max) {
     if (typeof value !== 'number' || !Number.isInteger(value)) {
         const err = new RangeError(`The value of "${name}" is out of range. It must be an integer. Received ${String(value)}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    if (min !== undefined && max !== undefined && (value < min || value > max)) {
+        const err = new RangeError(`The value of "${name}" is out of range. It must be >= ${min} && <= ${max}. Received ${value}`);
         err.code = 'ERR_OUT_OF_RANGE';
         throw err;
     }
@@ -174,16 +180,12 @@ function validateInteger(value, name, min, max) {
 }
 
 function validateFd(fd) {
-    if (typeof fd !== 'number' || !Number.isInteger(fd) || fd < 0) {
-        if (typeof fd !== 'number') {
-            const err = new TypeError(`The "fd" argument must be of type number. Received ${describeType(fd)}`);
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
-        const err = new RangeError(`The value of "fd" is out of range. It must be >= 0. Received ${fd}`);
-        err.code = 'ERR_OUT_OF_RANGE';
+    if (typeof fd !== 'number') {
+        const err = new TypeError(`The "fd" argument must be of type number. Received ${describeType(fd)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
+    validateInteger(fd, 'fd', 0, 2147483647);
 }
 
 function validateBuffer(buffer, name) {
@@ -196,7 +198,7 @@ function validateBuffer(buffer, name) {
 
 function validateCallback(cb) {
     if (typeof cb !== 'function') {
-        const err = new TypeError(`The "callback" argument must be of type function. Received type ${typeof cb}`);
+        const err = new TypeError(`The "callback" argument must be of type function. Received ${describeType(cb)}`);
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
@@ -208,6 +210,34 @@ function validateFlush(flush) {
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
+}
+
+function validateMode(mode, name, def) {
+    if (mode === undefined) return def;
+    if (typeof mode === 'string') {
+        if (!/^[0-7]+$/.test(mode)) {
+            const err = new TypeError(`The argument '${name}' must be a 32-bit unsigned integer or an octal string. Received '${mode}'`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        return parseInt(mode, 8);
+    }
+    if (typeof mode !== 'number') {
+        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(mode)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    validateInteger(mode, name, 0, 4294967295);
+    return mode;
+}
+
+function validateUid(id, name) {
+    if (typeof id !== 'number') {
+        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(id)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    validateInteger(id, name, -1, 4294967295);
 }
 
 function validatePath(path, propName) {
@@ -313,6 +343,11 @@ export class Dirent {
 
 export class Dir {
     constructor(path, entries) {
+        if (path === undefined) {
+            const err = new TypeError('The "path" argument must be of type string. Received undefined');
+            err.code = 'ERR_MISSING_ARGS';
+            throw err;
+        }
         this.path = path;
         this._entries = entries;
         this._index = 0;
@@ -374,6 +409,18 @@ export class Dir {
     }
 }
 
+function normalizeEncoding(enc) {
+    if (!enc) return enc;
+    const lower = enc.toLowerCase().replace('-', '');
+    if (lower === 'utf8') return 'utf8';
+    if (lower === 'ascii') return 'ascii';
+    if (lower === 'hex') return 'hex';
+    if (lower === 'base64') return 'base64';
+    if (lower === 'latin1' || lower === 'binary') return 'latin1';
+    if (lower === 'ucs2' || lower === 'utf16le') return 'utf16le';
+    return enc;
+}
+
 // --- Sync functions ---
 
 export function readFileSync(path, options) {
@@ -381,8 +428,32 @@ export function readFileSync(path, options) {
     if (typeof options === 'string') {
         options = {encoding: options};
     }
-    if (options && options.encoding && options.encoding !== '') {
-        const [contents, error] = native.read_file_with_encoding(path, options.encoding);
+    const encoding = options && options.encoding && options.encoding !== '' ? normalizeEncoding(options.encoding) : null;
+
+    if (typeof path === 'number') {
+        const chunks = [];
+        let totalLength = 0;
+        const buf = new Uint8Array(8192);
+        while (true) {
+            const bytesRead = readSync(path, buf, 0, buf.length, null);
+            if (bytesRead === 0) break;
+            chunks.push(buf.slice(0, bytesRead));
+            totalLength += bytesRead;
+        }
+        const result = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+            result.set(chunk, offset);
+            offset += chunk.length;
+        }
+        if (encoding) {
+            return new TextDecoder(encoding).decode(result);
+        }
+        return getBuffer().from(result);
+    }
+
+    if (encoding) {
+        const [contents, error] = native.read_file_with_encoding(path, encoding);
         if (error === undefined) {
             return contents;
         } else {
@@ -405,8 +476,9 @@ export function writeFileSync(path, data, options) {
     }
     const flush = options ? options.flush : undefined;
     validateFlush(flush);
-    if (options && options.encoding && options.encoding !== '') {
-        const error = native.write_file_with_encoding(path, options.encoding, data);
+    const encoding = options && options.encoding && options.encoding !== '' ? normalizeEncoding(options.encoding) : null;
+    if (encoding) {
+        const error = native.write_file_with_encoding(path, encoding, data);
         if (error !== undefined) {
             throw new Error(error);
         }
@@ -464,7 +536,7 @@ export function appendFileSync(path, data, options) {
 export function openSync(path, flags, mode) {
     validatePath(path);
     flags = flagsToNumber(flags !== undefined ? flags : 'r');
-    mode = mode !== undefined ? mode : 0o666;
+    mode = validateMode(mode, 'mode', 0o666);
     const result = native.fs_open(path, flags, mode);
     if (result.error) {
         throw createSystemError(result.error);
@@ -473,6 +545,7 @@ export function openSync(path, flags, mode) {
 }
 
 export function closeSync(fd) {
+    validateFd(fd);
     const error = native.fs_close(fd);
     if (error) {
         throw createSystemError(error);
@@ -480,11 +553,24 @@ export function closeSync(fd) {
 }
 
 export function readSync(fd, buffer, offsetOrOptions, length, position) {
+    // When second arg is an options object (not a buffer), extract buffer from it
+    if (buffer != null && typeof buffer === 'object' && !ArrayBuffer.isView(buffer) && !Array.isArray(buffer) && offsetOrOptions === undefined) {
+        const opts = buffer;
+        if (opts.buffer == null) {
+            validateBuffer(opts, 'buffer');
+        }
+        buffer = opts.buffer;
+        offsetOrOptions = opts;
+    }
     let offset = 0;
-    if (typeof offsetOrOptions === 'object' && offsetOrOptions !== null && !ArrayBuffer.isView(offsetOrOptions)) {
+    if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions === 'object' && !ArrayBuffer.isView(offsetOrOptions) && !Array.isArray(offsetOrOptions)) {
         offset = offsetOrOptions.offset || 0;
         length = offsetOrOptions.length !== undefined ? offsetOrOptions.length : buffer.byteLength - offset;
         position = offsetOrOptions.position !== undefined ? offsetOrOptions.position : null;
+    } else if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions !== 'number') {
+        const err = new TypeError(`The "options" argument must be of type object. Received ${describeType(offsetOrOptions)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
     } else {
         offset = offsetOrOptions || 0;
         length = length !== undefined ? length : buffer.byteLength - offset;
@@ -717,6 +803,7 @@ export function readlinkSync(path, options) {
 
 export function chmodSync(path, mode) {
     validatePath(path);
+    mode = validateMode(mode, 'mode', undefined);
     const error = native.fs_chmod(path, mode);
     if (error) {
         throw createSystemError(error);
@@ -724,6 +811,8 @@ export function chmodSync(path, mode) {
 }
 
 export function fchmodSync(fd, mode) {
+    validateFd(fd);
+    mode = validateMode(mode, 'mode', undefined);
     const error = native.fs_fchmod(fd, mode);
     if (error) {
         throw createSystemError(error);
@@ -736,6 +825,8 @@ export function lchmodSync(path, mode) {
 
 export function chownSync(path, uid, gid) {
     validatePath(path);
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     const error = native.fs_chown(path, uid, gid);
     if (error) {
         throw createSystemError(error);
@@ -743,6 +834,9 @@ export function chownSync(path, uid, gid) {
 }
 
 export function fchownSync(fd, uid, gid) {
+    validateFd(fd);
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     const error = native.fs_fchown(fd, uid, gid);
     if (error) {
         throw createSystemError(error);
@@ -751,6 +845,8 @@ export function fchownSync(fd, uid, gid) {
 
 export function lchownSync(path, uid, gid) {
     validatePath(path);
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     const error = native.fs_lchown(path, uid, gid);
     if (error) {
         throw createSystemError(error);
@@ -979,6 +1075,12 @@ export function open(path, flagsOrCallback, modeOrCallback, callback) {
 }
 
 export function close(fd, callback) {
+    validateFd(fd);
+    if (callback !== undefined && typeof callback !== 'function') {
+        const err = new TypeError(`The "callback" argument must be of type function. Received ${describeType(callback)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
     if (typeof callback !== 'function') {
         callback = function() {};
     }
@@ -1014,12 +1116,38 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
             offset = 0;
             length = buffer.byteLength;
             position = null;
-        } else {
-            buffer = bufferOrOptions.buffer || getBuffer().alloc(16384);
+        } else if (bufferOrOptions != null && typeof bufferOrOptions === 'object' && !ArrayBuffer.isView(bufferOrOptions)) {
+            if ('buffer' in bufferOrOptions && bufferOrOptions.buffer != null) {
+                buffer = bufferOrOptions.buffer;
+            } else if ('buffer' in bufferOrOptions && bufferOrOptions.buffer == null) {
+                validateBuffer(bufferOrOptions, 'buffer');
+            } else {
+                buffer = getBuffer().alloc(16384);
+            }
             offset = bufferOrOptions.offset || 0;
             length = bufferOrOptions.length !== undefined ? bufferOrOptions.length : buffer.byteLength - offset;
             position = bufferOrOptions.position !== undefined ? bufferOrOptions.position : null;
+        } else {
+            buffer = getBuffer().alloc(16384);
+            offset = 0;
+            length = buffer.byteLength;
+            position = null;
         }
+    } else if (ArrayBuffer.isView(bufferOrOptions) && offsetOrCallback != null && typeof offsetOrCallback === 'object' && !ArrayBuffer.isView(offsetOrCallback) && !Array.isArray(offsetOrCallback)) {
+        buffer = bufferOrOptions;
+        offset = offsetOrCallback.offset || 0;
+        const optLen = offsetOrCallback.length;
+        position = offsetOrCallback.position !== undefined ? offsetOrCallback.position : null;
+        // The next positional param after options is the callback
+        if (typeof length === 'function') {
+            cb = length;
+        } else if (typeof position === 'function') {
+            cb = position;
+            position = null;
+        } else {
+            cb = callback;
+        }
+        length = optLen !== undefined ? optLen : buffer.byteLength - offset;
     } else {
         buffer = bufferOrOptions;
         offset = offsetOrCallback || 0;
@@ -1376,6 +1504,8 @@ export function chmod(path, mode, callback) {
 }
 
 export function fchmod(fd, mode, callback) {
+    validateFd(fd);
+    mode = validateMode(mode, 'mode', undefined);
     validateCallback(callback);
     queueMicrotask(() => {
         try {
@@ -1401,6 +1531,8 @@ export function lchmod(path, mode, callback) {
 
 export function chown(path, uid, gid, callback) {
     validatePath(path);
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     validateCallback(callback);
     queueMicrotask(() => {
         try {
@@ -1413,6 +1545,9 @@ export function chown(path, uid, gid, callback) {
 }
 
 export function fchown(fd, uid, gid, callback) {
+    validateFd(fd);
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     validateCallback(callback);
     queueMicrotask(() => {
         try {
@@ -1426,6 +1561,8 @@ export function fchown(fd, uid, gid, callback) {
 
 export function lchown(path, uid, gid, callback) {
     validatePath(path);
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     validateCallback(callback);
     queueMicrotask(() => {
         try {
