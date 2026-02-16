@@ -21,4 +21,44 @@ pub const WIRE_JS: &str = r#"
         globalThis.WritableStream = __wasm_rquickjs_streams.WritableStream;
         globalThis.WritableStreamDefaultController = __wasm_rquickjs_streams.WritableStreamDefaultController;
         globalThis.WritableStreamDefaultWriter = __wasm_rquickjs_streams.WritableStreamDefaultWriter;
+
+        // Patch ReadableStream to throw Node.js-compatible ERR_INVALID_STATE errors
+        // when the stream is already locked.
+        {
+            const RS = globalThis.ReadableStream;
+            function errInvalidState(msg) {
+                const e = new TypeError(msg);
+                e.code = 'ERR_INVALID_STATE';
+                return e;
+            }
+
+            const origGetReader = RS.prototype.getReader;
+            RS.prototype.getReader = function getReader(...args) {
+                if (this.locked) {
+                    throw errInvalidState('Invalid state: ReadableStream is locked');
+                }
+                return origGetReader.apply(this, args);
+            };
+
+            const origValues = RS.prototype.values;
+            if (typeof origValues === 'function') {
+                RS.prototype.values = function values(...args) {
+                    if (this.locked) {
+                        throw errInvalidState('Invalid state: ReadableStream is locked');
+                    }
+                    return origValues.apply(this, args);
+                };
+            }
+
+            const symAsyncIterator = Symbol.asyncIterator;
+            const origAsyncIterator = RS.prototype[symAsyncIterator];
+            if (typeof origAsyncIterator === 'function') {
+                RS.prototype[symAsyncIterator] = function(...args) {
+                    if (this.locked) {
+                        throw errInvalidState('Invalid state: ReadableStream is locked');
+                    }
+                    return origAsyncIterator.apply(this, args);
+                };
+            }
+        }
     "#;
