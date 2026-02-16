@@ -1047,58 +1047,34 @@
       "skip": true,
       "reason": "requires des3/des-ede3-cbc cipher which is not implemented"
     },
-    "parallel/test-crypto-dh-constructor.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
+    "parallel/test-crypto-dh-constructor.js": {},
     "parallel/test-crypto-dh-curves.js": {
       "skip": true,
-      "reason": "requires ECDH class which is not implemented"
+      "reason": "requires ECDH key pair consistency validation (Invalid key pair check) not available without OpenSSL"
     },
     "parallel/test-crypto-dh-errors.js": {
       "skip": true,
       "reason": "requires DiffieHellman class which is not implemented"
     },
-    "parallel/test-crypto-dh-generate-keys.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
-    "parallel/test-crypto-dh-group-setters.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
+    "parallel/test-crypto-dh-generate-keys.js": {},
+    "parallel/test-crypto-dh-group-setters.js": {},
     "parallel/test-crypto-dh-leak.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
-    "parallel/test-crypto-dh-modp2-views.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
-    "parallel/test-crypto-dh-modp2.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
-    "parallel/test-crypto-dh-odd-key.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
-    "parallel/test-crypto-dh-padding.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
-    "parallel/test-crypto-dh-shared.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
+       "skip": true,
+       "reason": "requires --expose-gc and process.memoryUsage.rss"
+     },
+    "parallel/test-crypto-dh-modp2-views.js": {},
+    "parallel/test-crypto-dh-modp2.js": {},
+    "parallel/test-crypto-dh-odd-key.js": {},
+    "parallel/test-crypto-dh-padding.js": {},
+    "parallel/test-crypto-dh-shared.js": {},
     "parallel/test-crypto-dh-stateless.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
+       "skip": true,
+       "reason": "requires crypto.diffieHellman() stateless API and DH key pair generation"
+     },
     "parallel/test-crypto-dh.js": {
-      "skip": true,
-      "reason": "requires DiffieHellman class which is not implemented"
-    },
+       "skip": true,
+       "reason": "requires aes-128-ecb cipher which is not implemented"
+     },
     "parallel/test-crypto-domain.js": {
       "skip": true,
       "reason": "requires domain module which is not available in WASM"
@@ -1258,8 +1234,7 @@
       "reason": "requires RSA key generation which is not implemented"
     },
     "parallel/test-crypto-keygen-key-objects.js": {
-      "skip": true,
-      "reason": "requires RSA key generation which is not implemented"
+      "skip": false
     },
     "parallel/test-crypto-keygen-missing-oid.js": {
       "skip": true,
@@ -1270,8 +1245,7 @@
       "reason": "requires RSA-PSS key generation which is not implemented"
     },
     "parallel/test-crypto-keygen-non-standard-public-exponent.js": {
-      "skip": true,
-      "reason": "requires RSA key generation which is not implemented"
+      "skip": false
     },
     "parallel/test-crypto-keygen-promisify.js": {
       "skip": true,
@@ -1290,8 +1264,7 @@
       "reason": "requires RSA-PSS key generation which is not implemented"
     },
     "parallel/test-crypto-keygen-sync.js": {
-      "skip": true,
-      "reason": "requires RSA key generation which is not implemented"
+      "skip": false
     },
     "parallel/test-crypto-keygen.js": {
       "skip": true,

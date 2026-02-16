@@ -27,7 +27,7 @@ process.version = 'v22.0.0';
 process.versions = {
     node: '22.0.0',
     modules: '127',
-    openssl: '',
+    openssl: '3.0.0',
 };
 process.config = {
     target_defaults: { default_configuration: 'Release' },

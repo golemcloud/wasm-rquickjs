@@ -25,8 +25,8 @@ logging = ["dep:wasi-logging"]
 rquickjs = { version = "0.9.0", default-features = false, features = ["futures", "bindgen", "loader", "macro"] }
 
 encoding_rs = "0.8.35"
-sha1 = "0.10"
-sha2 = "0.10"
+sha1 = { version = "0.10", features = ["oid"] }
+sha2 = { version = "0.10", features = ["oid"] }
 sha3 = "0.10"
 md-5 = "0.10"
 ripemd = "0.1"
@@ -43,10 +43,13 @@ cbc = { version = "0.1", features = ["alloc"] }
 ctr = "0.9"
 cipher = "0.4"
 ed25519-dalek = { version = "2", default-features = false, features = ["rand_core", "pkcs8"] }
-p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem"] }
-p384 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem"] }
-k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem"] }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "ecdh"] }
+p384 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "ecdh"] }
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "ecdh"] }
+num-bigint-dig = { version = "0.8", features = ["prime", "rand"] }
+num-traits = "0.2"
 pkcs8 = { version = "0.10", default-features = false, features = ["pem", "alloc"] }
+rsa = { version = "0.9", default-features = false, features = ["pem"] }
 elliptic-curve = { version = "0.13", default-features = false, features = ["sec1"] }
 ecdsa = { version = "0.16", default-features = false, features = ["signing", "verifying", "der"] }
 signature = "2"

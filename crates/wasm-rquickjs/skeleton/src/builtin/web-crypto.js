@@ -833,6 +833,281 @@ export function getCurves() {
     return ['prime256v1', 'secp384r1', 'secp256k1'];
 }
 
+// ===== DiffieHellman =====
+
+function DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding) {
+    if (!(this instanceof DiffieHellman)) return new DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding);
+    if (typeof sizeOrKey === 'number') {
+        if (!Number.isInteger(sizeOrKey)) {
+            const err = new RangeError('The value of "sizeOrKey" is out of range. It must be an integer. Received ' + sizeOrKey);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+        const result = webCryptoNative.dh_create_from_size_err(sizeOrKey);
+        if (result[0] === 'error') {
+            const err = new Error(result[1]);
+            err.code = 'ERR_OSSL_DH_MODULUS_TOO_SMALL';
+            throw err;
+        }
+        this._handle = parseInt(result[0]);
+    } else {
+        if (typeof sizeOrKey !== 'string' && !ArrayBuffer.isView(sizeOrKey) && !(sizeOrKey instanceof ArrayBuffer)) {
+            const err = new TypeError('The "sizeOrKey" argument must be of type number or string or an instance of Buffer, TypedArray, or DataView.');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        const primeBytes = toBytes(sizeOrKey, keyEncoding);
+        let genBytes;
+        if (generator === undefined || generator === null) {
+            genBytes = new Uint8Array([2]);
+        } else if (typeof generator === 'number') {
+            if (!Number.isInteger(generator)) {
+                const err = new RangeError('The value of "generator" is out of range. It must be an integer. Received ' + generator);
+                err.code = 'ERR_OUT_OF_RANGE';
+                throw err;
+            }
+            if (generator < 0 || generator > 0xFFFFFFFF) {
+                genBytes = new Uint8Array([2]);
+            } else if (generator === 0) {
+                genBytes = new Uint8Array([0]);
+            } else {
+                const buf = [];
+                let g = generator;
+                while (g > 0) { buf.unshift(g & 0xFF); g >>= 8; }
+                genBytes = new Uint8Array(buf);
+            }
+        } else if (typeof generator === 'string') {
+            genBytes = toBytes(generator, genEncoding);
+        } else if (ArrayBuffer.isView(generator) || generator instanceof ArrayBuffer) {
+            genBytes = toBytes(generator);
+        } else {
+            const err = new TypeError('The "generator" argument must be of type number or string or an instance of Buffer, TypedArray, or DataView.');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        this._handle = webCryptoNative.dh_create_from_prime(primeBytes, genBytes);
+    }
+}
+
+DiffieHellman.prototype.generateKeys = function(encoding) {
+    const bytes = webCryptoNative.dh_generate_keys(this._handle);
+    if (bytes === null || bytes === undefined) throw new Error('Failed to generate keys');
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+DiffieHellman.prototype.computeSecret = function(otherPublicKey, inputEncoding, outputEncoding) {
+    const pubBytes = toBytes(otherPublicKey, inputEncoding);
+    const result = webCryptoNative.dh_compute_secret_err(this._handle, pubBytes);
+    if (result[0] === 'error') {
+        const err = new Error(result[1]);
+        err.message = result[1];
+        throw err;
+    }
+    const hexStr = result[1];
+    const bytes = new Uint8Array(hexStr.length / 2);
+    for (let i = 0; i < hexStr.length; i += 2) {
+        bytes[i / 2] = parseInt(hexStr.substring(i, i + 2), 16);
+    }
+    return encodeOutput(bytes, outputEncoding);
+};
+
+DiffieHellman.prototype.getPrime = function(encoding) {
+    const bytes = webCryptoNative.dh_get_prime(this._handle);
+    if (bytes === null || bytes === undefined) throw new Error('Failed to get prime');
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+DiffieHellman.prototype.getGenerator = function(encoding) {
+    const bytes = webCryptoNative.dh_get_generator(this._handle);
+    if (bytes === null || bytes === undefined) throw new Error('Failed to get generator');
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+DiffieHellman.prototype.getPublicKey = function(encoding) {
+    const bytes = webCryptoNative.dh_get_public_key(this._handle);
+    if (bytes === null || bytes === undefined) {
+        const err = new Error('No public key - did you forget to generate one?');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+DiffieHellman.prototype.getPrivateKey = function(encoding) {
+    const bytes = webCryptoNative.dh_get_private_key(this._handle);
+    if (bytes === null || bytes === undefined) {
+        const err = new Error('No private key - did you forget to generate one?');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+DiffieHellman.prototype.setPublicKey = function(key, encoding) {
+    const keyBytes = toBytes(key, encoding);
+    webCryptoNative.dh_set_public_key(this._handle, keyBytes);
+};
+
+DiffieHellman.prototype.setPrivateKey = function(key, encoding) {
+    const keyBytes = toBytes(key, encoding);
+    webCryptoNative.dh_set_private_key(this._handle, keyBytes);
+};
+
+Object.defineProperty(DiffieHellman.prototype, 'verifyError', {
+    get: function() {
+        const err = webCryptoNative.dh_get_verify_error(this._handle);
+        return err === null || err === undefined ? 0 : err;
+    }
+});
+
+export { DiffieHellman };
+
+export function createDiffieHellman(sizeOrKey, encodingOrGenerator, generator, genEncoding) {
+    if (typeof sizeOrKey === 'number') {
+        return new DiffieHellman(sizeOrKey);
+    }
+    if (arguments.length >= 4) {
+        return new DiffieHellman(sizeOrKey, encodingOrGenerator, generator, genEncoding);
+    }
+    if (arguments.length === 3) {
+        if (typeof sizeOrKey === 'string') {
+            return new DiffieHellman(sizeOrKey, encodingOrGenerator, generator);
+        }
+        return new DiffieHellman(sizeOrKey, undefined, encodingOrGenerator, generator);
+    }
+    if (typeof sizeOrKey === 'string' && typeof encodingOrGenerator === 'string') {
+        return new DiffieHellman(sizeOrKey, encodingOrGenerator);
+    }
+    return new DiffieHellman(sizeOrKey, undefined, encodingOrGenerator);
+}
+
+// ===== DiffieHellmanGroup =====
+
+function DiffieHellmanGroup(name) {
+    if (!(this instanceof DiffieHellmanGroup)) return new DiffieHellmanGroup(name);
+    const handle = webCryptoNative.dh_create_group(name);
+    if (handle === null || handle === undefined) {
+        const err = new Error('Unknown DH group');
+        err.code = 'ERR_CRYPTO_UNKNOWN_DH_GROUP';
+        throw err;
+    }
+    this._handle = handle;
+}
+
+DiffieHellmanGroup.prototype.generateKeys = DiffieHellman.prototype.generateKeys;
+DiffieHellmanGroup.prototype.computeSecret = DiffieHellman.prototype.computeSecret;
+DiffieHellmanGroup.prototype.getPrime = DiffieHellman.prototype.getPrime;
+DiffieHellmanGroup.prototype.getGenerator = DiffieHellman.prototype.getGenerator;
+DiffieHellmanGroup.prototype.getPublicKey = DiffieHellman.prototype.getPublicKey;
+DiffieHellmanGroup.prototype.getPrivateKey = DiffieHellman.prototype.getPrivateKey;
+
+Object.defineProperty(DiffieHellmanGroup.prototype, 'verifyError', {
+    get: function() {
+        const err = webCryptoNative.dh_get_verify_error(this._handle);
+        return err === null || err === undefined ? 0 : err;
+    }
+});
+
+export { DiffieHellmanGroup };
+
+export function createDiffieHellmanGroup(name) {
+    return new DiffieHellmanGroup(name);
+}
+
+export function getDiffieHellman(name) {
+    return new DiffieHellmanGroup(name);
+}
+
+// ===== ECDH =====
+
+function ECDH(curve) {
+    if (!(this instanceof ECDH)) return new ECDH(curve);
+    if (typeof curve !== 'string') {
+        const err = new TypeError('The "curve" argument must be of type string. Received ' + (curve === undefined ? 'undefined' : typeof curve));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    const handle = webCryptoNative.ecdh_create(curve);
+    if (handle === null || handle === undefined) {
+        const err = new Error('Invalid curve: ' + curve);
+        err.code = 'ERR_CRYPTO_INVALID_CURVE';
+        throw err;
+    }
+    this._handle = handle;
+}
+
+ECDH.prototype.generateKeys = function(encoding, format) {
+    const bytes = webCryptoNative.ecdh_generate_keys(this._handle);
+    if (bytes === null || bytes === undefined) throw new Error('Failed to generate keys');
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+ECDH.prototype.computeSecret = function(otherPublicKey, inputEncoding, outputEncoding) {
+    const pubBytes = toBytes(otherPublicKey, inputEncoding);
+    const result = webCryptoNative.ecdh_compute_secret_err(this._handle, pubBytes);
+    if (result[0] === 'error') {
+        const err = new Error(result[1]);
+        err.code = 'ERR_CRYPTO_ECDH_INVALID_PUBLIC_KEY';
+        throw err;
+    }
+    const hexStr = result[1];
+    const bytes = new Uint8Array(hexStr.length / 2);
+    for (let i = 0; i < hexStr.length; i += 2) {
+        bytes[i / 2] = parseInt(hexStr.substring(i, i + 2), 16);
+    }
+    return encodeOutput(bytes, outputEncoding);
+};
+
+ECDH.prototype.getPublicKey = function(encoding, format) {
+    let compressed = false;
+    if (format === 'compressed') compressed = true;
+    else if (format === 'hybrid') compressed = false;
+    else if (format !== undefined && format !== null && format !== 'uncompressed') {
+        const err = new TypeError('Invalid ECDH format: ' + format);
+        err.code = 'ERR_CRYPTO_ECDH_INVALID_FORMAT';
+        throw err;
+    }
+    const bytes = webCryptoNative.ecdh_get_public_key(this._handle, compressed);
+    if (bytes === null || bytes === undefined) throw new Error('Failed to get ECDH public key');
+    if (format === 'hybrid' && bytes.length > 0) {
+        const result = new Uint8Array(bytes);
+        if (result[0] === 4) {
+            result[0] = (result[result.length - 1] & 1) === 0 ? 6 : 7;
+        }
+        return encodeOutput(result, encoding);
+    }
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+ECDH.prototype.getPrivateKey = function(encoding) {
+    const bytes = webCryptoNative.ecdh_get_private_key(this._handle);
+    if (bytes === null || bytes === undefined) throw new Error('Failed to get ECDH private key');
+    return encodeOutput(new Uint8Array(bytes), encoding);
+};
+
+ECDH.prototype.setPublicKey = function(key, encoding) {
+    const keyBytes = toBytes(key, encoding);
+    const result = webCryptoNative.ecdh_set_public_key_err(this._handle, keyBytes);
+    if (result[0] === 'error') {
+        throw new Error(result[1]);
+    }
+};
+
+ECDH.prototype.setPrivateKey = function(key, encoding) {
+    const keyBytes = toBytes(key, encoding);
+    const result = webCryptoNative.ecdh_set_private_key_err(this._handle, keyBytes);
+    if (result[0] === 'error') {
+        const err = new Error(result[1]);
+        throw err;
+    }
+};
+
+export { ECDH };
+
+export function createECDH(curve) {
+    return new ECDH(curve);
+}
+
 export const constants = {
     OPENSSL_VERSION_NUMBER: 0,
     SSL_OP_ALL: 0,
@@ -916,6 +1191,16 @@ class KeyObject {
         return webCryptoNative.key_asymmetric_type(this._handle);
     }
 
+    get asymmetricKeyDetails() {
+        if (this._type === 'secret') return undefined;
+        const details = webCryptoNative.key_asymmetric_details(this._handle);
+        if (details === null || details === undefined) return undefined;
+        return {
+            modulusLength: Number(details[0]),
+            publicExponent: BigInt(details[1]),
+        };
+    }
+
     export(options) {
         if (!options) options = {};
         if (this._type === 'secret') {
@@ -929,7 +1214,8 @@ class KeyObject {
             return new Uint8Array(raw);
         }
         const format = options.format || (options.type ? 'pem' : 'der');
-        const result = webCryptoNative.key_export(this._handle, format);
+        const type_ = options.type || null;
+        const result = webCryptoNative.key_export(this._handle, format, type_);
         if (result === null || result === undefined) {
             throw new Error('Failed to export key');
         }
@@ -1036,6 +1322,8 @@ export function generateKeyPairSync(type_, options) {
     options = options || {};
     let namedCurve = null;
     let algorithm = type_;
+    let modulusLength = null;
+    let publicExponent = null;
     if (type_ === 'ec') {
         namedCurve = options.namedCurve || options.curve;
         if (!namedCurve) {
@@ -1045,13 +1333,19 @@ export function generateKeyPairSync(type_, options) {
         }
     } else if (type_ === 'ed25519') {
         algorithm = 'ed25519';
+    } else if (type_ === 'rsa' || type_ === 'rsa-pss') {
+        algorithm = 'rsa';
+        modulusLength = options.modulusLength;
+        if (options.publicExponent !== undefined) {
+            publicExponent = options.publicExponent;
+        }
     } else {
         const err = new Error('Unsupported key type: ' + type_);
         err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
         throw err;
     }
 
-    const result = webCryptoNative.generate_key_pair(algorithm, namedCurve);
+    const result = webCryptoNative.generate_key_pair(algorithm, namedCurve, modulusLength, publicExponent);
     if (result === null || result === undefined) {
         const err = new Error('Key generation failed');
         err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
@@ -1248,6 +1542,84 @@ export { Verify };
 
 export function createVerify(algorithm) {
     return new Verify(algorithm);
+}
+
+export function sign(algorithm, data, key, callback) {
+    const algo = algorithm ? algorithm.toLowerCase() : null;
+    const s = new Sign(algo);
+    s.update(data);
+    const result = s.sign(key);
+    if (callback) {
+        queueMicrotask(() => callback(null, result));
+        return;
+    }
+    return result;
+}
+
+export function verify(algorithm, data, key, signature, callback) {
+    const algo = algorithm ? algorithm.toLowerCase() : null;
+    const v = new Verify(algo);
+    v.update(data);
+    const result = v.verify(key, signature);
+    if (callback) {
+        queueMicrotask(() => callback(null, result));
+        return;
+    }
+    return result;
+}
+
+export function publicEncrypt(key, buffer) {
+    let keyObj;
+    let padding = 4; // RSA_PKCS1_OAEP_PADDING default
+    if (key instanceof KeyObject) {
+        keyObj = key;
+    } else if (typeof key === 'object' && key !== null) {
+        if (key.key !== undefined) {
+            keyObj = key.key instanceof KeyObject ? key.key : createPublicKey(key.key);
+        } else {
+            keyObj = createPublicKey(key);
+        }
+        if (key.padding !== undefined) padding = key.padding;
+    } else {
+        keyObj = createPublicKey(key);
+    }
+
+    const data = toBytes(buffer);
+    const result = webCryptoNative.public_encrypt(keyObj._handle, data, padding);
+    if (result === null || result === undefined) {
+        throw new Error('Public encrypt failed');
+    }
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(result);
+    }
+    return new Uint8Array(result);
+}
+
+export function privateDecrypt(key, buffer) {
+    let keyObj;
+    let padding = 4; // RSA_PKCS1_OAEP_PADDING default
+    if (key instanceof KeyObject) {
+        keyObj = key;
+    } else if (typeof key === 'object' && key !== null) {
+        if (key.key !== undefined) {
+            keyObj = key.key instanceof KeyObject ? key.key : createPrivateKey(key.key);
+        } else {
+            keyObj = createPrivateKey(key);
+        }
+        if (key.padding !== undefined) padding = key.padding;
+    } else {
+        keyObj = createPrivateKey(key);
+    }
+
+    const data = toBytes(buffer);
+    const result = webCryptoNative.private_decrypt(keyObj._handle, data, padding);
+    if (result === null || result === undefined) {
+        throw new Error('Private decrypt failed');
+    }
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(result);
+    }
+    return new Uint8Array(result);
 }
 
 function normalizeHashForSign(algorithm) {

@@ -39,12 +39,19 @@ function assertApproximateSize(key, expectedSize) {
          'Key (' + key.length + ' ' + u + ') is longer than expected (' + max + ' ' + u + ')');
 }
 
-function testEncryptDecrypt() {
-  common.skip('publicEncrypt/privateDecrypt not supported in WASM');
+function testEncryptDecrypt(publicKey, privateKey) {
+  var message = 'Hello Node.js world!';
+  var plaintext = Buffer.from(message, 'utf8');
+  var ciphertext = crypto.publicEncrypt(publicKey, plaintext);
+  var received = crypto.privateDecrypt(privateKey, ciphertext);
+  assert.strictEqual(received.toString('utf8'), message);
 }
 
-function testSignVerify() {
-  common.skip('sign/verify not supported in WASM');
+function testSignVerify(publicKey, privateKey) {
+  var message = Buffer.from('Hello Node.js world!');
+  var signature = crypto.sign('SHA256', message, privateKey);
+  var okay = crypto.verify('SHA256', message, publicKey, signature);
+  assert(okay);
 }
 
 function getRegExpForPEM(label, cipher) {
