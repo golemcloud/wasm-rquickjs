@@ -2121,28 +2121,46 @@ const hexCharValueTable = [
 ]
 /* eslint-enable no-multi-spaces, indent */
 
-function validateBuffer (buffer) {
-    if (!ArrayBuffer.isView(buffer)) {
-        throw new TypeError('The "source" argument must be an instance of Buffer, TypedArray, or DataView.')
+function validateBufferSource (source) {
+    if (source instanceof ArrayBuffer || source instanceof SharedArrayBuffer) {
+        if (typeof source.detached === 'boolean' && source.detached) {
+            const err = new TypeError('Cannot perform operation on a detached ArrayBuffer')
+            err.code = 'ERR_INVALID_STATE'
+            throw err
+        }
+        if (source.byteLength === 0 && source.maxByteLength === undefined) {
+            // Possibly detached — try to create a view to detect
+            try {
+                new Uint8Array(source)
+            } catch (e) {
+                const err = new TypeError('Cannot perform operation on a detached ArrayBuffer')
+                err.code = 'ERR_INVALID_STATE'
+                throw err
+            }
+        }
+        return new Uint8Array(source)
     }
+    if (!ArrayBuffer.isView(source)) {
+        const err = new TypeError(
+            'The "source" argument must be an instance of SharedArrayBuffer, ArrayBuffer, Buffer, TypedArray, or DataView. Received ' +
+            (source === null ? 'null' : typeof source === 'object' ? 'an instance of ' + (source.constructor ? source.constructor.name : 'Object') : 'type ' + typeof source)
+        )
+        err.code = 'ERR_INVALID_ARG_TYPE'
+        throw err
+    }
+    return new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
 }
 
-export function isAscii (buffer) {
-    validateBuffer(buffer)
-    const bytes = buffer instanceof DataView
-        ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-        : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+export function isAscii (source) {
+    const bytes = validateBufferSource(source)
     for (let i = 0; i < bytes.length; i++) {
         if (bytes[i] > 127) return false
     }
     return true
 }
 
-export function isUtf8 (buffer) {
-    validateBuffer(buffer)
-    const bytes = buffer instanceof DataView
-        ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-        : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+export function isUtf8 (source) {
+    const bytes = validateBufferSource(source)
     let i = 0
     while (i < bytes.length) {
         const b = bytes[i]

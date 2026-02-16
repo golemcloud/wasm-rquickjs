@@ -1365,6 +1365,10 @@
 
     // === process.hrtime tests ===
     "parallel/test-process-hrtime.js": {},
-    "parallel/test-process-hrtime-bigint.js": {}
+    "parallel/test-process-hrtime-bigint.js": {},
+
+    // === node:buffer tests ===
+    "parallel/test-buffer-isascii.js": {},
+    "parallel/test-buffer-isutf8.js": {}
   }
 }

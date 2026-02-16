@@ -91,7 +91,8 @@ const serializer = (strict, json, $, _) => {
         if (type) {
           let spread = value;
           if (type === 'DataView') {
-            spread = new Uint8Array(value.buffer);
+            const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+            return as([type, {bytes: [...bytes], byteOffset: 0, byteLength: value.byteLength}], value);
           }
           else if (type === 'ArrayBuffer') {
             spread = new Uint8Array(value);
@@ -222,10 +223,11 @@ const deserializer = ($, _) => {
       case 'BigInt':
         return as(Object(BigInt(value)), index);
       case 'ArrayBuffer':
-        return as(new Uint8Array(value).buffer, value);
+        return as(new Uint8Array(value).buffer, index);
       case 'DataView': {
-        const { buffer } = new Uint8Array(value);
-        return as(new DataView(buffer), value);
+        const {bytes, byteOffset, byteLength} = value;
+        const buf = new Uint8Array(bytes).buffer;
+        return as(new DataView(buf, byteOffset, byteLength), index);
       }
     }
     return as(new env[type](value), index);
@@ -236,11 +238,48 @@ const deserializer = ($, _) => {
 
 export const deserialize = serialized => deserializer(new Map, serialized)(0);
 
-const structuredClone = (any, options) => {
-  if (options && ('json' in options || 'lossy' in options)) {
-    return deserialize(serialize(any, options));
+const dataCloneError = (message) => {
+  if (typeof DOMException === 'function') {
+    return new DOMException(message, 'DataCloneError');
   }
-  return deserialize(serialize(any, {}));
+  const e = new Error(message);
+  e.name = 'DataCloneError';
+  return e;
+};
+
+const structuredClone = (any, options) => {
+  const transferList = options && options.transfer;
+  const transferMap = new Map();
+
+  if (transferList != null) {
+    const seen = new Set();
+    for (const item of transferList) {
+      if (!(item instanceof ArrayBuffer)) {
+        throw dataCloneError('Transfer list item is not transferable');
+      }
+      if (typeof item.detached === 'boolean' && item.detached) {
+        throw dataCloneError('ArrayBuffer is already detached');
+      }
+      if (seen.has(item)) {
+        throw dataCloneError('ArrayBuffer occurs in transfer list more than once');
+      }
+      seen.add(item);
+    }
+  }
+
+  const cloneOpts = options && ('json' in options || 'lossy' in options) ? options : {};
+  const result = deserialize(serialize(any, cloneOpts));
+
+  if (transferList != null) {
+    if (typeof ArrayBuffer.prototype.transfer !== 'function') {
+      throw new TypeError('structuredClone: transfer is not supported in this runtime');
+    }
+    for (const item of transferList) {
+      ArrayBuffer.prototype.transfer.call(item);
+    }
+  }
+
+  return result;
 };
 
 export default structuredClone;

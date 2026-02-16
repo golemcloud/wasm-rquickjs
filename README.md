@@ -348,6 +348,8 @@ Implemented by https://github.com/ungap/structured-clone
 - `_extend`
 - `promisify`
 - `callbackify`
+- `TextEncoder`
+- `TextDecoder`
 
 ### `node:buffer`
 - `Buffer`

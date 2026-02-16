@@ -2046,6 +2046,10 @@ function _storeOption(values, name, desc, value) {
     }
 }
 
+import { TextEncoder as _TextEncoder, TextDecoder as _TextDecoder } from '__wasm_rquickjs_builtin/encoding';
+export var TextEncoder = _TextEncoder;
+export var TextDecoder = _TextDecoder;
+
 export default {
      format,
      formatWithOptions,
@@ -2078,5 +2082,7 @@ export default {
      inherits,
      isDeepStrictEqual,
      parseArgs,
-     types
+     types,
+     TextEncoder,
+     TextDecoder
  }
