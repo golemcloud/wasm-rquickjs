@@ -972,6 +972,125 @@ impl KeyData {
         }
     }
 
+    fn export_sec1_private_der(&self) -> Option<Vec<u8>> {
+        match self {
+            KeyData::EcP256Private(sk) => {
+                let secret_key = p256::SecretKey::from(sk);
+                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
+            }
+            KeyData::EcP384Private(sk) => {
+                let secret_key = p384::SecretKey::from(sk);
+                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
+            }
+            KeyData::EcK256Private(sk) => {
+                let secret_key = k256::SecretKey::from(sk);
+                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
+            }
+            _ => None,
+        }
+    }
+
+    fn export_sec1_private_pem(&self) -> Option<String> {
+        match self {
+            KeyData::EcP256Private(sk) => {
+                let secret_key = p256::SecretKey::from(sk);
+                secret_key.to_sec1_pem(sec1::LineEnding::LF).ok().map(|s| s.to_string())
+            }
+            KeyData::EcP384Private(sk) => {
+                let secret_key = p384::SecretKey::from(sk);
+                secret_key.to_sec1_pem(sec1::LineEnding::LF).ok().map(|s| s.to_string())
+            }
+            KeyData::EcK256Private(sk) => {
+                let secret_key = k256::SecretKey::from(sk);
+                secret_key.to_sec1_pem(sec1::LineEnding::LF).ok().map(|s| s.to_string())
+            }
+            _ => None,
+        }
+    }
+
+    fn export_pkcs8_encrypted_pem(&self, passphrase: &[u8]) -> Option<String> {
+        use pkcs8::EncodePrivateKey;
+        let rng = rand_core_06::OsRng;
+        match self {
+            KeyData::EcP256Private(sk) => {
+                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
+            }
+            KeyData::EcP384Private(sk) => {
+                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
+            }
+            KeyData::EcK256Private(sk) => {
+                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
+            }
+            KeyData::RsaPrivate(sk) => {
+                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
+            }
+            _ => None,
+        }
+    }
+
+    fn export_jwk(&self) -> Option<String> {
+        use base64ct::{Base64UrlUnpadded, Encoding};
+        use elliptic_curve::sec1::ToEncodedPoint;
+        match self {
+            KeyData::EcP256Private(sk) => {
+                let secret_key = p256::SecretKey::from(sk);
+                let public_key = secret_key.public_key();
+                let point = public_key.to_encoded_point(false);
+                let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
+                let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
+                let d = Base64UrlUnpadded::encode_string(secret_key.to_bytes().as_slice());
+                Some(format!(r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}","d":"{}"}}"#, x, y, d))
+            }
+            KeyData::EcP256Public(pk) => {
+                let point = pk.to_encoded_point(false);
+                let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
+                let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
+                Some(format!(r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}"}}"#, x, y))
+            }
+            KeyData::EcP384Private(sk) => {
+                let secret_key = p384::SecretKey::from(sk);
+                let public_key = secret_key.public_key();
+                let point = public_key.to_encoded_point(false);
+                let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
+                let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
+                let d = Base64UrlUnpadded::encode_string(secret_key.to_bytes().as_slice());
+                Some(format!(r#"{{"kty":"EC","crv":"P-384","x":"{}","y":"{}","d":"{}"}}"#, x, y, d))
+            }
+            KeyData::EcP384Public(pk) => {
+                let point = pk.to_encoded_point(false);
+                let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
+                let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
+                Some(format!(r#"{{"kty":"EC","crv":"P-384","x":"{}","y":"{}"}}"#, x, y))
+            }
+            KeyData::EcK256Private(sk) => {
+                let secret_key = k256::SecretKey::from(sk);
+                let public_key = secret_key.public_key();
+                let point = public_key.to_encoded_point(false);
+                let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
+                let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
+                let d = Base64UrlUnpadded::encode_string(secret_key.to_bytes().as_slice());
+                Some(format!(r#"{{"kty":"EC","crv":"secp256k1","x":"{}","y":"{}","d":"{}"}}"#, x, y, d))
+            }
+            KeyData::EcK256Public(pk) => {
+                let point = pk.to_encoded_point(false);
+                let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
+                let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
+                Some(format!(r#"{{"kty":"EC","crv":"secp256k1","x":"{}","y":"{}"}}"#, x, y))
+            }
+            KeyData::Ed25519Private(sk) => {
+                let pk = Ed25519VerifyingKey::from(sk);
+                let x = Base64UrlUnpadded::encode_string(pk.as_bytes());
+                let d = Base64UrlUnpadded::encode_string(&sk.to_bytes());
+                Some(format!(r#"{{"kty":"OKP","crv":"Ed25519","x":"{}","d":"{}"}}"#, x, d))
+            }
+            KeyData::Ed25519Public(pk) => {
+                let x = Base64UrlUnpadded::encode_string(pk.as_bytes());
+                Some(format!(r#"{{"kty":"OKP","crv":"Ed25519","x":"{}"}}"#, x))
+            }
+            _ => None,
+        }
+    }
+
     fn rsa_public_key(&self) -> Option<RsaPublicKey> {
         match self {
             KeyData::RsaPrivate(sk) => Some(sk.to_public_key()),
@@ -1091,6 +1210,8 @@ fn key_export_impl(id: u32, format: &str, type_: Option<&str>) -> Option<Vec<u8>
                 _ => None,
             }
         }
+        ("der", Some("sec1")) => key.export_sec1_private_der(),
+        ("pem", Some("sec1")) => key.export_sec1_private_pem().map(|s| s.into_bytes()),
         ("der", Some("pkcs8")) => key.export_private_der(),
         ("pem", Some("pkcs8")) => key.export_private_pem().map(|s| s.into_bytes()),
         ("der", Some("spki")) => key.export_public_der(),
@@ -1116,6 +1237,304 @@ fn key_export_impl(id: u32, format: &str, type_: Option<&str>) -> Option<Vec<u8>
 
 fn key_asymmetric_details_impl(id: u32) -> Option<(u32, u64)> {
     KEY_STORE.lock().unwrap().get(&id)?.asymmetric_key_details()
+}
+
+fn key_export_jwk_impl(id: u32) -> Option<String> {
+    let store = KEY_STORE.lock().unwrap();
+    let key = store.get(&id)?;
+    key.export_jwk()
+}
+
+fn evp_bytes_to_key(password: &[u8], salt: &[u8], key_len: usize, iv_len: usize) -> (Vec<u8>, Vec<u8>) {
+    let mut key = Vec::with_capacity(key_len);
+    let mut iv = Vec::with_capacity(iv_len);
+    let mut prev = Vec::new();
+    while key.len() < key_len || iv.len() < iv_len {
+        let mut hasher = Md5::new();
+        if !prev.is_empty() {
+            hasher.update(&prev);
+        }
+        hasher.update(password);
+        hasher.update(salt);
+        prev = hasher.finalize().to_vec();
+        for &b in &prev {
+            if key.len() < key_len {
+                key.push(b);
+            } else if iv.len() < iv_len {
+                iv.push(b);
+            }
+        }
+    }
+    (key, iv)
+}
+
+fn encrypt_sec1_pem_traditional(der: &[u8], cipher_name: &str, passphrase: &[u8]) -> Option<String> {
+    use cipher::BlockEncryptMut;
+    use cipher::KeyIvInit;
+
+    let key_len = match cipher_name.to_uppercase().as_str() {
+        "AES-128-CBC" => 16,
+        "AES-256-CBC" => 32,
+        _ => return None,
+    };
+
+    // Generate random IV
+    let mut iv_bytes = [0u8; 16];
+    rand::rng().fill_bytes(&mut iv_bytes);
+
+    // Derive key using EVP_BytesToKey (salt = first 8 bytes of IV)
+    let (key, _) = evp_bytes_to_key(passphrase, &iv_bytes[..8], key_len, 0);
+
+    // PKCS#7 pad the DER data
+    let block_size = 16usize;
+    let pad_len = block_size - (der.len() % block_size);
+    let mut padded = der.to_vec();
+    padded.extend(std::iter::repeat(pad_len as u8).take(pad_len));
+
+    // Encrypt with AES-CBC block by block
+    let mut output = Vec::new();
+    match key_len {
+        16 => {
+            let mut enc = cbc::Encryptor::<aes::Aes128>::new_from_slices(&key, &iv_bytes).ok()?;
+            for chunk in padded.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+        }
+        32 => {
+            let mut enc = cbc::Encryptor::<aes::Aes256>::new_from_slices(&key, &iv_bytes).ok()?;
+            for chunk in padded.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+        }
+        _ => return None,
+    }
+
+    // Format as RFC 1421 PEM with Proc-Type and DEK-Info headers
+    let iv_hex: String = iv_bytes.iter().map(|b| format!("{:02X}", b)).collect();
+    let cipher_upper = cipher_name.to_uppercase();
+    use base64ct::Encoding;
+    let b64 = base64ct::Base64::encode_string(&output);
+
+    let mut pem = format!("-----BEGIN EC PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: {},{}\n\n", cipher_upper, iv_hex);
+    for chunk in b64.as_bytes().chunks(64) {
+        pem.push_str(std::str::from_utf8(chunk).unwrap_or(""));
+        pem.push('\n');
+    }
+    pem.push_str("-----END EC PRIVATE KEY-----\n");
+
+    Some(pem)
+}
+
+fn decrypt_traditional_pem(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
+    use cipher::BlockDecryptMut;
+    use cipher::KeyIvInit;
+
+    let lines: Vec<&str> = pem.lines().collect();
+    let mut cipher_name = String::new();
+    let mut iv_hex = String::new();
+    let mut b64_data = String::new();
+    let mut in_headers = true;
+    let mut past_begin = false;
+
+    for line in &lines {
+        if line.starts_with("-----BEGIN ") {
+            past_begin = true;
+            continue;
+        }
+        if line.starts_with("-----END ") {
+            break;
+        }
+        if !past_begin {
+            continue;
+        }
+        if in_headers {
+            if line.is_empty() {
+                in_headers = false;
+                continue;
+            }
+            if line.starts_with("DEK-Info: ") {
+                let info = &line["DEK-Info: ".len()..];
+                let parts: Vec<&str> = info.splitn(2, ',').collect();
+                if parts.len() == 2 {
+                    cipher_name = parts[0].to_string();
+                    iv_hex = parts[1].to_string();
+                }
+            }
+            continue;
+        }
+        b64_data.push_str(line);
+    }
+
+    if cipher_name.is_empty() || iv_hex.is_empty() || b64_data.is_empty() {
+        return None;
+    }
+
+    // Decode IV from hex
+    let iv_bytes: Vec<u8> = (0..iv_hex.len())
+        .step_by(2)
+        .filter_map(|i| u8::from_str_radix(&iv_hex[i..i + 2], 16).ok())
+        .collect();
+
+    if iv_bytes.len() != 16 {
+        return None;
+    }
+
+    // Decode base64 ciphertext
+    use base64ct::Encoding;
+    let ciphertext = base64ct::Base64::decode_vec(&b64_data).ok()?;
+
+    let key_len = match cipher_name.to_uppercase().as_str() {
+        "AES-128-CBC" => 16,
+        "AES-256-CBC" => 32,
+        _ => return None,
+    };
+
+    // Derive key using EVP_BytesToKey
+    let (key, _) = evp_bytes_to_key(passphrase, &iv_bytes[..8], key_len, 0);
+
+    // Decrypt block by block
+    let block_size = 16;
+    if ciphertext.len() % block_size != 0 {
+        return None;
+    }
+    let mut output = Vec::new();
+    match key_len {
+        16 => {
+            let mut dec = cbc::Decryptor::<aes::Aes128>::new_from_slices(&key, &iv_bytes).ok()?;
+            for chunk in ciphertext.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+        }
+        32 => {
+            let mut dec = cbc::Decryptor::<aes::Aes256>::new_from_slices(&key, &iv_bytes).ok()?;
+            for chunk in ciphertext.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+        }
+        _ => return None,
+    }
+
+    // Remove PKCS#7 padding
+    let pad_byte = *output.last()? as usize;
+    if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
+        return None;
+    }
+    if !output[output.len() - pad_byte..].iter().all(|&b| b as usize == pad_byte) {
+        return None;
+    }
+    output.truncate(output.len() - pad_byte);
+
+    Some(output)
+}
+
+fn key_export_encrypted_impl(id: u32, format: &str, type_: &str, cipher_name: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
+    let store = KEY_STORE.lock().unwrap();
+    let key = store.get(&id)?;
+    match (format, type_) {
+        ("pem", "pkcs8") => {
+            key.export_pkcs8_encrypted_pem(passphrase).map(|s| s.into_bytes())
+        }
+        ("pem", "sec1") => {
+            let der = key.export_sec1_private_der()?;
+            let encrypted_pem = encrypt_sec1_pem_traditional(&der, cipher_name, passphrase)?;
+            Some(encrypted_pem.into_bytes())
+        }
+        _ => None,
+    }
+}
+
+fn create_private_key_from_sec1_der(der: &[u8]) -> Option<u32> {
+    use sec1::DecodeEcPrivateKey;
+    if let Ok(sk) = p256::ecdsa::SigningKey::from_sec1_der(der) {
+        let id = next_id();
+        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+        return Some(id);
+    }
+    if let Ok(sk) = p384::ecdsa::SigningKey::from_sec1_der(der) {
+        let id = next_id();
+        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+        return Some(id);
+    }
+    if let Ok(sk) = k256::ecdsa::SigningKey::from_sec1_der(der) {
+        let id = next_id();
+        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+        return Some(id);
+    }
+    None
+}
+
+fn create_private_key_from_sec1_pem(pem: &str) -> Option<u32> {
+    use sec1::DecodeEcPrivateKey;
+    if let Ok(sk) = p256::ecdsa::SigningKey::from_sec1_pem(pem) {
+        let id = next_id();
+        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+        return Some(id);
+    }
+    if let Ok(sk) = p384::ecdsa::SigningKey::from_sec1_pem(pem) {
+        let id = next_id();
+        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+        return Some(id);
+    }
+    if let Ok(sk) = k256::ecdsa::SigningKey::from_sec1_pem(pem) {
+        let id = next_id();
+        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+        return Some(id);
+    }
+    None
+}
+
+fn create_private_key_from_encrypted_pem(pem: &str, passphrase: &[u8]) -> Option<u32> {
+    // Try PKCS#8 encrypted PEM first (-----BEGIN ENCRYPTED PRIVATE KEY-----)
+    if pem.contains("ENCRYPTED PRIVATE KEY") {
+        use pkcs8::DecodePrivateKey;
+        if let Ok(sk) = p256::ecdsa::SigningKey::from_pkcs8_encrypted_pem(pem, passphrase) {
+            let id = next_id();
+            KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+            return Some(id);
+        }
+        if let Ok(sk) = p384::ecdsa::SigningKey::from_pkcs8_encrypted_pem(pem, passphrase) {
+            let id = next_id();
+            KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+            return Some(id);
+        }
+        if let Ok(sk) = k256::ecdsa::SigningKey::from_pkcs8_encrypted_pem(pem, passphrase) {
+            let id = next_id();
+            KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+            return Some(id);
+        }
+        if let Ok(sk) = RsaPrivateKey::from_pkcs8_encrypted_pem(pem, passphrase) {
+            let id = next_id();
+            KEY_STORE.lock().unwrap().insert(id, KeyData::RsaPrivate(sk));
+            return Some(id);
+        }
+        return None;
+    }
+
+    // Try RFC 1421 traditional encrypted PEM (-----BEGIN EC PRIVATE KEY----- with Proc-Type header)
+    if pem.contains("EC PRIVATE KEY") && pem.contains("Proc-Type: 4,ENCRYPTED") {
+        let der = decrypt_traditional_pem(pem, passphrase)?;
+        return create_private_key_from_sec1_der(&der);
+    }
+
+    // Try RFC 1421 traditional encrypted PEM for RSA (-----BEGIN RSA PRIVATE KEY----- with Proc-Type)
+    if pem.contains("RSA PRIVATE KEY") && pem.contains("Proc-Type: 4,ENCRYPTED") {
+        let der = decrypt_traditional_pem(pem, passphrase)?;
+        return create_rsa_private_key_from_der(&der);
+    }
+
+    None
 }
 
 fn create_private_key_from_der(der: &[u8]) -> Option<u32> {
@@ -1165,6 +1584,10 @@ fn create_private_key_from_pem(pem: &str) -> Option<u32> {
         let id = next_id();
         KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
         return Some(id);
+    }
+    // Try SEC1 PEM
+    if let result @ Some(_) = create_private_key_from_sec1_pem(pem) {
+        return result;
     }
     None
 }
@@ -2441,6 +2864,19 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
+    pub fn key_export_encrypted(id: u32, format: String, type_: String, cipher_name: String, passphrase: TypedArray<'_, u8>) -> Option<Vec<u8>> {
+        let slice = passphrase.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::key_export_encrypted_impl(id, &format, &type_, &cipher_name, slice)
+    }
+
+    #[rquickjs::function]
+    pub fn key_export_jwk(id: u32) -> Option<String> {
+        super::key_export_jwk_impl(id)
+    }
+
+    #[rquickjs::function]
     pub fn key_asymmetric_details(id: u32) -> Option<Vec<u64>> {
         super::key_asymmetric_details_impl(id).map(|(modulus_length, public_exponent)| {
             vec![modulus_length as u64, public_exponent]
@@ -2465,6 +2901,14 @@ pub mod native_module {
     pub fn create_private_key_pem(pem: String) -> Option<u32> {
         super::create_private_key_from_pem(&pem)
             .or_else(|| super::create_rsa_private_key_from_pem(&pem))
+    }
+
+    #[rquickjs::function]
+    pub fn create_private_key_encrypted_pem(pem: String, passphrase: TypedArray<'_, u8>) -> Option<u32> {
+        let slice = passphrase.as_raw().map(|raw| unsafe {
+            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
+        }).unwrap_or(&[]);
+        super::create_private_key_from_encrypted_pem(&pem, slice)
     }
 
     #[rquickjs::function]

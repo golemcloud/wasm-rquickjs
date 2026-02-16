@@ -1147,7 +1147,7 @@
     },
     "parallel/test-crypto-keygen-async-elliptic-curve-jwk-ec.js": {
       "skip": true,
-      "reason": "requires JWK export format for EC keys which is not implemented"
+      "reason": "requires P-521 curve support (JWK export for P-256/P-384/secp256k1 is implemented)"
     },
     "parallel/test-crypto-keygen-async-elliptic-curve-jwk-rsa.js": {
       "skip": true,
@@ -1155,7 +1155,7 @@
     },
     "parallel/test-crypto-keygen-async-elliptic-curve-jwk.js": {
       "skip": true,
-      "reason": "requires JWK export format for EC keys which is not implemented"
+      "reason": "requires ed448, x25519, x448 key types (JWK export for Ed25519 is implemented)"
     },
     "parallel/test-crypto-keygen-async-encrypted-private-key-der.js": {
       "skip": true,
@@ -1165,30 +1165,12 @@
       "skip": true,
       "reason": "requires RSA key generation with encrypted PEM output"
     },
-    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js": {
-      "skip": true,
-      "reason": "requires encrypted PEM export for EC keys which is not implemented"
-    },
-    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted.js.js": {
-      "skip": true,
-      "reason": "requires encrypted PEM export for EC keys which is not implemented"
-    },
-    "parallel/test-crypto-keygen-async-explicit-elliptic-curve.js": {
-      "skip": true,
-      "reason": "requires EC key export in SEC1/SPKI PEM format with paramEncoding"
-    },
-    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js": {
-      "skip": true,
-      "reason": "requires encrypted PEM export for EC keys which is not implemented"
-    },
-    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted.js": {
-      "skip": true,
-      "reason": "requires encrypted PEM export for EC keys which is not implemented"
-    },
-    "parallel/test-crypto-keygen-async-named-elliptic-curve.js": {
-      "skip": true,
-      "reason": "requires EC key export in SEC1/SPKI PEM format with paramEncoding"
-    },
+    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js": {},
+    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted.js.js": {},
+    "parallel/test-crypto-keygen-async-explicit-elliptic-curve.js": {},
+    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js": {},
+    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted.js": {},
+    "parallel/test-crypto-keygen-async-named-elliptic-curve.js": {},
     "parallel/test-crypto-keygen-async-rsa.js": {
       "skip": true,
       "reason": "requires RSA key generation which is not implemented"

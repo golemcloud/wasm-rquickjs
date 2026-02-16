@@ -1215,6 +1215,33 @@ class KeyObject {
         }
         const format = options.format || (options.type ? 'pem' : 'der');
         const type_ = options.type || null;
+
+        // JWK export
+        if (format === 'jwk') {
+            const json = webCryptoNative.key_export_jwk(this._handle);
+            if (json === null || json === undefined) {
+                throw new Error('Failed to export key as JWK');
+            }
+            return JSON.parse(json);
+        }
+
+        // Encrypted PEM export
+        if (options.cipher && options.passphrase !== undefined) {
+            const passBytes = toBytes(options.passphrase);
+            const result = webCryptoNative.key_export_encrypted(this._handle, format, type_ || 'pkcs8', options.cipher, passBytes);
+            if (result === null || result === undefined) {
+                throw new Error('Failed to export encrypted key');
+            }
+            if (format === 'pem') {
+                const decoder = new TextDecoder();
+                return decoder.decode(new Uint8Array(result));
+            }
+            if (typeof Buffer !== 'undefined') {
+                return Buffer.from(result);
+            }
+            return new Uint8Array(result);
+        }
+
         const result = webCryptoNative.key_export(this._handle, format, type_);
         if (result === null || result === undefined) {
             throw new Error('Failed to export key');
@@ -1250,7 +1277,19 @@ export function createPrivateKey(key) {
             return key;
         }
         if (key.key !== undefined) {
-            return createPrivateKey(key.key);
+            const innerKey = key.key;
+            const passphrase = key.passphrase;
+            if (passphrase !== undefined && typeof innerKey === 'string') {
+                const passBytes = toBytes(passphrase);
+                const handle = webCryptoNative.create_private_key_encrypted_pem(innerKey, passBytes);
+                if (handle === null || handle === undefined) {
+                    const err = new Error('Failed to parse encrypted private key');
+                    err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+                    throw err;
+                }
+                return new KeyObject(handle, 'private');
+            }
+            return createPrivateKey(innerKey);
         }
         const data = toBytes(key);
         const handle = webCryptoNative.create_private_key_der(data);
@@ -1445,7 +1484,7 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
     if (privateKey instanceof KeyObject) {
         keyObj = privateKey;
     } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
-        keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey.key);
+        keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey);
     } else {
         keyObj = createPrivateKey(privateKey);
     }
@@ -1507,7 +1546,15 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     if (publicKey instanceof KeyObject) {
         keyObj = publicKey;
     } else if (typeof publicKey === 'object' && publicKey !== null && publicKey.key !== undefined) {
-        keyObj = publicKey.key instanceof KeyObject ? publicKey.key : createPublicKey(publicKey.key);
+        if (publicKey.key instanceof KeyObject) {
+            keyObj = publicKey.key;
+        } else if (publicKey.passphrase !== undefined) {
+            // Encrypted private key — decrypt and derive public key
+            const privKey = createPrivateKey(publicKey);
+            keyObj = createPublicKey(privKey);
+        } else {
+            keyObj = createPublicKey(publicKey.key);
+        }
     } else {
         keyObj = createPublicKey(publicKey);
     }

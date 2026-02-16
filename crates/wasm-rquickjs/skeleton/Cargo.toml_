@@ -48,9 +48,9 @@ p384 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8
 k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "ecdh"] }
 num-bigint-dig = { version = "0.8", features = ["prime", "rand"] }
 num-traits = "0.2"
-pkcs8 = { version = "0.10", default-features = false, features = ["pem", "alloc"] }
+pkcs8 = { version = "0.10", default-features = false, features = ["pem", "alloc", "encryption"] }
 rsa = { version = "0.9", default-features = false, features = ["pem"] }
-elliptic-curve = { version = "0.13", default-features = false, features = ["sec1"] }
+elliptic-curve = { version = "0.13", default-features = false, features = ["sec1", "pem", "alloc"] }
 ecdsa = { version = "0.16", default-features = false, features = ["signing", "verifying", "der"] }
 signature = "2"
 futures = { version = "0.3.31", features = [] }
@@ -58,6 +58,9 @@ futures-concurrency = "7.6.3"
 url = "2.5.7"
 uuid = { version = "1.18.1", features = ["v4"] }
 rand = "0.9.2"
+rand_core_06 = { package = "rand_core", version = "0.6", features = ["getrandom"] }
+sec1 = { version = "0.7", default-features = false, features = ["der", "alloc", "pem", "pkcs8"] }
+base64ct = { version = "1", features = ["alloc"] }
 wasi = "=0.14.1+wasi-0.2.3"
 wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
 wstd = "=0.5.4"
