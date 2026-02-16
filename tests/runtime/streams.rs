@@ -105,3 +105,48 @@ async fn consumers_arraybuffer(
     assert_eq!(r, Some(Val::U32(5)));
     Ok(())
 }
+
+#[test]
+async fn readable_from_web(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-readable-from-web", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::String("hello from web".to_string())));
+    Ok(())
+}
+
+#[test]
+async fn readable_to_web(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-readable-to-web", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::String("hello to web".to_string())));
+    Ok(())
+}
+
+#[test]
+async fn writable_from_web(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-writable-from-web", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::String("hello from web".to_string())));
+    Ok(())
+}
+
+#[test]
+async fn writable_to_web(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-writable-to-web", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::String("hello to web".to_string())));
+    Ok(())
+}
+
+#[test]
+async fn duplex_from_web(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-duplex-from-web", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::String("echo:hello".to_string())));
+    Ok(())
+}

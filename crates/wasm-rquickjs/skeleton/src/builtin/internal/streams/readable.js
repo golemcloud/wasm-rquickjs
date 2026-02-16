@@ -8,9 +8,10 @@ import { debuglog } from "__wasm_rquickjs_builtin/internal/util/debuglog";
 import { getDefaultHighWaterMark, getHighWaterMark } from "__wasm_rquickjs_builtin/internal/streams/state";
 import { prependListener, Stream } from "__wasm_rquickjs_builtin/internal/streams/legacy";
 import { StringDecoder } from "string_decoder";
-import { validateObject } from "__wasm_rquickjs_builtin/internal/validators";
+import { validateObject, validateBoolean } from "__wasm_rquickjs_builtin/internal/validators";
 import {
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
     ERR_METHOD_NOT_IMPLEMENTED,
     ERR_STREAM_PUSH_AFTER_EOF,
     ERR_STREAM_UNSHIFT_AFTER_END_EVENT,
@@ -20,6 +21,8 @@ import BufferList from "__wasm_rquickjs_builtin/internal/streams/buffer_list";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
 import { nextTick } from "node:process";
+import { isDestroyed, isReadable } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 
 let debug = debuglog("stream", (fn) => {
     debug = fn;
@@ -1391,11 +1394,149 @@ function wrap(src, options) {
     }).wrap(src);
 }
 
+function newStreamReadableFromReadableStream(readableStream, options = {}) {
+    if (!(readableStream instanceof ReadableStream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            'readableStream',
+            'ReadableStream',
+            readableStream);
+    }
+
+    validateObject(options, 'options');
+    const {
+        highWaterMark,
+        encoding,
+        objectMode = false,
+        signal,
+    } = options;
+
+    if (encoding !== undefined && !Buffer.isEncoding(encoding))
+        throw new ERR_INVALID_ARG_VALUE('options.encoding', encoding);
+    validateBoolean(objectMode, 'options.objectMode');
+
+    const reader = readableStream.getReader();
+    let closed = false;
+
+    const readable = new Readable({
+        objectMode,
+        highWaterMark,
+        encoding,
+        signal,
+
+        read() {
+            reader.read().then(
+                (chunk) => {
+                    if (chunk.done) {
+                        readable.push(null);
+                    } else {
+                        readable.push(chunk.value);
+                    }
+                },
+                (error) => destroyImpl.destroyer(readable, error));
+        },
+
+        destroy(error, callback) {
+            function done() {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => { throw error; });
+                }
+            }
+
+            if (!closed) {
+                reader.cancel(error).then(done, done);
+                return;
+            }
+            done();
+        },
+    });
+
+    reader.closed.then(
+        () => {
+            closed = true;
+        },
+        (error) => {
+            closed = true;
+            destroyImpl.destroyer(readable, error);
+        });
+
+    return readable;
+}
+
+
+function newReadableStreamFromStreamReadable(streamReadable, options = {}) {
+    if (typeof streamReadable?._readableState !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE(
+            'streamReadable',
+            'stream.Readable',
+            streamReadable);
+    }
+
+    if (isDestroyed(streamReadable) || !isReadable(streamReadable)) {
+        const readable = new ReadableStream();
+        readable.cancel();
+        return readable;
+    }
+
+    const objectMode = streamReadable.readableObjectMode;
+    const highWaterMark = streamReadable.readableHighWaterMark;
+
+    const strategy = objectMode
+        ? new CountQueuingStrategy({ highWaterMark })
+        : { highWaterMark };
+
+    let controller;
+    let wasCanceled = false;
+
+    function onData(chunk) {
+        if (Buffer.isBuffer(chunk) && !objectMode)
+            chunk = new Uint8Array(chunk);
+        controller.enqueue(chunk);
+        if (controller.desiredSize <= 0)
+            streamReadable.pause();
+    }
+
+    streamReadable.pause();
+
+    const cleanup = eos(streamReadable, (error) => {
+        cleanup();
+        streamReadable.on('error', () => {});
+        if (error)
+            return controller.error(error);
+        if (wasCanceled) {
+            return;
+        }
+        controller.close();
+    });
+
+    streamReadable.on('data', onData);
+
+    return new ReadableStream({
+        start(c) { controller = c; },
+
+        pull() { streamReadable.resume(); },
+
+        cancel(reason) {
+            wasCanceled = true;
+            destroyImpl.destroyer(streamReadable, reason);
+        },
+    }, strategy);
+}
+
 // Exposed for testing purposes only.
 Readable._fromList = fromList;
 Readable.ReadableState = ReadableState;
 Readable.from = readableFrom;
 Readable.wrap = wrap;
 
+Readable.fromWeb = function(readableStream, options) {
+    return newStreamReadableFromReadableStream(readableStream, options);
+};
+
+Readable.toWeb = function(streamReadable, options) {
+    return newReadableStreamFromStreamReadable(streamReadable, options);
+};
+
 export default Readable;
-export { fromList as _fromList, readableFrom as from, ReadableState, wrap };
+export { fromList as _fromList, readableFrom as from, ReadableState, wrap, newStreamReadableFromReadableStream as fromWeb, newReadableStreamFromStreamReadable as toWeb };

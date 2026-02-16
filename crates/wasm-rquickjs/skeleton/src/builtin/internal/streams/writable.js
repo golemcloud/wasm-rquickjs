@@ -17,7 +17,12 @@ import {
     ERR_STREAM_NULL_VALUES,
     ERR_STREAM_WRITE_AFTER_END,
     ERR_UNKNOWN_ENCODING,
+    ERR_STREAM_PREMATURE_CLOSE,
+    AbortError,
 } from "__wasm_rquickjs_builtin/internal/errors";
+import { isDestroyed, isWritable, isWritableEnded } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { validateObject, validateBoolean } from "__wasm_rquickjs_builtin/internal/validators";
+import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
 import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
@@ -884,7 +889,208 @@ Writable.prototype[EventEmitter.captureRejectionSymbol] = function (err) {
     this.destroy(err);
 };
 
+function newStreamWritableFromWritableStream(writableStream, options = {}) {
+    if (!(writableStream instanceof WritableStream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            'writableStream',
+            'WritableStream',
+            writableStream);
+    }
+
+    validateObject(options, 'options');
+    const {
+        highWaterMark,
+        decodeStrings = true,
+        objectMode = false,
+        signal,
+    } = options;
+
+    validateBoolean(objectMode, 'options.objectMode');
+    validateBoolean(decodeStrings, 'options.decodeStrings');
+
+    const writer = writableStream.getWriter();
+    let closed = false;
+
+    const writable = new Writable({
+        highWaterMark,
+        objectMode,
+        decodeStrings,
+        signal,
+
+        write(chunk, encoding, callback) {
+            if (typeof chunk === 'string' && decodeStrings && !objectMode) {
+                chunk = Buffer.from(chunk, encoding);
+                chunk = new Uint8Array(
+                    chunk.buffer,
+                    chunk.byteOffset,
+                    chunk.byteLength,
+                );
+            }
+
+            function done(error) {
+                try {
+                    callback(error);
+                } catch (error) {
+                    destroyImpl.destroyer(writable, error);
+                }
+            }
+
+            writer.ready.then(
+                () => {
+                    return writer.write(chunk).then(done, done);
+                },
+                done);
+        },
+
+        destroy(error, callback) {
+            function done() {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => { throw error; });
+                }
+            }
+
+            if (!closed) {
+                if (error != null) {
+                    writer.abort(error).then(done, done);
+                } else {
+                    writer.close().then(done, done);
+                }
+                return;
+            }
+
+            done();
+        },
+
+        final(callback) {
+            function done(error) {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => { destroyImpl.destroyer(writable, error); });
+                }
+            }
+
+            if (!closed) {
+                writer.close().then(done, done);
+            }
+        },
+    });
+
+    writer.closed.then(
+        () => {
+            closed = true;
+            if (!isWritableEnded(writable))
+                destroyImpl.destroyer(writable, new ERR_STREAM_PREMATURE_CLOSE());
+        },
+        (error) => {
+            closed = true;
+            destroyImpl.destroyer(writable, error);
+        });
+
+    return writable;
+}
+
+
+function newWritableStreamFromStreamWritable(streamWritable) {
+    if (typeof streamWritable?.write !== 'function' ||
+        typeof streamWritable?.on !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE(
+            'streamWritable',
+            'stream.Writable',
+            streamWritable);
+    }
+
+    if (isDestroyed(streamWritable) || !isWritable(streamWritable)) {
+        const writable = new WritableStream();
+        writable.close();
+        return writable;
+    }
+
+    const highWaterMark = streamWritable.writableHighWaterMark;
+    const strategy = streamWritable.writableObjectMode
+        ? new CountQueuingStrategy({ highWaterMark })
+        : { highWaterMark };
+
+    let controller;
+    let backpressureResolve;
+    let backpressureReject;
+
+    function onDrain() {
+        if (backpressureResolve !== undefined) {
+            backpressureResolve();
+            backpressureResolve = undefined;
+            backpressureReject = undefined;
+        }
+    }
+
+    const cleanup = eos(streamWritable, (error) => {
+        cleanup();
+        streamWritable.on('error', () => {});
+
+        if (error != null) {
+            if (backpressureReject !== undefined) {
+                backpressureReject(error);
+                backpressureResolve = undefined;
+                backpressureReject = undefined;
+            }
+            controller.error(error);
+            controller = undefined;
+            return;
+        }
+
+        controller.error(new AbortError());
+        controller = undefined;
+    });
+
+    streamWritable.on('drain', onDrain);
+
+    return new WritableStream({
+        start(c) { controller = c; },
+
+        write(chunk) {
+            if (streamWritable.writableNeedDrain || !streamWritable.write(chunk)) {
+                return new Promise((resolve, reject) => {
+                    backpressureResolve = resolve;
+                    backpressureReject = reject;
+                }).finally(() => {
+                    backpressureResolve = undefined;
+                    backpressureReject = undefined;
+                });
+            }
+        },
+
+        abort(reason) {
+            destroyImpl.destroyer(streamWritable, reason);
+        },
+
+        close() {
+            if (!isWritableEnded(streamWritable)) {
+                return new Promise((resolve, reject) => {
+                    streamWritable.end();
+                    eos(streamWritable, (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+            }
+
+            controller = undefined;
+            return Promise.resolve();
+        },
+    }, strategy);
+}
+
+Writable.fromWeb = function(writableStream, options) {
+    return newStreamWritableFromWritableStream(writableStream, options);
+};
+
+Writable.toWeb = function(streamWritable) {
+    return newWritableStreamFromStreamWritable(streamWritable);
+};
+
 Writable.WritableState = WritableState;
 
 export default Writable;
-export { Writable, WritableState };
+export { Writable, WritableState, newStreamWritableFromWritableStream as fromWeb, newWritableStreamFromStreamWritable as toWeb };

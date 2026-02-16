@@ -8,17 +8,23 @@ import { destroyer } from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import {
     AbortError,
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
     ERR_INVALID_RETURN_VALUE,
+    ERR_STREAM_PREMATURE_CLOSE,
 } from "__wasm_rquickjs_builtin/internal/errors";
 import {
     isDuplexNodeStream,
+    isDestroyed,
     isIterable,
     isNodeStream,
     isReadable,
     isReadableNodeStream,
     isWritable,
+    isWritableEnded,
     isWritableNodeStream,
 } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { validateObject, validateBoolean } from "__wasm_rquickjs_builtin/internal/validators";
+import { Buffer } from "buffer";
 import _from from "__wasm_rquickjs_builtin/internal/streams/from";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
@@ -127,7 +133,13 @@ function isWritableStream(object) {
     return object instanceof WritableStream;
 }
 
-Duplex.fromWeb = function (pair, options) { }
+Duplex.fromWeb = function (pair, options) {
+    return newStreamDuplexFromReadableWritablePair(pair, options);
+};
+
+Duplex.toWeb = function (duplex, options) {
+    return newReadableWritablePairFromDuplex(duplex, options);
+};
 
 class Duplexify extends Duplex {
     constructor(options) {
@@ -168,15 +180,13 @@ function duplexify(body, name) {
         return _duplexify({ writable: false, readable: false });
     }
 
-    // TODO: Webstreams
-    // if (isReadableStream(body)) {
-    //   return _duplexify({ readable: Readable.fromWeb(body) });
-    // }
+    if (isReadableStream(body)) {
+        return _duplexify({ readable: Readable.fromWeb(body) });
+    }
 
-    // TODO: Webstreams
-    // if (isWritableStream(body)) {
-    //   return _duplexify({ writable: Writable.fromWeb(body) });
-    // }
+    if (isWritableStream(body)) {
+        return _duplexify({ writable: Writable.fromWeb(body) });
+    }
 
     if (typeof body === "function") {
         const { value, write, final, destroy } = fromAsyncGen(body);
@@ -245,13 +255,12 @@ function duplexify(body, name) {
         });
     }
 
-    // TODO: Webstreams.
-    // if (
-    //   isReadableStream(body?.readable) &&
-    //   isWritableStream(body?.writable)
-    // ) {
-    //   return Duplexify.fromWeb(body);
-    // }
+    if (
+        isReadableStream(body?.readable) &&
+        isWritableStream(body?.writable)
+    ) {
+        return Duplex.fromWeb(body);
+    }
 
     if (
         typeof body?.writable === "object" ||
@@ -496,5 +505,217 @@ function duplexFrom(body) {
 
 Duplex.from = duplexFrom;
 
+
+function newStreamDuplexFromReadableWritablePair(pair = {}, options = {}) {
+    validateObject(pair, 'pair');
+    const {
+        readable: readableStream,
+        writable: writableStream,
+    } = pair;
+
+    if (!(readableStream instanceof ReadableStream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            'pair.readable',
+            'ReadableStream',
+            readableStream);
+    }
+    if (!(writableStream instanceof WritableStream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            'pair.writable',
+            'WritableStream',
+            writableStream);
+    }
+
+    validateObject(options, 'options');
+    const {
+        allowHalfOpen = false,
+        objectMode = false,
+        encoding,
+        decodeStrings = true,
+        highWaterMark,
+        signal,
+    } = options;
+
+    validateBoolean(objectMode, 'options.objectMode');
+    if (encoding !== undefined && !Buffer.isEncoding(encoding))
+        throw new ERR_INVALID_ARG_VALUE('options.encoding', encoding);
+
+    const writer = writableStream.getWriter();
+    const reader = readableStream.getReader();
+    let writableClosed = false;
+    let readableClosed = false;
+
+    const duplex = new Duplex({
+        allowHalfOpen,
+        highWaterMark,
+        objectMode,
+        encoding,
+        decodeStrings,
+        signal,
+
+        writev(chunks, callback) {
+            function done(error) {
+                error = error.filter((e) => e);
+                try {
+                    callback(error.length === 0 ? undefined : error);
+                } catch (error) {
+                    nextTick(() => destroyer(duplex, error));
+                }
+            }
+
+            writer.ready.then(
+                () => {
+                    return Promise.all(
+                        chunks.map((data) => writer.write(data.chunk))
+                    ).then(
+                        () => done([]),
+                        (err) => done([err])
+                    );
+                },
+                (err) => done([err]));
+        },
+
+        write(chunk, encoding, callback) {
+            if (typeof chunk === 'string' && decodeStrings && !objectMode) {
+                chunk = Buffer.from(chunk, encoding);
+                chunk = new Uint8Array(
+                    chunk.buffer,
+                    chunk.byteOffset,
+                    chunk.byteLength,
+                );
+            }
+
+            function done(error) {
+                try {
+                    callback(error);
+                } catch (error) {
+                    destroyer(duplex, error);
+                }
+            }
+
+            writer.ready.then(
+                () => {
+                    return writer.write(chunk).then(done, done);
+                },
+                done);
+        },
+
+        final(callback) {
+            function done(error) {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => destroyer(duplex, error));
+                }
+            }
+
+            if (!writableClosed) {
+                writer.close().then(done, done);
+            }
+        },
+
+        read() {
+            reader.read().then(
+                (chunk) => {
+                    if (chunk.done) {
+                        duplex.push(null);
+                    } else {
+                        duplex.push(chunk.value);
+                    }
+                },
+                (error) => destroyer(duplex, error));
+        },
+
+        destroy(error, callback) {
+            function done() {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => { throw error; });
+                }
+            }
+
+            async function closeWriter() {
+                if (!writableClosed)
+                    await writer.abort(error);
+            }
+
+            async function closeReader() {
+                if (!readableClosed)
+                    await reader.cancel(error);
+            }
+
+            if (!writableClosed || !readableClosed) {
+                Promise.all([
+                    closeWriter(),
+                    closeReader(),
+                ]).then(done, done);
+                return;
+            }
+
+            done();
+        },
+    });
+
+    writer.closed.then(
+        () => {
+            writableClosed = true;
+            if (!isWritableEnded(duplex))
+                destroyer(duplex, new ERR_STREAM_PREMATURE_CLOSE());
+        },
+        (error) => {
+            writableClosed = true;
+            readableClosed = true;
+            destroyer(duplex, error);
+        });
+
+    reader.closed.then(
+        () => {
+            readableClosed = true;
+        },
+        (error) => {
+            writableClosed = true;
+            readableClosed = true;
+            destroyer(duplex, error);
+        });
+
+    return duplex;
+}
+
+
+function newReadableWritablePairFromDuplex(duplex, options = {}) {
+    if (typeof duplex?._writableState !== 'object' ||
+        typeof duplex?._readableState !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('duplex', 'stream.Duplex', duplex);
+    }
+
+    if (isDestroyed(duplex)) {
+        const writable = new WritableStream();
+        const readable = new ReadableStream();
+        writable.close();
+        readable.cancel();
+        return { readable, writable };
+    }
+
+    const writable =
+        isWritable(duplex)
+            ? Writable.toWeb(duplex)
+            : new WritableStream();
+
+    if (!isWritable(duplex))
+        writable.close();
+
+    const readable =
+        isReadable(duplex)
+            ? Readable.toWeb(duplex)
+            : new ReadableStream();
+
+    if (!isReadable(duplex))
+        readable.cancel();
+
+    return { writable, readable };
+}
+
+
 export default Duplex;
-export { duplexFrom as from, duplexify };
+export { duplexFrom as from, duplexify, newStreamDuplexFromReadableWritablePair as fromWeb, newReadableWritablePairFromDuplex as toWeb };
