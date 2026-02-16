@@ -1358,6 +1358,10 @@
     "parallel/test-abortsignal-cloneable.js": {
       "skip": true,
       "reason": "requires transferableAbortController and MessageChannel"
-    }
+    },
+
+    // === process.hrtime tests ===
+    "parallel/test-process-hrtime.js": {},
+    "parallel/test-process-hrtime-bigint.js": {}
   }
 }

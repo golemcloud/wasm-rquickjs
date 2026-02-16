@@ -5,6 +5,7 @@ pub mod native_module {
     use rquickjs::{Ctx, Function, Value};
     use std::collections::HashMap;
     use std::io::Write;
+    use std::time::Instant;
 
     #[rquickjs::function]
     pub fn write_stdout(data: String) {
@@ -37,6 +38,14 @@ pub mod native_module {
         js_args
             .defer(function)
             .expect("Failed to defer nextTick callback");
+    }
+
+    #[rquickjs::function]
+    pub fn hrtime_ns() -> u64 {
+        use std::sync::OnceLock;
+        static ORIGIN: OnceLock<Instant> = OnceLock::new();
+        let origin = ORIGIN.get_or_init(Instant::now);
+        origin.elapsed().as_nanos() as u64
     }
 }
 

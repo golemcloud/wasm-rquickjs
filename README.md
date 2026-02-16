@@ -385,6 +385,7 @@ Implemented by https://github.com/ungap/structured-clone
 - `argv0`
 - `env`
 - `cwd`
+- `hrtime` / `hrtime.bigint`
 
 ### `node:stream`
 - `_uint8ArrayToBuffer`

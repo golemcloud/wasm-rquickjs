@@ -3,7 +3,8 @@ import {
     get_env,
     next_tick,
     write_stdout,
-    write_stderr
+    write_stderr,
+    hrtime_ns
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
@@ -67,6 +68,34 @@ process.getgid = function getgid() { return 0; };
 process.geteuid = function geteuid() { return 0; };
 process.getegid = function getegid() { return 0; };
 process.getgroups = function getgroups() { return [0]; };
+
+process.hrtime = function hrtime(time) {
+    var ns = hrtime_ns();
+    if (time !== undefined) {
+        if (!Array.isArray(time)) {
+            var err = new TypeError('The "time" argument must be an instance of Array. Received type ' + typeof time + ' (' + String(time) + ')');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (time.length !== 2) {
+            var err2 = new RangeError('The value of "time" is out of range. It must be 2. Received ' + time.length);
+            err2.code = 'ERR_OUT_OF_RANGE';
+            throw err2;
+        }
+        var sec = Math.floor(ns / 1e9) - time[0];
+        var nsec = (ns % 1e9) - time[1];
+        if (nsec < 0) {
+            sec -= 1;
+            nsec += 1e9;
+        }
+        return [sec, nsec];
+    }
+    return [Math.floor(ns / 1e9), ns % 1e9];
+};
+
+process.hrtime.bigint = function bigint() {
+    return BigInt(hrtime_ns());
+};
 
 process.kill = function kill(pid, signal) {
     throw new Error('process.kill is not supported in WASI environment');
@@ -151,5 +180,6 @@ export var versions = process.versions;
 export var config = process.config;
 export var execArgv = process.execArgv;
 export var execPath = process.execPath;
+export var hrtime = process.hrtime;
 
 export default process;
