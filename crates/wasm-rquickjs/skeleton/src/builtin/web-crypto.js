@@ -1,4 +1,5 @@
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
+import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
 
 const HASH_ALIASES = {
     'md5': 'md5',
@@ -130,7 +131,29 @@ function Hash(algorithm, options) {
     }
     this._handle = handle;
     this._finalized = false;
+    Transform.call(this, options);
 }
+
+Object.setPrototypeOf(Hash.prototype, Transform.prototype);
+Object.setPrototypeOf(Hash, Transform);
+
+Hash.prototype._transform = function(chunk, encoding, callback) {
+    try {
+        this.update(chunk, encoding);
+        callback(null);
+    } catch (e) {
+        callback(e);
+    }
+};
+
+Hash.prototype._flush = function(callback) {
+    if (this._finalized) return callback(null);
+    try {
+        callback(null, this.digest());
+    } catch (e) {
+        callback(e);
+    }
+};
 
 Hash.prototype.update = function(data, inputEncoding) {
     if (this._finalized) {
@@ -166,8 +189,7 @@ Hash.prototype.copy = function(options) {
         err.code = 'ERR_CRYPTO_HASH_FINALIZED';
         throw err;
     }
-    const newHash = Object.create(Hash.prototype);
-    newHash._algorithm = this._algorithm;
+    const newHash = new Hash(this._algorithm, options);
     newHash._handle = webCryptoNative.hash_copy(this._handle);
     newHash._finalized = false;
     return newHash;
@@ -191,7 +213,14 @@ function Hmac(algorithm, key, options) {
     }
     this._handle = handle;
     this._finalized = false;
+    Transform.call(this, options);
 }
+
+Object.setPrototypeOf(Hmac.prototype, Transform.prototype);
+Object.setPrototypeOf(Hmac, Transform);
+
+Hmac.prototype._transform = Hash.prototype._transform;
+Hmac.prototype._flush = Hash.prototype._flush;
 
 Hmac.prototype.update = function(data, inputEncoding) {
     if (this._finalized) {
@@ -513,7 +542,7 @@ function Cipheriv(algorithm, key, iv, options) {
     if (!(this instanceof Cipheriv)) return new Cipheriv(algorithm, key, iv, options);
     this._algorithm = normalizeCipherAlgorithm(algorithm);
     const keyBytes = toBytes(key);
-    const ivBytes = toBytes(iv);
+    const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
     const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, false);
     if (handle === null || handle === undefined) {
         const err = new Error('Invalid key length or IV length for cipher: ' + algorithm);
@@ -522,7 +551,55 @@ function Cipheriv(algorithm, key, iv, options) {
     }
     this._handle = handle;
     this._finalized = false;
+    this._decoder = null;
+    Transform.call(this, options);
 }
+
+Object.setPrototypeOf(Cipheriv.prototype, Transform.prototype);
+Object.setPrototypeOf(Cipheriv, Transform);
+
+Cipheriv.prototype._transform = function(chunk, encoding, callback) {
+    try {
+        const bytes = toBytes(chunk, encoding);
+        const result = webCryptoNative.cipher_update(this._handle, bytes);
+        if (result !== null && result !== undefined) {
+            const out = new Uint8Array(result);
+            if (out.length > 0) {
+                if (typeof Buffer !== 'undefined') {
+                    callback(null, Buffer.from(out.buffer, out.byteOffset, out.byteLength));
+                } else {
+                    callback(null, out);
+                }
+                return;
+            }
+        }
+        callback(null);
+    } catch (e) {
+        callback(e);
+    }
+};
+
+Cipheriv.prototype._flush = function(callback) {
+    if (this._finalized) return callback(null);
+    try {
+        this._finalized = true;
+        const result = webCryptoNative.cipher_final(this._handle);
+        if (result !== null && result !== undefined) {
+            const out = new Uint8Array(result);
+            if (out.length > 0) {
+                if (typeof Buffer !== 'undefined') {
+                    callback(null, Buffer.from(out.buffer, out.byteOffset, out.byteLength));
+                } else {
+                    callback(null, out);
+                }
+                return;
+            }
+        }
+        callback(null);
+    } catch (e) {
+        callback(e);
+    }
+};
 
 Cipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
     if (this._finalized) {
@@ -598,7 +675,7 @@ function Decipheriv(algorithm, key, iv, options) {
     if (!(this instanceof Decipheriv)) return new Decipheriv(algorithm, key, iv, options);
     this._algorithm = normalizeCipherAlgorithm(algorithm);
     const keyBytes = toBytes(key);
-    const ivBytes = toBytes(iv);
+    const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
     const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, true);
     if (handle === null || handle === undefined) {
         const err = new Error('Invalid key length or IV length for decipher: ' + algorithm);
@@ -607,7 +684,15 @@ function Decipheriv(algorithm, key, iv, options) {
     }
     this._handle = handle;
     this._finalized = false;
+    this._decoder = null;
+    Transform.call(this, options);
 }
+
+Object.setPrototypeOf(Decipheriv.prototype, Transform.prototype);
+Object.setPrototypeOf(Decipheriv, Transform);
+
+Decipheriv.prototype._transform = Cipheriv.prototype._transform;
+Decipheriv.prototype._flush = Cipheriv.prototype._flush;
 
 Decipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
     if (this._finalized) {

@@ -463,7 +463,7 @@
     },
     "parallel/test-fs-readfile.js": {
       "skip": true,
-      "reason": "uses wrong tmpdir require path (../../test/common/tmpdir)"
+      "reason": "requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation"
     },
     "parallel/test-fs-readfile-empty.js": {},
     "parallel/test-fs-readfile-eof.js": {
@@ -1025,7 +1025,7 @@
     },
     "parallel/test-crypto-authenticated-stream.js": {
       "skip": true,
-      "reason": "requires stream.Transform interface for crypto"
+      "reason": "requires aes-128-ccm cipher (AEAD with plaintextLength) and fs.createReadStream/WriteStream for crypto streams"
     },
     "parallel/test-crypto-authenticated.js": {
       "skip": true,
@@ -1037,7 +1037,7 @@
     },
     "parallel/test-crypto-cipheriv-decipheriv.js": {
       "skip": true,
-      "reason": "requires des-ede3-cbc cipher, ECB mode, stream interface, and non-standard GCM IV lengths"
+      "reason": "requires des-ede3-cbc cipher, ECB mode, id-aes128-wrap cipher, and non-standard GCM IV lengths"
     },
     "parallel/test-crypto-classes.js": {
       "skip": true,
@@ -1136,13 +1136,10 @@
       "skip": true,
       "reason": "requires aes-128-ccm, aes-128-ocb cipher modes and NID lookup"
     },
-    "parallel/test-crypto-hash-stream-pipe.js": {
-      "skip": true,
-      "reason": "requires stream.pipe interface for crypto Hash"
-    },
+    "parallel/test-crypto-hash-stream-pipe.js": {},
     "parallel/test-crypto-hash.js": {
       "skip": true,
-      "reason": "requires stream interface (end/read/write), fixtures module, and shake128/256 XOF hash support"
+      "reason": "requires fixtures module (sample.png) and shake128/256 XOF hash support"
     },
     "parallel/test-crypto-hkdf.js": {
       "skip": true,
@@ -1300,10 +1297,7 @@
       "skip": true,
       "reason": "requires RSA/DSA/DH key generation for validation tests"
     },
-    "parallel/test-crypto-lazy-transform-writable.js": {
-      "skip": true,
-      "reason": "requires stream.Transform interface for crypto"
-    },
+    "parallel/test-crypto-lazy-transform-writable.js": {},
     "parallel/test-crypto-no-algorithm.js": {
       "skip": true,
       "reason": "requires specific createHash(null) error handling"
@@ -1367,10 +1361,7 @@
       "skip": true,
       "reason": "requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option"
     },
-    "parallel/test-crypto-stream.js": {
-      "skip": true,
-      "reason": "requires stream.Transform interface for crypto"
-    },
+    "parallel/test-crypto-stream.js": {},
     "parallel/test-crypto-subtle-zero-length.js": {
       "skip": true,
       "reason": "requires WebCrypto subtle with AES-CBC and zero-length input"
