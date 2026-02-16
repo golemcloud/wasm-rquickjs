@@ -1015,35 +1015,389 @@
     },
 
     // === node:crypto tests ===
-    "parallel/test-crypto-hash.js": {
+    "parallel/test-crypto-aes-wrap.js": {
       "skip": true,
-      "reason": "requires stream interface on Hash (write/end/read), Hash() without new, XOF hash functions (shake128/256), and fixtures (sample.png)"
+      "reason": "requires aes-wrap cipher modes which are not implemented"
     },
-    "parallel/test-crypto-hash-stream-pipe.js": {
+    "parallel/test-crypto-async-sign-verify.js": {
       "skip": true,
-      "reason": "requires stream interface on Hash (pipe/write/end/read)"
+      "reason": "requires fixtures/keys which are not available"
+    },
+    "parallel/test-crypto-authenticated-stream.js": {
+      "skip": true,
+      "reason": "requires stream.Transform interface for crypto"
+    },
+    "parallel/test-crypto-authenticated.js": {
+      "skip": true,
+      "reason": "requires fixtures/aead-vectors.js test vectors"
+    },
+    "parallel/test-crypto-certificate.js": {
+      "skip": true,
+      "reason": "requires crypto.Certificate and SPKAC support"
+    },
+    "parallel/test-crypto-cipheriv-decipheriv.js": {
+      "skip": true,
+      "reason": "requires des-ede3-cbc cipher, ECB mode, stream interface, and non-standard GCM IV lengths"
     },
     "parallel/test-crypto-classes.js": {
       "skip": true,
-      "reason": "requires Cipheriv, Decipheriv, Sign, Verify, DiffieHellman, DiffieHellmanGroup, ECDH classes"
+      "reason": "requires des-ede3-cbc cipher, DiffieHellman, DiffieHellmanGroup, and ECDH classes"
+    },
+    "parallel/test-crypto-des3-wrap.js": {
+      "skip": true,
+      "reason": "requires des3/des-ede3-cbc cipher which is not implemented"
+    },
+    "parallel/test-crypto-dh-constructor.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-curves.js": {
+      "skip": true,
+      "reason": "requires ECDH class which is not implemented"
+    },
+    "parallel/test-crypto-dh-errors.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-generate-keys.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-group-setters.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-leak.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-modp2-views.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-modp2.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-odd-key.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-padding.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-shared.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh-stateless.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-dh.js": {
+      "skip": true,
+      "reason": "requires DiffieHellman class which is not implemented"
+    },
+    "parallel/test-crypto-domain.js": {
+      "skip": true,
+      "reason": "requires domain module which is not available in WASM"
+    },
+    "parallel/test-crypto-domains.js": {
+      "skip": true,
+      "reason": "requires domain module which is not available in WASM"
+    },
+    "parallel/test-crypto-ecb.js": {
+      "skip": true,
+      "reason": "requires ECB cipher mode which is not implemented"
+    },
+    "parallel/test-crypto-ecdh-convert-key.js": {
+      "skip": true,
+      "reason": "requires ECDH class and convertKey which is not implemented"
+    },
+    "parallel/test-crypto-encoding-validation-error.js": {
+      "skip": true,
+      "reason": "requires encoding change tracking in cipher update/final"
+    },
+    "parallel/test-crypto-fips.js": {
+      "skip": true,
+      "reason": "requires OpenSSL FIPS mode support"
+    },
+    "parallel/test-crypto-from-binary.js": {},
+    "parallel/test-crypto-gcm-explicit-short-tag.js": {
+      "skip": true,
+      "reason": "requires non-standard GCM auth tag lengths"
+    },
+    "parallel/test-crypto-gcm-implicit-short-tag.js": {
+      "skip": true,
+      "reason": "requires non-standard GCM auth tag lengths"
+    },
+    "parallel/test-crypto-getcipherinfo.js": {
+      "skip": true,
+      "reason": "requires aes-128-ccm, aes-128-ocb cipher modes and NID lookup"
+    },
+    "parallel/test-crypto-hash-stream-pipe.js": {
+      "skip": true,
+      "reason": "requires stream.pipe interface for crypto Hash"
+    },
+    "parallel/test-crypto-hash.js": {
+      "skip": true,
+      "reason": "requires stream interface (end/read/write), fixtures module, and shake128/256 XOF hash support"
+    },
+    "parallel/test-crypto-hkdf.js": {
+      "skip": true,
+      "reason": "requires buffer.kMaxLength, SharedArrayBuffer, specific error messages, and info length validation"
     },
     "parallel/test-crypto-hmac.js": {
       "skip": true,
-      "reason": "requires stream interface on Hmac (end/read), Hmac() without new, createSecretKey, digest() returning empty after finalization, and common.expectWarning"
+      "reason": "requires specific error message format ('The \"hmac\" argument...') and createSecretKey in HMAC"
     },
-    "parallel/test-crypto-randomuuid.js": {
+    "parallel/test-crypto-key-objects-messageport.js": {
       "skip": true,
-      "reason": "requires randomUUID options validation (disableEntropyCache, ERR_INVALID_ARG_TYPE)"
+      "reason": "requires MessagePort and structured clone which is not available in WASM"
     },
-    "parallel/test-crypto-randomfillsync-regression.js": {},
-    "parallel/test-crypto-from-binary.js": {},
-    "parallel/test-crypto-subtle-zero-length.js": {
+    "parallel/test-crypto-key-objects-to-crypto-key.js": {
       "skip": true,
-      "reason": "requires Web Crypto subtle API (importKey, encrypt, decrypt, CryptoKey)"
+      "reason": "requires KeyObject.from() which is not implemented"
+    },
+    "parallel/test-crypto-key-objects.js": {
+      "skip": true,
+      "reason": "requires fixtures/keys and full KeyObject API (symmetricKeySize, equals)"
+    },
+    "parallel/test-crypto-keygen-async-dsa-key-object.js": {
+      "skip": true,
+      "reason": "requires DSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-dsa.js": {
+      "skip": true,
+      "reason": "requires DSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-elliptic-curve-jwk-ec.js": {
+      "skip": true,
+      "reason": "requires JWK export format for EC keys which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-elliptic-curve-jwk-rsa.js": {
+      "skip": true,
+      "reason": "requires RSA key generation for JWK format"
+    },
+    "parallel/test-crypto-keygen-async-elliptic-curve-jwk.js": {
+      "skip": true,
+      "reason": "requires JWK export format for EC keys which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-encrypted-private-key-der.js": {
+      "skip": true,
+      "reason": "requires RSA key generation with encrypted DER output"
+    },
+    "parallel/test-crypto-keygen-async-encrypted-private-key.js": {
+      "skip": true,
+      "reason": "requires RSA key generation with encrypted PEM output"
+    },
+    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js": {
+      "skip": true,
+      "reason": "requires encrypted PEM export for EC keys which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted.js.js": {
+      "skip": true,
+      "reason": "requires encrypted PEM export for EC keys which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-explicit-elliptic-curve.js": {
+      "skip": true,
+      "reason": "requires EC key export in SEC1/SPKI PEM format with paramEncoding"
+    },
+    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js": {
+      "skip": true,
+      "reason": "requires encrypted PEM export for EC keys which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted.js": {
+      "skip": true,
+      "reason": "requires encrypted PEM export for EC keys which is not implemented"
+    },
+    "parallel/test-crypto-keygen-async-named-elliptic-curve.js": {
+      "skip": true,
+      "reason": "requires EC key export in SEC1/SPKI PEM format with paramEncoding"
+    },
+    "parallel/test-crypto-keygen-async-rsa.js": {
+      "skip": true,
+      "reason": "requires RSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-bit-length.js": {
+      "skip": true,
+      "reason": "requires RSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-deprecation.js": {
+      "skip": true,
+      "reason": "requires RSA key generation and deprecated options"
+    },
+    "parallel/test-crypto-keygen-dh-classic.js": {
+      "skip": true,
+      "reason": "requires DH key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-duplicate-deprecated-option.js": {
+      "skip": true,
+      "reason": "requires RSA key generation and deprecated options"
+    },
+    "parallel/test-crypto-keygen-eddsa.js": {
+      "skip": true,
+      "reason": "requires ed448, x25519, x448 key types and asymmetricKeyDetails property"
+    },
+    "parallel/test-crypto-keygen-empty-passphrase-no-error.js": {
+      "skip": true,
+      "reason": "requires RSA key generation with passphrase which is not implemented"
+    },
+    "parallel/test-crypto-keygen-empty-passphrase-no-prompt.js": {
+      "skip": true,
+      "reason": "requires RSA key generation with passphrase which is not implemented"
+    },
+    "parallel/test-crypto-keygen-invalid-parameter-encoding-dsa.js": {
+      "skip": true,
+      "reason": "requires DSA key generation for parameter validation"
+    },
+    "parallel/test-crypto-keygen-invalid-parameter-encoding-ec.js": {
+      "skip": true,
+      "reason": "requires specific ERR_INCOMPATIBLE_OPTION_PAIR error handling"
+    },
+    "parallel/test-crypto-keygen-key-object-without-encoding.js": {
+      "skip": true,
+      "reason": "requires RSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-key-objects.js": {
+      "skip": true,
+      "reason": "requires RSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-missing-oid.js": {
+      "skip": true,
+      "reason": "requires RSA-PSS key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-no-rsassa-pss-params.js": {
+      "skip": true,
+      "reason": "requires RSA-PSS key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-non-standard-public-exponent.js": {
+      "skip": true,
+      "reason": "requires RSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-promisify.js": {
+      "skip": true,
+      "reason": "requires RSA key generation and util.promisify"
+    },
+    "parallel/test-crypto-keygen-rfc8017-9-1.js": {
+      "skip": true,
+      "reason": "requires RSA-PSS key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-rfc8017-a-2-3.js": {
+      "skip": true,
+      "reason": "requires RSA-PSS key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-rsa-pss.js": {
+      "skip": true,
+      "reason": "requires RSA-PSS key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen-sync.js": {
+      "skip": true,
+      "reason": "requires RSA key generation which is not implemented"
+    },
+    "parallel/test-crypto-keygen.js": {
+      "skip": true,
+      "reason": "requires RSA/DSA/DH key generation for validation tests"
+    },
+    "parallel/test-crypto-lazy-transform-writable.js": {
+      "skip": true,
+      "reason": "requires stream.Transform interface for crypto"
+    },
+    "parallel/test-crypto-no-algorithm.js": {
+      "skip": true,
+      "reason": "requires specific createHash(null) error handling"
+    },
+    "parallel/test-crypto-oneshot-hash.js": {
+      "skip": true,
+      "reason": "requires fixtures module for test data and specific ERR_INVALID_ARG_VALUE error handling"
+    },
+    "parallel/test-crypto-op-during-process-exit.js": {
+      "skip": true,
+      "reason": "requires process.exit and process.on('exit') hooks"
+    },
+    "parallel/test-crypto-padding-aes256.js": {},
+    "parallel/test-crypto-padding.js": {
+      "skip": true,
+      "reason": "requires OpenSSL-specific error messages for encryption failures"
+    },
+    "parallel/test-crypto-pbkdf2.js": {
+      "skip": true,
+      "reason": "requires extensive argument validation with specific error messages, SharedArrayBuffer, and iteration range checks"
+    },
+    "parallel/test-crypto-prime.js": {
+      "skip": true,
+      "reason": "requires crypto.generatePrime and worker_threads"
+    },
+    "parallel/test-crypto-private-decrypt-gh32240.js": {
+      "skip": true,
+      "reason": "requires RSA privateDecrypt which is not implemented"
+    },
+    "parallel/test-crypto-psychic-signatures.js": {
+      "skip": true,
+      "reason": "requires ECDSA with raw signature verification internals"
+    },
+    "parallel/test-crypto-publicDecrypt-fails-first-time.js": {
+      "skip": true,
+      "reason": "requires RSA publicDecrypt/privateDecrypt"
     },
     "parallel/test-crypto-random.js": {
       "skip": true,
-      "reason": "requires crypto.pseudoRandomBytes, randomFill with SharedArrayBuffer, and kMaxLength validation"
+      "reason": "requires crypto.pseudoRandomBytes, buffer.kMaxLength, and specific error message formats"
+    },
+    "parallel/test-crypto-randomfillsync-regression.js": {},
+    "parallel/test-crypto-randomuuid.js": {},
+    "parallel/test-crypto-rsa-dsa.js": {
+      "skip": true,
+      "reason": "requires RSA/DSA support and fixtures/keys"
+    },
+    "parallel/test-crypto-scrypt.js": {
+      "skip": true,
+      "reason": "requires internal/test/binding which is not available in WASM"
+    },
+    "parallel/test-crypto-secret-keygen.js": {
+      "skip": true,
+      "reason": "requires generateKey/generateKeySync for symmetric keys which is not implemented"
+    },
+    "parallel/test-crypto-secure-heap.js": {
+      "skip": true,
+      "reason": "requires --secure-heap flag and OpenSSL secure heap support"
+    },
+    "parallel/test-crypto-sign-verify.js": {
+      "skip": true,
+      "reason": "requires fixtures/keys and RSA/DSA signing"
+    },
+    "parallel/test-crypto-stream.js": {
+      "skip": true,
+      "reason": "requires stream.Transform interface for crypto"
+    },
+    "parallel/test-crypto-subtle-zero-length.js": {
+      "skip": true,
+      "reason": "requires WebCrypto subtle with AES-CBC and zero-length input"
+    },
+    "parallel/test-crypto-update-encoding.js": {
+      "skip": true,
+      "reason": "requires createSign to accept buffer data for update without key initialization"
+    },
+    "parallel/test-crypto-verify-failure.js": {
+      "skip": true,
+      "reason": "requires fixtures/keys which are not available"
+    },
+    "parallel/test-crypto-webcrypto-aes-decrypt-tag-too-small.js": {
+      "skip": true,
+      "reason": "requires WebCrypto AES-GCM with specific tag length validation"
+    },
+    "parallel/test-crypto-worker-thread.js": {
+      "skip": true,
+      "reason": "requires worker_threads which is not available in WASM"
+    },
+    "parallel/test-crypto-x509.js": {
+      "skip": true,
+      "reason": "requires X509Certificate class and fixtures/keys which are not available"
+    },
+    "parallel/test-crypto.js": {
+      "skip": true,
+      "reason": "requires tls module and fixtures/keys which are not available"
     },
 
     // === AbortController tests ===

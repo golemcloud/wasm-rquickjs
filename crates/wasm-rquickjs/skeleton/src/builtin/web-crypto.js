@@ -119,60 +119,59 @@ function encodeOutput(result, encoding) {
     }
 }
 
-class Hash {
-    constructor(algorithm, options) {
-        this._algorithm = normalizeHashAlgorithm(algorithm);
-        const handle = webCryptoNative.hash_init(this._algorithm);
-        if (handle === null || handle === undefined) {
-            const err = new Error('Digest method not supported: ' + algorithm);
-            err.code = 'ERR_CRYPTO_INVALID_DIGEST';
-            throw err;
-        }
-        this._handle = handle;
-        this._finalized = false;
+function Hash(algorithm, options) {
+    if (!(this instanceof Hash)) return new Hash(algorithm, options);
+    this._algorithm = normalizeHashAlgorithm(algorithm);
+    const handle = webCryptoNative.hash_init(this._algorithm);
+    if (handle === null || handle === undefined) {
+        const err = new Error('Digest method not supported: ' + algorithm);
+        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+        throw err;
     }
-
-    update(data, inputEncoding) {
-        if (this._finalized) {
-            const err = new Error('Digest already called');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        if (data === undefined || data === null) {
-            const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView.');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
-        const bytes = toBytes(data, inputEncoding);
-        webCryptoNative.hash_update(this._handle, bytes);
-        return this;
-    }
-
-    digest(encoding) {
-        if (this._finalized) {
-            const err = new Error('Digest already called');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        this._finalized = true;
-        const hashBytes = webCryptoNative.hash_final(this._handle);
-        const result = new Uint8Array(hashBytes);
-        return encodeOutput(result, encoding);
-    }
-
-    copy(options) {
-        if (this._finalized) {
-            const err = new Error('Digest already called');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        const newHash = Object.create(Hash.prototype);
-        newHash._algorithm = this._algorithm;
-        newHash._handle = webCryptoNative.hash_copy(this._handle);
-        newHash._finalized = false;
-        return newHash;
-    }
+    this._handle = handle;
+    this._finalized = false;
 }
+
+Hash.prototype.update = function(data, inputEncoding) {
+    if (this._finalized) {
+        const err = new Error('Digest already called');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    if (data === undefined || data === null) {
+        const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView.');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    const bytes = toBytes(data, inputEncoding);
+    webCryptoNative.hash_update(this._handle, bytes);
+    return this;
+};
+
+Hash.prototype.digest = function(encoding) {
+    if (this._finalized) {
+        const err = new Error('Digest already called');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    this._finalized = true;
+    const hashBytes = webCryptoNative.hash_final(this._handle);
+    const result = new Uint8Array(hashBytes);
+    return encodeOutput(result, encoding);
+};
+
+Hash.prototype.copy = function(options) {
+    if (this._finalized) {
+        const err = new Error('Digest already called');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    const newHash = Object.create(Hash.prototype);
+    newHash._algorithm = this._algorithm;
+    newHash._handle = webCryptoNative.hash_copy(this._handle);
+    newHash._finalized = false;
+    return newHash;
+};
 
 export { Hash };
 
@@ -180,48 +179,47 @@ export function createHash(algorithm, options) {
     return new Hash(algorithm, options);
 }
 
-class Hmac {
-    constructor(algorithm, key, options) {
-        this._algorithm = normalizeHashAlgorithm(algorithm);
-        const keyBytes = toBytes(key);
-        const handle = webCryptoNative.hmac_init(this._algorithm, keyBytes);
-        if (handle === null || handle === undefined) {
-            const err = new Error('Digest method not supported: ' + algorithm);
-            err.code = 'ERR_CRYPTO_INVALID_DIGEST';
-            throw err;
-        }
-        this._handle = handle;
-        this._finalized = false;
+function Hmac(algorithm, key, options) {
+    if (!(this instanceof Hmac)) return new Hmac(algorithm, key, options);
+    this._algorithm = normalizeHashAlgorithm(algorithm);
+    const keyBytes = toBytes(key);
+    const handle = webCryptoNative.hmac_init(this._algorithm, keyBytes);
+    if (handle === null || handle === undefined) {
+        const err = new Error('Digest method not supported: ' + algorithm);
+        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+        throw err;
     }
-
-    update(data, inputEncoding) {
-        if (this._finalized) {
-            const err = new Error('Digest already called');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        if (data === undefined || data === null) {
-            const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView.');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
-        const bytes = toBytes(data, inputEncoding);
-        webCryptoNative.hmac_update(this._handle, bytes);
-        return this;
-    }
-
-    digest(encoding) {
-        if (this._finalized) {
-            const err = new Error('Digest already called');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        this._finalized = true;
-        const hmacBytes = webCryptoNative.hmac_final(this._handle);
-        const result = new Uint8Array(hmacBytes);
-        return encodeOutput(result, encoding);
-    }
+    this._handle = handle;
+    this._finalized = false;
 }
+
+Hmac.prototype.update = function(data, inputEncoding) {
+    if (this._finalized) {
+        const err = new Error('Digest already called');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    if (data === undefined || data === null) {
+        const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView.');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    const bytes = toBytes(data, inputEncoding);
+    webCryptoNative.hmac_update(this._handle, bytes);
+    return this;
+};
+
+Hmac.prototype.digest = function(encoding) {
+    if (this._finalized) {
+        const err = new Error('Digest already called');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    this._finalized = true;
+    const hmacBytes = webCryptoNative.hmac_final(this._handle);
+    const result = new Uint8Array(hmacBytes);
+    return encodeOutput(result, encoding);
+};
 
 export { Hmac };
 
@@ -276,7 +274,19 @@ export function getRandomValues(typedArray) {
  * Generate a random UUID
  * @returns A string containing a randomly generated, 36 character long v4 UUID.
  */
-export function randomUUID() {
+export function randomUUID(options) {
+    if (options !== undefined) {
+        if (typeof options !== 'object' || options === null) {
+            const err = new TypeError('The "options" argument must be of type object.');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (options.disableEntropyCache !== undefined && typeof options.disableEntropyCache !== 'boolean') {
+            const err = new TypeError('The "options.disableEntropyCache" property must be of type boolean.');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+    }
     return webCryptoNative.random_uuid_v4_string();
 }
 
@@ -478,6 +488,10 @@ const CIPHER_ALIASES = {
     'aes-128-gcm': 'aes-128-gcm',
     'aes-256-gcm': 'aes-256-gcm',
     'chacha20-poly1305': 'chacha20-poly1305',
+    'aes256': 'aes-256-cbc',
+    'aes-256': 'aes-256-cbc',
+    'aes128': 'aes-128-cbc',
+    'aes-128': 'aes-128-cbc',
 };
 
 function normalizeCipherAlgorithm(algorithm) {
@@ -495,85 +509,84 @@ function normalizeCipherAlgorithm(algorithm) {
     return normalized;
 }
 
-class Cipheriv {
-    constructor(algorithm, key, iv, options) {
-        this._algorithm = normalizeCipherAlgorithm(algorithm);
-        const keyBytes = toBytes(key);
-        const ivBytes = toBytes(iv);
-        const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, false);
-        if (handle === null || handle === undefined) {
-            const err = new Error('Invalid key length or IV length for cipher: ' + algorithm);
-            err.code = 'ERR_CRYPTO_INVALID_IV';
-            throw err;
-        }
-        this._handle = handle;
-        this._finalized = false;
+function Cipheriv(algorithm, key, iv, options) {
+    if (!(this instanceof Cipheriv)) return new Cipheriv(algorithm, key, iv, options);
+    this._algorithm = normalizeCipherAlgorithm(algorithm);
+    const keyBytes = toBytes(key);
+    const ivBytes = toBytes(iv);
+    const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, false);
+    if (handle === null || handle === undefined) {
+        const err = new Error('Invalid key length or IV length for cipher: ' + algorithm);
+        err.code = 'ERR_CRYPTO_INVALID_IV';
+        throw err;
     }
-
-    update(data, inputEncoding, outputEncoding) {
-        if (this._finalized) {
-            const err = new Error('Attempting to use a finalized cipher');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        const bytes = toBytes(data, inputEncoding);
-        const result = webCryptoNative.cipher_update(this._handle, bytes);
-        if (result === null || result === undefined) {
-            const err = new Error('Cipher update failed');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        const out = new Uint8Array(result);
-        return encodeOutput(out, outputEncoding);
-    }
-
-    final(outputEncoding) {
-        if (this._finalized) {
-            const err = new Error('Attempting to use a finalized cipher');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        this._finalized = true;
-        const result = webCryptoNative.cipher_final(this._handle);
-        if (result === null || result === undefined) {
-            const err = new Error('Cipher final failed');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        const out = new Uint8Array(result);
-        return encodeOutput(out, outputEncoding);
-    }
-
-    setAAD(buffer, options) {
-        const bytes = toBytes(buffer);
-        const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
-        if (!ok) {
-            const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        return this;
-    }
-
-    getAuthTag() {
-        const result = webCryptoNative.cipher_get_auth_tag(this._handle);
-        if (result === null || result === undefined) {
-            const err = new Error('getAuthTag failed: not an AEAD cipher or final not called');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        const buf = new Uint8Array(result);
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
-        }
-        return buf;
-    }
-
-    setAutoPadding(autoPadding) {
-        webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
-        return this;
-    }
+    this._handle = handle;
+    this._finalized = false;
 }
+
+Cipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
+    if (this._finalized) {
+        const err = new Error('Attempting to use a finalized cipher');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    const bytes = toBytes(data, inputEncoding);
+    const result = webCryptoNative.cipher_update(this._handle, bytes);
+    if (result === null || result === undefined) {
+        const err = new Error('Cipher update failed');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    const out = new Uint8Array(result);
+    return encodeOutput(out, outputEncoding);
+};
+
+Cipheriv.prototype.final = function(outputEncoding) {
+    if (this._finalized) {
+        const err = new Error('Attempting to use a finalized cipher');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    this._finalized = true;
+    const result = webCryptoNative.cipher_final(this._handle);
+    if (result === null || result === undefined) {
+        const err = new Error('Cipher final failed');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    const out = new Uint8Array(result);
+    return encodeOutput(out, outputEncoding);
+};
+
+Cipheriv.prototype.setAAD = function(buffer, options) {
+    const bytes = toBytes(buffer);
+    const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
+    if (!ok) {
+        const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    return this;
+};
+
+Cipheriv.prototype.getAuthTag = function() {
+    const result = webCryptoNative.cipher_get_auth_tag(this._handle);
+    if (result === null || result === undefined) {
+        const err = new Error('getAuthTag failed: not an AEAD cipher or final not called');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    const buf = new Uint8Array(result);
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    return buf;
+};
+
+Cipheriv.prototype.setAutoPadding = function(autoPadding) {
+    webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
+    return this;
+};
 
 export { Cipheriv };
 
@@ -581,82 +594,81 @@ export function createCipheriv(algorithm, key, iv, options) {
     return new Cipheriv(algorithm, key, iv, options);
 }
 
-class Decipheriv {
-    constructor(algorithm, key, iv, options) {
-        this._algorithm = normalizeCipherAlgorithm(algorithm);
-        const keyBytes = toBytes(key);
-        const ivBytes = toBytes(iv);
-        const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, true);
-        if (handle === null || handle === undefined) {
-            const err = new Error('Invalid key length or IV length for decipher: ' + algorithm);
-            err.code = 'ERR_CRYPTO_INVALID_IV';
-            throw err;
-        }
-        this._handle = handle;
-        this._finalized = false;
+function Decipheriv(algorithm, key, iv, options) {
+    if (!(this instanceof Decipheriv)) return new Decipheriv(algorithm, key, iv, options);
+    this._algorithm = normalizeCipherAlgorithm(algorithm);
+    const keyBytes = toBytes(key);
+    const ivBytes = toBytes(iv);
+    const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, true);
+    if (handle === null || handle === undefined) {
+        const err = new Error('Invalid key length or IV length for decipher: ' + algorithm);
+        err.code = 'ERR_CRYPTO_INVALID_IV';
+        throw err;
     }
-
-    update(data, inputEncoding, outputEncoding) {
-        if (this._finalized) {
-            const err = new Error('Attempting to use a finalized decipher');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        const bytes = toBytes(data, inputEncoding);
-        const result = webCryptoNative.cipher_update(this._handle, bytes);
-        if (result === null || result === undefined) {
-            const err = new Error('Decipher update failed');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        const out = new Uint8Array(result);
-        return encodeOutput(out, outputEncoding);
-    }
-
-    final(outputEncoding) {
-        if (this._finalized) {
-            const err = new Error('Attempting to use a finalized decipher');
-            err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-            throw err;
-        }
-        this._finalized = true;
-        const result = webCryptoNative.cipher_final(this._handle);
-        if (result === null || result === undefined) {
-            const err = new Error('Decipher final failed (possibly wrong key, IV, or auth tag)');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        const out = new Uint8Array(result);
-        return encodeOutput(out, outputEncoding);
-    }
-
-    setAAD(buffer, options) {
-        const bytes = toBytes(buffer);
-        const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
-        if (!ok) {
-            const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        return this;
-    }
-
-    setAuthTag(buffer) {
-        const bytes = toBytes(buffer);
-        const ok = webCryptoNative.cipher_set_auth_tag(this._handle, bytes);
-        if (!ok) {
-            const err = new Error('setAuthTag failed: not an AEAD decipher or invalid state');
-            err.code = 'ERR_CRYPTO_INVALID_STATE';
-            throw err;
-        }
-        return this;
-    }
-
-    setAutoPadding(autoPadding) {
-        webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
-        return this;
-    }
+    this._handle = handle;
+    this._finalized = false;
 }
+
+Decipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
+    if (this._finalized) {
+        const err = new Error('Attempting to use a finalized decipher');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    const bytes = toBytes(data, inputEncoding);
+    const result = webCryptoNative.cipher_update(this._handle, bytes);
+    if (result === null || result === undefined) {
+        const err = new Error('Decipher update failed');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    const out = new Uint8Array(result);
+    return encodeOutput(out, outputEncoding);
+};
+
+Decipheriv.prototype.final = function(outputEncoding) {
+    if (this._finalized) {
+        const err = new Error('Attempting to use a finalized decipher');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    this._finalized = true;
+    const result = webCryptoNative.cipher_final(this._handle);
+    if (result === null || result === undefined) {
+        const err = new Error('Decipher final failed (possibly wrong key, IV, or auth tag)');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    const out = new Uint8Array(result);
+    return encodeOutput(out, outputEncoding);
+};
+
+Decipheriv.prototype.setAAD = function(buffer, options) {
+    const bytes = toBytes(buffer);
+    const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
+    if (!ok) {
+        const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    return this;
+};
+
+Decipheriv.prototype.setAuthTag = function(buffer) {
+    const bytes = toBytes(buffer);
+    const ok = webCryptoNative.cipher_set_auth_tag(this._handle, bytes);
+    if (!ok) {
+        const err = new Error('setAuthTag failed: not an AEAD decipher or invalid state');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
+    return this;
+};
+
+Decipheriv.prototype.setAutoPadding = function(autoPadding) {
+    webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
+    return this;
+};
 
 export { Decipheriv };
 
@@ -670,6 +682,66 @@ export function getHashes() {
 
 export function getCiphers() {
     return webCryptoNative.get_ciphers();
+}
+
+const CIPHER_INFO = {
+    'aes-128-cbc': { name: 'aes-128-cbc', nid: 419, blockSize: 16, ivLength: 16, keyLength: 16, mode: 'cbc' },
+    'aes-256-cbc': { name: 'aes-256-cbc', nid: 427, blockSize: 16, ivLength: 16, keyLength: 32, mode: 'cbc' },
+    'aes-128-ctr': { name: 'aes-128-ctr', nid: 904, blockSize: 1, ivLength: 16, keyLength: 16, mode: 'ctr' },
+    'aes-256-ctr': { name: 'aes-256-ctr', nid: 906, blockSize: 1, ivLength: 16, keyLength: 32, mode: 'ctr' },
+    'aes-128-gcm': { name: 'aes-128-gcm', nid: 895, blockSize: 1, ivLength: 12, keyLength: 16, mode: 'gcm' },
+    'aes-256-gcm': { name: 'aes-256-gcm', nid: 901, blockSize: 1, ivLength: 12, keyLength: 32, mode: 'gcm' },
+    'chacha20-poly1305': { name: 'chacha20-poly1305', nid: 1018, blockSize: 1, ivLength: 12, keyLength: 32, mode: 'wrap' },
+};
+
+const CIPHER_NID_MAP = {};
+for (const [name, info] of Object.entries(CIPHER_INFO)) {
+    CIPHER_NID_MAP[info.nid] = info;
+}
+
+export function getCipherInfo(nameOrNid, options) {
+    if (typeof nameOrNid !== 'string' && typeof nameOrNid !== 'number') {
+        const err = new TypeError('The "nameOrNid" argument must be of type string or number.');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    if (options !== undefined && (typeof options !== 'object' || options === null)) {
+        const err = new TypeError('The "options" argument must be of type object.');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    
+    let info;
+    if (typeof nameOrNid === 'number') {
+        info = CIPHER_NID_MAP[nameOrNid];
+    } else {
+        const lower = nameOrNid.toLowerCase();
+        const resolved = CIPHER_ALIASES[lower] || lower;
+        info = CIPHER_INFO[resolved];
+    }
+    
+    if (!info) return undefined;
+    
+    if (options) {
+        if (options.keyLength !== undefined) {
+            if (typeof options.keyLength !== 'number') {
+                const err = new TypeError('The "options.keyLength" property must be of type number.');
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+            if (options.keyLength !== info.keyLength) return undefined;
+        }
+        if (options.ivLength !== undefined) {
+            if (typeof options.ivLength !== 'number') {
+                const err = new TypeError('The "options.ivLength" property must be of type number.');
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+            if (options.ivLength !== info.ivLength) return undefined;
+        }
+    }
+    
+    return { ...info };
 }
 
 export function getCurves() {
@@ -929,65 +1001,103 @@ export function generateKeyPair(type_, options, callback) {
     }
 }
 
+export function generateKeySync(type_, options) {
+    if (type_ === 'hmac') {
+        const length = (options && options.length) || 256;
+        if (typeof length !== 'number' || length <= 0 || length % 8 !== 0) {
+            const err = new RangeError('Invalid key length for hmac');
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        const keyBytes = randomBytes(length / 8);
+        return createSecretKey(keyBytes);
+    } else if (type_ === 'aes') {
+        const length = options && options.length;
+        if (length !== 128 && length !== 192 && length !== 256) {
+            const err = new RangeError('Invalid key length for aes: must be 128, 192, or 256');
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        const keyBytes = randomBytes(length / 8);
+        return createSecretKey(keyBytes);
+    } else {
+        const err = new Error('Unsupported key type: ' + type_);
+        err.code = 'ERR_INVALID_ARG_VALUE';
+        throw err;
+    }
+}
+
+export function generateKey(type_, options, callback) {
+    if (typeof options === 'function') {
+        callback = options;
+        options = undefined;
+    }
+    try {
+        const key = generateKeySync(type_, options);
+        queueMicrotask(() => callback(null, key));
+    } catch (err) {
+        queueMicrotask(() => callback(err));
+    }
+}
+
 // ===== Sign / Verify classes =====
 
-class Sign {
-    constructor(algorithm, options) {
-        this._algorithm = algorithm ? algorithm.toLowerCase() : null;
-        this._keySet = false;
-        this._handle = null;
-        this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
+function Sign(algorithm, options) {
+    if (!(this instanceof Sign)) return new Sign(algorithm, options);
+    this._algorithm = algorithm ? algorithm.toLowerCase() : null;
+    this._keySet = false;
+    this._handle = null;
+    this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
+}
+
+Sign.prototype.update = function(data, inputEncoding) {
+    if (this._handle !== null) {
+        const bytes = toBytes(data, inputEncoding);
+        webCryptoNative.sign_update(this._handle, bytes);
+    } else {
+        if (!this._pendingData) this._pendingData = [];
+        this._pendingData.push({ data, inputEncoding });
+    }
+    return this;
+};
+
+Sign.prototype.sign = function(privateKey, outputEncoding) {
+    let keyObj;
+    if (privateKey instanceof KeyObject) {
+        keyObj = privateKey;
+    } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
+        keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey.key);
+    } else {
+        keyObj = createPrivateKey(privateKey);
     }
 
-    update(data, inputEncoding) {
-        if (this._handle !== null) {
-            const bytes = toBytes(data, inputEncoding);
-            webCryptoNative.sign_update(this._handle, bytes);
-        } else {
-            if (!this._pendingData) this._pendingData = [];
-            this._pendingData.push({ data, inputEncoding });
-        }
-        return this;
-    }
-
-    sign(privateKey, outputEncoding) {
-        let keyObj;
-        if (privateKey instanceof KeyObject) {
-            keyObj = privateKey;
-        } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
-            keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey.key);
-        } else {
-            keyObj = createPrivateKey(privateKey);
-        }
-
-        if (this._handle === null) {
-            const handle = webCryptoNative.sign_init(this._algorithmNormalized, keyObj._handle);
-            if (handle === null || handle === undefined) {
-                const err = new Error('Sign init failed');
-                err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
-                throw err;
-            }
-            this._handle = handle;
-            if (this._pendingData) {
-                for (const { data, inputEncoding } of this._pendingData) {
-                    const bytes = toBytes(data, inputEncoding);
-                    webCryptoNative.sign_update(this._handle, bytes);
-                }
-                this._pendingData = null;
-            }
-        }
-
-        const result = webCryptoNative.sign_final_native(this._handle);
-        this._handle = null;
-        if (result === null || result === undefined) {
-            const err = new Error('Sign failed');
+    if (this._handle === null) {
+        const handle = webCryptoNative.sign_init(this._algorithmNormalized, keyObj._handle);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Sign init failed');
             err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
             throw err;
         }
-        const sig = new Uint8Array(result);
-        return encodeOutput(sig, outputEncoding);
+        this._handle = handle;
+        if (this._pendingData) {
+            for (const { data, inputEncoding } of this._pendingData) {
+                const bytes = toBytes(data, inputEncoding);
+                webCryptoNative.sign_update(this._handle, bytes);
+            }
+            this._pendingData = null;
+        }
     }
-}
+
+    const result = webCryptoNative.sign_final_native(this._handle);
+    this._handle = null;
+    if (result === null || result === undefined) {
+        const err = new Error('Sign failed');
+        err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+        throw err;
+    }
+    const sig = new Uint8Array(result);
+    return encodeOutput(sig, outputEncoding);
+};
 
 export { Sign };
 
@@ -995,60 +1105,59 @@ export function createSign(algorithm) {
     return new Sign(algorithm);
 }
 
-class Verify {
-    constructor(algorithm, options) {
-        this._algorithm = algorithm ? algorithm.toLowerCase() : null;
-        this._handle = null;
-        this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
-    }
-
-    update(data, inputEncoding) {
-        if (this._handle !== null) {
-            const bytes = toBytes(data, inputEncoding);
-            webCryptoNative.verify_update(this._handle, bytes);
-        } else {
-            if (!this._pendingData) this._pendingData = [];
-            this._pendingData.push({ data, inputEncoding });
-        }
-        return this;
-    }
-
-    verify(publicKey, signature, signatureEncoding) {
-        let keyObj;
-        if (publicKey instanceof KeyObject) {
-            keyObj = publicKey;
-        } else if (typeof publicKey === 'object' && publicKey !== null && publicKey.key !== undefined) {
-            keyObj = publicKey.key instanceof KeyObject ? publicKey.key : createPublicKey(publicKey.key);
-        } else {
-            keyObj = createPublicKey(publicKey);
-        }
-
-        if (this._handle === null) {
-            const handle = webCryptoNative.verify_init(this._algorithmNormalized, keyObj._handle);
-            if (handle === null || handle === undefined) {
-                const err = new Error('Verify init failed');
-                err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
-                throw err;
-            }
-            this._handle = handle;
-            if (this._pendingData) {
-                for (const { data, inputEncoding } of this._pendingData) {
-                    const bytes = toBytes(data, inputEncoding);
-                    webCryptoNative.verify_update(this._handle, bytes);
-                }
-                this._pendingData = null;
-            }
-        }
-
-        const sigBytes = toBytes(signature, signatureEncoding);
-        const result = webCryptoNative.verify_final_native(this._handle, sigBytes);
-        this._handle = null;
-        if (result === null || result === undefined) {
-            return false;
-        }
-        return result;
-    }
+function Verify(algorithm, options) {
+    if (!(this instanceof Verify)) return new Verify(algorithm, options);
+    this._algorithm = algorithm ? algorithm.toLowerCase() : null;
+    this._handle = null;
+    this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
 }
+
+Verify.prototype.update = function(data, inputEncoding) {
+    if (this._handle !== null) {
+        const bytes = toBytes(data, inputEncoding);
+        webCryptoNative.verify_update(this._handle, bytes);
+    } else {
+        if (!this._pendingData) this._pendingData = [];
+        this._pendingData.push({ data, inputEncoding });
+    }
+    return this;
+};
+
+Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
+    let keyObj;
+    if (publicKey instanceof KeyObject) {
+        keyObj = publicKey;
+    } else if (typeof publicKey === 'object' && publicKey !== null && publicKey.key !== undefined) {
+        keyObj = publicKey.key instanceof KeyObject ? publicKey.key : createPublicKey(publicKey.key);
+    } else {
+        keyObj = createPublicKey(publicKey);
+    }
+
+    if (this._handle === null) {
+        const handle = webCryptoNative.verify_init(this._algorithmNormalized, keyObj._handle);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Verify init failed');
+            err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+            throw err;
+        }
+        this._handle = handle;
+        if (this._pendingData) {
+            for (const { data, inputEncoding } of this._pendingData) {
+                const bytes = toBytes(data, inputEncoding);
+                webCryptoNative.verify_update(this._handle, bytes);
+            }
+            this._pendingData = null;
+        }
+    }
+
+    const sigBytes = toBytes(signature, signatureEncoding);
+    const result = webCryptoNative.verify_final_native(this._handle, sigBytes);
+    this._handle = null;
+    if (result === null || result === undefined) {
+        return false;
+    }
+    return result;
+};
 
 export { Verify };
 

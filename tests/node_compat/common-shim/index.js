@@ -5,6 +5,7 @@
 'use strict';
 
 var noop = function() {};
+var _mustCallChecks = [];
 
 var common = {
     // Platform detection — always WASM
@@ -29,17 +30,34 @@ var common = {
     // Build type
     buildType: 'Release',
 
-    // Call verification — simplified (no process.on('exit') hooks in WASM)
+    // Call verification — tracks actual calls and verifies at end of test
     mustCall: function(fn, exact) {
         if (typeof fn === 'number') {
             exact = fn;
             fn = noop;
         }
         var wrapped = fn || noop;
-        return function() { return wrapped.apply(this, arguments); };
+        var expected = (exact !== undefined) ? exact : 1;
+        var actual = 0;
+        var callSite = new Error('mustCall').stack;
+        var wrapper = function() {
+            actual++;
+            return wrapped.apply(this, arguments);
+        };
+        _mustCallChecks.push({ expected: expected, getActual: function() { return actual; }, callSite: callSite });
+        return wrapper;
     },
     mustCallAtLeast: function(fn, minimum) {
-        return fn || noop;
+        var wrapped = fn || noop;
+        var min = (minimum !== undefined) ? minimum : 1;
+        var actual = 0;
+        var callSite = new Error('mustCallAtLeast').stack;
+        var wrapper = function() {
+            actual++;
+            return wrapped.apply(this, arguments);
+        };
+        _mustCallChecks.push({ minimum: min, getActual: function() { return actual; }, callSite: callSite });
+        return wrapper;
     },
     mustNotCall: function(msg) {
         return function() {
@@ -47,11 +65,24 @@ var common = {
         };
     },
     mustSucceed: function(fn, exact) {
-        return function(err) {
+        var expected = 1;
+        if (typeof fn === 'number') {
+            expected = fn;
+            fn = noop;
+        } else if (typeof exact === 'number') {
+            expected = exact;
+        }
+        var wrapped = fn || noop;
+        var actual = 0;
+        var callSite = new Error('mustSucceed').stack;
+        var wrapper = function(err) {
             if (err) throw err;
+            actual++;
             var args = Array.prototype.slice.call(arguments, 1);
-            if (typeof fn === 'function') return fn.apply(this, args);
+            if (typeof wrapped === 'function') return wrapped.apply(this, args);
         };
+        _mustCallChecks.push({ expected: expected, getActual: function() { return actual; }, callSite: callSite });
+        return wrapper;
     },
     mustNotMutateObjectDeep: function(obj) {
         return obj;
@@ -186,6 +217,29 @@ var common = {
 
     // Inside directory with unusual characters
     get isInsideDirWithUnusualChars() { return false; },
+
+    // mustCall verification
+    _checkMustCalls: function() {
+        var errors = [];
+        for (var i = 0; i < _mustCallChecks.length; i++) {
+            var check = _mustCallChecks[i];
+            var actual = check.getActual();
+            if (check.minimum !== undefined) {
+                if (actual < check.minimum) {
+                    errors.push('mustCallAtLeast: expected at least ' + check.minimum + ' calls, got ' + actual + '\n' + (check.callSite || ''));
+                }
+            } else {
+                if (actual !== check.expected) {
+                    errors.push('mustCall: expected exactly ' + check.expected + ' call(s), got ' + actual + '\n' + (check.callSite || ''));
+                }
+            }
+        }
+        _mustCallChecks = [];
+        return errors;
+    },
+    _resetMustCalls: function() {
+        _mustCallChecks = [];
+    },
 };
 
 module.exports = common;

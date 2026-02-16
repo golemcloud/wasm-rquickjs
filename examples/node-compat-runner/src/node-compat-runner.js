@@ -31,6 +31,15 @@ function drainAsync() {
 
 export const runTest = async (testPath) => {
     try {
+        // Reset mustCall tracking for this test
+        var commonMod;
+        try {
+            commonMod = require('/tests/common/index.js');
+        } catch(e) {}
+        if (commonMod && typeof commonMod._resetMustCalls === 'function') {
+            commonMod._resetMustCalls();
+        }
+
         require(testPath);
         // Await any pending async tests from node:test
         var testModule = require('node:test');
@@ -42,6 +51,17 @@ export const runTest = async (testPath) => {
         // Run exit handlers after test completes normally
         if (globalThis.process && typeof globalThis.process._runExitHandlers === 'function') {
             globalThis.process._runExitHandlers(0);
+        }
+        // Verify mustCall expectations
+        var common;
+        try {
+            common = require('/tests/common/index.js');
+        } catch(e) {}
+        if (common && typeof common._checkMustCalls === 'function') {
+            var mustCallErrors = common._checkMustCalls();
+            if (mustCallErrors.length > 0) {
+                return "FAIL: mustCall verification failed:\n" + mustCallErrors.join("\n");
+            }
         }
         return "PASS";
     } catch (e) {
