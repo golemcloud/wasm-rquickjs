@@ -1021,7 +1021,7 @@
     },
     "parallel/test-crypto-async-sign-verify.js": {
       "skip": true,
-      "reason": "requires fixtures/keys which are not available"
+      "reason": "requires one-shot crypto.sign/verify callback form, KeyObject.export({format,type}), RSA-PSS padding, DSA/ECDSA dsaEncoding options"
     },
     "parallel/test-crypto-authenticated-stream.js": {
       "skip": true,
@@ -1162,7 +1162,7 @@
     },
     "parallel/test-crypto-key-objects.js": {
       "skip": true,
-      "reason": "requires fixtures/keys and full KeyObject API (symmetricKeySize, equals)"
+      "reason": "requires full KeyObject API (symmetricKeySize, equals, asymmetricKeyType, asymmetricKeySize)"
     },
     "parallel/test-crypto-keygen-async-dsa-key-object.js": {
       "skip": true,
@@ -1349,7 +1349,7 @@
     "parallel/test-crypto-randomuuid.js": {},
     "parallel/test-crypto-rsa-dsa.js": {
       "skip": true,
-      "reason": "requires RSA/DSA support and fixtures/keys"
+      "reason": "requires publicEncrypt/privateDecrypt/privateEncrypt/publicDecrypt which are not implemented"
     },
     "parallel/test-crypto-scrypt.js": {
       "skip": true,
@@ -1365,7 +1365,7 @@
     },
     "parallel/test-crypto-sign-verify.js": {
       "skip": true,
-      "reason": "requires fixtures/keys and RSA/DSA signing"
+      "reason": "requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option"
     },
     "parallel/test-crypto-stream.js": {
       "skip": true,
@@ -1381,7 +1381,7 @@
     },
     "parallel/test-crypto-verify-failure.js": {
       "skip": true,
-      "reason": "requires fixtures/keys which are not available"
+      "reason": "requires tls module which is not available in WASM"
     },
     "parallel/test-crypto-webcrypto-aes-decrypt-tag-too-small.js": {
       "skip": true,
@@ -1393,11 +1393,11 @@
     },
     "parallel/test-crypto-x509.js": {
       "skip": true,
-      "reason": "requires X509Certificate class and fixtures/keys which are not available"
+      "reason": "requires X509Certificate class which is not implemented"
     },
     "parallel/test-crypto.js": {
       "skip": true,
-      "reason": "requires tls module and fixtures/keys which are not available"
+      "reason": "requires tls module which is not available in WASM"
     },
 
     // === AbortController tests ===
