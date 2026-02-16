@@ -356,6 +356,8 @@ Implemented by https://github.com/ungap/structured-clone
 - `kStringMaxLength`
 - `constants`
 - `SlowBuffer`
+- `isAscii`
+- `isUtf8`
 
 ### `node:fs`
 - `readFile`

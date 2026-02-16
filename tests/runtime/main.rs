@@ -11,6 +11,7 @@ mod common;
 mod abort_controller;
 mod assert;
 mod bigint_roundtrip;
+mod buffer;
 mod cjs_require;
 mod console;
 mod crypto;
@@ -121,6 +122,12 @@ fn compiled_timeout() -> CompiledTest {
 fn compiled_bigint_roundtrip() -> CompiledTest {
     let path = Utf8Path::new("examples/bigint-roundtrip");
     CompiledTest::new(path, true).expect("Failed to compile bigint-roundtrip")
+}
+
+#[test_dep(tagged_as = "buffer_utils")]
+fn compiled_buffer_utils() -> CompiledTest {
+    let path = Utf8Path::new("examples/buffer-utils");
+    CompiledTest::new(path, false).expect("Failed to compile buffer-utils")
 }
 
 #[test_dep(tagged_as = "pollable")]

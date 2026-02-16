@@ -2121,6 +2121,63 @@ const hexCharValueTable = [
 ]
 /* eslint-enable no-multi-spaces, indent */
 
+function validateBuffer (buffer) {
+    if (!ArrayBuffer.isView(buffer)) {
+        throw new TypeError('The "source" argument must be an instance of Buffer, TypedArray, or DataView.')
+    }
+}
+
+export function isAscii (buffer) {
+    validateBuffer(buffer)
+    const bytes = buffer instanceof DataView
+        ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+        : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+    for (let i = 0; i < bytes.length; i++) {
+        if (bytes[i] > 127) return false
+    }
+    return true
+}
+
+export function isUtf8 (buffer) {
+    validateBuffer(buffer)
+    const bytes = buffer instanceof DataView
+        ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+        : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+    let i = 0
+    while (i < bytes.length) {
+        const b = bytes[i]
+        if (b <= 0x7F) {
+            i++
+        } else if ((b & 0xE0) === 0xC0) {
+            if (b < 0xC2) return false // overlong
+            if (i + 1 >= bytes.length) return false
+            if ((bytes[i + 1] & 0xC0) !== 0x80) return false
+            i += 2
+        } else if ((b & 0xF0) === 0xE0) {
+            if (i + 2 >= bytes.length) return false
+            const b1 = bytes[i + 1]
+            const b2 = bytes[i + 2]
+            if ((b1 & 0xC0) !== 0x80 || (b2 & 0xC0) !== 0x80) return false
+            if (b === 0xE0 && b1 < 0xA0) return false // overlong
+            if (b === 0xED && b1 >= 0xA0) return false // surrogate
+            i += 3
+        } else if ((b & 0xF8) === 0xF0) {
+            if (b > 0xF4) return false
+            if (i + 3 >= bytes.length) return false
+            const b1 = bytes[i + 1]
+            const b2 = bytes[i + 2]
+            const b3 = bytes[i + 3]
+            if ((b1 & 0xC0) !== 0x80 || (b2 & 0xC0) !== 0x80 || (b3 & 0xC0) !== 0x80) return false
+            if (b === 0xF0 && b1 < 0x90) return false // overlong
+            if (b === 0xF4 && b1 >= 0x90) return false // > U+10FFFF
+            i += 4
+        } else {
+            return false
+        }
+    }
+    return true
+}
+
 // Return not function with Error if BigInt not supported
 function defineBigIntMethod (fn) {
     return typeof BigInt === 'undefined' ? BufferBigIntNotDefined : fn
@@ -2136,5 +2193,7 @@ export default {
     kStringMaxLength,
     constants,
     Buffer,
-    SlowBuffer
+    SlowBuffer,
+    isAscii,
+    isUtf8
 }
