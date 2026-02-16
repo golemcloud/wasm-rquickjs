@@ -43,6 +43,13 @@ impl Config {
             })
             .collect()
     }
+
+    fn tests_in_suite(&self, suite: &str) -> Vec<&TestEntry> {
+        self.tests
+            .iter()
+            .filter(|t| t.path.starts_with(&format!("{suite}/")))
+            .collect()
+    }
 }
 
 /// Strip JSONC comments (// and /* */) while respecting string literals.
@@ -138,6 +145,98 @@ async fn run_node_compat_suite(runner: &CompiledTest, prefix: &str) -> anyhow::R
     let tests = config.tests_matching(prefix);
 
     assert!(!tests.is_empty(), "No {prefix} tests found in config.jsonc");
+
+    let prepared = PreparedComponent::new(runner.wasm_path())?;
+
+    let mut results: BTreeMap<String, String> = BTreeMap::new();
+    let mut failures = Vec::new();
+
+    for entry in &tests {
+        if entry.skip {
+            let reason = entry.reason.as_deref().unwrap_or("no reason");
+            println!("  {} ... SKIP ({})", entry.path, reason);
+            results.insert(entry.path.clone(), format!("SKIP: {reason}"));
+            continue;
+        }
+
+        let mut instance = TestInstance::from_prepared(&prepared).await?;
+        setup_test_files(&instance, &entry.path)?;
+
+        let guest_path = format!("/tests/{}", entry.path);
+
+        let (result, stdout, stderr) = instance
+            .invoke_and_capture_output_with_stderr(None, "run-test", &[Val::String(guest_path)])
+            .await;
+
+        match result {
+            Ok(Some(Val::String(ref s))) => {
+                if s.starts_with("PASS") {
+                    println!("  {} ... ok", entry.path);
+                    results.insert(entry.path.clone(), "PASS".to_string());
+                } else if let Some(reason) = s.strip_prefix("SKIP:") {
+                    println!("  {} ... SKIP ({})", entry.path, reason.trim());
+                    results.insert(entry.path.clone(), s.clone());
+                } else {
+                    println!("  {} ... FAIL", entry.path);
+                    println!("    {}", s);
+                    if !stdout.is_empty() {
+                        println!("    [stdout] {}", stdout.trim());
+                    }
+                    if !stderr.is_empty() {
+                        println!("    [stderr] {}", stderr.trim());
+                    }
+                    results.insert(entry.path.clone(), s.clone());
+                    failures.push(entry.path.clone());
+                }
+            }
+            Ok(other) => {
+                let msg = format!("Unexpected return value: {other:?}");
+                println!("  {} ... FAIL ({})", entry.path, msg);
+                if !stdout.is_empty() {
+                    println!("    [stdout] {}", stdout.trim());
+                }
+                if !stderr.is_empty() {
+                    println!("    [stderr] {}", stderr.trim());
+                }
+                results.insert(entry.path.clone(), format!("FAIL: {msg}"));
+                failures.push(entry.path.clone());
+            }
+            Err(e) => {
+                let msg = format!("Invocation error: {e}");
+                println!("  {} ... FAIL ({})", entry.path, msg);
+                if !stdout.is_empty() {
+                    println!("    [stdout] {}", stdout.trim());
+                }
+                if !stderr.is_empty() {
+                    println!("    [stderr] {}", stderr.trim());
+                }
+                results.insert(entry.path.clone(), format!("FAIL: {msg}"));
+                failures.push(entry.path.clone());
+            }
+        }
+    }
+
+    let total = tests.len();
+    let passed = results.values().filter(|v| *v == "PASS").count();
+    let skipped = results.values().filter(|v| v.starts_with("SKIP")).count();
+    let failed = failures.len();
+    println!("\n  Results: {passed} passed, {failed} failed, {skipped} skipped (total {total})");
+
+    if !failures.is_empty() {
+        anyhow::bail!("{failed} test(s) failed:\n  {}", failures.join("\n  "));
+    }
+
+    Ok(())
+}
+
+async fn run_node_compat_by_suite(runner: &CompiledTest, suite: &str) -> anyhow::Result<()> {
+    let config = load_config("tests/node_compat/config.jsonc")?;
+    let tests = config.tests_in_suite(suite);
+
+    if tests.is_empty() {
+        println!("  No {suite} tests found in config.jsonc, skipping");
+        return Ok(());
+    }
 
     let prepared = PreparedComponent::new(runner.wasm_path())?;
 
@@ -355,4 +454,22 @@ async fn node_compat_buffer(
     #[tagged_as("node_compat_runner")] runner: &CompiledTest,
 ) -> anyhow::Result<()> {
     run_node_compat_suite(runner, "test-buffer").await
+}
+
+// --- es-module suite ---
+
+#[test]
+async fn node_compat_es_module(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_by_suite(runner, "es-module").await
+}
+
+// --- sequential suite ---
+
+#[test]
+async fn node_compat_sequential(
+    #[tagged_as("node_compat_runner")] runner: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_node_compat_by_suite(runner, "sequential").await
 }

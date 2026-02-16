@@ -4,7 +4,7 @@
 // by the Rust test harness before invoking this function.
 //
 // Expected filesystem layout:
-//   /tests/parallel/<test-file>.js   — the vendored Node.js test
+//   /tests/<suite>/<test-file>.js    — the vendored Node.js test (suite: parallel, sequential, es-module)
 //   /tests/common/index.js           — our common shim
 //
 // The test does require('../common') which resolves naturally to /tests/common/index.js.

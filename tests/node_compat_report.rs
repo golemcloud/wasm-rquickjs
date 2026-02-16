@@ -390,14 +390,22 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         }
     });
 
-    // Step 3: Collect all .js test files
-    let suite_dir = "tests/node_compat/suite/parallel";
+    // Step 3: Collect all .js test files from all suites
+    let suites = ["parallel", "sequential", "es-module"];
     let mut test_files: Vec<String> = Vec::new();
-    for entry in fs::read_dir(suite_dir)? {
-        let entry = entry?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".js") {
-            test_files.push(format!("parallel/{name}"));
+    for suite in &suites {
+        let suite_dir = format!("tests/node_compat/suite/{suite}");
+        let suite_path = std::path::Path::new(&suite_dir);
+        if !suite_path.exists() {
+            println!("Suite directory {suite_dir} not found, skipping");
+            continue;
+        }
+        for entry in fs::read_dir(&suite_dir)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".js") {
+                test_files.push(format!("{suite}/{name}"));
+            }
         }
     }
     test_files.sort();

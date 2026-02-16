@@ -16,8 +16,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SUITE_DIR="${SCRIPT_DIR}/suite"
 
-if [ ! -d "${SUITE_DIR}/parallel" ]; then
-  echo "Error: vendored test suite not found at ${SUITE_DIR}/parallel"
+if [ ! -d "${SUITE_DIR}" ]; then
+  echo "Error: vendored test suite not found at ${SUITE_DIR}"
   echo "Run ./tests/node_compat/vendor.sh first."
   exit 1
 fi

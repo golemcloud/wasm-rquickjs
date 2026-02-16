@@ -9,7 +9,10 @@ against the wasm-rquickjs runtime.
 tests/node_compat/
 ├── suite/                  # Vendored Node.js test files (gitignored)
 │   ├── parallel/           # ~3600 test files from test/parallel/
+│   ├── sequential/         # ~120 test files from test/sequential/
+│   ├── es-module/          # ~190 test files from test/es-module/
 │   ├── common/             # Node.js test/common/ infrastructure
+│   ├── fixtures/           # Node.js test/fixtures/ data files
 │   └── NODE_VERSION        # Version string (e.g., "22.14.0")
 ├── common-shim/            # Our WASM-compatible shim for test/common
 │   └── index.js
@@ -30,8 +33,9 @@ To fetch (or update) the vendored test suite:
 ./tests/node_compat/vendor.sh 22.16.0
 ```
 
-This sparse-checkouts `test/parallel/` and `test/common/` from the Node.js
-repository at the specified tag. The `suite/` directory is gitignored — each
+This sparse-checkouts `test/parallel/`, `test/sequential/`, `test/es-module/`,
+`test/common/`, and `test/fixtures/` from the Node.js repository at the
+specified tag. The `suite/` directory is gitignored — each
 developer runs the vendor script to populate it.
 
 ## Config Format

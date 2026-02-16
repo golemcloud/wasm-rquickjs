@@ -5,8 +5,8 @@
 #   ./tests/node_compat/vendor.sh [version]
 #
 # If no version is specified, defaults to the version in NODE_VERSION below.
-# The script sparse-checkouts test/parallel/ and test/common/ from the
-# nodejs/node repository at the given tag.
+# The script sparse-checkouts test/parallel/, test/sequential/, test/es-module/,
+# test/common/, and test/fixtures/ from the nodejs/node repository at the given tag.
 
 set -euo pipefail
 
@@ -31,10 +31,12 @@ git clone --depth 1 --sparse --branch "${TAG}" --single-branch \
     https://github.com/nodejs/node.git "${TMPDIR_CLONE}/node"
 
 cd "${TMPDIR_CLONE}/node"
-git sparse-checkout set test/parallel test/common test/fixtures
+git sparse-checkout set test/parallel test/sequential test/es-module test/common test/fixtures
 
 echo "==> Copying test files..."
 cp -r test/parallel "${SUITE_DIR}/parallel"
+cp -r test/sequential "${SUITE_DIR}/sequential"
+cp -r test/es-module "${SUITE_DIR}/es-module"
 cp -r test/common "${SUITE_DIR}/common"
 cp -r test/fixtures "${SUITE_DIR}/fixtures"
 
@@ -43,8 +45,10 @@ echo "${NODE_VERSION}" > "${SUITE_DIR}/NODE_VERSION"
 
 # Count what we got
 PARALLEL_COUNT=$(find "${SUITE_DIR}/parallel" -name '*.js' -o -name '*.mjs' | wc -l | tr -d ' ')
+SEQUENTIAL_COUNT=$(find "${SUITE_DIR}/sequential" -name '*.js' -o -name '*.mjs' | wc -l | tr -d ' ')
+ES_MODULE_COUNT=$(find "${SUITE_DIR}/es-module" -name '*.js' -o -name '*.mjs' | wc -l | tr -d ' ')
 COMMON_COUNT=$(find "${SUITE_DIR}/common" -name '*.js' -o -name '*.mjs' | wc -l | tr -d ' ')
 FIXTURES_COUNT=$(find "${SUITE_DIR}/fixtures" -type f | wc -l | tr -d ' ')
 
-echo "==> Done! Vendored ${PARALLEL_COUNT} test files + ${COMMON_COUNT} common files + ${FIXTURES_COUNT} fixture files from Node.js ${TAG}"
+echo "==> Done! Vendored ${PARALLEL_COUNT} parallel + ${SEQUENTIAL_COUNT} sequential + ${ES_MODULE_COUNT} es-module test files + ${COMMON_COUNT} common files + ${FIXTURES_COUNT} fixture files from Node.js ${TAG}"
 echo "==> Suite directory: ${SUITE_DIR}"

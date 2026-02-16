@@ -45,16 +45,19 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyho
 /// - `/tmp/` — for tmpdir shim
 /// - `/tests/fixtures/` — fixture data files (recursively copied)
 pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> anyhow::Result<()> {
-    // Create directory structure: /tests/parallel/ and /tests/common/
-    let parallel_dir = temp.join("tests").join("parallel");
+    // Parse the suite name from the relative path (e.g., "parallel/test-foo.js" → "parallel")
+    let suite = test_rel_path.split('/').next().unwrap_or("parallel");
+
+    // Create directory structure: /tests/<suite>/ and /tests/common/
+    let suite_dir = temp.join("tests").join(suite);
     let common_dir = temp.join("tests").join("common");
-    fs::create_dir_all(&parallel_dir)?;
+    fs::create_dir_all(&suite_dir)?;
     fs::create_dir_all(&common_dir)?;
 
     // Copy the test file
     let test_filename = test_rel_path.rsplit('/').next().unwrap_or(test_rel_path);
     let src_test = format!("tests/node_compat/suite/{test_rel_path}");
-    let dst_test = parallel_dir.join(test_filename);
+    let dst_test = suite_dir.join(test_filename);
     fs::copy(&src_test, &dst_test)?;
 
     // Copy the common shim

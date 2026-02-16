@@ -1369,6 +1369,9 @@
 
     // === node:buffer tests ===
     "parallel/test-buffer-isascii.js": {},
-    "parallel/test-buffer-isutf8.js": {}
+    "parallel/test-buffer-isutf8.js": {},
+
+    // === es-module suite ===
+    "es-module/test-esm-loader-cache-clearing.js": {}
   }
 }
