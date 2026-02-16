@@ -5,7 +5,6 @@ use crate::skeleton::{copy_skeleton_sources, generate_app_manifest, generate_car
 use crate::wit::add_get_script_import;
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
-use fs_extra::dir::CopyOptions;
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span};
 use std::cell::RefCell;
@@ -24,6 +23,38 @@ mod skeleton;
 mod types;
 mod typescript;
 mod wit;
+
+/// Write `contents` to `path` only if the file doesn't exist or its current content differs.
+/// This preserves file timestamps when content hasn't changed, avoiding unnecessary recompilation.
+pub(crate) fn write_if_changed(
+    path: impl AsRef<std::path::Path>,
+    contents: impl AsRef<[u8]>,
+) -> std::io::Result<()> {
+    let path = path.as_ref();
+    let contents = contents.as_ref();
+    if let Ok(existing) = std::fs::read(path) {
+        if existing == contents {
+            return Ok(());
+        }
+    }
+    std::fs::write(path, contents)
+}
+
+/// Copy a file from `src` to `dst` only if the destination doesn't exist or its content differs.
+pub(crate) fn copy_if_changed(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+    let src_contents = std::fs::read(src)?;
+    if let Ok(existing) = std::fs::read(dst) {
+        if existing == src_contents {
+            return Ok(());
+        }
+    }
+    std::fs::write(dst, src_contents)
+}
 
 /// Specifies how a given user-defined JS module gets embedded into the generated Rust crate.
 #[derive(Debug, Clone)]
@@ -313,11 +344,24 @@ impl<'a> ImportedInterface<'a> {
 
 /// Recursively copies a WIT directory to `<output>/wit`.
 fn copy_wit_directory(wit: &Utf8Path, output: &Utf8Path) -> anyhow::Result<()> {
-    fs_extra::dir::create(output, true)
-        .context("Failed to create and erase output WIT directory")?;
-    fs_extra::dir::copy(wit, output, &CopyOptions::new().content_only(true))
+    std::fs::create_dir_all(output)?;
+    copy_dir_if_changed(wit.as_std_path(), output.as_std_path())
         .context("Failed to copy WIT directory")?;
+    Ok(())
+}
 
+fn copy_dir_if_changed(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_if_changed(&src_path, &dst_path)?;
+        } else {
+            copy_if_changed(&src_path, &dst_path)?;
+        }
+    }
     Ok(())
 }
 
@@ -327,7 +371,7 @@ fn copy_js_modules(js_modules: &[JsModuleSpec], output: &Utf8Path) -> anyhow::Re
         if let EmbeddingMode::EmbedFile(source) = &module.mode {
             let filename = module.file_name();
             let js_dest = output.join("src").join(filename);
-            std::fs::copy(source, js_dest)
+            copy_if_changed(source, js_dest)
                 .context(format!("Failed to copy JavaScript module {}", module.name))?;
         }
     }

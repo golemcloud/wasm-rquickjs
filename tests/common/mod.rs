@@ -217,6 +217,7 @@ impl PreparedComponent {
         config.wasm_component_model(true);
         config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
         config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
+        config.cache(Some(wasmtime::Cache::from_file(None)?));
         let engine = Engine::new(&config)?;
         let mut linker: Linker<Host> = Linker::new(&engine);
 

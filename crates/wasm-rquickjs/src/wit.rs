@@ -57,7 +57,7 @@ pub fn add_get_script_import(wit_root: &Utf8Path, world: Option<&str>) -> anyhow
 
     world.function_import(get_source_func);
 
-    std::fs::write(root_package_path[0], root_package.to_string()).context(format!(
+    crate::write_if_changed(root_package_path[0], root_package.to_string()).context(format!(
         "Overwriting root WIT package at {:?}",
         root_package_path[0]
     ))?;

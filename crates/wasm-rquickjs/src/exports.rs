@@ -50,7 +50,7 @@ pub fn generate_export_impls(
     let lib_path = context.output.join("src").join("lib.rs");
     let lib_src = prettier_please::unparse(&lib_ast);
 
-    std::fs::write(&lib_path, lib_src)?;
+    crate::write_if_changed(&lib_path, lib_src)?;
 
     Ok(())
 }

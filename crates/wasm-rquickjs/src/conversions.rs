@@ -25,7 +25,7 @@ pub fn generate_conversions(context: &GeneratorContext<'_>) -> anyhow::Result<()
     let conversions_path = context.output.join("src").join("conversions.rs");
     let conversions_src = prettier_please::unparse(&conversions_ast);
 
-    std::fs::write(&conversions_path, conversions_src)?;
+    crate::write_if_changed(&conversions_path, conversions_src)?;
 
     Ok(())
 }

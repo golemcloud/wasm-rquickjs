@@ -32,7 +32,7 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
 
         let module_src = prettier_please::unparse(&module_ast);
 
-        std::fs::write(&module_path, module_src)?;
+        crate::write_if_changed(&module_path, module_src)?;
     }
 
     let global_module_path = context.output.join("src").join("modules").join("mod.rs");
@@ -41,7 +41,7 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
     let global_module_ast: syn::File =
         syn::parse2(global_module_tokens).context("failed to parse generated mod.rs tokens")?;
     let global_module_src = prettier_please::unparse(&global_module_ast);
-    std::fs::write(&global_module_path, global_module_src)?;
+    crate::write_if_changed(&global_module_path, global_module_src)?;
 
     Ok(())
 }

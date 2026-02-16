@@ -40,7 +40,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 uuid = { version = "1.18.1", features = ["v4"] }
 wac-graph = { workspace = true }
-wasmtime = { workspace = true, features = ["async", "component-model"] }
+wasmtime = { workspace = true, features = ["async", "component-model", "cache"] }
 wasmtime-wasi = { workspace = true }
 wasmtime-wasi-http = { workspace = true }
 

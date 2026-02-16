@@ -34,7 +34,7 @@ pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()>
 
     // Writing the result
     let output_path = context.output.join("Cargo.toml");
-    std::fs::write(output_path, doc.to_string())?;
+    crate::write_if_changed(output_path, doc.to_string())?;
     Ok(())
 }
 
@@ -53,7 +53,7 @@ pub fn generate_app_manifest(context: &GeneratorContext<'_>) -> anyhow::Result<(
 
     // Writing the result
     let output_path = context.output.join("golem.yaml");
-    std::fs::write(output_path, &raw_yaml)?;
+    crate::write_if_changed(output_path, &raw_yaml)?;
     Ok(())
 }
 
@@ -141,14 +141,21 @@ fn add_wit_dependencies(context: &&GeneratorContext, doc: &mut DocumentMut) -> a
     Ok(())
 }
 
+/// Files in the skeleton `src/` directory that are always overwritten by code generation.
+/// Skipping them avoids unnecessary timestamp changes that would trigger recompilation.
+const GENERATED_FILES: &[&str] = &["src/lib.rs"];
+
 /// Copies all source files from the skeleton directory to `<output>/src`.
 pub fn copy_skeleton_sources(output: &Utf8Path) -> anyhow::Result<()> {
     if let Some(src) = SKELETON.get_dir("src") {
         for file in src.files() {
             let src_path = Utf8Path::from_path(file.path())
                 .ok_or_else(|| anyhow!("Unexpected non-UTF-8 path in skeleton"))?;
+            if GENERATED_FILES.contains(&src_path.as_str()) {
+                continue;
+            }
             let dest_path = output.join(src_path);
-            std::fs::write(dest_path, file.contents())?;
+            crate::write_if_changed(dest_path, file.contents())?;
         }
 
         recursive_copy_sources(
@@ -169,7 +176,7 @@ fn recursive_copy_sources(dir: &Dir, output: &Utf8Path) -> anyhow::Result<()> {
         let src_path = Utf8Path::from_path(file.path())
             .ok_or_else(|| anyhow!("Unexpected non-UTF-8 path in skeleton"))?;
         let dest_path = output.join(src_path);
-        std::fs::write(dest_path, file.contents())?;
+        crate::write_if_changed(dest_path, file.contents())?;
     }
 
     for dir in dir.dirs() {
