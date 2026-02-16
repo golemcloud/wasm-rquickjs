@@ -21,6 +21,53 @@ use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
 use wasmtime_wasi::{DirPerms, FilePerms};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
+/// Strip JSONC comments (// and /* */) while respecting string literals.
+pub fn strip_jsonc_comments(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        if chars[i] == '"' {
+            result.push(chars[i]);
+            i += 1;
+            while i < len && chars[i] != '"' {
+                if chars[i] == '\\' && i + 1 < len {
+                    result.push(chars[i]);
+                    result.push(chars[i + 1]);
+                    i += 2;
+                } else {
+                    result.push(chars[i]);
+                    i += 1;
+                }
+            }
+            if i < len {
+                result.push(chars[i]);
+                i += 1;
+            }
+        } else if chars[i] == '/' && i + 1 < len && chars[i + 1] == '/' {
+            i += 2;
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+        } else if chars[i] == '/' && i + 1 < len && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            if i + 1 < len {
+                i += 2;
+            }
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+
+    result
+}
+
 /// Recursively copy a directory and all its contents to a destination.
 pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyhow::Result<()> {
     fs::create_dir_all(dst)?;
@@ -91,9 +138,17 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     fs::create_dir_all(&tmp_dir)?;
 
     // Copy fixture data files for tests that use require('../common/fixtures')
+    let fixtures_dst = temp.join("tests").join("fixtures");
+
+    // First copy vendored suite fixtures
+    let vendored_fixtures_src = std::path::Path::new("tests/node_compat/suite/fixtures");
+    if vendored_fixtures_src.exists() {
+        copy_dir_recursive(vendored_fixtures_src, fixtures_dst.as_std_path())?;
+    }
+
+    // Then overlay with our custom fixtures (take priority over vendored ones)
     let fixtures_src = std::path::Path::new("tests/node_compat/fixtures");
     if fixtures_src.exists() {
-        let fixtures_dst = temp.join("tests").join("fixtures");
         copy_dir_recursive(fixtures_src, fixtures_dst.as_std_path())?;
     }
 

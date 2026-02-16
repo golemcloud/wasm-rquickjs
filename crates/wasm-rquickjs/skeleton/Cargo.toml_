@@ -20,9 +20,7 @@ logging = ["dep:wasi-logging"]
 
 [dependencies]
 # Core dependencies
-# rquickjs = { version = "0.10.0", default-features = false, features = ["full-async-wasi"] }
-# rquickjs = { git = "https://github.com/DelSkayn/rquickjs", rev="7e921da7637ce6c330ab206f17d9ae5d275d8755", default-features = false, features = ["full-async-wasi"] }
-rquickjs = { version = "0.9.0", default-features = false, features = ["futures", "bindgen", "loader", "macro"] }
+rquickjs = { version = "0.10.0", default-features = false, features = ["std", "futures", "bindgen", "loader", "macro"] }
 
 encoding_rs = "0.8.35"
 sha1 = { version = "0.10", features = ["oid"] }

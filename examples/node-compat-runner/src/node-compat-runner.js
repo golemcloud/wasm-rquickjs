@@ -29,7 +29,42 @@ function drainAsync() {
     return p;
 }
 
+// Track unhandled rejections from test top-level promise chains.
+//
+// Node.js tests typically follow this pattern:
+//   (async () => { ... })().then(common.mustCall());
+//
+// If the async IIFE rejects, the .then() has no rejection handler, so the
+// rejection is unhandled. The runtime's native promise rejection tracker
+// (set via rquickjs 0.10's set_host_promise_rejection_tracker) emits
+// process.emit('unhandledRejection', reason) which we listen for here.
+var _firstUnhandledRejection = null;
+
+function installRejectionTracking() {
+    _firstUnhandledRejection = null;
+
+    function onUnhandledRejection(reason) {
+        if (!_firstUnhandledRejection) {
+            _firstUnhandledRejection = reason;
+        }
+    }
+
+    if (globalThis.process && typeof globalThis.process.on === 'function') {
+        globalThis.process.on('unhandledRejection', onUnhandledRejection);
+    }
+
+    return function restore() {
+        if (globalThis.process && typeof globalThis.process.removeListener === 'function') {
+            globalThis.process.removeListener('unhandledRejection', onUnhandledRejection);
+        }
+        var rejection = _firstUnhandledRejection;
+        _firstUnhandledRejection = null;
+        return rejection;
+    };
+}
+
 export const runTest = async (testPath) => {
+    var restorePromise = null;
     try {
         // Reset mustCall tracking for this test
         var commonMod;
@@ -39,6 +74,8 @@ export const runTest = async (testPath) => {
         if (commonMod && typeof commonMod._resetMustCalls === 'function') {
             commonMod._resetMustCalls();
         }
+
+        restorePromise = installRejectionTracking();
 
         require(testPath);
         // Await any pending async tests from node:test
@@ -52,19 +89,37 @@ export const runTest = async (testPath) => {
         if (globalThis.process && typeof globalThis.process._runExitHandlers === 'function') {
             globalThis.process._runExitHandlers(0);
         }
-        // Verify mustCall expectations
+
+        var rejection = restorePromise();
+        restorePromise = null;
+
+        // Verify mustCall expectations first
         var common;
         try {
             common = require('/tests/common/index.js');
         } catch(e) {}
+        var mustCallErrors = [];
         if (common && typeof common._checkMustCalls === 'function') {
-            var mustCallErrors = common._checkMustCalls();
+            mustCallErrors = common._checkMustCalls();
+        }
+
+        // If we have both mustCall failures and an unhandled rejection,
+        // show the rejection as it's likely the root cause
+        if (rejection) {
+            var errMsg = (rejection && rejection.stack) ? rejection.stack : String(rejection);
             if (mustCallErrors.length > 0) {
-                return "FAIL: mustCall verification failed:\n" + mustCallErrors.join("\n");
+                return "FAIL: Unhandled promise rejection (likely cause of mustCall failure): " + errMsg;
             }
+            return "FAIL: Unhandled promise rejection: " + errMsg;
+        }
+
+        if (mustCallErrors.length > 0) {
+            return "FAIL: mustCall verification failed:\n" + mustCallErrors.join("\n");
         }
         return "PASS";
     } catch (e) {
+        if (restorePromise) restorePromise();
+
         // Check for process.exit() sentinel
         if (e && e.__isProcessExit) {
             return "PASS";

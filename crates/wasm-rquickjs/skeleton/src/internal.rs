@@ -49,6 +49,8 @@ impl JsState {
                     const dispose = Symbol.for("dispose");
                     globalThis.{DISPOSE_SYMBOL} = dispose;
                     Symbol.dispose = dispose;
+                    const asyncDispose = Symbol.for("asyncDispose");
+                    Symbol.asyncDispose = asyncDispose;
                     "#)
                 ).catch(&ctx)
                 .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
@@ -114,6 +116,23 @@ impl JsState {
             })
                 .await;
             rt.idle().await;
+
+            rt.set_host_promise_rejection_tracker(Some(Box::new(
+                |ctx, _promise, reason, is_handled| {
+                    if !is_handled {
+                        if let Ok(process) = ctx.globals().get::<_, Object>("process") {
+                            if let Ok(emit) = process.get::<_, Function>("emit") {
+                                let _ = emit.call::<_, Value>((
+                                    This(process.clone()),
+                                    "unhandledRejection",
+                                    reason,
+                                ));
+                            }
+                        }
+                    }
+                },
+            )))
+            .await;
 
             let (resource_drop_queue_tx, resource_drop_queue_rx) =
                 futures::channel::mpsc::unbounded();

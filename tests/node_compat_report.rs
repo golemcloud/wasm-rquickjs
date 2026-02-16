@@ -14,7 +14,7 @@ mod common;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
-use common::setup_node_compat_test_files;
+use common::{setup_node_compat_test_files, strip_jsonc_comments};
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -780,6 +780,37 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             "  {module:<20} {pass:>4}/{total:<4} ({:.1}%)",
             *pass as f64 / *total as f64 * 100.0
         );
+    }
+
+    // Step 6: Warn about passing tests not in config.jsonc
+    let config_content = fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
+    let config_json_str = strip_jsonc_comments(&config_content);
+    let config_tests: BTreeSet<String> = if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
+        val.get("tests")
+            .and_then(|v| v.as_object())
+            .map(|obj| obj.keys().cloned().collect())
+            .unwrap_or_default()
+    } else {
+        BTreeSet::new()
+    };
+
+    let missing_from_config: Vec<&String> = results
+        .iter()
+        .filter(|(path, result)| {
+            matches!(result, TestResult::Pass)
+                && !internals_tests.contains(path.as_str())
+                && !config_tests.contains(path.as_str())
+        })
+        .map(|(path, _)| path)
+        .collect();
+
+    if !missing_from_config.is_empty() {
+        println!("\n⚠️  WARNING: {} passing test(s) are NOT in config.jsonc!", missing_from_config.len());
+        println!("Add the following entries to the \"tests\" object in tests/node_compat/config.jsonc:\n");
+        for path in &missing_from_config {
+            println!("    \"{path}\": {{}},");
+        }
+        println!();
     }
 
     // Don't fail the test - this is a report generator

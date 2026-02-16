@@ -1,6 +1,6 @@
 test_r::enable!();
 
-use crate::common::{CompiledTest, PreparedComponent, TestInstance, setup_node_compat_test_files};
+use crate::common::{CompiledTest, PreparedComponent, TestInstance, setup_node_compat_test_files, strip_jsonc_comments};
 use camino::Utf8Path;
 use std::collections::BTreeMap;
 use std::fs;
@@ -50,56 +50,6 @@ impl Config {
             .filter(|t| t.path.starts_with(&format!("{suite}/")))
             .collect()
     }
-}
-
-/// Strip JSONC comments (// and /* */) while respecting string literals.
-fn strip_jsonc_comments(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-    let chars: Vec<char> = input.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-
-    while i < len {
-        // Inside a string literal
-        if chars[i] == '"' {
-            result.push(chars[i]);
-            i += 1;
-            while i < len && chars[i] != '"' {
-                if chars[i] == '\\' && i + 1 < len {
-                    result.push(chars[i]);
-                    result.push(chars[i + 1]);
-                    i += 2;
-                } else {
-                    result.push(chars[i]);
-                    i += 1;
-                }
-            }
-            if i < len {
-                result.push(chars[i]); // closing quote
-                i += 1;
-            }
-        } else if chars[i] == '/' && i + 1 < len && chars[i + 1] == '/' {
-            // Line comment — skip to end of line
-            i += 2;
-            while i < len && chars[i] != '\n' {
-                i += 1;
-            }
-        } else if chars[i] == '/' && i + 1 < len && chars[i + 1] == '*' {
-            // Block comment — skip to */
-            i += 2;
-            while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
-                i += 1;
-            }
-            if i + 1 < len {
-                i += 2; // skip */
-            }
-        } else {
-            result.push(chars[i]);
-            i += 1;
-        }
-    }
-
-    result
 }
 
 fn load_config(path: &str) -> anyhow::Result<Config> {
