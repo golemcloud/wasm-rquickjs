@@ -1,0 +1,6 @@
+package quickjs:buffer-utils;
+
+world buffer-utils {
+  export test-is-ascii: func() -> bool;
+  export test-is-utf8: func() -> bool;
+}
