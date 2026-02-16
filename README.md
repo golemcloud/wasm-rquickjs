@@ -402,6 +402,7 @@ Implemented by https://github.com/ungap/structured-clone
 - `Stream`
 - `Transform`
 - `Writable`
+- `stream/consumers` (`arrayBuffer`, `blob`, `buffer`, `json`, `text`)
 
 ### `base64-js`
 - `byteLength`

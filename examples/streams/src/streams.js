@@ -1,4 +1,5 @@
-import {Readable} from 'stream';
+import {Readable, PassThrough} from 'stream';
+import {text, json, buffer, arrayBuffer} from 'stream/consumers';
 
 class TimestampSource {
     #interval
@@ -60,4 +61,27 @@ export async function testNodeStream1() {
 
     const readable = Readable.from('Good morning!', {encoding: 'utf8'});
     return await readableToString2(readable);
+}
+
+export async function testConsumersText() {
+    const readable = Readable.from('hello world', {encoding: 'utf8'});
+    return await text(readable);
+}
+
+export async function testConsumersJson() {
+    const readable = Readable.from('{"key":"value"}', {encoding: 'utf8'});
+    const obj = await json(readable);
+    return JSON.stringify(obj);
+}
+
+export async function testConsumersBuffer() {
+    const readable = Readable.from('hello', {encoding: 'utf8'});
+    const buf = await buffer(readable);
+    return buf.byteLength;
+}
+
+export async function testConsumersArraybuffer() {
+    const readable = Readable.from('hello', {encoding: 'utf8'});
+    const ab = await arrayBuffer(readable);
+    return ab.byteLength;
 }

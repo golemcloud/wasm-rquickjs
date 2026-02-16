@@ -6,6 +6,7 @@ import * as os from 'node:os';
 import * as events from 'node:events';
 import * as stream from 'node:stream';
 import * as streamPromises from 'node:stream/promises';
+import * as streamConsumers from 'node:stream/consumers';
 import * as streamWeb from 'node:stream/web';
 import * as crypto from 'node:crypto';
 import * as child_process from 'node:child_process';
@@ -60,6 +61,8 @@ const builtinModules = {
     'node:stream': cjsExport(stream),
     'stream/promises': cjsExport(streamPromises),
     'node:stream/promises': cjsExport(streamPromises),
+    'stream/consumers': cjsExport(streamConsumers),
+    'node:stream/consumers': cjsExport(streamConsumers),
     'stream/web': cjsExport(streamWeb),
     'node:stream/web': cjsExport(streamWeb),
     'crypto': cjsExport(crypto),

@@ -825,7 +825,10 @@ async fn crypto_ecdsa_secp256k1_sign_verify(
     let result = result?;
     match result {
         Some(Val::Bool(valid)) => {
-            assert!(valid, "ECDSA secp256k1 signature should verify successfully");
+            assert!(
+                valid,
+                "ECDSA secp256k1 signature should verify successfully"
+            );
             Ok(())
         }
         _ => Err(anyhow!("Expected bool result")),

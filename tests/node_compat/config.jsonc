@@ -1360,6 +1360,12 @@
       "reason": "requires transferableAbortController and MessageChannel"
     },
 
+    // === node:stream/consumers tests ===
+    "parallel/test-stream-consumers.js": {
+      "skip": true,
+      "reason": "requires web streams ERR_INVALID_STATE error when reading a locked ReadableStream; our web-streams-polyfill does not produce Node.js error codes"
+    },
+
     // === process.hrtime tests ===
     "parallel/test-process-hrtime.js": {},
     "parallel/test-process-hrtime-bigint.js": {}

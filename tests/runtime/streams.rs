@@ -62,3 +62,46 @@ async fn node_stream1(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow
 
     Ok(())
 }
+
+#[test]
+async fn consumers_text(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-consumers-text", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::String("hello world".to_string())));
+    Ok(())
+}
+
+#[test]
+async fn consumers_json(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-consumers-json", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::String("{\"key\":\"value\"}".to_string())));
+    Ok(())
+}
+
+#[test]
+async fn consumers_buffer(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-consumers-buffer", &[]).await;
+    let r = r?;
+    assert_eq!(r, Some(Val::U32(5)));
+    Ok(())
+}
+
+#[test]
+async fn consumers_arraybuffer(
+    #[tagged_as("streams")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-consumers-arraybuffer",
+        &[],
+    )
+    .await;
+    let r = r?;
+    assert_eq!(r, Some(Val::U32(5)));
+    Ok(())
+}
