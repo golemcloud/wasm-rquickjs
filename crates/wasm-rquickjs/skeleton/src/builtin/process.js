@@ -163,6 +163,28 @@ process._runExitHandlers = function _runExitHandlers(code) {
     }
 };
 
+// Unhandled promise rejection tracking.
+// The native rejection tracker (set_host_promise_rejection_tracker) calls
+// __wasm_rquickjs_rejection_tracker(promise, reason, is_handled) for every
+// rejection event. We track unhandled rejections and only emit the event
+// after a microtask turn, so that assert.rejects() and similar patterns
+// that handle the rejection synchronously don't cause false positives.
+var _pendingRejections = new Map();
+
+globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandled) {
+    if (!isHandled) {
+        _pendingRejections.set(promise, reason);
+        Promise.resolve().then(function() {
+            if (_pendingRejections.has(promise)) {
+                _pendingRejections.delete(promise);
+                process.emit('unhandledRejection', reason, promise);
+            }
+        });
+    } else {
+        _pendingRejections.delete(promise);
+    }
+};
+
 // Named exports for import { argv } from 'node:process' style
 export var argv = process.argv;
 export var argv0 = process.argv0;

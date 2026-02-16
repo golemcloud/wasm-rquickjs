@@ -118,17 +118,11 @@ impl JsState {
             rt.idle().await;
 
             rt.set_host_promise_rejection_tracker(Some(Box::new(
-                |ctx, _promise, reason, is_handled| {
-                    if !is_handled {
-                        if let Ok(process) = ctx.globals().get::<_, Object>("process") {
-                            if let Ok(emit) = process.get::<_, Function>("emit") {
-                                let _ = emit.call::<_, Value>((
-                                    This(process.clone()),
-                                    "unhandledRejection",
-                                    reason,
-                                ));
-                            }
-                        }
+                |ctx, promise, reason, is_handled| {
+                    if let Ok(handler) =
+                        ctx.globals().get::<_, Function>("__wasm_rquickjs_rejection_tracker")
+                    {
+                        let _ = handler.call::<_, Value>((promise, reason, is_handled));
                     }
                 },
             )))

@@ -103,6 +103,17 @@ cargo test --test runtime crypto -- --nocapture
 cargo test --test runtime fs -- --nocapture
 ```
 
+### Saving test output for runtime and node_compat tests
+
+Runtime and node_compat tests are slow to run. **Always redirect test output to a temp file** so you can inspect, grep, or re-analyze results without re-running the tests:
+
+```bash
+cargo test --test runtime url -- --nocapture 2>&1 | tee /tmp/test-output.txt
+cargo test --test node_compat -- --nocapture 2>&1 | tee /tmp/test-output.txt
+```
+
+Then use the saved file for further checks (e.g., `grep`, `Read`) instead of re-running the test.
+
 ### Generate code for a JavaScript module
 ```bash
 ./target/release/wasm-rquickjs generate-wrapper-crate \
