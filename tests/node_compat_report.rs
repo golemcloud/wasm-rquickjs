@@ -16,7 +16,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use common::setup_node_compat_test_files;
 use heck::ToSnakeCase;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -366,6 +366,27 @@ fn classify_test(filename: &str) -> &str {
     }
 }
 
+/// Check if a test file relies on Node.js internals (not public API).
+///
+/// Detects patterns like `// Flags: --expose-internals`, `require('internal/...')`,
+/// and `internalBinding(...)` in the test source code.
+fn uses_node_internals(test_path: &str) -> bool {
+    let file_path = format!("tests/node_compat/suite/{test_path}");
+    let content = match fs::read_to_string(&file_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    // Only check the first 50 lines for the Flags comment (it's always near the top)
+    let header: String = content.lines().take(50).collect::<Vec<_>>().join("\n");
+    if header.contains("--expose-internals") {
+        return true;
+    }
+    // Check the full file for internal requires/bindings
+    content.contains("require('internal/")
+        || content.contains("require(\"internal/")
+        || content.contains("internalBinding(")
+}
+
 #[test]
 async fn generate_node_compat_report() -> anyhow::Result<()> {
     let total_start = Instant::now();
@@ -410,8 +431,17 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     }
     test_files.sort();
 
+    // Pre-scan all test files to classify internals vs public API
+    let internals_tests: BTreeSet<String> = test_files
+        .iter()
+        .filter(|p| uses_node_internals(p))
+        .cloned()
+        .collect();
+
     let total_tests = test_files.len();
-    println!("=== Running {total_tests} tests ===\n");
+    let total_internals = internals_tests.len();
+    let total_public = total_tests - total_internals;
+    println!("=== Running {total_tests} tests ({total_public} public API, {total_internals} internals) ===\n");
 
     // Step 4: Run all tests
     let mut results: BTreeMap<String, TestResult> = BTreeMap::new();
@@ -419,6 +449,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut fail_count = 0usize;
     let mut skip_count = 0usize;
     let mut error_count = 0usize;
+    let mut internals_pass = 0usize;
+    let mut internals_fail = 0usize;
+    let mut internals_skip = 0usize;
+    let mut internals_error = 0usize;
 
     for (i, test_path) in test_files.iter().enumerate() {
         let test_start = Instant::now();
@@ -432,36 +466,39 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         let elapsed = test_start.elapsed();
         let filename = test_path.rsplit('/').next().unwrap_or(test_path);
 
+        let is_internal = internals_tests.contains(test_path);
+        let tag = if is_internal { " [internal]" } else { "" };
+
         match &result {
             TestResult::Pass => {
-                pass_count += 1;
+                if is_internal { internals_pass += 1; } else { pass_count += 1; }
                 println!(
-                    "[{:>4}/{total_tests}] PASS  {filename} ({:.1}s)",
+                    "[{:>4}/{total_tests}] PASS  {filename}{tag} ({:.1}s)",
                     i + 1,
                     elapsed.as_secs_f64()
                 );
             }
             TestResult::Skip(reason) => {
-                skip_count += 1;
-                println!("[{:>4}/{total_tests}] SKIP  {filename} ({reason})", i + 1);
+                if is_internal { internals_skip += 1; } else { skip_count += 1; }
+                println!("[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})", i + 1);
             }
             TestResult::Fail(msg) => {
-                fail_count += 1;
+                if is_internal { internals_fail += 1; } else { fail_count += 1; }
                 let short_msg = if msg.len() > 120 {
                     format!("{}...", truncate_str(msg, 120))
                 } else {
                     msg.clone()
                 };
-                println!("[{:>4}/{total_tests}] FAIL  {filename}: {short_msg}", i + 1);
+                println!("[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}", i + 1);
             }
             TestResult::Error(msg) => {
-                error_count += 1;
+                if is_internal { internals_error += 1; } else { error_count += 1; }
                 let short_msg = if msg.len() > 120 {
                     format!("{}...", truncate_str(msg, 120))
                 } else {
                     msg.clone()
                 };
-                println!("[{:>4}/{total_tests}] ERROR {filename}: {short_msg}", i + 1);
+                println!("[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}", i + 1);
             }
         }
 
@@ -481,41 +518,79 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         total_elapsed.as_secs_f64()
     ));
 
-    // Summary
-    report.push_str("## Summary\n\n");
-    report.push_str(&format!("| Result | Count | Percentage |\n"));
-    report.push_str(&format!("|--------|-------|------------|\n"));
+    // Summary (public API tests only)
+    report.push_str("## Summary (Public API Tests)\n\n");
+    report.push_str(&format!(
+        "Tests that rely on Node.js internals (`--expose-internals`, `internalBinding`, `require('internal/...')`) \
+         are excluded from the primary counts ({total_internals} internals tests listed separately below).\n\n"
+    ));
+    report.push_str("| Result | Count | Percentage |\n");
+    report.push_str("|--------|-------|------------|\n");
     report.push_str(&format!(
         "| ✅ PASS | {pass_count} | {:.1}% |\n",
-        pass_count as f64 / total_tests as f64 * 100.0
+        pass_count as f64 / total_public as f64 * 100.0
     ));
     report.push_str(&format!(
         "| ⏭️ SKIP | {skip_count} | {:.1}% |\n",
-        skip_count as f64 / total_tests as f64 * 100.0
+        skip_count as f64 / total_public as f64 * 100.0
     ));
     report.push_str(&format!(
         "| ❌ FAIL | {fail_count} | {:.1}% |\n",
-        fail_count as f64 / total_tests as f64 * 100.0
+        fail_count as f64 / total_public as f64 * 100.0
     ));
     report.push_str(&format!(
         "| 💥 ERROR | {error_count} | {:.1}% |\n",
-        error_count as f64 / total_tests as f64 * 100.0
+        error_count as f64 / total_public as f64 * 100.0
+    ));
+    report.push_str(&format!("| **Total** | **{total_public}** | **100%** |\n\n"));
+
+    // All tests summary (public + internals combined)
+    let all_pass = pass_count + internals_pass;
+    let all_skip = skip_count + internals_skip;
+    let all_fail = fail_count + internals_fail;
+    let all_error = error_count + internals_error;
+
+    report.push_str("### All Tests (Public + Internals)\n\n");
+    report.push_str(&format!(
+        "Including {total_internals} tests that use Node.js internals \
+         (`--expose-internals`, `internalBinding`, `require('internal/...')`).\n\n"
+    ));
+    report.push_str("| Result | Count | Percentage |\n");
+    report.push_str("|--------|-------|------------|\n");
+    report.push_str(&format!(
+        "| ✅ PASS | {all_pass} | {:.1}% |\n",
+        all_pass as f64 / total_tests as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| ⏭️ SKIP | {all_skip} | {:.1}% |\n",
+        all_skip as f64 / total_tests as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| ❌ FAIL | {all_fail} | {:.1}% |\n",
+        all_fail as f64 / total_tests as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| 💥 ERROR | {all_error} | {:.1}% |\n",
+        all_error as f64 / total_tests as f64 * 100.0
     ));
     report.push_str(&format!("| **Total** | **{total_tests}** | **100%** |\n\n"));
 
-    // By module category
+    // By module category (public API only)
     report.push_str("## Results by Module\n\n");
-    let mut by_module: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
+    let mut by_module_public: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
     for (path, result) in &results {
+        if internals_tests.contains(path) {
+            continue;
+        }
         let filename = path.rsplit('/').next().unwrap_or(path);
         let module = classify_test(filename).to_string();
-        by_module.entry(module).or_default().push((path, result));
+        by_module_public.entry(module).or_default().push((path, result));
     }
 
     report.push_str("| Module | Total | Pass | Fail | Error | Skip | Pass% |\n");
     report.push_str("|--------|-------|------|------|-------|------|-------|\n");
 
-    for (module, tests) in &by_module {
+    for (module, tests) in &by_module_public {
         let total = tests.len();
         let pass = tests
             .iter()
@@ -543,11 +618,11 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         ));
     }
 
-    // Passing tests (full list)
+    // Passing tests (public API only)
     report.push_str("\n## Passing Tests\n\n");
     let passing: Vec<_> = results
         .iter()
-        .filter(|(_, r)| matches!(r, TestResult::Pass))
+        .filter(|(p, r)| matches!(r, TestResult::Pass) && !internals_tests.contains(p.as_str()))
         .collect();
     if passing.is_empty() {
         report.push_str("_No tests passed._\n\n");
@@ -558,9 +633,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         report.push_str("\n");
     }
 
-    // Failing tests with error messages (grouped by module)
+    // Failing tests with error messages (grouped by module, public API only)
     report.push_str("## Failing Tests\n\n");
-    for (module, tests) in &by_module {
+    for (module, tests) in &by_module_public {
         let failures: Vec<_> = tests
             .iter()
             .filter(|(_, r)| matches!(r, TestResult::Fail(_)))
@@ -583,16 +658,15 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         report.push_str("\n");
     }
 
-    // Error tests (instantiation/timeout errors)
+    // Error tests (public API only)
     report.push_str("## Error Tests (runtime/instantiation errors)\n\n");
     let errors: Vec<_> = results
         .iter()
-        .filter(|(_, r)| matches!(r, TestResult::Error(_)))
+        .filter(|(p, r)| matches!(r, TestResult::Error(_)) && !internals_tests.contains(p.as_str()))
         .collect();
     if errors.is_empty() {
         report.push_str("_No errors._\n\n");
     } else {
-        // Just show count and first few
         report.push_str(&format!("{} tests had runtime errors.\n\n", errors.len()));
         report.push_str("<details>\n<summary>Click to expand</summary>\n\n");
         for (path, result) in &errors {
@@ -609,11 +683,11 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         report.push_str("\n</details>\n\n");
     }
 
-    // Skipped tests
+    // Skipped tests (public API only)
     report.push_str("## Skipped Tests\n\n");
     let skipped: Vec<_> = results
         .iter()
-        .filter(|(_, r)| matches!(r, TestResult::Skip(_)))
+        .filter(|(p, r)| matches!(r, TestResult::Skip(_)) && !internals_tests.contains(p.as_str()))
         .collect();
     if skipped.is_empty() {
         report.push_str("_No tests skipped._\n\n");
@@ -628,6 +702,30 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         report.push_str("\n</details>\n\n");
     }
 
+    // All tests by module (public + internals combined)
+    report.push_str("## All Results by Module (Public + Internals)\n\n");
+    let mut by_module_all: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
+    for (path, result) in &results {
+        let filename = path.rsplit('/').next().unwrap_or(path);
+        let module = classify_test(filename).to_string();
+        by_module_all.entry(module).or_default().push((path, result));
+    }
+
+    report.push_str("| Module | Total | Pass | Fail | Error | Skip | Pass% |\n");
+    report.push_str("|--------|-------|------|------|-------|------|-------|\n");
+    for (module, tests) in &by_module_all {
+        let total = tests.len();
+        let pass = tests.iter().filter(|(_, r)| matches!(r, TestResult::Pass)).count();
+        let fail = tests.iter().filter(|(_, r)| matches!(r, TestResult::Fail(_))).count();
+        let error = tests.iter().filter(|(_, r)| matches!(r, TestResult::Error(_))).count();
+        let skip = tests.iter().filter(|(_, r)| matches!(r, TestResult::Skip(_))).count();
+        let pass_pct = if total > 0 { pass as f64 / total as f64 * 100.0 } else { 0.0 };
+        report.push_str(&format!(
+            "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {pass_pct:.1}% |\n"
+        ));
+    }
+    report.push_str("\n");
+
     // Write report
     fs::write("tests/node_compat/report.md", &report)?;
     println!("Report written to tests/node_compat/report.md");
@@ -635,31 +733,37 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     // Print summary to console
     println!("\n============================================");
     println!("  Node.js v22 Compatibility Report Summary");
+    println!("  (Public API Tests Only)");
     println!("============================================");
     println!(
         "  ✅ PASS:  {pass_count:>5} ({:.1}%)",
-        pass_count as f64 / total_tests as f64 * 100.0
+        pass_count as f64 / total_public as f64 * 100.0
     );
     println!(
         "  ⏭️  SKIP:  {skip_count:>5} ({:.1}%)",
-        skip_count as f64 / total_tests as f64 * 100.0
+        skip_count as f64 / total_public as f64 * 100.0
     );
     println!(
         "  ❌ FAIL:  {fail_count:>5} ({:.1}%)",
-        fail_count as f64 / total_tests as f64 * 100.0
+        fail_count as f64 / total_public as f64 * 100.0
     );
     println!(
         "  💥 ERROR: {error_count:>5} ({:.1}%)",
-        error_count as f64 / total_tests as f64 * 100.0
+        error_count as f64 / total_public as f64 * 100.0
     );
     println!("  ─────────────────────────────────");
-    println!("  Total:    {total_tests:>5}");
+    println!("  Total:    {total_public:>5}");
+    println!("  ─────────────────────────────────");
+    println!("  All (incl. internals):");
+    println!(
+        "    PASS: {all_pass}, SKIP: {all_skip}, FAIL: {all_fail}, ERROR: {all_error}, Total: {total_tests}"
+    );
     println!("  Runtime:  {:.0}s", total_elapsed.as_secs_f64());
     println!("============================================\n");
 
-    // Print top passing modules
-    println!("Top passing modules:");
-    let mut module_stats: Vec<(String, usize, usize)> = by_module
+    // Print top passing modules (public API only)
+    println!("Top passing modules (public API):");
+    let mut module_stats: Vec<(String, usize, usize)> = by_module_public
         .iter()
         .map(|(m, tests)| {
             let pass = tests
