@@ -96,6 +96,18 @@ cargo test --test runtime fs -- --nocapture
 cargo test --test runtime -- --nocapture
 ```
 
+**RULE 2b: NEVER run `cargo test --test node_compat` without a filter.** The node_compat suite contains 800+ dynamically generated tests (one per entry in `config.jsonc`). ALWAYS filter to a specific test or group:
+
+```bash
+# ✅ CORRECT — run only specific tests or groups:
+cargo test --test node_compat parallel__test_assert_calltracker -- --nocapture
+cargo test --test node_compat parallel__test_fs -- --nocapture
+cargo test --test node_compat parallel__test_btoa_atob -- --nocapture
+
+# ❌ WRONG — never do this, it runs ALL 800+ node_compat tests:
+cargo test --test node_compat -- --nocapture
+```
+
 **RULE 3: DO NOT run `cargo test` (without arguments) as it runs everything including compilation and all runtime tests.** Always run only the specific test harness relevant to your changes.
 
 ### Build specific test harness
@@ -115,7 +127,7 @@ Runtime and node_compat tests are slow to run. **Always redirect test output to 
 
 ```bash
 cargo test --test runtime url -- --nocapture 2>&1 | tee /tmp/test-output.txt
-cargo test --test node_compat -- --nocapture 2>&1 | tee /tmp/test-output.txt
+cargo test --test node_compat parallel__test_fs -- --nocapture 2>&1 | tee /tmp/test-output.txt
 ```
 
 Then use the saved file for further checks (e.g., `grep`, `Read`) instead of re-running the test.
@@ -229,6 +241,9 @@ The `tests/node_compat/` directory contains vendored Node.js test files used to 
 - **Never modify vendored test files** in `tests/node_compat/suite/`. These are upstream Node.js tests fetched via `vendor.sh` and must remain unmodified.
 - **We only implement the public Node.js API.** Tests that exercise Node.js internals (internal modules, private APIs, implementation details) are out of scope. Only tests for the public-facing Node.js API surface are relevant.
 - The `config.jsonc` allowlist controls which tests are run. Add or remove entries there rather than modifying test files.
+- Tests are **dynamically generated** by `tests/node_compat.rs` using test-r's `#[test_gen]`: one test case per entry in `config.jsonc`. A shared `PreparedComponent` (compiled WASM) is created once as a test dependency and reused across all tests.
+- Tests with `"skip": true` in `config.jsonc` are marked as `is_ignored` and reported as `IGNORED` by the test runner.
+- Test names follow the pattern `gen_node_compat_tests::<suite>__<test_file>` (e.g., `parallel__test_btoa_atob_js`).
 
 ## Key Files
 
