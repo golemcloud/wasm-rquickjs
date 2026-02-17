@@ -5,10 +5,8 @@ use crate::common::{
     strip_jsonc_comments,
 };
 use camino::Utf8Path;
-use futures::stream::{self, StreamExt};
 use std::collections::BTreeMap;
 use std::fs;
-use std::sync::Arc;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -176,9 +174,8 @@ async fn run_test_entry(
 async fn run_tests(
     runner: &CompiledTest,
     tests: &[&TestEntry],
-    parallel: bool,
 ) -> anyhow::Result<()> {
-    let prepared = Arc::new(PreparedComponent::new(runner.wasm_path())?);
+    let prepared = PreparedComponent::new(runner.wasm_path())?;
 
     let mut results: BTreeMap<String, String> = BTreeMap::new();
     let mut failures = Vec::new();
@@ -194,40 +191,16 @@ async fn run_tests(
 
     let non_skipped: Vec<&TestEntry> = tests.iter().filter(|e| !e.skip).copied().collect();
 
-    if parallel {
-        let parallelism = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4);
-
-        let parallel_results: Vec<(String, String, String, String)> = stream::iter(non_skipped)
-            .map(|entry| {
-                let prepared = Arc::clone(&prepared);
-                let path = entry.path.clone();
-                async move {
-                    let (result_str, stdout, stderr) =
-                        run_test_entry(&prepared, entry).await;
-                    (path, result_str, stdout, stderr)
-                }
-            })
-            .buffer_unordered(parallelism)
-            .collect()
-            .await;
-
-        for (path, result_str, stdout, stderr) in parallel_results {
-            process_result(path, result_str, stdout, stderr, &mut results, &mut failures);
-        }
-    } else {
-        for entry in non_skipped {
-            let (result_str, stdout, stderr) = run_test_entry(&prepared, entry).await;
-            process_result(
-                entry.path.clone(),
-                result_str,
-                stdout,
-                stderr,
-                &mut results,
-                &mut failures,
-            );
-        }
+    for entry in non_skipped {
+        let (result_str, stdout, stderr) = run_test_entry(&prepared, entry).await;
+        process_result(
+            entry.path.clone(),
+            result_str,
+            stdout,
+            stderr,
+            &mut results,
+            &mut failures,
+        );
     }
 
     let total = tests.len();
@@ -247,7 +220,7 @@ async fn run_node_compat_suite(runner: &CompiledTest, prefix: &str) -> anyhow::R
     let config = load_config("tests/node_compat/config.jsonc")?;
     let tests = config.tests_matching(prefix);
     assert!(!tests.is_empty(), "No {prefix} tests found in config.jsonc");
-    run_tests(runner, &tests, true).await
+    run_tests(runner, &tests).await
 }
 
 async fn run_node_compat_by_suite(runner: &CompiledTest, suite: &str) -> anyhow::Result<()> {
@@ -257,7 +230,7 @@ async fn run_node_compat_by_suite(runner: &CompiledTest, suite: &str) -> anyhow:
         println!("  No {suite} tests found in config.jsonc, skipping");
         return Ok(());
     }
-    run_tests(runner, &tests, false).await
+    run_tests(runner, &tests).await
 }
 
 // --- Tests ---
@@ -535,7 +508,7 @@ async fn node_compat_misc(
         return Ok(());
     }
 
-    run_tests(runner, &misc_tests, true).await
+    run_tests(runner, &misc_tests).await
 }
 
 // --- es-module suite ---

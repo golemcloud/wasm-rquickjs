@@ -15,7 +15,6 @@ mod common;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use common::{setup_node_compat_test_files, strip_jsonc_comments};
-use futures::stream::{self, StreamExt};
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -458,119 +457,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut internals_skip = 0usize;
     let mut internals_error = 0usize;
 
-    // Split tests into parallel (parallel/) and sequential (everything else)
-    let parallel_tests: Vec<String> = test_files
-        .iter()
-        .filter(|p| p.starts_with("parallel/"))
-        .cloned()
-        .collect();
-    let sequential_tests: Vec<String> = test_files
-        .iter()
-        .filter(|p| !p.starts_with("parallel/"))
-        .cloned()
-        .collect();
-
-    let parallelism = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
-    println!("Running {} parallel tests with concurrency {parallelism}", parallel_tests.len());
-
-    // Run parallel suite tests concurrently
-    let parallel_results: Vec<(String, TestResult, Duration)> = stream::iter(parallel_tests.iter())
-        .map(|test_path| {
-            let runner_ref = &runner;
-            async move {
-                let test_start = Instant::now();
-                let result = match tokio::time::timeout(
-                    Duration::from_secs(60),
-                    runner_ref.run_test(test_path),
-                )
-                .await
-                {
-                    Ok(Ok(r)) => r,
-                    Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-                    Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
-                };
-                let elapsed = test_start.elapsed();
-                (test_path.clone(), result, elapsed)
-            }
-        })
-        .buffer_unordered(parallelism)
-        .collect()
-        .await;
-
-    // Process parallel results
+    // Run all tests sequentially
     let mut progress = 0usize;
-    for (test_path, result, elapsed) in parallel_results {
-        progress += 1;
-        let filename = test_path.rsplit('/').next().unwrap_or(&test_path);
-        let is_internal = internals_tests.contains(&test_path);
-        let tag = if is_internal { " [internal]" } else { "" };
-
-        match &result {
-            TestResult::Pass => {
-                if is_internal {
-                    internals_pass += 1;
-                } else {
-                    pass_count += 1;
-                }
-                println!(
-                    "[{:>4}/{total_tests}] PASS  {filename}{tag} ({:.1}s)",
-                    progress,
-                    elapsed.as_secs_f64()
-                );
-            }
-            TestResult::Skip(reason) => {
-                if is_internal {
-                    internals_skip += 1;
-                } else {
-                    skip_count += 1;
-                }
-                println!(
-                    "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
-                    progress
-                );
-            }
-            TestResult::Fail(msg) => {
-                if is_internal {
-                    internals_fail += 1;
-                } else {
-                    fail_count += 1;
-                }
-                let short_msg = if msg.len() > 120 {
-                    format!("{}...", truncate_str(msg, 120))
-                } else {
-                    msg.clone()
-                };
-                println!(
-                    "[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}",
-                    progress
-                );
-            }
-            TestResult::Error(msg) => {
-                if is_internal {
-                    internals_error += 1;
-                } else {
-                    error_count += 1;
-                }
-                let short_msg = if msg.len() > 120 {
-                    format!("{}...", truncate_str(msg, 120))
-                } else {
-                    msg.clone()
-                };
-                println!(
-                    "[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}",
-                    progress
-                );
-            }
-        }
-
-        results.insert(test_path, result);
-    }
-
-    // Run sequential suite tests sequentially
-    println!("Running {} sequential tests", sequential_tests.len());
-    for test_path in &sequential_tests {
+    for test_path in &test_files {
         progress += 1;
         let test_start = Instant::now();
         let result =
