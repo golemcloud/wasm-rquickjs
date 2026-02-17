@@ -33,7 +33,7 @@ function addAbortSignalNoValidate(signal, stream) {
         return stream;
     }
     const onAbort = () => {
-        stream.destroy(new AbortError());
+        stream.destroy(new AbortError(signal.reason));
     };
     if (signal.aborted) {
         onAbort();

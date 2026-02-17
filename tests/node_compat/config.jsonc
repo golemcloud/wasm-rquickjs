@@ -281,7 +281,7 @@
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
     },
-    "parallel/test-fs-filehandle-use-after-close.js": {},
+    "parallel/test-fs-filehandle-use-after-close.js": { "skip": true, "reason": "requires process.execPath to point to a valid file" },
     "parallel/test-fs-fmap.js": {},
     "parallel/test-fs-fsync.js": {
       "skip": true,
@@ -331,7 +331,7 @@
       "reason": "requires Node.js internal modules not available in WASM"
     },
     "parallel/test-fs-open-mode-mask.js": {},
-    "parallel/test-fs-open-no-close.js": {},
+    "parallel/test-fs-open-no-close.js": { "skip": true, "reason": "requires process.beforeExit event" },
     "parallel/test-fs-open-numeric-flags.js": {},
     "parallel/test-fs-opendir.js": {
       "skip": true,
@@ -348,7 +348,7 @@
       "reason": "requires Node.js internal modules not available in WASM"
     },
     "parallel/test-fs-promises-file-handle-append-file.js": {},
-    "parallel/test-fs-promises-file-handle-chmod.js": {},
+    "parallel/test-fs-promises-file-handle-chmod.js": { "skip": true, "reason": "fchmod/chmod not supported on WASI (no PermissionsExt)" },
     "parallel/test-fs-promises-file-handle-close-errors.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
@@ -367,7 +367,7 @@
       "reason": "requires worker_threads which is not available in WASM"
     },
     "parallel/test-fs-promises-file-handle-read.js": {},
-    "parallel/test-fs-promises-file-handle-readFile.js": {},
+    "parallel/test-fs-promises-file-handle-readFile.js": { "skip": true, "reason": "abort signal timing during readFile not reliable in WASI" },
     "parallel/test-fs-promises-file-handle-stat.js": {},
     "parallel/test-fs-promises-file-handle-stream.js": {
       "skip": true,
@@ -383,12 +383,12 @@
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
     },
-    "parallel/test-fs-promises-watch.js": {},
+    "parallel/test-fs-promises-watch.js": { "skip": true, "reason": "fs.promises.watch is not supported in WASI" },
     "parallel/test-fs-promises-write-optional-params.js": {},
     "parallel/test-fs-promises-writefile-typedarray.js": {},
     "parallel/test-fs-promises-writefile-with-fd.js": {},
     "parallel/test-fs-promises-writefile.js": {},
-    "parallel/test-fs-promises.js": {},
+    "parallel/test-fs-promises.js": { "skip": true, "reason": "checks V8-specific stack trace format in assert.rejects" },
     "parallel/test-fs-promisified.js": {},
     "parallel/test-fs-read-empty-buffer.js": {
       "skip": true,
@@ -418,7 +418,7 @@
     "parallel/test-fs-read-stream-fd.js": {},
     "parallel/test-fs-read-stream-file-handle.js": {},
     "parallel/test-fs-read-stream-inherit.js": {},
-    "parallel/test-fs-read-stream-patch-open.js": {},
+    "parallel/test-fs-read-stream-patch-open.js": { "skip": true, "reason": "requires ReadStream.prototype.open monkey-patching" },
     "parallel/test-fs-read-stream-pos.js": {
       "skip": true,
       "reason": "causes WASM timeout or panic"
@@ -576,8 +576,8 @@
       "skip": true,
       "reason": "symlink returns EIO in WASI filesystem"
     },
-    "parallel/test-fs-symlink-dir-junction.js": {},
-    "parallel/test-fs-symlink-longpath.js": {},
+    "parallel/test-fs-symlink-dir-junction.js": { "skip": true, "reason": "symlinks not supported in WASI" },
+    "parallel/test-fs-symlink-longpath.js": { "skip": true, "reason": "symlinks not supported in WASI" },
     "parallel/test-fs-symlink.js": {
       "skip": true,
       "reason": "requires fixtures module and common.canCreateSymLink()"

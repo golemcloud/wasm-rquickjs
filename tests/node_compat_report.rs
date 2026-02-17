@@ -441,7 +441,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let total_tests = test_files.len();
     let total_internals = internals_tests.len();
     let total_public = total_tests - total_internals;
-    println!("=== Running {total_tests} tests ({total_public} public API, {total_internals} internals) ===\n");
+    println!(
+        "=== Running {total_tests} tests ({total_public} public API, {total_internals} internals) ===\n"
+    );
 
     // Step 4: Run all tests
     let mut results: BTreeMap<String, TestResult> = BTreeMap::new();
@@ -471,7 +473,11 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
         match &result {
             TestResult::Pass => {
-                if is_internal { internals_pass += 1; } else { pass_count += 1; }
+                if is_internal {
+                    internals_pass += 1;
+                } else {
+                    pass_count += 1;
+                }
                 println!(
                     "[{:>4}/{total_tests}] PASS  {filename}{tag} ({:.1}s)",
                     i + 1,
@@ -479,26 +485,47 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 );
             }
             TestResult::Skip(reason) => {
-                if is_internal { internals_skip += 1; } else { skip_count += 1; }
-                println!("[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})", i + 1);
+                if is_internal {
+                    internals_skip += 1;
+                } else {
+                    skip_count += 1;
+                }
+                println!(
+                    "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
+                    i + 1
+                );
             }
             TestResult::Fail(msg) => {
-                if is_internal { internals_fail += 1; } else { fail_count += 1; }
+                if is_internal {
+                    internals_fail += 1;
+                } else {
+                    fail_count += 1;
+                }
                 let short_msg = if msg.len() > 120 {
                     format!("{}...", truncate_str(msg, 120))
                 } else {
                     msg.clone()
                 };
-                println!("[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}", i + 1);
+                println!(
+                    "[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}",
+                    i + 1
+                );
             }
             TestResult::Error(msg) => {
-                if is_internal { internals_error += 1; } else { error_count += 1; }
+                if is_internal {
+                    internals_error += 1;
+                } else {
+                    error_count += 1;
+                }
                 let short_msg = if msg.len() > 120 {
                     format!("{}...", truncate_str(msg, 120))
                 } else {
                     msg.clone()
                 };
-                println!("[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}", i + 1);
+                println!(
+                    "[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}",
+                    i + 1
+                );
             }
         }
 
@@ -542,7 +569,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         "| 💥 ERROR | {error_count} | {:.1}% |\n",
         error_count as f64 / total_public as f64 * 100.0
     ));
-    report.push_str(&format!("| **Total** | **{total_public}** | **100%** |\n\n"));
+    report.push_str(&format!(
+        "| **Total** | **{total_public}** | **100%** |\n\n"
+    ));
 
     // All tests summary (public + internals combined)
     let all_pass = pass_count + internals_pass;
@@ -584,7 +613,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         }
         let filename = path.rsplit('/').next().unwrap_or(path);
         let module = classify_test(filename).to_string();
-        by_module_public.entry(module).or_default().push((path, result));
+        by_module_public
+            .entry(module)
+            .or_default()
+            .push((path, result));
     }
 
     report.push_str("| Module | Total | Pass | Fail | Error | Skip | Pass% |\n");
@@ -708,18 +740,37 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     for (path, result) in &results {
         let filename = path.rsplit('/').next().unwrap_or(path);
         let module = classify_test(filename).to_string();
-        by_module_all.entry(module).or_default().push((path, result));
+        by_module_all
+            .entry(module)
+            .or_default()
+            .push((path, result));
     }
 
     report.push_str("| Module | Total | Pass | Fail | Error | Skip | Pass% |\n");
     report.push_str("|--------|-------|------|------|-------|------|-------|\n");
     for (module, tests) in &by_module_all {
         let total = tests.len();
-        let pass = tests.iter().filter(|(_, r)| matches!(r, TestResult::Pass)).count();
-        let fail = tests.iter().filter(|(_, r)| matches!(r, TestResult::Fail(_))).count();
-        let error = tests.iter().filter(|(_, r)| matches!(r, TestResult::Error(_))).count();
-        let skip = tests.iter().filter(|(_, r)| matches!(r, TestResult::Skip(_))).count();
-        let pass_pct = if total > 0 { pass as f64 / total as f64 * 100.0 } else { 0.0 };
+        let pass = tests
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Pass))
+            .count();
+        let fail = tests
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Fail(_)))
+            .count();
+        let error = tests
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Error(_)))
+            .count();
+        let skip = tests
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Skip(_)))
+            .count();
+        let pass_pct = if total > 0 {
+            pass as f64 / total as f64 * 100.0
+        } else {
+            0.0
+        };
         report.push_str(&format!(
             "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {pass_pct:.1}% |\n"
         ));
@@ -785,14 +836,15 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     // Step 6: Warn about passing tests not in config.jsonc
     let config_content = fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
     let config_json_str = strip_jsonc_comments(&config_content);
-    let config_tests: BTreeSet<String> = if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
-        val.get("tests")
-            .and_then(|v| v.as_object())
-            .map(|obj| obj.keys().cloned().collect())
-            .unwrap_or_default()
-    } else {
-        BTreeSet::new()
-    };
+    let config_tests: BTreeSet<String> =
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
+            val.get("tests")
+                .and_then(|v| v.as_object())
+                .map(|obj| obj.keys().cloned().collect())
+                .unwrap_or_default()
+        } else {
+            BTreeSet::new()
+        };
 
     let missing_from_config: Vec<&String> = results
         .iter()
@@ -805,8 +857,13 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         .collect();
 
     if !missing_from_config.is_empty() {
-        println!("\n⚠️  WARNING: {} passing test(s) are NOT in config.jsonc!", missing_from_config.len());
-        println!("Add the following entries to the \"tests\" object in tests/node_compat/config.jsonc:\n");
+        println!(
+            "\n⚠️  WARNING: {} passing test(s) are NOT in config.jsonc!",
+            missing_from_config.len()
+        );
+        println!(
+            "Add the following entries to the \"tests\" object in tests/node_compat/config.jsonc:\n"
+        );
         for path in &missing_from_config {
             println!("    \"{path}\": {{}},");
         }

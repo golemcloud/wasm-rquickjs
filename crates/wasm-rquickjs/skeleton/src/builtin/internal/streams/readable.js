@@ -162,12 +162,13 @@ function Readable(options) {
         if (typeof options.construct === "function") {
             this._construct = options.construct;
         }
-        if (options.signal && !isDuplex) {
-            addAbortSignalNoValidate(options.signal, this);
-        }
     }
 
     Stream.call(this, options);
+
+    if (options && options.signal && !isDuplex) {
+        addAbortSignalNoValidate(options.signal, this);
+    }
 
     destroyImpl.construct(this, () => {
         if (this._readableState.needReadable) {
@@ -911,6 +912,15 @@ Readable.prototype.on = function (ev, fn) {
     return res;
 };
 Readable.prototype.addListener = Readable.prototype.on;
+
+Readable.prototype.once = function (ev, fn) {
+    const onceWrapper = (...args) => {
+        this.removeListener(ev, onceWrapper);
+        fn.apply(this, args);
+    };
+    onceWrapper.fn = fn;
+    return this.on(ev, onceWrapper);
+};
 
 Readable.prototype.removeListener = function (ev, fn) {
     const res = Stream.prototype.removeListener.call(this, ev, fn);

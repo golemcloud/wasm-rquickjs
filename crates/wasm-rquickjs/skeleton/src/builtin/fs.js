@@ -126,7 +126,13 @@ function flagsToNumber(flags) {
 
 function createSystemError(errObj) {
     if (!errObj) return null;
-    const err = new Error(errObj.message);
+    // Format message like Node.js: "ECODE: description, syscall 'path'"
+    let msg = errObj.message;
+    if (errObj.code && errObj.syscall) {
+        msg = errObj.code + ': ' + (errObj.message || 'unknown error') + ', ' + errObj.syscall;
+        if (errObj.path !== undefined) msg += " '" + errObj.path + "'";
+    }
+    const err = new Error(msg);
     err.code = errObj.code;
     err.errno = errObj.errno;
     err.syscall = errObj.syscall;
@@ -267,6 +273,16 @@ function validatePath(path, propName) {
     const err = new TypeError(`The "${propName || 'path'}" argument must be of type string or an instance of Buffer or URL. Received ${describeType(path)}`);
     err.code = 'ERR_INVALID_ARG_TYPE';
     throw err;
+}
+
+function pathToString(path) {
+    if (typeof path === 'string') return path;
+    if (getBuffer() && path instanceof getBuffer()) return path.toString();
+    if (path instanceof URL) {
+        if (path.protocol !== 'file:') return path.toString();
+        return path.pathname;
+    }
+    return String(path);
 }
 
 // --- Stats class ---
@@ -505,6 +521,34 @@ export function readFileSync(path, options) {
         return getBuffer().from(result);
     }
 
+    const flag = options && options.flag;
+    if (flag && flag !== 'r') {
+        // Use openSync to respect the flag (e.g., 'ax+' should fail with EEXIST)
+        const fd = openSync(path, flag);
+        try {
+            const chunks = [];
+            let totalLength = 0;
+            const buf = new Uint8Array(8192);
+            while (true) {
+                const bytesRead = readSync(fd, buf, 0, buf.length, null);
+                if (bytesRead === 0) break;
+                chunks.push(buf.slice(0, bytesRead));
+                totalLength += bytesRead;
+            }
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+                result.set(chunk, offset);
+                offset += chunk.length;
+            }
+            if (encoding) {
+                return new TextDecoder(encoding).decode(result);
+            }
+            return getBuffer().from(result);
+        } finally {
+            closeSync(fd);
+        }
+    }
     if (encoding) {
         const [contents, error] = native.read_file_with_encoding(path, encoding);
         if (error === undefined) {
@@ -530,31 +574,46 @@ export function writeFileSync(path, data, options) {
     const flush = options ? options.flush : undefined;
     validateFlush(flush);
     const encoding = options && options.encoding && options.encoding !== '' ? normalizeEncoding(options.encoding) : null;
-    if (encoding) {
-        const error = native.write_file_with_encoding(path, encoding, data);
+
+    if (typeof path === 'number') {
+        // fd-based write
+        if (typeof data === 'string') {
+            const result = native.fs_write_string(path, data, null);
+            if (result.error) throw createSystemError(result.error);
+        } else {
+            const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
+            const result = native.fs_write_buffer(path, dataArray, 0, dataArray.length, null);
+            if (result.error) throw createSystemError(result.error);
+        }
+    } else if (encoding) {
+        const error = native.write_file_with_encoding(pathToString(path), encoding, data);
         if (error !== undefined) {
             throw new Error(error);
         }
     } else {
         if (typeof data === 'string') {
-            const error = native.write_file_with_encoding(path, "utf8", data);
+            const error = native.write_file_with_encoding(pathToString(path), "utf8", data);
             if (error !== undefined) {
                 throw new Error(error);
             }
         } else {
             const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-            const error = native.write_file(path, dataArray);
+            const error = native.write_file(pathToString(path), dataArray);
             if (error !== undefined) {
                 throw new Error(error);
             }
         }
     }
     if (flush === true) {
-        const fd = openSync(path, 'r');
-        try {
-            _default.fsyncSync(fd);
-        } finally {
-            closeSync(fd);
+        if (typeof path === 'number') {
+            fsyncSync(path);
+        } else {
+            const fd = openSync(path, 'r');
+            try {
+                _default.fsyncSync(fd);
+            } finally {
+                closeSync(fd);
+            }
         }
     }
 }
@@ -591,7 +650,7 @@ export function openSync(path, flags, mode) {
     validatePath(path);
     flags = flagsToNumber(flags !== undefined ? flags : 'r');
     mode = validateMode(mode, 'mode', 0o666);
-    const result = native.fs_open(path, flags, mode);
+    const result = native.fs_open(pathToString(path), flags, mode);
     if (result.error) {
         throw createSystemError(result.error);
     }
@@ -696,7 +755,7 @@ export function fdatasyncSync(fd) {
 
 export function statSync(path, options) {
     validatePath(path);
-    const result = native.fs_stat(path);
+    const result = native.fs_stat(pathToString(path));
     if (result.error) {
         if (options && options.throwIfNoEntry === false && result.error.code === 'ENOENT') {
             return undefined;
@@ -709,7 +768,7 @@ export function statSync(path, options) {
 
 export function lstatSync(path, options) {
     validatePath(path);
-    const result = native.fs_lstat(path);
+    const result = native.fs_lstat(pathToString(path));
     if (result.error) {
         if (options && options.throwIfNoEntry === false && result.error.code === 'ENOENT') {
             return undefined;
@@ -735,7 +794,7 @@ export function readdirSync(path, options) {
     const opts = getOptions(options, {});
     const withFileTypes = opts.withFileTypes || false;
     const recursive = opts.recursive || false;
-    const result = native.fs_readdir(path, withFileTypes);
+    const result = native.fs_readdir(pathToString(path), withFileTypes);
     if (result.error) {
         if (result.error.code === 'EIO') {
             const st = native.fs_stat(path);
@@ -793,7 +852,7 @@ export function readdirSync(path, options) {
 export function accessSync(path, mode) {
     validatePath(path);
     mode = mode !== undefined ? mode : F_OK;
-    const error = native.fs_access(path, mode);
+    const error = native.fs_access(pathToString(path), mode);
     if (error) {
         throw createSystemError(error);
     }
@@ -1072,9 +1131,35 @@ export function writeFile(path, data, optionsOrCallback, callback) {
     const opts = optionsOrCallback || {};
     const flush = opts.flush;
     validateFlush(flush);
-    const cb = callback;
-    validateCallback(cb);
+    const signal = opts.signal;
+    const rawCb = callback;
+    validateCallback(rawCb);
+    let called = false;
+    const cb = function() {
+        if (called) return;
+        called = true;
+        rawCb.apply(this, arguments);
+    };
+    if (signal && signal.aborted) {
+        const e = new DOMException('The operation was aborted', 'AbortError');
+        e.name = 'AbortError';
+        queueMicrotask(() => cb(e));
+        return;
+    }
+    if (signal) {
+        signal.addEventListener('abort', function onAbort() {
+            const e = new DOMException('The operation was aborted', 'AbortError');
+            e.name = 'AbortError';
+            cb(e);
+        }, { once: true });
+    }
     queueMicrotask(() => {
+        if (signal && signal.aborted) {
+            const e = new DOMException('The operation was aborted', 'AbortError');
+            e.name = 'AbortError';
+            cb(e);
+            return;
+        }
         try {
             const writeOpts = flush !== undefined ? Object.assign({}, opts, { flush: undefined }) : opts;
             writeFileSync(path, data, writeOpts);
@@ -1897,7 +1982,10 @@ export function ReadStream(path, options) {
         _readStreamProtoInited = true;
     }
 
-    this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd : null;
+    this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd
+            : (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd.fd
+            : null;
+    this._fileHandle = (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd : null;
     this.path = (this.fd != null && (path == null || path === undefined)) ? undefined : path;
     this.flags = opts.flags || 'r';
     this.mode = opts.mode || 0o666;
@@ -1956,6 +2044,13 @@ export function ReadStream(path, options) {
     this.bytesRead = 0;
     this._fs = opts.fs || _default;
 
+    if (this._fileHandle && opts.fs) {
+        const err = new Error('The FileHandle with fs method is not implemented');
+        err.code = 'ERR_METHOD_NOT_IMPLEMENTED';
+        err.name = 'Error';
+        throw err;
+    }
+
     _Readable.call(this, opts);
 }
 
@@ -1968,7 +2063,11 @@ ReadStream.prototype._construct = function(callback) {
     }
     if (typeof this.open === 'function' && this.open !== ReadStream.prototype.open) {
         this.open();
-        this.once('open', function() { callback(); });
+        const onOpen = function() { self.removeListener('error', onError); callback(); };
+        const onError = function() { self.removeListener('open', onOpen); callback(); };
+        const self = this;
+        this.once('open', onOpen);
+        this.once('error', onError);
         return;
     }
     const self = this;
@@ -2011,6 +2110,29 @@ ReadStream.prototype._read = function(n) {
 
     const buf = getBuffer().alloc(toRead);
     const self = this;
+
+    if (this._fileHandle) {
+        this._fileHandle.read(buf, 0, toRead, this.pos).then(function(result) {
+            if (self.destroyed) return;
+            const bytesRead = result.bytesRead;
+            if (bytesRead > 0) {
+                if (self.pos !== undefined) self.pos += bytesRead;
+                self.bytesRead += bytesRead;
+                self.push(bytesRead !== toRead ? result.buffer.slice(0, bytesRead) : result.buffer);
+            } else {
+                self.push(null);
+            }
+        }, function(err) {
+            if (self.destroyed) return;
+            if (self.autoClose) {
+                self.destroy(err);
+            } else {
+                self.emit('error', err);
+            }
+        });
+        return;
+    }
+
     this._fs.read(this.fd, buf, 0, toRead, this.pos, function(err, bytesRead, buffer) {
         if (self.destroyed) return;
         if (err) {
@@ -2031,6 +2153,11 @@ ReadStream.prototype._read = function(n) {
 
 ReadStream.prototype._destroy = function(err, cb) {
     if (this.fd === null) { cb(err); return; }
+    if (this._fileHandle) {
+        this.fd = null;
+        this._fileHandle.close().then(() => cb(err), (er) => cb(er || err));
+        return;
+    }
     const fd = this.fd;
     this.fd = null;
     this._fs.close(fd, function(er) {
@@ -2091,7 +2218,10 @@ export function WriteStream(path, options) {
         _writeStreamProtoInited = true;
     }
 
-    this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd : null;
+    this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd
+            : (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd.fd
+            : null;
+    this._fileHandle = (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd : null;
     this.path = (this.fd != null && (path == null || path === undefined)) ? undefined : path;
     this.flags = opts.flags || 'w';
     this.mode = opts.mode || 0o666;
@@ -2134,7 +2264,11 @@ WriteStream.prototype._construct = function(callback) {
     }
     if (typeof this.open === 'function' && this.open !== WriteStream.prototype.open) {
         this.open();
-        this.once('open', function() { callback(); });
+        const onOpen = function() { self.removeListener('error', onError); callback(); };
+        const onError = function() { self.removeListener('open', onOpen); callback(); };
+        const self = this;
+        this.once('open', onOpen);
+        this.once('error', onError);
         return;
     }
     const self = this;
@@ -2200,6 +2334,11 @@ WriteStream.prototype._writev = function(data, cb) {
 
 WriteStream.prototype._destroy = function(err, cb) {
     if (this.fd === null) { cb(err); return; }
+    if (this._fileHandle) {
+        this.fd = null;
+        this._fileHandle.close().then(() => cb(err), (er) => cb(er || err));
+        return;
+    }
     const fd = this.fd;
     this.fd = null;
     this._fs.close(fd, function(er) {

@@ -247,12 +247,13 @@ function Writable(options) {
         if (typeof options.construct === "function") {
             this._construct = options.construct;
         }
-        if (options.signal) {
-            addAbortSignalNoValidate(options.signal, this);
-        }
     }
 
     Stream.call(this, options);
+
+    if (options && options.signal) {
+        addAbortSignalNoValidate(options.signal, this);
+    }
 
     destroyImpl.construct(this, () => {
         const state = this._writableState;

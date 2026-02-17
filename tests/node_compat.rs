@@ -1,6 +1,9 @@
 test_r::enable!();
 
-use crate::common::{CompiledTest, PreparedComponent, TestInstance, setup_node_compat_test_files, strip_jsonc_comments};
+use crate::common::{
+    CompiledTest, PreparedComponent, TestInstance, setup_node_compat_test_files,
+    strip_jsonc_comments,
+};
 use camino::Utf8Path;
 use std::collections::BTreeMap;
 use std::fs;

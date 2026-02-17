@@ -370,8 +370,8 @@ export class ERR_STREAM_PREMATURE_CLOSE extends Error {
 }
 
 export class AbortError extends Error {
-    constructor() {
-        super("The operation was aborted");
+    constructor(reason) {
+        super("The operation was aborted", reason !== undefined ? { cause: reason } : undefined);
         this.code = "ABORT_ERR";
         this.name = "AbortError";
     }

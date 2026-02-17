@@ -84,15 +84,50 @@ function flagsToNumber(flags) {
     }
 }
 
+function makeEBADF(syscall) {
+    const err = new Error('EBADF: bad file descriptor, ' + syscall);
+    err.code = 'EBADF';
+    err.errno = -9;
+    err.syscall = syscall;
+    return err;
+}
+
 function createSystemError(errObj) {
     if (!errObj) return null;
-    const err = new Error(errObj.message);
+    let msg = errObj.message;
+    if (errObj.code && errObj.syscall) {
+        msg = errObj.code + ': ' + (errObj.message || 'unknown error') + ', ' + errObj.syscall;
+        if (errObj.path !== undefined) msg += " '" + errObj.path + "'";
+    }
+    const err = new Error(msg);
     err.code = errObj.code;
     err.errno = errObj.errno;
     err.syscall = errObj.syscall;
     if (errObj.path !== undefined) err.path = errObj.path;
     if (errObj.dest !== undefined) err.dest = errObj.dest;
     return err;
+}
+
+function validateInteger(value, name, min, max) {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+        const err = new RangeError(`The value of "${name}" is out of range. It must be an integer. Received ${String(value)}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    if (min !== undefined && max !== undefined && (value < min || value > max)) {
+        const err = new RangeError(`The value of "${name}" is out of range. It must be >= ${min} && <= ${max}. Received ${value}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+}
+
+function validateUid(id, name) {
+    if (typeof id !== 'number') {
+        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(id)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    validateInteger(id, name, -1, 4294967295);
 }
 
 function validateFlush(flush) {
@@ -131,7 +166,7 @@ export class FileHandle {
     get fd() { return this._fd; }
 
     async appendFile(data, options) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('write');
         if (typeof data === 'string') {
             const pos = null;
             const result = native.fs_write_string(this._fd, data, pos);
@@ -144,13 +179,15 @@ export class FileHandle {
     }
 
     async chmod(mode) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('fchmod');
         const error = native.fs_fchmod(this._fd, mode);
         if (error) throw createSystemError(error);
     }
 
     async chown(uid, gid) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('fchown');
+        validateUid(uid, 'uid');
+        validateUid(gid, 'gid');
         const error = native.fs_fchown(this._fd, uid, gid);
         if (error) throw createSystemError(error);
     }
@@ -159,6 +196,7 @@ export class FileHandle {
         if (this._closed) return;
         this._closed = true;
         const error = native.fs_close(this._fd);
+        this._fd = -1;
         if (error) throw createSystemError(error);
         if (this.emit) this.emit('close');
     }
@@ -166,22 +204,29 @@ export class FileHandle {
     createReadStream(options) {
         // Lazy import to avoid circular dependency
         const fs = require('node:fs');
-        return fs.createReadStream(this._path, { ...options, fd: this._fd, autoClose: false });
+        if (options && options.signal !== undefined) {
+            if (options.signal === null || typeof options.signal !== 'object' || !('aborted' in options.signal)) {
+                const err = new TypeError(`The "options.signal" property must be an instance of AbortSignal. Received ${options.signal === null ? 'null' : typeof options.signal === 'object' ? 'an instance of ' + (options.signal.constructor?.name || 'Object') : typeof options.signal}`);
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+        }
+        return fs.createReadStream(this._path, { ...options, fd: this, autoClose: false });
     }
 
     createWriteStream(options) {
         const fs = require('node:fs');
-        return fs.createWriteStream(this._path, { ...options, fd: this._fd, autoClose: false });
+        return fs.createWriteStream(this._path, { ...options, fd: this, autoClose: false });
     }
 
     async datasync() {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('fdatasync');
         const error = native.fs_fdatasync(this._fd);
         if (error) throw createSystemError(error);
     }
 
     async read(bufferOrOptions, offset, length, position) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('read');
         let buffer;
         if (bufferOrOptions === null) {
             // null means use fallback buffer, but respect positional args
@@ -202,9 +247,17 @@ export class FileHandle {
                 throw err;
             }
             buffer = bufferOrOptions;
-            offset = offset || 0;
-            length = length !== undefined && length !== null ? length : buffer.byteLength - offset;
-            position = position !== undefined ? position : null;
+            if (offset !== undefined && offset !== null && typeof offset === 'object') {
+                // fh.read(buffer, options) form
+                const opts = offset;
+                offset = opts.offset || 0;
+                length = opts.length !== undefined && opts.length !== null ? opts.length : buffer.byteLength - offset;
+                position = opts.position !== undefined && opts.position !== null ? opts.position : null;
+            } else {
+                offset = offset || 0;
+                length = length !== undefined && length !== null ? length : buffer.byteLength - offset;
+                position = position !== undefined ? position : null;
+            }
         }
 
         const result = native.fs_read(this._fd, length, position);
@@ -219,13 +272,22 @@ export class FileHandle {
     }
 
     async readFile(options) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('read');
         const encoding = typeof options === 'string' ? options : (options && options.encoding);
         const signal = typeof options === 'object' && options ? options.signal : undefined;
         if (signal && signal.aborted) {
             const e = new DOMException('The operation was aborted', 'AbortError');
             e.name = 'AbortError';
             throw e;
+        }
+        // Yield before starting to allow abort signals from nextTick to fire
+        if (signal) {
+            await new Promise(r => setTimeout(r, 0));
+            if (signal.aborted) {
+                const e = new DOMException('The operation was aborted', 'AbortError');
+                e.name = 'AbortError';
+                throw e;
+            }
         }
         // Read all data from file using current fd position (pass null to use OS offset)
         const chunks = [];
@@ -243,7 +305,11 @@ export class FileHandle {
             chunks.push(chunk);
             totalSize += result.bytesRead;
             // Yield to allow abort signals to fire
-            await new Promise(r => r());
+            if (signal) {
+                await new Promise(r => setTimeout(r, 0));
+            } else {
+                await new Promise(r => r());
+            }
         }
         const combined = new Uint8Array(totalSize);
         let cOffset = 0;
@@ -264,27 +330,27 @@ export class FileHandle {
             err.code = 'ERR_INTERNAL_ASSERTION';
             throw err;
         }
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('fstat');
         const result = native.fs_fstat(this._fd);
         if (result.error) throw createSystemError(result.error);
         return wrapStat(result.stat, options);
     }
 
     async sync() {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('fsync');
         const error = native.fs_fsync(this._fd);
         if (error) throw createSystemError(error);
     }
 
     async truncate(len) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('ftruncate');
         len = len !== undefined ? len : 0;
         const error = native.fs_ftruncate(this._fd, len);
         if (error) throw createSystemError(error);
     }
 
     async utimes(atime, mtime) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('futimes');
         const atimeSecs = (atime instanceof Date) ? atime.getTime() / 1000 : Number(atime);
         const mtimeSecs = (mtime instanceof Date) ? mtime.getTime() / 1000 : Number(mtime);
         const error = native.fs_futimes(this._fd, atimeSecs, mtimeSecs);
@@ -292,7 +358,7 @@ export class FileHandle {
     }
 
     async write(bufferOrString, offsetOrPosition, lengthOrEncoding, position) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('write');
         if (typeof bufferOrString === 'string') {
             const pos = offsetOrPosition !== undefined ? offsetOrPosition : null;
             const enc = lengthOrEncoding || 'utf8';
@@ -318,9 +384,40 @@ export class FileHandle {
                 err.code = 'ERR_INVALID_ARG_TYPE';
                 throw err;
             }
-            const offset = offsetOrPosition || 0;
-            const length = lengthOrEncoding !== undefined ? lengthOrEncoding : bufferOrString.byteLength - offset;
-            const pos = position !== undefined ? position : null;
+            let offset, length, pos;
+            if (offsetOrPosition !== undefined && offsetOrPosition !== null && typeof offsetOrPosition === 'object') {
+                // Options object form: fh.write(buffer, { offset, length, position })
+                const opts = offsetOrPosition;
+                offset = opts.offset !== undefined && opts.offset !== null ? opts.offset : 0;
+                length = opts.length !== undefined && opts.length !== null ? opts.length : bufferOrString.byteLength - offset;
+                pos = opts.position !== undefined && opts.position !== null ? opts.position : null;
+            } else {
+                offset = offsetOrPosition || 0;
+                length = lengthOrEncoding !== undefined ? lengthOrEncoding : bufferOrString.byteLength - offset;
+                pos = position !== undefined ? position : null;
+            }
+            // Validate offset
+            if (typeof offset !== 'number' || !Number.isInteger(offset)) {
+                const err = new TypeError('The "offset" argument must be of type number. Received ' + describeType(offset));
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+            if (offset < 0 || offset > bufferOrString.byteLength) {
+                const err = new RangeError(`The value of "offset" is out of range. It must be >= 0 && <= ${bufferOrString.byteLength}. Received ${offset}`);
+                err.code = 'ERR_OUT_OF_RANGE';
+                throw err;
+            }
+            // Validate length
+            if (typeof length !== 'number' || !Number.isInteger(length)) {
+                const err = new TypeError('The "length" argument must be of type number. Received ' + describeType(length));
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+            if (length < 0 || length > bufferOrString.byteLength - offset) {
+                const err = new RangeError(`The value of "length" is out of range. It must be >= 0 && <= ${bufferOrString.byteLength - offset}. Received ${length}`);
+                err.code = 'ERR_OUT_OF_RANGE';
+                throw err;
+            }
             const dataArray = new Uint8Array(bufferOrString.buffer || bufferOrString, bufferOrString.byteOffset || 0, bufferOrString.byteLength || bufferOrString.length);
             const result = native.fs_write_buffer(this._fd, dataArray, offset, length, pos);
             if (result.error) throw createSystemError(result.error);
@@ -329,12 +426,18 @@ export class FileHandle {
     }
 
     async readv(buffers, position) {
-        if (this._closed) throw new Error('file closed');
-        const fs = globalThis.require ? globalThis.require('node:fs') : null;
+        if (this._closed) throw makeEBADF('read');
         let totalRead = 0;
         let pos = position !== undefined && position !== null ? position : null;
         for (const buf of buffers) {
-            const bytesRead = fs ? fs.readSync(this._fd, buf, 0, buf.byteLength, pos) : 0;
+            if (buf.byteLength === 0) continue;
+            const result = native.fs_read(this._fd, buf.byteLength, pos);
+            if (result.error) throw createSystemError(result.error);
+            const bytesRead = result.bytesRead;
+            const src = result.buffer;
+            for (let i = 0; i < bytesRead; i++) {
+                buf[i] = src[i];
+            }
             totalRead += bytesRead;
             if (pos !== null) pos += bytesRead;
             if (bytesRead < buf.byteLength) break;
@@ -343,20 +446,22 @@ export class FileHandle {
     }
 
     async writev(buffers, position) {
-        if (this._closed) throw new Error('file closed');
-        const fs = globalThis.require ? globalThis.require('node:fs') : null;
+        if (this._closed) throw makeEBADF('write');
         let totalWritten = 0;
         let pos = position !== undefined && position !== null ? position : null;
         for (const buf of buffers) {
-            const written = fs ? fs.writeSync(this._fd, buf, 0, buf.byteLength, pos) : 0;
-            totalWritten += written;
-            if (pos !== null) pos += written;
+            if (buf.byteLength === 0) continue;
+            const dataArray = new Uint8Array(buf.buffer || buf, buf.byteOffset || 0, buf.byteLength || buf.length);
+            const result = native.fs_write_buffer(this._fd, dataArray, 0, dataArray.length, pos);
+            if (result.error) throw createSystemError(result.error);
+            totalWritten += result.bytesWritten;
+            if (pos !== null) pos += result.bytesWritten;
         }
         return { bytesWritten: totalWritten, buffers };
     }
 
     async writeFile(data, options) {
-        if (this._closed) throw new Error('file closed');
+        if (this._closed) throw makeEBADF('write');
         const encoding = typeof options === 'string' ? options : (options && options.encoding) || 'utf8';
         const signal = typeof options === 'object' && options ? options.signal : undefined;
         const flush = typeof options === 'object' && options ? options.flush : undefined;
@@ -365,6 +470,16 @@ export class FileHandle {
             const e = new DOMException('The operation was aborted', 'AbortError');
             e.name = 'AbortError';
             throw e;
+        }
+
+        // Yield to allow pending abort signals (e.g. from process.nextTick) to fire
+        if (signal) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            if (signal.aborted) {
+                const e = new DOMException('The operation was aborted', 'AbortError');
+                e.name = 'AbortError';
+                throw e;
+            }
         }
 
         // FileHandle.writeFile writes at the current position (no truncate, no seek to 0)
@@ -377,7 +492,7 @@ export class FileHandle {
             const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
             const result = native.fs_write_buffer(this._fd, dataArray, 0, dataArray.length, null);
             if (result.error) throw createSystemError(result.error);
-        } else if (data != null && (typeof data[Symbol.asyncIterator] === 'function' || typeof data[Symbol.iterator] === 'function')) {
+        } else if (data != null && typeof data !== 'symbol' && (typeof data[Symbol.asyncIterator] === 'function' || typeof data[Symbol.iterator] === 'function')) {
             for await (const chunk of data) {
                 if (signal && signal.aborted) {
                     const e = new DOMException('The operation was aborted', 'AbortError');
@@ -464,9 +579,18 @@ export async function writeFile(path, data, options) {
         encoding = options.encoding;
     }
 
+    // Validate data type early - reject null, undefined, numbers, booleans, symbols, etc.
+    if (data == null || typeof data === 'number' || typeof data === 'boolean' || typeof data === 'bigint' || typeof data === 'symbol' ||
+        (typeof data !== 'string' && !ArrayBuffer.isView(data) && !(data instanceof ArrayBuffer) &&
+        typeof data[Symbol.asyncIterator] !== 'function' && typeof data[Symbol.iterator] !== 'function')) {
+        const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, DataView, or an iterable/async iterable object. Received ' + describeType(data));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
     // Handle streams, iterables, and async iterables
     if (typeof data !== 'string' && !ArrayBuffer.isView(data) && !(data instanceof ArrayBuffer) &&
-        data != null && (typeof data[Symbol.asyncIterator] === 'function' || typeof data[Symbol.iterator] === 'function')) {
+        (typeof data[Symbol.asyncIterator] === 'function' || typeof data[Symbol.iterator] === 'function')) {
         const fileHandle = await open(path, 'w');
         try {
             await fileHandle.writeFile(data, options);
@@ -476,11 +600,14 @@ export async function writeFile(path, data, options) {
         return;
     }
 
-    // Validate data type
-    if (data != null && typeof data !== 'string' && !ArrayBuffer.isView(data) && !(data instanceof ArrayBuffer)) {
-        const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, DataView, or an iterable/async iterable object. Received ' + describeType(data));
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+    // Yield to allow pending abort signals (e.g. from process.nextTick) to fire
+    if (signal) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        if (signal.aborted) {
+            const e = new DOMException('The operation was aborted', 'AbortError');
+            e.name = 'AbortError';
+            throw e;
+        }
     }
 
     let error;
@@ -678,6 +805,11 @@ export async function truncate(path, len) {
 }
 
 export async function copyFile(src, dest, mode) {
+    if (mode !== undefined && typeof mode !== 'number') {
+        const err = new TypeError('The "mode" argument must be of type number. Received ' + describeType(mode));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
     const error = native.fs_copy_file(src, dest);
     if (error) throw createSystemError(error);
 }
@@ -708,11 +840,15 @@ export async function lchmod(path, mode) {
 }
 
 export async function chown(path, uid, gid) {
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     const error = native.fs_chown(path, uid, gid);
     if (error) throw createSystemError(error);
 }
 
 export async function lchown(path, uid, gid) {
+    validateUid(uid, 'uid');
+    validateUid(gid, 'gid');
     const error = native.fs_lchown(path, uid, gid);
     if (error) throw createSystemError(error);
 }

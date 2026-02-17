@@ -55,7 +55,11 @@ class AbortSignal {
     static abort(reason) {
         const signal = new AbortSignal();
         signal.aborted = true;
-        signal.reason = reason;
+        if (reason !== undefined) {
+            signal.reason = reason;
+        } else {
+            signal.reason = new DOMException('This operation was aborted', 'AbortError');
+        }
         return signal;
     }
 

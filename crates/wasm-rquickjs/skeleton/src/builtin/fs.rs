@@ -92,6 +92,28 @@ fn make_badf_error<'js>(ctx: &rquickjs::Ctx<'js>, syscall: &str) -> rquickjs::Ob
     obj
 }
 
+fn stdio_stat_obj<'js>(ctx: &rquickjs::Ctx<'js>) -> rquickjs::Object<'js> {
+    let obj = rquickjs::Object::new(ctx.clone()).unwrap();
+    obj.set("dev", 0_f64).unwrap();
+    obj.set("ino", 0_f64).unwrap();
+    obj.set("mode", 8592_f64).unwrap(); // 0o20620 = S_IFCHR | 0620
+    obj.set("nlink", 1_f64).unwrap();
+    obj.set("uid", 0_f64).unwrap();
+    obj.set("gid", 0_f64).unwrap();
+    obj.set("rdev", 0_f64).unwrap();
+    obj.set("blksize", 0_f64).unwrap();
+    obj.set("blocks", 0_f64).unwrap();
+    obj.set("size", 0_f64).unwrap();
+    obj.set("atimeMs", 0_f64).unwrap();
+    obj.set("mtimeMs", 0_f64).unwrap();
+    obj.set("ctimeMs", 0_f64).unwrap();
+    obj.set("birthtimeMs", 0_f64).unwrap();
+    obj.set("isFile", false).unwrap();
+    obj.set("isDirectory", false).unwrap();
+    obj.set("isSymlink", false).unwrap();
+    obj
+}
+
 fn metadata_to_obj<'js>(
     ctx: &rquickjs::Ctx<'js>,
     meta: &std::fs::Metadata,
@@ -600,6 +622,14 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_fstat(ctx: Ctx<'_>, fd: i32) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
+
+        // Handle stdin/stdout/stderr (fd 0, 1, 2) which are not in FD_TABLE
+        if fd >= 0 && fd <= 2 {
+            let stat = super::stdio_stat_obj(&ctx);
+            result.set("stat", stat).unwrap();
+            return result;
+        }
+
         let mut table = super::FD_TABLE.lock().unwrap();
         match table.get_mut(fd) {
             Some(file) => match file.metadata() {
@@ -788,6 +818,7 @@ pub mod native_module {
         }
         #[cfg(not(unix))]
         {
+            // chmod is not supported on WASI/Windows; verify path exists
             match std::fs::metadata(&path) {
                 Ok(_) => None,
                 Err(err) => Some(super::make_fs_error(&ctx, &err, "chmod", Some(&path))),
@@ -800,8 +831,21 @@ pub mod native_module {
         let mut table = super::FD_TABLE.lock().unwrap();
         match table.get_mut(fd) {
             Some(_file) => {
-                // fchmod is hard to do portably; no-op on WASI
-                None
+                #[cfg(unix)]
+                {
+                    use std::fs::Permissions;
+                    use std::os::unix::fs::PermissionsExt;
+                    let perms = Permissions::from_mode(_mode);
+                    match _file.set_permissions(perms) {
+                        Ok(_) => None,
+                        Err(err) => Some(super::make_fs_error(&ctx, &err, "fchmod", None)),
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    // fchmod is not supported on WASI/Windows; no-op
+                    None
+                }
             }
             None => Some(super::make_badf_error(&ctx, "fchmod")),
         }
