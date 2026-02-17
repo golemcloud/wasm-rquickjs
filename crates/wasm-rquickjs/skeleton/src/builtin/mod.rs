@@ -2,10 +2,16 @@ use std::fmt::Write;
 
 mod abort_controller;
 mod assert;
+mod async_hooks;
 mod base64;
 mod buffer;
 mod child_process;
+mod cluster;
 mod console;
+mod dgram;
+mod diagnostics_channel;
+mod dns;
+mod domain;
 mod encoding;
 mod fs;
 
@@ -19,25 +25,36 @@ mod http {
     pub use super::http_disabled::*;
 }
 
+mod http2;
+mod https;
 mod events;
 mod ieee754;
 mod module;
+mod net;
 mod node_test;
 mod internal;
 mod os;
 mod path;
+mod perf_hooks;
 mod process;
 mod querystring;
+mod readline;
+mod repl;
 mod stream;
 mod string_decoder;
 mod structured_clone;
 mod timeout;
 mod timers;
+mod tls;
+mod tty;
 mod url;
 mod util;
+mod v8;
 mod vm;
 mod web_crypto;
 mod webstreams;
+mod worker_threads;
+mod zlib;
 
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
@@ -118,7 +135,47 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/vm")
             .with_module("node:vm")
             .with_module("vm")
-            .with_module("__wasm_rquickjs_builtin/structured_clone"),
+            .with_module("__wasm_rquickjs_builtin/structured_clone")
+            .with_module("node:async_hooks")
+            .with_module("async_hooks")
+            .with_module("node:cluster")
+            .with_module("cluster")
+            .with_module("node:dgram")
+            .with_module("dgram")
+            .with_module("node:diagnostics_channel")
+            .with_module("diagnostics_channel")
+            .with_module("node:dns")
+            .with_module("dns")
+            .with_module("node:dns/promises")
+            .with_module("dns/promises")
+            .with_module("node:domain")
+            .with_module("domain")
+            .with_module("node:http2")
+            .with_module("http2")
+            .with_module("node:https")
+            .with_module("https")
+            .with_module("node:net")
+            .with_module("net")
+            .with_module("node:perf_hooks")
+            .with_module("perf_hooks")
+            .with_module("node:readline")
+            .with_module("readline")
+            .with_module("node:readline/promises")
+            .with_module("readline/promises")
+            .with_module("node:repl")
+            .with_module("repl")
+            .with_module("node:console")
+            .with_module("console")
+            .with_module("node:tls")
+            .with_module("tls")
+            .with_module("node:tty")
+            .with_module("tty")
+            .with_module("node:v8")
+            .with_module("v8")
+            .with_module("node:worker_threads")
+            .with_module("worker_threads")
+            .with_module("node:zlib")
+            .with_module("zlib"),
     )
 }
 
@@ -240,7 +297,47 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/structured_clone",
                 structured_clone::STRUCTURED_CLONE_JS,
-            ),
+            )
+            .with_module("node:async_hooks", async_hooks::ASYNC_HOOKS_JS)
+            .with_module("async_hooks", async_hooks::REEXPORT_JS)
+            .with_module("node:cluster", cluster::CLUSTER_JS)
+            .with_module("cluster", cluster::REEXPORT_JS)
+            .with_module("node:dgram", dgram::DGRAM_JS)
+            .with_module("dgram", dgram::REEXPORT_JS)
+            .with_module("node:diagnostics_channel", diagnostics_channel::DIAGNOSTICS_CHANNEL_JS)
+            .with_module("diagnostics_channel", diagnostics_channel::REEXPORT_JS)
+            .with_module("node:dns", dns::DNS_JS)
+            .with_module("dns", dns::REEXPORT_JS)
+            .with_module("node:dns/promises", dns::DNS_PROMISES_JS)
+            .with_module("dns/promises", dns::REEXPORT_PROMISES_JS)
+            .with_module("node:domain", domain::DOMAIN_JS)
+            .with_module("domain", domain::REEXPORT_JS)
+            .with_module("node:http2", http2::HTTP2_JS)
+            .with_module("http2", http2::REEXPORT_JS)
+            .with_module("node:https", https::HTTPS_JS)
+            .with_module("https", https::REEXPORT_JS)
+            .with_module("node:net", net::NET_JS)
+            .with_module("net", net::REEXPORT_JS)
+            .with_module("node:perf_hooks", perf_hooks::PERF_HOOKS_JS)
+            .with_module("perf_hooks", perf_hooks::REEXPORT_JS)
+            .with_module("node:readline", readline::READLINE_JS)
+            .with_module("readline", readline::REEXPORT_JS)
+            .with_module("node:readline/promises", readline::READLINE_PROMISES_JS)
+            .with_module("readline/promises", readline::REEXPORT_PROMISES_JS)
+            .with_module("node:repl", repl::REPL_JS)
+            .with_module("repl", repl::REEXPORT_JS)
+            .with_module("node:console", console::CONSOLE_JS)
+            .with_module("console", console::REEXPORT_JS)
+            .with_module("node:tls", tls::TLS_JS)
+            .with_module("tls", tls::REEXPORT_JS)
+            .with_module("node:tty", tty::TTY_JS)
+            .with_module("tty", tty::REEXPORT_JS)
+            .with_module("node:v8", v8::V8_JS)
+            .with_module("v8", v8::REEXPORT_JS)
+            .with_module("node:worker_threads", worker_threads::WORKER_THREADS_JS)
+            .with_module("worker_threads", worker_threads::REEXPORT_JS)
+            .with_module("node:zlib", zlib::ZLIB_JS)
+            .with_module("zlib", zlib::REEXPORT_JS),
         internal::module_loader(),
     )
 }

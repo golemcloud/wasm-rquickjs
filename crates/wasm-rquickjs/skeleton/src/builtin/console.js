@@ -272,3 +272,37 @@ function printTable(data, keys) {
 
     return printRows(rows);
 }
+
+export class Console {
+    constructor(stdout, stderr, ignoreErrors) {
+        if (stdout && typeof stdout === 'object' && !stdout.write) {
+            // Options object form: new Console({ stdout, stderr })
+            stderr = stdout.stderr;
+            ignoreErrors = stdout.ignoreErrors;
+            stdout = stdout.stdout;
+        }
+        this._stdout = stdout || { write: function(s) {} };
+        this._stderr = stderr || this._stdout;
+    }
+    log(...args) { log(...args); }
+    info(...args) { info(...args); }
+    warn(...args) { warn(...args); }
+    error(...args) { error(...args); }
+    debug(...args) { debug(...args); }
+    dir(...args) { dir(...args); }
+    dirxml(...args) { dirxml(...args); }
+    trace(...args) { trace(...args); }
+    assert(...args) { assert(...args); }
+    clear() { clear(); }
+    count(...args) { count(...args); }
+    countReset(...args) { countReset(...args); }
+    group(...args) { group(...args); }
+    groupCollapsed(...args) { groupCollapsed(...args); }
+    groupEnd() { groupEnd(); }
+    table(...args) { table(...args); }
+    time(...args) { time(...args); }
+    timeLog(...args) { timeLog(...args); }
+    timeEnd(...args) { timeEnd(...args); }
+}
+
+export default { Console, assert, clear, count, countReset, debug, dir, dirxml, error, group, groupCollapsed, groupEnd, info, log, table, time, timeLog, timeEnd, trace, warn };

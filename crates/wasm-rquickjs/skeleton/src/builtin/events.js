@@ -230,7 +230,34 @@ EventEmitter.prototype.listenerCount = function listenerCount(event, listener) {
 EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
     var evt = prefix ? prefix + event : event;
 
-    if (!this._events[evt]) return false;
+    // Emit on errorMonitor for 'error' events regardless of listeners
+    if (event === 'error') {
+        var monitorEvt = prefix ? prefix + EventEmitter.errorMonitor : EventEmitter.errorMonitor;
+        if (this._events[monitorEvt]) {
+            var monitorListeners = this._events[monitorEvt];
+            if (monitorListeners.fn) {
+                monitorListeners.fn.call(monitorListeners.context, a1);
+            } else {
+                for (var mi = 0; mi < monitorListeners.length; mi++) {
+                    monitorListeners[mi].fn.call(monitorListeners[mi].context, a1);
+                }
+            }
+        }
+    }
+
+    if (!this._events[evt]) {
+        // Node.js behavior: emit('error') with no listener throws
+        if (event === 'error') {
+            var er = a1;
+            if (er instanceof Error) {
+                throw er;
+            }
+            var err = new Error('Unhandled error.' + (er ? ' (' + er + ')' : ''));
+            err.context = er;
+            throw err;
+        }
+        return false;
+    }
 
     var listeners = this._events[evt]
         , len = arguments.length

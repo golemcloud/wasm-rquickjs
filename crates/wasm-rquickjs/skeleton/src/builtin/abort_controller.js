@@ -75,6 +75,32 @@ class AbortSignal {
         return signal;
     }
 
+    static any(signals) {
+        if (!Array.isArray(signals)) {
+            throw new TypeError('signals must be an iterable');
+        }
+        const signal = new AbortSignal();
+        // If any signal is already aborted, return an already-aborted signal
+        for (const s of signals) {
+            if (s.aborted) {
+                signal.aborted = true;
+                signal.reason = s.reason;
+                return signal;
+            }
+        }
+        // Listen for abort on all signals
+        for (const s of signals) {
+            s.addEventListener('abort', function() {
+                if (!signal.aborted) {
+                    signal.aborted = true;
+                    signal.reason = s.reason;
+                    signal.dispatchEvent(new AbortEvent('abort'));
+                }
+            }, { once: true });
+        }
+        return signal;
+    }
+
     get onabort() {
         return this._onabort;
     }

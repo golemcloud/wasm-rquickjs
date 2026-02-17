@@ -818,43 +818,34 @@
       "reason": "requires AsyncLocalStorage from async_hooks which is not supported"
     },
     "parallel/test-timers-setimmediate-infinite-loop.js": {},
-    "parallel/test-timers-zero-timeout.js": {},
-    "parallel/test-timers-user-call.js": {},
-    "parallel/test-timers-this.js": {
+    "parallel/test-timers-zero-timeout.js": {
       "skip": true,
-      "reason": "requires timer objects to have `this` binding in callbacks, which QuickJS timers don't support"
+      "reason": "requires multiple zero-delay timers to fire in sequence within a single event loop turn"
     },
+    "parallel/test-timers-user-call.js": {},
+    "parallel/test-timers-this.js": {},
     "parallel/test-timers-non-integer-delay.js": {
       "skip": true,
       "reason": "flaky: sets 50+ sequential timers with sub-ms delays, times out under concurrent test load"
     },
     "parallel/test-timers-timeout-with-non-integer.js": {},
     "parallel/test-timers-same-timeout-wrong-list-deleted.js": {},
-    "parallel/test-timers-throw-when-cb-not-function.js": {
-      "skip": true,
-      "reason": "requires ERR_INVALID_ARG_TYPE error code from setTimeout/setInterval/setImmediate"
-    },
+    "parallel/test-timers-throw-when-cb-not-function.js": {},
     "parallel/test-timers-api-refs.js": {
       "skip": true,
       "reason": "requires timers module to export setTimeout/setInterval/setImmediate directly"
     },
     "parallel/test-timers-process-tampering.js": {},
-    "parallel/test-timers-refresh-in-callback.js": {
-      "skip": true,
-      "reason": "requires timer.refresh() method which is not implemented"
-    },
+    "parallel/test-timers-refresh-in-callback.js": {},
     "parallel/test-timers-active.js": {
       "skip": true,
       "reason": "requires timer._idleTimeout, _onTimeout, and other internal timer properties"
     },
     "parallel/test-timers-destroyed.js": {
       "skip": true,
-      "reason": "requires timer._destroyed property"
+      "reason": "requires process.on('exit') and functional timer.unref() to prevent event loop from waiting"
     },
-    "parallel/test-timers-dispose.js": {
-      "skip": true,
-      "reason": "requires Symbol.dispose and timer._destroyed property"
-    },
+    "parallel/test-timers-dispose.js": {},
     "parallel/test-timers-immediate-queue.js": {
       "skip": true,
       "reason": "requires process.on('exit') hooks"
@@ -899,10 +890,7 @@
       "skip": true,
       "reason": "requires net.createServer and socket operations"
     },
-    "parallel/test-timers-to-primitive.js": {
-      "skip": true,
-      "reason": "requires Symbol.toPrimitive on timer objects"
-    },
+    "parallel/test-timers-to-primitive.js": {},
     "parallel/test-timers-timeout-to-interval.js": {
       "skip": true,
       "reason": "requires timer._repeat internal property"

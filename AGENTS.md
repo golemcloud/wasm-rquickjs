@@ -80,27 +80,33 @@ cargo build --release
 cargo test
 ```
 
+### ⚠️ CRITICAL TEST RULES — READ BEFORE RUNNING ANY TESTS
+
+**RULE 1: DO NOT run `cargo test --test compilation` unless files in `crates/wasm-rquickjs/src/` (the code generator) were modified.** Skeleton-only changes (`crates/wasm-rquickjs/skeleton/`) do NOT require compilation tests. Violating this wastes significant time.
+
+**RULE 2: NEVER run `cargo test --test runtime` without a filter.** The full runtime suite is extremely slow. ALWAYS run a specific submodule instead:
+
+```bash
+# ✅ CORRECT — run only the relevant submodule:
+cargo test --test runtime url -- --nocapture
+cargo test --test runtime crypto -- --nocapture
+cargo test --test runtime fs -- --nocapture
+
+# ❌ WRONG — never do this, it runs ALL runtime tests and takes too long:
+cargo test --test runtime -- --nocapture
+```
+
+**RULE 3: DO NOT run `cargo test` (without arguments) as it runs everything including compilation and all runtime tests.** Always run only the specific test harness relevant to your changes.
+
 ### Build specific test harness
 
 Always pass `-- --nocapture` to `cargo test` so you can see the output.
 
 ```bash
-cargo test --test compilation -- --nocapture
-cargo test --test runtime -- --nocapture
+cargo test --test compilation -- --nocapture   # ONLY if code generator changed
+cargo test --test runtime <module> -- --nocapture  # ALWAYS specify a module
 cargo test --test dts -- --nocapture
 cargo test --test errors -- --nocapture
-```
-
-**Note:** The `compilation` tests only need to be run when the code generator (`crates/wasm-rquickjs/src/`) changes. Changes limited to the skeleton (`crates/wasm-rquickjs/skeleton/`) do not require running compilation tests.
-
-### Running specific runtime test modules
-
-The full runtime test suite takes a long time. Prefer running specific submodules instead of the whole suite:
-
-```bash
-cargo test --test runtime url -- --nocapture
-cargo test --test runtime crypto -- --nocapture
-cargo test --test runtime fs -- --nocapture
 ```
 
 ### Saving test output for runtime and node_compat tests

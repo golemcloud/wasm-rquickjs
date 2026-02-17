@@ -93,6 +93,8 @@ pub mod native_module {
 
 // JS functions for the console implementation
 pub const CONSOLE_JS: &str = include_str!("console.js");
+pub const REEXPORT_JS: &str =
+    r#"export * from 'node:console'; export { default } from 'node:console';"#;
 
 // JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"

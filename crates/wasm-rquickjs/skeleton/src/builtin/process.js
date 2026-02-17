@@ -46,6 +46,64 @@ process.features = {
 process.execArgv = [];
 process.execPath = '/usr/local/bin/node';
 process.title = 'wasm-rquickjs';
+process.release = { name: 'node', lts: 'Jod' };
+process.allowedNodeEnvironmentFlags = new Set();
+
+var _startTime = Date.now();
+
+process.cpuUsage = function cpuUsage(previousValue) {
+    if (previousValue) {
+        return { user: -previousValue.user, system: -previousValue.system };
+    }
+    return { user: 0, system: 0 };
+};
+
+process.memoryUsage = function memoryUsage() {
+    return { rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 };
+};
+
+process.memoryUsage.rss = function rss() {
+    return 0;
+};
+
+process.constrainedMemory = function constrainedMemory() {
+    return 0;
+};
+
+process.availableMemory = function availableMemory() {
+    return 0;
+};
+
+process.uptime = function uptime() {
+    return (Date.now() - _startTime) / 1000;
+};
+
+process.binding = function binding() {
+    throw new Error('process.binding is not supported in WASM environment');
+};
+
+process._linkedBinding = function _linkedBinding() {
+    throw new Error('process._linkedBinding is not supported in WASM environment');
+};
+
+var _uncaughtExceptionCallback = null;
+
+process.setUncaughtExceptionCaptureCallback = function setUncaughtExceptionCaptureCallback(fn) {
+    if (fn !== null && typeof fn !== 'function') {
+        throw new TypeError('The "fn" argument must be of type function or null');
+    }
+    _uncaughtExceptionCallback = fn;
+};
+
+process.hasUncaughtExceptionCaptureCallback = function hasUncaughtExceptionCaptureCallback() {
+    return _uncaughtExceptionCallback !== null;
+};
+
+process.dlopen = function dlopen() {
+    throw new Error('process.dlopen is not supported in WASM environment');
+};
+
+process.stdin = { isTTY: false, fd: 0, read() { return null; }, on() { return this; }, resume() { return this; }, pause() { return this; } };
 
 process.stdout = { isTTY: false, write(s) { write_stdout(String(s)); return true; }, fd: 1 };
 process.stderr = { isTTY: false, write(s) { write_stderr(String(s)); return true; }, fd: 2 };
@@ -134,6 +192,10 @@ process.exit = function exit(code) {
 };
 
 process._exiting = false;
+process.channel = undefined;
+process.connected = false;
+process.debugPort = 9229;
+process.setSourceMapsEnabled = function() {};
 
 Object.defineProperty(process, '_exiting', {
     get: function() { return _exiting; },
@@ -203,5 +265,35 @@ export var config = process.config;
 export var execArgv = process.execArgv;
 export var execPath = process.execPath;
 export var hrtime = process.hrtime;
+export var cpuUsage = process.cpuUsage;
+export var memoryUsage = process.memoryUsage;
+export var uptime = process.uptime;
+export var release = process.release;
+export var stdin = process.stdin;
+export var kill = process.kill;
+export var emitWarning = process.emitWarning;
+export var allowedNodeEnvironmentFlags = process.allowedNodeEnvironmentFlags;
+export var features = process.features;
+export var title = process.title;
+export var ppid = process.ppid;
+export var umask = process.umask;
+export var getuid = process.getuid;
+export var getgid = process.getgid;
+export var geteuid = process.geteuid;
+export var getegid = process.getegid;
+export var getgroups = process.getgroups;
+export var dlopen = process.dlopen;
+export var binding = process.binding;
+export var _linkedBinding = process._linkedBinding;
+export var constrainedMemory = process.constrainedMemory;
+export var availableMemory = process.availableMemory;
+export var setUncaughtExceptionCaptureCallback = process.setUncaughtExceptionCaptureCallback;
+export var hasUncaughtExceptionCaptureCallback = process.hasUncaughtExceptionCaptureCallback;
+export var exitCode = process.exitCode;
+export var _exiting = process._exiting;
+export var channel = process.channel;
+export var connected = process.connected;
+export var debugPort = process.debugPort;
+export var setSourceMapsEnabled = process.setSourceMapsEnabled;
 
 export default process;

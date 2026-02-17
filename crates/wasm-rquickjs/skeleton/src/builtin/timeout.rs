@@ -14,12 +14,20 @@ pub mod native_module {
     pub fn schedule(
         ctx: Ctx<'_>,
         code_or_fn: Persistent<Value<'static>>,
-        delay: Option<u32>,
+        delay: Value<'_>,
         periodic: bool,
         args: Persistent<Vec<Value<'static>>>,
     ) -> usize {
         let state = get_js_state();
-        let delay = delay.unwrap_or(0);
+        let delay: u32 = if delay.is_null() || delay.is_undefined() {
+            0
+        } else if let Some(n) = delay.as_number() {
+            if n.is_finite() && n > 0.0 { n as u32 } else { 0 }
+        } else if let Some(n) = delay.as_int() {
+            if n > 0 { n as u32 } else { 0 }
+        } else {
+            0
+        };
 
         let (task, abort_handle) = abortable(super::scheduled_task(
             ctx.clone(),
@@ -41,10 +49,9 @@ pub mod native_module {
     pub fn clear_schedule(timeout_id: usize) {
         let state = get_js_state();
         let mut abort_handles = state.abort_handles.borrow_mut();
-        let handle = abort_handles
-            .remove(&timeout_id)
-            .expect("No such timeout ID");
-        handle.abort();
+        if let Some(handle) = abort_handles.remove(&timeout_id) {
+            handle.abort();
+        }
     }
 }
 
@@ -58,8 +65,8 @@ pub const WIRE_JS: &str = r#"
         globalThis.setImmediate = __wasm_rquickjs_timeout.setImmediate;
         globalThis.setInterval = __wasm_rquickjs_timeout.setInterval;
         globalThis.clearTimeout = __wasm_rquickjs_timeout.clearTimeout;
-        globalThis.clearInterval = __wasm_rquickjs_timeout.clearTimeout;
-        globalThis.clearImmediate = __wasm_rquickjs_timeout.clearTimeout;
+        globalThis.clearInterval = __wasm_rquickjs_timeout.clearInterval;
+        globalThis.clearImmediate = __wasm_rquickjs_timeout.clearImmediate;
     "#;
 
 async fn scheduled_task(
@@ -73,7 +80,7 @@ async fn scheduled_task(
         run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
             .catch(&ctx)
             .unwrap_or_else(|e| {
-                panic!("Failed to run scheduled task:\n{}", format_caught_error(e))
+                eprintln!("Uncaught exception in timer callback: {}", format_caught_error(e))
             });
     } else {
         let duration = wstd::time::Duration::from_millis(delay as u64);
@@ -84,7 +91,7 @@ async fn scheduled_task(
             run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
                 .catch(&ctx)
                 .unwrap_or_else(|e| {
-                    panic!("Failed to run scheduled task:\n{}", format_caught_error(e))
+                    eprintln!("Uncaught exception in timer callback: {}", format_caught_error(e))
                 });
 
             if !periodic {
@@ -107,11 +114,9 @@ fn run_scheduled_task(
         args.push_args(&restored_args)?;
         func.call_arg(args)
     } else if let Some(code) = restored_code_or_fn.as_string() {
-        if !restored_args.is_empty() {
-            panic!("Passing arguments to scheduled code snippets is not supported");
-        }
         ctx.eval(code.to_string()?)
     } else {
-        panic!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
+        eprintln!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
+        Ok(())
     }
 }
