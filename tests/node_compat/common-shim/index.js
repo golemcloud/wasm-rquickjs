@@ -4,6 +4,7 @@
 
 'use strict';
 
+var { inspect } = require('util');
 var noop = function() {};
 var _mustCallChecks = [];
 
@@ -128,8 +129,9 @@ var common = {
 
     // Inspection helpers
     invalidArgTypeHelper: function(input) {
-        if (input === null) return ' Received null';
-        if (input === undefined) return ' Received undefined';
+        if (input == null) {
+            return ' Received ' + input;
+        }
         if (typeof input === 'function' && input.name) {
             return ' Received function ' + input.name;
         }
@@ -137,12 +139,13 @@ var common = {
             if (input.constructor && input.constructor.name) {
                 return ' Received an instance of ' + input.constructor.name;
             }
-            return ' Received ' + (input + '');
+            return ' Received ' + inspect(input, { depth: -1 });
         }
-        if (typeof input === 'string') {
-            return ' Received type string (' + JSON.stringify(input) + ')';
+        var inspected = inspect(input, { colors: false });
+        if (inspected.length > 28) {
+            inspected = inspected.slice(0, 25) + '...';
         }
-        return ' Received type ' + typeof input + ' (' + String(input) + ')';
+        return ' Received type ' + typeof input + ' (' + inspected + ')';
     },
 
     // Skipping helpers

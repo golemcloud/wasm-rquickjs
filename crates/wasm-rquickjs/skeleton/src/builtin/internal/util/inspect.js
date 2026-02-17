@@ -653,6 +653,10 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
                 return ctx.stylize(base, "date");
             }
         } else if (value instanceof Error) {
+            // Ensure 'cause' property is included in keys (it's non-enumerable)
+            if (Object.prototype.hasOwnProperty.call(value, 'cause') && keys.indexOf('cause') === -1) {
+                keys.push('cause');
+            }
             base = formatError(value, constructor, tag, ctx, keys);
             if (keys.length === 0 && protoProps === undefined) {
                 return base;
@@ -1201,7 +1205,18 @@ function formatError(
 ) {
     const name = err.name != null ? String(err.name) : "Error";
     let len = name.length;
-    let stack = err.stack ? String(err.stack) : err.toString();
+    // QuickJS: err.stack contains only stack frames (without error name/message prefix)
+    // unlike V8 where err.stack starts with "ErrorName: message\n    at ...".
+    // Use err.toString() as the base and only include stack if it's V8-style.
+    let rawStack = err.stack ? String(err.stack) : "";
+    let stack;
+    if (rawStack && (rawStack.startsWith(name) || rawStack.startsWith(err.toString()))) {
+        // V8-style stack: starts with error name
+        stack = rawStack;
+    } else {
+        // QuickJS-style stack: only contains frame lines; use toString() as base
+        stack = err.toString();
+    }
 
     // Do not "duplicate" error properties that are already included in the output
     // otherwise.
@@ -1249,35 +1264,16 @@ function formatError(
     if (pos !== -1) {
         pos += err.message.length;
     }
-    // Wrap the error in brackets in case it has no stack trace.
+    // Wrap the error in brackets.
+    // In QuickJS/WASM environment, always strip stack traces and use bracket format
+    // because QuickJS stack traces use a different format than V8 and are not
+    // meaningful in the same way for Node.js compatibility.
     const stackStart = stack.indexOf("\n    at", pos);
-    if (stackStart === -1) {
+    if (stackStart !== -1) {
+        // Strip the stack trace portion, keep only the error name + message
+        stack = `[${stack.slice(0, stackStart)}]`;
+    } else {
         stack = `[${stack}]`;
-    } else if (ctx.colors) {
-        // Highlight userland code and node modules.
-        let newStack = stack.slice(0, stackStart);
-        const lines = stack.slice(stackStart + 1).split("\n");
-        for (const line of lines) {
-            // const core = line.match(coreModuleRegExp);
-            // TODO(wafuwafu13): Implement
-            // if (core !== null && NativeModule.exists(core[1])) {
-            //   newStack += `\n${ctx.stylize(line, 'undefined')}`;
-            // } else {
-            // This adds underscores to all node_modules to quickly identify them.
-            let nodeModule;
-            newStack += "\n";
-            let pos = 0;
-            // deno-lint-ignore no-cond-assign
-            while (nodeModule = nodeModulesRegExp.exec(line)) {
-                // '/node_modules/'.length === 14
-                newStack += line.slice(pos, nodeModule.index + 14);
-                newStack += ctx.stylize(nodeModule[1], "module");
-                pos = nodeModule.index + nodeModule[0].length;
-            }
-            newStack += pos === 0 ? line : line.slice(pos);
-            // }
-        }
-        stack = newStack;
     }
     // The message and the stack have to be indented as well!
     if (ctx.indentationLvl !== 0) {

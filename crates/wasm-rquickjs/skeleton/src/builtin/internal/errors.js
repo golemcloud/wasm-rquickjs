@@ -172,7 +172,7 @@ function invalidArgTypeHelper(input) {
         return ` Received ${inspect(input, { depth: -1 })}`;
     }
     let inspected = inspect(input, { colors: false });
-    if (inspected.length > 25) {
+    if (inspected.length > 28) {
         inspected = `${inspected.slice(0, 25)}...`;
     }
     return ` Received type ${typeof input} (${inspected})`;
@@ -458,6 +458,17 @@ export class ERR_UNKNOWN_ENCODING extends TypeError {
     constructor(x) {
         super(`Unknown encoding: ${x}`);
         addCodeToMessage(this, "ERR_UNKNOWN_ENCODING");
+    }
+}
+
+export class ERR_BUFFER_OUT_OF_BOUNDS extends RangeError {
+    constructor(name) {
+        if (name) {
+            super(`"${name}" is outside of buffer bounds`);
+        } else {
+            super('Attempt to access memory outside buffer bounds');
+        }
+        addCodeToMessage(this, "ERR_BUFFER_OUT_OF_BOUNDS");
     }
 }
 

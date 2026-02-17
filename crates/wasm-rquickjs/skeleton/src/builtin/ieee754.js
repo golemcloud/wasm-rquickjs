@@ -47,7 +47,7 @@ export const write = function (buffer, value, offset, isLE, mLen, nBytes) {
     value = Math.abs(value)
 
     if (isNaN(value) || value === Infinity) {
-        m = isNaN(value) ? 1 : 0
+        m = isNaN(value) ? Math.pow(2, mLen - 1) : 0
         e = eMax
     } else {
         e = Math.floor(Math.log(value) / Math.LN2)

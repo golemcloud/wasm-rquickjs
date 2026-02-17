@@ -19,6 +19,14 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Import Node.js-compatible inspect/format/formatWithOptions from internal implementation
+import {
+    inspect,
+    format,
+    formatWithOptions,
+    stripVTControlCharacters
+} from '__wasm_rquickjs_builtin/internal/util/inspect';
+
 var _ObjectKeys = Object.keys;
 var _ObjectGetOwnPropertyNames = Object.getOwnPropertyNames;
 var _ObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
@@ -210,29 +218,6 @@ function formatWithInspectOptions(inspectOptions, f) {
     return str;
 }
 
-export const format = function(f) {
-    if (arguments.length === 0) return '';
-    var args = [{}];
-    for (var i = 0; i < arguments.length; i++) {
-        args.push(arguments[i]);
-    }
-    return formatWithInspectOptions.apply(null, args);
-};
-
-export function formatWithOptions(inspectOptions) {
-    if (typeof inspectOptions !== 'object' || inspectOptions === null) {
-        var err = new TypeError('"inspectOptions" argument must be an object, got ' + typeof inspectOptions);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-    var args = [inspectOptions];
-    for (var i = 1; i < arguments.length; i++) {
-        args.push(arguments[i]);
-    }
-    return formatWithInspectOptions.apply(null, args);
-}
-
-
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
 // If --no-deprecation is set, then it is a no-op.
@@ -249,7 +234,7 @@ export const debuglog = function(set) {
     if (!debugs[set]) {
         if (debugEnvRegex.test(set)) {
             debugs[set] = function() {
-                var msg = format(arguments);
+                var msg = format.apply(null, arguments);
                 console.error('%s: %s', set, msg);
             };
         } else {
@@ -268,7 +253,9 @@ export const debuglog = function(set) {
  * @param {Object} opts Optional options object that alters the output.
  */
 /* legacy: obj, showHidden, depth, colors*/
-export function inspect(obj, opts) {
+// inspect is now delegated to the internal implementation (see bottom of file)
+// This old implementation is kept as _legacyInspect for internal use by debuglog etc.
+function _legacyInspect(obj, opts) {
     // default options
     var ctx = {
         seen: [],
@@ -297,38 +284,8 @@ export function inspect(obj, opts) {
     return formatValue(ctx, obj, ctx.depth);
 }
 
-// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
-inspect.colors = {
-    'bold' : [1, 22],
-    'italic' : [3, 23],
-    'underline' : [4, 24],
-    'inverse' : [7, 27],
-    'white' : [37, 39],
-    'grey' : [90, 39],
-    'black' : [30, 39],
-    'blue' : [34, 39],
-    'cyan' : [36, 39],
-    'green' : [32, 39],
-    'magenta' : [35, 39],
-    'red' : [31, 39],
-    'yellow' : [33, 39]
-};
-
-// Don't use 'blue' not visible on cmd.exe
-inspect.styles = {
-    'special': 'cyan',
-    'number': 'yellow',
-    'boolean': 'yellow',
-    'undefined': 'grey',
-    'null': 'bold',
-    'string': 'green',
-    'date': 'magenta',
-    // "name": intentionally not styling
-    'regexp': 'red',
-    'symbol': 'green'
-};
-
-inspect.defaultOptions = {};
+// inspect.colors, inspect.styles, and inspect.defaultOptions are provided by the
+// internal inspect implementation imported at the top of this file.
 
 function stylizeWithColor(str, styleType) {
     var style = inspect.styles[styleType];
@@ -994,7 +951,7 @@ function timestamp() {
 
 // log is just a thin wrapper to console.log that prepends a timestamp
 export const log = function() {
-    console.log('%s - %s', timestamp(), format(arguments));
+    console.log('%s - %s', timestamp(), format.apply(null, arguments));
 };
 
 export const _extend = function(origin, add) {
@@ -2050,6 +2007,8 @@ import { TextEncoder as _TextEncoder, TextDecoder as _TextDecoder } from '__wasm
 export var TextEncoder = _TextEncoder;
 export var TextDecoder = _TextDecoder;
 
+export { inspect, format, formatWithOptions, stripVTControlCharacters };
+
 export default {
      format,
      formatWithOptions,
@@ -2084,5 +2043,6 @@ export default {
      parseArgs,
      types,
      TextEncoder,
-     TextDecoder
+     TextDecoder,
+     stripVTControlCharacters
  }

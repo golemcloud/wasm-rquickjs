@@ -75,13 +75,26 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
     --- Map Examples ---
     Empty map: Map(0) {{}}
     Simple map: Map(3) {{ 'name' => 'John', 'age' => 30, 'city' => 'New York' }}
-    Map with mixed keys: Map(3) {{ 'string' => 'value', 42 => 'number key', {{ key: 'obj' }} => 'object key' }}
-    Map with object values: Map(2) {{ 'user' => {{ name: 'Alice', age: 25 }}, 'config' => {{ debug: true, timeout: 5000 }} }}
-    Map with array values: Map(2) {{ 'colors' => [ 'red', 'green', 'blue' ], 'numbers' => [ 1, 2, 3, 4, 5 ] }}
+    Map with mixed keys: Map(3) {{
+      'string' => 'value',
+      42 => 'number key',
+      {{ key: 'obj' }} => 'object key'
+    }}
+    Map with object values: Map(2) {{
+      'user' => {{ name: 'Alice', age: 25 }},
+      'config' => {{ debug: true, timeout: 5000 }}
+    }}
+    Map with array values: Map(2) {{
+      'colors' => [ 'red', 'green', 'blue' ],
+      'numbers' => [ 1, 2, 3, 4, 5 ]
+    }}
     --- Map in dir() ---
     Map(3) {{ 'name' => 'John', 'age' => 30, 'city' => 'New York' }}
     --- Map in inspect() ---
-    Map(2) {{ 'user' => {{ name: 'Alice', age: 25 }}, 'config' => {{ debug: true, timeout: 5000 }} }}
+    Map(2) {{
+      'user' => {{ name: 'Alice', age: 25 }},
+      'config' => {{ debug: true, timeout: 5000 }}
+    }}
     --- Set Examples ---
     Empty set: Set(0) {{}}
     Simple set: Set(3) {{ 'apple', 'banana', 'cherry' }}

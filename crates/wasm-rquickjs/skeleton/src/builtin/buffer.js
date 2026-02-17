@@ -10,12 +10,14 @@
 
 import * as base64 from "base64-js"
 import * as ieee754 from "ieee754"
+import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING, ERR_BUFFER_OUT_OF_BOUNDS } from "__wasm_rquickjs_builtin/internal/errors"
 
 const customInspectSymbol =
     (typeof Symbol === 'function' && typeof Symbol['for'] === 'function') // eslint-disable-line dot-notation
         ? Symbol['for']('nodejs.util.inspect.custom') // eslint-disable-line dot-notation
         : null
 
+let _inspectMaxBytes = 50
 export const INSPECT_MAX_BYTES = 50
 
 const K_MAX_LENGTH = 0x7fffffff
@@ -92,7 +94,7 @@ Object.defineProperty(Buffer.prototype, 'offset', {
 
 function createBuffer (length) {
     if (length > K_MAX_LENGTH) {
-        throw new RangeError('The value "' + length + '" is invalid for option "size"')
+        throw new ERR_OUT_OF_RANGE('size', '>= 0 and <= ' + K_MAX_LENGTH, length)
     }
     // Return an augmented `Uint8Array` instance
     const buf = new Uint8Array(length)
@@ -114,9 +116,7 @@ export function Buffer (arg, encodingOrOffset, length) {
     // Common case.
     if (typeof arg === 'number') {
         if (typeof encodingOrOffset === 'string') {
-            throw new TypeError(
-                'The "string" argument must be of type string. Received type number'
-            )
+            throw new ERR_INVALID_ARG_TYPE('string', 'string', arg)
         }
         return allocUnsafe(arg)
     }
@@ -135,9 +135,10 @@ function from (value, encodingOrOffset, length) {
     }
 
     if (value == null) {
-        throw new TypeError(
-            'The first argument must be one of type string, Buffer, ArrayBuffer, Array, ' +
-            'or Array-like Object. Received type ' + (typeof value)
+        throw new ERR_INVALID_ARG_TYPE(
+            'first argument',
+            ['string', 'Buffer', 'ArrayBuffer', 'Array', 'Array-like Object'],
+            value
         )
     }
 
@@ -153,14 +154,32 @@ function from (value, encodingOrOffset, length) {
     }
 
     if (typeof value === 'number') {
-        throw new TypeError(
-            'The "value" argument must not be of type number. Received type number'
+        throw new ERR_INVALID_ARG_TYPE(
+            'first argument',
+            ['string', 'Buffer', 'ArrayBuffer', 'Array', 'Array-like Object'],
+            value
         )
     }
 
     const valueOf = value.valueOf && value.valueOf()
     if (valueOf != null && valueOf !== value) {
-        return Buffer.from(valueOf, encodingOrOffset, length)
+        if (typeof valueOf === 'string') {
+            return fromString(valueOf, encodingOrOffset)
+        }
+        if (ArrayBuffer.isView(valueOf)) {
+            return fromArrayView(valueOf)
+        }
+        if (isInstance(valueOf, ArrayBuffer) ||
+            (valueOf && isInstance(valueOf.buffer, ArrayBuffer))) {
+            return fromArrayBuffer(valueOf, encodingOrOffset, length)
+        }
+        if (typeof valueOf === 'number') {
+            throw new ERR_INVALID_ARG_TYPE(
+                'first argument',
+                ['string', 'Buffer', 'ArrayBuffer', 'Array', 'Array-like Object'],
+                value
+            )
+        }
     }
 
     const b = fromObject(value)
@@ -171,9 +190,10 @@ function from (value, encodingOrOffset, length) {
         return Buffer.from(value[Symbol.toPrimitive]('string'), encodingOrOffset, length)
     }
 
-    throw new TypeError(
-        'The first argument must be one of type string, Buffer, ArrayBuffer, Array, ' +
-        'or Array-like Object. Received type ' + (typeof value)
+    throw new ERR_INVALID_ARG_TYPE(
+        'first argument',
+        ['string', 'Buffer', 'ArrayBuffer', 'Array', 'Array-like Object'],
+        value
     )
 }
 
@@ -196,9 +216,9 @@ Object.setPrototypeOf(Buffer, Uint8Array)
 
 function assertSize (size) {
     if (typeof size !== 'number') {
-        throw new TypeError('"size" argument must be of type number')
-    } else if (size < 0) {
-        throw new RangeError('The value "' + size + '" is invalid for option "size"')
+        throw new ERR_INVALID_ARG_TYPE('size', 'number', size)
+    } else if (size < 0 || size > K_MAX_LENGTH || size !== size) { // size !== size catches NaN
+        throw new ERR_OUT_OF_RANGE('size', '>= 0 and <= ' + K_MAX_LENGTH, size)
     }
 }
 
@@ -250,7 +270,7 @@ function fromString (string, encoding) {
     }
 
     if (!Buffer.isEncoding(encoding)) {
-        throw new TypeError('Unknown encoding: ' + encoding)
+        throw new ERR_UNKNOWN_ENCODING(encoding)
     }
 
     const length = byteLength(string, encoding) | 0
@@ -287,11 +307,11 @@ function fromArrayView (arrayView) {
 
 function fromArrayBuffer (array, byteOffset, length) {
     if (byteOffset < 0 || array.byteLength < byteOffset) {
-        throw new RangeError('"offset" is outside of buffer bounds')
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('offset')
     }
 
     if (array.byteLength < byteOffset + (length || 0)) {
-        throw new RangeError('"length" is outside of buffer bounds')
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('length')
     }
 
     let buf
@@ -346,8 +366,11 @@ function checked (length) {
 }
 
 export function SlowBuffer (length) {
-    if (+length != length) { // eslint-disable-line eqeqeq
-        length = 0
+    if (typeof length !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('size', 'number', length)
+    }
+    if (length < 0 || length !== length) { // NaN check
+        throw new ERR_OUT_OF_RANGE('size', '>= 0 and <= ' + K_MAX_LENGTH, length)
     }
     return Buffer.alloc(+length)
 }
@@ -358,10 +381,11 @@ Buffer.isBuffer = function isBuffer (b) {
 }
 
 Buffer.compare = function compare (a, b) {
-    if (!isInstance(a, Uint8Array) || !isInstance(b, Uint8Array)) {
-        throw new TypeError(
-            'The "buf1", "buf2" arguments must be one of type Buffer or Uint8Array'
-        )
+    if (!isInstance(a, Uint8Array)) {
+        throw new ERR_INVALID_ARG_TYPE('buf1', ['Buffer', 'Uint8Array'], a)
+    }
+    if (!isInstance(b, Uint8Array)) {
+        throw new ERR_INVALID_ARG_TYPE('buf2', ['Buffer', 'Uint8Array'], b)
     }
 
     if (a === b) return 0
@@ -391,6 +415,7 @@ Buffer.isEncoding = function isEncoding (encoding) {
         case 'latin1':
         case 'binary':
         case 'base64':
+        case 'base64url':
         case 'ucs2':
         case 'ucs-2':
         case 'utf16le':
@@ -403,7 +428,7 @@ Buffer.isEncoding = function isEncoding (encoding) {
 
 Buffer.concat = function concat (list, length) {
     if (!Array.isArray(list)) {
-        throw new TypeError('"list" argument must be an Array of Buffers')
+        throw new ERR_INVALID_ARG_TYPE('list', 'Array', list)
     }
 
     if (list.length === 0) {
@@ -411,6 +436,12 @@ Buffer.concat = function concat (list, length) {
     }
 
     let i
+    for (i = 0; i < list.length; ++i) {
+        if (!isInstance(list[i], Uint8Array)) {
+            throw new ERR_INVALID_ARG_TYPE('list[' + i + ']', ['Buffer', 'Uint8Array'], list[i])
+        }
+    }
+
     if (length === undefined) {
         length = 0
         for (i = 0; i < list.length; ++i) {
@@ -422,9 +453,6 @@ Buffer.concat = function concat (list, length) {
     let pos = 0
     for (i = 0; i < list.length; ++i) {
         const buf = list[i]
-        if (!isInstance(buf, Uint8Array)) {
-            throw new TypeError('"list" argument must be an Array of Buffers')
-        }
         if (pos + buf.length > buffer.length) {
             buffer.set(buf.subarray(0, buffer.length - pos), pos)
             break
@@ -444,10 +472,7 @@ function byteLength (string, encoding) {
         return string.byteLength
     }
     if (typeof string !== 'string') {
-        throw new TypeError(
-            'The "string" argument must be one of type string, Buffer, or ArrayBuffer. ' +
-            'Received type ' + typeof string
-        )
+        throw new ERR_INVALID_ARG_TYPE('string', ['string', 'Buffer', 'ArrayBuffer'], string)
     }
 
     const len = string.length
@@ -474,6 +499,8 @@ function byteLength (string, encoding) {
                 return len >>> 1
             case 'base64':
                 return base64ToBytes(string).length
+            case 'base64url':
+                return base64ToBytes(base64UrlToBase64(string)).length
             default:
                 if (loweredCase) {
                     return mustMatch ? -1 : utf8ToBytes(string).length // assume utf8
@@ -520,6 +547,10 @@ function slowToString (encoding, start, end) {
         return ''
     }
 
+    if (typeof encoding === 'number' || encoding === null) {
+        throw new ERR_UNKNOWN_ENCODING(encoding)
+    }
+
     if (!encoding) encoding = 'utf8'
 
     while (true) {
@@ -541,6 +572,9 @@ function slowToString (encoding, start, end) {
             case 'base64':
                 return base64Slice(this, start, end)
 
+            case 'base64url':
+                return base64urlSlice(this, start, end)
+
             case 'ucs2':
             case 'ucs-2':
             case 'utf16le':
@@ -548,7 +582,7 @@ function slowToString (encoding, start, end) {
                 return utf16leSlice(this, start, end)
 
             default:
-                if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding)
+                if (loweredCase) throw new ERR_UNKNOWN_ENCODING(encoding)
                 encoding = (encoding + '').toLowerCase()
                 loweredCase = true
         }
@@ -616,15 +650,20 @@ Buffer.prototype.toString = function toString () {
 Buffer.prototype.toLocaleString = Buffer.prototype.toString
 
 Buffer.prototype.equals = function equals (b) {
+    if (!isInstance(b, Uint8Array)) {
+        throw new ERR_INVALID_ARG_TYPE('otherBuffer', ['Buffer', 'Uint8Array'], b)
+    }
     if (this === b) return true
     return Buffer.compare(this, b) === 0
 }
 
 Buffer.prototype.inspect = function inspect () {
     let str = ''
-    const max = INSPECT_MAX_BYTES
-    str = this.toString('hex', 0, max).replace(/(.{2})/g, '$1 ').trim()
-    if (this.length > max) str += ' ... '
+    const max = _inspectMaxBytes
+    const actualMax = Math.min(max, this.length)
+    str = this.toString('hex', 0, actualMax).replace(/(.{2})/g, '$1 ').trim()
+    const remaining = this.length - actualMax
+    if (remaining > 0) str += ' ... ' + remaining + ' more byte' + (remaining > 1 ? 's' : '')
     return '<Buffer ' + str + '>'
 }
 if (customInspectSymbol) {
@@ -633,37 +672,52 @@ if (customInspectSymbol) {
 
 Buffer.prototype.compare = function compare (target, start, end, thisStart, thisEnd) {
     if (!isInstance(target, Uint8Array)) {
-        throw new TypeError(
-            'The "target" argument must be one of type Buffer or Uint8Array. ' +
-            'Received type ' + (typeof target)
-        )
+        throw new ERR_INVALID_ARG_TYPE('target', ['Buffer', 'Uint8Array'], target)
     }
 
     if (start === undefined) {
         start = 0
+    } else if (typeof start !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('targetStart', 'number', start)
     }
+
     if (end === undefined) {
         end = target ? target.length : 0
+    } else if (typeof end !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('targetEnd', 'number', end)
     }
+
     if (thisStart === undefined) {
         thisStart = 0
+    } else if (typeof thisStart !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('sourceStart', 'number', thisStart)
     }
+
     if (thisEnd === undefined) {
         thisEnd = this.length
+    } else if (typeof thisEnd !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('sourceEnd', 'number', thisEnd)
     }
 
-    if (start < 0 || end > target.length || thisStart < 0 || thisEnd > this.length) {
-        throw new RangeError('out of range index')
+    if (start < 0) {
+        throw new ERR_OUT_OF_RANGE('targetStart', '>= 0', start)
+    }
+    if (end < 0 || end > target.length) {
+        throw new ERR_OUT_OF_RANGE('targetEnd', '>= 0 and <= ' + target.length, end)
+    }
+    if (thisStart < 0) {
+        throw new ERR_OUT_OF_RANGE('sourceStart', '>= 0', thisStart)
+    }
+    if (thisEnd < 0 || thisEnd > this.length) {
+        throw new ERR_OUT_OF_RANGE('sourceEnd', '>= 0 and <= ' + this.length, thisEnd)
     }
 
-    if (thisStart >= thisEnd && start >= end) {
-        return 0
-    }
-    if (thisStart >= thisEnd) {
-        return -1
-    }
-    if (start >= end) {
+    if (start >= end || start >= target.length) {
+        if (thisStart >= thisEnd) return 0
         return 1
+    }
+    if (thisStart >= thisEnd || thisStart >= this.length) {
+        return -1
     }
 
     start >>>= 0
@@ -720,6 +774,17 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
 
     // Normalize byteOffset: negative offsets start from the end of the buffer
     if (byteOffset < 0) byteOffset = buffer.length + byteOffset
+
+    // Normalize val early to detect empty needles before clamping byteOffset
+    if (typeof val === 'string') {
+        val = Buffer.from(val, encoding)
+    }
+
+    // Handle empty needle/val - always found at clamped byteOffset
+    if (Buffer.isBuffer(val) && val.length === 0) {
+        return Math.min(Math.max(byteOffset, 0), buffer.length)
+    }
+
     if (byteOffset >= buffer.length) {
         if (dir) return -1
         else byteOffset = buffer.length - 1
@@ -728,17 +793,8 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
         else return -1
     }
 
-    // Normalize val
-    if (typeof val === 'string') {
-        val = Buffer.from(val, encoding)
-    }
-
     // Finally, search either indexOf (if dir is true) or lastIndexOf
     if (Buffer.isBuffer(val)) {
-        // Special case: looking for empty string/buffer always fails
-        if (val.length === 0) {
-            return -1
-        }
         return arrayIndexOf(buffer, val, byteOffset, encoding, dir)
     } else if (typeof val === 'number') {
         val = val & 0xFF // Search for a byte value [0-255]
@@ -752,7 +808,7 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
         return arrayIndexOf(buffer, [val], byteOffset, encoding, dir)
     }
 
-    throw new TypeError('val must be string, number or Buffer')
+    throw new ERR_INVALID_ARG_TYPE('value', ['number', 'string', 'Buffer', 'Uint8Array'], val)
 }
 
 function arrayIndexOf (arr, val, byteOffset, encoding, dir) {
@@ -768,9 +824,9 @@ function arrayIndexOf (arr, val, byteOffset, encoding, dir) {
                 return -1
             }
             indexSize = 2
-            arrLength /= 2
-            valLength /= 2
-            byteOffset /= 2
+            arrLength = Math.floor(arrLength / 2)
+            valLength = Math.floor(valLength / 2)
+            byteOffset = Math.floor(byteOffset / 2)
         }
     }
 
@@ -886,7 +942,11 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
         offset = 0
         // Buffer#write(string, offset[, length][, encoding])
     } else if (isFinite(offset)) {
+        const originalOffset = offset
         offset = offset >>> 0
+        if (offset < 0 || offset > this.length) {
+            throw new ERR_OUT_OF_RANGE('offset', '>= 0 && <= ' + this.length, originalOffset)
+        }
         if (isFinite(length)) {
             length = length >>> 0
             if (encoding === undefined) encoding = 'utf8'
@@ -902,10 +962,6 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
 
     const remaining = this.length - offset
     if (length === undefined || length > remaining) length = remaining
-
-    if ((string.length > 0 && (length < 0 || offset < 0)) || offset > this.length) {
-        throw new RangeError('Attempt to write outside buffer bounds')
-    }
 
     if (!encoding) encoding = 'utf8'
 
@@ -928,6 +984,9 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
                 // Warning: maxLength not taken into account in base64Write
                 return base64Write(this, string, offset, length)
 
+            case 'base64url':
+                return base64Write(this, string, offset, length)
+
             case 'ucs2':
             case 'ucs-2':
             case 'utf16le':
@@ -935,11 +994,35 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
                 return ucs2Write(this, string, offset, length)
 
             default:
-                if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding)
+                if (loweredCase) throw new ERR_UNKNOWN_ENCODING(encoding)
                 encoding = ('' + encoding).toLowerCase()
                 loweredCase = true
         }
     }
+}
+
+Buffer.prototype.utf8Write = function utf8Write_ (string, offset, length) {
+    return utf8Write(this, string, offset, length)
+}
+
+Buffer.prototype.asciiWrite = function asciiWrite_ (string, offset, length) {
+    return asciiWrite(this, string, offset, length)
+}
+
+Buffer.prototype.latin1Write = function latin1Write (string, offset, length) {
+    return asciiWrite(this, string, offset, length)
+}
+
+Buffer.prototype.base64Write = function base64Write_ (string, offset, length) {
+    return base64Write(this, string, offset, length)
+}
+
+Buffer.prototype.hexWrite = function hexWrite_ (string, offset, length) {
+    return hexWrite(this, string, offset, length)
+}
+
+Buffer.prototype.ucs2Write = function ucs2Write_ (string, offset, length) {
+    return ucs2Write(this, string, offset, length)
 }
 
 Buffer.prototype.toJSON = function toJSON () {
@@ -1131,15 +1214,43 @@ Buffer.prototype.slice = function slice (start, end) {
  * Need to make sure that buffer isn't trying to write out of bounds.
  */
 function checkOffset (offset, ext, length) {
-    if ((offset % 1) !== 0 || offset < 0) throw new RangeError('offset is not uint')
-    if (offset + ext > length) throw new RangeError('Trying to access beyond buffer length')
+    if (typeof offset !== 'number' || offset !== offset) { // NaN check
+        throw new ERR_OUT_OF_RANGE('offset', 'an integer', offset)
+    }
+    if (offset % 1 !== 0) {
+        throw new ERR_OUT_OF_RANGE('offset', 'an integer', offset)
+    }
+    if (offset < 0 || offset + ext > length) {
+        throw new ERR_OUT_OF_RANGE('offset', '>= 0 and <= ' + (length - ext), offset)
+    }
+}
+
+function _validateOffset (value, name, min, max) {
+    if (typeof value !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE(name, 'number', value)
+    }
+    if (!Number.isInteger(value)) {
+        // NaN, Infinity, -Infinity, fractional — all non-integers
+        if (Number.isFinite(value) || value !== value) {
+            // NaN and fractional: report as "not an integer"
+            throw new ERR_OUT_OF_RANGE(name, 'an integer', value)
+        }
+        // +/-Infinity falls through to range check
+    }
+    if (max < min) {
+        // Buffer is too small for this operation
+        throw new ERR_BUFFER_OUT_OF_BOUNDS()
+    }
+    if (value < min || value > max) {
+        throw new ERR_OUT_OF_RANGE(name, '>= ' + min + ' and <= ' + max, value)
+    }
+    return value
 }
 
 Buffer.prototype.readUintLE =
-    Buffer.prototype.readUIntLE = function readUIntLE (offset, byteLength, noAssert) {
-        offset = offset >>> 0
-        byteLength = byteLength >>> 0
-        if (!noAssert) checkOffset(offset, byteLength, this.length)
+    Buffer.prototype.readUIntLE = function readUIntLE (offset, byteLength) {
+        byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+        offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
 
         let val = this[offset]
         let mul = 1
@@ -1152,12 +1263,9 @@ Buffer.prototype.readUintLE =
     }
 
 Buffer.prototype.readUintBE =
-    Buffer.prototype.readUIntBE = function readUIntBE (offset, byteLength, noAssert) {
-        offset = offset >>> 0
-        byteLength = byteLength >>> 0
-        if (!noAssert) {
-            checkOffset(offset, byteLength, this.length)
-        }
+    Buffer.prototype.readUIntBE = function readUIntBE (offset, byteLength) {
+        byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+        offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
 
         let val = this[offset + --byteLength]
         let mul = 1
@@ -1169,30 +1277,30 @@ Buffer.prototype.readUintBE =
     }
 
 Buffer.prototype.readUint8 =
-    Buffer.prototype.readUInt8 = function readUInt8 (offset, noAssert) {
-        offset = offset >>> 0
-        if (!noAssert) checkOffset(offset, 1, this.length)
+    Buffer.prototype.readUInt8 = function readUInt8 (offset) {
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 1)
         return this[offset]
     }
 
 Buffer.prototype.readUint16LE =
-    Buffer.prototype.readUInt16LE = function readUInt16LE (offset, noAssert) {
-        offset = offset >>> 0
-        if (!noAssert) checkOffset(offset, 2, this.length)
+    Buffer.prototype.readUInt16LE = function readUInt16LE (offset) {
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 2)
         return this[offset] | (this[offset + 1] << 8)
     }
 
 Buffer.prototype.readUint16BE =
-    Buffer.prototype.readUInt16BE = function readUInt16BE (offset, noAssert) {
-        offset = offset >>> 0
-        if (!noAssert) checkOffset(offset, 2, this.length)
+    Buffer.prototype.readUInt16BE = function readUInt16BE (offset) {
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 2)
         return (this[offset] << 8) | this[offset + 1]
     }
 
 Buffer.prototype.readUint32LE =
-    Buffer.prototype.readUInt32LE = function readUInt32LE (offset, noAssert) {
-        offset = offset >>> 0
-        if (!noAssert) checkOffset(offset, 4, this.length)
+    Buffer.prototype.readUInt32LE = function readUInt32LE (offset) {
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 4)
 
         return ((this[offset]) |
                 (this[offset + 1] << 8) |
@@ -1201,9 +1309,9 @@ Buffer.prototype.readUint32LE =
     }
 
 Buffer.prototype.readUint32BE =
-    Buffer.prototype.readUInt32BE = function readUInt32BE (offset, noAssert) {
-        offset = offset >>> 0
-        if (!noAssert) checkOffset(offset, 4, this.length)
+    Buffer.prototype.readUInt32BE = function readUInt32BE (offset) {
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 4)
 
         return (this[offset] * 0x1000000) +
             ((this[offset + 1] << 16) |
@@ -1255,10 +1363,9 @@ Buffer.prototype.readBigUInt64BE = defineBigIntMethod(function readBigUInt64BE (
     return (BigInt(hi) << BigInt(32)) + BigInt(lo)
 })
 
-Buffer.prototype.readIntLE = function readIntLE (offset, byteLength, noAssert) {
-    offset = offset >>> 0
-    byteLength = byteLength >>> 0
-    if (!noAssert) checkOffset(offset, byteLength, this.length)
+Buffer.prototype.readIntLE = function readIntLE (offset, byteLength) {
+    byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+    offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
 
     let val = this[offset]
     let mul = 1
@@ -1273,10 +1380,9 @@ Buffer.prototype.readIntLE = function readIntLE (offset, byteLength, noAssert) {
     return val
 }
 
-Buffer.prototype.readIntBE = function readIntBE (offset, byteLength, noAssert) {
-    offset = offset >>> 0
-    byteLength = byteLength >>> 0
-    if (!noAssert) checkOffset(offset, byteLength, this.length)
+Buffer.prototype.readIntBE = function readIntBE (offset, byteLength) {
+    byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+    offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
 
     let i = byteLength
     let mul = 1
@@ -1291,30 +1397,30 @@ Buffer.prototype.readIntBE = function readIntBE (offset, byteLength, noAssert) {
     return val
 }
 
-Buffer.prototype.readInt8 = function readInt8 (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 1, this.length)
+Buffer.prototype.readInt8 = function readInt8 (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 1)
     if (!(this[offset] & 0x80)) return (this[offset])
     return ((0xff - this[offset] + 1) * -1)
 }
 
-Buffer.prototype.readInt16LE = function readInt16LE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 2, this.length)
+Buffer.prototype.readInt16LE = function readInt16LE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 2)
     const val = this[offset] | (this[offset + 1] << 8)
     return (val & 0x8000) ? val | 0xFFFF0000 : val
 }
 
-Buffer.prototype.readInt16BE = function readInt16BE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 2, this.length)
+Buffer.prototype.readInt16BE = function readInt16BE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 2)
     const val = this[offset + 1] | (this[offset] << 8)
     return (val & 0x8000) ? val | 0xFFFF0000 : val
 }
 
-Buffer.prototype.readInt32LE = function readInt32LE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 4, this.length)
+Buffer.prototype.readInt32LE = function readInt32LE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 4)
 
     return (this[offset]) |
         (this[offset + 1] << 8) |
@@ -1322,9 +1428,9 @@ Buffer.prototype.readInt32LE = function readInt32LE (offset, noAssert) {
         (this[offset + 3] << 24)
 }
 
-Buffer.prototype.readInt32BE = function readInt32BE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 4, this.length)
+Buffer.prototype.readInt32BE = function readInt32BE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 4)
 
     return (this[offset] << 24) |
         (this[offset + 1] << 16) |
@@ -1374,45 +1480,62 @@ Buffer.prototype.readBigInt64BE = defineBigIntMethod(function readBigInt64BE (of
             last)
 })
 
-Buffer.prototype.readFloatLE = function readFloatLE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 4, this.length)
+Buffer.prototype.readFloatLE = function readFloatLE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 4)
     return ieee754.read(this, offset, true, 23, 4)
 }
 
-Buffer.prototype.readFloatBE = function readFloatBE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 4, this.length)
+Buffer.prototype.readFloatBE = function readFloatBE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 4)
     return ieee754.read(this, offset, false, 23, 4)
 }
 
-Buffer.prototype.readDoubleLE = function readDoubleLE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 8, this.length)
+Buffer.prototype.readDoubleLE = function readDoubleLE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 8)
     return ieee754.read(this, offset, true, 52, 8)
 }
 
-Buffer.prototype.readDoubleBE = function readDoubleBE (offset, noAssert) {
-    offset = offset >>> 0
-    if (!noAssert) checkOffset(offset, 8, this.length)
+Buffer.prototype.readDoubleBE = function readDoubleBE (offset) {
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 8)
     return ieee754.read(this, offset, false, 52, 8)
 }
 
 function checkInt (buf, value, offset, ext, max, min) {
-    if (!Buffer.isBuffer(buf)) throw new TypeError('"buffer" argument must be a Buffer instance')
-    if (value > max || value < min) throw new RangeError('"value" argument is out of bounds')
-    if (offset + ext > buf.length) throw new RangeError('Index out of range')
+    if (value > max || value < min) {
+        const n = typeof min === 'bigint' ? 'n' : ''
+        let range
+        if (ext > 4) {
+            if (min === 0 || min === BigInt(0)) {
+                range = '>= 0' + n + ' and < 2' + n + ' ** ' + (ext * 8) + n
+            } else {
+                range = '>= -(2' + n + ' ** ' + (ext * 8 - 1) + n + ')' +
+                    ' and < 2' + n + ' ** ' + (ext * 8 - 1) + n
+            }
+        } else {
+            if (min === 0 || min === BigInt(0)) {
+                range = '>= 0' + n + ' and <= ' + max + n
+            } else {
+                range = '>= ' + min + n + ' and <= ' + max + n
+            }
+        }
+        throw new ERR_OUT_OF_RANGE('value', range, value)
+    }
+    if (offset + ext > buf.length) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS()
+    }
 }
 
 Buffer.prototype.writeUintLE =
-    Buffer.prototype.writeUIntLE = function writeUIntLE (value, offset, byteLength, noAssert) {
+    Buffer.prototype.writeUIntLE = function writeUIntLE (value, offset, byteLength) {
         value = +value
-        offset = offset >>> 0
-        byteLength = byteLength >>> 0
-        if (!noAssert) {
-            const maxBytes = Math.pow(2, 8 * byteLength) - 1
-            checkInt(this, value, offset, byteLength, maxBytes, 0)
-        }
+        byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+        offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
+        const maxBytes = Math.pow(2, 8 * byteLength) - 1
+        checkInt(this, value, offset, byteLength, maxBytes, 0)
 
         let mul = 1
         let i = 0
@@ -1425,14 +1548,12 @@ Buffer.prototype.writeUintLE =
     }
 
 Buffer.prototype.writeUintBE =
-    Buffer.prototype.writeUIntBE = function writeUIntBE (value, offset, byteLength, noAssert) {
+    Buffer.prototype.writeUIntBE = function writeUIntBE (value, offset, byteLength) {
         value = +value
-        offset = offset >>> 0
-        byteLength = byteLength >>> 0
-        if (!noAssert) {
-            const maxBytes = Math.pow(2, 8 * byteLength) - 1
-            checkInt(this, value, offset, byteLength, maxBytes, 0)
-        }
+        byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+        offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
+        const maxBytes = Math.pow(2, 8 * byteLength) - 1
+        checkInt(this, value, offset, byteLength, maxBytes, 0)
 
         let i = byteLength - 1
         let mul = 1
@@ -1445,39 +1566,43 @@ Buffer.prototype.writeUintBE =
     }
 
 Buffer.prototype.writeUint8 =
-    Buffer.prototype.writeUInt8 = function writeUInt8 (value, offset, noAssert) {
+    Buffer.prototype.writeUInt8 = function writeUInt8 (value, offset) {
         value = +value
-        offset = offset >>> 0
-        if (!noAssert) checkInt(this, value, offset, 1, 0xff, 0)
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 1)
+        checkInt(this, value, offset, 1, 0xff, 0)
         this[offset] = (value & 0xff)
         return offset + 1
     }
 
 Buffer.prototype.writeUint16LE =
-    Buffer.prototype.writeUInt16LE = function writeUInt16LE (value, offset, noAssert) {
+    Buffer.prototype.writeUInt16LE = function writeUInt16LE (value, offset) {
         value = +value
-        offset = offset >>> 0
-        if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 2)
+        checkInt(this, value, offset, 2, 0xffff, 0)
         this[offset] = (value & 0xff)
         this[offset + 1] = (value >>> 8)
         return offset + 2
     }
 
 Buffer.prototype.writeUint16BE =
-    Buffer.prototype.writeUInt16BE = function writeUInt16BE (value, offset, noAssert) {
+    Buffer.prototype.writeUInt16BE = function writeUInt16BE (value, offset) {
         value = +value
-        offset = offset >>> 0
-        if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0)
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 2)
+        checkInt(this, value, offset, 2, 0xffff, 0)
         this[offset] = (value >>> 8)
         this[offset + 1] = (value & 0xff)
         return offset + 2
     }
 
 Buffer.prototype.writeUint32LE =
-    Buffer.prototype.writeUInt32LE = function writeUInt32LE (value, offset, noAssert) {
+    Buffer.prototype.writeUInt32LE = function writeUInt32LE (value, offset) {
         value = +value
-        offset = offset >>> 0
-        if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0)
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 4)
+        checkInt(this, value, offset, 4, 0xffffffff, 0)
         this[offset + 3] = (value >>> 24)
         this[offset + 2] = (value >>> 16)
         this[offset + 1] = (value >>> 8)
@@ -1486,10 +1611,11 @@ Buffer.prototype.writeUint32LE =
     }
 
 Buffer.prototype.writeUint32BE =
-    Buffer.prototype.writeUInt32BE = function writeUInt32BE (value, offset, noAssert) {
+    Buffer.prototype.writeUInt32BE = function writeUInt32BE (value, offset) {
         value = +value
-        offset = offset >>> 0
-        if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0)
+        if (offset === undefined) offset = 0
+        offset = _validateOffset(offset, 'offset', 0, this.length - 4)
+        checkInt(this, value, offset, 4, 0xffffffff, 0)
         this[offset] = (value >>> 24)
         this[offset + 1] = (value >>> 16)
         this[offset + 2] = (value >>> 8)
@@ -1549,14 +1675,12 @@ Buffer.prototype.writeBigUInt64BE = defineBigIntMethod(function writeBigUInt64BE
     return wrtBigUInt64BE(this, value, offset, BigInt(0), BigInt('0xffffffffffffffff'))
 })
 
-Buffer.prototype.writeIntLE = function writeIntLE (value, offset, byteLength, noAssert) {
+Buffer.prototype.writeIntLE = function writeIntLE (value, offset, byteLength) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) {
-        const limit = Math.pow(2, (8 * byteLength) - 1)
-
-        checkInt(this, value, offset, byteLength, limit - 1, -limit)
-    }
+    byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+    offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
+    const limit = Math.pow(2, (8 * byteLength) - 1)
+    checkInt(this, value, offset, byteLength, limit - 1, -limit)
 
     let i = 0
     let mul = 1
@@ -1572,14 +1696,12 @@ Buffer.prototype.writeIntLE = function writeIntLE (value, offset, byteLength, no
     return offset + byteLength
 }
 
-Buffer.prototype.writeIntBE = function writeIntBE (value, offset, byteLength, noAssert) {
+Buffer.prototype.writeIntBE = function writeIntBE (value, offset, byteLength) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) {
-        const limit = Math.pow(2, (8 * byteLength) - 1)
-
-        checkInt(this, value, offset, byteLength, limit - 1, -limit)
-    }
+    byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
+    offset = _validateOffset(offset, 'offset', 0, this.length - byteLength)
+    const limit = Math.pow(2, (8 * byteLength) - 1)
+    checkInt(this, value, offset, byteLength, limit - 1, -limit)
 
     let i = byteLength - 1
     let mul = 1
@@ -1595,37 +1717,41 @@ Buffer.prototype.writeIntBE = function writeIntBE (value, offset, byteLength, no
     return offset + byteLength
 }
 
-Buffer.prototype.writeInt8 = function writeInt8 (value, offset, noAssert) {
+Buffer.prototype.writeInt8 = function writeInt8 (value, offset) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) checkInt(this, value, offset, 1, 0x7f, -0x80)
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 1)
+    checkInt(this, value, offset, 1, 0x7f, -0x80)
     if (value < 0) value = 0xff + value + 1
     this[offset] = (value & 0xff)
     return offset + 1
 }
 
-Buffer.prototype.writeInt16LE = function writeInt16LE (value, offset, noAssert) {
+Buffer.prototype.writeInt16LE = function writeInt16LE (value, offset) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 2)
+    checkInt(this, value, offset, 2, 0x7fff, -0x8000)
     this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
     return offset + 2
 }
 
-Buffer.prototype.writeInt16BE = function writeInt16BE (value, offset, noAssert) {
+Buffer.prototype.writeInt16BE = function writeInt16BE (value, offset) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000)
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 2)
+    checkInt(this, value, offset, 2, 0x7fff, -0x8000)
     this[offset] = (value >>> 8)
     this[offset + 1] = (value & 0xff)
     return offset + 2
 }
 
-Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset, noAssert) {
+Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 4)
+    checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
     this[offset] = (value & 0xff)
     this[offset + 1] = (value >>> 8)
     this[offset + 2] = (value >>> 16)
@@ -1633,10 +1759,11 @@ Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset, noAssert) 
     return offset + 4
 }
 
-Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset, noAssert) {
+Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, this.length - 4)
+    checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000)
     if (value < 0) value = 0xffffffff + value + 1
     this[offset] = (value >>> 24)
     this[offset + 1] = (value >>> 16)
@@ -1653,66 +1780,83 @@ Buffer.prototype.writeBigInt64BE = defineBigIntMethod(function writeBigInt64BE (
     return wrtBigUInt64BE(this, value, offset, -BigInt('0x8000000000000000'), BigInt('0x7fffffffffffffff'))
 })
 
-function checkIEEE754 (buf, value, offset, ext, max, min) {
-    if (offset + ext > buf.length) throw new RangeError('Index out of range')
-    if (offset < 0) throw new RangeError('Index out of range')
+// Lowercase Uint aliases for BigUInt64 methods (Node.js compat)
+Buffer.prototype.readBigUint64LE = Buffer.prototype.readBigUInt64LE
+Buffer.prototype.readBigUint64BE = Buffer.prototype.readBigUInt64BE
+Buffer.prototype.writeBigUint64LE = Buffer.prototype.writeBigUInt64LE
+Buffer.prototype.writeBigUint64BE = Buffer.prototype.writeBigUInt64BE
+
+function checkIEEE754 (buf, value, offset, ext) {
+    if (offset + ext > buf.length) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS()
+    }
 }
 
-function writeFloat (buf, value, offset, littleEndian, noAssert) {
+function writeFloat (buf, value, offset, littleEndian) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) {
-        checkIEEE754(buf, value, offset, 4, 3.4028234663852886e+38, -3.4028234663852886e+38)
-    }
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, buf.length - 4)
     ieee754.write(buf, value, offset, littleEndian, 23, 4)
     return offset + 4
 }
 
-Buffer.prototype.writeFloatLE = function writeFloatLE (value, offset, noAssert) {
-    return writeFloat(this, value, offset, true, noAssert)
+Buffer.prototype.writeFloatLE = function writeFloatLE (value, offset) {
+    return writeFloat(this, value, offset, true)
 }
 
-Buffer.prototype.writeFloatBE = function writeFloatBE (value, offset, noAssert) {
-    return writeFloat(this, value, offset, false, noAssert)
+Buffer.prototype.writeFloatBE = function writeFloatBE (value, offset) {
+    return writeFloat(this, value, offset, false)
 }
 
-function writeDouble (buf, value, offset, littleEndian, noAssert) {
+function writeDouble (buf, value, offset, littleEndian) {
     value = +value
-    offset = offset >>> 0
-    if (!noAssert) {
-        checkIEEE754(buf, value, offset, 8, 1.7976931348623157E+308, -1.7976931348623157E+308)
-    }
+    if (offset === undefined) offset = 0
+    offset = _validateOffset(offset, 'offset', 0, buf.length - 8)
     ieee754.write(buf, value, offset, littleEndian, 52, 8)
     return offset + 8
 }
 
-Buffer.prototype.writeDoubleLE = function writeDoubleLE (value, offset, noAssert) {
-    return writeDouble(this, value, offset, true, noAssert)
+Buffer.prototype.writeDoubleLE = function writeDoubleLE (value, offset) {
+    return writeDouble(this, value, offset, true)
 }
 
-Buffer.prototype.writeDoubleBE = function writeDoubleBE (value, offset, noAssert) {
-    return writeDouble(this, value, offset, false, noAssert)
+Buffer.prototype.writeDoubleBE = function writeDoubleBE (value, offset) {
+    return writeDouble(this, value, offset, false)
 }
 
 // copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
 Buffer.prototype.copy = function copy (target, targetStart, start, end) {
-    if (!isInstance(target, Uint8Array)) throw new TypeError('argument should be a Buffer')
-    if (!start) start = 0
-    if (!end && end !== 0) end = this.length
-    if (targetStart >= target.length) targetStart = target.length
+    if (!isInstance(this, Uint8Array)) {
+        throw new ERR_INVALID_ARG_TYPE('source', ['Buffer', 'Uint8Array'], this)
+    }
+    if (!isInstance(target, Uint8Array)) {
+        throw new ERR_INVALID_ARG_TYPE('target', ['Buffer', 'Uint8Array'], target)
+    }
     if (!targetStart) targetStart = 0
+    if (!start) start = 0
+    if (end === undefined || end === null) end = this.length
+
+    // Fatal error conditions
+    if (targetStart < 0) {
+        throw new ERR_OUT_OF_RANGE('targetStart', '>= 0', targetStart)
+    }
+    if (start < 0 || start >= this.length) {
+        throw new ERR_OUT_OF_RANGE('sourceStart', '>= 0 and < ' + this.length, start)
+    }
+    if (end < 0) {
+        throw new ERR_OUT_OF_RANGE('sourceEnd', '>= 0', end)
+    }
+
+    targetStart = targetStart >>> 0
+    start = start >>> 0
+    end = end >>> 0
+
+    if (targetStart >= target.length) targetStart = target.length
     if (end > 0 && end < start) end = start
 
     // Copy 0 bytes; we're done
     if (end === start) return 0
     if (target.length === 0 || this.length === 0) return 0
-
-    // Fatal error conditions
-    if (targetStart < 0) {
-        throw new RangeError('targetStart out of bounds')
-    }
-    if (start < 0 || start >= this.length) throw new RangeError('Index out of range')
-    if (end < 0) throw new RangeError('sourceEnd out of bounds')
 
     // Are we oob?
     if (end > this.length) end = this.length
@@ -1755,7 +1899,7 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
             throw new TypeError('encoding must be a string')
         }
         if (typeof encoding === 'string' && !Buffer.isEncoding(encoding)) {
-            throw new TypeError('Unknown encoding: ' + encoding)
+            throw new ERR_UNKNOWN_ENCODING(encoding)
         }
         if (val.length === 1) {
             const code = val.charCodeAt(0)
@@ -1807,90 +1951,17 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
     return this
 }
 
-// CUSTOM ERRORS
-// =============
 
-// Simplified versions from Node, changed for Buffer-only usage
-const errors = {}
-function E (sym, getMessage, Base) {
-    function NodeError () {
-        const err = new Base(getMessage.apply(null, arguments))
-
-        Object.setPrototypeOf(err, NodeError.prototype)
-
-        // Node.js `err.code` properties are own/enumerable properties.
-        err.code = sym
-        // Add the error code to the name to include it in the stack trace.
-        err.name = `${err.name} [${sym}]`
-        // Remove NodeError from the stack trace.
-        if (Error.captureStackTrace) {
-            Error.captureStackTrace(err, NodeError)
-        }
-        // Access the stack to generate the error message including the error code
-        // from the name.
-        err.stack // eslint-disable-line no-unused-expressions
-        // Reset the name to the actual name.
-        delete err.name
-
-        return err
-    }
-
-    Object.setPrototypeOf(NodeError.prototype, Base.prototype)
-    Object.setPrototypeOf(NodeError, Base)
-
-    NodeError.prototype.toString = function toString () {
-        return `${this.name} [${sym}]: ${this.message}`
-    }
-
-    errors[sym] = NodeError
-}
-
-E('ERR_BUFFER_OUT_OF_BOUNDS',
-    function (name) {
-        if (name) {
-            return `${name} is outside of buffer bounds`
-        }
-
-        return 'Attempt to access memory outside buffer bounds'
-    }, RangeError)
-E('ERR_INVALID_ARG_TYPE',
-    function (name, actual) {
-        return `The "${name}" argument must be of type number. Received type ${typeof actual}`
-    }, TypeError)
-E('ERR_OUT_OF_RANGE',
-    function (str, range, input) {
-        let msg = `The value of "${str}" is out of range.`
-        let received = input
-        if (Number.isInteger(input) && Math.abs(input) > 2 ** 32) {
-            received = addNumericalSeparator(String(input))
-        } else if (typeof input === 'bigint') {
-            received = String(input)
-            if (input > BigInt(2) ** BigInt(32) || input < -(BigInt(2) ** BigInt(32))) {
-                received = addNumericalSeparator(received)
-            }
-            received += 'n'
-        }
-        msg += ` It must be ${range}. Received ${received}`
-        return msg
-    }, RangeError)
-
-function addNumericalSeparator (val) {
-    let res = ''
-    let i = val.length
-    const start = val[0] === '-' ? 1 : 0
-    for (; i >= start + 4; i -= 3) {
-        res = `_${val.slice(i - 3, i)}${res}`
-    }
-    return `${val.slice(0, i)}${res}`
-}
 
 // CHECK FUNCTIONS
 // ===============
 
 function checkBounds (buf, offset, byteLength) {
-    validateNumber(offset, 'offset')
-    if (buf[offset] === undefined || buf[offset + byteLength] === undefined) {
-        boundsError(offset, buf.length - (byteLength + 1))
+    if (typeof offset !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('offset', 'number', offset)
+    }
+    if (offset < 0 || offset + byteLength > buf.length) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS()
     }
 }
 
@@ -1908,28 +1979,28 @@ function checkIntBI (value, min, max, buf, offset, byteLength) {
         } else {
             range = `>= ${min}${n} and <= ${max}${n}`
         }
-        throw new errors.ERR_OUT_OF_RANGE('value', range, value)
+        throw new ERR_OUT_OF_RANGE('value', range, value)
     }
     checkBounds(buf, offset, byteLength)
 }
 
 function validateNumber (value, name) {
     if (typeof value !== 'number') {
-        throw new errors.ERR_INVALID_ARG_TYPE(name, 'number', value)
+        throw new ERR_INVALID_ARG_TYPE(name, 'number', value)
     }
 }
 
 function boundsError (value, length, type) {
     if (Math.floor(value) !== value) {
         validateNumber(value, type)
-        throw new errors.ERR_OUT_OF_RANGE(type || 'offset', 'an integer', value)
+        throw new ERR_OUT_OF_RANGE(type || 'offset', 'an integer', value)
     }
 
     if (length < 0) {
-        throw new errors.ERR_BUFFER_OUT_OF_BOUNDS()
+        throw new ERR_BUFFER_OUT_OF_BOUNDS()
     }
 
-    throw new errors.ERR_OUT_OF_RANGE(type || 'offset',
+    throw new ERR_OUT_OF_RANGE(type || 'offset',
         `>= ${type ? 1 : 0} and <= ${length}`,
         value)
 }
@@ -1951,6 +2022,22 @@ function base64clean (str) {
         str = str + '='
     }
     return str
+}
+
+function base64UrlToBase64 (str) {
+    // Replace URL-safe chars with standard base64 chars
+    str = str.replace(/-/g, '+').replace(/_/g, '/')
+    // Add padding
+    const pad = str.length % 4
+    if (pad === 2) str += '=='
+    else if (pad === 3) str += '='
+    return str
+}
+
+function base64urlSlice (buf, start, end) {
+    const base64str = base64Slice(buf, start, end)
+    // Convert to base64url: replace chars and remove padding
+    return base64str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 function utf8ToBytes (string, units) {
@@ -2205,8 +2292,17 @@ function BufferBigIntNotDefined () {
     throw new Error('BigInt not supported')
 }
 
-export default {
-    INSPECT_MAX_BYTES,
+const _defaultExport = {
+    get INSPECT_MAX_BYTES() { return _inspectMaxBytes },
+    set INSPECT_MAX_BYTES(val) {
+        if (typeof val !== 'number') {
+            throw new ERR_INVALID_ARG_TYPE('buffer.INSPECT_MAX_BYTES', 'number', val)
+        }
+        if (val < 0 || val !== val) { // NaN check
+            throw new ERR_OUT_OF_RANGE('buffer.INSPECT_MAX_BYTES', '>= 0', val)
+        }
+        _inspectMaxBytes = val
+    },
     kMaxLength,
     kStringMaxLength,
     constants,
@@ -2215,3 +2311,4 @@ export default {
     isAscii,
     isUtf8
 }
+export default _defaultExport
