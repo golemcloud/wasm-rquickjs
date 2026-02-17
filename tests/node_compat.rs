@@ -5,8 +5,10 @@ use crate::common::{
     strip_jsonc_comments,
 };
 use camino::Utf8Path;
+use futures::stream::{self, StreamExt};
 use std::collections::BTreeMap;
 use std::fs;
+use std::sync::Arc;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -99,73 +101,101 @@ async fn run_node_compat_suite(runner: &CompiledTest, prefix: &str) -> anyhow::R
 
     assert!(!tests.is_empty(), "No {prefix} tests found in config.jsonc");
 
-    let prepared = PreparedComponent::new(runner.wasm_path())?;
+    let prepared = Arc::new(PreparedComponent::new(runner.wasm_path())?);
+    let parallelism = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
 
     let mut results: BTreeMap<String, String> = BTreeMap::new();
     let mut failures = Vec::new();
 
+    // Handle skipped tests first
     for entry in &tests {
         if entry.skip {
             let reason = entry.reason.as_deref().unwrap_or("no reason");
             println!("  {} ... SKIP ({})", entry.path, reason);
             results.insert(entry.path.clone(), format!("SKIP: {reason}"));
-            continue;
         }
+    }
 
-        let mut instance = TestInstance::from_prepared(&prepared).await?;
-        setup_test_files(&instance, &entry.path)?;
+    // Collect non-skipped entries for parallel execution
+    let non_skipped: Vec<&TestEntry> = tests.iter().filter(|e| !e.skip).copied().collect();
 
-        let guest_path = format!("/tests/{}", entry.path);
-
-        let (result, stdout, stderr) = instance
-            .invoke_and_capture_output_with_stderr(None, "run-test", &[Val::String(guest_path)])
-            .await;
-
-        match result {
-            Ok(Some(Val::String(ref s))) => {
-                if s.starts_with("PASS") {
-                    println!("  {} ... ok", entry.path);
-                    results.insert(entry.path.clone(), "PASS".to_string());
-                } else if let Some(reason) = s.strip_prefix("SKIP:") {
-                    println!("  {} ... SKIP ({})", entry.path, reason.trim());
-                    results.insert(entry.path.clone(), s.clone());
-                } else {
-                    println!("  {} ... FAIL", entry.path);
-                    println!("    {}", s);
-                    if !stdout.is_empty() {
-                        println!("    [stdout] {}", stdout.trim());
-                    }
-                    if !stderr.is_empty() {
-                        println!("    [stderr] {}", stderr.trim());
-                    }
-                    results.insert(entry.path.clone(), s.clone());
-                    failures.push(entry.path.clone());
-                }
+    // Run non-skipped tests in parallel
+    let parallel_results: Vec<(String, String, String, String)> = stream::iter(non_skipped)
+        .map(|entry| {
+            let prepared = Arc::clone(&prepared);
+            let path = entry.path.clone();
+            async move {
+                let (result, stdout, stderr) = match TestInstance::from_prepared(&prepared).await {
+                    Ok(mut instance) => match setup_test_files(&instance, &path) {
+                        Ok(()) => {
+                            let guest_path = format!("/tests/{}", path);
+                            instance
+                                .invoke_and_capture_output_with_stderr(
+                                    None,
+                                    "run-test",
+                                    &[Val::String(guest_path)],
+                                )
+                                .await
+                        }
+                        Err(e) => (Err(e), String::new(), String::new()),
+                    },
+                    Err(e) => (Err(e), String::new(), String::new()),
+                };
+                let result_str = match result {
+                    Ok(Some(Val::String(ref s))) => s.clone(),
+                    Ok(other) => format!("UNEXPECTED: {other:?}"),
+                    Err(e) => format!("ERROR: {e}"),
+                };
+                (path, result_str, stdout, stderr)
             }
-            Ok(other) => {
-                let msg = format!("Unexpected return value: {other:?}");
-                println!("  {} ... FAIL ({})", entry.path, msg);
-                if !stdout.is_empty() {
-                    println!("    [stdout] {}", stdout.trim());
-                }
-                if !stderr.is_empty() {
-                    println!("    [stderr] {}", stderr.trim());
-                }
-                results.insert(entry.path.clone(), format!("FAIL: {msg}"));
-                failures.push(entry.path.clone());
+        })
+        .buffer_unordered(parallelism)
+        .collect()
+        .await;
+
+    // Process parallel results
+    for (path, result_str, stdout, stderr) in parallel_results {
+        if result_str.starts_with("PASS") {
+            println!("  {} ... ok", path);
+            results.insert(path, "PASS".to_string());
+        } else if let Some(reason) = result_str.strip_prefix("SKIP:") {
+            println!("  {} ... SKIP ({})", path, reason.trim());
+            results.insert(path, result_str);
+        } else if result_str.starts_with("UNEXPECTED:") {
+            let msg = format!("Unexpected return value: {}", &result_str[12..]);
+            println!("  {} ... FAIL ({})", path, msg);
+            if !stdout.is_empty() {
+                println!("    [stdout] {}", stdout.trim());
             }
-            Err(e) => {
-                let msg = format!("Invocation error: {e}");
-                println!("  {} ... FAIL ({})", entry.path, msg);
-                if !stdout.is_empty() {
-                    println!("    [stdout] {}", stdout.trim());
-                }
-                if !stderr.is_empty() {
-                    println!("    [stderr] {}", stderr.trim());
-                }
-                results.insert(entry.path.clone(), format!("FAIL: {msg}"));
-                failures.push(entry.path.clone());
+            if !stderr.is_empty() {
+                println!("    [stderr] {}", stderr.trim());
             }
+            results.insert(path.clone(), format!("FAIL: {msg}"));
+            failures.push(path);
+        } else if result_str.starts_with("ERROR:") {
+            let msg = format!("Invocation error: {}", &result_str[7..]);
+            println!("  {} ... FAIL ({})", path, msg);
+            if !stdout.is_empty() {
+                println!("    [stdout] {}", stdout.trim());
+            }
+            if !stderr.is_empty() {
+                println!("    [stderr] {}", stderr.trim());
+            }
+            results.insert(path.clone(), format!("FAIL: {msg}"));
+            failures.push(path);
+        } else {
+            println!("  {} ... FAIL", path);
+            println!("    {}", result_str);
+            if !stdout.is_empty() {
+                println!("    [stdout] {}", stdout.trim());
+            }
+            if !stderr.is_empty() {
+                println!("    [stderr] {}", stderr.trim());
+            }
+            results.insert(path.clone(), result_str);
+            failures.push(path);
         }
     }
 
@@ -549,60 +579,101 @@ async fn node_compat_misc(
         return Ok(());
     }
 
-    let prepared = PreparedComponent::new(runner.wasm_path())?;
+    let prepared = Arc::new(PreparedComponent::new(runner.wasm_path())?);
+    let parallelism = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+
     let mut results: BTreeMap<String, String> = BTreeMap::new();
     let mut failures = Vec::new();
 
+    // Handle skipped tests first
     for entry in &misc_tests {
         if entry.skip {
             let reason = entry.reason.as_deref().unwrap_or("no reason");
             println!("  {} ... SKIP ({})", entry.path, reason);
             results.insert(entry.path.clone(), format!("SKIP: {reason}"));
-            continue;
         }
+    }
 
-        let mut instance = TestInstance::from_prepared(&prepared).await?;
-        setup_test_files(&instance, &entry.path)?;
+    // Collect non-skipped entries for parallel execution
+    let non_skipped: Vec<&TestEntry> = misc_tests.iter().filter(|e| !e.skip).copied().collect();
 
-        let guest_path = format!("/tests/{}", entry.path);
-
-        let (result, stdout, stderr) = instance
-            .invoke_and_capture_output_with_stderr(None, "run-test", &[Val::String(guest_path)])
-            .await;
-
-        match result {
-            Ok(Some(Val::String(ref s))) => {
-                if s.starts_with("PASS") {
-                    println!("  {} ... ok", entry.path);
-                    results.insert(entry.path.clone(), "PASS".to_string());
-                } else if let Some(reason) = s.strip_prefix("SKIP:") {
-                    println!("  {} ... SKIP ({})", entry.path, reason.trim());
-                    results.insert(entry.path.clone(), s.clone());
-                } else {
-                    println!("  {} ... FAIL", entry.path);
-                    println!("    {}", s);
-                    if !stdout.is_empty() {
-                        println!("    [stdout] {}", stdout.trim());
-                    }
-                    if !stderr.is_empty() {
-                        println!("    [stderr] {}", stderr.trim());
-                    }
-                    results.insert(entry.path.clone(), s.clone());
-                    failures.push(entry.path.clone());
-                }
+    // Run non-skipped tests in parallel
+    let parallel_results: Vec<(String, String, String, String)> = stream::iter(non_skipped)
+        .map(|entry| {
+            let prepared = Arc::clone(&prepared);
+            let path = entry.path.clone();
+            async move {
+                let (result, stdout, stderr) = match TestInstance::from_prepared(&prepared).await {
+                    Ok(mut instance) => match setup_test_files(&instance, &path) {
+                        Ok(()) => {
+                            let guest_path = format!("/tests/{}", path);
+                            instance
+                                .invoke_and_capture_output_with_stderr(
+                                    None,
+                                    "run-test",
+                                    &[Val::String(guest_path)],
+                                )
+                                .await
+                        }
+                        Err(e) => (Err(e), String::new(), String::new()),
+                    },
+                    Err(e) => (Err(e), String::new(), String::new()),
+                };
+                let result_str = match result {
+                    Ok(Some(Val::String(ref s))) => s.clone(),
+                    Ok(other) => format!("UNEXPECTED: {other:?}"),
+                    Err(e) => format!("ERROR: {e}"),
+                };
+                (path, result_str, stdout, stderr)
             }
-            Ok(other) => {
-                let msg = format!("Unexpected return value: {other:?}");
-                println!("  {} ... FAIL ({})", entry.path, msg);
-                results.insert(entry.path.clone(), format!("FAIL: {msg}"));
-                failures.push(entry.path.clone());
+        })
+        .buffer_unordered(parallelism)
+        .collect()
+        .await;
+
+    // Process parallel results
+    for (path, result_str, stdout, stderr) in parallel_results {
+        if result_str.starts_with("PASS") {
+            println!("  {} ... ok", path);
+            results.insert(path, "PASS".to_string());
+        } else if let Some(reason) = result_str.strip_prefix("SKIP:") {
+            println!("  {} ... SKIP ({})", path, reason.trim());
+            results.insert(path, result_str);
+        } else if result_str.starts_with("UNEXPECTED:") {
+            let msg = format!("Unexpected return value: {}", &result_str[12..]);
+            println!("  {} ... FAIL ({})", path, msg);
+            if !stdout.is_empty() {
+                println!("    [stdout] {}", stdout.trim());
             }
-            Err(e) => {
-                let msg = format!("Invocation error: {e}");
-                println!("  {} ... FAIL ({})", entry.path, msg);
-                results.insert(entry.path.clone(), format!("FAIL: {msg}"));
-                failures.push(entry.path.clone());
+            if !stderr.is_empty() {
+                println!("    [stderr] {}", stderr.trim());
             }
+            results.insert(path.clone(), format!("FAIL: {msg}"));
+            failures.push(path);
+        } else if result_str.starts_with("ERROR:") {
+            let msg = format!("Invocation error: {}", &result_str[7..]);
+            println!("  {} ... FAIL ({})", path, msg);
+            if !stdout.is_empty() {
+                println!("    [stdout] {}", stdout.trim());
+            }
+            if !stderr.is_empty() {
+                println!("    [stderr] {}", stderr.trim());
+            }
+            results.insert(path.clone(), format!("FAIL: {msg}"));
+            failures.push(path);
+        } else {
+            println!("  {} ... FAIL", path);
+            println!("    {}", result_str);
+            if !stdout.is_empty() {
+                println!("    [stdout] {}", stdout.trim());
+            }
+            if !stderr.is_empty() {
+                println!("    [stderr] {}", stderr.trim());
+            }
+            results.insert(path.clone(), result_str);
+            failures.push(path);
         }
     }
 
