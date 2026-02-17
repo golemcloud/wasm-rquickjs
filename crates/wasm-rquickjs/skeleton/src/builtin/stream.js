@@ -3,7 +3,7 @@
 
 import { addAbortSignal } from "__wasm_rquickjs_builtin/internal/streams/add-abort-signal";
 import { destroyer } from "__wasm_rquickjs_builtin/internal/streams/destroy";
-import { isDisturbed } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDisturbed, isErrored } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { isUint8Array } from "__wasm_rquickjs_builtin/internal/util/types";
 import { pipeline } from "__wasm_rquickjs_builtin/internal/streams/pipeline";
 import { promisify } from "__wasm_rquickjs_builtin/internal/util";
@@ -16,6 +16,7 @@ import promises from "node:stream/promises";
 import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
 import Transform from "__wasm_rquickjs_builtin/internal/streams/transform";
 import Writable from "__wasm_rquickjs_builtin/internal/streams/writable";
+import { getDefaultHighWaterMark, setDefaultHighWaterMark } from "__wasm_rquickjs_builtin/internal/streams/state";
 import { Buffer } from "buffer";
 
 const { custom: customPromisify } = promisify;
@@ -62,6 +63,8 @@ Stream.addAbortSignal = addAbortSignal;
 Stream.finished = finishedWrapper;
 Stream.destroy = destroyer;
 Stream.compose = compose;
+Stream.getDefaultHighWaterMark = getDefaultHighWaterMark;
+Stream.setDefaultHighWaterMark = setDefaultHighWaterMark;
 
 Object.defineProperty(Stream, "promises", {
     configurable: true,
@@ -82,9 +85,12 @@ export {
     addAbortSignal,
     compose,
     destroyer as destroy,
+    getDefaultHighWaterMark,
+    setDefaultHighWaterMark,
     Duplex,
     finishedWrapper as finished,
     isDisturbed,
+    isErrored,
     isUint8Array as _isUint8Array,
     PassThrough,
     pipelineWrapper as pipeline,

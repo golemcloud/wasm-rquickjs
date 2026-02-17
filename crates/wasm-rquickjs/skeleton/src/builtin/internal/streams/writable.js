@@ -862,6 +862,22 @@ Object.defineProperties(Writable.prototype, {
             return this._writableState && this._writableState.length;
         },
     },
+
+    writableAborted: {
+        enumerable: false,
+        get: function () {
+            return !!(this._writableState.writable !== false &&
+                (this._writableState.destroyed || this._writableState.errored) &&
+                !this._writableState.finished);
+        },
+    },
+
+    errored: {
+        enumerable: false,
+        get() {
+            return this._writableState ? this._writableState.errored : null;
+        },
+    },
 });
 
 const destroy = destroyImpl.destroy;

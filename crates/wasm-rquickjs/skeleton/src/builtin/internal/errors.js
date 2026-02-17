@@ -1,5 +1,24 @@
 import { inspect } from "__wasm_rquickjs_builtin/internal/util/inspect";
 
+// Node.js includes the error code in toString() so that regex tests like
+// /ERR_INVALID_ARG_TYPE/ can match against String(error).
+// We keep message and name clean (for exact-match tests) but add toString().
+function addCodeToMessage(err, code) {
+    err.code = code;
+    const origToString = Error.prototype.toString;
+    Object.defineProperty(err, 'toString', {
+        value: function() {
+            const name = this.name || 'Error';
+            const msg = this.message || '';
+            if (!msg) return `${name} [${code}]`;
+            return `${name} [${code}]: ${msg}`;
+        },
+        writable: true,
+        configurable: true,
+        enumerable: false,
+    });
+}
+
 /**
  * 
  * @template T
@@ -18,7 +37,7 @@ export class ERR_HTTP_HEADERS_SENT extends Error {
         super(
             `Cannot ${x} headers after they are sent to the client`,
         );
-        this.code = "ERR_HTTP_HEADERS_SENT";
+        addCodeToMessage(this, "ERR_HTTP_HEADERS_SENT");
     }
 }
 
@@ -27,7 +46,7 @@ export class ERR_HTTP_INVALID_HEADER_VALUE extends TypeError {
         super(
             `Invalid value "${x}" for header "${y}"`,
         );
-        this.code = "ERR_HTTP_INVALID_HEADER_VALUE";
+        addCodeToMessage(this, "ERR_HTTP_INVALID_HEADER_VALUE");
     }
 }
 
@@ -36,14 +55,14 @@ export class ERR_HTTP_TRAILER_INVALID extends Error {
         super(
             `Trailers are invalid with this transfer encoding`,
         );
-        this.code = "ERR_HTTP_TRAILER_INVALID";
+        addCodeToMessage(this, "ERR_HTTP_TRAILER_INVALID");
     }
 }
 
 export class ERR_INVALID_HTTP_TOKEN extends TypeError {
     constructor(x, y) {
         super(`${x} must be a valid HTTP token ["${y}"]`);
-        this.code = "ERR_INVALID_HTTP_TOKEN";
+        addCodeToMessage(this, "ERR_INVALID_HTTP_TOKEN");
     }
 }
 
@@ -175,8 +194,6 @@ function addNumericalSeparator(val) {
 }
 
 export class ERR_OUT_OF_RANGE extends RangeError {
-    code = "ERR_OUT_OF_RANGE";
-
     /**
      * 
      * @param {string} str 
@@ -209,14 +226,7 @@ export class ERR_OUT_OF_RANGE extends RangeError {
         msg += ` It must be ${range}. Received ${received}`;
 
         super(msg);
-
-        const { name } = this;
-        // Add the error code to the name to include it in the stack trace.
-        this.name = `${name} [${this.code}]`;
-        // Access the stack to generate the error message including the error code from the name.
-        this.stack;
-        // Reset the name to the actual name.
-        this.name = name;
+        addCodeToMessage(this, "ERR_OUT_OF_RANGE");
     }
 }
 
@@ -225,7 +235,7 @@ export class ERR_INVALID_ARG_TYPE_RANGE extends RangeError {
         const msg = createInvalidArgType(name, expected);
 
         super(`${msg}.${invalidArgTypeHelper(actual)}`);
-        this.code = "ERR_INVALID_ARG_TYPE";
+        addCodeToMessage(this, "ERR_INVALID_ARG_TYPE");
     }
 }
 
@@ -240,7 +250,7 @@ export class ERR_INVALID_ARG_TYPE extends TypeError {
         const msg = createInvalidArgType(name, expected);
 
         super(`${msg}.${invalidArgTypeHelper(actual)}`);
-        this.code = "ERR_INVALID_ARG_TYPE";
+        addCodeToMessage(this, "ERR_INVALID_ARG_TYPE");
     }
 
     static RangeError = ERR_INVALID_ARG_TYPE_RANGE;
@@ -253,7 +263,7 @@ export class ERR_INVALID_ARG_VALUE_RANGE extends RangeError {
 
         super(`The ${type} '${name}' ${reason}. Received ${inspected}`,);
 
-        this.code = "ERR_INVALID_ARG_VALUE"
+        addCodeToMessage(this, "ERR_INVALID_ARG_VALUE")
     }
 }
 
@@ -264,7 +274,7 @@ export class ERR_INVALID_ARG_VALUE extends TypeError {
 
         super(`The ${type} '${name}' ${reason}. Received ${inspected}`,);
 
-        this.code = "ERR_INVALID_ARG_VALUE"
+        addCodeToMessage(this, "ERR_INVALID_ARG_VALUE")
     }
 }
 
@@ -274,21 +284,21 @@ export class ERR_INVALID_CHAR extends TypeError {
             ? `Invalid character in ${name}`
             : `Invalid character in ${name} ["${field}"]`,
         );
-        this.code = "ERR_INVALID_CHAR";
+        addCodeToMessage(this, "ERR_INVALID_CHAR");
     }
 }
 
 export class ERR_METHOD_NOT_IMPLEMENTED extends Error {
     constructor(x) {
         super(`The ${x} method is not implemented`);
-        this.code = "ERR_METHOD_NOT_IMPLEMENTED";
+        addCodeToMessage(this, "ERR_METHOD_NOT_IMPLEMENTED");
     }
 }
 
 export class ERR_STREAM_CANNOT_PIPE extends Error {
     constructor() {
         super(`Cannot pipe, not readable`);
-        this.code = "ERR_STREAM_CANNOT_PIPE";
+        addCodeToMessage(this, "ERR_STREAM_CANNOT_PIPE");
     }
 }
 
@@ -297,21 +307,21 @@ export class ERR_STREAM_ALREADY_FINISHED extends Error {
         super(
             `Cannot call ${x} after a stream was finished`,
         );
-        this.code = "ERR_STREAM_ALREADY_FINISHED";
+        addCodeToMessage(this, "ERR_STREAM_ALREADY_FINISHED");
     }
 }
 
 export class ERR_STREAM_WRITE_AFTER_END extends Error {
     constructor() {
         super(`write after end`);
-        this.code = "ERR_STREAM_WRITE_AFTER_END";
+        addCodeToMessage(this, "ERR_STREAM_WRITE_AFTER_END");
     }
 }
 
 export class ERR_STREAM_NULL_VALUES extends TypeError {
     constructor() {
         super(`May not write null values to stream`);
-        this.code = "ERR_STREAM_NULL_VALUES";
+        addCodeToMessage(this, "ERR_STREAM_NULL_VALUES");
     }
 }
 
@@ -320,7 +330,7 @@ export class ERR_STREAM_DESTROYED extends Error {
         super(
             `Cannot call ${x} after a stream was destroyed`,
         );
-        this.code = "ERR_STREAM_DESTROYED";
+        addCodeToMessage(this, "ERR_STREAM_DESTROYED");
     }
 }
 
@@ -358,21 +368,21 @@ export class ERR_SOCKET_BAD_PORT extends RangeError {
         super(
             `${name} should be ${operator} 0 and < 65536. Received ${port}.`,
         );
-        this.code = "ERR_SOCKET_BAD_PORT";
+        addCodeToMessage(this, "ERR_SOCKET_BAD_PORT");
     }
 }
 
 export class ERR_STREAM_PREMATURE_CLOSE extends Error {
     constructor() {
         super(`Premature close`);
-        this.code = "ERR_STREAM_PREMATURE_CLOSE";
+        addCodeToMessage(this, "ERR_STREAM_PREMATURE_CLOSE");
     }
 }
 
 export class AbortError extends Error {
     constructor(reason) {
         super("The operation was aborted", reason !== undefined ? { cause: reason } : undefined);
-        this.code = "ABORT_ERR";
+        addCodeToMessage(this, "ABORT_ERR");
         this.name = "AbortError";
     }
 }
@@ -382,7 +392,7 @@ export class ERR_INVALID_CALLBACK extends TypeError {
         super(
             `Callback must be a function. Received ${JSON.stringify(object)}`,
         );
-        this.code = "ERR_INVALID_CALLBACK";
+        addCodeToMessage(this, "ERR_INVALID_CALLBACK");
     }
 }
 
@@ -412,26 +422,26 @@ export class ERR_MISSING_ARGS extends TypeError {
         }
 
         super(`${msg} must be specified`);
-        this.code = "ERR_MISSING_ARGS";
+        addCodeToMessage(this, "ERR_MISSING_ARGS");
     }
 }
 export class ERR_MISSING_OPTION extends TypeError {
     constructor(x) {
         super(`${x} is required`);
-        this.code = "ERR_MISSING_OPTION";
+        addCodeToMessage(this, "ERR_MISSING_OPTION");
     }
 }
 export class ERR_MULTIPLE_CALLBACK extends Error {
     constructor() {
         super(`Callback called multiple times`);
-        this.code = "ERR_MULTIPLE_CALLBACK";
+        addCodeToMessage(this, "ERR_MULTIPLE_CALLBACK");
     }
 }
 
 export class ERR_STREAM_PUSH_AFTER_EOF extends Error {
     constructor() {
         super(`stream.push() after EOF`);
-        this.code = "ERR_STREAM_PUSH_AFTER_EOF";
+        addCodeToMessage(this, "ERR_STREAM_PUSH_AFTER_EOF");
     }
 }
 
@@ -440,14 +450,14 @@ export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends Error {
         super(
             `stream.unshift() after end event`,
         );
-        this.code = "ERR_STREAM_UNSHIFT_AFTER_END_EVENT";
+        addCodeToMessage(this, "ERR_STREAM_UNSHIFT_AFTER_END_EVENT");
     }
 }
 
 export class ERR_UNKNOWN_ENCODING extends TypeError {
     constructor(x) {
         super(`Unknown encoding: ${x}`);
-        this.code = "ERR_UNKNOWN_ENCODING";
+        addCodeToMessage(this, "ERR_UNKNOWN_ENCODING");
     }
 }
 
@@ -464,7 +474,7 @@ export class ERR_INVALID_RETURN_VALUE extends TypeError {
         super(
             `Expected ${input} to be returned from the "${name}" function but got ${buildReturnPropertyType(value)}.`,
         );
-        this.code = "ERR_INVALID_RETURN_VALUE";
+        addCodeToMessage(this, "ERR_INVALID_RETURN_VALUE");
     }
 }
 
@@ -473,7 +483,7 @@ export class ERR_INCOMPATIBLE_OPTION_PAIR extends TypeError {
         super(
             `Option "${input}" cannot be used in combination with option "${name}"`,
         );
-        this.code = "ERR_INCOMPATIBLE_OPTION_PAIR";
+        addCodeToMessage(this, "ERR_INCOMPATIBLE_OPTION_PAIR");
     }
 }
 
@@ -521,9 +531,6 @@ export class NodeErrorAbstraction extends Error {
         super(message);
         this.code = code;
         this.name = name;
-        //This number changes depending on the name of this class
-        //20 characters as of now
-        this.stack = this.stack && `${name} [${this.code}]${this.stack.slice(20)}`;
     }
 
     toString() {
@@ -777,7 +784,7 @@ export class ERR_AMBIGUOUS_ARGUMENT extends TypeError {
 export class ERR_DIR_CLOSED extends Error {
     constructor() {
         super("Directory handle was closed");
-        this.code = "ERR_DIR_CLOSED";
+        addCodeToMessage(this, "ERR_DIR_CLOSED");
     }
 }
 
@@ -786,7 +793,7 @@ export class ERR_DIR_CONCURRENT_OPERATION extends Error {
         super(
             "Cannot do synchronous work on directory handle with concurrent asynchronous operations",
         );
-        this.code = "ERR_DIR_CONCURRENT_OPERATION";
+        addCodeToMessage(this, "ERR_DIR_CONCURRENT_OPERATION");
     }
 }
 
@@ -795,7 +802,7 @@ export class ERR_FS_FILE_TOO_LARGE extends RangeError {
         super(
             `File size (${x}) is greater than 2 GB`,
         );
-        this.code = "ERR_FS_FILE_TOO_LARGE";
+        addCodeToMessage(this, "ERR_FS_FILE_TOO_LARGE");
     }
 }
 
@@ -813,7 +820,7 @@ export class ERR_FS_INVALID_SYMLINK_TYPE extends Error {
         super(
             `Symlink type must be one of "dir", "file", or "junction". Received "${x}"`,
         );
-        this.code = "ERR_FS_INVALID_SYMLINK_TYPE";
+        addCodeToMessage(this, "ERR_FS_INVALID_SYMLINK_TYPE");
     }
 }
 
@@ -822,7 +829,7 @@ export class ERR_CRYPTO_FIPS_FORCED extends Error {
         super(
             'Cannot set FIPS mode, it was forced with --force-fips at startup.',
         );
-        this.code = "ERR_CRYPTO_FIPS_FORCED";
+        addCodeToMessage(this, "ERR_CRYPTO_FIPS_FORCED");
     }
 }
 
@@ -831,7 +838,7 @@ export class ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH extends RangeError {
         super(
             'Input buffers must have the same byte length',
         );
-        this.code = "ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH";
+        addCodeToMessage(this, "ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH");
     }
 }
 
@@ -840,7 +847,7 @@ export class ERR_OPERATION_FAILED extends Error {
         super(
             `Operation failed: ${x}`,
         );
-        this.code = "ERR_OPERATION_FAILED";
+        addCodeToMessage(this, "ERR_OPERATION_FAILED");
     }
 }
 
@@ -849,90 +856,90 @@ export class ERR_CRYPTO_ENGINE_UNKNOWN extends Error {
         super(
             `Engine "${x}" was not found`,
         );
-        this.code = "ERR_CRYPTO_ENGINE_UNKNOWN";
+        addCodeToMessage(this, "ERR_CRYPTO_ENGINE_UNKNOWN");
     }
 }
 
 export class ERR_CRYPTO_INVALID_DIGEST extends TypeError {
     constructor(x) {
         super(`Invalid digest: ${x}`);
-        this.code = "ERR_CRYPTO_INVALID_DIGEST";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_DIGEST");
     }
 }
 
 export class ERR_CRYPTO_SCRYPT_INVALID_PARAMETER extends Error {
     constructor() {
         super(`Invalid scrypt parameter`);
-        this.code = "ERR_CRYPTO_SCRYPT_INVALID_PARAMETER";
+        addCodeToMessage(this, "ERR_CRYPTO_SCRYPT_INVALID_PARAMETER");
     }
 }
 
 export class ERR_CRYPTO_SCRYPT_NOT_SUPPORTED extends Error {
     constructor() {
         super(`Scrypt algorithm not supported`);
-        this.code = "ERR_CRYPTO_SCRYPT_NOT_SUPPORTED";
+        addCodeToMessage(this, "ERR_CRYPTO_SCRYPT_NOT_SUPPORTED");
     }
 }
 
 export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS extends Error {
     constructor(a, b) {
         super(`The selected key encoding ${a} ${b}.`);
-        this.code = "ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS";
+        addCodeToMessage(this, "ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS");
     }
 }
 
 export class ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE extends TypeError {
     constructor(t, e) {
         super(`Invalid key object type ${t}, expected ${e}.`);
-        this.code = "ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE");
     }
 }
 
 export class ERR_CRYPTO_INVALID_JWK extends TypeError {
     constructor() {
         super(`Invalid JWK data`);
-        this.code = "ERR_CRYPTO_INVALID_JWK";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_JWK");
     }
 }
 
 export class ERR_ILLEGAL_CONSTRUCTOR extends TypeError {
     constructor() {
         super(`Illegal constructor`);
-        this.code = "ERR_ILLEGAL_CONSTRUCTOR";
+        addCodeToMessage(this, "ERR_ILLEGAL_CONSTRUCTOR");
     }
 }
 
 export class ERR_CRYPTO_INVALID_KEYLEN extends RangeError {
     constructor() {
         super(`Invalid key length`);
-        this.code = "ERR_CRYPTO_INVALID_KEYLEN";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_KEYLEN");
     }
 }
 
 export class ERR_CRYPTO_HASH_FINALIZED extends Error {
     constructor() {
         super(`Digest already called`);
-        this.code = "ERR_CRYPTO_HASH_FINALIZED";
+        addCodeToMessage(this, "ERR_CRYPTO_HASH_FINALIZED");
     }
 }
 
 export class ERR_CRYPTO_HASH_UPDATE_FAILED extends Error {
     constructor() {
         super(`Hash update failed`);
-        this.code = "ERR_CRYPTO_HASH_UPDATE_FAILED";
+        addCodeToMessage(this, "ERR_CRYPTO_HASH_UPDATE_FAILED");
     }
 }
 
 export class ERR_CRYPTO_INVALID_STATE extends Error {
     constructor() {
         super(`Invalid state`);
-        this.code = "ERR_CRYPTO_INVALID_STATE";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_STATE");
     }
 }
 
 export class ERR_CRYPTO_UNKNOWN_CIPHER extends Error {
     constructor() {
         super(`Unknown cipher`);
-        this.code = "ERR_CRYPTO_UNKNOWN_CIPHER";
+        addCodeToMessage(this, "ERR_CRYPTO_UNKNOWN_CIPHER");
     }
 }

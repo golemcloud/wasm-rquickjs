@@ -436,6 +436,14 @@ EventEmitter.defaultMaxListeners = 10;
 EventEmitter.errorMonitor = Symbol('events.errorMonitor');
 EventEmitter.captureRejections = false;
 
+// Legacy static listenerCount (used by legacy stream pipe onerror handler)
+EventEmitter.listenerCount = function(emitter, eventName) {
+    if (emitter == null || typeof emitter.listenerCount !== 'function') return 0;
+    return emitter.listenerCount(eventName);
+};
+
+EventEmitter.captureRejectionSymbol = Symbol('events.captureRejection');
+
 EventEmitter.once = function(emitter, name, options) {
     return new Promise(function(resolve, reject) {
         var signal = options && options.signal;

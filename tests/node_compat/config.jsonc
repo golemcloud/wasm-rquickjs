@@ -1470,6 +1470,63 @@
     "parallel/test-event-emitter-symbols.js": {},
 
     // === node:stream tests (additional) ===
+    "parallel/test-readable-from.js": {},
+    "parallel/test-stream-aliases-legacy.js": {},
+    "parallel/test-stream-drop-take.js": {
+      "skip": true,
+      "reason": "take(1) on lazy generator hangs (async iterator early-return not propagated through readableFrom)"
+    },
+    "parallel/test-stream-filter.js": {
+      "skip": true,
+      "reason": "QuickJS microtask timing differs from V8; concurrency count assertion fires before pump completes"
+    },
+    "parallel/test-stream-flatMap.js": {
+      "skip": true,
+      "reason": "requires common/fixtures for createReadStream test"
+    },
+    "parallel/test-stream-forEach.js": {
+      "skip": true,
+      "reason": "QuickJS microtask timing differs from V8; concurrency count assertion fires before pump completes"
+    },
+    "parallel/test-stream-map.js": {
+      "skip": true,
+      "reason": "QuickJS memory corruption with large concurrent promise chains (createDependentPromises(20))"
+    },
+    "parallel/test-stream-reduce.js": {},
+    "parallel/test-stream-set-default-hwm.js": {},
+    "parallel/test-stream-toArray.js": {},
+    "parallel/test-stream-pipe-error-handling.js": {},
+    "parallel/test-stream-pipe-without-listenerCount.js": {
+      "skip": true,
+      "reason": "legacy pipe calls listenerCount with wrong context (mustCall count mismatch)"
+    },
+    "parallel/test-stream-writable-aborted.js": {},
+    "parallel/test-stream-readable-didRead.js": {},
+    "parallel/test-stream-readable-dispose.js": {
+      "skip": true,
+      "reason": "requires Symbol.asyncDispose support in QuickJS engine"
+    },
+    "parallel/test-stream-duplex-from.js": {
+      "skip": true,
+      "reason": "Duplex.from with readable/writable pair not fully implemented"
+    },
+    "parallel/test-stream-duplex-destroy.js": {
+      "skip": true,
+      "reason": "requires autoDestroy timing fixes for duplex streams"
+    },
+    "parallel/test-stream-transform-destroy.js": {
+      "skip": true,
+      "reason": "requires autoDestroy timing fixes"
+    },
+    "parallel/test-stream-transform-split-objectmode.js": {},
+    "parallel/test-stream-typedarray.js": {
+      "skip": true,
+      "reason": "Writable stream does not accept TypedArray views other than Uint8Array"
+    },
+    "parallel/test-stream-writable-samecb-singletick.js": {
+      "skip": true,
+      "reason": "requires require('console') CJS resolution (console module ES/CJS interop issue)"
+    },
     "parallel/test-readable-from-iterator-closing.js": {},
     "parallel/test-readable-from-web-enqueue-then-close.js": {},
     "parallel/test-readable-large-hwm.js": {},

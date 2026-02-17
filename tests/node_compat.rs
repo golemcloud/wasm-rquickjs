@@ -500,22 +500,49 @@ async fn node_compat_misc(
     // Tests that don't fit into other prefix-based groups
     let config = load_config("tests/node_compat/config.jsonc")?;
     let all_other_prefixes = [
-        "test-btoa-atob", "test-path", "test-assert", "test-querystring",
-        "test-url", "test-util", "test-fs", "test-timers", "test-events",
-        "test-event-target", "test-eventtarget", "test-eventsource",
-        "test-abortcontroller", "test-abortsignal", "test-aborted",
-        "test-crypto", "test-stream", "test-process-hrtime", "test-buffer",
-        "test-readable", "test-console", "test-eval", "test-event-emitter",
-        "test-global", "test-module", "test-next-tick",
-        "test-require", "test-v8", "test-vm", "test-whatwg", "test-runner",
+        "test-btoa-atob",
+        "test-path",
+        "test-assert",
+        "test-querystring",
+        "test-url",
+        "test-util",
+        "test-fs",
+        "test-timers",
+        "test-events",
+        "test-event-target",
+        "test-eventtarget",
+        "test-eventsource",
+        "test-abortcontroller",
+        "test-abortsignal",
+        "test-aborted",
+        "test-crypto",
+        "test-stream",
+        "test-process-hrtime",
+        "test-buffer",
+        "test-readable",
+        "test-console",
+        "test-eval",
+        "test-event-emitter",
+        "test-global",
+        "test-module",
+        "test-next-tick",
+        "test-require",
+        "test-v8",
+        "test-vm",
+        "test-whatwg",
+        "test-runner",
     ];
-    let misc_tests: Vec<&TestEntry> = config.tests.iter().filter(|t| {
-        if !t.path.starts_with("parallel/") {
-            return false;
-        }
-        let filename = t.path.rsplit('/').next().unwrap_or(&t.path);
-        !all_other_prefixes.iter().any(|p| filename.starts_with(p))
-    }).collect();
+    let misc_tests: Vec<&TestEntry> = config
+        .tests
+        .iter()
+        .filter(|t| {
+            if !t.path.starts_with("parallel/") {
+                return false;
+            }
+            let filename = t.path.rsplit('/').next().unwrap_or(&t.path);
+            !all_other_prefixes.iter().any(|p| filename.starts_with(p))
+        })
+        .collect();
 
     if misc_tests.is_empty() {
         println!("  No miscellaneous tests found, skipping");

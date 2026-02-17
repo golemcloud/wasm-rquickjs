@@ -21,6 +21,26 @@ import * as nodeUrl from 'node:url';
 import * as vm from 'node:vm';
 import * as timers from 'node:timers';
 import * as timersPromises from 'node:timers/promises';
+import * as consoleMod from 'node:console';
+import * as async_hooks from 'node:async_hooks';
+import * as cluster from 'node:cluster';
+import * as dgram from 'node:dgram';
+import * as diagnostics_channel from 'node:diagnostics_channel';
+import * as dns from 'node:dns';
+import * as dnsPromises from 'node:dns/promises';
+import * as domain from 'node:domain';
+import * as http2 from 'node:http2';
+import * as https from 'node:https';
+import * as net from 'node:net';
+import * as perf_hooks from 'node:perf_hooks';
+import * as readline from 'node:readline';
+import * as readlinePromises from 'node:readline/promises';
+import * as repl from 'node:repl';
+import * as tls from 'node:tls';
+import * as tty from 'node:tty';
+import * as v8 from 'node:v8';
+import * as worker_threads from 'node:worker_threads';
+import * as zlib from 'node:zlib';
 
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
@@ -89,6 +109,55 @@ const builtinModules = {
     'node:timers': cjsExport(timers),
     'timers/promises': cjsExport(timersPromises),
     'node:timers/promises': cjsExport(timersPromises),
+    'console': cjsExport(consoleMod),
+    'node:console': cjsExport(consoleMod),
+    'async_hooks': cjsExport(async_hooks),
+    'node:async_hooks': cjsExport(async_hooks),
+    'cluster': cjsExport(cluster),
+    'node:cluster': cjsExport(cluster),
+    'dgram': cjsExport(dgram),
+    'node:dgram': cjsExport(dgram),
+    'diagnostics_channel': cjsExport(diagnostics_channel),
+    'node:diagnostics_channel': cjsExport(diagnostics_channel),
+    'dns': cjsExport(dns),
+    'node:dns': cjsExport(dns),
+    'dns/promises': cjsExport(dnsPromises),
+    'node:dns/promises': cjsExport(dnsPromises),
+    'domain': cjsExport(domain),
+    'node:domain': cjsExport(domain),
+    'http': cjsExport(https),
+    'node:http': cjsExport(https),
+    'http2': cjsExport(http2),
+    'node:http2': cjsExport(http2),
+    'https': cjsExport(https),
+    'node:https': cjsExport(https),
+    'net': cjsExport(net),
+    'node:net': cjsExport(net),
+    'perf_hooks': cjsExport(perf_hooks),
+    'node:perf_hooks': cjsExport(perf_hooks),
+    'readline': cjsExport(readline),
+    'node:readline': cjsExport(readline),
+    'readline/promises': cjsExport(readlinePromises),
+    'node:readline/promises': cjsExport(readlinePromises),
+    'repl': cjsExport(repl),
+    'node:repl': cjsExport(repl),
+    'tls': cjsExport(tls),
+    'node:tls': cjsExport(tls),
+    'tty': cjsExport(tty),
+    'node:tty': cjsExport(tty),
+    'v8': cjsExport(v8),
+    'node:v8': cjsExport(v8),
+    'worker_threads': cjsExport(worker_threads),
+    'node:worker_threads': cjsExport(worker_threads),
+    'zlib': cjsExport(zlib),
+    'node:zlib': cjsExport(zlib),
+    'util/types': (cjsExport(util) && cjsExport(util).types) || {},
+    'node:util/types': (cjsExport(util) && cjsExport(util).types) || {},
+    '_stream_readable': cjsExport(stream) && cjsExport(stream).Readable,
+    '_stream_writable': cjsExport(stream) && cjsExport(stream).Writable,
+    '_stream_duplex': cjsExport(stream) && cjsExport(stream).Duplex,
+    '_stream_transform': cjsExport(stream) && cjsExport(stream).Transform,
+    '_stream_passthrough': cjsExport(stream) && cjsExport(stream).PassThrough,
 };
 
 // Self-reference will be added after the module object is created (see bottom of file)

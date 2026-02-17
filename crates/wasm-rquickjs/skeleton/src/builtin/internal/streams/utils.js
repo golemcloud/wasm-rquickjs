@@ -127,6 +127,18 @@ function isWritable(stream) {
     return r && stream.writable && !isWritableEnded(stream);
 }
 
+function isErrored(stream) {
+    if (!isNodeStream(stream)) {
+        return null;
+    }
+    const wState = stream._writableState;
+    const rState = stream._readableState;
+    return !!(
+        (rState && rState.errored) ||
+        (wState && wState.errored)
+    );
+}
+
 function isFinished(stream, opts) {
     if (!isNodeStream(stream)) {
         return null;
@@ -210,6 +222,7 @@ function willEmitClose(stream) {
 
 export default {
     isDisturbed,
+    isErrored,
     kIsDisturbed,
     isClosed,
     isDestroyed,
@@ -234,6 +247,7 @@ export {
     isDestroyed,
     isDisturbed,
     isDuplexNodeStream,
+    isErrored,
     isFinished,
     isIterable,
     isNodeStream,

@@ -398,11 +398,28 @@ Implemented by https://github.com/ungap/structured-clone
 - `destroy`
 - `Duplex`
 - `finished`
+- `getDefaultHighWaterMark`
+- `setDefaultHighWaterMark`
 - `isDisturbed`
 - `_isUint8Array`
 - `PassThrough`
 - `pipeline`
 - `Readable`
+  - `Readable.from`
+  - `Readable.fromWeb`
+  - `Readable.toWeb`
+  - `Readable.wrap`
+  - `Readable.prototype.map`
+  - `Readable.prototype.filter`
+  - `Readable.prototype.flatMap`
+  - `Readable.prototype.take`
+  - `Readable.prototype.drop`
+  - `Readable.prototype.toArray`
+  - `Readable.prototype.forEach`
+  - `Readable.prototype.reduce`
+  - `Readable.prototype.some`
+  - `Readable.prototype.every`
+  - `Readable.prototype.find`
 - `Stream`
 - `Transform`
 - `Writable`
