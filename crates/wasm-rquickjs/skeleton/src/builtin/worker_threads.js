@@ -22,36 +22,53 @@ export class BroadcastChannel {
 }
 
 export class MessagePort {
-    postMessage() {
-        throw new Error(NOT_SUPPORTED_ERROR);
+    #onmessage = null
+    #closed = false
+
+    get onmessage() {
+        return this.#onmessage
+    }
+    set onmessage(fn) {
+        this.#onmessage = fn
+    }
+
+    _deliver(data) {
+        if (this.#closed) return
+        if (typeof this.#onmessage === 'function') {
+            this.#onmessage({ data })
+        }
+    }
+
+    postMessage(value) {
+        if (this.#closed) return
+        const target = this._target
+        if (target) {
+            Promise.resolve().then(() => target._deliver(value))
+        }
     }
     close() {
-        throw new Error(NOT_SUPPORTED_ERROR);
+        this.#closed = true
     }
-    ref() {
-        throw new Error(NOT_SUPPORTED_ERROR);
+    ref() {}
+    unref() {}
+    start() {}
+    on(event, fn) {
+        if (event === 'message') this.#onmessage = fn
     }
-    unref() {
-        throw new Error(NOT_SUPPORTED_ERROR);
+    once(event, fn) {
+        if (event === 'message') {
+            this.#onmessage = (e) => { this.#onmessage = null; fn(e) }
+        }
     }
-    start() {
-        throw new Error(NOT_SUPPORTED_ERROR);
-    }
-    on() {
-        throw new Error(NOT_SUPPORTED_ERROR);
-    }
-    once() {
-        throw new Error(NOT_SUPPORTED_ERROR);
-    }
-    removeListener() {
-        throw new Error(NOT_SUPPORTED_ERROR);
-    }
+    removeListener() {}
 }
 
 export class MessageChannel {
     constructor() {
         this.port1 = new MessagePort();
         this.port2 = new MessagePort();
+        this.port1._target = this.port2;
+        this.port2._target = this.port1;
     }
 }
 

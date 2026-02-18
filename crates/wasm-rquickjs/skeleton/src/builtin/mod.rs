@@ -363,6 +363,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", process::WIRE_JS).unwrap();
     writeln!(result, "{}", structured_clone::WIRE_JS).unwrap();
     writeln!(result, "{}", module::WIRE_JS).unwrap();
+    writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();
     writeln!(result, "globalThis.global = globalThis;").unwrap();
 
     result

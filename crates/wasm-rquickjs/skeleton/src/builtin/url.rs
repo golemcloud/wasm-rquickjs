@@ -289,8 +289,29 @@ pub mod native_module {
         }
 
         #[qjs(static, rename = "createObjectURL")]
-        pub fn create_object_url(_object: Value<'_>) -> String {
-            todo!()
+        pub fn create_object_url<'js>(
+            object: Value<'js>,
+            ctx: Ctx<'js>,
+        ) -> rquickjs::Result<String> {
+            if !object.is_object() {
+                return Err(Exception::throw_type(
+                    &ctx,
+                    "The argument must be an instance of Blob",
+                ));
+            }
+            let id = uuid::Uuid::new_v4().to_string();
+            let url = format!("blob:nodedata:{id}");
+            // Store the blob in a global registry
+            let global = ctx.globals();
+            let registry: rquickjs::Object<'js> = global
+                .get::<_, rquickjs::Object>("__blobURLRegistry")
+                .unwrap_or_else(|_| {
+                    let obj = rquickjs::Object::new(ctx.clone()).unwrap();
+                    global.set("__blobURLRegistry", obj.clone()).unwrap();
+                    obj
+                });
+            registry.set(&url as &str, object)?;
+            Ok(url)
         }
 
         #[qjs(static, rename = "parse")]
@@ -299,8 +320,12 @@ pub mod native_module {
         }
 
         #[qjs(static, rename = "revokeObjectURL")]
-        pub fn revoke_object_url(_object_url: String) {
-            todo!()
+        pub fn revoke_object_url(object_url: String, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+            let global = ctx.globals();
+            if let Ok(registry) = global.get::<_, rquickjs::Object>("__blobURLRegistry") {
+                registry.set(&object_url as &str, rquickjs::Value::new_undefined(ctx.clone()))?;
+            }
+            Ok(())
         }
     }
 }
@@ -348,6 +373,7 @@ pub const REEXPORT_JS: &str = r#"export * from 'node:url'; export { default } fr
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_url_native from '__wasm_rquickjs_builtin/url_native';
         import * as __wasm_rquickjs_url from '__wasm_rquickjs_builtin/url';
+        import { ERR_INVALID_ARG_TYPE as __url_ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
         globalThis.URL = __wasm_rquickjs_url_native.URL;
         globalThis.URLSearchParams = __wasm_rquickjs_url.URLSearchParams;
         Object.defineProperty(globalThis.URL.prototype, "searchParams", {
@@ -355,4 +381,14 @@ pub const WIRE_JS: &str = r#"
             enumerable: true,
             configurable: true
         });
+
+        // Wrap createObjectURL to validate Blob argument with proper error code
+        const __origCreateObjectURL = globalThis.URL.createObjectURL;
+        globalThis.URL.createObjectURL = function createObjectURL(obj) {
+            if (!obj || typeof obj !== 'object' ||
+                (typeof obj.arrayBuffer !== 'function' && typeof obj.stream !== 'function')) {
+                throw new __url_ERR_INVALID_ARG_TYPE('object', 'Blob', obj);
+            }
+            return __origCreateObjectURL.call(this, obj);
+        };
     "#;

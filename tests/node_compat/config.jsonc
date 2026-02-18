@@ -99,6 +99,14 @@
     // === btoa/atob tests ===
     "parallel/test-btoa-atob.js": {},
 
+    // === blob tests ===
+    "parallel/test-blob.js": {
+      "skip": true,
+      "reason": "Tests use internal/webstreams/util kState symbol to inspect web stream internals"
+    },
+    "parallel/test-blob-createobjecturl.js": {},
+    "parallel/test-blob-file-backed.js": {},
+
     // === node:querystring tests ===
     "parallel/test-querystring.js": {},
     "parallel/test-querystring-escape.js": {},

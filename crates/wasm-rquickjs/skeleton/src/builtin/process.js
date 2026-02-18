@@ -237,10 +237,12 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
     if (!isHandled) {
         _pendingRejections.set(promise, reason);
         Promise.resolve().then(function() {
+        Promise.resolve().then(function() {
             if (_pendingRejections.has(promise)) {
                 _pendingRejections.delete(promise);
                 process.emit('unhandledRejection', reason, promise);
             }
+        });
         });
     } else {
         _pendingRejections.delete(promise);

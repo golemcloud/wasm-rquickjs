@@ -278,6 +278,8 @@ Only if the `http` feature flag is enabled in the generated crate. It depends on
 #### URL
 
 - `URL`
+- `URL.createObjectURL`
+- `URL.revokeObjectURL`
 - `URLSearchParams`
 
 #### Streams
@@ -318,6 +320,11 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `TextDecoderStream`
 - `TextEncoderStream`
 
+#### Messaging
+
+- `MessageChannel`
+- `MessagePort`
+
 #### Structured Clone
 
 Implemented by https://github.com/ungap/structured-clone
@@ -353,6 +360,9 @@ Implemented by https://github.com/ungap/structured-clone
 
 ### `node:buffer`
 - `Buffer`
+- `Blob`
+- `File`
+- `resolveObjectURL`
 - `INSPECT_MAX_BYTES`
 - `kMaxLength`
 - `kStringMaxLength`

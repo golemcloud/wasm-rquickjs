@@ -26,6 +26,7 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/util/debuglog")
         .with_module("__wasm_rquickjs_builtin/internal/util/inspect")
         .with_module("__wasm_rquickjs_builtin/internal/util/types")
+        .with_module("__wasm_rquickjs_builtin/internal/webstreams/util")
 }
 
 pub fn module_loader() -> BuiltinLoader {
@@ -125,5 +126,9 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/util/types",
             include_str!("util/types.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/webstreams/util",
+            include_str!("webstreams_util.js"),
         )
 }

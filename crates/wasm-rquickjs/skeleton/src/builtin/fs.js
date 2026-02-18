@@ -2615,6 +2615,176 @@ Object.defineProperty(exists, kCustomPromisifiedSymbol, {
     }
 });
 
+// --- openAsBlob ---
+
+const _kFileBackedBlob = Symbol.for('kFileBackedBlob');
+
+function _createFileBackedStream(readFn, validateFn, chunkSize) {
+    let data = null;
+    let offset = 0;
+    return new globalThis.ReadableStream({
+        pull(ctrl) {
+            try {
+                validateFn();
+            } catch (e) {
+                ctrl.error(e);
+                return;
+            }
+            if (data === null) {
+                data = readFn();
+            }
+            if (offset >= data.byteLength) {
+                ctrl.close();
+                return;
+            }
+            const end = Math.min(offset + chunkSize, data.byteLength);
+            ctrl.enqueue(data.slice(offset, end));
+            offset = end;
+            if (offset >= data.byteLength) {
+                ctrl.close();
+            }
+        }
+    });
+}
+
+function _createNotReadableError() {
+    if (typeof DOMException === 'function') {
+        return new DOMException('The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.', 'NotReadableError');
+    }
+    const err = new Error('The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.');
+    err.name = 'NotReadableError';
+    return err;
+}
+
+class FileBackedBlob {
+    constructor(path, size, mtimeMs) {
+        this._path = path;
+        this._size = size;
+        this._mtimeMs = mtimeMs;
+        this[_kFileBackedBlob] = true;
+    }
+
+    _validate() {
+        const st = statSync(this._path);
+        if (st.size !== this._size || st.mtimeMs !== this._mtimeMs) {
+            throw _createNotReadableError();
+        }
+    }
+
+    _readData() {
+        this._validate();
+        return readFileSync(this._path);
+    }
+
+    get size() {
+        return this._size;
+    }
+
+    get type() {
+        return '';
+    }
+
+    async text() {
+        this._validate();
+        return readFileSync(this._path, 'utf8');
+    }
+
+    async arrayBuffer() {
+        const data = this._readData();
+        const u8 = (data instanceof Uint8Array) ? data : new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
+        return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+    }
+
+    stream() {
+        const self = this;
+        const CHUNK_SIZE = 65536;
+        return _createFileBackedStream(() => {
+            const raw = readFileSync(self._path);
+            return (raw instanceof Uint8Array) ? raw : new Uint8Array(raw.buffer || raw, raw.byteOffset || 0, raw.byteLength || raw.length);
+        }, () => self._validate(), CHUNK_SIZE);
+    }
+
+    slice(start, end, type) {
+        const size = this._size;
+        if (start === undefined) start = 0;
+        if (end === undefined) end = size;
+        let relativeStart = start < 0 ? Math.max(size + start, 0) : Math.min(start, size);
+        let relativeEnd = end < 0 ? Math.max(size + end, 0) : Math.min(end, size);
+        const span = Math.max(relativeEnd - relativeStart, 0);
+        return new FileBackedBlobSlice(this, relativeStart, span);
+    }
+
+    get [Symbol.toStringTag]() {
+        return 'Blob';
+    }
+}
+
+class FileBackedBlobSlice {
+    constructor(parent, offset, length) {
+        this._parent = parent;
+        this._offset = offset;
+        this._size = length;
+        this[_kFileBackedBlob] = true;
+    }
+
+    get size() {
+        return this._size;
+    }
+
+    get type() {
+        return '';
+    }
+
+    _readSliceData() {
+        const data = readFileSync(this._parent._path);
+        const u8 = (data instanceof Uint8Array) ? data : new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
+        return u8.slice(this._offset, this._offset + this._size);
+    }
+
+    _readSlice() {
+        this._parent._validate();
+        return this._readSliceData();
+    }
+
+    async text() {
+        const slice = this._readSlice();
+        return new TextDecoder().decode(slice);
+    }
+
+    async arrayBuffer() {
+        const slice = this._readSlice();
+        return slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength);
+    }
+
+    stream() {
+        const self = this;
+        return _createFileBackedStream(() => self._readSliceData(), () => self._parent._validate(), 65536);
+    }
+
+    slice(start, end, type) {
+        const size = this._size;
+        if (start === undefined) start = 0;
+        if (end === undefined) end = size;
+        let relativeStart = start < 0 ? Math.max(size + start, 0) : Math.min(start, size);
+        let relativeEnd = end < 0 ? Math.max(size + end, 0) : Math.min(end, size);
+        const span = Math.max(relativeEnd - relativeStart, 0);
+        return new FileBackedBlobSlice(this._parent, this._offset + relativeStart, span);
+    }
+
+    get [Symbol.toStringTag]() {
+        return 'Blob';
+    }
+}
+
+export async function openAsBlob(path, options) {
+    validatePath(path);
+    const st = statSync(path);
+    return new FileBackedBlob(pathToString(path), st.size, st.mtimeMs);
+}
+
+// Expose the symbol for structuredClone integration
+export { _kFileBackedBlob };
+
 // --- Default export ---
 
 const _default = {
@@ -2716,6 +2886,7 @@ const _default = {
     readv,
     writev,
     cp,
+    openAsBlob,
 };
 
 export default _default;

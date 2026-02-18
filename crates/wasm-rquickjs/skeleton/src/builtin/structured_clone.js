@@ -248,6 +248,14 @@ const dataCloneError = (message) => {
 };
 
 const structuredClone = (any, options) => {
+  // Detect file-backed Blobs (from fs.openAsBlob) and reject them
+  const kFileBackedBlob = Symbol.for('kFileBackedBlob');
+  if (any && typeof any === 'object' && any[kFileBackedBlob]) {
+    const err = new Error('Invalid state: File-backed Blobs are not cloneable');
+    err.code = 'ERR_INVALID_STATE';
+    throw err;
+  }
+
   const transferList = options && options.transfer;
   const transferMap = new Map();
 

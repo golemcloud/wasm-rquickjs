@@ -278,6 +278,13 @@ export class ERR_INVALID_ARG_VALUE extends TypeError {
     }
 }
 
+export class ERR_INVALID_THIS extends TypeError {
+    constructor(type) {
+        super(`Value of "this" must be of type ${type}`);
+        addCodeToMessage(this, "ERR_INVALID_THIS");
+    }
+}
+
 export class ERR_INVALID_CHAR extends TypeError {
     constructor(name, field) {
         super(field

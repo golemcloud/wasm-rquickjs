@@ -10,7 +10,8 @@
 
 import * as base64 from "base64-js"
 import * as ieee754 from "ieee754"
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING, ERR_BUFFER_OUT_OF_BOUNDS } from "__wasm_rquickjs_builtin/internal/errors"
+import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING, ERR_BUFFER_OUT_OF_BOUNDS, ERR_INVALID_ARG_VALUE, ERR_INVALID_THIS } from "__wasm_rquickjs_builtin/internal/errors"
+import { Blob as _BlobImport, File as _FileImport } from "__wasm_rquickjs_builtin/http_blob"
 
 const customInspectSymbol =
     (typeof Symbol === 'function' && typeof Symbol['for'] === 'function') // eslint-disable-line dot-notation
@@ -2313,6 +2314,130 @@ function validateBufferSource (source) {
     return new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
 }
 
+// Node.js-compatible Blob wrapper
+// Wraps the fetch-blob polyfill with Node.js error codes and API compatibility
+
+const _blobBrand = Symbol('blobBrand')
+
+function _validateBlobThis(self) {
+    if (!self || !self[_blobBrand]) {
+        throw new ERR_INVALID_THIS('Blob')
+    }
+}
+
+const _innerKey = Symbol('blobInner')
+
+const _Blob = class Blob {
+    constructor(sources = [], options = {}) {
+        // Sentinel for _fromInner
+        if (sources === _innerKey) {
+            this[_innerKey] = options
+            Object.defineProperty(this, _blobBrand, { value: true, enumerable: false, writable: false, configurable: false })
+            return
+        }
+
+        if (sources !== undefined && sources !== null && typeof sources === 'object' && typeof sources[Symbol.iterator] !== 'function') {
+            throw new ERR_INVALID_ARG_TYPE('sources', 'a sequence', sources)
+        }
+        if (sources !== undefined && typeof sources !== 'object') {
+            throw new ERR_INVALID_ARG_TYPE('sources', 'a sequence', sources)
+        }
+        if (options !== undefined && options !== null && typeof options !== 'object' && typeof options !== 'function') {
+            throw new ERR_INVALID_ARG_TYPE('options', 'object', options)
+        }
+
+        // Validate endings option
+        if (options !== null && options !== undefined) {
+            const endings = options.endings
+            if (endings !== undefined && endings !== 'transparent' && endings !== 'native') {
+                throw new ERR_INVALID_ARG_VALUE('options.endings', endings)
+            }
+        }
+
+        // Node.js lowercases the type per the Blob specification
+        let effectiveOptions = options || {}
+        const rawType = effectiveOptions.type
+        if (rawType !== undefined) {
+            const lowered = String(rawType).toLowerCase()
+            effectiveOptions = { __proto__: null, type: lowered, endings: effectiveOptions.endings }
+        }
+        this[_innerKey] = new _BlobImport(sources === undefined ? [] : sources, effectiveOptions)
+        Object.defineProperty(this, _blobBrand, { value: true, enumerable: false, writable: false, configurable: false })
+    }
+
+    get size() {
+        _validateBlobThis(this)
+        return this[_innerKey].size
+    }
+
+    get type() {
+        _validateBlobThis(this)
+        return this[_innerKey].type
+    }
+
+    async text() {
+        _validateBlobThis(this)
+        return this[_innerKey].text()
+    }
+
+    async arrayBuffer() {
+        _validateBlobThis(this)
+        return this[_innerKey].arrayBuffer()
+    }
+
+    async bytes() {
+        _validateBlobThis(this)
+        const ab = await this[_innerKey].arrayBuffer()
+        return new Uint8Array(ab)
+    }
+
+    stream() {
+        _validateBlobThis(this)
+        return this[_innerKey].stream()
+    }
+
+    slice(start, end, type) {
+        _validateBlobThis(this)
+        const sliced = this[_innerKey].slice(start, end, type)
+        return new Blob(_innerKey, sliced)
+    }
+}
+
+const _inspectCustom = Symbol.for('nodejs.util.inspect.custom')
+_Blob.prototype[_inspectCustom] = function(depth, options, inspect) {
+    if (depth < 0) return '[Blob]'
+    return `Blob { size: ${this.size}, type: '${this.type}' }`
+}
+
+Object.defineProperty(_Blob.prototype, Symbol.toStringTag, {
+    value: 'Blob',
+    writable: false,
+    enumerable: false,
+    configurable: true,
+})
+
+Object.defineProperties(_Blob.prototype, {
+    size: { enumerable: true },
+    type: { enumerable: true },
+    slice: { enumerable: true },
+    stream: { enumerable: true },
+    text: { enumerable: true },
+    arrayBuffer: { enumerable: true },
+    bytes: { enumerable: true },
+})
+
+export const Blob = _Blob
+export const File = _FileImport
+
+export function resolveObjectURL(url) {
+    if (typeof url !== 'string') return undefined
+    const registry = globalThis.__blobURLRegistry
+    if (!registry) return undefined
+    const blob = registry[url]
+    if (blob === undefined || blob === null) return undefined
+    return blob
+}
+
 export function isAscii (source) {
     const bytes = validateBufferSource(source)
     for (let i = 0; i < bytes.length; i++) {
@@ -2383,6 +2508,9 @@ const _defaultExport = {
     constants,
     Buffer,
     SlowBuffer,
+    Blob,
+    File,
+    resolveObjectURL,
     isAscii,
     isUtf8
 }
