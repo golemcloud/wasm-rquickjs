@@ -6,7 +6,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const fixturesDir = '/tests/fixtures';
+const fixturesDir = '/test/fixtures';
 
 function fixturesPath(...args) {
   return path.join(fixturesDir, ...args);

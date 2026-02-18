@@ -16,10 +16,7 @@
     // === node:path tests ===
     // Pure string operations, no I/O — highest likelihood of passing
     "parallel/test-path-basename.js": {},
-    "parallel/test-path-dirname.js": {
-      "skip": true,
-      "reason": "__filename assertion expects test/parallel suffix but WASM test harness uses tests/parallel"
-    },
+    "parallel/test-path-dirname.js": {},
     "parallel/test-path-extname.js": {},
     "parallel/test-path-join.js": {},
     "parallel/test-path-isabsolute.js": {},

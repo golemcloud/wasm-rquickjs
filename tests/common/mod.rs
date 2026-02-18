@@ -95,9 +95,10 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     // Parse the suite name from the relative path (e.g., "parallel/test-foo.js" → "parallel")
     let suite = test_rel_path.split('/').next().unwrap_or("parallel");
 
-    // Create directory structure: /tests/<suite>/ and /tests/common/
-    let suite_dir = temp.join("tests").join(suite);
-    let common_dir = temp.join("tests").join("common");
+    // Create directory structure: /test/<suite>/ and /test/common/
+    // Node.js uses "test/" (not "tests/") so __filename ends up matching expectations.
+    let suite_dir = temp.join("test").join(suite);
+    let common_dir = temp.join("test").join("common");
     fs::create_dir_all(&suite_dir)?;
     fs::create_dir_all(&common_dir)?;
 
@@ -138,7 +139,7 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     fs::create_dir_all(&tmp_dir)?;
 
     // Copy fixture data files for tests that use require('../common/fixtures')
-    let fixtures_dst = temp.join("tests").join("fixtures");
+    let fixtures_dst = temp.join("test").join("fixtures");
 
     // First copy vendored suite fixtures
     let vendored_fixtures_src = std::path::Path::new("tests/node_compat/suite/fixtures");

@@ -80,7 +80,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 let mut instance = TestInstance::from_prepared(&prepared).await?;
                 setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                let guest_path = format!("/tests/{}", path);
+                let guest_path = format!("/test/{}", path);
                 let (result, stdout, stderr) = instance
                     .invoke_and_capture_output_with_stderr(
                         None,
