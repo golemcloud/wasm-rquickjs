@@ -147,6 +147,7 @@ pub fn add_module_resolvers(
             .with_module("dgram")
             .with_module("node:diagnostics_channel")
             .with_module("diagnostics_channel")
+            .with_module("__wasm_rquickjs_builtin/dns_native")
             .with_module("node:dns")
             .with_module("dns")
             .with_module("node:dns/promises")
@@ -225,6 +226,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/zlib_native",
                 zlib::js_native_module,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/dns_native",
+                dns::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
             .with_module(

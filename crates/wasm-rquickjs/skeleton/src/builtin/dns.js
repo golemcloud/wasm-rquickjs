@@ -1,7 +1,8 @@
-// node:dns stub implementation
-// All functions throw errors as DNS resolution is not supported in WASM environment
+// node:dns implementation backed by wasi:sockets/ip-name-lookup
+import { resolve as native_resolve } from '__wasm_rquickjs_builtin/dns_native';
+import { isIP, isIPv4, isIPv6 } from 'node:net';
 
-const NOT_SUPPORTED_ERROR = new Error('dns is not supported in WebAssembly environment');
+const NOT_SUPPORTED_ERROR_MSG = 'dns record type queries are not supported in WebAssembly environment';
 
 // Error codes
 export const NODATA = 'ENODATA';
@@ -28,155 +29,468 @@ export const NOTINITIALIZED = 'ENOTINITIALIZED';
 export const LOADIPHLPAPI = 'ELOADIPHLPAPI';
 export const ADDRGETNETWORKPARAMS = 'EADDRGETNETWORKPARAMS';
 export const CANCELLED = 'ECANCELLED';
-export const ADDRCONFIG = 'EADDRCONFIG';
+
+// Hint flags
+export const ADDRCONFIG = 1024;
+export const V4MAPPED = 8;
+export const ALL = 16;
+
+let _defaultResultOrder = 'verbatim';
+
+function makeDnsError(code, hostname, syscall) {
+    const msg = syscall
+        ? `${syscall} ${code} ${hostname}`
+        : `${code} ${hostname}`;
+    const err = new Error(msg);
+    err.code = code;
+    err.hostname = hostname;
+    if (syscall) err.syscall = syscall;
+    return err;
+}
+
+function parseNativeError(e, hostname, syscall) {
+    try {
+        const parsed = JSON.parse(e.message);
+        return makeDnsError(parsed.code || 'ESERVFAIL', parsed.hostname || hostname, syscall);
+    } catch (_) {
+        return makeDnsError('ESERVFAIL', hostname, syscall);
+    }
+}
+
+function filterByFamily(results, family) {
+    if (family === 0) return results;
+    return results.filter(r => r.family === family);
+}
+
+function orderResults(results) {
+    if (_defaultResultOrder === 'ipv4first') {
+        const v4 = results.filter(r => r.family === 4);
+        const v6 = results.filter(r => r.family === 6);
+        return [...v4, ...v6];
+    }
+    if (_defaultResultOrder === 'ipv6first') {
+        const v6 = results.filter(r => r.family === 6);
+        const v4 = results.filter(r => r.family === 4);
+        return [...v6, ...v4];
+    }
+    return results;
+}
+
+function normalizeFamily(family) {
+    if (family === 'IPv4' || family === 'ipv4') return 4;
+    if (family === 'IPv6' || family === 'ipv6') return 6;
+    if (family === 4 || family === 6) return family;
+    return 0;
+}
+
+function parseLookupArgs(optionsOrCallback, callback) {
+    let options = {};
+    let cb;
+    if (typeof optionsOrCallback === 'function') {
+        cb = optionsOrCallback;
+    } else if (typeof optionsOrCallback === 'number') {
+        options = { family: optionsOrCallback };
+        cb = callback;
+    } else if (typeof optionsOrCallback === 'object' && optionsOrCallback !== null) {
+        options = optionsOrCallback;
+        cb = callback;
+    } else {
+        cb = callback;
+    }
+    return { options, cb };
+}
 
 // Callback-style functions
-export function lookup(hostname, options, callback) {
-    throw NOT_SUPPORTED_ERROR;
+export function lookup(hostname, optionsOrCallback, callback) {
+    const { options, cb } = parseLookupArgs(optionsOrCallback, callback);
+    if (typeof cb !== 'function') {
+        throw new TypeError('callback must be a function');
+    }
+
+    const family = normalizeFamily(options.family || 0);
+    const all = !!options.all;
+
+    // If hostname is falsy, return loopback
+    if (!hostname) {
+        if (all) {
+            queueMicrotask(() => cb(null, [{ address: '127.0.0.1', family: 4 }]));
+        } else {
+            queueMicrotask(() => cb(null, '127.0.0.1', 4));
+        }
+        return;
+    }
+
+    // If hostname is an IP address, return it directly
+    const ipVersion = isIP(hostname);
+    if (ipVersion) {
+        if (family && family !== ipVersion) {
+            queueMicrotask(() => cb(makeDnsError('ENOTFOUND', hostname, 'getaddrinfo')));
+            return;
+        }
+        if (all) {
+            queueMicrotask(() => cb(null, [{ address: hostname, family: ipVersion }]));
+        } else {
+            queueMicrotask(() => cb(null, hostname, ipVersion));
+        }
+        return;
+    }
+
+    (async () => {
+        try {
+            let results = await native_resolve(hostname);
+            results = results.map(r => ({ address: r.address, family: r.family }));
+            results = filterByFamily(results, family);
+            results = orderResults(results);
+
+            if (results.length === 0) {
+                cb(makeDnsError('ENOTFOUND', hostname, 'getaddrinfo'));
+                return;
+            }
+
+            if (all) {
+                cb(null, results);
+            } else {
+                cb(null, results[0].address, results[0].family);
+            }
+        } catch (e) {
+            cb(parseNativeError(e, hostname, 'getaddrinfo'));
+        }
+    })();
+}
+
+export function resolve(hostname, rrtypeOrCallback, callback) {
+    let rrtype = 'A';
+    let cb;
+    if (typeof rrtypeOrCallback === 'function') {
+        cb = rrtypeOrCallback;
+    } else {
+        rrtype = rrtypeOrCallback;
+        cb = callback;
+    }
+
+    if (typeof cb !== 'function') {
+        throw new TypeError('callback must be a function');
+    }
+
+    switch (rrtype) {
+        case 'A':
+            resolve4(hostname, cb);
+            break;
+        case 'AAAA':
+            resolve6(hostname, cb);
+            break;
+        default:
+            queueMicrotask(() => cb(Object.assign(
+                new Error(`queryA${rrtype} ${NOT_SUPPORTED_ERROR_MSG}`),
+                { code: 'ENOTIMP', hostname }
+            )));
+            break;
+    }
+}
+
+export function resolve4(hostname, optionsOrCallback, callback) {
+    let options = {};
+    let cb;
+    if (typeof optionsOrCallback === 'function') {
+        cb = optionsOrCallback;
+    } else {
+        options = optionsOrCallback || {};
+        cb = callback;
+    }
+    if (typeof cb !== 'function') {
+        throw new TypeError('callback must be a function');
+    }
+
+    (async () => {
+        try {
+            let results = await native_resolve(hostname);
+            results = results.filter(r => r.family === 4);
+            if (results.length === 0) {
+                cb(makeDnsError('ENODATA', hostname, 'queryA'));
+                return;
+            }
+            if (options.ttl) {
+                cb(null, results.map(r => ({ address: r.address, ttl: 0 })));
+            } else {
+                cb(null, results.map(r => r.address));
+            }
+        } catch (e) {
+            cb(parseNativeError(e, hostname, 'queryA'));
+        }
+    })();
+}
+
+export function resolve6(hostname, optionsOrCallback, callback) {
+    let options = {};
+    let cb;
+    if (typeof optionsOrCallback === 'function') {
+        cb = optionsOrCallback;
+    } else {
+        options = optionsOrCallback || {};
+        cb = callback;
+    }
+    if (typeof cb !== 'function') {
+        throw new TypeError('callback must be a function');
+    }
+
+    (async () => {
+        try {
+            let results = await native_resolve(hostname);
+            results = results.filter(r => r.family === 6);
+            if (results.length === 0) {
+                cb(makeDnsError('ENODATA', hostname, 'queryAaaa'));
+                return;
+            }
+            if (options.ttl) {
+                cb(null, results.map(r => ({ address: r.address, ttl: 0 })));
+            } else {
+                cb(null, results.map(r => r.address));
+            }
+        } catch (e) {
+            cb(parseNativeError(e, hostname, 'queryAaaa'));
+        }
+    })();
+}
+
+function unsupportedRecordType(syscall) {
+    return function (hostname, callback) {
+        if (typeof callback !== 'function') {
+            throw new TypeError('callback must be a function');
+        }
+        queueMicrotask(() => callback(Object.assign(
+            new Error(`${syscall} ${NOT_SUPPORTED_ERROR_MSG}`),
+            { code: 'ENOTIMP', hostname }
+        )));
+    };
+}
+
+export const resolveAny = unsupportedRecordType('queryAny');
+export const resolveCname = unsupportedRecordType('queryCname');
+export const resolveCaa = unsupportedRecordType('queryCaa');
+export const resolveMx = unsupportedRecordType('queryMx');
+export const resolveNaptr = unsupportedRecordType('queryNaptr');
+export const resolveNs = unsupportedRecordType('queryNs');
+export const resolvePtr = unsupportedRecordType('queryPtr');
+export const resolveSoa = unsupportedRecordType('querySoa');
+export const resolveSrv = unsupportedRecordType('querySrv');
+export const resolveTxt = unsupportedRecordType('queryTxt');
+export const resolveTlsa = unsupportedRecordType('queryTlsa');
+
+export function reverse(ip, callback) {
+    if (typeof callback !== 'function') {
+        throw new TypeError('callback must be a function');
+    }
+    queueMicrotask(() => callback(Object.assign(
+        new Error(`getHostByAddr ${NOT_SUPPORTED_ERROR_MSG}`),
+        { code: 'ENOTIMP', hostname: ip }
+    )));
 }
 
 export function lookupService(address, port, callback) {
-    throw NOT_SUPPORTED_ERROR;
+    if (typeof callback !== 'function') {
+        throw new TypeError('callback must be a function');
+    }
+    queueMicrotask(() => callback(Object.assign(
+        new Error(`getnameinfo ${NOT_SUPPORTED_ERROR_MSG}`),
+        { code: 'ENOTIMP' }
+    )));
 }
 
-export function resolve(hostname, rrtype, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolve4(hostname, options, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolve6(hostname, options, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveAny(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveCname(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveCaa(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveMx(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveNaptr(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveNs(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolvePtr(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveSoa(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveSrv(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function resolveTxt(hostname, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function reverse(ip, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
+let _servers = [];
 
 export function setServers(servers) {
-    throw NOT_SUPPORTED_ERROR;
+    if (!Array.isArray(servers)) {
+        throw new TypeError('servers must be an array');
+    }
+    _servers = servers.slice();
 }
 
 export function getServers() {
-    throw NOT_SUPPORTED_ERROR;
+    return _servers.slice();
 }
 
 export function setDefaultResultOrder(order) {
-    throw NOT_SUPPORTED_ERROR;
+    if (order !== 'verbatim' && order !== 'ipv4first' && order !== 'ipv6first') {
+        throw new TypeError(`invalid order: ${order}`);
+    }
+    _defaultResultOrder = order;
 }
 
 export function getDefaultResultOrder() {
-    throw NOT_SUPPORTED_ERROR;
+    return _defaultResultOrder;
 }
 
 // Resolver class
 export class Resolver {
-    constructor() {}
-    cancel() { throw NOT_SUPPORTED_ERROR; }
-    getServers() { throw NOT_SUPPORTED_ERROR; }
-    setServers() { throw NOT_SUPPORTED_ERROR; }
-    resolve(hostname, rrtype, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolve4(hostname, options, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolve6(hostname, options, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveAny(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveCname(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveCaa(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveMx(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveNaptr(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveNs(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolvePtr(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveSoa(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveSrv(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    resolveTxt(hostname, callback) { throw NOT_SUPPORTED_ERROR; }
-    reverse(ip, callback) { throw NOT_SUPPORTED_ERROR; }
-    setLocalAddress(ipv4, ipv6) { throw NOT_SUPPORTED_ERROR; }
-    lookup(hostname, options, callback) { throw NOT_SUPPORTED_ERROR; }
+    constructor(options) {
+        this._servers = [];
+        this._timeout = options?.timeout ?? -1;
+        this._tries = options?.tries ?? 4;
+    }
+
+    cancel() {
+        // No-op: no outstanding queries to cancel in sync WASI model
+    }
+
+    getServers() {
+        return this._servers.slice();
+    }
+
+    setServers(servers) {
+        if (!Array.isArray(servers)) {
+            throw new TypeError('servers must be an array');
+        }
+        this._servers = servers.slice();
+    }
+
+    setLocalAddress(_ipv4, _ipv6) {
+        // No-op: WASI does not support setting source address
+    }
+
+    lookup(hostname, options, callback) {
+        return lookup(hostname, options, callback);
+    }
+
+    resolve(hostname, rrtype, callback) {
+        return resolve(hostname, rrtype, callback);
+    }
+
+    resolve4(hostname, options, callback) {
+        return resolve4(hostname, options, callback);
+    }
+
+    resolve6(hostname, options, callback) {
+        return resolve6(hostname, options, callback);
+    }
+
+    resolveAny(hostname, callback) { return resolveAny(hostname, callback); }
+    resolveCname(hostname, callback) { return resolveCname(hostname, callback); }
+    resolveCaa(hostname, callback) { return resolveCaa(hostname, callback); }
+    resolveMx(hostname, callback) { return resolveMx(hostname, callback); }
+    resolveNaptr(hostname, callback) { return resolveNaptr(hostname, callback); }
+    resolveNs(hostname, callback) { return resolveNs(hostname, callback); }
+    resolvePtr(hostname, callback) { return resolvePtr(hostname, callback); }
+    resolveSoa(hostname, callback) { return resolveSoa(hostname, callback); }
+    resolveSrv(hostname, callback) { return resolveSrv(hostname, callback); }
+    resolveTxt(hostname, callback) { return resolveTxt(hostname, callback); }
+    reverse(ip, callback) { return reverse(ip, callback); }
 }
 
 // Promise-based API
 export const promises = {
-    lookup(hostname, options) { throw NOT_SUPPORTED_ERROR; },
-    lookupService(address, port) { throw NOT_SUPPORTED_ERROR; },
-    resolve(hostname, rrtype) { throw NOT_SUPPORTED_ERROR; },
-    resolve4(hostname, options) { throw NOT_SUPPORTED_ERROR; },
-    resolve6(hostname, options) { throw NOT_SUPPORTED_ERROR; },
-    resolveAny(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveCname(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveCaa(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveMx(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveNaptr(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveNs(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolvePtr(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveSoa(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveSrv(hostname) { throw NOT_SUPPORTED_ERROR; },
-    resolveTxt(hostname) { throw NOT_SUPPORTED_ERROR; },
-    reverse(ip) { throw NOT_SUPPORTED_ERROR; },
-    setServers(servers) { throw NOT_SUPPORTED_ERROR; },
-    getServers() { throw NOT_SUPPORTED_ERROR; },
-    setDefaultResultOrder(order) { throw NOT_SUPPORTED_ERROR; },
-    getDefaultResultOrder() { throw NOT_SUPPORTED_ERROR; },
-    Resolver: class Resolver {
-        constructor() {}
-        cancel() { throw NOT_SUPPORTED_ERROR; }
-        resolve(hostname, rrtype) { throw NOT_SUPPORTED_ERROR; }
-        resolve4(hostname, options) { throw NOT_SUPPORTED_ERROR; }
-        resolve6(hostname, options) { throw NOT_SUPPORTED_ERROR; }
-        resolveAny(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveCname(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveCaa(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveMx(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveNaptr(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveNs(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolvePtr(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveSoa(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveSrv(hostname) { throw NOT_SUPPORTED_ERROR; }
-        resolveTxt(hostname) { throw NOT_SUPPORTED_ERROR; }
-        reverse(ip) { throw NOT_SUPPORTED_ERROR; }
-        setLocalAddress(ipv4, ipv6) { throw NOT_SUPPORTED_ERROR; }
+    lookup(hostname, options) {
+        return new Promise((resolve, reject) => {
+            const opts = typeof options === 'number' ? { family: options } : (options || {});
+            lookup(hostname, { ...opts, all: !!opts.all }, (err, addressOrResults, family) => {
+                if (err) return reject(err);
+                if (opts.all) {
+                    resolve(addressOrResults);
+                } else {
+                    resolve({ address: addressOrResults, family });
+                }
+            });
+        });
+    },
+
+    lookupService(address, port) {
+        return new Promise((resolve, reject) => {
+            lookupService(address, port, (err, hostname, service) => {
+                if (err) return reject(err);
+                resolve({ hostname, service });
+            });
+        });
+    },
+
+    resolve(hostname, rrtype) {
+        return new Promise((res, reject) => {
+            resolve(hostname, rrtype || 'A', (err, addresses) => {
+                if (err) return reject(err);
+                res(addresses);
+            });
+        });
+    },
+
+    resolve4(hostname, options) {
+        return new Promise((res, reject) => {
+            resolve4(hostname, options || {}, (err, addresses) => {
+                if (err) return reject(err);
+                res(addresses);
+            });
+        });
+    },
+
+    resolve6(hostname, options) {
+        return new Promise((res, reject) => {
+            resolve6(hostname, options || {}, (err, addresses) => {
+                if (err) return reject(err);
+                res(addresses);
+            });
+        });
+    },
+
+    resolveAny(hostname) { return _unsupportedPromise('queryAny', hostname); },
+    resolveCname(hostname) { return _unsupportedPromise('queryCname', hostname); },
+    resolveCaa(hostname) { return _unsupportedPromise('queryCaa', hostname); },
+    resolveMx(hostname) { return _unsupportedPromise('queryMx', hostname); },
+    resolveNaptr(hostname) { return _unsupportedPromise('queryNaptr', hostname); },
+    resolveNs(hostname) { return _unsupportedPromise('queryNs', hostname); },
+    resolvePtr(hostname) { return _unsupportedPromise('queryPtr', hostname); },
+    resolveSoa(hostname) { return _unsupportedPromise('querySoa', hostname); },
+    resolveSrv(hostname) { return _unsupportedPromise('querySrv', hostname); },
+    resolveTxt(hostname) { return _unsupportedPromise('queryTxt', hostname); },
+
+    reverse(ip) {
+        return Promise.reject(Object.assign(
+            new Error(`getHostByAddr ${NOT_SUPPORTED_ERROR_MSG}`),
+            { code: 'ENOTIMP', hostname: ip }
+        ));
+    },
+
+    setServers,
+    getServers,
+    setDefaultResultOrder,
+    getDefaultResultOrder,
+
+    Resolver: class PromiseResolver {
+        constructor(options) {
+            this._servers = [];
+            this._timeout = options?.timeout ?? -1;
+            this._tries = options?.tries ?? 4;
+        }
+
+        cancel() {}
+
+        getServers() { return this._servers.slice(); }
+        setServers(servers) {
+            if (!Array.isArray(servers)) throw new TypeError('servers must be an array');
+            this._servers = servers.slice();
+        }
+        setLocalAddress(_ipv4, _ipv6) {}
+
+        lookup(hostname, options) { return promises.lookup(hostname, options); }
+        resolve(hostname, rrtype) { return promises.resolve(hostname, rrtype); }
+        resolve4(hostname, options) { return promises.resolve4(hostname, options); }
+        resolve6(hostname, options) { return promises.resolve6(hostname, options); }
+        resolveAny(hostname) { return promises.resolveAny(hostname); }
+        resolveCname(hostname) { return promises.resolveCname(hostname); }
+        resolveCaa(hostname) { return promises.resolveCaa(hostname); }
+        resolveMx(hostname) { return promises.resolveMx(hostname); }
+        resolveNaptr(hostname) { return promises.resolveNaptr(hostname); }
+        resolveNs(hostname) { return promises.resolveNs(hostname); }
+        resolvePtr(hostname) { return promises.resolvePtr(hostname); }
+        resolveSoa(hostname) { return promises.resolveSoa(hostname); }
+        resolveSrv(hostname) { return promises.resolveSrv(hostname); }
+        resolveTxt(hostname) { return promises.resolveTxt(hostname); }
+        reverse(ip) { return promises.reverse(ip); }
     },
 };
+
+function _unsupportedPromise(syscall, hostname) {
+    return Promise.reject(Object.assign(
+        new Error(`${syscall} ${NOT_SUPPORTED_ERROR_MSG}`),
+        { code: 'ENOTIMP', hostname }
+    ));
+}
 
 export default {
     lookup,
@@ -194,6 +508,7 @@ export default {
     resolveSoa,
     resolveSrv,
     resolveTxt,
+    resolveTlsa,
     reverse,
     setServers,
     getServers,
@@ -226,4 +541,6 @@ export default {
     ADDRGETNETWORKPARAMS,
     CANCELLED,
     ADDRCONFIG,
+    V4MAPPED,
+    ALL,
 };

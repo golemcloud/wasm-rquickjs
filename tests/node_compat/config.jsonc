@@ -1911,6 +1911,109 @@
     "parallel/test-zlib-unzip-one-byte-chunks.js": {
       "skip": true,
       "reason": "Tests one-byte streaming unzip of concatenated gzip"
+    },
+
+    // === node:dns tests ===
+    "parallel/test-dns-promises-exists.js": {},
+    "parallel/test-dns-lookup.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap') to stub getaddrinfo"
+    },
+    "parallel/test-dns-lookup-promises.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap') to stub getaddrinfo"
+    },
+    "parallel/test-dns-lookup-promises-options-deprecated.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap')"
+    },
+    "parallel/test-dns-resolve-promises.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap')"
+    },
+    "parallel/test-dns-set-default-order.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap')"
+    },
+    "parallel/test-dns-default-order-verbatim.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap')"
+    },
+    "parallel/test-dns-default-order-ipv4.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap')"
+    },
+    "parallel/test-dns-default-order-ipv6.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap')"
+    },
+    "parallel/test-dns.js": {
+      "skip": true,
+      "reason": "requires dgram module, common/dns utilities, and detailed setServers validation (ERR_INVALID_IP_ADDRESS)"
+    },
+    "parallel/test-dns-setservers-type-check.js": {
+      "skip": true,
+      "reason": "requires common/internet module and detailed ERR_INVALID_ARG_TYPE checks on setServers"
+    },
+    "parallel/test-dns-resolvens-typeerror.js": {
+      "skip": true,
+      "reason": "requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented)"
+    },
+    "parallel/test-dns-get-server.js": {
+      "skip": true,
+      "reason": "accesses internal Resolver._handle property"
+    },
+    "parallel/test-dns-channel-cancel.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-channel-cancel-promise.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-channel-timeout.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-multi-channel.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-resolveany.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-resolveany-bad-ancount.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-setserver-when-querying.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-setlocaladdress.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-cancel-reverse-lookup.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-lookupService.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-lookupService-promises.js": {
+      "skip": true,
+      "reason": "requires dgram and DNS protocol-level testing"
+    },
+    "parallel/test-dns-perf_hooks.js": {
+      "skip": true,
+      "reason": "requires perf_hooks timerify integration with dns"
+    },
+    "parallel/test-dns-memory-error.js": {
+      "skip": true,
+      "reason": "requires --expose-internals and internalBinding('cares_wrap')"
     }
   }
 }

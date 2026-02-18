@@ -1,5 +1,7 @@
-// node:dns/promises - re-exports the promises API from node:dns
-import { promises } from 'node:dns';
+// node:dns/promises - re-exports the promises API and error codes from node:dns
+import dns from 'node:dns';
+
+const { promises } = dns;
 
 export const lookup = promises.lookup;
 export const lookupService = promises.lookupService;
@@ -22,5 +24,31 @@ export const getServers = promises.getServers;
 export const setDefaultResultOrder = promises.setDefaultResultOrder;
 export const getDefaultResultOrder = promises.getDefaultResultOrder;
 export const Resolver = promises.Resolver;
+
+// Error codes (re-exported from dns for compatibility)
+export const NODATA = dns.NODATA;
+export const FORMERR = dns.FORMERR;
+export const SERVFAIL = dns.SERVFAIL;
+export const NOTFOUND = dns.NOTFOUND;
+export const NOTIMP = dns.NOTIMP;
+export const REFUSED = dns.REFUSED;
+export const BADQUERY = dns.BADQUERY;
+export const BADNAME = dns.BADNAME;
+export const BADFAMILY = dns.BADFAMILY;
+export const BADRESP = dns.BADRESP;
+export const CONNREFUSED = dns.CONNREFUSED;
+export const TIMEOUT = dns.TIMEOUT;
+export const EOF = dns.EOF;
+export const FILE = dns.FILE;
+export const NOMEM = dns.NOMEM;
+export const DESTRUCTION = dns.DESTRUCTION;
+export const BADSTR = dns.BADSTR;
+export const BADFLAGS = dns.BADFLAGS;
+export const NONAME = dns.NONAME;
+export const BADHINTS = dns.BADHINTS;
+export const NOTINITIALIZED = dns.NOTINITIALIZED;
+export const LOADIPHLPAPI = dns.LOADIPHLPAPI;
+export const ADDRGETNETWORKPARAMS = dns.ADDRGETNETWORKPARAMS;
+export const CANCELLED = dns.CANCELLED;
 
 export default promises;

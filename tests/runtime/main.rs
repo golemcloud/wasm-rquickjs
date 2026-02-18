@@ -15,6 +15,7 @@ mod buffer;
 mod cjs_require;
 mod console;
 mod crypto;
+mod dns;
 mod encoding;
 mod example1;
 mod example2;
@@ -176,6 +177,12 @@ fn compiled_xhr() -> CompiledTest {
 fn compiled_os() -> CompiledTest {
     let path = Utf8Path::new("examples/os");
     CompiledTest::new(path, true).expect("Failed to compile os")
+}
+
+#[test_dep(tagged_as = "dns")]
+fn compiled_dns() -> CompiledTest {
+    let path = Utf8Path::new("examples/dns");
+    CompiledTest::new(path, false).expect("Failed to compile dns")
 }
 
 #[test_dep(tagged_as = "structured_clone")]
