@@ -127,7 +127,7 @@ impl SharedRunner {
             .instantiate_async(&mut store, &self.component)
             .await?;
 
-        let guest_path = format!("/tests/{}", test_rel_path);
+        let guest_path = format!("/test/{}", test_rel_path);
 
         let func = instance
             .get_func(&mut store, "run-test")
