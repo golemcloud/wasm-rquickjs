@@ -189,10 +189,7 @@
       "skip": true,
       "reason": "requires internal/util sleep function"
     },
-    "parallel/test-util-stripvtcontrolcharacters.js": {
-      "skip": true,
-      "reason": "requires util.stripVTControlCharacters which is not implemented"
-    },
+    "parallel/test-util-stripvtcontrolcharacters.js": {},
     "parallel/test-util-styletext.js": {
       "skip": true,
       "reason": "requires util.styleText and node:tty WriteStream"

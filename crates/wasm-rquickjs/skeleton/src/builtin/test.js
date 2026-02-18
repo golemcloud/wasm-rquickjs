@@ -3,6 +3,8 @@
 // Tests run synchronously/eagerly when called. Failures are collected
 // and an aggregate error is thrown after all tests in a suite complete.
 
+import assert from 'node:assert';
+
 var currentSuite = null;
 
 // --- Suite context ---
@@ -56,6 +58,7 @@ function TestContext(name, suite) {
     this._beforeEachFns = [];
     this._afterEachFns = [];
     this.mock = new MockTracker();
+    this.assert = assert;
 }
 
 Object.defineProperty(TestContext.prototype, 'fullName', {
