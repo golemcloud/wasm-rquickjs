@@ -96,6 +96,7 @@ const inspectDefaultOptions = {
     compact: 3,
     sorted: false,
     getters: false,
+    numericSeparator: false,
 };
 
 function getUserOptions(ctx, isCrossContext) {
@@ -1305,9 +1306,38 @@ function formatArrayBuffer(ctx, value) {
     return [`${ctx.stylize("[Uint8Contents]", "special")}: <${str}>`];
 }
 
-function formatNumber(fn, value) {
+// Copied from util.js to avoid circular dependency; keep in sync.
+function addNumericSeparator(intStr) {
+    let result = '';
+    let i = intStr.length;
+    const start = intStr.charAt(0) === '-' ? 1 : 0;
+    for (; i >= start + 4; i -= 3) {
+        result = '_' + intStr.slice(i - 3, i) + result;
+    }
+    return (i === intStr.length) ? intStr : intStr.slice(0, i) + result;
+}
+
+function addNumericSeparatorEnd(intStr) {
+    let result = '';
+    let i = 0;
+    for (; i < intStr.length - 3; i += 3) {
+        result += intStr.slice(i, i + 3) + '_';
+    }
+    return (i === 0) ? intStr : result + intStr.slice(i);
+}
+
+function formatNumber(fn, value, numericSeparator) {
     // Format -0 as '-0'. Checking `value === -0` won't distinguish 0 from -0.
-    return fn(Object.is(value, -0) ? "-0" : `${value}`, "number");
+    if (Object.is(value, -0)) return fn("-0", "number");
+    const str = `${value}`;
+    if (!numericSeparator) return fn(str, "number");
+    if (!Number.isFinite(value)) return fn(str, "number");
+    if (str.includes("e") || str.includes("E")) return fn(str, "number");
+    const dot = str.indexOf(".");
+    if (dot === -1) return fn(addNumericSeparator(str), "number");
+    const intPart = str.slice(0, dot);
+    const fracPart = str.slice(dot + 1);
+    return fn(addNumericSeparator(intPart) + "." + addNumericSeparatorEnd(fracPart), "number");
 }
 
 function formatPromise(ctx, value, recurseTimes) {
@@ -1474,8 +1504,10 @@ function isBelowBreakLength(ctx, output, start, base) {
     return base === "" || !base.includes("\n");
 }
 
-function formatBigInt(fn, value) {
-    return fn(`${value}n`, "bigint");
+function formatBigInt(fn, value, numericSeparator) {
+    let str = `${value}`;
+    if (numericSeparator) str = addNumericSeparator(str);
+    return fn(`${str}n`, "bigint");
 }
 
 function formatNamespaceObject(
