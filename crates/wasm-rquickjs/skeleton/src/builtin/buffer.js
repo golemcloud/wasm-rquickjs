@@ -820,6 +820,9 @@ Buffer.prototype.compare = function compare (target, start, end, thisStart, this
 // - encoding - an optional encoding, relevant is val is a string
 // - dir - true for indexOf, false for lastIndexOf
 function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
+    if (!Buffer.isBuffer(buffer) && !(buffer instanceof Uint8Array) && !ArrayBuffer.isView(buffer)) {
+        throw new ERR_INVALID_ARG_TYPE('buffer', ['Buffer', 'TypedArray', 'DataView'], buffer)
+    }
     // Empty buffer means no match
     if (buffer.length === 0) return -1
 
@@ -835,7 +838,7 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
     byteOffset = +byteOffset // Coerce to Number.
     if (numberIsNaN(byteOffset)) {
         // byteOffset: it it's undefined, null, NaN, "foo", etc, search whole buffer
-        byteOffset = dir ? 0 : (buffer.length - 1)
+        byteOffset = dir ? 0 : buffer.length
     }
 
     // Normalize byteOffset: negative offsets start from the end of the buffer
@@ -844,11 +847,17 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
     // Normalize val early to detect empty needles before clamping byteOffset
     if (typeof val === 'string') {
         val = Buffer.from(val, encoding)
+    } else if (val instanceof Uint8Array && !Buffer.isBuffer(val)) {
+        val = Buffer.from(val)
     }
 
-    // Handle empty needle/val - always found at clamped byteOffset
+    // Handle empty needle/val
     if (Buffer.isBuffer(val) && val.length === 0) {
-        return Math.min(Math.max(byteOffset, 0), buffer.length)
+        if (byteOffset < 0) {
+            if (dir) return 0
+            else return -1
+        }
+        return Math.min(byteOffset, buffer.length)
     }
 
     if (byteOffset >= buffer.length) {
