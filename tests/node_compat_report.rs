@@ -15,12 +15,10 @@ mod common;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use common::{setup_node_compat_test_files, strip_jsonc_comments};
-use futures::stream::{self, StreamExt};
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use test_r::test;
@@ -390,50 +388,6 @@ fn uses_node_internals(test_path: &str) -> bool {
         || content.contains("internalBinding(")
 }
 
-fn print_result(
-    progress: usize,
-    total: usize,
-    filename: &str,
-    tag: &str,
-    result: &TestResult,
-    elapsed: Duration,
-) {
-    match result {
-        TestResult::Pass => {
-            println!(
-                "[{:>4}/{total}] PASS  {filename}{tag} ({:.1}s)",
-                progress,
-                elapsed.as_secs_f64()
-            );
-        }
-        TestResult::Skip(reason) => {
-            println!("[{:>4}/{total}] SKIP  {filename}{tag} ({reason})", progress);
-        }
-        TestResult::Fail(msg) => {
-            let short_msg = if msg.len() > 120 {
-                format!("{}...", truncate_str(msg, 120))
-            } else {
-                msg.clone()
-            };
-            println!(
-                "[{:>4}/{total}] FAIL  {filename}{tag}: {short_msg}",
-                progress
-            );
-        }
-        TestResult::Error(msg) => {
-            let short_msg = if msg.len() > 120 {
-                format!("{}...", truncate_str(msg, 120))
-            } else {
-                msg.clone()
-            };
-            println!(
-                "[{:>4}/{total}] ERROR {filename}{tag}: {short_msg}",
-                progress
-            );
-        }
-    }
-}
-
 #[test]
 async fn generate_node_compat_report() -> anyhow::Result<()> {
     let total_start = Instant::now();
@@ -493,84 +447,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     );
 
     // Step 4: Run all tests
-    // Split into parallel suite (run concurrently) and other suites (run sequentially)
-    let (parallel_tests, sequential_tests): (Vec<_>, Vec<_>) = test_files
-        .iter()
-        .cloned()
-        .partition(|p| p.starts_with("parallel/"));
-
-    let concurrency = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
-    println!("=== Running {total_tests} tests: {} parallel (concurrency={concurrency}), {} sequential ===\n",
-        parallel_tests.len(), sequential_tests.len());
-
-    let runner = Arc::new(runner);
-    let results: BTreeMap<String, TestResult> = BTreeMap::new();
-    let results = Arc::new(Mutex::new(results));
-    let progress = Arc::new(AtomicUsize::new(0));
-
-    // Run parallel suite tests concurrently
-    let parallel_results: Vec<(String, TestResult)> = stream::iter(parallel_tests)
-        .map(|test_path| {
-            let runner = Arc::clone(&runner);
-            let internals_tests = &internals_tests;
-            let progress = Arc::clone(&progress);
-            async move {
-                let cur = progress.fetch_add(1, Ordering::Relaxed) + 1;
-                let test_start = Instant::now();
-                let result = match tokio::time::timeout(
-                    Duration::from_secs(60),
-                    runner.run_test(&test_path),
-                )
-                .await
-                {
-                    Ok(Ok(r)) => r,
-                    Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-                    Err(_) => {
-                        TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string())
-                    }
-                };
-                let elapsed = test_start.elapsed();
-                let filename = test_path.rsplit('/').next().unwrap_or(&test_path);
-                let is_internal = internals_tests.contains(test_path.as_str());
-                let tag = if is_internal { " [internal]" } else { "" };
-                print_result(cur, total_tests, filename, tag, &result, elapsed);
-                (test_path, result)
-            }
-        })
-        .buffer_unordered(concurrency)
-        .collect()
-        .await;
-
-    for (path, result) in parallel_results {
-        results.lock().unwrap().insert(path, result);
-    }
-
-    // Run sequential suite tests one at a time
-    for test_path in &sequential_tests {
-        let cur = progress.fetch_add(1, Ordering::Relaxed) + 1;
-        let test_start = Instant::now();
-        let result =
-            match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path)).await {
-                Ok(Ok(r)) => r,
-                Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-                Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
-            };
-        let elapsed = test_start.elapsed();
-        let filename = test_path.rsplit('/').next().unwrap_or(test_path);
-        let is_internal = internals_tests.contains(test_path.as_str());
-        let tag = if is_internal { " [internal]" } else { "" };
-        print_result(cur, total_tests, filename, tag, &result, elapsed);
-        results.lock().unwrap().insert(test_path.clone(), result);
-    }
-
-    let results = Arc::try_unwrap(results)
-        .expect("All references should be dropped")
-        .into_inner()
-        .unwrap();
-
-    // Compute counts from collected results
+    let mut results: BTreeMap<String, TestResult> = BTreeMap::new();
     let mut pass_count = 0usize;
     let mut fail_count = 0usize;
     let mut skip_count = 0usize;
@@ -580,38 +457,83 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut internals_skip = 0usize;
     let mut internals_error = 0usize;
 
-    for (path, result) in &results {
-        let is_internal = internals_tests.contains(path.as_str());
-        match result {
+    // Run all tests sequentially
+    let mut progress = 0usize;
+    for test_path in &test_files {
+        progress += 1;
+        let test_start = Instant::now();
+        let result =
+            match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path)).await {
+                Ok(Ok(r)) => r,
+                Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
+                Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
+            };
+
+        let elapsed = test_start.elapsed();
+        let filename = test_path.rsplit('/').next().unwrap_or(test_path);
+
+        let is_internal = internals_tests.contains(test_path);
+        let tag = if is_internal { " [internal]" } else { "" };
+
+        match &result {
             TestResult::Pass => {
                 if is_internal {
                     internals_pass += 1;
                 } else {
                     pass_count += 1;
                 }
+                println!(
+                    "[{:>4}/{total_tests}] PASS  {filename}{tag} ({:.1}s)",
+                    progress,
+                    elapsed.as_secs_f64()
+                );
             }
-            TestResult::Skip(_) => {
+            TestResult::Skip(reason) => {
                 if is_internal {
                     internals_skip += 1;
                 } else {
                     skip_count += 1;
                 }
+                println!(
+                    "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
+                    progress
+                );
             }
-            TestResult::Fail(_) => {
+            TestResult::Fail(msg) => {
                 if is_internal {
                     internals_fail += 1;
                 } else {
                     fail_count += 1;
                 }
+                let short_msg = if msg.len() > 120 {
+                    format!("{}...", truncate_str(msg, 120))
+                } else {
+                    msg.clone()
+                };
+                println!(
+                    "[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}",
+                    progress
+                );
             }
-            TestResult::Error(_) => {
+            TestResult::Error(msg) => {
                 if is_internal {
                     internals_error += 1;
                 } else {
                     error_count += 1;
                 }
+                let short_msg = if msg.len() > 120 {
+                    format!("{}...", truncate_str(msg, 120))
+                } else {
+                    msg.clone()
+                };
+                println!(
+                    "[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}",
+                    progress
+                );
             }
         }
+
+        results.insert(test_path.clone(), result);
     }
 
     let total_elapsed = total_start.elapsed();
