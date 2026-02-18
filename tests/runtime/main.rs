@@ -24,6 +24,7 @@ mod export_from_inner_package;
 mod fetch;
 mod fs;
 mod imports;
+mod node_http;
 mod os;
 mod path;
 mod pollable;
@@ -207,4 +208,10 @@ fn compiled_assert() -> CompiledTest {
 fn compiled_cjs_require() -> CompiledTest {
     let path = Utf8Path::new("examples/cjs-require");
     CompiledTest::new(path, false).expect("Failed to compile cjs-require")
+}
+
+#[test_dep(tagged_as = "node_http")]
+fn compiled_node_http() -> CompiledTest {
+    let path = Utf8Path::new("examples/node-http");
+    CompiledTest::new(path, true).expect("Failed to compile node-http")
 }

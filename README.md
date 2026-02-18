@@ -444,6 +444,23 @@ Implemented by https://github.com/ungap/structured-clone
 - `read`
 - `write`
 
+### `node:http` / `node:https` (client only)
+
+Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createServer`, `Server`, `ServerResponse`) throw a not-implemented error.
+
+- `http.request(url|options[, callback])` — make HTTP requests
+- `http.get(url|options[, callback])` — convenience GET helper
+- `http.METHODS` — list of supported HTTP methods
+- `http.STATUS_CODES` — status code to reason phrase mapping
+- `http.maxHeaderSize` — constant (16384)
+- `http.validateHeaderName(name)` — validate header name
+- `http.validateHeaderValue(name, value)` — validate header value
+- `http.Agent` — connection pooling stub (options accepted, pooling is host-controlled)
+- `http.globalAgent` — default Agent instance
+- `http.ClientRequest` — outgoing request (`write`, `end`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `abort`, `destroy`, `setTimeout`)
+- `http.IncomingMessage` — incoming response (`statusCode`, `statusMessage`, `headers`, `rawHeaders`, `httpVersion`, `on('data')`, `on('end')`)
+- `https.request` / `https.get` — delegates to `http` (WASI-HTTP handles TLS transparently)
+
 ### `node:crypto`
 - `createHash`
 - `createHmac`

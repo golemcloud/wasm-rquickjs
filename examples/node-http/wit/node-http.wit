@@ -1,0 +1,8 @@
+package quickjs:node-http;
+
+world node-http {
+  export http-get: func(port: u16);
+  export http-post-json: func(port: u16);
+  export http-request-with-headers: func(port: u16);
+  export http-constants: func();
+}

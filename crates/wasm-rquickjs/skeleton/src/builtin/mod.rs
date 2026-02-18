@@ -32,6 +32,17 @@ mod ieee754;
 mod internal;
 mod module;
 mod net;
+
+#[cfg(feature = "http")]
+mod node_http;
+
+#[cfg(not(feature = "http"))]
+mod node_http_disabled;
+#[cfg(not(feature = "http"))]
+mod node_http {
+    pub use super::node_http_disabled::*;
+}
+
 mod node_test;
 mod os;
 mod path;
@@ -158,6 +169,9 @@ pub fn add_module_resolvers(
             .with_module("http2")
             .with_module("node:https")
             .with_module("https")
+            .with_module("__wasm_rquickjs_builtin/node_http_native")
+            .with_module("node:http")
+            .with_module("http")
             .with_module("node:net")
             .with_module("net")
             .with_module("node:perf_hooks")
@@ -230,6 +244,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/dns_native",
                 dns::js_native_module,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/node_http_native",
+                node_http::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
             .with_module(
@@ -325,6 +343,8 @@ pub fn module_loader() -> (
             .with_module("dns/promises", dns::REEXPORT_PROMISES_JS)
             .with_module("node:domain", domain::DOMAIN_JS)
             .with_module("domain", domain::REEXPORT_JS)
+            .with_module("node:http", node_http::NODE_HTTP_JS)
+            .with_module("http", node_http::REEXPORT_JS)
             .with_module("node:http2", http2::HTTP2_JS)
             .with_module("http2", http2::REEXPORT_JS)
             .with_module("node:https", https::HTTPS_JS)

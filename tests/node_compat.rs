@@ -59,10 +59,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
     for entry in entries {
         let path = entry.path.clone();
-        let test_name = path
-            .replace('/', "__")
-            .replace('.', "_")
-            .replace('-', "_");
+        let test_name = path.replace('/', "__").replace('.', "_").replace('-', "_");
 
         let props = TestProperties {
             is_ignored: entry.skip,

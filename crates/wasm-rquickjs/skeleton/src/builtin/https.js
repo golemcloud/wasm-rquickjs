@@ -1,27 +1,37 @@
 // node:https stub implementation
-// HTTPS will be implementable via WASI-HTTP later, stubbed for now
+// Client methods delegate to node:http since WASI-HTTP handles TLS transparently
+// We override the default protocol to 'https:' so URLs are constructed correctly
+import * as http from 'node:http';
 
-const NOT_SUPPORTED_ERROR = new Error('https is not yet supported in WebAssembly environment');
+const NOT_SUPPORTED_ERROR = new Error('https.createServer is not supported in WebAssembly environment');
 
-export function request(options, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
+export const METHODS = http.METHODS;
+export const STATUS_CODES = http.STATUS_CODES;
+export const Agent = http.Agent;
+export const globalAgent = http.globalAgent;
+export const IncomingMessage = http.IncomingMessage;
+export const ClientRequest = http.ClientRequest;
 
-export function get(options, callback) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export function createServer(options, requestListener) {
-    throw NOT_SUPPORTED_ERROR;
-}
-
-export class Agent {
-    constructor() {
-        throw NOT_SUPPORTED_ERROR;
+export function request(url, options, callback) {
+    if (typeof url === 'object' && url !== null && !(url instanceof URL)) {
+        url = { protocol: 'https:', ...url };
+        return http.request(url, options, callback);
     }
+    if (typeof options === 'object' && options !== null) {
+        options = { protocol: 'https:', ...options };
+    }
+    return http.request(url, options, callback);
 }
 
-export const globalAgent = null;
+export function get(url, options, callback) {
+    const req = request(url, options, callback);
+    req.end();
+    return req;
+}
+
+export function createServer() {
+    throw NOT_SUPPORTED_ERROR;
+}
 
 export class Server {
     constructor() {
@@ -32,8 +42,12 @@ export class Server {
 export default {
     request,
     get,
-    createServer,
     Agent,
     globalAgent,
+    IncomingMessage,
+    ClientRequest,
+    METHODS,
+    STATUS_CODES,
+    createServer,
     Server,
 };
