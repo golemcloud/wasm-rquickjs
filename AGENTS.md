@@ -247,6 +247,48 @@ The `tests/node_compat/` directory contains vendored Node.js test files used to 
 - Tests with `"skip": true` in `config.jsonc` are marked as `is_ignored` and reported as `IGNORED` by the test runner.
 - Test names follow the pattern `gen_node_compat_tests::<suite>__<test_file>` (e.g., `parallel__test_btoa_atob_js`).
 
+## Built-in Module Architecture
+
+### Hybrid Native + JS Pattern
+
+Built-in modules follow a two-layer architecture:
+- **Native bridge (Rust)**: Low-level operations implemented in Rust using `#[rquickjs::module]`. These are registered under internal paths like `__wasm_rquickjs_builtin/<name>_native`.
+- **JS wrapper**: A companion `.js` file imports from the native bridge and implements the high-level Node.js-compatible API (classes, streams, convenience methods, validation).
+
+This separation keeps Rust code focused on performance-critical operations while JS handles API surface compatibility.
+
+### How to Add a New Built-in Module
+
+1. **Create the Rust native module** at `crates/wasm-rquickjs/skeleton/src/builtin/<name>.rs`. Define a `#[rquickjs::module]` block exporting functions.
+2. **Create the JS wrapper** at `crates/wasm-rquickjs/skeleton/src/builtin/<name>.js`. Import native functions from `__wasm_rquickjs_builtin/<name>_native`.
+3. **Add dependencies** (if any) to `crates/wasm-rquickjs/skeleton/Cargo.toml_` — use `default-features = false` for crates that may pull in C libraries.
+4. **Register in `crates/wasm-rquickjs/skeleton/src/builtin/mod.rs`**:
+   - Add `mod <name>;`
+   - In `add_module_resolvers`: add `.with_module("__wasm_rquickjs_builtin/<name>_native")` and the public names (e.g., `node:<name>`, `<name>`)
+   - In `module_loader` (ModuleLoader): map `__wasm_rquickjs_builtin/<name>_native` → `<name>::js_native_module`
+   - In `module_loader` (BuiltinLoader): map public names → JS constants (e.g., `<name>::<NAME>_JS`, `<name>::REEXPORT_JS`)
+5. **Update `README.md`** with the newly supported API.
+
+### `#[rquickjs::module(rename = ...)]` Does NOT Affect JS Imports
+
+The `rename` attribute (e.g., `rename = "camelCase"` or `rename_vars`) on a `#[rquickjs::module]` block does **not** rename the exports as seen by JavaScript `import` statements. JS code must always import using the **original Rust `snake_case` names** (e.g., `import { zlib_compress_sync } from ...`). Attempting to import the camelCase version will cause a "Could not find export" runtime error.
+
+### `u32` Return Value Truncation
+
+When a Rust function returns `u32`, `rquickjs` may deliver it to JavaScript as a signed 32-bit integer (e.g., `0xFFFFFFFF` becomes `-1`). In the JS wrapper, always apply the unsigned right shift operator (`>>> 0`) to recover the correct unsigned value:
+
+```javascript
+const result = native_crc32(data) >>> 0;
+```
+
+### CJS Default Export Immutability
+
+To emulate Node.js behavior where module-level constants are immutable (e.g., `require('zlib').codes`), use `Object.defineProperty` on the default export object with `writable: false` and `configurable: false`.
+
+### WASM-Compatible Dependencies
+
+When adding crate dependencies to the skeleton (`Cargo.toml_`), always use `default-features = false` for crates that may optionally pull in C/native libraries (e.g., `libz-sys`). Use pure-Rust backends or features (e.g., `rust_backend`) to ensure compatibility with the `wasm32-wasip2` target.
+
 ## Key Files
 
 - `src/main.rs` - CLI entry point
