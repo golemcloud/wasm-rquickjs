@@ -160,6 +160,11 @@ process.kill = function kill(pid, signal) {
 };
 
 process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
+    // Handle overload: emitWarning(warning, type, ctor) where code is a function
+    if (typeof code === 'function') {
+        ctor = code;
+        code = undefined;
+    }
     var obj;
     if (typeof warning === 'string') {
         obj = new Error(warning);
@@ -168,7 +173,7 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
             if (typeOrOptions.type) obj.name = typeOrOptions.type;
             if (typeOrOptions.code) obj.code = typeOrOptions.code;
             if (typeOrOptions.detail) obj.detail = typeOrOptions.detail;
-        } else if (code) {
+        } else if (typeof code === 'string') {
             obj.code = code;
         }
     } else if (warning instanceof Error) {
@@ -177,7 +182,7 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     } else {
         throw new TypeError('The "warning" argument must be of type string or an instance of Error');
     }
-    process.emit('warning', obj);
+    process.nextTick(function() { process.emit('warning', obj); });
 };
 
 process.exit = function exit(code) {

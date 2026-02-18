@@ -127,14 +127,8 @@
       "skip": true,
       "reason": "requires child_process.execFile and common/fixtures for uncaught-exception tests"
     },
-    "parallel/test-util-deprecate-invalid-code.js": {
-      "skip": true,
-      "reason": "requires ERR_INVALID_ARG_TYPE error code from util.deprecate"
-    },
-    "parallel/test-util-deprecate.js": {
-      "skip": true,
-      "reason": "requires process.on('warning') and process.on('exit') hooks"
-    },
+    "parallel/test-util-deprecate-invalid-code.js": {},
+    "parallel/test-util-deprecate.js": {},
     "parallel/test-util-emit-experimental-warning.js": {
       "skip": true,
       "reason": "requires internal/util and process.on('warning')"

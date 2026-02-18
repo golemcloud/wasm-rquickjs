@@ -27,6 +27,8 @@ import {
     stripVTControlCharacters
 } from '__wasm_rquickjs_builtin/internal/util/inspect';
 
+import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
+
 var _ObjectKeys = Object.keys;
 var _ObjectGetOwnPropertyNames = Object.getOwnPropertyNames;
 var _ObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
@@ -221,9 +223,7 @@ function formatWithInspectOptions(inspectOptions, f) {
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
 // If --no-deprecation is set, then it is a no-op.
-export const deprecate = function(fn, msg) {
-    return fn;
-};
+export const deprecate = _internalDeprecate;
 
 
 var debugs = {};
