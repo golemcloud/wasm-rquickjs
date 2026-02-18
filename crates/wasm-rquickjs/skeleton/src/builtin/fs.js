@@ -158,7 +158,7 @@ function describeType(value) {
         }
         return value + '';
     }
-    if (typeof value === 'string') return 'type string (' + JSON.stringify(value) + ')';
+    if (typeof value === 'string') return "type string ('" + value + "')";
     return 'type ' + typeof value + ' (' + String(value) + ')';
 }
 
