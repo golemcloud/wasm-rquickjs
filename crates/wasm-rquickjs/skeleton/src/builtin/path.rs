@@ -103,12 +103,13 @@ pub mod native_module {
             return ".".to_string();
         }
 
-        let joined = paths.iter()
+        let joined = paths
+            .iter()
             .filter(|p| !p.is_empty())
             .cloned()
             .collect::<Vec<String>>()
             .join("/");
-        
+
         // If the result is empty (e.g. join("", "")), return "."
         if joined.is_empty() {
             return ".".to_string();
@@ -130,13 +131,13 @@ pub mod native_module {
             if path.is_empty() {
                 continue;
             }
-            
+
             if resolved.is_empty() {
                 resolved = path.clone();
             } else {
                 resolved = format!("{}/{}", path, resolved);
             }
-            
+
             if path.starts_with('/') {
                 resolved_absolute = true;
                 break;
@@ -163,10 +164,10 @@ pub mod native_module {
     pub fn relative(from: String, to: String) -> String {
         let from_res = resolve_impl(&[from]);
         let to_res = resolve_impl(&[to]);
-        
+
         let from_parts: Vec<&str> = from_res.split('/').filter(|s| !s.is_empty()).collect();
         let to_parts: Vec<&str> = to_res.split('/').filter(|s| !s.is_empty()).collect();
-        
+
         let mut common_len = 0;
         for (f, t) in from_parts.iter().zip(to_parts.iter()) {
             if f == t {
@@ -175,17 +176,17 @@ pub mod native_module {
                 break;
             }
         }
-        
+
         let mut result = Vec::new();
-        
+
         for _ in common_len..from_parts.len() {
             result.push("..");
         }
-        
+
         for i in common_len..to_parts.len() {
             result.push(to_parts[i]);
         }
-        
+
         if result.is_empty() {
             "".to_string()
         } else {

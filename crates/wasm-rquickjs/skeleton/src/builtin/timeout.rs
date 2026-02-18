@@ -22,7 +22,11 @@ pub mod native_module {
         let delay: u32 = if delay.is_null() || delay.is_undefined() {
             0
         } else if let Some(n) = delay.as_number() {
-            if n.is_finite() && n > 0.0 { n as u32 } else { 0 }
+            if n.is_finite() && n > 0.0 {
+                n as u32
+            } else {
+                0
+            }
         } else if let Some(n) = delay.as_int() {
             if n > 0 { n as u32 } else { 0 }
         } else {
@@ -80,7 +84,10 @@ async fn scheduled_task(
         run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
             .catch(&ctx)
             .unwrap_or_else(|e| {
-                eprintln!("Uncaught exception in timer callback: {}", format_caught_error(e))
+                eprintln!(
+                    "Uncaught exception in timer callback: {}",
+                    format_caught_error(e)
+                )
             });
     } else {
         let duration = wstd::time::Duration::from_millis(delay as u64);
@@ -91,7 +98,10 @@ async fn scheduled_task(
             run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
                 .catch(&ctx)
                 .unwrap_or_else(|e| {
-                    eprintln!("Uncaught exception in timer callback: {}", format_caught_error(e))
+                    eprintln!(
+                        "Uncaught exception in timer callback: {}",
+                        format_caught_error(e)
+                    )
                 });
 
             if !periodic {

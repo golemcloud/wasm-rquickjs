@@ -13,9 +13,9 @@ use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_384, Sha3_512};
 
-use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
 use ecdsa::signature::Signer;
 use ecdsa::signature::Verifier;
+use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 use num_bigint_dig::{BigUint, RandPrime};
@@ -98,7 +98,15 @@ fn create_hasher(algorithm: &str) -> Option<HashContext> {
 }
 
 const SUPPORTED_HASHES: &[&str] = &[
-    "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "sha3-256", "sha3-384", "sha3-512",
+    "md5",
+    "sha1",
+    "sha224",
+    "sha256",
+    "sha384",
+    "sha512",
+    "sha3-256",
+    "sha3-384",
+    "sha3-512",
     "ripemd160",
 ];
 
@@ -191,16 +199,36 @@ impl HmacContext {
 
 fn create_hmac(algorithm: &str, key: &[u8]) -> Option<HmacContext> {
     match algorithm {
-        "md5" => Some(HmacContext::Md5(<Hmac<Md5> as Mac>::new_from_slice(key).unwrap())),
-        "sha1" => Some(HmacContext::Sha1(<Hmac<Sha1> as Mac>::new_from_slice(key).unwrap())),
-        "sha224" => Some(HmacContext::Sha224(<Hmac<Sha224> as Mac>::new_from_slice(key).unwrap())),
-        "sha256" => Some(HmacContext::Sha256(<Hmac<Sha256> as Mac>::new_from_slice(key).unwrap())),
-        "sha384" => Some(HmacContext::Sha384(<Hmac<Sha384> as Mac>::new_from_slice(key).unwrap())),
-        "sha512" => Some(HmacContext::Sha512(<Hmac<Sha512> as Mac>::new_from_slice(key).unwrap())),
-        "sha3-256" => Some(HmacContext::Sha3_256(<Hmac<Sha3_256> as Mac>::new_from_slice(key).unwrap())),
-        "sha3-384" => Some(HmacContext::Sha3_384(<Hmac<Sha3_384> as Mac>::new_from_slice(key).unwrap())),
-        "sha3-512" => Some(HmacContext::Sha3_512(<Hmac<Sha3_512> as Mac>::new_from_slice(key).unwrap())),
-        "ripemd160" => Some(HmacContext::Ripemd160(<Hmac<Ripemd160> as Mac>::new_from_slice(key).unwrap())),
+        "md5" => Some(HmacContext::Md5(
+            <Hmac<Md5> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha1" => Some(HmacContext::Sha1(
+            <Hmac<Sha1> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha224" => Some(HmacContext::Sha224(
+            <Hmac<Sha224> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha256" => Some(HmacContext::Sha256(
+            <Hmac<Sha256> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha384" => Some(HmacContext::Sha384(
+            <Hmac<Sha384> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha512" => Some(HmacContext::Sha512(
+            <Hmac<Sha512> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha3-256" => Some(HmacContext::Sha3_256(
+            <Hmac<Sha3_256> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha3-384" => Some(HmacContext::Sha3_384(
+            <Hmac<Sha3_384> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "sha3-512" => Some(HmacContext::Sha3_512(
+            <Hmac<Sha3_512> as Mac>::new_from_slice(key).unwrap(),
+        )),
+        "ripemd160" => Some(HmacContext::Ripemd160(
+            <Hmac<Ripemd160> as Mac>::new_from_slice(key).unwrap(),
+        )),
         _ => None,
     }
 }
@@ -234,7 +262,13 @@ fn hmac_final_impl(id: u32) -> Option<Vec<u8>> {
         .map(|h| h.finalize())
 }
 
-fn pbkdf2_derive_impl(algorithm: &str, password: &[u8], salt: &[u8], iterations: u32, keylen: u32) -> Option<Vec<u8>> {
+fn pbkdf2_derive_impl(
+    algorithm: &str,
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    keylen: u32,
+) -> Option<Vec<u8>> {
     let algo = algorithm.to_lowercase();
     let mut result = vec![0u8; keylen as usize];
     match algo.as_str() {
@@ -253,7 +287,13 @@ fn pbkdf2_derive_impl(algorithm: &str, password: &[u8], salt: &[u8], iterations:
     Some(result)
 }
 
-fn hkdf_derive_impl(algorithm: &str, ikm: &[u8], salt: &[u8], info: &[u8], keylen: u32) -> Option<Vec<u8>> {
+fn hkdf_derive_impl(
+    algorithm: &str,
+    ikm: &[u8],
+    salt: &[u8],
+    info: &[u8],
+    keylen: u32,
+) -> Option<Vec<u8>> {
     let algo = algorithm.to_lowercase();
     let mut result = vec![0u8; keylen as usize];
     macro_rules! do_hkdf {
@@ -278,7 +318,14 @@ fn hkdf_derive_impl(algorithm: &str, ikm: &[u8], salt: &[u8], info: &[u8], keyle
     Some(result)
 }
 
-fn scrypt_derive_impl(password: &[u8], salt: &[u8], n: u32, r: u32, p: u32, keylen: u32) -> Option<Vec<u8>> {
+fn scrypt_derive_impl(
+    password: &[u8],
+    salt: &[u8],
+    n: u32,
+    r: u32,
+    p: u32,
+    keylen: u32,
+) -> Option<Vec<u8>> {
     // Node.js takes N directly; the Rust crate needs log2(N)
     if n == 0 || (n & (n - 1)) != 0 {
         return None; // N must be a power of 2
@@ -383,9 +430,21 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             let mut nonce = [0u8; 12];
             nonce.copy_from_slice(iv);
             if decrypt {
-                CipherContext::Aes128GcmDec { cipher, nonce, aad: Vec::new(), buf: Vec::new(), expected_tag: None }
+                CipherContext::Aes128GcmDec {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    expected_tag: None,
+                }
             } else {
-                CipherContext::Aes128GcmEnc { cipher, nonce, aad: Vec::new(), buf: Vec::new(), tag: None }
+                CipherContext::Aes128GcmEnc {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    tag: None,
+                }
             }
         }
         "aes-256-gcm" => {
@@ -396,9 +455,21 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             let mut nonce = [0u8; 12];
             nonce.copy_from_slice(iv);
             if decrypt {
-                CipherContext::Aes256GcmDec { cipher, nonce, aad: Vec::new(), buf: Vec::new(), expected_tag: None }
+                CipherContext::Aes256GcmDec {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    expected_tag: None,
+                }
             } else {
-                CipherContext::Aes256GcmEnc { cipher, nonce, aad: Vec::new(), buf: Vec::new(), tag: None }
+                CipherContext::Aes256GcmEnc {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    tag: None,
+                }
             }
         }
         "chacha20-poly1305" => {
@@ -409,9 +480,21 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             let mut nonce = [0u8; 12];
             nonce.copy_from_slice(iv);
             if decrypt {
-                CipherContext::ChaCha20Poly1305Dec { cipher, nonce, aad: Vec::new(), buf: Vec::new(), expected_tag: None }
+                CipherContext::ChaCha20Poly1305Dec {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    expected_tag: None,
+                }
             } else {
-                CipherContext::ChaCha20Poly1305Enc { cipher, nonce, aad: Vec::new(), buf: Vec::new(), tag: None }
+                CipherContext::ChaCha20Poly1305Enc {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    tag: None,
+                }
             }
         }
         "aes-128-cbc" => {
@@ -420,10 +503,18 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             }
             if decrypt {
                 let dec = cbc::Decryptor::<aes::Aes128>::new_from_slices(key, iv).ok()?;
-                CipherContext::Aes128CbcDec { dec, tail: Vec::new(), auto_padding: true }
+                CipherContext::Aes128CbcDec {
+                    dec,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
             } else {
                 let enc = cbc::Encryptor::<aes::Aes128>::new_from_slices(key, iv).ok()?;
-                CipherContext::Aes128CbcEnc { enc, tail: Vec::new(), auto_padding: true }
+                CipherContext::Aes128CbcEnc {
+                    enc,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
             }
         }
         "aes-256-cbc" => {
@@ -432,10 +523,18 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             }
             if decrypt {
                 let dec = cbc::Decryptor::<aes::Aes256>::new_from_slices(key, iv).ok()?;
-                CipherContext::Aes256CbcDec { dec, tail: Vec::new(), auto_padding: true }
+                CipherContext::Aes256CbcDec {
+                    dec,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
             } else {
                 let enc = cbc::Encryptor::<aes::Aes256>::new_from_slices(key, iv).ok()?;
-                CipherContext::Aes256CbcEnc { enc, tail: Vec::new(), auto_padding: true }
+                CipherContext::Aes256CbcEnc {
+                    enc,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
             }
         }
         "aes-128-ctr" => {
@@ -580,9 +679,17 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
     let ctx = contexts.remove(&id)?;
     match ctx {
         // AEAD encrypt: encrypt-in-place, return ciphertext (tag stored separately)
-        CipherContext::Aes128GcmEnc { cipher, nonce, aad, mut buf, .. } => {
+        CipherContext::Aes128GcmEnc {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            ..
+        } => {
             let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
-            let tag = cipher.encrypt_in_place_detached(nonce_ga, &aad, &mut buf).ok()?;
+            let tag = cipher
+                .encrypt_in_place_detached(nonce_ga, &aad, &mut buf)
+                .ok()?;
             let done_ctx = CipherContext::Aes128GcmEnc {
                 cipher,
                 nonce,
@@ -593,9 +700,17 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             contexts.insert(id, done_ctx);
             Some(buf)
         }
-        CipherContext::Aes256GcmEnc { cipher, nonce, aad, mut buf, .. } => {
+        CipherContext::Aes256GcmEnc {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            ..
+        } => {
             let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
-            let tag = cipher.encrypt_in_place_detached(nonce_ga, &aad, &mut buf).ok()?;
+            let tag = cipher
+                .encrypt_in_place_detached(nonce_ga, &aad, &mut buf)
+                .ok()?;
             let done_ctx = CipherContext::Aes256GcmEnc {
                 cipher,
                 nonce,
@@ -606,10 +721,18 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             contexts.insert(id, done_ctx);
             Some(buf)
         }
-        CipherContext::ChaCha20Poly1305Enc { cipher, nonce, aad, mut buf, .. } => {
+        CipherContext::ChaCha20Poly1305Enc {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            ..
+        } => {
             use chacha20poly1305::aead::AeadInPlace as _;
             let nonce_ga = chacha20poly1305::Nonce::from_slice(&nonce);
-            let tag = cipher.encrypt_in_place_detached(nonce_ga, &aad, &mut buf).ok()?;
+            let tag = cipher
+                .encrypt_in_place_detached(nonce_ga, &aad, &mut buf)
+                .ok()?;
             let done_ctx = CipherContext::ChaCha20Poly1305Enc {
                 cipher,
                 nonce,
@@ -621,30 +744,58 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             Some(buf)
         }
         // AEAD decrypt: decrypt-in-place with tag verification
-        CipherContext::Aes128GcmDec { cipher, nonce, aad, mut buf, expected_tag } => {
+        CipherContext::Aes128GcmDec {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            expected_tag,
+        } => {
             let tag_bytes = expected_tag?;
             let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
             let tag = aes_gcm::Tag::from_slice(&tag_bytes);
-            cipher.decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag).ok()?;
+            cipher
+                .decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag)
+                .ok()?;
             Some(buf)
         }
-        CipherContext::Aes256GcmDec { cipher, nonce, aad, mut buf, expected_tag } => {
+        CipherContext::Aes256GcmDec {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            expected_tag,
+        } => {
             let tag_bytes = expected_tag?;
             let nonce_ga = aes_gcm::Nonce::from_slice(&nonce);
             let tag = aes_gcm::Tag::from_slice(&tag_bytes);
-            cipher.decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag).ok()?;
+            cipher
+                .decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag)
+                .ok()?;
             Some(buf)
         }
-        CipherContext::ChaCha20Poly1305Dec { cipher, nonce, aad, mut buf, expected_tag } => {
+        CipherContext::ChaCha20Poly1305Dec {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            expected_tag,
+        } => {
             use chacha20poly1305::aead::AeadInPlace as _;
             let tag_bytes = expected_tag?;
             let nonce_ga = chacha20poly1305::Nonce::from_slice(&nonce);
             let tag = chacha20poly1305::Tag::from_slice(&tag_bytes);
-            cipher.decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag).ok()?;
+            cipher
+                .decrypt_in_place_detached(nonce_ga, &aad, &mut buf, tag)
+                .ok()?;
             Some(buf)
         }
         // CBC encrypt final: PKCS7 pad and encrypt remaining
-        CipherContext::Aes128CbcEnc { mut enc, tail, auto_padding } => {
+        CipherContext::Aes128CbcEnc {
+            mut enc,
+            tail,
+            auto_padding,
+        } => {
             if auto_padding {
                 let block_size = 16;
                 let pad_len = block_size - (tail.len() % block_size);
@@ -665,7 +816,11 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
                 Some(Vec::new())
             }
         }
-        CipherContext::Aes256CbcEnc { mut enc, tail, auto_padding } => {
+        CipherContext::Aes256CbcEnc {
+            mut enc,
+            tail,
+            auto_padding,
+        } => {
             if auto_padding {
                 let block_size = 16;
                 let pad_len = block_size - (tail.len() % block_size);
@@ -687,7 +842,11 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             }
         }
         // CBC decrypt final: decrypt remaining block(s) and PKCS7 unpad
-        CipherContext::Aes128CbcDec { mut dec, tail, auto_padding } => {
+        CipherContext::Aes128CbcDec {
+            mut dec,
+            tail,
+            auto_padding,
+        } => {
             let block_size = 16;
             if tail.is_empty() {
                 return Some(Vec::new());
@@ -707,14 +866,21 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
                 if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
                     return None;
                 }
-                if !output[output.len() - pad_byte..].iter().all(|&b| b as usize == pad_byte) {
+                if !output[output.len() - pad_byte..]
+                    .iter()
+                    .all(|&b| b as usize == pad_byte)
+                {
                     return None;
                 }
                 output.truncate(output.len() - pad_byte);
             }
             Some(output)
         }
-        CipherContext::Aes256CbcDec { mut dec, tail, auto_padding } => {
+        CipherContext::Aes256CbcDec {
+            mut dec,
+            tail,
+            auto_padding,
+        } => {
             let block_size = 16;
             if tail.is_empty() {
                 return Some(Vec::new());
@@ -734,7 +900,10 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
                 if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
                     return None;
                 }
-                if !output[output.len() - pad_byte..].iter().all(|&b| b as usize == pad_byte) {
+                if !output[output.len() - pad_byte..]
+                    .iter()
+                    .all(|&b| b as usize == pad_byte)
+                {
                     return None;
                 }
                 output.truncate(output.len() - pad_byte);
@@ -742,9 +911,7 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             Some(output)
         }
         // CTR final: nothing to do
-        CipherContext::Aes128CtrCtx { .. } | CipherContext::Aes256CtrCtx { .. } => {
-            Some(Vec::new())
-        }
+        CipherContext::Aes128CtrCtx { .. } | CipherContext::Aes256CtrCtx { .. } => Some(Vec::new()),
     }
 }
 
@@ -848,8 +1015,16 @@ enum KeyData {
 impl KeyData {
     fn key_type(&self) -> &'static str {
         match self {
-            KeyData::Ed25519Private(_) | KeyData::EcP256Private(_) | KeyData::EcP384Private(_) | KeyData::EcK256Private(_) | KeyData::RsaPrivate(_) => "private",
-            KeyData::Ed25519Public(_) | KeyData::EcP256Public(_) | KeyData::EcP384Public(_) | KeyData::EcK256Public(_) | KeyData::RsaPublic(_) => "public",
+            KeyData::Ed25519Private(_)
+            | KeyData::EcP256Private(_)
+            | KeyData::EcP384Private(_)
+            | KeyData::EcK256Private(_)
+            | KeyData::RsaPrivate(_) => "private",
+            KeyData::Ed25519Public(_)
+            | KeyData::EcP256Public(_)
+            | KeyData::EcP384Public(_)
+            | KeyData::EcK256Public(_)
+            | KeyData::RsaPublic(_) => "public",
             KeyData::Secret(_) => "secret",
         }
     }
@@ -914,13 +1089,25 @@ impl KeyData {
         match self {
             KeyData::Ed25519Private(_) => None,
             KeyData::Ed25519Public(_) => None,
-            KeyData::EcP256Private(sk) => sk.verifying_key().to_public_key_pem(pkcs8::LineEnding::LF).ok(),
+            KeyData::EcP256Private(sk) => sk
+                .verifying_key()
+                .to_public_key_pem(pkcs8::LineEnding::LF)
+                .ok(),
             KeyData::EcP256Public(pk) => pk.to_public_key_pem(pkcs8::LineEnding::LF).ok(),
-            KeyData::EcP384Private(sk) => sk.verifying_key().to_public_key_pem(pkcs8::LineEnding::LF).ok(),
+            KeyData::EcP384Private(sk) => sk
+                .verifying_key()
+                .to_public_key_pem(pkcs8::LineEnding::LF)
+                .ok(),
             KeyData::EcP384Public(pk) => pk.to_public_key_pem(pkcs8::LineEnding::LF).ok(),
-            KeyData::EcK256Private(sk) => sk.verifying_key().to_public_key_pem(pkcs8::LineEnding::LF).ok(),
+            KeyData::EcK256Private(sk) => sk
+                .verifying_key()
+                .to_public_key_pem(pkcs8::LineEnding::LF)
+                .ok(),
             KeyData::EcK256Public(pk) => pk.to_public_key_pem(pkcs8::LineEnding::LF).ok(),
-            KeyData::RsaPrivate(sk) => sk.to_public_key().to_public_key_pem(pkcs8::LineEnding::LF).ok(),
+            KeyData::RsaPrivate(sk) => sk
+                .to_public_key()
+                .to_public_key_pem(pkcs8::LineEnding::LF)
+                .ok(),
             KeyData::RsaPublic(pk) => pk.to_public_key_pem(pkcs8::LineEnding::LF).ok(),
             KeyData::Secret(_) => None,
         }
@@ -930,10 +1117,22 @@ impl KeyData {
         use pkcs8::EncodePrivateKey;
         match self {
             KeyData::Ed25519Private(_) => None,
-            KeyData::EcP256Private(sk) => sk.to_pkcs8_pem(pkcs8::LineEnding::LF).ok().map(|s| s.to_string()),
-            KeyData::EcP384Private(sk) => sk.to_pkcs8_pem(pkcs8::LineEnding::LF).ok().map(|s| s.to_string()),
-            KeyData::EcK256Private(sk) => sk.to_pkcs8_pem(pkcs8::LineEnding::LF).ok().map(|s| s.to_string()),
-            KeyData::RsaPrivate(sk) => sk.to_pkcs8_pem(pkcs8::LineEnding::LF).ok().map(|s| s.to_string()),
+            KeyData::EcP256Private(sk) => sk
+                .to_pkcs8_pem(pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            KeyData::EcP384Private(sk) => sk
+                .to_pkcs8_pem(pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            KeyData::EcK256Private(sk) => sk
+                .to_pkcs8_pem(pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            KeyData::RsaPrivate(sk) => sk
+                .to_pkcs8_pem(pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
             _ => None,
         }
     }
@@ -941,7 +1140,10 @@ impl KeyData {
     fn export_pkcs1_public_pem(&self) -> Option<String> {
         use rsa::pkcs1::EncodeRsaPublicKey;
         match self {
-            KeyData::RsaPrivate(sk) => sk.to_public_key().to_pkcs1_pem(rsa::pkcs1::LineEnding::LF).ok(),
+            KeyData::RsaPrivate(sk) => sk
+                .to_public_key()
+                .to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)
+                .ok(),
             KeyData::RsaPublic(pk) => pk.to_pkcs1_pem(rsa::pkcs1::LineEnding::LF).ok(),
             _ => None,
         }
@@ -959,7 +1161,10 @@ impl KeyData {
     fn export_pkcs1_private_pem(&self) -> Option<String> {
         use rsa::pkcs1::EncodeRsaPrivateKey;
         match self {
-            KeyData::RsaPrivate(sk) => sk.to_pkcs1_pem(rsa::pkcs1::LineEnding::LF).ok().map(|s| s.to_string()),
+            KeyData::RsaPrivate(sk) => sk
+                .to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
             _ => None,
         }
     }
@@ -994,15 +1199,24 @@ impl KeyData {
         match self {
             KeyData::EcP256Private(sk) => {
                 let secret_key = p256::SecretKey::from(sk);
-                secret_key.to_sec1_pem(sec1::LineEnding::LF).ok().map(|s| s.to_string())
+                secret_key
+                    .to_sec1_pem(sec1::LineEnding::LF)
+                    .ok()
+                    .map(|s| s.to_string())
             }
             KeyData::EcP384Private(sk) => {
                 let secret_key = p384::SecretKey::from(sk);
-                secret_key.to_sec1_pem(sec1::LineEnding::LF).ok().map(|s| s.to_string())
+                secret_key
+                    .to_sec1_pem(sec1::LineEnding::LF)
+                    .ok()
+                    .map(|s| s.to_string())
             }
             KeyData::EcK256Private(sk) => {
                 let secret_key = k256::SecretKey::from(sk);
-                secret_key.to_sec1_pem(sec1::LineEnding::LF).ok().map(|s| s.to_string())
+                secret_key
+                    .to_sec1_pem(sec1::LineEnding::LF)
+                    .ok()
+                    .map(|s| s.to_string())
             }
             _ => None,
         }
@@ -1012,18 +1226,22 @@ impl KeyData {
         use pkcs8::EncodePrivateKey;
         let rng = rand_core_06::OsRng;
         match self {
-            KeyData::EcP256Private(sk) => {
-                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
-            }
-            KeyData::EcP384Private(sk) => {
-                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
-            }
-            KeyData::EcK256Private(sk) => {
-                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
-            }
-            KeyData::RsaPrivate(sk) => {
-                sk.to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF).ok().map(|s| s.to_string())
-            }
+            KeyData::EcP256Private(sk) => sk
+                .to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            KeyData::EcP384Private(sk) => sk
+                .to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            KeyData::EcK256Private(sk) => sk
+                .to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            KeyData::RsaPrivate(sk) => sk
+                .to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
             _ => None,
         }
     }
@@ -1039,13 +1257,19 @@ impl KeyData {
                 let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
                 let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
                 let d = Base64UrlUnpadded::encode_string(secret_key.to_bytes().as_slice());
-                Some(format!(r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}","d":"{}"}}"#, x, y, d))
+                Some(format!(
+                    r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}","d":"{}"}}"#,
+                    x, y, d
+                ))
             }
             KeyData::EcP256Public(pk) => {
                 let point = pk.to_encoded_point(false);
                 let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
                 let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
-                Some(format!(r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}"}}"#, x, y))
+                Some(format!(
+                    r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}"}}"#,
+                    x, y
+                ))
             }
             KeyData::EcP384Private(sk) => {
                 let secret_key = p384::SecretKey::from(sk);
@@ -1054,13 +1278,19 @@ impl KeyData {
                 let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
                 let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
                 let d = Base64UrlUnpadded::encode_string(secret_key.to_bytes().as_slice());
-                Some(format!(r#"{{"kty":"EC","crv":"P-384","x":"{}","y":"{}","d":"{}"}}"#, x, y, d))
+                Some(format!(
+                    r#"{{"kty":"EC","crv":"P-384","x":"{}","y":"{}","d":"{}"}}"#,
+                    x, y, d
+                ))
             }
             KeyData::EcP384Public(pk) => {
                 let point = pk.to_encoded_point(false);
                 let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
                 let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
-                Some(format!(r#"{{"kty":"EC","crv":"P-384","x":"{}","y":"{}"}}"#, x, y))
+                Some(format!(
+                    r#"{{"kty":"EC","crv":"P-384","x":"{}","y":"{}"}}"#,
+                    x, y
+                ))
             }
             KeyData::EcK256Private(sk) => {
                 let secret_key = k256::SecretKey::from(sk);
@@ -1069,19 +1299,28 @@ impl KeyData {
                 let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
                 let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
                 let d = Base64UrlUnpadded::encode_string(secret_key.to_bytes().as_slice());
-                Some(format!(r#"{{"kty":"EC","crv":"secp256k1","x":"{}","y":"{}","d":"{}"}}"#, x, y, d))
+                Some(format!(
+                    r#"{{"kty":"EC","crv":"secp256k1","x":"{}","y":"{}","d":"{}"}}"#,
+                    x, y, d
+                ))
             }
             KeyData::EcK256Public(pk) => {
                 let point = pk.to_encoded_point(false);
                 let x = Base64UrlUnpadded::encode_string(point.x().unwrap().as_slice());
                 let y = Base64UrlUnpadded::encode_string(point.y().unwrap().as_slice());
-                Some(format!(r#"{{"kty":"EC","crv":"secp256k1","x":"{}","y":"{}"}}"#, x, y))
+                Some(format!(
+                    r#"{{"kty":"EC","crv":"secp256k1","x":"{}","y":"{}"}}"#,
+                    x, y
+                ))
             }
             KeyData::Ed25519Private(sk) => {
                 let pk = Ed25519VerifyingKey::from(sk);
                 let x = Base64UrlUnpadded::encode_string(pk.as_bytes());
                 let d = Base64UrlUnpadded::encode_string(&sk.to_bytes());
-                Some(format!(r#"{{"kty":"OKP","crv":"Ed25519","x":"{}","d":"{}"}}"#, x, d))
+                Some(format!(
+                    r#"{{"kty":"OKP","crv":"Ed25519","x":"{}","d":"{}"}}"#,
+                    x, d
+                ))
             }
             KeyData::Ed25519Public(pk) => {
                 let x = Base64UrlUnpadded::encode_string(pk.as_bytes());
@@ -1129,7 +1368,12 @@ impl KeyData {
 static KEY_STORE: LazyLock<Mutex<HashMap<u32, KeyData>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn generate_key_pair_impl(algorithm: &str, named_curve: Option<&str>, modulus_length: Option<u32>, public_exponent: Option<u32>) -> Option<(u32, u32)> {
+fn generate_key_pair_impl(
+    algorithm: &str,
+    named_curve: Option<&str>,
+    modulus_length: Option<u32>,
+    public_exponent: Option<u32>,
+) -> Option<(u32, u32)> {
     let (priv_key, pub_key) = match algorithm {
         "ed25519" => {
             let mut bytes = [0u8; 32];
@@ -1185,52 +1429,52 @@ fn generate_key_pair_impl(algorithm: &str, named_curve: Option<&str>, modulus_le
 }
 
 fn key_type_impl(id: u32) -> Option<String> {
-    KEY_STORE.lock().unwrap().get(&id).map(|k| k.key_type().to_string())
+    KEY_STORE
+        .lock()
+        .unwrap()
+        .get(&id)
+        .map(|k| k.key_type().to_string())
 }
 
 fn key_asymmetric_type_impl(id: u32) -> Option<String> {
-    KEY_STORE.lock().unwrap().get(&id).and_then(|k| k.asymmetric_key_type().map(|s| s.to_string()))
+    KEY_STORE
+        .lock()
+        .unwrap()
+        .get(&id)
+        .and_then(|k| k.asymmetric_key_type().map(|s| s.to_string()))
 }
 
 fn key_export_impl(id: u32, format: &str, type_: Option<&str>) -> Option<Vec<u8>> {
     let store = KEY_STORE.lock().unwrap();
     let key = store.get(&id)?;
     match (format, type_) {
-        ("der", Some("pkcs1")) => {
-            match key.key_type() {
-                "private" => key.export_pkcs1_private_der(),
-                "public" => key.export_pkcs1_public_der(),
-                _ => None,
-            }
-        }
-        ("pem", Some("pkcs1")) => {
-            match key.key_type() {
-                "private" => key.export_pkcs1_private_pem().map(|s| s.into_bytes()),
-                "public" => key.export_pkcs1_public_pem().map(|s| s.into_bytes()),
-                _ => None,
-            }
-        }
+        ("der", Some("pkcs1")) => match key.key_type() {
+            "private" => key.export_pkcs1_private_der(),
+            "public" => key.export_pkcs1_public_der(),
+            _ => None,
+        },
+        ("pem", Some("pkcs1")) => match key.key_type() {
+            "private" => key.export_pkcs1_private_pem().map(|s| s.into_bytes()),
+            "public" => key.export_pkcs1_public_pem().map(|s| s.into_bytes()),
+            _ => None,
+        },
         ("der", Some("sec1")) => key.export_sec1_private_der(),
         ("pem", Some("sec1")) => key.export_sec1_private_pem().map(|s| s.into_bytes()),
         ("der", Some("pkcs8")) => key.export_private_der(),
         ("pem", Some("pkcs8")) => key.export_private_pem().map(|s| s.into_bytes()),
         ("der", Some("spki")) => key.export_public_der(),
         ("pem", Some("spki")) => key.export_public_pem().map(|s| s.into_bytes()),
-        ("der", _) => {
-            match key.key_type() {
-                "private" => key.export_private_der(),
-                "public" => key.export_public_der(),
-                "secret" => key.export_public_der(),
-                _ => None,
-            }
-        }
-        ("pem", _) => {
-            match key.key_type() {
-                "private" => key.export_private_pem().map(|s| s.into_bytes()),
-                "public" => key.export_public_pem().map(|s| s.into_bytes()),
-                _ => None,
-            }
-        }
+        ("der", _) => match key.key_type() {
+            "private" => key.export_private_der(),
+            "public" => key.export_public_der(),
+            "secret" => key.export_public_der(),
+            _ => None,
+        },
+        ("pem", _) => match key.key_type() {
+            "private" => key.export_private_pem().map(|s| s.into_bytes()),
+            "public" => key.export_public_pem().map(|s| s.into_bytes()),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -1245,7 +1489,12 @@ fn key_export_jwk_impl(id: u32) -> Option<String> {
     key.export_jwk()
 }
 
-fn evp_bytes_to_key(password: &[u8], salt: &[u8], key_len: usize, iv_len: usize) -> (Vec<u8>, Vec<u8>) {
+fn evp_bytes_to_key(
+    password: &[u8],
+    salt: &[u8],
+    key_len: usize,
+    iv_len: usize,
+) -> (Vec<u8>, Vec<u8>) {
     let mut key = Vec::with_capacity(key_len);
     let mut iv = Vec::with_capacity(iv_len);
     let mut prev = Vec::new();
@@ -1268,7 +1517,11 @@ fn evp_bytes_to_key(password: &[u8], salt: &[u8], key_len: usize, iv_len: usize)
     (key, iv)
 }
 
-fn encrypt_sec1_pem_traditional(der: &[u8], cipher_name: &str, passphrase: &[u8]) -> Option<String> {
+fn encrypt_sec1_pem_traditional(
+    der: &[u8],
+    cipher_name: &str,
+    passphrase: &[u8],
+) -> Option<String> {
     use cipher::BlockEncryptMut;
     use cipher::KeyIvInit;
 
@@ -1321,7 +1574,10 @@ fn encrypt_sec1_pem_traditional(der: &[u8], cipher_name: &str, passphrase: &[u8]
     use base64ct::Encoding;
     let b64 = base64ct::Base64::encode_string(&output);
 
-    let mut pem = format!("-----BEGIN EC PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: {},{}\n\n", cipher_upper, iv_hex);
+    let mut pem = format!(
+        "-----BEGIN EC PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: {},{}\n\n",
+        cipher_upper, iv_hex
+    );
     for chunk in b64.as_bytes().chunks(64) {
         pem.push_str(std::str::from_utf8(chunk).unwrap_or(""));
         pem.push('\n');
@@ -1431,7 +1687,10 @@ fn decrypt_traditional_pem(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
     if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
         return None;
     }
-    if !output[output.len() - pad_byte..].iter().all(|&b| b as usize == pad_byte) {
+    if !output[output.len() - pad_byte..]
+        .iter()
+        .all(|&b| b as usize == pad_byte)
+    {
         return None;
     }
     output.truncate(output.len() - pad_byte);
@@ -1439,13 +1698,19 @@ fn decrypt_traditional_pem(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
     Some(output)
 }
 
-fn key_export_encrypted_impl(id: u32, format: &str, type_: &str, cipher_name: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
+fn key_export_encrypted_impl(
+    id: u32,
+    format: &str,
+    type_: &str,
+    cipher_name: &str,
+    passphrase: &[u8],
+) -> Option<Vec<u8>> {
     let store = KEY_STORE.lock().unwrap();
     let key = store.get(&id)?;
     match (format, type_) {
-        ("pem", "pkcs8") => {
-            key.export_pkcs8_encrypted_pem(passphrase).map(|s| s.into_bytes())
-        }
+        ("pem", "pkcs8") => key
+            .export_pkcs8_encrypted_pem(passphrase)
+            .map(|s| s.into_bytes()),
         ("pem", "sec1") => {
             let der = key.export_sec1_private_der()?;
             let encrypted_pem = encrypt_sec1_pem_traditional(&der, cipher_name, passphrase)?;
@@ -1459,17 +1724,26 @@ fn create_private_key_from_sec1_der(der: &[u8]) -> Option<u32> {
     use sec1::DecodeEcPrivateKey;
     if let Ok(sk) = p256::ecdsa::SigningKey::from_sec1_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP256Private(sk));
         return Some(id);
     }
     if let Ok(sk) = p384::ecdsa::SigningKey::from_sec1_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP384Private(sk));
         return Some(id);
     }
     if let Ok(sk) = k256::ecdsa::SigningKey::from_sec1_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcK256Private(sk));
         return Some(id);
     }
     None
@@ -1479,17 +1753,26 @@ fn create_private_key_from_sec1_pem(pem: &str) -> Option<u32> {
     use sec1::DecodeEcPrivateKey;
     if let Ok(sk) = p256::ecdsa::SigningKey::from_sec1_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP256Private(sk));
         return Some(id);
     }
     if let Ok(sk) = p384::ecdsa::SigningKey::from_sec1_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP384Private(sk));
         return Some(id);
     }
     if let Ok(sk) = k256::ecdsa::SigningKey::from_sec1_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcK256Private(sk));
         return Some(id);
     }
     None
@@ -1501,22 +1784,34 @@ fn create_private_key_from_encrypted_pem(pem: &str, passphrase: &[u8]) -> Option
         use pkcs8::DecodePrivateKey;
         if let Ok(sk) = p256::ecdsa::SigningKey::from_pkcs8_encrypted_pem(pem, passphrase) {
             let id = next_id();
-            KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::EcP256Private(sk));
             return Some(id);
         }
         if let Ok(sk) = p384::ecdsa::SigningKey::from_pkcs8_encrypted_pem(pem, passphrase) {
             let id = next_id();
-            KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::EcP384Private(sk));
             return Some(id);
         }
         if let Ok(sk) = k256::ecdsa::SigningKey::from_pkcs8_encrypted_pem(pem, passphrase) {
             let id = next_id();
-            KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::EcK256Private(sk));
             return Some(id);
         }
         if let Ok(sk) = RsaPrivateKey::from_pkcs8_encrypted_pem(pem, passphrase) {
             let id = next_id();
-            KEY_STORE.lock().unwrap().insert(id, KeyData::RsaPrivate(sk));
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::RsaPrivate(sk));
             return Some(id);
         }
         return None;
@@ -1544,25 +1839,37 @@ fn create_private_key_from_der(der: &[u8]) -> Option<u32> {
         let bytes: [u8; 32] = der.try_into().ok()?;
         let sk = Ed25519SigningKey::from_bytes(&bytes);
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::Ed25519Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::Ed25519Private(sk));
         return Some(id);
     }
     // Try P-256
     if let Ok(sk) = p256::ecdsa::SigningKey::from_pkcs8_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP256Private(sk));
         return Some(id);
     }
     // Try P-384
     if let Ok(sk) = p384::ecdsa::SigningKey::from_pkcs8_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP384Private(sk));
         return Some(id);
     }
     // Try secp256k1
     if let Ok(sk) = k256::ecdsa::SigningKey::from_pkcs8_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcK256Private(sk));
         return Some(id);
     }
     None
@@ -1572,17 +1879,26 @@ fn create_private_key_from_pem(pem: &str) -> Option<u32> {
     use pkcs8::DecodePrivateKey;
     if let Ok(sk) = p256::ecdsa::SigningKey::from_pkcs8_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP256Private(sk));
         return Some(id);
     }
     if let Ok(sk) = p384::ecdsa::SigningKey::from_pkcs8_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP384Private(sk));
         return Some(id);
     }
     if let Ok(sk) = k256::ecdsa::SigningKey::from_pkcs8_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Private(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcK256Private(sk));
         return Some(id);
     }
     // Try SEC1 PEM
@@ -1599,23 +1915,35 @@ fn create_public_key_from_der(der: &[u8]) -> Option<u32> {
         let bytes: [u8; 32] = der.try_into().ok()?;
         if let Ok(pk) = Ed25519VerifyingKey::from_bytes(&bytes) {
             let id = next_id();
-            KEY_STORE.lock().unwrap().insert(id, KeyData::Ed25519Public(pk));
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::Ed25519Public(pk));
             return Some(id);
         }
     }
     if let Ok(pk) = p256::ecdsa::VerifyingKey::from_public_key_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Public(pk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP256Public(pk));
         return Some(id);
     }
     if let Ok(pk) = p384::ecdsa::VerifyingKey::from_public_key_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Public(pk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP384Public(pk));
         return Some(id);
     }
     if let Ok(pk) = k256::ecdsa::VerifyingKey::from_public_key_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Public(pk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcK256Public(pk));
         return Some(id);
     }
     None
@@ -1625,17 +1953,26 @@ fn create_public_key_from_pem(pem: &str) -> Option<u32> {
     use pkcs8::DecodePublicKey;
     if let Ok(pk) = p256::ecdsa::VerifyingKey::from_public_key_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP256Public(pk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP256Public(pk));
         return Some(id);
     }
     if let Ok(pk) = p384::ecdsa::VerifyingKey::from_public_key_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcP384Public(pk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcP384Public(pk));
         return Some(id);
     }
     if let Ok(pk) = k256::ecdsa::VerifyingKey::from_public_key_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::EcK256Public(pk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::EcK256Public(pk));
         return Some(id);
     }
     None
@@ -1660,26 +1997,61 @@ fn create_public_key_from_private(private_id: u32) -> Option<u32> {
 
 fn create_secret_key(data: &[u8]) -> u32 {
     let id = next_id();
-    KEY_STORE.lock().unwrap().insert(id, KeyData::Secret(data.to_vec()));
+    KEY_STORE
+        .lock()
+        .unwrap()
+        .insert(id, KeyData::Secret(data.to_vec()));
     id
 }
 
 // ===== Sign / Verify =====
 
 enum SignContext {
-    Ed25519 { key: Ed25519SigningKey, data: Vec<u8> },
-    EcP256 { key: p256::ecdsa::SigningKey, hasher: Option<HashContext> },
-    EcP384 { key: p384::ecdsa::SigningKey, hasher: Option<HashContext> },
-    EcK256 { key: k256::ecdsa::SigningKey, hasher: Option<HashContext> },
-    Rsa { key: RsaPrivateKey, hasher: Option<HashContext>, hash_algo: String },
+    Ed25519 {
+        key: Ed25519SigningKey,
+        data: Vec<u8>,
+    },
+    EcP256 {
+        key: p256::ecdsa::SigningKey,
+        hasher: Option<HashContext>,
+    },
+    EcP384 {
+        key: p384::ecdsa::SigningKey,
+        hasher: Option<HashContext>,
+    },
+    EcK256 {
+        key: k256::ecdsa::SigningKey,
+        hasher: Option<HashContext>,
+    },
+    Rsa {
+        key: RsaPrivateKey,
+        hasher: Option<HashContext>,
+        hash_algo: String,
+    },
 }
 
 enum VerifyContext {
-    Ed25519 { key: Ed25519VerifyingKey, data: Vec<u8> },
-    EcP256 { key: p256::ecdsa::VerifyingKey, hasher: Option<HashContext> },
-    EcP384 { key: p384::ecdsa::VerifyingKey, hasher: Option<HashContext> },
-    EcK256 { key: k256::ecdsa::VerifyingKey, hasher: Option<HashContext> },
-    Rsa { key: RsaPublicKey, hasher: Option<HashContext>, hash_algo: String },
+    Ed25519 {
+        key: Ed25519VerifyingKey,
+        data: Vec<u8>,
+    },
+    EcP256 {
+        key: p256::ecdsa::VerifyingKey,
+        hasher: Option<HashContext>,
+    },
+    EcP384 {
+        key: p384::ecdsa::VerifyingKey,
+        hasher: Option<HashContext>,
+    },
+    EcK256 {
+        key: k256::ecdsa::VerifyingKey,
+        hasher: Option<HashContext>,
+    },
+    Rsa {
+        key: RsaPublicKey,
+        hasher: Option<HashContext>,
+        hash_algo: String,
+    },
 }
 
 static SIGN_CONTEXTS: LazyLock<Mutex<HashMap<u32, SignContext>>> =
@@ -1692,28 +2064,42 @@ fn sign_init_impl(algorithm: Option<&str>, key_id: u32) -> Option<u32> {
     let store = KEY_STORE.lock().unwrap();
     let key = store.get(&key_id)?;
     let ctx = match key {
-        KeyData::Ed25519Private(sk) => {
-            SignContext::Ed25519 { key: sk.clone(), data: Vec::new() }
-        }
+        KeyData::Ed25519Private(sk) => SignContext::Ed25519 {
+            key: sk.clone(),
+            data: Vec::new(),
+        },
         KeyData::EcP256Private(sk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            SignContext::EcP256 { key: sk.clone(), hasher: Some(hasher) }
+            SignContext::EcP256 {
+                key: sk.clone(),
+                hasher: Some(hasher),
+            }
         }
         KeyData::EcP384Private(sk) => {
             let algo = algorithm.unwrap_or("sha384");
             let hasher = create_hasher(algo)?;
-            SignContext::EcP384 { key: sk.clone(), hasher: Some(hasher) }
+            SignContext::EcP384 {
+                key: sk.clone(),
+                hasher: Some(hasher),
+            }
         }
         KeyData::EcK256Private(sk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            SignContext::EcK256 { key: sk.clone(), hasher: Some(hasher) }
+            SignContext::EcK256 {
+                key: sk.clone(),
+                hasher: Some(hasher),
+            }
         }
         KeyData::RsaPrivate(sk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            SignContext::Rsa { key: sk.clone(), hasher: Some(hasher), hash_algo: algo.to_string() }
+            SignContext::Rsa {
+                key: sk.clone(),
+                hasher: Some(hasher),
+                hash_algo: algo.to_string(),
+            }
         }
         _ => return None,
     };
@@ -1728,10 +2114,26 @@ fn sign_update_impl(id: u32, data: &[u8]) -> bool {
     if let Some(ctx) = contexts.get_mut(&id) {
         match ctx {
             SignContext::Ed25519 { data: buf, .. } => buf.extend_from_slice(data),
-            SignContext::EcP256 { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
-            SignContext::EcP384 { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
-            SignContext::EcK256 { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
-            SignContext::Rsa { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
+            SignContext::EcP256 { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            SignContext::EcP384 { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            SignContext::EcK256 { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            SignContext::Rsa { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
         }
         true
     } else {
@@ -1761,7 +2163,11 @@ fn sign_final_impl(id: u32) -> Option<Vec<u8>> {
             let sig: k256::ecdsa::DerSignature = key.sign(&digest);
             Some(sig.as_bytes().to_vec())
         }
-        SignContext::Rsa { key, hasher, hash_algo } => {
+        SignContext::Rsa {
+            key,
+            hasher,
+            hash_algo,
+        } => {
             let digest = hasher?.finalize();
             rsa_sign(&key, &digest, &hash_algo)
         }
@@ -1772,52 +2178,82 @@ fn verify_init_impl(algorithm: Option<&str>, key_id: u32) -> Option<u32> {
     let store = KEY_STORE.lock().unwrap();
     let key = store.get(&key_id)?;
     let ctx = match key {
-        KeyData::Ed25519Public(pk) => {
-            VerifyContext::Ed25519 { key: *pk, data: Vec::new() }
-        }
+        KeyData::Ed25519Public(pk) => VerifyContext::Ed25519 {
+            key: *pk,
+            data: Vec::new(),
+        },
         KeyData::Ed25519Private(sk) => {
             let pk = Ed25519VerifyingKey::from(sk);
-            VerifyContext::Ed25519 { key: pk, data: Vec::new() }
+            VerifyContext::Ed25519 {
+                key: pk,
+                data: Vec::new(),
+            }
         }
         KeyData::EcP256Public(pk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            VerifyContext::EcP256 { key: *pk, hasher: Some(hasher) }
+            VerifyContext::EcP256 {
+                key: *pk,
+                hasher: Some(hasher),
+            }
         }
         KeyData::EcP256Private(sk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            VerifyContext::EcP256 { key: *sk.verifying_key(), hasher: Some(hasher) }
+            VerifyContext::EcP256 {
+                key: *sk.verifying_key(),
+                hasher: Some(hasher),
+            }
         }
         KeyData::EcP384Public(pk) => {
             let algo = algorithm.unwrap_or("sha384");
             let hasher = create_hasher(algo)?;
-            VerifyContext::EcP384 { key: *pk, hasher: Some(hasher) }
+            VerifyContext::EcP384 {
+                key: *pk,
+                hasher: Some(hasher),
+            }
         }
         KeyData::EcP384Private(sk) => {
             let algo = algorithm.unwrap_or("sha384");
             let hasher = create_hasher(algo)?;
-            VerifyContext::EcP384 { key: *sk.verifying_key(), hasher: Some(hasher) }
+            VerifyContext::EcP384 {
+                key: *sk.verifying_key(),
+                hasher: Some(hasher),
+            }
         }
         KeyData::EcK256Public(pk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            VerifyContext::EcK256 { key: *pk, hasher: Some(hasher) }
+            VerifyContext::EcK256 {
+                key: *pk,
+                hasher: Some(hasher),
+            }
         }
         KeyData::EcK256Private(sk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            VerifyContext::EcK256 { key: *sk.verifying_key(), hasher: Some(hasher) }
+            VerifyContext::EcK256 {
+                key: *sk.verifying_key(),
+                hasher: Some(hasher),
+            }
         }
         KeyData::RsaPublic(pk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            VerifyContext::Rsa { key: pk.clone(), hasher: Some(hasher), hash_algo: algo.to_string() }
+            VerifyContext::Rsa {
+                key: pk.clone(),
+                hasher: Some(hasher),
+                hash_algo: algo.to_string(),
+            }
         }
         KeyData::RsaPrivate(sk) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
-            VerifyContext::Rsa { key: sk.to_public_key(), hasher: Some(hasher), hash_algo: algo.to_string() }
+            VerifyContext::Rsa {
+                key: sk.to_public_key(),
+                hasher: Some(hasher),
+                hash_algo: algo.to_string(),
+            }
         }
         _ => return None,
     };
@@ -1832,10 +2268,26 @@ fn verify_update_impl(id: u32, data: &[u8]) -> bool {
     if let Some(ctx) = contexts.get_mut(&id) {
         match ctx {
             VerifyContext::Ed25519 { data: buf, .. } => buf.extend_from_slice(data),
-            VerifyContext::EcP256 { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
-            VerifyContext::EcP384 { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
-            VerifyContext::EcK256 { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
-            VerifyContext::Rsa { hasher, .. } => { if let Some(h) = hasher { h.update(data) } }
+            VerifyContext::EcP256 { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            VerifyContext::EcP384 { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            VerifyContext::EcK256 { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            VerifyContext::Rsa { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
         }
         true
     } else {
@@ -1870,7 +2322,11 @@ fn verify_final_impl(id: u32, signature: &[u8]) -> Option<bool> {
             let sig = k256::ecdsa::DerSignature::from_bytes(signature).ok()?;
             Some(key.verify(&digest, &sig).is_ok())
         }
-        VerifyContext::Rsa { key, hasher, hash_algo } => {
+        VerifyContext::Rsa {
+            key,
+            hasher,
+            hash_algo,
+        } => {
             let digest = hasher?.finalize();
             Some(rsa_verify(&key, &digest, signature, &hash_algo))
         }
@@ -1879,8 +2335,8 @@ fn verify_final_impl(id: u32, signature: &[u8]) -> Option<bool> {
 
 fn rsa_sign(key: &RsaPrivateKey, digest: &[u8], hash_algo: &str) -> Option<Vec<u8>> {
     use rsa::pkcs1v15::SigningKey;
-    use signature::hazmat::PrehashSigner;
     use signature::SignatureEncoding;
+    use signature::hazmat::PrehashSigner;
     match hash_algo {
         "sha1" => {
             let signing_key = SigningKey::<Sha1>::new(key.clone());
@@ -1994,13 +2450,19 @@ fn create_rsa_private_key_from_der(der: &[u8]) -> Option<u32> {
     // Try PKCS#8 first
     if let Ok(sk) = RsaPrivateKey::from_pkcs8_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::RsaPrivate(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::RsaPrivate(sk));
         return Some(id);
     }
     // Try PKCS#1
     if let Ok(sk) = RsaPrivateKey::from_pkcs1_der(der) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::RsaPrivate(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::RsaPrivate(sk));
         return Some(id);
     }
     None
@@ -2012,13 +2474,19 @@ fn create_rsa_private_key_from_pem(pem: &str) -> Option<u32> {
     // Try PKCS#8 first
     if let Ok(sk) = RsaPrivateKey::from_pkcs8_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::RsaPrivate(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::RsaPrivate(sk));
         return Some(id);
     }
     // Try PKCS#1
     if let Ok(sk) = RsaPrivateKey::from_pkcs1_pem(pem) {
         let id = next_id();
-        KEY_STORE.lock().unwrap().insert(id, KeyData::RsaPrivate(sk));
+        KEY_STORE
+            .lock()
+            .unwrap()
+            .insert(id, KeyData::RsaPrivate(sk));
         return Some(id);
     }
     None
@@ -2154,22 +2622,26 @@ fn dh_create_from_group_impl(name: &str) -> Option<u32> {
     let g = BigUint::from(gen_val);
     let p_len = p.to_bytes_be().len();
     let id = next_id();
-    DH_CONTEXTS.lock().unwrap().insert(id, DhState {
-        p,
-        g,
-        priv_key: None,
-        pub_key: None,
-        verify_error: 0,
-        p_len,
-        is_group: true,
-        pub_key_stale: false,
-    });
+    DH_CONTEXTS.lock().unwrap().insert(
+        id,
+        DhState {
+            p,
+            g,
+            priv_key: None,
+            pub_key: None,
+            verify_error: 0,
+            p_len,
+            is_group: true,
+            pub_key_stale: false,
+        },
+    );
     Some(id)
 }
 
 fn dh_create_from_prime_impl(prime_bytes: &[u8], generator_bytes: &[u8]) -> u32 {
     let p = BigUint::from_bytes_be(prime_bytes);
-    let g = if generator_bytes.is_empty() || (generator_bytes.len() == 1 && generator_bytes[0] == 0) {
+    let g = if generator_bytes.is_empty() || (generator_bytes.len() == 1 && generator_bytes[0] == 0)
+    {
         BigUint::from(2u32) // g=0 defaults to 2 (Node.js historical behavior)
     } else {
         BigUint::from_bytes_be(generator_bytes)
@@ -2177,16 +2649,19 @@ fn dh_create_from_prime_impl(prime_bytes: &[u8], generator_bytes: &[u8]) -> u32 
     let p_len = prime_bytes.len();
     let verify_error = dh_check_params(&p, &g);
     let id = next_id();
-    DH_CONTEXTS.lock().unwrap().insert(id, DhState {
-        p,
-        g,
-        priv_key: None,
-        pub_key: None,
-        verify_error,
-        p_len,
-        is_group: false,
-        pub_key_stale: false,
-    });
+    DH_CONTEXTS.lock().unwrap().insert(
+        id,
+        DhState {
+            p,
+            g,
+            priv_key: None,
+            pub_key: None,
+            verify_error,
+            p_len,
+            is_group: false,
+            pub_key_stale: false,
+        },
+    );
     id
 }
 
@@ -2199,16 +2674,19 @@ fn dh_create_from_size_impl(bits: u32) -> Result<u32, String> {
     let g = BigUint::from(2u32);
     let p_len = p.to_bytes_be().len();
     let id = next_id();
-    DH_CONTEXTS.lock().unwrap().insert(id, DhState {
-        p,
-        g,
-        priv_key: None,
-        pub_key: None,
-        verify_error: 0,
-        p_len,
-        is_group: false,
-        pub_key_stale: false,
-    });
+    DH_CONTEXTS.lock().unwrap().insert(
+        id,
+        DhState {
+            p,
+            g,
+            priv_key: None,
+            pub_key: None,
+            verify_error: 0,
+            p_len,
+            is_group: false,
+            pub_key_stale: false,
+        },
+    );
     Ok(id)
 }
 
@@ -2406,7 +2884,8 @@ fn ecdh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, 
             if public.is_none().into() {
                 return Err("Public key is not valid for specified curve".to_string());
             }
-            let shared = diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
+            let shared =
+                diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
             Ok(shared.raw_secret_bytes().to_vec())
         }
         EcdhState::P384 { sk, .. } => {
@@ -2417,7 +2896,8 @@ fn ecdh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, 
             if public.is_none().into() {
                 return Err("Public key is not valid for specified curve".to_string());
             }
-            let shared = diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
+            let shared =
+                diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
             Ok(shared.raw_secret_bytes().to_vec())
         }
         EcdhState::K256 { sk, .. } => {
@@ -2428,7 +2908,8 @@ fn ecdh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, 
             if public.is_none().into() {
                 return Err("Public key is not valid for specified curve".to_string());
             }
-            let shared = diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
+            let shared =
+                diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
             Ok(shared.raw_secret_bytes().to_vec())
         }
     }
@@ -2664,10 +3145,7 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn timing_safe_equal(
-        a: TypedArray<'_, u8>,
-        b: TypedArray<'_, u8>,
-    ) -> Option<bool> {
+    pub fn timing_safe_equal(a: TypedArray<'_, u8>, b: TypedArray<'_, u8>) -> Option<bool> {
         let a_raw = a.as_raw()?;
         let b_raw = b.as_raw()?;
         if a_raw.len != b_raw.len {
@@ -2732,12 +3210,14 @@ pub mod native_module {
         iterations: u32,
         keylen: u32,
     ) -> Option<Vec<u8>> {
-        let password_slice = password.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
-        let salt_slice = salt.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let password_slice = password
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        let salt_slice = salt
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::pbkdf2_derive_impl(&algorithm, password_slice, salt_slice, iterations, keylen)
     }
 
@@ -2749,15 +3229,18 @@ pub mod native_module {
         info: TypedArray<'_, u8>,
         keylen: u32,
     ) -> Option<Vec<u8>> {
-        let ikm_slice = ikm.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
-        let salt_slice = salt.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
-        let info_slice = info.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let ikm_slice = ikm
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        let salt_slice = salt
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        let info_slice = info
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::hkdf_derive_impl(&algorithm, ikm_slice, salt_slice, info_slice, keylen)
     }
 
@@ -2770,31 +3253,41 @@ pub mod native_module {
         p: u32,
         keylen: u32,
     ) -> Option<Vec<u8>> {
-        let password_slice = password.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
-        let salt_slice = salt.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let password_slice = password
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        let salt_slice = salt
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::scrypt_derive_impl(password_slice, salt_slice, n, r, p, keylen)
     }
 
     #[rquickjs::function]
-    pub fn cipher_init(algorithm: String, key: TypedArray<'_, u8>, iv: TypedArray<'_, u8>, decrypt: bool) -> Option<u32> {
-        let key_slice = key.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
-        let iv_slice = iv.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+    pub fn cipher_init(
+        algorithm: String,
+        key: TypedArray<'_, u8>,
+        iv: TypedArray<'_, u8>,
+        decrypt: bool,
+    ) -> Option<u32> {
+        let key_slice = key
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        let iv_slice = iv
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::cipher_init_impl(&algorithm.to_lowercase(), key_slice, iv_slice, decrypt)
     }
 
     #[rquickjs::function]
     pub fn cipher_update(id: u32, data: TypedArray<'_, u8>) -> Option<Vec<u8>> {
-        let data_slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let data_slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::cipher_update_impl(id, data_slice)
     }
 
@@ -2810,9 +3303,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn cipher_set_aad(id: u32, aad: TypedArray<'_, u8>) -> bool {
-        let aad_slice = aad.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let aad_slice = aad
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::cipher_set_aad_impl(id, aad_slice)
     }
 
@@ -2823,9 +3317,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn cipher_set_auth_tag(id: u32, tag: TypedArray<'_, u8>) -> bool {
-        let tag_slice = tag.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let tag_slice = tag
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::cipher_set_auth_tag_impl(id, tag_slice)
     }
 
@@ -2843,9 +3338,15 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn generate_key_pair(algorithm: String, named_curve: Option<String>, modulus_length: Option<u32>, public_exponent: Option<u32>) -> Option<Vec<u32>> {
+    pub fn generate_key_pair(
+        algorithm: String,
+        named_curve: Option<String>,
+        modulus_length: Option<u32>,
+        public_exponent: Option<u32>,
+    ) -> Option<Vec<u32>> {
         let curve_ref = named_curve.as_deref();
-        super::generate_key_pair_impl(&algorithm, curve_ref, modulus_length, public_exponent).map(|(priv_id, pub_id)| vec![priv_id, pub_id])
+        super::generate_key_pair_impl(&algorithm, curve_ref, modulus_length, public_exponent)
+            .map(|(priv_id, pub_id)| vec![priv_id, pub_id])
     }
 
     #[rquickjs::function]
@@ -2864,10 +3365,17 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn key_export_encrypted(id: u32, format: String, type_: String, cipher_name: String, passphrase: TypedArray<'_, u8>) -> Option<Vec<u8>> {
-        let slice = passphrase.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+    pub fn key_export_encrypted(
+        id: u32,
+        format: String,
+        type_: String,
+        cipher_name: String,
+        passphrase: TypedArray<'_, u8>,
+    ) -> Option<Vec<u8>> {
+        let slice = passphrase
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::key_export_encrypted_impl(id, &format, &type_, &cipher_name, slice)
     }
 
@@ -2878,9 +3386,8 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn key_asymmetric_details(id: u32) -> Option<Vec<u64>> {
-        super::key_asymmetric_details_impl(id).map(|(modulus_length, public_exponent)| {
-            vec![modulus_length as u64, public_exponent]
-        })
+        super::key_asymmetric_details_impl(id)
+            .map(|(modulus_length, public_exponent)| vec![modulus_length as u64, public_exponent])
     }
 
     #[rquickjs::function]
@@ -2890,9 +3397,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn create_private_key_der(data: TypedArray<'_, u8>) -> Option<u32> {
-        let slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::create_private_key_from_der(slice)
             .or_else(|| super::create_rsa_private_key_from_der(slice))
     }
@@ -2904,18 +3412,23 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn create_private_key_encrypted_pem(pem: String, passphrase: TypedArray<'_, u8>) -> Option<u32> {
-        let slice = passphrase.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+    pub fn create_private_key_encrypted_pem(
+        pem: String,
+        passphrase: TypedArray<'_, u8>,
+    ) -> Option<u32> {
+        let slice = passphrase
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::create_private_key_from_encrypted_pem(&pem, slice)
     }
 
     #[rquickjs::function]
     pub fn create_public_key_der(data: TypedArray<'_, u8>) -> Option<u32> {
-        let slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::create_public_key_from_der(slice)
             .or_else(|| super::create_rsa_public_key_from_der(slice))
     }
@@ -2933,9 +3446,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn create_secret_key_native(data: TypedArray<'_, u8>) -> u32 {
-        let slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::create_secret_key(slice)
     }
 
@@ -2947,9 +3461,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn sign_update(id: u32, data: TypedArray<'_, u8>) -> bool {
-        let slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::sign_update_impl(id, slice)
     }
 
@@ -2966,33 +3481,37 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn verify_update(id: u32, data: TypedArray<'_, u8>) -> bool {
-        let slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::verify_update_impl(id, slice)
     }
 
     #[rquickjs::function]
     pub fn verify_final_native(id: u32, signature: TypedArray<'_, u8>) -> Option<bool> {
-        let slice = signature.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = signature
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::verify_final_impl(id, slice)
     }
 
     #[rquickjs::function]
     pub fn public_encrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
-        let slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::public_encrypt_impl(key_id, slice, padding)
     }
 
     #[rquickjs::function]
     pub fn private_decrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
-        let slice = data.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::private_decrypt_impl(key_id, slice, padding)
     }
 
@@ -3005,12 +3524,14 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn dh_create_from_prime(prime: TypedArray<'_, u8>, generator: TypedArray<'_, u8>) -> u32 {
-        let prime_slice = prime.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
-        let gen_slice = generator.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let prime_slice = prime
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        let gen_slice = generator
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::dh_create_from_prime_impl(prime_slice, gen_slice)
     }
 
@@ -3034,17 +3555,19 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn dh_compute_secret(id: u32, other_pub: TypedArray<'_, u8>) -> Option<Vec<u8>> {
-        let slice = other_pub.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = other_pub
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::dh_compute_secret_impl(id, slice).ok()
     }
 
     #[rquickjs::function]
     pub fn dh_compute_secret_err(id: u32, other_pub: TypedArray<'_, u8>) -> Vec<String> {
-        let slice = other_pub.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = other_pub
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         match super::dh_compute_secret_impl(id, slice) {
             Ok(bytes) => {
                 let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
@@ -3081,18 +3604,20 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn dh_set_public_key(id: u32, key: TypedArray<'_, u8>) -> bool {
-        let slice = key.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = key
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::dh_set_public_key_impl(id, slice);
         true
     }
 
     #[rquickjs::function]
     pub fn dh_set_private_key(id: u32, key: TypedArray<'_, u8>) -> bool {
-        let slice = key.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = key
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::dh_set_private_key_impl(id, slice)
     }
 
@@ -3120,17 +3645,19 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn ecdh_compute_secret(id: u32, other_pub: TypedArray<'_, u8>) -> Option<Vec<u8>> {
-        let slice = other_pub.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = other_pub
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::ecdh_compute_secret_impl(id, slice).ok()
     }
 
     #[rquickjs::function]
     pub fn ecdh_compute_secret_err(id: u32, other_pub: TypedArray<'_, u8>) -> Vec<String> {
-        let slice = other_pub.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = other_pub
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         match super::ecdh_compute_secret_impl(id, slice) {
             Ok(bytes) => {
                 let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
@@ -3152,17 +3679,19 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn ecdh_set_private_key(id: u32, key: TypedArray<'_, u8>) -> Option<Vec<u8>> {
-        let slice = key.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = key
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::ecdh_set_private_key_impl(id, slice).ok()
     }
 
     #[rquickjs::function]
     pub fn ecdh_set_private_key_err(id: u32, key: TypedArray<'_, u8>) -> Vec<String> {
-        let slice = key.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = key
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         match super::ecdh_set_private_key_impl(id, slice) {
             Ok(bytes) => {
                 let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
@@ -3174,17 +3703,19 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn ecdh_set_public_key(id: u32, key: TypedArray<'_, u8>) -> bool {
-        let slice = key.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = key
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         super::ecdh_set_public_key_impl(id, slice).is_ok()
     }
 
     #[rquickjs::function]
     pub fn ecdh_set_public_key_err(id: u32, key: TypedArray<'_, u8>) -> Vec<String> {
-        let slice = key.as_raw().map(|raw| unsafe {
-            std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len)
-        }).unwrap_or(&[]);
+        let slice = key
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
         match super::ecdh_set_public_key_impl(id, slice) {
             Ok(_) => vec!["ok".to_string()],
             Err(msg) => vec!["error".to_string(), msg],

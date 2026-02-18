@@ -2,7 +2,8 @@
 pub const BUFFER_JS: &str = include_str!("buffer.js");
 
 // Re-export for aliases
-pub const REEXPORT_JS: &str = r#"export * from 'node:buffer'; export { default } from 'node:buffer';"#;
+pub const REEXPORT_JS: &str =
+    r#"export * from 'node:buffer'; export { default } from 'node:buffer';"#;
 
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_buffer from 'node:buffer';

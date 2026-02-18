@@ -18,19 +18,23 @@ pub mod native_module {
 
     #[rquickjs::methods(rename_all = "camelCase")]
     impl JsUrl {
-         #[qjs(constructor)]
-         pub fn new(url: String, base_url: Opt<Option<String>>, ctx: Ctx<'_>) -> rquickjs::Result<Self> {
-             let base = Opt(base_url.0.flatten());
-             
-             match super::parse_url(url, base) {
-                 Ok(url) => Ok(Self { url }),
-                 Err(err) => Err(ctx.throw(
-                     Exception::from_message(ctx.clone(), &format!("Invalid URL: {err}"))
-                         .unwrap()
-                         .into(),
-                 )),
-             }
-         }
+        #[qjs(constructor)]
+        pub fn new(
+            url: String,
+            base_url: Opt<Option<String>>,
+            ctx: Ctx<'_>,
+        ) -> rquickjs::Result<Self> {
+            let base = Opt(base_url.0.flatten());
+
+            match super::parse_url(url, base) {
+                Ok(url) => Ok(Self { url }),
+                Err(err) => Err(ctx.throw(
+                    Exception::from_message(ctx.clone(), &format!("Invalid URL: {err}"))
+                        .unwrap()
+                        .into(),
+                )),
+            }
+        }
 
         /// The hash property of the URL interface is a string containing a "#" followed by the fragment identifier of the URL.
         /// If the URL does not have a fragment identifier, this property contains an empty string, "".
@@ -338,8 +342,7 @@ fn parse_url_with_base(
 pub const URL_JS: &str = include_str!("url.js");
 
 // Re-export for aliases
-pub const REEXPORT_JS: &str =
-    r#"export * from 'node:url'; export { default } from 'node:url';"#;
+pub const REEXPORT_JS: &str = r#"export * from 'node:url'; export { default } from 'node:url';"#;
 
 // JS code wiring the URL module into the global context
 pub const WIRE_JS: &str = r#"

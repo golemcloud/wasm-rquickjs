@@ -1768,6 +1768,163 @@
 
     // === es-module suite ===
     "es-module/test-dynamic-import-script-lifetime.js": {},
-    "es-module/test-esm-loader-cache-clearing.js": {}
+    "es-module/test-esm-loader-cache-clearing.js": {},
+
+    // === node:zlib tests ===
+    "parallel/test-zlib-const.js": {},
+    "parallel/test-zlib-crc32.js": {},
+    "parallel/test-zlib-no-stream.js": {},
+    "parallel/test-zlib-create-raw.js": {},
+    "parallel/test-zlib-flush-flags.js": {},
+    "parallel/test-zlib-convenience-methods.js": {},
+    "parallel/test-zlib-from-string.js": {},
+    "parallel/test-zlib-brotli-from-string.js": {},
+    "parallel/test-zlib-empty-buffer.js": {},
+    "parallel/test-zlib-deflate-constructors.js": {},
+    "parallel/test-zlib-not-string-or-buffer.js": {},
+    "parallel/test-zlib-sync-no-event.js": {},
+    "parallel/test-zlib-brotli.js": {},
+    "parallel/test-zlib-invalid-arg-value-brotli-compress.js": {},
+    "parallel/test-zlib-bytes-read.js": {
+      "skip": true,
+      "reason": "Byte-by-byte streaming with flush hangs due to buffered gzip/brotli streaming implementation"
+    },
+    "parallel/test-zlib-close-after-write.js": {},
+    "parallel/test-zlib-deflate-raw-inherits.js": {
+      "skip": true,
+      "reason": "Requires Constructor.call(this) inheritance pattern which doesn't work with ES6 class-based internals"
+    },
+    "parallel/test-zlib-invalid-input.js": {
+      "skip": true,
+      "reason": "process.nextTick arg count panic when stream error events propagate through Transform internals"
+    },
+    "parallel/test-zlib-object-write.js": {
+      "skip": true,
+      "reason": "process.nextTick arg count panic when Transform write validation triggers error propagation"
+    },
+    "parallel/test-zlib-premature-end.js": {
+      "skip": true,
+      "reason": "Streaming with trailing data after compressed payload not yet supported"
+    },
+    "parallel/test-zlib-brotli-16GB.js": {
+      "skip": true,
+      "reason": "Requires 16GB memory allocation; not feasible in WASM"
+    },
+    "parallel/test-zlib-brotli-flush.js": {
+      "skip": true,
+      "reason": "Requires precise brotli flush byte output comparison"
+    },
+    "parallel/test-zlib-brotli-from-brotli.js": {
+      "skip": true,
+      "reason": "Requires fs.createReadStream/createWriteStream pipe + tmpdir integration"
+    },
+    "parallel/test-zlib-brotli-kmaxlength-rangeerror.js": {
+      "skip": true,
+      "reason": "Modifies buffer.kMaxLength at runtime before requiring zlib"
+    },
+    "parallel/test-zlib-dictionary.js": {
+      "skip": true,
+      "reason": "Dictionary support not available in flate2 rust_backend"
+    },
+    "parallel/test-zlib-dictionary-fail.js": {
+      "skip": true,
+      "reason": "Dictionary support not available in flate2 rust_backend"
+    },
+    "parallel/test-zlib-destroy-pipe.js": {
+      "skip": true,
+      "reason": "Complex pipe+destroy interaction"
+    },
+    "parallel/test-zlib-flush.js": {
+      "skip": true,
+      "reason": "Tests precise byte-level flush output comparison"
+    },
+    "parallel/test-zlib-flush-drain.js": {
+      "skip": true,
+      "reason": "Relies on internal _writableState.needDrain"
+    },
+    "parallel/test-zlib-flush-drain-longblock.js": {
+      "skip": true,
+      "reason": "Complex flush/drain/pipe interaction"
+    },
+    "parallel/test-zlib-flush-write-sync-interleaved.js": {
+      "skip": true,
+      "reason": "Tests precise ordering of write+flush+read interleaving"
+    },
+    "parallel/test-zlib-from-concatenated-gzip.js": {
+      "skip": true,
+      "reason": "Multi-member gzip with fs.createReadStream + pipe + tmpdir"
+    },
+    "parallel/test-zlib-from-gzip.js": {
+      "skip": true,
+      "reason": "Requires fs.createReadStream/createWriteStream pipe + tmpdir"
+    },
+    "parallel/test-zlib-from-gzip-with-trailing-garbage.js": {
+      "skip": true,
+      "reason": "Tests precise error code handling for trailing garbage"
+    },
+    "parallel/test-zlib-invalid-input-memory.js": {
+      "skip": true,
+      "reason": "Requires --expose-gc and globalThis.gc()"
+    },
+    "parallel/test-zlib-kmaxlength-rangeerror.js": {
+      "skip": true,
+      "reason": "Modifies buffer.kMaxLength at runtime before requiring zlib"
+    },
+    "parallel/test-zlib-maxOutputLength.js": {
+      "skip": true,
+      "reason": "maxOutputLength not implemented in native layer"
+    },
+    "parallel/test-zlib-params.js": {
+      "skip": true,
+      "reason": "Actual params() level change mid-stream not supported"
+    },
+    "parallel/test-zlib-random-byte-pipes.js": {
+      "skip": true,
+      "reason": "Complex pipe chain with crypto.createHash"
+    },
+    "parallel/test-zlib-reset-before-write.js": {
+      "skip": true,
+      "reason": "Tests params() and reset() interaction before first write"
+    },
+    "parallel/test-zlib-truncated.js": {
+      "skip": true,
+      "reason": "Tests precise truncated input error handling with finishFlush recovery"
+    },
+    "parallel/test-zlib-unused-weak.js": {
+      "skip": true,
+      "reason": "Requires --expose-gc and process.memoryUsage().external"
+    },
+    "parallel/test-zlib-write-after-close.js": {
+      "skip": true,
+      "reason": "Uses t.mock.fn() with mock.callCount() assertion"
+    },
+    "parallel/test-zlib-write-after-end.js": {
+      "skip": true,
+      "reason": "Uses t.mock.fn() with mock.callCount() assertion"
+    },
+    "parallel/test-zlib-write-after-flush.js": {
+      "skip": true,
+      "reason": "Tests write after flush pipe interaction with gzip+brotli"
+    },
+    "parallel/test-zlib-close-after-error.js": {
+      "skip": true,
+      "reason": "Tests close after error on invalid input with _closed internal state"
+    },
+    "parallel/test-zlib-close-in-ondata.js": {
+      "skip": true,
+      "reason": "Tests close during data event with large buffer"
+    },
+    "parallel/test-zlib-destroy.js": {
+      "skip": true,
+      "reason": "Tests destroy() nullifies _handle internal property"
+    },
+    "parallel/test-zlib-failed-init.js": {
+      "skip": true,
+      "reason": "Tests internal _level/_strategy properties with NaN"
+    },
+    "parallel/test-zlib-unzip-one-byte-chunks.js": {
+      "skip": true,
+      "reason": "Tests one-byte streaming unzip of concatenated gzip"
+    }
   }
 }

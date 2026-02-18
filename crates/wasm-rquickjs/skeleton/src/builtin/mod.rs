@@ -25,14 +25,14 @@ mod http {
     pub use super::http_disabled::*;
 }
 
+mod events;
 mod http2;
 mod https;
-mod events;
 mod ieee754;
+mod internal;
 mod module;
 mod net;
 mod node_test;
-mod internal;
 mod os;
 mod path;
 mod perf_hooks;
@@ -174,6 +174,7 @@ pub fn add_module_resolvers(
             .with_module("v8")
             .with_module("node:worker_threads")
             .with_module("worker_threads")
+            .with_module("__wasm_rquickjs_builtin/zlib_native")
             .with_module("node:zlib")
             .with_module("zlib"),
     )
@@ -221,9 +222,10 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/web_crypto_native",
                 web_crypto::js_native_module,
             )
+            .with_module("__wasm_rquickjs_builtin/vm_native", vm::js_native_module)
             .with_module(
-                "__wasm_rquickjs_builtin/vm_native",
-                vm::js_native_module,
+                "__wasm_rquickjs_builtin/zlib_native",
+                zlib::js_native_module,
             ),
         rquickjs::loader::BuiltinLoader::default()
             .with_module(
@@ -304,7 +306,10 @@ pub fn module_loader() -> (
             .with_module("cluster", cluster::REEXPORT_JS)
             .with_module("node:dgram", dgram::DGRAM_JS)
             .with_module("dgram", dgram::REEXPORT_JS)
-            .with_module("node:diagnostics_channel", diagnostics_channel::DIAGNOSTICS_CHANNEL_JS)
+            .with_module(
+                "node:diagnostics_channel",
+                diagnostics_channel::DIAGNOSTICS_CHANNEL_JS,
+            )
             .with_module("diagnostics_channel", diagnostics_channel::REEXPORT_JS)
             .with_module("node:dns", dns::DNS_JS)
             .with_module("dns", dns::REEXPORT_JS)

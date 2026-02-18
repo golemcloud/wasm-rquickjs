@@ -63,8 +63,16 @@ pub mod native_module {
             if chunk.len() < 2 {
                 break;
             }
-            let a = if (chunk[0] as usize) < 128 { lookup[chunk[0] as usize] } else { 255 };
-            let b = if (chunk[1] as usize) < 128 { lookup[chunk[1] as usize] } else { 255 };
+            let a = if (chunk[0] as usize) < 128 {
+                lookup[chunk[0] as usize]
+            } else {
+                255
+            };
+            let b = if (chunk[1] as usize) < 128 {
+                lookup[chunk[1] as usize]
+            } else {
+                255
+            };
 
             if a == 255 || b == 255 {
                 return None;
@@ -73,14 +81,22 @@ pub mod native_module {
             result.push((a << 2) | (b >> 4));
 
             if chunk.len() > 2 && chunk[2] != b'=' {
-                let c = if (chunk[2] as usize) < 128 { lookup[chunk[2] as usize] } else { 255 };
+                let c = if (chunk[2] as usize) < 128 {
+                    lookup[chunk[2] as usize]
+                } else {
+                    255
+                };
                 if c == 255 {
                     return None;
                 }
                 result.push(((b & 0xF) << 4) | (c >> 2));
 
                 if chunk.len() > 3 && chunk[3] != b'=' {
-                    let d = if (chunk[3] as usize) < 128 { lookup[chunk[3] as usize] } else { 255 };
+                    let d = if (chunk[3] as usize) < 128 {
+                        lookup[chunk[3] as usize]
+                    } else {
+                        255
+                    };
                     if d == 255 {
                         return None;
                     }

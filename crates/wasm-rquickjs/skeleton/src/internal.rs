@@ -119,8 +119,9 @@ impl JsState {
 
             rt.set_host_promise_rejection_tracker(Some(Box::new(
                 |ctx, promise, reason, is_handled| {
-                    if let Ok(handler) =
-                        ctx.globals().get::<_, Function>("__wasm_rquickjs_rejection_tracker")
+                    if let Ok(handler) = ctx
+                        .globals()
+                        .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
                     {
                         let _ = handler.call::<_, Value>((promise, reason, is_handled));
                     }

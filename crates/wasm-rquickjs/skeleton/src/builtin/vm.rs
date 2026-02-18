@@ -129,5 +129,4 @@ fn serde_json_mini_quote(s: &str) -> String {
 pub const VM_JS: &str = include_str!("vm.js");
 
 // Re-export for aliases
-pub const REEXPORT_JS: &str =
-    r#"export * from '__wasm_rquickjs_builtin/vm'; export { default } from '__wasm_rquickjs_builtin/vm';"#;
+pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/vm'; export { default } from '__wasm_rquickjs_builtin/vm';"#;

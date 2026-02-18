@@ -298,7 +298,9 @@ pub mod native_module {
     pub fn rename(old_path: String, new_path: String) -> Option<String> {
         match std::fs::rename(Path::new(&old_path), Path::new(&new_path)) {
             Ok(_) => None,
-            Err(err) => Some(format!("Failed to rename {old_path:?} to {new_path:?}: {err}")),
+            Err(err) => Some(format!(
+                "Failed to rename {old_path:?} to {new_path:?}: {err}"
+            )),
         }
     }
 
@@ -356,7 +358,10 @@ pub mod native_module {
             }
             Err(err) => {
                 result
-                    .set("error", super::make_fs_error(&ctx, &err, "open", Some(&path)))
+                    .set(
+                        "error",
+                        super::make_fs_error(&ctx, &err, "open", Some(&path)),
+                    )
                     .unwrap();
             }
         }
@@ -591,7 +596,10 @@ pub mod native_module {
             }
             Err(err) => {
                 result
-                    .set("error", super::make_fs_error(&ctx, &err, "stat", Some(&path)))
+                    .set(
+                        "error",
+                        super::make_fs_error(&ctx, &err, "stat", Some(&path)),
+                    )
                     .unwrap();
             }
         }
@@ -752,11 +760,7 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn fs_link(
-        ctx: Ctx<'_>,
-        existing_path: String,
-        new_path: String,
-    ) -> Option<Object<'_>> {
+    pub fn fs_link(ctx: Ctx<'_>, existing_path: String, new_path: String) -> Option<Object<'_>> {
         match std::fs::hard_link(&existing_path, &new_path) {
             Ok(_) => None,
             Err(err) => Some(super::make_fs_error(
@@ -995,7 +999,11 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn fs_append_file<'js>(ctx: Ctx<'js>, path: String, data: TypedArray<'js, u8>) -> Option<Object<'js>> {
+    pub fn fs_append_file<'js>(
+        ctx: Ctx<'js>,
+        path: String,
+        data: TypedArray<'js, u8>,
+    ) -> Option<Object<'js>> {
         let Some(bytes) = data.as_bytes() else {
             return Some(super::make_fs_error(
                 &ctx,
