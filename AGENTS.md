@@ -96,7 +96,7 @@ cargo test --test runtime fs -- --nocapture
 cargo test --test runtime -- --nocapture
 ```
 
-**RULE 2b: NEVER run `cargo test --test node_compat` without a filter.** The node_compat suite contains 800+ dynamically generated tests (one per entry in `config.jsonc`). ALWAYS filter to a specific test or group:
+**RULE 2b: NEVER run `cargo test --test node_compat` without a filter** unless you intend to run the full suite. The node_compat suite contains 800+ dynamically generated tests (one per entry in `config.jsonc`). ALWAYS filter to a specific test or group when working on individual features:
 
 ```bash
 # ✅ CORRECT — run only specific tests or groups:
@@ -104,8 +104,10 @@ cargo test --test node_compat parallel__test_assert_calltracker -- --nocapture
 cargo test --test node_compat parallel__test_fs -- --nocapture
 cargo test --test node_compat parallel__test_btoa_atob -- --nocapture
 
-# ❌ WRONG — never do this, it runs ALL 800+ node_compat tests:
-cargo test --test node_compat -- --nocapture
+# ✅ CORRECT — run ALL enabled vendor tests in parallel:
+cargo test --test node_compat -- --report-time --nocapture
+
+# ❌ WRONG — running the full suite unintentionally when only a subset is needed
 ```
 
 **RULE 3: DO NOT run `cargo test` (without arguments) as it runs everything including compilation and all runtime tests.** Always run only the specific test harness relevant to your changes.

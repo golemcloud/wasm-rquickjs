@@ -153,7 +153,7 @@ function from (value, encodingOrOffset, length) {
         return fromArrayBuffer(value, encodingOrOffset, length)
     }
 
-    if (typeof value === 'number') {
+    if (typeof value !== 'object') {
         throw new ERR_INVALID_ARG_TYPE(
             'first argument',
             ['string', 'Buffer', 'ArrayBuffer', 'Array', 'Array-like Object'],
@@ -187,7 +187,10 @@ function from (value, encodingOrOffset, length) {
 
     if (typeof Symbol !== 'undefined' && Symbol.toPrimitive != null &&
         typeof value[Symbol.toPrimitive] === 'function') {
-        return Buffer.from(value[Symbol.toPrimitive]('string'), encodingOrOffset, length)
+        const primitive = value[Symbol.toPrimitive]('string')
+        if (typeof primitive === 'string') {
+            return fromString(primitive, encodingOrOffset)
+        }
     }
 
     throw new ERR_INVALID_ARG_TYPE(
@@ -262,6 +265,69 @@ Buffer.allocUnsafe = function (size) {
  */
 Buffer.allocUnsafeSlow = function (size) {
     return allocUnsafe(size)
+}
+
+function isTypedArray (value) {
+    return (value instanceof Int8Array) ||
+        (value instanceof Uint8Array) ||
+        (value instanceof Uint8ClampedArray) ||
+        (value instanceof Int16Array) ||
+        (value instanceof Uint16Array) ||
+        (value instanceof Int32Array) ||
+        (value instanceof Uint32Array) ||
+        (value instanceof Float32Array) ||
+        (value instanceof Float64Array) ||
+        (value instanceof BigInt64Array) ||
+        (value instanceof BigUint64Array)
+}
+
+function validateInteger (value, name, min, max) {
+    if (min === undefined) min = Number.MIN_SAFE_INTEGER
+    if (max === undefined) max = Number.MAX_SAFE_INTEGER
+    if (typeof value !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE(name, 'number', value)
+    }
+    if (!Number.isInteger(value)) {
+        throw new ERR_OUT_OF_RANGE(name, 'an integer', value)
+    }
+    if (value < min || value > max) {
+        throw new ERR_OUT_OF_RANGE(name, '>= ' + min + ' && <= ' + max, value)
+    }
+}
+
+Buffer.copyBytesFrom = function copyBytesFrom (view, offset, length) {
+    if (!isTypedArray(view)) {
+        throw new ERR_INVALID_ARG_TYPE('view', ['TypedArray'], view)
+    }
+
+    const viewLength = view.length
+    if (viewLength === 0) {
+        return createBuffer(0)
+    }
+
+    if (offset !== undefined || length !== undefined) {
+        if (offset !== undefined) {
+            validateInteger(offset, 'offset', 0)
+            if (offset >= viewLength) return createBuffer(0)
+        } else {
+            offset = 0
+        }
+        let end
+        if (length !== undefined) {
+            validateInteger(length, 'length', 0)
+            end = offset + length
+        } else {
+            end = viewLength
+        }
+
+        view = view.slice(offset, end)
+    }
+
+    return fromArrayLike(new Uint8Array(
+        view.buffer,
+        view.byteOffset,
+        view.byteLength
+    ))
 }
 
 function fromString (string, encoding) {
