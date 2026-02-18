@@ -103,9 +103,12 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/process_native")
             .with_module("node:process")
             .with_module("process")
-            .with_module("__wasm_rquickjs_builtin/path_native")
             .with_module("node:path")
             .with_module("path")
+            .with_module("node:path/posix")
+            .with_module("path/posix")
+            .with_module("node:path/win32")
+            .with_module("path/win32")
             .with_module("__wasm_rquickjs_builtin/url_native")
             .with_module("__wasm_rquickjs_builtin/url")
             .with_module("node:url")
@@ -213,10 +216,6 @@ pub fn module_loader() -> (
                 "__wasm_rquickjs_builtin/process_native",
                 process::js_native_module,
             )
-            .with_module(
-                "__wasm_rquickjs_builtin/path_native",
-                path::js_native_module,
-            )
             .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto_native",
@@ -270,6 +269,10 @@ pub fn module_loader() -> (
             .with_module("process", process::REEXPORT_JS)
             .with_module("node:path", path::PATH_JS)
             .with_module("path", path::REEXPORT_JS)
+            .with_module("node:path/posix", path::PATH_POSIX_REEXPORT_JS)
+            .with_module("path/posix", path::PATH_POSIX_REEXPORT_JS)
+            .with_module("node:path/win32", path::PATH_WIN32_REEXPORT_JS)
+            .with_module("path/win32", path::PATH_WIN32_REEXPORT_JS)
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module("node:url", url::URL_JS)
             .with_module("url", url::REEXPORT_JS)

@@ -1,4 +1,6 @@
 import * as pathModule from 'node:path';
+import * as pathPosix from 'node:path/posix';
+import * as pathWin32 from 'node:path/win32';
 import * as fsModule from 'node:fs';
 import * as util from 'node:util';
 import * as buffer from 'node:buffer';
@@ -66,6 +68,10 @@ function cjsExport(ns) {
 const builtinModules = {
     'path': cjsExport(pathModule),
     'node:path': cjsExport(pathModule),
+    'path/posix': cjsExport(pathPosix),
+    'node:path/posix': cjsExport(pathPosix),
+    'path/win32': cjsExport(pathWin32),
+    'node:path/win32': cjsExport(pathWin32),
     'fs': cjsExport(fsModule),
     'node:fs': cjsExport(fsModule),
     'fs/promises': cjsExport(fsPromises),
