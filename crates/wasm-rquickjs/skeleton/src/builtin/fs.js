@@ -1986,6 +1986,7 @@ export function ReadStream(path, options) {
             : (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd.fd
             : null;
     this._fileHandle = (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd : null;
+
     this.path = (this.fd != null && (path == null || path === undefined)) ? undefined : path;
     this.flags = opts.flags || 'r';
     this.mode = opts.mode || 0o666;
@@ -2052,6 +2053,15 @@ export function ReadStream(path, options) {
     }
 
     _Readable.call(this, opts);
+
+    // When a FileHandle is passed, listen for its 'close' event so that
+    // closing the handle externally also destroys the stream (Node.js compat).
+    if (this._fileHandle && typeof this._fileHandle.on === 'function') {
+        const self = this;
+        this._fileHandle.on('close', function onHandleClose() {
+            if (!self.destroyed) self.destroy();
+        });
+    }
 }
 
 ReadStream.prototype._construct = function(callback) {
@@ -2155,7 +2165,11 @@ ReadStream.prototype._destroy = function(err, cb) {
     if (this.fd === null) { cb(err); return; }
     if (this._fileHandle) {
         this.fd = null;
-        this._fileHandle.close().then(() => cb(err), (er) => cb(er || err));
+        if (this._fileHandle._closed) {
+            cb(err);
+        } else {
+            this._fileHandle.close().then(() => cb(err), (er) => cb(er || err));
+        }
         return;
     }
     const fd = this.fd;
@@ -2253,6 +2267,13 @@ export function WriteStream(path, options) {
     this._fs = opts.fs || _default;
 
     _Writable.call(this, opts);
+
+    if (this._fileHandle && typeof this._fileHandle.on === 'function') {
+        const self = this;
+        this._fileHandle.on('close', function onHandleClose() {
+            if (!self.destroyed) self.destroy();
+        });
+    }
 }
 
 WriteStream.prototype._construct = function(callback) {
@@ -2336,7 +2357,11 @@ WriteStream.prototype._destroy = function(err, cb) {
     if (this.fd === null) { cb(err); return; }
     if (this._fileHandle) {
         this.fd = null;
-        this._fileHandle.close().then(() => cb(err), (er) => cb(er || err));
+        if (this._fileHandle._closed) {
+            cb(err);
+        } else {
+            this._fileHandle.close().then(() => cb(err), (er) => cb(er || err));
+        }
         return;
     }
     const fd = this.fd;
