@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
+use camino::Utf8Path;
 use indoc::indoc;
-use test_r::{inherit_test_dep, test};
+use test_r::{test, test_dep};
 
-inherit_test_dep!(
-    #[tagged_as("encoding")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "encoding")]
+fn compiled_encoding() -> CompiledTest {
+    let path = Utf8Path::new("examples/encoding");
+    CompiledTest::new(path, true).expect("Failed to compile encoding")
+}
 
 #[test]
 async fn encoding(#[tagged_as("encoding")] compiled: &CompiledTest) -> anyhow::Result<()> {

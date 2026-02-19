@@ -1,12 +1,14 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
 use anyhow::anyhow;
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("crypto")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "crypto")]
+fn compiled_crypto() -> CompiledTest {
+    let path = Utf8Path::new("examples/crypto");
+    CompiledTest::new(path, false).expect("Failed to compile crypto")
+}
 
 #[test]
 async fn web_crypto_random_uuid(

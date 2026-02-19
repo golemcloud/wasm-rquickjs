@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("structured_clone")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "structured_clone")]
+fn compiled_structured_clone() -> CompiledTest {
+    let path = Utf8Path::new("examples/structured-clone");
+    CompiledTest::new(path, true).expect("Failed to compile structured_clone")
+}
 
 #[test]
 async fn structured_clone_primitives(

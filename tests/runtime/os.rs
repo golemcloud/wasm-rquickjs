@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("os")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "os")]
+fn compiled_os() -> CompiledTest {
+    let path = Utf8Path::new("examples/os");
+    CompiledTest::new(path, true).expect("Failed to compile os")
+}
 
 #[test]
 async fn os_eol_constant(#[tagged_as("os")] compiled: &CompiledTest) -> anyhow::Result<()> {

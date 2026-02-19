@@ -1,12 +1,14 @@
 use crate::common::test_server::start_test_server;
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("node_http")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "node_http")]
+fn compiled_node_http() -> CompiledTest {
+    let path = Utf8Path::new("examples/node-http");
+    CompiledTest::new(path, true).expect("Failed to compile node_http")
+}
 
 #[test]
 async fn node_http_get(#[tagged_as("node_http")] compiled: &CompiledTest) -> anyhow::Result<()> {

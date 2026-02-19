@@ -44,6 +44,10 @@ pub mod native_module {
         let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
         ctx.spawn(async move {
             let _ = task.await;
+            // Clean up after the task completes naturally
+            let state = get_js_state();
+            state.abort_handles.borrow_mut().remove(&key);
+            state.unrefed_timers.borrow_mut().remove(&key);
         });
         state.abort_handles.borrow_mut().insert(key, abort_handle);
         key
@@ -52,10 +56,23 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn clear_schedule(timeout_id: usize) {
         let state = get_js_state();
+        state.unrefed_timers.borrow_mut().remove(&timeout_id);
         let mut abort_handles = state.abort_handles.borrow_mut();
         if let Some(handle) = abort_handles.remove(&timeout_id) {
             handle.abort();
         }
+    }
+
+    #[rquickjs::function]
+    pub fn unref_schedule(timeout_id: usize) {
+        let state = get_js_state();
+        state.unrefed_timers.borrow_mut().insert(timeout_id);
+    }
+
+    #[rquickjs::function]
+    pub fn ref_schedule(timeout_id: usize) {
+        let state = get_js_state();
+        state.unrefed_timers.borrow_mut().remove(&timeout_id);
     }
 }
 

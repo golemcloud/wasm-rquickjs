@@ -1318,10 +1318,7 @@
     },
 
     // === AbortController tests ===
-    "parallel/test-abortcontroller.js": {
-      "skip": true,
-      "reason": "hangs on AbortSignal.timeout() test - needs Promise.withResolvers or timers/promises sleep support"
-    },
+    "parallel/test-abortcontroller.js": {},
     "parallel/test-aborted-util.js": {
       "skip": true,
       "reason": "requires --expose-internals and internal/abort_controller"

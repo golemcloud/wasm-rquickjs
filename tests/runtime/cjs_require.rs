@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("cjs_require")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "cjs_require")]
+fn compiled_cjs_require() -> CompiledTest {
+    let path = Utf8Path::new("examples/cjs-require");
+    CompiledTest::new(path, false).expect("Failed to compile cjs_require")
+}
 
 #[test]
 async fn cjs_require_builtin(

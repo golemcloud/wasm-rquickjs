@@ -37,6 +37,14 @@ import { _eventTrusted } from 'node:events';
 const signalState = new WeakMap();
 const INTERNAL_TOKEN = Symbol('AbortSignal.internal');
 
+const _timeoutFinalizer = typeof FinalizationRegistry !== 'undefined'
+    ? new FinalizationRegistry((timeoutId) => clearTimeout(timeoutId))
+    : null;
+
+// Signals with active abort listeners are kept alive (strong ref) to prevent GC.
+// When all listeners are removed, the signal is released and can be collected.
+const _gcPersistentSignals = new Set();
+
 function getSignalState(signal) {
     const state = signalState.get(signal);
     if (!state) {
@@ -78,7 +86,13 @@ class AbortSignal {
     }
 
     set onabort(handler) {
-        getSignalState(this).onabort = handler;
+        const state = getSignalState(this);
+        state.onabort = handler;
+        if (handler != null) {
+            _gcPersistentSignals.add(this);
+        } else if (state.listeners.length === 0) {
+            _gcPersistentSignals.delete(this);
+        }
     }
 
     static abort(reason) {
@@ -94,15 +108,46 @@ class AbortSignal {
     }
 
     static timeout(milliseconds) {
+        console.error(`[DEBUG] AbortSignal.timeout(${milliseconds}) called`);
         const signal = createAbortSignal();
-        const state = signalState.get(signal);
-        setTimeout(() => {
-            if (!state.aborted) {
-                state.aborted = true;
-                state.reason = new DOMException('The operation timed out.', 'TimeoutError');
-                signal.dispatchEvent(new Event('abort'));
-            }
+
+        // Pin signal temporarily to prevent QuickJS from collecting it before
+        // the caller has a chance to attach listeners (QuickJS doesn't guarantee
+        // WeakRef referents survive within the same synchronous turn like V8).
+        _gcPersistentSignals.add(signal);
+
+        const ref = new WeakRef(signal);
+        const timeoutId = setTimeout(() => {
+            console.error(`[DEBUG] timeout(${milliseconds}) timer fired`);
+            const s = ref.deref();
+            if (!s) { console.error(`[DEBUG] timeout(${milliseconds}) signal was GC'd`); return; }
+            const st = signalState.get(s);
+            if (!st || st.aborted) return;
+            st.aborted = true;
+            st.reason = new DOMException('The operation timed out.', 'TimeoutError');
+            const event = new Event('abort');
+            _eventTrusted.set(event, true);
+            s.dispatchEvent(event);
         }, milliseconds);
+        if (timeoutId && typeof timeoutId.unref === 'function') {
+            timeoutId.unref();
+        }
+        if (_timeoutFinalizer) {
+            _timeoutFinalizer.register(signal, timeoutId);
+        }
+
+        // After the current synchronous turn, unpin if no listeners were attached.
+        // Use the WeakRef to avoid the microtask closure itself preventing GC.
+        queueMicrotask(() => {
+            const s = ref.deref();
+            if (s) {
+                const st = signalState.get(s);
+                if (st && st.listeners.length === 0 && st.onabort === null) {
+                    _gcPersistentSignals.delete(s);
+                }
+            }
+        });
+
         return signal;
     }
 
@@ -151,6 +196,7 @@ class AbortSignal {
                 listener,
                 once: opts.once || false
             });
+            _gcPersistentSignals.add(this);
         }
     }
 
@@ -161,6 +207,9 @@ class AbortSignal {
         const index = state.listeners.findIndex(l => l.listener === listener);
         if (index !== -1) {
             state.listeners.splice(index, 1);
+            if (state.listeners.length === 0 && state.onabort === null) {
+                _gcPersistentSignals.delete(this);
+            }
         }
     }
 
@@ -192,6 +241,10 @@ class AbortSignal {
                     state.listeners.splice(index, 1);
                 }
             }
+        }
+
+        if (state.listeners.length === 0 && state.onabort === null) {
+            _gcPersistentSignals.delete(this);
         }
 
         return !event.defaultPrevented;

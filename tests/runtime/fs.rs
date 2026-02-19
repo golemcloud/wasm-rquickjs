@@ -1,10 +1,12 @@
 use crate::common::{CompiledTest, TestInstance};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 
-inherit_test_dep!(
-    #[tagged_as("fs")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "fs")]
+fn compiled_fs() -> CompiledTest {
+    let path = Utf8Path::new("examples/fs");
+    CompiledTest::new(path, false).expect("Failed to compile fs")
+}
 
 #[test]
 async fn fs(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {

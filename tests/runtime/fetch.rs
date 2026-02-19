@@ -1,13 +1,15 @@
 use crate::common::test_server::start_test_server;
 use crate::common::{CompiledTest, invoke_and_capture_output};
+use camino::Utf8Path;
 use indoc::indoc;
-use test_r::{inherit_test_dep, test};
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("fetch")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "fetch")]
+fn compiled_fetch() -> CompiledTest {
+    let path = Utf8Path::new("examples/fetch");
+    CompiledTest::new(path, true).expect("Failed to compile fetch")
+}
 
 #[test]
 async fn fetch_post_json_and_get(

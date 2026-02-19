@@ -1,12 +1,14 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
+use camino::Utf8Path;
 use indoc::indoc;
-use test_r::{inherit_test_dep, test};
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("streams")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "streams")]
+fn compiled_streams() -> CompiledTest {
+    let path = Utf8Path::new("examples/streams");
+    CompiledTest::new(path, true).expect("Failed to compile streams")
+}
 
 #[test]
 async fn streams(#[tagged_as("streams")] compiled: &CompiledTest) -> anyhow::Result<()> {

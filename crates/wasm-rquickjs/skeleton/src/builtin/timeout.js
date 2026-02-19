@@ -13,11 +13,13 @@ class Timeout {
 
     ref() {
         this._refed = true;
+        timeoutNative.ref_schedule(this._id);
         return this;
     }
 
     unref() {
         this._refed = false;
+        timeoutNative.unref_schedule(this._id);
         return this;
     }
 

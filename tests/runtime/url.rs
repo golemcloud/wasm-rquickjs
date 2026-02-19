@@ -1,12 +1,14 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
+use camino::Utf8Path;
 use indoc::indoc;
-use test_r::{inherit_test_dep, test};
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("url")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "url")]
+fn compiled_url() -> CompiledTest {
+    let path = Utf8Path::new("examples/url");
+    CompiledTest::new(path, false).expect("Failed to compile url")
+}
 
 #[test]
 async fn url_test1(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {

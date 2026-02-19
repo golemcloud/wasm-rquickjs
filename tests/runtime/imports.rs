@@ -1,29 +1,38 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
 use anyhow::anyhow;
+use camino::Utf8Path;
 use indoc::indoc;
-use test_r::{inherit_test_dep, test};
+use test_r::{inherit_test_dep, test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("imports1")]
-    CompiledTest
-);
-inherit_test_dep!(
-    #[tagged_as("imports2")]
-    CompiledTest
-);
-inherit_test_dep!(
-    #[tagged_as("imports3")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "imports1")]
+fn compiled_imports1() -> CompiledTest {
+    let path = Utf8Path::new("examples/imports1");
+    CompiledTest::new(path, true).expect("Failed to compile imports1")
+}
+
+#[test_dep(tagged_as = "imports2")]
+fn compiled_imports2() -> CompiledTest {
+    let path = Utf8Path::new("examples/imports2");
+    CompiledTest::new(path, true).expect("Failed to compile imports2")
+}
+
+#[test_dep(tagged_as = "imports3")]
+fn compiled_imports3() -> CompiledTest {
+    let path = Utf8Path::new("examples/imports3");
+    CompiledTest::new(path, true).expect("Failed to compile imports3")
+}
+
 inherit_test_dep!(
     #[tagged_as("example3")]
     CompiledTest
 );
-inherit_test_dep!(
-    #[tagged_as("types_in_exports")]
-    CompiledTest
-);
+
+#[test_dep(tagged_as = "types_in_exports")]
+fn compiled_types_in_exports() -> CompiledTest {
+    let path = Utf8Path::new("examples/types-in-exports");
+    CompiledTest::new(path, true).expect("Failed to compile types-in-exports")
+}
 
 #[test]
 async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::Result<()> {

@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, TestInstance};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("stateful1")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "stateful1")]
+fn compiled_stateful1() -> CompiledTest {
+    let path = Utf8Path::new("examples/stateful1");
+    CompiledTest::new(path, true).expect("Failed to compile stateful1")
+}
 
 #[test]
 async fn stateful1(#[tagged_as("stateful1")] compiled: &CompiledTest) -> anyhow::Result<()> {

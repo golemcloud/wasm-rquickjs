@@ -8,7 +8,7 @@ use rquickjs::{
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
@@ -25,6 +25,7 @@ pub struct JsState {
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
+    pub unrefed_timers: RefCell<HashSet<usize>>,
 }
 
 impl Default for JsState {
@@ -141,9 +142,52 @@ impl JsState {
                 resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
                 abort_handles: RefCell::new(HashMap::new()),
                 last_abort_id: AtomicUsize::new(0),
+                unrefed_timers: RefCell::new(HashSet::new()),
             }
         })
     }
+}
+
+fn abort_unrefed_timers(js_state: &JsState) {
+    let unrefed = js_state.unrefed_timers.borrow().clone();
+    let mut abort_handles = js_state.abort_handles.borrow_mut();
+    let mut unrefed_mut = js_state.unrefed_timers.borrow_mut();
+    for id in unrefed.iter() {
+        if let Some(handle) = abort_handles.remove(id) {
+            handle.abort();
+        }
+        unrefed_mut.remove(id);
+    }
+}
+
+/// Spawns a sentinel task that waits for all ref'd timers to complete,
+/// then aborts remaining unref'd timers so that `idle()` can return.
+async fn drain_and_idle(js_state: &JsState) {
+    if js_state.unrefed_timers.borrow().is_empty() {
+        js_state.rt.idle().await;
+        return;
+    }
+    // Spawn a sentinel that polls until only unref'd timers remain, then aborts them.
+    async_with!(js_state.ctx => |ctx| {
+        ctx.spawn(async {
+            loop {
+                wstd::task::sleep(wstd::time::Duration::from_millis(1)).await;
+                let state = get_js_state();
+                let abort_count = state.abort_handles.borrow().len();
+                let unref_count = state.unrefed_timers.borrow().len();
+                // When the only remaining abort handles are for unref'd timers,
+                // abort them all (the sentinel itself is not tracked in abort_handles).
+                if abort_count > 0 && abort_count == unref_count {
+                    abort_unrefed_timers(state);
+                    break;
+                }
+                if unref_count == 0 {
+                    break;
+                }
+            }
+        });
+    }).await;
+    js_state.rt.idle().await;
 }
 
 static mut STATE: Option<JsState> = None;
@@ -305,7 +349,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    drain_and_idle(js_state).await;
     result
 }
 
@@ -359,7 +403,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    drain_and_idle(js_state).await;
     result
 }
 
@@ -511,7 +555,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    drain_and_idle(js_state).await;
     result
 }
 

@@ -14,6 +14,7 @@ mod dns;
 mod domain;
 mod encoding;
 mod fs;
+mod gc;
 
 #[cfg(feature = "http")]
 mod http;
@@ -78,6 +79,7 @@ pub fn add_module_resolvers(
             .with_module("__wasm_rquickjs_builtin/console")
             .with_module("__wasm_rquickjs_builtin/timeout_native")
             .with_module("__wasm_rquickjs_builtin/timeout")
+            .with_module("__wasm_rquickjs_builtin/gc_native")
             .with_module("__wasm_rquickjs_builtin/http_native")
             .with_module("__wasm_rquickjs_builtin/http")
             .with_module("__wasm_rquickjs_builtin/http_blob")
@@ -216,6 +218,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/timeout_native",
                 timeout::js_native_module,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/gc_native",
+                gc::js_native_module,
             )
             .with_module(
                 "__wasm_rquickjs_builtin/http_native",
@@ -383,6 +389,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", buffer::WIRE_JS).unwrap();
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();
+    writeln!(result, "{}", gc::WIRE_JS).unwrap();
     writeln!(result, "{}", http::WIRE_JS).unwrap();
     writeln!(result, "{}", webstreams::WIRE_JS).unwrap();
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();

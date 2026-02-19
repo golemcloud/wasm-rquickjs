@@ -1,12 +1,14 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
 use anyhow::anyhow;
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("response_static")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "response_static")]
+fn compiled_response_static() -> CompiledTest {
+    let path = Utf8Path::new("examples/response-static");
+    CompiledTest::new(path, true).expect("Failed to compile response_static")
+}
 
 #[test]
 async fn response_static_error(

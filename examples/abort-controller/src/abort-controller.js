@@ -226,6 +226,26 @@ export async function testFetchAbortAlreadyAborted() {
     }
 }
 
+export function testTimeoutUnrefDoesNotBlockIdle() {
+    // Long timer: should NOT keep the runtime alive after .unref()
+    const long = setTimeout(() => {
+        console.log("long fired (BUG: should not have blocked idle)");
+    }, 60000);
+    long.unref();
+
+    // Short unref'd timer: should still fire (unref must NOT cancel the timer)
+    const short = setTimeout(() => {
+        console.log("short unrefed fired");
+    }, 5);
+    short.unref();
+
+    // Short ref'd timer: should run, then we log "done"
+    setTimeout(() => {
+        console.log("short fired");
+        console.log("done");
+    }, 10);
+}
+
 export async function testFetchAbortDuringRequest() {
     console.log('Testing fetch with signal aborted during request');
     const controller = new AbortController();

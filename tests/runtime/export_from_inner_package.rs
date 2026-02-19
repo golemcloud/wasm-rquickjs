@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("export_from_inner_package")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "export_from_inner_package")]
+fn compiled_export_from_inner_package() -> CompiledTest {
+    let path = Utf8Path::new("examples/export-from-inner-package");
+    CompiledTest::new(path, true).expect("Failed to compile export_from_inner_package")
+}
 
 #[test]
 async fn export_from_inner_package(

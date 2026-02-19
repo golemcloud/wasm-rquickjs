@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
+use camino::Utf8Path;
 use indoc::formatdoc;
-use test_r::{inherit_test_dep, test};
+use test_r::{test, test_dep};
 
-inherit_test_dep!(
-    #[tagged_as("console")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "console")]
+fn compiled_console() -> CompiledTest {
+    let path = Utf8Path::new("examples/console");
+    CompiledTest::new(path, true).expect("Failed to compile console")
+}
 
 #[test]
 async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Result<()> {

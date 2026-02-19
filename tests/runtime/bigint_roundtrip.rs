@@ -1,13 +1,15 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
+use camino::Utf8Path;
 use rand::Rng;
 use std::slice;
-use test_r::{inherit_test_dep, test};
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("bigint_roundtrip")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "bigint_roundtrip")]
+fn compiled_bigint_roundtrip() -> CompiledTest {
+    let path = Utf8Path::new("examples/bigint-roundtrip");
+    CompiledTest::new(path, true).expect("Failed to compile bigint_roundtrip")
+}
 
 #[test]
 async fn roundtrip_u64(

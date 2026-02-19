@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("buffer_utils")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "buffer_utils")]
+fn compiled_buffer_utils() -> CompiledTest {
+    let path = Utf8Path::new("examples/buffer-utils");
+    CompiledTest::new(path, false).expect("Failed to compile buffer_utils")
+}
 
 #[test]
 async fn buffer_test_is_ascii(

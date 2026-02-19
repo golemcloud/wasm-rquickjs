@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("dns")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "dns")]
+fn compiled_dns() -> CompiledTest {
+    let path = Utf8Path::new("examples/dns");
+    CompiledTest::new(path, false).expect("Failed to compile dns")
+}
 
 #[test]
 async fn dns_module_api(#[tagged_as("dns")] compiled: &CompiledTest) -> anyhow::Result<()> {

@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
-use test_r::{inherit_test_dep, test};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-inherit_test_dep!(
-    #[tagged_as("example2")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "example2")]
+fn compiled_example2() -> CompiledTest {
+    let path = Utf8Path::new("examples/example2");
+    CompiledTest::new(path, true).expect("Failed to compile example2")
+}
 
 #[test]
 async fn example2_sync(#[tagged_as("example2")] compiled: &CompiledTest) -> anyhow::Result<()> {

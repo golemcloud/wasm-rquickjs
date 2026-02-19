@@ -1,11 +1,13 @@
 use crate::common::{CompiledTest, invoke_and_capture_output};
+use camino::Utf8Path;
 use indoc::indoc;
-use test_r::{inherit_test_dep, test};
+use test_r::{test, test_dep};
 
-inherit_test_dep!(
-    #[tagged_as("timeout")]
-    CompiledTest
-);
+#[test_dep(tagged_as = "timeout")]
+fn compiled_timeout() -> CompiledTest {
+    let path = Utf8Path::new("examples/timeout");
+    CompiledTest::new(path, true).expect("Failed to compile timeout")
+}
 
 #[test]
 async fn timeout_1(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::Result<()> {
