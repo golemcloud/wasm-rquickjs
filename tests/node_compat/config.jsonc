@@ -97,26 +97,14 @@
     "parallel/test-url-urltooptions.js": {},
     "parallel/test-url-format-whatwg.js": {},
     "parallel/test-url-format-invalid-input.js": {},
-    "parallel/test-url-domain-ascii-unicode.js": {
-      "skip": true,
-      "reason": "requires ICU/punycode support (hasIntl)"
-    },
-    "parallel/test-url-format.js": {
-      "skip": true,
-      "reason": "requires full legacy url.format with complex edge cases and hasIntl"
-    },
-    "parallel/test-url-parse-format.js": {
-      "skip": true,
-      "reason": "requires full legacy url.parse with complex edge cases and hasIntl"
-    },
+    "parallel/test-url-domain-ascii-unicode.js": {},
+    "parallel/test-url-format.js": {},
+    "parallel/test-url-parse-format.js": {},
     "parallel/test-url-parse-invalid-input.js": {
       "skip": true,
       "reason": "requires ERR_INVALID_URL error code and process.execPath/spawnPromisified"
     },
-    "parallel/test-url-parse-query.js": {
-      "skip": true,
-      "reason": "requires full legacy url.parse with query string parsing and Url constructor"
-    },
+    "parallel/test-url-parse-query.js": {},
     "parallel/test-url-relative.js": {
       "skip": true,
       "reason": "requires full legacy url.resolveObject with complex edge cases"
@@ -195,10 +183,7 @@
       "reason": "requires util.styleText and node:tty WriteStream"
     },
     "parallel/test-util-text-decoder.js": {},
-    "parallel/test-util-types-exists.js": {
-      "skip": true,
-      "reason": "requires util/types subpath module resolution"
-    },
+    "parallel/test-util-types-exists.js": {},
     "parallel/test-util-types.js": {
       "skip": true,
       "reason": "requires --expose-internals, internalBinding, and vm.SourceTextModule"
@@ -281,10 +266,7 @@
       "reason": "platform-specific long path handling"
     },
     "parallel/test-fs-make-callback.js": {},
-    "parallel/test-fs-makeStatsCallback.js": {
-      "skip": true,
-      "reason": "requires __filename and ERR_INVALID_ARG_TYPE"
-    },
+    "parallel/test-fs-makeStatsCallback.js": {},
     "parallel/test-fs-mkdir.js": {
       "skip": true,
       "reason": "requires worker_threads which is not available in WASM"
@@ -314,7 +296,7 @@
       "reason": "requires Node.js internal modules not available in WASM"
     },
     "parallel/test-fs-open-mode-mask.js": {},
-    "parallel/test-fs-open-no-close.js": { "skip": true, "reason": "requires process.beforeExit event" },
+    "parallel/test-fs-open-no-close.js": {},
     "parallel/test-fs-open-numeric-flags.js": {},
     "parallel/test-fs-opendir.js": {
       "skip": true,
@@ -336,10 +318,7 @@
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
     },
-    "parallel/test-fs-promises-file-handle-close.js": {
-      "skip": true,
-      "reason": "causes WASM timeout or panic"
-    },
+    "parallel/test-fs-promises-file-handle-close.js": {},
     "parallel/test-fs-promises-file-handle-dispose.js": {},
     "parallel/test-fs-promises-file-handle-op-errors.js": {
       "skip": true,
@@ -352,10 +331,7 @@
     "parallel/test-fs-promises-file-handle-read.js": {},
     "parallel/test-fs-promises-file-handle-readFile.js": { "skip": true, "reason": "abort signal timing during readFile not reliable in WASI" },
     "parallel/test-fs-promises-file-handle-stat.js": {},
-    "parallel/test-fs-promises-file-handle-stream.js": {
-      "skip": true,
-      "reason": "requires ReadStream/WriteStream from FileHandle"
-    },
+    "parallel/test-fs-promises-file-handle-stream.js": {},
     "parallel/test-fs-promises-file-handle-sync.js": {},
     "parallel/test-fs-promises-file-handle-truncate.js": {},
     "parallel/test-fs-promises-file-handle-write.js": {},
@@ -394,14 +370,11 @@
     "parallel/test-fs-read-stream-double-close.js": {},
     "parallel/test-fs-read-stream-encoding.js": {},
     "parallel/test-fs-read-stream-err.js": {},
-    "parallel/test-fs-read-stream-fd-leak.js": {
-      "skip": true,
-      "reason": "causes WASM timeout or panic"
-    },
+    "parallel/test-fs-read-stream-fd-leak.js": {},
     "parallel/test-fs-read-stream-fd.js": {},
     "parallel/test-fs-read-stream-file-handle.js": {},
     "parallel/test-fs-read-stream-inherit.js": {},
-    "parallel/test-fs-read-stream-patch-open.js": { "skip": true, "reason": "requires ReadStream.prototype.open monkey-patching" },
+    "parallel/test-fs-read-stream-patch-open.js": {},
     "parallel/test-fs-read-stream-pos.js": {
       "skip": true,
       "reason": "causes WASM timeout or panic"
@@ -559,8 +532,8 @@
       "skip": true,
       "reason": "symlink returns EIO in WASI filesystem"
     },
-    "parallel/test-fs-symlink-dir-junction.js": { "skip": true, "reason": "symlinks not supported in WASI" },
-    "parallel/test-fs-symlink-longpath.js": { "skip": true, "reason": "symlinks not supported in WASI" },
+    "parallel/test-fs-symlink-dir-junction.js": {},
+    "parallel/test-fs-symlink-longpath.js": {},
     "parallel/test-fs-symlink.js": {
       "skip": true,
       "reason": "requires fixtures module and common.canCreateSymLink()"
@@ -601,10 +574,7 @@
       "skip": true,
       "reason": "requires process.arch for 32-bit detection"
     },
-    "parallel/test-fs-watch.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch.js": {},
     "parallel/test-fs-watch-abort-signal.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -621,10 +591,7 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-file-enoent-after-deletion.js": {
-      "skip": true,
-      "reason": "requires fs.watchFile which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-file-enoent-after-deletion.js": {},
     "parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -649,10 +616,7 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-recursive-delete.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-recursive-delete.js": {},
     "parallel/test-fs-watch-recursive-linux-parallel-remove.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -669,10 +633,7 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-recursive-update-file.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-recursive-update-file.js": {},
     "parallel/test-fs-watch-recursive-validate.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -681,10 +642,7 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-ref-unref.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-ref-unref.js": {},
     "parallel/test-fs-watch-stop-async.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -697,10 +655,7 @@
       "skip": true,
       "reason": "requires fs.watch/fs.watchFile which is not supported in WASI"
     },
-    "parallel/test-fs-watchfile-ref-unref.js": {
-      "skip": true,
-      "reason": "requires fs.watchFile which is not supported in WASI"
-    },
+    "parallel/test-fs-watchfile-ref-unref.js": {},
     "parallel/test-fs-watchfile.js": {
       "skip": true,
       "reason": "requires fs.watchFile which is not supported in WASI"
@@ -730,10 +685,7 @@
     },
     "parallel/test-fs-write-file-typedarrays.js": {},
     "parallel/test-fs-write-file.js": {},
-    "parallel/test-fs-write-negativeoffset.js": {
-      "skip": true,
-      "reason": "requires ERR_OUT_OF_RANGE error code validation"
-    },
+    "parallel/test-fs-write-negativeoffset.js": {},
     "parallel/test-fs-write-no-fd.js": {
       "skip": true,
       "reason": "assert.throws fails: fs.write with undefined fd calls callback instead of throwing ERR_INVALID_ARG_TYPE"
@@ -742,10 +694,7 @@
       "skip": true,
       "reason": "requires ERR_OUT_OF_RANGE and ERR_INVALID_ARG_TYPE validation"
     },
-    "parallel/test-fs-write-reuse-callback.js": {
-      "skip": true,
-      "reason": "requires process.on('exit') hooks"
-    },
+    "parallel/test-fs-write-reuse-callback.js": {},
     "parallel/test-fs-write-sigxfsz.js": {
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
@@ -757,18 +706,9 @@
     "parallel/test-fs-write-stream-encoding.js": {},
     "parallel/test-fs-write-stream-end.js": {},
     "parallel/test-fs-write-stream-err.js": {},
-    "parallel/test-fs-write-stream-file-handle-2.js": {
-      "skip": true,
-      "reason": "requires FileHandle support for fd option"
-    },
-    "parallel/test-fs-write-stream-file-handle.js": {
-      "skip": true,
-      "reason": "requires FileHandle support for fd option"
-    },
-    "parallel/test-fs-write-stream-flush.js": {
-      "skip": true,
-      "reason": "requires node:test mock support (t.mock.method)"
-    },
+    "parallel/test-fs-write-stream-file-handle-2.js": {},
+    "parallel/test-fs-write-stream-file-handle.js": {},
+    "parallel/test-fs-write-stream-flush.js": {},
     "parallel/test-fs-write-stream-fs.js": {},
     "parallel/test-fs-write-stream-patch-open.js": {
       "skip": true,
@@ -781,10 +721,7 @@
       "skip": true,
       "reason": "requires ERR_INVALID_ARG_TYPE and ERR_OUT_OF_RANGE validation"
     },
-    "parallel/test-fs-writefile-with-fd.js": {
-      "skip": true,
-      "reason": "requires process.on('beforeExit') hooks"
-    },
+    "parallel/test-fs-writefile-with-fd.js": {},
     "parallel/test-fs-writestream-open-write.js": {},
     "parallel/test-fs-writev.js": {},
     "parallel/test-fs-writev-promises.js": {},
@@ -796,21 +733,12 @@
     "parallel/test-timers-clear-object-does-not-throw-error.js": {},
     "parallel/test-timers-clear-timeout-interval-equivalent.js": {},
     "parallel/test-timers-clearImmediate.js": {},
-    "parallel/test-timers-clearImmediate-als.js": {
-      "skip": true,
-      "reason": "requires AsyncLocalStorage from async_hooks which is not supported"
-    },
+    "parallel/test-timers-clearImmediate-als.js": {},
     "parallel/test-timers-setimmediate-infinite-loop.js": {},
-    "parallel/test-timers-zero-timeout.js": {
-      "skip": true,
-      "reason": "requires multiple zero-delay timers to fire in sequence within a single event loop turn"
-    },
+    "parallel/test-timers-zero-timeout.js": {},
     "parallel/test-timers-user-call.js": {},
     "parallel/test-timers-this.js": {},
-    "parallel/test-timers-non-integer-delay.js": {
-      "skip": true,
-      "reason": "flaky: sets 50+ sequential timers with sub-ms delays, times out under concurrent test load"
-    },
+    "parallel/test-timers-non-integer-delay.js": {},
     "parallel/test-timers-timeout-with-non-integer.js": {},
     "parallel/test-timers-same-timeout-wrong-list-deleted.js": {},
     "parallel/test-timers-throw-when-cb-not-function.js": {},
@@ -833,30 +761,15 @@
       "skip": true,
       "reason": "requires process.on('exit') hooks"
     },
-    "parallel/test-timers-immediate-queue-throw.js": {
-      "skip": true,
-      "reason": "requires process.on('uncaughtException') hooks"
-    },
-    "parallel/test-timers-immediate-unref.js": {
-      "skip": true,
-      "reason": "requires immediate.ref()/unref() which is not implemented"
-    },
-    "parallel/test-timers-immediate-unref-nested-once.js": {
-      "skip": true,
-      "reason": "requires immediate.unref() which is not implemented"
-    },
-    "parallel/test-timers-immediate-unref-simple.js": {
-      "skip": true,
-      "reason": "requires immediate.unref() which is not implemented"
-    },
+    "parallel/test-timers-immediate-queue-throw.js": {},
+    "parallel/test-timers-immediate-unref.js": {},
+    "parallel/test-timers-immediate-unref-nested-once.js": {},
+    "parallel/test-timers-immediate-unref-simple.js": {},
     "parallel/test-timers-interval-throw.js": {
       "skip": true,
       "reason": "requires process.on('uncaughtException') hooks"
     },
-    "parallel/test-timers-max-duration-warning.js": {
-      "skip": true,
-      "reason": "requires process.on('warning') hooks"
-    },
+    "parallel/test-timers-max-duration-warning.js": {},
     "parallel/test-timers-enroll-invalid-msecs.js": {
       "skip": true,
       "reason": "requires timers.enroll which is not implemented"
@@ -865,31 +778,16 @@
       "skip": true,
       "reason": "requires timers.enroll which is not implemented"
     },
-    "parallel/test-timers-reset-process-domain-on-throw.js": {
-      "skip": true,
-      "reason": "requires process.domain and uncaughtException hooks"
-    },
+    "parallel/test-timers-reset-process-domain-on-throw.js": {},
     "parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js": {
       "skip": true,
       "reason": "requires net.createServer and socket operations"
     },
     "parallel/test-timers-to-primitive.js": {},
-    "parallel/test-timers-timeout-to-interval.js": {
-      "skip": true,
-      "reason": "requires timer._repeat internal property"
-    },
-    "parallel/test-timers-uncaught-exception.js": {
-      "skip": true,
-      "reason": "requires process.on('uncaughtException') hooks"
-    },
-    "parallel/test-timers-unenroll-unref-interval.js": {
-      "skip": true,
-      "reason": "requires timers.unenroll and timer.unref()"
-    },
-    "parallel/test-timers-unref.js": {
-      "skip": true,
-      "reason": "requires timer.unref() which is not implemented"
-    },
+    "parallel/test-timers-timeout-to-interval.js": {},
+    "parallel/test-timers-uncaught-exception.js": {},
+    "parallel/test-timers-unenroll-unref-interval.js": {},
+    "parallel/test-timers-unref.js": {},
     "parallel/test-timers-unref-active.js": {
       "skip": true,
       "reason": "requires timer.unref() and _unrefActive"
@@ -902,18 +800,9 @@
       "skip": true,
       "reason": "requires timer.unref() which is not implemented"
     },
-    "parallel/test-timers-unref-throw-then-ref.js": {
-      "skip": true,
-      "reason": "requires timer.unref()/ref() which is not implemented"
-    },
-    "parallel/test-timers-unrefd-interval-still-fires.js": {
-      "skip": true,
-      "reason": "requires timer.unref() which is not implemented"
-    },
-    "parallel/test-timers-unrefed-in-beforeexit.js": {
-      "skip": true,
-      "reason": "requires process.on('beforeExit') and timer.unref()"
-    },
+    "parallel/test-timers-unref-throw-then-ref.js": {},
+    "parallel/test-timers-unrefd-interval-still-fires.js": {},
+    "parallel/test-timers-unrefed-in-beforeexit.js": {},
     "parallel/test-timers-unrefed-in-callback.js": {
       "skip": true,
       "reason": "requires timer.unref() and process.on('exit')"
@@ -1029,10 +918,7 @@
     },
     "parallel/test-crypto-dh-generate-keys.js": {},
     "parallel/test-crypto-dh-group-setters.js": {},
-    "parallel/test-crypto-dh-leak.js": {
-       "skip": true,
-       "reason": "requires --expose-gc and process.memoryUsage.rss"
-     },
+    "parallel/test-crypto-dh-leak.js": {},
     "parallel/test-crypto-dh-modp2-views.js": {},
     "parallel/test-crypto-dh-modp2.js": {},
     "parallel/test-crypto-dh-odd-key.js": {},
@@ -1046,14 +932,8 @@
        "skip": true,
        "reason": "requires aes-128-ecb cipher which is not implemented"
      },
-    "parallel/test-crypto-domain.js": {
-      "skip": true,
-      "reason": "requires domain module which is not available in WASM"
-    },
-    "parallel/test-crypto-domains.js": {
-      "skip": true,
-      "reason": "requires domain module which is not available in WASM"
-    },
+    "parallel/test-crypto-domain.js": {},
+    "parallel/test-crypto-domains.js": {},
     "parallel/test-crypto-ecb.js": {
       "skip": true,
       "reason": "requires ECB cipher mode which is not implemented"
@@ -1108,58 +988,25 @@
       "skip": true,
       "reason": "requires full KeyObject API (symmetricKeySize, equals, asymmetricKeyType, asymmetricKeySize)"
     },
-    "parallel/test-crypto-keygen-async-dsa-key-object.js": {
-      "skip": true,
-      "reason": "requires DSA key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-async-dsa.js": {
-      "skip": true,
-      "reason": "requires DSA key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-async-elliptic-curve-jwk-ec.js": {
-      "skip": true,
-      "reason": "requires P-521 curve support (JWK export for P-256/P-384/secp256k1 is implemented)"
-    },
+    "parallel/test-crypto-keygen-async-dsa-key-object.js": {},
+    "parallel/test-crypto-keygen-async-dsa.js": {},
+    "parallel/test-crypto-keygen-async-elliptic-curve-jwk-ec.js": {},
     "parallel/test-crypto-keygen-async-elliptic-curve-jwk-rsa.js": {},
-    "parallel/test-crypto-keygen-async-elliptic-curve-jwk.js": {
-      "skip": true,
-      "reason": "requires ed448, x25519, x448 key types (JWK export for Ed25519 is implemented)"
-    },
+    "parallel/test-crypto-keygen-async-elliptic-curve-jwk.js": {},
     "parallel/test-crypto-keygen-async-encrypted-private-key-der.js": {},
-    "parallel/test-crypto-keygen-async-encrypted-private-key.js": {
-      "skip": true,
-      "reason": "requires RSA key generation with encrypted PEM output"
-    },
+    "parallel/test-crypto-keygen-async-encrypted-private-key.js": {},
     "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js": {},
     "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted.js.js": {},
     "parallel/test-crypto-keygen-async-explicit-elliptic-curve.js": {},
     "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js": {},
     "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted.js": {},
     "parallel/test-crypto-keygen-async-named-elliptic-curve.js": {},
-    "parallel/test-crypto-keygen-async-rsa.js": {
-      "skip": true,
-      "reason": "requires RSA key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-bit-length.js": {
-      "skip": true,
-      "reason": "requires RSA key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-deprecation.js": {
-      "skip": true,
-      "reason": "requires RSA key generation and deprecated options"
-    },
-    "parallel/test-crypto-keygen-dh-classic.js": {
-      "skip": true,
-      "reason": "requires DH key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-duplicate-deprecated-option.js": {
-      "skip": true,
-      "reason": "requires RSA key generation and deprecated options"
-    },
-    "parallel/test-crypto-keygen-eddsa.js": {
-      "skip": true,
-      "reason": "requires ed448, x25519, x448 key types and asymmetricKeyDetails property"
-    },
+    "parallel/test-crypto-keygen-async-rsa.js": {},
+    "parallel/test-crypto-keygen-bit-length.js": {},
+    "parallel/test-crypto-keygen-deprecation.js": {},
+    "parallel/test-crypto-keygen-dh-classic.js": {},
+    "parallel/test-crypto-keygen-duplicate-deprecated-option.js": {},
+    "parallel/test-crypto-keygen-eddsa.js": {},
     "parallel/test-crypto-keygen-empty-passphrase-no-error.js": {},
     "parallel/test-crypto-keygen-empty-passphrase-no-prompt.js": {
       "skip": true,
@@ -1177,14 +1024,8 @@
     "parallel/test-crypto-keygen-key-objects.js": {
       "skip": false
     },
-    "parallel/test-crypto-keygen-missing-oid.js": {
-      "skip": true,
-      "reason": "requires RSA-PSS key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-no-rsassa-pss-params.js": {
-      "skip": true,
-      "reason": "requires RSA-PSS key generation which is not implemented"
-    },
+    "parallel/test-crypto-keygen-missing-oid.js": {},
+    "parallel/test-crypto-keygen-no-rsassa-pss-params.js": {},
     "parallel/test-crypto-keygen-non-standard-public-exponent.js": {
       "skip": false
     },
@@ -1192,18 +1033,9 @@
       "skip": true,
       "reason": "requires RSA key generation and util.promisify"
     },
-    "parallel/test-crypto-keygen-rfc8017-9-1.js": {
-      "skip": true,
-      "reason": "requires RSA-PSS key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-rfc8017-a-2-3.js": {
-      "skip": true,
-      "reason": "requires RSA-PSS key generation which is not implemented"
-    },
-    "parallel/test-crypto-keygen-rsa-pss.js": {
-      "skip": true,
-      "reason": "requires RSA-PSS key generation which is not implemented"
-    },
+    "parallel/test-crypto-keygen-rfc8017-9-1.js": {},
+    "parallel/test-crypto-keygen-rfc8017-a-2-3.js": {},
+    "parallel/test-crypto-keygen-rsa-pss.js": {},
     "parallel/test-crypto-keygen-sync.js": {
       "skip": false
     },
@@ -1220,10 +1052,7 @@
       "skip": true,
       "reason": "requires fixtures module for test data and specific ERR_INVALID_ARG_VALUE error handling"
     },
-    "parallel/test-crypto-op-during-process-exit.js": {
-      "skip": true,
-      "reason": "requires process.exit and process.on('exit') hooks"
-    },
+    "parallel/test-crypto-op-during-process-exit.js": {},
     "parallel/test-crypto-padding-aes256.js": {},
     "parallel/test-crypto-padding.js": {
       "skip": true,
@@ -1396,18 +1225,9 @@
       "skip": true,
       "reason": "requires worker_threads MessageChannel which is not available in WASM"
     },
-    "parallel/test-buffer-constructor-deprecation-error.js": {
-      "skip": true,
-      "reason": "requires process.on('warning') and Error.prepareStackTrace which are not available in WASM"
-    },
-    "parallel/test-buffer-constructor-outside-node-modules.js": {
-      "skip": true,
-      "reason": "requires process.on('warning') and Error.prepareStackTrace which are not available in WASM"
-    },
-    "parallel/test-buffer-pending-deprecation.js": {
-      "skip": true,
-      "reason": "requires process.on('warning') and Error.prepareStackTrace which are not available in WASM"
-    },
+    "parallel/test-buffer-constructor-deprecation-error.js": {},
+    "parallel/test-buffer-constructor-outside-node-modules.js": {},
+    "parallel/test-buffer-pending-deprecation.js": {},
 
     // === miscellaneous tests ===
     "parallel/test-arm-math-illegal-instruction.js": {},
@@ -1525,7 +1345,7 @@
     "parallel/test-child-process-stdout-flush-exit.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-stdout-flush.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-stdout-ipc.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
-    "parallel/test-child-process-uid-gid.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-child-process-uid-gid.js": {},
     "parallel/test-child-process-validate-stdio.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-windows-hide.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
     "parallel/test-cli-eval.js": {},
@@ -1562,8 +1382,8 @@
     "parallel/test-http-agent-getname.js": {},
     "parallel/test-http-client-defaults.js": {},
     "parallel/test-http-methods.js": {},
-    "parallel/test-http2-client-upload-reject.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http2-request-response-proto.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http2-client-upload-reject.js": {},
+    "parallel/test-http2-request-response-proto.js": {},
     "parallel/test-instanceof.js": {},
     "parallel/test-microtask-queue-integration.js": {},
     "parallel/test-module-cache.js": {},
@@ -1700,10 +1520,7 @@
     "parallel/test-stream2-readable-legacy-drain.js": {},
     "parallel/test-stream2-readable-wrap.js": {},
     "parallel/test-stream3-cork-end.js": {},
-    "parallel/test-stream-pipe-without-listenerCount.js": {
-      "skip": true,
-      "reason": "legacy pipe calls listenerCount with wrong context (mustCall count mismatch)"
-    },
+    "parallel/test-stream-pipe-without-listenerCount.js": {},
     "parallel/test-stream-writable-aborted.js": {},
     "parallel/test-stream-readable-didRead.js": {},
     "parallel/test-stream-readable-dispose.js": {
@@ -1714,23 +1531,14 @@
       "skip": true,
       "reason": "Duplex.from with readable/writable pair not fully implemented"
     },
-    "parallel/test-stream-duplex-destroy.js": {
-      "skip": true,
-      "reason": "requires autoDestroy timing fixes for duplex streams"
-    },
-    "parallel/test-stream-transform-destroy.js": {
-      "skip": true,
-      "reason": "requires autoDestroy timing fixes"
-    },
+    "parallel/test-stream-duplex-destroy.js": {},
+    "parallel/test-stream-transform-destroy.js": {},
     "parallel/test-stream-transform-split-objectmode.js": {},
     "parallel/test-stream-typedarray.js": {
       "skip": true,
       "reason": "Writable stream does not accept TypedArray views other than Uint8Array"
     },
-    "parallel/test-stream-writable-samecb-singletick.js": {
-      "skip": true,
-      "reason": "requires require('console') CJS resolution (console module ES/CJS interop issue)"
-    },
+    "parallel/test-stream-writable-samecb-singletick.js": {},
     "parallel/test-readable-from-iterator-closing.js": {},
     "parallel/test-readable-from-web-enqueue-then-close.js": {},
     "parallel/test-readable-large-hwm.js": {},
@@ -1869,10 +1677,10 @@
     "parallel/test-http-agent-close.js": {},
     "parallel/test-http-agent-false.js": {},
     "parallel/test-http-client-read-in-error.js": {},
-    "parallel/test-http-server-keep-alive-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-set-timeout-server.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http2-compat-client-upload-reject.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-https-set-timeout-server.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-server-keep-alive-timeout.js": {},
+    "parallel/test-http-set-timeout-server.js": {},
+    "parallel/test-http2-compat-client-upload-reject.js": {},
+    "parallel/test-https-set-timeout-server.js": {},
     "parallel/test-messagechannel.js": {},
     "parallel/test-performance-measure-detail.js": {},
     "parallel/test-performance-measure.js": {},
@@ -1904,6 +1712,12 @@
     "parallel/test-stream2-transform.js": {},
     "parallel/test-worker-message-port-close-while-receiving.js": {},
     "parallel/test-zlib-zero-byte.js": {},
+    "parallel/test-async-hooks-vm-gc.js": {},
+    "parallel/test-finalization-registry-shutdown.js": {},
+    "parallel/test-heapdump-async-hooks-init-promise.js": {},
+    "parallel/test-performance-gc.js": {},
+    "parallel/test-process-no-deprecation.js": {},
+    "parallel/test-v8-flag-pool-size-0.js": {},
 
     // === sequential tests ===
     "sequential/test-net-server-listen-ipv6-link-local.js": {},
@@ -1947,10 +1761,7 @@
       "skip": true,
       "reason": "process.nextTick arg count panic when Transform write validation triggers error propagation"
     },
-    "parallel/test-zlib-premature-end.js": {
-      "skip": true,
-      "reason": "Streaming with trailing data after compressed payload not yet supported"
-    },
+    "parallel/test-zlib-premature-end.js": {},
     "parallel/test-zlib-brotli-16GB.js": {
       "skip": true,
       "reason": "Requires 16GB memory allocation; not feasible in WASM"
@@ -1959,10 +1770,7 @@
       "skip": true,
       "reason": "Requires precise brotli flush byte output comparison"
     },
-    "parallel/test-zlib-brotli-from-brotli.js": {
-      "skip": true,
-      "reason": "Requires fs.createReadStream/createWriteStream pipe + tmpdir integration"
-    },
+    "parallel/test-zlib-brotli-from-brotli.js": {},
     "parallel/test-zlib-brotli-kmaxlength-rangeerror.js": {
       "skip": true,
       "reason": "Modifies buffer.kMaxLength at runtime before requiring zlib"
@@ -1975,18 +1783,12 @@
       "skip": true,
       "reason": "Dictionary support not available in flate2 rust_backend"
     },
-    "parallel/test-zlib-destroy-pipe.js": {
-      "skip": true,
-      "reason": "Complex pipe+destroy interaction"
-    },
+    "parallel/test-zlib-destroy-pipe.js": {},
     "parallel/test-zlib-flush.js": {
       "skip": true,
       "reason": "Tests precise byte-level flush output comparison"
     },
-    "parallel/test-zlib-flush-drain.js": {
-      "skip": true,
-      "reason": "Relies on internal _writableState.needDrain"
-    },
+    "parallel/test-zlib-flush-drain.js": {},
     "parallel/test-zlib-flush-drain-longblock.js": {
       "skip": true,
       "reason": "Complex flush/drain/pipe interaction"
@@ -1999,10 +1801,7 @@
       "skip": true,
       "reason": "Multi-member gzip with fs.createReadStream + pipe + tmpdir"
     },
-    "parallel/test-zlib-from-gzip.js": {
-      "skip": true,
-      "reason": "Requires fs.createReadStream/createWriteStream pipe + tmpdir"
-    },
+    "parallel/test-zlib-from-gzip.js": {},
     "parallel/test-zlib-from-gzip-with-trailing-garbage.js": {
       "skip": true,
       "reason": "Tests precise error code handling for trailing garbage"
@@ -2023,18 +1822,9 @@
       "skip": true,
       "reason": "Actual params() level change mid-stream not supported"
     },
-    "parallel/test-zlib-random-byte-pipes.js": {
-      "skip": true,
-      "reason": "Complex pipe chain with crypto.createHash"
-    },
-    "parallel/test-zlib-reset-before-write.js": {
-      "skip": true,
-      "reason": "Tests params() and reset() interaction before first write"
-    },
-    "parallel/test-zlib-truncated.js": {
-      "skip": true,
-      "reason": "Tests precise truncated input error handling with finishFlush recovery"
-    },
+    "parallel/test-zlib-random-byte-pipes.js": {},
+    "parallel/test-zlib-reset-before-write.js": {},
+    "parallel/test-zlib-truncated.js": {},
     "parallel/test-zlib-unused-weak.js": {
       "skip": true,
       "reason": "Requires --expose-gc and process.memoryUsage().external"
@@ -2047,22 +1837,10 @@
       "skip": true,
       "reason": "Uses t.mock.fn() with mock.callCount() assertion"
     },
-    "parallel/test-zlib-write-after-flush.js": {
-      "skip": true,
-      "reason": "Tests write after flush pipe interaction with gzip+brotli"
-    },
-    "parallel/test-zlib-close-after-error.js": {
-      "skip": true,
-      "reason": "Tests close after error on invalid input with _closed internal state"
-    },
-    "parallel/test-zlib-close-in-ondata.js": {
-      "skip": true,
-      "reason": "Tests close during data event with large buffer"
-    },
-    "parallel/test-zlib-destroy.js": {
-      "skip": true,
-      "reason": "Tests destroy() nullifies _handle internal property"
-    },
+    "parallel/test-zlib-write-after-flush.js": {},
+    "parallel/test-zlib-close-after-error.js": {},
+    "parallel/test-zlib-close-in-ondata.js": {},
+    "parallel/test-zlib-destroy.js": {},
     "parallel/test-zlib-failed-init.js": {
       "skip": true,
       "reason": "Tests internal _level/_strategy properties with NaN"
@@ -2166,10 +1944,7 @@
       "skip": true,
       "reason": "requires dgram and DNS protocol-level testing"
     },
-    "parallel/test-dns-perf_hooks.js": {
-      "skip": true,
-      "reason": "requires perf_hooks timerify integration with dns"
-    },
+    "parallel/test-dns-perf_hooks.js": {},
     "parallel/test-dns-memory-error.js": {
       "skip": true,
       "reason": "requires --expose-internals and internalBinding('cares_wrap')"
