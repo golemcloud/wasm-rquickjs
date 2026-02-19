@@ -505,6 +505,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut internals_skip = 0usize;
     let mut internals_error = 0usize;
 
+    // Track skipped tests that actually pass (should be unskipped)
+    let mut should_not_be_skipped: Vec<String> = Vec::new();
+
     // Run all tests sequentially
     let mut progress = 0usize;
     for test_path in &test_files {
@@ -513,25 +516,42 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         let is_internal = internals_tests.contains(test_path);
         let tag = if is_internal { " [internal]" } else { "" };
 
-        // Check if this test is explicitly skipped in config.jsonc
-        let result = if let Some(reason) = config_skipped.get(test_path) {
-            println!(
-                "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
-                progress
-            );
-            TestResult::Skip(reason.clone())
+        let skip_reason = config_skipped.get(test_path).cloned();
+
+        let test_start = Instant::now();
+        let r = match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path))
+            .await
+        {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
+            Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
+        };
+
+        let elapsed = test_start.elapsed();
+
+        // If the test is marked as skipped in config.jsonc, check if it actually passes
+        let result = if let Some(reason) = skip_reason {
+            match &r {
+                TestResult::Pass => {
+                    // Test passes despite being marked as skipped — count as pass
+                    println!(
+                        "[{:>4}/{total_tests}] PASS* {filename}{tag} ({:.1}s) [was skipped: {reason}]",
+                        progress,
+                        elapsed.as_secs_f64()
+                    );
+                    should_not_be_skipped.push(test_path.clone());
+                    TestResult::Pass
+                }
+                _ => {
+                    // Test still fails — count as skipped (known skip)
+                    println!(
+                        "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
+                        progress
+                    );
+                    TestResult::Skip(reason)
+                }
+            }
         } else {
-            let test_start = Instant::now();
-            let r = match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path))
-                .await
-            {
-                Ok(Ok(r)) => r,
-                Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-                Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
-            };
-
-            let elapsed = test_start.elapsed();
-
             match &r {
                 TestResult::Pass => {
                     println!(
@@ -809,6 +829,25 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         report.push_str("\n</details>\n\n");
     }
 
+    // Tests that should not be skipped (marked skip in config.jsonc but actually pass)
+    report.push_str("## Tests That Should Not Be Skipped\n\n");
+    report.push_str(
+        "These tests are marked with `\"skip\": true` in `config.jsonc` but actually pass.\n\
+         Consider removing the `skip` flag.\n\n",
+    );
+    if should_not_be_skipped.is_empty() {
+        report.push_str("_All skipped tests still fail — no changes needed._\n\n");
+    } else {
+        report.push_str(&format!(
+            "{} test(s) should be unskipped:\n\n",
+            should_not_be_skipped.len()
+        ));
+        for path in &should_not_be_skipped {
+            report.push_str(&format!("- `{path}`\n"));
+        }
+        report.push_str("\n");
+    }
+
     // All tests by module (public + internals combined)
     report.push_str("## All Results by Module (Public + Internals)\n\n");
     let mut by_module_all: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
@@ -906,6 +945,19 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             "  {module:<20} {pass:>4}/{total:<4} ({:.1}%)",
             *pass as f64 / *total as f64 * 100.0
         );
+    }
+
+    // Warn about skipped tests that actually pass
+    if !should_not_be_skipped.is_empty() {
+        println!(
+            "\n⚠️  WARNING: {} skipped test(s) in config.jsonc actually PASS!",
+            should_not_be_skipped.len()
+        );
+        println!("Consider removing \"skip\": true for these entries:\n");
+        for path in &should_not_be_skipped {
+            println!("    \"{path}\"");
+        }
+        println!();
     }
 
     // Step 6: Warn about passing tests not in config.jsonc
