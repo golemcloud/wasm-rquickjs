@@ -1120,18 +1120,12 @@
       "skip": true,
       "reason": "requires P-521 curve support (JWK export for P-256/P-384/secp256k1 is implemented)"
     },
-    "parallel/test-crypto-keygen-async-elliptic-curve-jwk-rsa.js": {
-      "skip": true,
-      "reason": "requires RSA key generation for JWK format"
-    },
+    "parallel/test-crypto-keygen-async-elliptic-curve-jwk-rsa.js": {},
     "parallel/test-crypto-keygen-async-elliptic-curve-jwk.js": {
       "skip": true,
       "reason": "requires ed448, x25519, x448 key types (JWK export for Ed25519 is implemented)"
     },
-    "parallel/test-crypto-keygen-async-encrypted-private-key-der.js": {
-      "skip": true,
-      "reason": "requires RSA key generation with encrypted DER output"
-    },
+    "parallel/test-crypto-keygen-async-encrypted-private-key-der.js": {},
     "parallel/test-crypto-keygen-async-encrypted-private-key.js": {
       "skip": true,
       "reason": "requires RSA key generation with encrypted PEM output"
@@ -1166,10 +1160,7 @@
       "skip": true,
       "reason": "requires ed448, x25519, x448 key types and asymmetricKeyDetails property"
     },
-    "parallel/test-crypto-keygen-empty-passphrase-no-error.js": {
-      "skip": true,
-      "reason": "requires RSA key generation with passphrase which is not implemented"
-    },
+    "parallel/test-crypto-keygen-empty-passphrase-no-error.js": {},
     "parallel/test-crypto-keygen-empty-passphrase-no-prompt.js": {
       "skip": true,
       "reason": "requires RSA key generation with passphrase which is not implemented"
@@ -1182,10 +1173,7 @@
       "skip": true,
       "reason": "requires specific ERR_INCOMPATIBLE_OPTION_PAIR error handling"
     },
-    "parallel/test-crypto-keygen-key-object-without-encoding.js": {
-      "skip": true,
-      "reason": "requires RSA key generation which is not implemented"
-    },
+    "parallel/test-crypto-keygen-key-object-without-encoding.js": {},
     "parallel/test-crypto-keygen-key-objects.js": {
       "skip": false
     },
@@ -1292,10 +1280,7 @@
       "skip": true,
       "reason": "requires WebCrypto subtle with AES-CBC and zero-length input"
     },
-    "parallel/test-crypto-update-encoding.js": {
-      "skip": true,
-      "reason": "requires createSign to accept buffer data for update without key initialization"
-    },
+    "parallel/test-crypto-update-encoding.js": {},
     "parallel/test-crypto-verify-failure.js": {
       "skip": true,
       "reason": "requires tls module which is not available in WASM"
