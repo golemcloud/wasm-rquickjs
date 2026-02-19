@@ -26,6 +26,7 @@ pub struct JsState {
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
     pub unrefed_timers: RefCell<HashSet<usize>>,
+    pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
 impl Default for JsState {
@@ -143,6 +144,7 @@ impl JsState {
                 abort_handles: RefCell::new(HashMap::new()),
                 last_abort_id: AtomicUsize::new(0),
                 unrefed_timers: RefCell::new(HashSet::new()),
+                gc_pending: std::sync::atomic::AtomicBool::new(false),
             }
         })
     }
@@ -160,9 +162,23 @@ fn abort_unrefed_timers(js_state: &JsState) {
     }
 }
 
+/// Runs GC if it was requested from JS (deferred to avoid re-entrancy issues).
+async fn run_pending_gc(js_state: &JsState) {
+    if js_state
+        .gc_pending
+        .swap(false, std::sync::atomic::Ordering::Relaxed)
+    {
+        async_with!(js_state.ctx => |ctx| {
+            ctx.run_gc();
+        })
+        .await;
+    }
+}
+
 /// Spawns a sentinel task that waits for all ref'd timers to complete,
 /// then aborts remaining unref'd timers so that `idle()` can return.
 async fn drain_and_idle(js_state: &JsState) {
+    run_pending_gc(js_state).await;
     if js_state.unrefed_timers.borrow().is_empty() {
         js_state.rt.idle().await;
         return;
