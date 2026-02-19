@@ -30,46 +30,77 @@ class DOMException extends Error {
     }
 }
 
-// Event class for abort events
-class AbortEvent {
-    constructor(type) {
-        this.type = type;
-        this.target = null;
-        this.defaultPrevented = false;
-    }
+// We need access to the Event _eventTrusted WeakMap to mark events as trusted.
+// Import the _eventTrusted symbol from events module.
+import { _eventTrusted } from 'node:events';
 
-    preventDefault() {
-        this.defaultPrevented = true;
+const signalState = new WeakMap();
+const INTERNAL_TOKEN = Symbol('AbortSignal.internal');
+
+function getSignalState(signal) {
+    const state = signalState.get(signal);
+    if (!state) {
+        throw new TypeError('Illegal invocation');
     }
+    return state;
+}
+
+function createAbortSignal() {
+    return new AbortSignal(INTERNAL_TOKEN);
 }
 
 // AbortSignal implementation
 class AbortSignal {
-    constructor() {
-        this.aborted = false;
-        this.reason = undefined;
-        this._listeners = [];
-        this._onabort = null;
+    constructor(token) {
+        if (token !== INTERNAL_TOKEN) {
+            const err = new TypeError('Illegal constructor');
+            err.code = 'ERR_ILLEGAL_CONSTRUCTOR';
+            throw err;
+        }
+        signalState.set(this, {
+            aborted: false,
+            reason: undefined,
+            listeners: [],
+            onabort: null,
+        });
+    }
+
+    get aborted() {
+        return getSignalState(this).aborted;
+    }
+
+    get reason() {
+        return getSignalState(this).reason;
+    }
+
+    get onabort() {
+        return getSignalState(this).onabort;
+    }
+
+    set onabort(handler) {
+        getSignalState(this).onabort = handler;
     }
 
     static abort(reason) {
-        const signal = new AbortSignal();
-        signal.aborted = true;
+        const signal = createAbortSignal();
+        const state = signalState.get(signal);
+        state.aborted = true;
         if (reason !== undefined) {
-            signal.reason = reason;
+            state.reason = reason;
         } else {
-            signal.reason = new DOMException('This operation was aborted', 'AbortError');
+            state.reason = new DOMException('This operation was aborted', 'AbortError');
         }
         return signal;
     }
 
     static timeout(milliseconds) {
-        const signal = new AbortSignal();
+        const signal = createAbortSignal();
+        const state = signalState.get(signal);
         setTimeout(() => {
-            if (!signal.aborted) {
-                signal.aborted = true;
-                signal.reason = new DOMException('AbortError', 'AbortError');
-                signal.dispatchEvent(new AbortEvent('abort'));
+            if (!state.aborted) {
+                state.aborted = true;
+                state.reason = new DOMException('The operation timed out.', 'TimeoutError');
+                signal.dispatchEvent(new Event('abort'));
             }
         }, milliseconds);
         return signal;
@@ -79,53 +110,44 @@ class AbortSignal {
         if (!Array.isArray(signals)) {
             throw new TypeError('signals must be an iterable');
         }
-        const signal = new AbortSignal();
-        // If any signal is already aborted, return an already-aborted signal
+        const signal = createAbortSignal();
+        const state = signalState.get(signal);
         for (const s of signals) {
             if (s.aborted) {
-                signal.aborted = true;
-                signal.reason = s.reason;
+                state.aborted = true;
+                state.reason = s.reason;
                 return signal;
             }
         }
-        // Listen for abort on all signals
         for (const s of signals) {
             s.addEventListener('abort', function() {
-                if (!signal.aborted) {
-                    signal.aborted = true;
-                    signal.reason = s.reason;
-                    signal.dispatchEvent(new AbortEvent('abort'));
+                if (!state.aborted) {
+                    state.aborted = true;
+                    state.reason = s.reason;
+                    signal.dispatchEvent(new Event('abort'));
                 }
             }, { once: true });
         }
         return signal;
     }
 
-    get onabort() {
-        return this._onabort;
-    }
-
-    set onabort(handler) {
-        this._onabort = handler;
-    }
-
     throwIfAborted() {
-        if (this.aborted) {
-            throw this.reason;
+        const state = getSignalState(this);
+        if (state.aborted) {
+            throw state.reason;
         }
     }
 
     addEventListener(type, listener, options) {
         if (!listener) return;
-        
+
         const opts = typeof options === 'object' ? options : { capture: !!options };
-        
-        // Only handle abort events
+
         if (type !== 'abort') return;
-        
-        // Avoid duplicates
-        if (!this._listeners.find(l => l.listener === listener)) {
-            this._listeners.push({
+
+        const state = getSignalState(this);
+        if (!state.listeners.find(l => l.listener === listener)) {
+            state.listeners.push({
                 listener,
                 once: opts.once || false
             });
@@ -134,64 +156,117 @@ class AbortSignal {
 
     removeEventListener(type, listener, options) {
         if (!listener || type !== 'abort') return;
-        
-        const index = this._listeners.findIndex(l => l.listener === listener);
+
+        const state = getSignalState(this);
+        const index = state.listeners.findIndex(l => l.listener === listener);
         if (index !== -1) {
-            this._listeners.splice(index, 1);
+            state.listeners.splice(index, 1);
         }
     }
 
     dispatchEvent(event) {
         event.target = this;
-        
-        // Call onabort handler if set
-        if (this._onabort && event.type === 'abort') {
+
+        const state = getSignalState(this);
+
+        if (state.onabort && event.type === 'abort') {
             try {
-                this._onabort.call(this, event);
+                state.onabort.call(this, event);
             } catch (e) {
                 // Ignore errors in onabort handler
             }
         }
-        
-        const listenersToCall = [...this._listeners];
-        
+
+        const listenersToCall = [...state.listeners];
+
         for (const item of listenersToCall) {
             try {
                 item.listener.call(this, event);
             } catch (e) {
                 // Ignore errors in event listeners
             }
-            
+
             if (item.once) {
-                const index = this._listeners.indexOf(item);
+                const index = state.listeners.indexOf(item);
                 if (index !== -1) {
-                    this._listeners.splice(index, 1);
+                    state.listeners.splice(index, 1);
                 }
             }
         }
-        
+
         return !event.defaultPrevented;
     }
+}
+
+const controllerState = new WeakMap();
+
+function getControllerState(controller) {
+    const state = controllerState.get(controller);
+    if (!state) {
+        throw new TypeError('Illegal invocation');
+    }
+    return state;
 }
 
 // AbortController implementation
 class AbortController {
     constructor() {
-        this.signal = new AbortSignal();
+        controllerState.set(this, {
+            signal: createAbortSignal(),
+        });
+    }
+
+    get signal() {
+        return getControllerState(this).signal;
     }
 
     abort(reason) {
-        if (this.signal.aborted) {
+        const signal = this.signal;
+        const state = signalState.get(signal);
+        if (state.aborted) {
             return;
         }
-        this.signal.aborted = true;
+        state.aborted = true;
         if (reason !== undefined) {
-            this.signal.reason = reason;
+            state.reason = reason;
         } else {
-            this.signal.reason = new DOMException('The operation was aborted.', 'AbortError');
+            state.reason = new DOMException('The operation was aborted.', 'AbortError');
         }
-        this.signal.dispatchEvent(new AbortEvent('abort'));
+        const event = new Event('abort');
+        _eventTrusted.set(event, true);
+        signal.dispatchEvent(event);
     }
 }
+
+const customInspect = Symbol.for('nodejs.util.inspect.custom');
+
+AbortSignal.prototype[customInspect] = function(depth, opts) {
+    if (depth < 0) return 'AbortSignal';
+    const state = signalState.get(this);
+    if (!state) return 'AbortSignal';
+    if (depth === 0) {
+        return `[AbortSignal]`;
+    }
+    return `AbortSignal { aborted: ${state.aborted} }`;
+};
+
+AbortController.prototype[customInspect] = function(depth, opts) {
+    if (depth !== null && depth < 0) return 'AbortController';
+    const signal = controllerState.get(this)?.signal;
+    if (!signal) return 'AbortController';
+    const nextDepth = depth === null ? null : depth - 1;
+    const signalStr = (nextDepth !== null && nextDepth < 0) ? '[AbortSignal]' : signal[customInspect](nextDepth, opts);
+    return `AbortController { signal: ${signalStr} }`;
+};
+
+Object.defineProperty(AbortController.prototype, Symbol.toStringTag, {
+    value: 'AbortController',
+    configurable: true,
+});
+
+Object.defineProperty(AbortSignal.prototype, Symbol.toStringTag, {
+    value: 'AbortSignal',
+    configurable: true,
+});
 
 export { AbortController, AbortSignal, DOMException };

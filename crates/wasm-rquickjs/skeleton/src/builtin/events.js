@@ -1,5 +1,7 @@
 // Web platform Event, EventTarget, and CustomEvent implementations
 
+const _eventTrusted = new WeakMap();
+
 class Event {
     constructor(type, eventInitDict = {}) {
         this.type = String(type);
@@ -11,9 +13,13 @@ class Event {
         this.currentTarget = null;
         this.eventPhase = 0; // Event.NONE
         this.timeStamp = Date.now();
-        this.isTrusted = false;
+        _eventTrusted.set(this, false);
         this._stopPropagation = false;
         this._stopImmediatePropagation = false;
+    }
+
+    get isTrusted() {
+        return _eventTrusted.get(this) || false;
     }
 
     composedPath() {
@@ -625,7 +631,8 @@ export {
     addAbortListener,
     defaultMaxListeners,
     errorMonitor,
-    captureRejections
+    captureRejections,
+    _eventTrusted,
 };
 
 export default EventEmitter;

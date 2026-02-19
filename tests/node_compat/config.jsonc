@@ -1320,7 +1320,7 @@
     // === AbortController tests ===
     "parallel/test-abortcontroller.js": {
       "skip": true,
-      "reason": "requires --expose-gc, mock.fn, and detailed AbortSignal properties (onabort, reason, throwIfAborted)"
+      "reason": "hangs on AbortSignal.timeout() test - needs Promise.withResolvers or timers/promises sleep support"
     },
     "parallel/test-aborted-util.js": {
       "skip": true,
