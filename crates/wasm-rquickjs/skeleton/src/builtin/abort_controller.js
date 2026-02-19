@@ -37,9 +37,7 @@ import { _eventTrusted } from 'node:events';
 const signalState = new WeakMap();
 const INTERNAL_TOKEN = Symbol('AbortSignal.internal');
 
-const _timeoutFinalizer = typeof FinalizationRegistry !== 'undefined'
-    ? new FinalizationRegistry((timeoutId) => clearTimeout(timeoutId))
-    : null;
+const _timeoutFinalizer = null;
 
 // Signals with active abort listeners are kept alive (strong ref) to prevent GC.
 // When all listeners are removed, the signal is released and can be collected.
@@ -108,7 +106,6 @@ class AbortSignal {
     }
 
     static timeout(milliseconds) {
-        console.error(`[DEBUG] AbortSignal.timeout(${milliseconds}) called`);
         const signal = createAbortSignal();
 
         // Pin signal temporarily to prevent QuickJS from collecting it before
@@ -118,9 +115,8 @@ class AbortSignal {
 
         const ref = new WeakRef(signal);
         const timeoutId = setTimeout(() => {
-            console.error(`[DEBUG] timeout(${milliseconds}) timer fired`);
             const s = ref.deref();
-            if (!s) { console.error(`[DEBUG] timeout(${milliseconds}) signal was GC'd`); return; }
+            if (!s) return;
             const st = signalState.get(s);
             if (!st || st.aborted) return;
             st.aborted = true;
