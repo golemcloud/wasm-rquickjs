@@ -1352,7 +1352,7 @@
     "parallel/test-console-assign-undefined.js": {},
     "parallel/test-console-count.js": {},
     "parallel/test-console-instance.js": {},
-    "parallel/test-console-issue-43095.js": { "skip": true, "reason": "util.inspect throws on revoked proxies; needs inspect-level fix" },
+    "parallel/test-console-issue-43095.js": {},
     "parallel/test-console-log-stdio-broken-dest.js": {},
     "parallel/test-console-log-throw-primitive.js": {},
     "parallel/test-console-not-call-toString.js": {},

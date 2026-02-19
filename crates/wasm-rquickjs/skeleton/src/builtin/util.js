@@ -324,6 +324,20 @@ function getCircularRef(ctx, value) {
 }
 
 function formatValue(ctx, value, recurseTimes) {
+    // Detect revoked proxies early: any property access on a revoked proxy
+    // throws TypeError. We catch this and return a safe representation.
+    if (value !== null && (typeof value === 'object' || typeof value === 'function')) {
+        try {
+            Object.getPrototypeOf(value);
+        } catch (err) {
+            if (err instanceof TypeError && typeof err.message === 'string' &&
+                /revoked/i.test(err.message) && /proxy/i.test(err.message)) {
+                return ctx.stylize('<Revoked Proxy>', 'special');
+            }
+            throw err;
+        }
+    }
+
     // Provide a hook for user-specified inspect functions.
     // Check that value is an object with an inspect function on it
     // Skip custom inspect for TypedArrays/Buffers — use built-in formatting

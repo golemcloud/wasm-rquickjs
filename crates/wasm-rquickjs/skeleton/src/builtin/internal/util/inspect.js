@@ -433,6 +433,19 @@ function formatValue(
         return ctx.stylize("null", "null");
     }
 
+    // Detect revoked proxies early: any property access on a revoked proxy
+    // throws TypeError. We catch this and return a safe representation,
+    // matching Node.js behavior.
+    try {
+        Object.getPrototypeOf(value);
+    } catch (err) {
+        if (err instanceof TypeError && typeof err.message === "string" &&
+            /revoked/i.test(err.message) && /proxy/i.test(err.message)) {
+            return ctx.stylize("<Revoked Proxy>", "special");
+        }
+        throw err;
+    }
+
     // Memorize the context for custom inspection on proxies.
     const context = value;
     // Always check for proxies to prevent side effects and to prevent triggering
