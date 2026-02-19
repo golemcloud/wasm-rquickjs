@@ -446,6 +446,54 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         "=== Running {total_tests} tests ({total_public} public API, {total_internals} internals) ===\n"
     );
 
+    // Load config.jsonc to find tests explicitly skipped with a reason
+    let config_skipped: BTreeMap<String, String> = {
+        let config_content =
+            fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
+        let config_json_str = strip_jsonc_comments(&config_content);
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
+            val.get("tests")
+                .and_then(|v| v.as_object())
+                .map(|obj| {
+                    obj.iter()
+                        .filter_map(|(key, entry)| {
+                            let skip = entry.get("skip")?.as_bool()?;
+                            if skip {
+                                let reason = entry
+                                    .get("reason")
+                                    .and_then(|r| r.as_str())
+                                    .unwrap_or("skipped in config.jsonc")
+                                    .to_string();
+                                Some((key.clone(), reason))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            BTreeMap::new()
+        }
+    };
+
+    // Also include config-skipped tests that weren't found in the suite directory scan
+    // (e.g. .mjs files) so they still appear in the report
+    for (path, _) in &config_skipped {
+        if !test_files.contains(path) {
+            let suite_file = format!("tests/node_compat/suite/{path}");
+            if std::path::Path::new(&suite_file).exists() {
+                test_files.push(path.clone());
+            }
+        }
+    }
+    test_files.sort();
+
+    // Recompute totals after adding config-skipped files
+    let total_tests = test_files.len();
+    let total_internals = internals_tests.len();
+    let total_public = total_tests - total_internals;
+
     // Step 4: Run all tests
     let mut results: BTreeMap<String, TestResult> = BTreeMap::new();
     let mut pass_count = 0usize;
@@ -461,19 +509,69 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut progress = 0usize;
     for test_path in &test_files {
         progress += 1;
-        let test_start = Instant::now();
-        let result =
-            match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path)).await {
+        let filename = test_path.rsplit('/').next().unwrap_or(test_path);
+        let is_internal = internals_tests.contains(test_path);
+        let tag = if is_internal { " [internal]" } else { "" };
+
+        // Check if this test is explicitly skipped in config.jsonc
+        let result = if let Some(reason) = config_skipped.get(test_path) {
+            println!(
+                "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
+                progress
+            );
+            TestResult::Skip(reason.clone())
+        } else {
+            let test_start = Instant::now();
+            let r = match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path))
+                .await
+            {
                 Ok(Ok(r)) => r,
                 Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
                 Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
             };
 
-        let elapsed = test_start.elapsed();
-        let filename = test_path.rsplit('/').next().unwrap_or(test_path);
+            let elapsed = test_start.elapsed();
 
-        let is_internal = internals_tests.contains(test_path);
-        let tag = if is_internal { " [internal]" } else { "" };
+            match &r {
+                TestResult::Pass => {
+                    println!(
+                        "[{:>4}/{total_tests}] PASS  {filename}{tag} ({:.1}s)",
+                        progress,
+                        elapsed.as_secs_f64()
+                    );
+                }
+                TestResult::Skip(reason) => {
+                    println!(
+                        "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
+                        progress
+                    );
+                }
+                TestResult::Fail(msg) => {
+                    let short_msg = if msg.len() > 120 {
+                        format!("{}...", truncate_str(msg, 120))
+                    } else {
+                        msg.clone()
+                    };
+                    println!(
+                        "[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}",
+                        progress
+                    );
+                }
+                TestResult::Error(msg) => {
+                    let short_msg = if msg.len() > 120 {
+                        format!("{}...", truncate_str(msg, 120))
+                    } else {
+                        msg.clone()
+                    };
+                    println!(
+                        "[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}",
+                        progress
+                    );
+                }
+            }
+
+            r
+        };
 
         match &result {
             TestResult::Pass => {
@@ -482,54 +580,27 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 } else {
                     pass_count += 1;
                 }
-                println!(
-                    "[{:>4}/{total_tests}] PASS  {filename}{tag} ({:.1}s)",
-                    progress,
-                    elapsed.as_secs_f64()
-                );
             }
-            TestResult::Skip(reason) => {
+            TestResult::Skip(_) => {
                 if is_internal {
                     internals_skip += 1;
                 } else {
                     skip_count += 1;
                 }
-                println!(
-                    "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
-                    progress
-                );
             }
-            TestResult::Fail(msg) => {
+            TestResult::Fail(_) => {
                 if is_internal {
                     internals_fail += 1;
                 } else {
                     fail_count += 1;
                 }
-                let short_msg = if msg.len() > 120 {
-                    format!("{}...", truncate_str(msg, 120))
-                } else {
-                    msg.clone()
-                };
-                println!(
-                    "[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}",
-                    progress
-                );
             }
-            TestResult::Error(msg) => {
+            TestResult::Error(_) => {
                 if is_internal {
                     internals_error += 1;
                 } else {
                     error_count += 1;
                 }
-                let short_msg = if msg.len() > 120 {
-                    format!("{}...", truncate_str(msg, 120))
-                } else {
-                    msg.clone()
-                };
-                println!(
-                    "[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}",
-                    progress
-                );
             }
         }
 
@@ -840,15 +911,20 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     // Step 6: Warn about passing tests not in config.jsonc
     let config_content = fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
     let config_json_str = strip_jsonc_comments(&config_content);
-    let config_tests: BTreeSet<String> =
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
-            val.get("tests")
-                .and_then(|v| v.as_object())
-                .map(|obj| obj.keys().cloned().collect())
-                .unwrap_or_default()
-        } else {
-            BTreeSet::new()
-        };
+    let config_tests: BTreeSet<String> = {
+        let mut keys: BTreeSet<String> =
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
+                val.get("tests")
+                    .and_then(|v| v.as_object())
+                    .map(|obj| obj.keys().cloned().collect())
+                    .unwrap_or_default()
+            } else {
+                BTreeSet::new()
+            };
+        // Also include all config-skipped keys (already loaded earlier)
+        keys.extend(config_skipped.keys().cloned());
+        keys
+    };
 
     let missing_from_config: Vec<&String> = results
         .iter()
