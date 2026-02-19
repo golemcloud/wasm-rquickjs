@@ -117,8 +117,14 @@ const builtinModules = {
     'node:timers': cjsExport(timers),
     'timers/promises': cjsExport(timersPromises),
     'node:timers/promises': cjsExport(timersPromises),
-    'console': cjsExport(consoleMod),
-    'node:console': cjsExport(consoleMod),
+    get 'console'() {
+        const c = globalThis.console;
+        if (c && consoleMod.Console) c.Console = consoleMod.Console;
+        return c || cjsExport(consoleMod);
+    },
+    get 'node:console'() {
+        return this['console'];
+    },
     'async_hooks': cjsExport(async_hooks),
     'node:async_hooks': cjsExport(async_hooks),
     'cluster': cjsExport(cluster),

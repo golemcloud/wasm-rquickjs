@@ -94,10 +94,30 @@ pub mod native_module {
 // JS functions for the console implementation
 pub const CONSOLE_JS: &str = include_str!("console.js");
 pub const REEXPORT_JS: &str =
-    r#"export * from 'node:console'; export { default } from 'node:console';"#;
+    r#"export * from 'node:console'; import { Console } from 'node:console'; const c = globalThis.console; c.Console = Console; export default c;"#;
 
 // JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_console from '__wasm_rquickjs_builtin/console';
-        globalThis.console = __wasm_rquickjs_console;
+        const __console_obj = {};
+        const __console_keys = Object.keys(__wasm_rquickjs_console);
+        for (let i = 0; i < __console_keys.length; i++) {
+            const k = __console_keys[i];
+            if (k !== 'default') {
+                __console_obj[k] = __wasm_rquickjs_console[k];
+            }
+        }
+        Object.defineProperty(__console_obj, '_stdout', {
+            get() { return globalThis.process ? globalThis.process.stdout : undefined; },
+            set(v) { Object.defineProperty(this, '_stdout', { value: v, writable: true, configurable: true, enumerable: false }); },
+            configurable: true,
+            enumerable: false
+        });
+        Object.defineProperty(__console_obj, '_stderr', {
+            get() { return globalThis.process ? globalThis.process.stderr : undefined; },
+            set(v) { Object.defineProperty(this, '_stderr', { value: v, writable: true, configurable: true, enumerable: false }); },
+            configurable: true,
+            enumerable: false
+        });
+        globalThis.console = __console_obj;
     "#;

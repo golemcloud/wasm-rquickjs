@@ -32,21 +32,43 @@ export function countReset(label) {
     }
 }
 
+function _getStdout() {
+    const c = globalThis.console;
+    return c && c._stdout ? c._stdout : null;
+}
+
+function _getStderr() {
+    const c = globalThis.console;
+    return c && c._stderr ? c._stderr : null;
+}
+
 export function debug(...v) {
-    consoleNative.debug(util.format(...v))
+    const msg = util.format(...v);
+    const s = _getStdout();
+    if (s) { s.write(msg + '\n'); } else { consoleNative.debug(msg); }
 }
 
 export function dir(object, options) {
-    consoleNative.println(util.inspect(object, options));
+    let msg;
+    try {
+        const result = util.inspect(object, options);
+        msg = result !== undefined ? result : 'undefined';
+    } catch (e) {
+        msg = e instanceof TypeError && /revoked proxy/i.test(e.message)
+            ? '<Revoked Proxy>' : `[Unable to inspect: ${e.message}]`;
+    }
+    const s = _getStdout();
+    if (s) { s.write(msg + '\n'); } else { consoleNative.println(msg); }
 }
 
 export function dirxml(object) {
-    // just fallback to dir() here
     dir(object);
 }
 
 export function error(...v) {
-    consoleNative.error(util.format(...v))
+    const msg = util.format(...v);
+    const s = _getStderr();
+    if (s) { s.write(msg + '\n'); } else { consoleNative.error(msg); }
 }
 
 export function group(label) {
@@ -65,11 +87,20 @@ export function groupEnd() {
 }
 
 export function info(...v) {
-    consoleNative.info(util.format(...v))
+    const msg = util.format(...v);
+    const s = _getStdout();
+    if (s) { s.write(msg + '\n'); } else { consoleNative.info(msg); }
 }
 
 export function log(...v) {
-    consoleNative.println(util.format(...v))
+    let msg;
+    try {
+        msg = util.format(...v);
+    } catch (e) {
+        msg = `[Unable to format: ${e.message}]`;
+    }
+    const s = _getStdout();
+    if (s) { s.write(msg + '\n'); } else { consoleNative.println(msg); }
 }
 
 export function table(data, keys) {
@@ -110,11 +141,15 @@ export function timeEnd(label) {
 }
 
 export function trace(...v) {
-    consoleNative.trace(util.format(...v))
+    const msg = util.format(...v);
+    const s = _getStderr();
+    if (s) { s.write(msg + '\n'); } else { consoleNative.trace(msg); }
 }
 
 export function warn(...v) {
-    consoleNative.warn(util.format(...v))
+    const msg = util.format(...v);
+    const s = _getStderr();
+    if (s) { s.write(msg + '\n'); } else { consoleNative.warn(msg); }
 }
 
 // table rendering based on https://github.com/ronnyKJ/consoleTable
@@ -273,36 +308,184 @@ function printTable(data, keys) {
     return printRows(rows);
 }
 
-export class Console {
-    constructor(stdout, stderr, ignoreErrors) {
-        if (stdout && typeof stdout === 'object' && !stdout.write) {
-            // Options object form: new Console({ stdout, stderr })
-            stderr = stdout.stderr;
-            ignoreErrors = stdout.ignoreErrors;
-            stdout = stdout.stdout;
-        }
-        this._stdout = stdout || { write: function(s) {} };
-        this._stderr = stderr || this._stdout;
+const _METHODS_TO_BIND = [
+    'log', 'info', 'warn', 'error', 'debug',
+    'dir', 'dirxml', 'trace', 'assert', 'clear',
+    'count', 'countReset', 'group', 'groupCollapsed', 'groupEnd',
+    'table', 'time', 'timeLog', 'timeEnd',
+];
+
+export function Console(stdout, stderr, ignoreErrors) {
+    if (!new.target) {
+        return new Console(stdout, stderr, ignoreErrors);
     }
-    log(...args) { log(...args); }
-    info(...args) { info(...args); }
-    warn(...args) { warn(...args); }
-    error(...args) { error(...args); }
-    debug(...args) { debug(...args); }
-    dir(...args) { dir(...args); }
-    dirxml(...args) { dirxml(...args); }
-    trace(...args) { trace(...args); }
-    assert(...args) { assert(...args); }
-    clear() { clear(); }
-    count(...args) { count(...args); }
-    countReset(...args) { countReset(...args); }
-    group(...args) { group(...args); }
-    groupCollapsed(...args) { groupCollapsed(...args); }
-    groupEnd() { groupEnd(); }
-    table(...args) { table(...args); }
-    time(...args) { time(...args); }
-    timeLog(...args) { timeLog(...args); }
-    timeEnd(...args) { timeEnd(...args); }
+
+    let colorMode = 'auto';
+    let colorModeWasSet = false;
+    let inspectOptions;
+
+    if (stdout && typeof stdout === 'object' && !stdout.write) {
+        const options = stdout;
+        stderr = options.stderr;
+        ignoreErrors = options.ignoreErrors;
+        if (options.colorMode !== undefined) {
+            colorMode = options.colorMode;
+            colorModeWasSet = true;
+        }
+        inspectOptions = options.inspectOptions;
+        stdout = options.stdout;
+    }
+
+    if (!stdout || typeof stdout.write !== 'function') {
+        const err = new TypeError(`The "stdout" argument must be an instance of Writable. Received ${util.inspect(stdout)}`);
+        err.code = 'ERR_CONSOLE_WRITABLE_STREAM';
+        throw err;
+    }
+
+    if (stderr && typeof stderr.write !== 'function') {
+        const err = new TypeError(`The "stderr" argument must be an instance of Writable. Received ${util.inspect(stderr)}`);
+        err.code = 'ERR_CONSOLE_WRITABLE_STREAM';
+        throw err;
+    }
+
+    if (colorMode !== 'auto' && colorMode !== true && colorMode !== false) {
+        const err = new TypeError(`The argument 'colorMode' must be one of: 'auto', true, false. Received ${util.inspect(colorMode)}`);
+        err.code = 'ERR_INVALID_ARG_VALUE';
+        throw err;
+    }
+
+    if (inspectOptions !== undefined) {
+        if (typeof inspectOptions !== 'object' || inspectOptions === null) {
+            let received;
+            if (inspectOptions == null) {
+                received = ` Received ${inspectOptions}`;
+            } else if (typeof inspectOptions === 'function') {
+                received = ` Received function ${inspectOptions.name}`;
+            } else {
+                let inspected = util.inspect(inspectOptions, { colors: false });
+                if (inspected.length > 28) inspected = inspected.slice(0, 25) + '...';
+                received = ` Received type ${typeof inspectOptions} (${inspected})`;
+            }
+            const err = new TypeError(`The "options.inspectOptions" property must be of type object.${received}`);
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if ('colors' in inspectOptions && colorModeWasSet) {
+            const err = new TypeError('Option "options.inspectOptions.color" cannot be used in combination with option "colorMode"');
+            err.code = 'ERR_INCOMPATIBLE_OPTION_PAIR';
+            throw err;
+        }
+    }
+
+    this._stdout = stdout;
+    this._stderr = stderr || stdout;
+    this._ignoreErrors = ignoreErrors !== false;
+    this._colorMode = colorMode;
+    this._inspectOptions = inspectOptions;
+    this._counts = {};
+    this._timers = {};
+
+    // Bind methods from the most-derived prototype so subclass overrides win,
+    // while still supporting detached usage (e.g. [1,2,3].forEach(c.log)).
+    const proto = new.target.prototype || Console.prototype;
+    for (let i = 0; i < _METHODS_TO_BIND.length; i++) {
+        const name = _METHODS_TO_BIND[i];
+        const fn = typeof proto[name] === 'function' ? proto[name] : Console.prototype[name];
+        this[name] = fn.bind(this);
+    }
 }
+
+Console.prototype._writeToStream = function(stream, string) {
+    if (this._ignoreErrors) {
+        try { stream.write(string); } catch (e) {}
+    } else {
+        stream.write(string);
+    }
+};
+
+Console.prototype._getColors = function() {
+    if (this._inspectOptions && 'colors' in this._inspectOptions) {
+        return this._inspectOptions.colors;
+    }
+    if (this._colorMode === 'auto') {
+        return !!(this._stdout && this._stdout.isTTY);
+    }
+    return this._colorMode;
+};
+
+Console.prototype.log = function(...args) {
+    const opts = { colors: this._getColors(), ...this._inspectOptions };
+    const str = args.length === 0 ? '' :
+        args.length === 1 && typeof args[0] === 'string' ? args[0] :
+        args.length === 1 ? util.inspect(args[0], opts) :
+        util.format(...args);
+    this._writeToStream(this._stdout, str + '\n');
+};
+Console.prototype.info = function(...args) { this.log(...args); };
+Console.prototype.debug = function(...args) { this.log(...args); };
+Console.prototype.warn = function(...args) {
+    const str = util.format(...args);
+    this._writeToStream(this._stderr, str + '\n');
+};
+Console.prototype.error = function(...args) { this.warn(...args); };
+Console.prototype.dir = function(object, options) {
+    const opts = { ...this._inspectOptions, ...options };
+    const result = util.inspect(object, opts);
+    this._writeToStream(this._stdout, (result !== undefined ? result : 'undefined') + '\n');
+};
+Console.prototype.dirxml = function(...args) { this.dir(...args); };
+Console.prototype.trace = function(...args) { trace(...args); };
+Console.prototype.assert = function(condition, ...v) { assert(condition, ...v); };
+Console.prototype.clear = function() { clear(); };
+Console.prototype.count = function(label) {
+    label = label === undefined ? DEFAULT_LABEL : String(label);
+    if (!this._counts[label]) this._counts[label] = 0;
+    this._counts[label]++;
+    this._writeToStream(this._stdout, `${label}: ${this._counts[label]}\n`);
+};
+Console.prototype.countReset = function(label) {
+    label = label === undefined ? DEFAULT_LABEL : String(label);
+    if (this._counts[label]) {
+        this._counts[label] = 0;
+    } else {
+        this._writeToStream(this._stderr, `Count for '${label}' does not exist\n`);
+    }
+};
+Console.prototype.group = function(...args) { if (args.length > 0) this.log(...args); };
+Console.prototype.groupCollapsed = function(...args) { if (args.length > 0) this.log(...args); };
+Console.prototype.groupEnd = function() {};
+Console.prototype.table = function(...args) { table(...args); };
+Console.prototype.time = function(label) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    this._timers[label] = consoleNative.timestamp();
+};
+Console.prototype.timeLog = function(label, ...v) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    const start = this._timers[label];
+    if (start === undefined) {
+        this._writeToStream(this._stderr, `No such timer label: ${label}\n`);
+        return;
+    }
+    const diff = consoleNative.timestamp() - start;
+    this._writeToStream(this._stdout, `${label}: ${diff}ms` + (v.length ? ' ' + util.format(...v) : '') + '\n');
+};
+Console.prototype.timeEnd = function(label) {
+    label = label === undefined ? DEFAULT_LABEL : label;
+    const start = this._timers[label];
+    if (start === undefined) {
+        this._writeToStream(this._stderr, `No such timer label: ${label}\n`);
+        return;
+    }
+    const diff = consoleNative.timestamp() - start;
+    this._writeToStream(this._stdout, `${label}: ${diff}ms - timer ended\n`);
+    delete this._timers[label];
+};
+
+Object.defineProperty(Console, Symbol.hasInstance, {
+    value: function(instance) {
+        if (instance === globalThis.console) return true;
+        return !!instance && Console.prototype.isPrototypeOf(instance);
+    }
+});
 
 export default { Console, assert, clear, count, countReset, debug, dir, dirxml, error, group, groupCollapsed, groupEnd, info, log, table, time, timeLog, timeEnd, trace, warn };
