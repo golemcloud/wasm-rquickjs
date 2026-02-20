@@ -121,27 +121,20 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
         fs::copy(src_shim_mjs, common_dir.join("index.mjs"))?;
     }
 
-    // Copy additional common shims if they exist
-    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js", "crypto.js"] {
-        let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
-        if std::path::Path::new(&src_shim_extra).exists() {
-            let dst_shim_extra = common_dir.join(shim_name);
-            fs::copy(&src_shim_extra, &dst_shim_extra)?;
-        }
-    }
-
-    // Some vendored tests use require('../../test/common/tmpdir') instead of
-    // require('../common/tmpdir'), so mirror shims into /test/common/ as well.
-    let test_common_dir = temp.join("test").join("common");
-    fs::create_dir_all(&test_common_dir)?;
-    fs::copy(src_shim, test_common_dir.join("index.js"))?;
-    if std::path::Path::new(src_shim_mjs).exists() {
-        fs::copy(src_shim_mjs, test_common_dir.join("index.mjs"))?;
-    }
-    for shim_name in &["tmpdir.js", "tick.js", "fixtures.js", "crypto.js"] {
-        let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
-        if std::path::Path::new(&src_shim_extra).exists() {
-            fs::copy(&src_shim_extra, test_common_dir.join(shim_name))?;
+    // Copy all additional common shims from common-shim directory
+    let shim_dir = std::path::Path::new("tests/node_compat/common-shim");
+    if shim_dir.exists() {
+        for entry in fs::read_dir(shim_dir)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name_str = file_name.to_string_lossy();
+            // Skip index.js and index.mjs (already copied above)
+            if file_name_str == "index.js" || file_name_str == "index.mjs" {
+                continue;
+            }
+            if entry.file_type()?.is_file() {
+                fs::copy(entry.path(), common_dir.join(file_name_str.as_ref()))?;
+            }
         }
     }
 
@@ -317,9 +310,9 @@ impl GolemPreparedComponent {
             let mut logging = linker.instance("wasi:logging/logging")?;
             logging.func_wrap(
                 "log",
-                |_ctx: StoreContextMut<'_, Host>, (_level, _context, _message): (LogLevel, String, String)| -> Result<(), anyhow::Error> {
-                    Ok(())
-                },
+                |_ctx: StoreContextMut<'_, Host>,
+                 (_level, _context, _message): (LogLevel, String, String)|
+                 -> Result<(), anyhow::Error> { Ok(()) },
             )?;
         }
 
@@ -343,27 +336,26 @@ impl GolemPreparedComponent {
         })?;
 
         // start-span: func(name: string) -> span
-        golem_ctx.func_wrap(
-            "start-span",
-            {
-                let spans = spans_clone.clone();
-                move |mut ctx: StoreContextMut<'_, Host>, (name,): (String,)| -> Result<(wasmtime::component::Resource<GolemSpan>,), anyhow::Error> {
-                    let span = GolemSpan {
-                        name,
-                        attributes: Vec::new(),
-                        finished: false,
-                    };
-                    let mut table = ctx.data_mut().table.lock().unwrap();
-                    let resource = table.push(span)?;
-                    spans.lock().unwrap().push(GolemSpan {
-                        name: String::new(), // placeholder, real data is in table
-                        attributes: Vec::new(),
-                        finished: false,
-                    });
-                    Ok((resource,))
-                }
-            },
-        )?;
+        golem_ctx.func_wrap("start-span", {
+            let spans = spans_clone.clone();
+            move |mut ctx: StoreContextMut<'_, Host>,
+                  (name,): (String,)|
+                  -> Result<(wasmtime::component::Resource<GolemSpan>,), anyhow::Error> {
+                let span = GolemSpan {
+                    name,
+                    attributes: Vec::new(),
+                    finished: false,
+                };
+                let mut table = ctx.data_mut().table.lock().unwrap();
+                let resource = table.push(span)?;
+                spans.lock().unwrap().push(GolemSpan {
+                    name: String::new(), // placeholder, real data is in table
+                    attributes: Vec::new(),
+                    finished: false,
+                });
+                Ok((resource,))
+            }
+        })?;
 
         // [method]span.set-attribute: func(name: string, value: attribute-value)
         // attribute-value is a variant with one case: string(string)
@@ -373,57 +365,53 @@ impl GolemPreparedComponent {
         // where attribute-value = variant { string(string) }
         // A variant with one case lifts as (discriminant: u32, payload: string) but wasmtime component
         // may represent it as an enum. Let's use a tuple.
-        golem_ctx.func_wrap(
-            "[method]span.set-attribute",
-            {
-                let spans = spans_clone.clone();
-                move |mut ctx: StoreContextMut<'_, Host>,
-                      (span_res, attr_name, attr_value): (
-                    wasmtime::component::Resource<GolemSpan>,
-                    String,
-                    AttributeValue,
-                )| -> Result<(), anyhow::Error> {
-                    let value_str = match &attr_value {
-                        AttributeValue::String(s) => s.clone(),
-                    };
-                    let mut table = ctx.data_mut().table.lock().unwrap();
-                    if let Ok(span) = table.get_mut(&span_res) {
-                        span.attributes.push((attr_name.clone(), value_str.clone()));
-                    }
-                    // Also record in the shared spans list
-                    let mut shared = spans.lock().unwrap();
-                    if let Some(last) = shared.last_mut() {
-                        last.attributes.push((attr_name, value_str));
-                    }
-                    Ok(())
+        golem_ctx.func_wrap("[method]span.set-attribute", {
+            let spans = spans_clone.clone();
+            move |mut ctx: StoreContextMut<'_, Host>,
+                  (span_res, attr_name, attr_value): (
+                wasmtime::component::Resource<GolemSpan>,
+                String,
+                AttributeValue,
+            )|
+                  -> Result<(), anyhow::Error> {
+                let value_str = match &attr_value {
+                    AttributeValue::String(s) => s.clone(),
+                };
+                let mut table = ctx.data_mut().table.lock().unwrap();
+                if let Ok(span) = table.get_mut(&span_res) {
+                    span.attributes.push((attr_name.clone(), value_str.clone()));
                 }
-            },
-        )?;
+                // Also record in the shared spans list
+                let mut shared = spans.lock().unwrap();
+                if let Some(last) = shared.last_mut() {
+                    last.attributes.push((attr_name, value_str));
+                }
+                Ok(())
+            }
+        })?;
 
         // [method]span.finish: func()
-        golem_ctx.func_wrap(
-            "[method]span.finish",
-            {
-                let spans = spans_clone.clone();
-                move |mut ctx: StoreContextMut<'_, Host>,
-                      (span_res,): (wasmtime::component::Resource<GolemSpan>,)| -> Result<(), anyhow::Error> {
-                    let mut table = ctx.data_mut().table.lock().unwrap();
-                    if let Ok(span) = table.get_mut(&span_res) {
-                        span.finished = true;
-                        // Copy final state to shared spans
-                        let name = span.name.clone();
-                        let attributes = span.attributes.clone();
-                        let mut shared = spans.lock().unwrap();
-                        if let Some(last) = shared.last_mut() {
-                            last.name = name;
-                            last.finished = true;
-                            last.attributes = attributes;
-                        }
+        golem_ctx.func_wrap("[method]span.finish", {
+            let spans = spans_clone.clone();
+            move |mut ctx: StoreContextMut<'_, Host>,
+                  (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
+                  -> Result<(), anyhow::Error> {
+                let mut table = ctx.data_mut().table.lock().unwrap();
+                if let Ok(span) = table.get_mut(&span_res) {
+                    span.finished = true;
+                    // Copy final state to shared spans
+                    let name = span.name.clone();
+                    let attributes = span.attributes.clone();
+                    let mut shared = spans.lock().unwrap();
+                    if let Some(last) = shared.last_mut() {
+                        last.name = name;
+                        last.finished = true;
+                        last.attributes = attributes;
                     }
-                    Ok(())
                 }
-            },
-        )?;
+                Ok(())
+            }
+        })?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -492,9 +480,7 @@ impl TestInstance {
 
         let mut store = Store::new(engine, host);
 
-        let instance = linker
-            .instantiate_async(&mut store, component)
-            .await?;
+        let instance = linker.instantiate_async(&mut store, component).await?;
 
         Ok(Self {
             engine: engine.clone(),

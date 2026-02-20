@@ -21,11 +21,7 @@ async fn diagnostics_channel_api(
         let r: serde_json::Value = serde_json::from_str(&json_str)?;
 
         let errors = r["errors"].as_array().unwrap();
-        assert!(
-            errors.is_empty(),
-            "Unexpected errors: {:?}",
-            errors
-        );
+        assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
 
         // Basic channel
         assert!(r["channelCreated"].as_bool().unwrap(), "channelCreated");
@@ -37,9 +33,15 @@ async fn diagnostics_channel_api(
         assert!(r["unsubscribed"].as_bool().unwrap(), "unsubscribed");
 
         // Module-level
-        assert!(r["moduleHasSubscribers"].as_bool().unwrap(), "moduleHasSubscribers");
+        assert!(
+            r["moduleHasSubscribers"].as_bool().unwrap(),
+            "moduleHasSubscribers"
+        );
         assert!(r["moduleCalled"].as_bool().unwrap(), "moduleCalled");
-        assert!(r["moduleUnsubscribed"].as_bool().unwrap(), "moduleUnsubscribed");
+        assert!(
+            r["moduleUnsubscribed"].as_bool().unwrap(),
+            "moduleUnsubscribed"
+        );
 
         // Symbol
         assert!(r["symbolChannel"].as_bool().unwrap(), "symbolChannel");
@@ -57,32 +59,71 @@ async fn diagnostics_channel_api(
         assert!(r["unbindStoreFalse"].as_bool().unwrap(), "unbindStoreFalse");
 
         // TracingChannel
-        assert!(r["tracingChannelStart"].as_bool().unwrap(), "tracingChannelStart");
-        assert!(r["tracingChannelEnd"].as_bool().unwrap(), "tracingChannelEnd");
-        assert!(r["tracingChannelAsyncStart"].as_bool().unwrap(), "tracingChannelAsyncStart");
-        assert!(r["tracingChannelAsyncEnd"].as_bool().unwrap(), "tracingChannelAsyncEnd");
-        assert!(r["tracingChannelError"].as_bool().unwrap(), "tracingChannelError");
+        assert!(
+            r["tracingChannelStart"].as_bool().unwrap(),
+            "tracingChannelStart"
+        );
+        assert!(
+            r["tracingChannelEnd"].as_bool().unwrap(),
+            "tracingChannelEnd"
+        );
+        assert!(
+            r["tracingChannelAsyncStart"].as_bool().unwrap(),
+            "tracingChannelAsyncStart"
+        );
+        assert!(
+            r["tracingChannelAsyncEnd"].as_bool().unwrap(),
+            "tracingChannelAsyncEnd"
+        );
+        assert!(
+            r["tracingChannelError"].as_bool().unwrap(),
+            "tracingChannelError"
+        );
 
         // traceSync
         assert!(r["traceSyncResult"].as_bool().unwrap(), "traceSyncResult");
         assert!(r["traceSyncEvents"].as_bool().unwrap(), "traceSyncEvents");
         assert!(r["traceSyncError"].as_bool().unwrap(), "traceSyncError");
-        assert!(r["traceSyncErrorEvents"].as_bool().unwrap(), "traceSyncErrorEvents");
-        assert!(r["traceSyncEarlyExit"].as_bool().unwrap(), "traceSyncEarlyExit");
-        assert!(r["traceSyncRunStores"].as_bool().unwrap(), "traceSyncRunStores");
+        assert!(
+            r["traceSyncErrorEvents"].as_bool().unwrap(),
+            "traceSyncErrorEvents"
+        );
+        assert!(
+            r["traceSyncEarlyExit"].as_bool().unwrap(),
+            "traceSyncEarlyExit"
+        );
+        assert!(
+            r["traceSyncRunStores"].as_bool().unwrap(),
+            "traceSyncRunStores"
+        );
 
         // TracingChannel hasSubscribers
         assert!(r["tracingNoSubs"].as_bool().unwrap(), "tracingNoSubs");
         assert!(r["tracingHasSubs"].as_bool().unwrap(), "tracingHasSubs");
-        assert!(r["tracingNoSubsAfter"].as_bool().unwrap(), "tracingNoSubsAfter");
+        assert!(
+            r["tracingNoSubsAfter"].as_bool().unwrap(),
+            "tracingNoSubsAfter"
+        );
 
         // traceCallback
-        assert!(r["traceCallbackSync"].as_bool().unwrap(), "traceCallbackSync");
-        assert!(r["traceCallbackThrows"].as_bool().unwrap(), "traceCallbackThrows");
+        assert!(
+            r["traceCallbackSync"].as_bool().unwrap(),
+            "traceCallbackSync"
+        );
+        assert!(
+            r["traceCallbackThrows"].as_bool().unwrap(),
+            "traceCallbackThrows"
+        );
 
         // Custom TracingChannel
-        assert!(r["customTracingChannel"].as_bool().unwrap(), "customTracingChannel");
-        assert!(r["tracingChannelCtorError"].as_bool().unwrap(), "tracingChannelCtorError");
+        assert!(
+            r["customTracingChannel"].as_bool().unwrap(),
+            "customTracingChannel"
+        );
+        assert!(
+            r["tracingChannelCtorError"].as_bool().unwrap(),
+            "tracingChannelCtorError"
+        );
     } else {
         anyhow::bail!("Expected string result from test function");
     }

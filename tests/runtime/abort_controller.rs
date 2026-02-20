@@ -237,13 +237,27 @@ async fn timeout_unref_does_not_block_idle(
     // This test reproduces the bug where an unref'd long timer blocks rt.idle().await.
     // With the bug, invoke_and_capture_output will hang for 120s and then timeout.
     // After the fix, it should complete in ~100ms.
-    let (r, output) =
-        invoke_and_capture_output(compiled.wasm_path(), None, "test-timeout-unref-does-not-block-idle", &[]).await;
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-timeout-unref-does-not-block-idle",
+        &[],
+    )
+    .await;
     let _ = r?;
 
-    assert!(output.contains("short unrefed fired"), "Expected 'short unrefed fired' in output (unref must not cancel timers): {output}");
-    assert!(output.contains("short fired"), "Expected 'short fired' in output: {output}");
-    assert!(output.contains("done"), "Expected 'done' in output: {output}");
+    assert!(
+        output.contains("short unrefed fired"),
+        "Expected 'short unrefed fired' in output (unref must not cancel timers): {output}"
+    );
+    assert!(
+        output.contains("short fired"),
+        "Expected 'short fired' in output: {output}"
+    );
+    assert!(
+        output.contains("done"),
+        "Expected 'done' in output: {output}"
+    );
 
     Ok(())
 }

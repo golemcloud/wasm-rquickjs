@@ -519,13 +519,12 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         let skip_reason = config_skipped.get(test_path).cloned();
 
         let test_start = Instant::now();
-        let r = match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path))
-            .await
-        {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-            Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
-        };
+        let r =
+            match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path)).await {
+                Ok(Ok(r)) => r,
+                Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
+                Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
+            };
 
         let elapsed = test_start.elapsed();
 

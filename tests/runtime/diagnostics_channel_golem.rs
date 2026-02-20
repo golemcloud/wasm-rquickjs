@@ -17,16 +17,19 @@ async fn golem_context_tracing(
     let prepared = GolemPreparedComponent::new(compiled.wasm_path())?;
     let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
 
-    let (result, output) = instance
-        .invoke_and_capture_output(None, "test", &[])
-        .await;
+    let (result, output) = instance.invoke_and_capture_output(None, "test", &[]).await;
     let result = result?;
 
     if let Some(Val::String(json_str)) = result {
         let r: serde_json::Value = serde_json::from_str(&json_str)?;
 
         let errors = r["errors"].as_array().unwrap();
-        assert!(errors.is_empty(), "Unexpected errors: {:?}\nOutput: {}", errors, output);
+        assert!(
+            errors.is_empty(),
+            "Unexpected errors: {:?}\nOutput: {}",
+            errors,
+            output
+        );
 
         // Golem tracing auto-installed on http.client channels
         assert!(
@@ -74,7 +77,10 @@ async fn golem_context_tracing(
             first_span.attributes
         );
         assert!(
-            first_span.attributes.iter().any(|(k, v)| k == "method" && v == "GET"),
+            first_span
+                .attributes
+                .iter()
+                .any(|(k, v)| k == "method" && v == "GET"),
             "First span method should be GET: {:?}",
             first_span.attributes
         );
@@ -83,7 +89,10 @@ async fn golem_context_tracing(
         let second_span = &spans[1];
         assert!(second_span.finished, "Second span should be finished");
         assert!(
-            second_span.attributes.iter().any(|(k, v)| k == "error" && v == "true"),
+            second_span
+                .attributes
+                .iter()
+                .any(|(k, v)| k == "error" && v == "true"),
             "Second span should have error=true: {:?}",
             second_span.attributes
         );
