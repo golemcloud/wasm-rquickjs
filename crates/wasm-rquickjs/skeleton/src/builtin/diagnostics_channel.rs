@@ -16,7 +16,7 @@ pub const GOLEM_WIRE_JS: &str = r#"
 "#;
 
 #[cfg(feature = "golem")]
-pub use golem_context::native_module::js_native_module;
+pub use golem_context::js_native_module;
 
 #[cfg(feature = "golem")]
 pub mod golem_context {

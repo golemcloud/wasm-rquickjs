@@ -15,6 +15,8 @@ mod buffer;
 mod cjs_require;
 mod console;
 mod crypto;
+mod diagnostics_channel;
+mod diagnostics_channel_golem;
 mod dns;
 mod encoding;
 mod example1;

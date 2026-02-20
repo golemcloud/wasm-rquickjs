@@ -1,0 +1,5 @@
+package quickjs:diagnostics-channel;
+
+world diagnostics-channel {
+  export test: func() -> string;
+}

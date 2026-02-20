@@ -15,8 +15,10 @@ use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
-use wasmtime::component::{Component, Func, Instance, Linker, ResourceAny, ResourceTable, Val};
-use wasmtime::{Engine, Store};
+use wasmtime::component::{
+    Component, Func, Instance, Linker, ResourceAny, ResourceTable, ResourceType, Val,
+};
+use wasmtime::{Engine, Store, StoreContextMut};
 use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
 use wasmtime_wasi::{DirPerms, FilePerms};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
@@ -177,6 +179,7 @@ pub enum FeatureCombination {
     LogOnly,
     HttpOnly,
     Default,
+    Golem,
 }
 
 impl FeatureCombination {
@@ -190,6 +193,7 @@ impl FeatureCombination {
             Self::LogOnly => "log",
             Self::HttpOnly => "http",
             Self::Default => "default",
+            Self::Golem => "golem",
         }
     }
 
@@ -201,6 +205,7 @@ impl FeatureCombination {
             }
             FeatureCombination::HttpOnly => vec!["--no-default-features", "--features", "http"],
             FeatureCombination::Default => vec![],
+            FeatureCombination::Golem => vec!["--features", "golem"],
         }
     }
 }
@@ -238,6 +243,190 @@ impl PreparedComponent {
     }
 }
 
+/// Mock logging level for wasi:logging/logging
+#[derive(wasmtime::component::ComponentType, wasmtime::component::Lift)]
+#[component(enum)]
+#[repr(u8)]
+#[allow(dead_code)]
+pub enum LogLevel {
+    #[component(name = "trace")]
+    Trace,
+    #[component(name = "debug")]
+    Debug,
+    #[component(name = "info")]
+    Info,
+    #[component(name = "warn")]
+    Warn,
+    #[component(name = "error")]
+    Error,
+    #[component(name = "critical")]
+    Critical,
+}
+
+/// Mock attribute-value variant for golem:api/context
+#[derive(wasmtime::component::ComponentType, wasmtime::component::Lift)]
+#[component(variant)]
+pub enum AttributeValue {
+    #[component(name = "string")]
+    String(String),
+}
+
+/// Mock span for golem:api/context testing
+pub struct GolemSpan {
+    pub name: String,
+    pub attributes: Vec<(String, String)>,
+    pub finished: bool,
+}
+
+/// A PreparedComponent that includes a mock golem:api/context host implementation.
+pub struct GolemPreparedComponent {
+    engine: Engine,
+    linker: Linker<Host>,
+    component: Component,
+    pub spans: Arc<Mutex<Vec<GolemSpan>>>,
+}
+
+impl GolemPreparedComponent {
+    pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        let mut config = wasmtime::Config::default();
+        config.async_support(true);
+        config.wasm_component_model(true);
+        config.async_stack_size(32 * 1024 * 1024);
+        config.max_wasm_stack(16 * 1024 * 1024);
+        config.cache(Some(wasmtime::Cache::from_file(None)?));
+        let engine = Engine::new(&config)?;
+        let mut linker: Linker<Host> = Linker::new(&engine);
+
+        wasmtime_wasi::p2::add_to_linker_with_options_async(
+            &mut linker,
+            &bindings::LinkOptions::default(),
+        )?;
+        wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+
+        // Mock wasi:logging/logging (required by the golem feature)
+        {
+            let mut logging = linker.instance("wasi:logging/logging")?;
+            logging.func_wrap(
+                "log",
+                |_ctx: StoreContextMut<'_, Host>, (_level, _context, _message): (LogLevel, String, String)| -> Result<(), anyhow::Error> {
+                    Ok(())
+                },
+            )?;
+        }
+
+        // Mock golem:api/context@1.3.0
+        let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
+        let spans_clone = spans.clone();
+
+        let mut golem_ctx = linker.instance("golem:api/context@1.3.0")?;
+
+        // Register the span resource type
+        let span_resource_type = ResourceType::host::<GolemSpan>();
+        golem_ctx.resource("span", span_resource_type, {
+            let spans = spans_clone.clone();
+            move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
+                // Destructor: mark span as finished if not already
+                let table = ctx.data_mut().table.lock().unwrap();
+                // Resource already dropped by wasmtime
+                let _ = (spans.as_ref(), rep, table);
+                Ok(())
+            }
+        })?;
+
+        // start-span: func(name: string) -> span
+        golem_ctx.func_wrap(
+            "start-span",
+            {
+                let spans = spans_clone.clone();
+                move |mut ctx: StoreContextMut<'_, Host>, (name,): (String,)| -> Result<(wasmtime::component::Resource<GolemSpan>,), anyhow::Error> {
+                    let span = GolemSpan {
+                        name,
+                        attributes: Vec::new(),
+                        finished: false,
+                    };
+                    let mut table = ctx.data_mut().table.lock().unwrap();
+                    let resource = table.push(span)?;
+                    spans.lock().unwrap().push(GolemSpan {
+                        name: String::new(), // placeholder, real data is in table
+                        attributes: Vec::new(),
+                        finished: false,
+                    });
+                    Ok((resource,))
+                }
+            },
+        )?;
+
+        // [method]span.set-attribute: func(name: string, value: attribute-value)
+        // attribute-value is a variant with one case: string(string)
+        // In the component model, a single-case variant is lifted as a tuple (u32, string) or similar.
+        // But since it has only one case, wasmtime may simplify it.
+        // Let's check what the actual signature is - it's (resource<span>, string, attribute-value)
+        // where attribute-value = variant { string(string) }
+        // A variant with one case lifts as (discriminant: u32, payload: string) but wasmtime component
+        // may represent it as an enum. Let's use a tuple.
+        golem_ctx.func_wrap(
+            "[method]span.set-attribute",
+            {
+                let spans = spans_clone.clone();
+                move |mut ctx: StoreContextMut<'_, Host>,
+                      (span_res, attr_name, attr_value): (
+                    wasmtime::component::Resource<GolemSpan>,
+                    String,
+                    AttributeValue,
+                )| -> Result<(), anyhow::Error> {
+                    let value_str = match &attr_value {
+                        AttributeValue::String(s) => s.clone(),
+                    };
+                    let mut table = ctx.data_mut().table.lock().unwrap();
+                    if let Ok(span) = table.get_mut(&span_res) {
+                        span.attributes.push((attr_name.clone(), value_str.clone()));
+                    }
+                    // Also record in the shared spans list
+                    let mut shared = spans.lock().unwrap();
+                    if let Some(last) = shared.last_mut() {
+                        last.attributes.push((attr_name, value_str));
+                    }
+                    Ok(())
+                }
+            },
+        )?;
+
+        // [method]span.finish: func()
+        golem_ctx.func_wrap(
+            "[method]span.finish",
+            {
+                let spans = spans_clone.clone();
+                move |mut ctx: StoreContextMut<'_, Host>,
+                      (span_res,): (wasmtime::component::Resource<GolemSpan>,)| -> Result<(), anyhow::Error> {
+                    let mut table = ctx.data_mut().table.lock().unwrap();
+                    if let Ok(span) = table.get_mut(&span_res) {
+                        span.finished = true;
+                        // Copy final state to shared spans
+                        let name = span.name.clone();
+                        let attributes = span.attributes.clone();
+                        let mut shared = spans.lock().unwrap();
+                        if let Some(last) = shared.last_mut() {
+                            last.name = name;
+                            last.finished = true;
+                            last.attributes = attributes;
+                        }
+                    }
+                    Ok(())
+                }
+            },
+        )?;
+
+        let component = Component::from_file(&engine, wasm_path)?;
+
+        Ok(Self {
+            engine,
+            linker,
+            component,
+            spans,
+        })
+    }
+}
+
 #[allow(dead_code)]
 pub struct TestInstance {
     engine: Engine,
@@ -257,6 +446,18 @@ impl TestInstance {
     }
 
     pub async fn from_prepared(prepared: &PreparedComponent) -> anyhow::Result<Self> {
+        Self::from_parts(&prepared.engine, &prepared.linker, &prepared.component).await
+    }
+
+    pub async fn from_golem_prepared(prepared: &GolemPreparedComponent) -> anyhow::Result<Self> {
+        Self::from_parts(&prepared.engine, &prepared.linker, &prepared.component).await
+    }
+
+    async fn from_parts(
+        engine: &Engine,
+        linker: &Linker<Host>,
+        component: &Component,
+    ) -> anyhow::Result<Self> {
         let stdout_file = NamedUtf8TempFile::new()?;
         let stderr_file = NamedUtf8TempFile::new()?;
 
@@ -280,17 +481,16 @@ impl TestInstance {
             wasi_http: Arc::new(http_ctx),
         };
 
-        let mut store = Store::new(&prepared.engine, host);
+        let mut store = Store::new(engine, host);
 
-        let instance = prepared
-            .linker
-            .instantiate_async(&mut store, &prepared.component)
+        let instance = linker
+            .instantiate_async(&mut store, component)
             .await?;
 
         Ok(Self {
-            engine: prepared.engine.clone(),
-            linker: prepared.linker.clone(),
-            component: prepared.component.clone(),
+            engine: engine.clone(),
+            linker: linker.clone(),
+            component: component.clone(),
             store,
             instance,
             stdout_file,
@@ -436,7 +636,15 @@ pub struct CompiledTest {
 
 impl CompiledTest {
     pub fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
-        let feature_combination = FeatureCombination::HttpOnly;
+        Self::new_with_features(path, use_shared_target, FeatureCombination::HttpOnly)
+    }
+
+    pub fn new_with_features(
+        path: &Utf8Path,
+        use_shared_target: bool,
+        feature_combination: FeatureCombination,
+    ) -> anyhow::Result<CompiledTest> {
+        let feature_combination = feature_combination;
         let name = path.file_name().unwrap();
         let wrapper_crate_root = Utf8Path::new("tmp")
             .join(name)
