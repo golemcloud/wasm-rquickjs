@@ -1384,6 +1384,7 @@
     "parallel/test-diagnostics-channel-tracing-channel-sync-error.js": {},
     "parallel/test-diagnostics-channel-tracing-channel-sync-run-stores.js": {},
     "parallel/test-diagnostics-channel-tracing-channel-sync.js": {},
+    "parallel/test-diagnostics-channel-udp.js": {},
     "parallel/test-domain-bind-timeout.js": {},
     "parallel/test-domain-ee-error-listener.js": {},
     "parallel/test-domain-from-timer.js": {},
@@ -1700,6 +1701,7 @@
     "parallel/test-event-emitter-once.js": {},
     "parallel/test-exception-handler.js": {},
     "parallel/test-file-write-stream.js": {},
+    "parallel/test-file-write-stream2.js": {},
     "parallel/test-file-write-stream3.js": {},
     "parallel/test-file-write-stream4.js": {},
     "parallel/test-handle-wrap-close-abort.js": {},
@@ -1756,7 +1758,7 @@
     "parallel/test-cluster-concurrent-disconnect.js": { "skip": true, "reason": "cluster is not supported in WebAssembly environment" },
     "parallel/test-cluster-cwd.js": { "skip": true, "reason": "cluster is not supported in WebAssembly environment" },
     "parallel/test-cluster-dgram-1.js": { "skip": true, "reason": "cluster is not supported in WebAssembly environment" },
-    "parallel/test-cluster-dgram-2.js": { "skip": true, "reason": "cluster is not supported in WebAssembly environment" },
+    "parallel/test-cluster-dgram-2.js": {},
     "parallel/test-cluster-dgram-reuse.js": { "skip": true, "reason": "cluster is not supported in WebAssembly environment" },
     "parallel/test-cluster-dgram-reuseport.js": { "skip": true, "reason": "cluster is not supported in WebAssembly environment" },
     "parallel/test-cluster-disconnect-before-exit.js": { "skip": true, "reason": "cluster is not supported in WebAssembly environment" },
@@ -2025,14 +2027,8 @@
       "skip": true,
       "reason": "accesses internal Resolver._handle property"
     },
-    "parallel/test-dns-channel-cancel.js": {
-      "skip": true,
-      "reason": "requires dgram and DNS protocol-level testing"
-    },
-    "parallel/test-dns-channel-cancel-promise.js": {
-      "skip": true,
-      "reason": "requires dgram and DNS protocol-level testing"
-    },
+    "parallel/test-dns-channel-cancel.js": {},
+    "parallel/test-dns-channel-cancel-promise.js": {},
     "parallel/test-dns-channel-timeout.js": {
       "skip": true,
       "reason": "requires dgram and DNS protocol-level testing"
@@ -2122,7 +2118,13 @@
     "parallel/test-dgram-connect-send-empty-array.js": {},
     "parallel/test-dgram-connect-send-callback-multi-buffer.js": {},
     "parallel/test-dgram-connect-send-multi-string-array.js": {},
+    "parallel/test-dgram-abort-closed.js": {},
+    "parallel/test-dgram-exclusive-implicit-bind.js": {},
+    "parallel/test-dgram-msgsize.js": {},
+    "parallel/test-dgram-multicast-set-interface.js": {},
+    "parallel/test-dgram-multicast-setTTL.js": {},
     "parallel/test-dgram-oob-buffer.js": {},
+    "parallel/test-dgram-send-queue-info.js": {},
     "parallel/test-dgram-error-message-address.js": {
       "skip": true,
       "reason": "WASI runtime maps binding to non-local IPs as access-denied (EACCES) instead of EADDRNOTAVAIL"
