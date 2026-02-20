@@ -182,7 +182,14 @@ function clearEvent(emitter, evt) {
 function EventEmitter() {
     this._events = new Events();
     this._eventsCount = 0;
+    // Domain implicit binding: if an active domain exists, bind this emitter to it.
+    // This is set up by the domain module's monkey-patch.
+    if (EventEmitter._domainInit) {
+        EventEmitter._domainInit(this);
+    }
 }
+
+EventEmitter._domainInit = null;
 
 EventEmitter.prototype.eventNames = function eventNames() {
     var names = []

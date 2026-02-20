@@ -20,6 +20,7 @@ process.argv = _argv;
 process.argv0 = _argv[0] || '';
 process.env = _env;
 process.exitCode = _exitCode;
+process.domain = null;
 process.pid = 1;
 process.ppid = 0;
 process.platform = 'wasi';

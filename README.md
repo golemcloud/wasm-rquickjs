@@ -528,6 +528,29 @@ Publish/subscribe diagnostic messaging and tracing.
 
 Built-in HTTP diagnostics channels: `http.client.request.created`, `http.client.request.start`, `http.client.request.error`, `http.client.response.finish`.
 
+### `node:domain`
+
+Deprecated error-handling domains (sync-only). Supported API:
+
+- `domain.create()` / `domain.createDomain()` — create a new Domain
+- `domain.active` — currently active domain (live binding)
+- `domain._stack` — internal domain stack
+- `Domain` class (extends `EventEmitter`):
+  - `run(fn, ...args)` — run function in domain context, catching sync errors
+  - `add(emitter)` / `remove(emitter)` — explicitly bind/unbind EventEmitters
+  - `bind(callback)` — wrap callback with domain error routing
+  - `intercept(callback)` — wrap error-first callback with domain error routing
+  - `enter()` / `exit()` — manually push/pop domain stack
+  - `dispose()` — clean up domain (remove members, listeners)
+  - `members` — array of explicitly added emitters
+  - `parent` — parent domain (set on `enter()`)
+- `process.domain` — reflects active domain
+- Error decoration: `error.domain`, `error.domainEmitter`, `error.domainBound`, `error.domainThrown`
+- EventEmitter integration: unhandled `'error'` events on domained emitters route to the domain
+- Async propagation: `process.nextTick`, `setTimeout`, `setInterval` callbacks auto-bind to active domain
+
+**Limitation:** No async context propagation via `async_hooks` — only synchronous errors and explicitly bound callbacks are captured.
+
 ### `node:async_hooks`
 
 - `AsyncLocalStorage` — `run`, `exit`, `getStore`, `enterWith`, `disable`, `snapshot`, `bind`

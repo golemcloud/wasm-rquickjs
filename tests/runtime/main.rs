@@ -18,6 +18,7 @@ mod crypto;
 mod diagnostics_channel;
 mod diagnostics_channel_golem;
 mod dns;
+mod domain;
 mod encoding;
 mod example1;
 mod example2;
