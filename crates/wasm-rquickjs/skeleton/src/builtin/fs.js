@@ -103,7 +103,10 @@ export const constants = {
 // --- Helpers ---
 
 function flagsToNumber(flags) {
-    if (typeof flags === 'number') return flags;
+    if (typeof flags === 'number') {
+        validateInteger(flags, 'flags', -2147483648, 2147483647);
+        return flags;
+    }
     if (typeof flags !== 'string') return O_RDONLY;
     switch (flags) {
         case 'r': return O_RDONLY;
@@ -1229,11 +1232,17 @@ export function open(path, flagsOrCallback, modeOrCallback, callback) {
         cb = callback;
     }
 
+    flags = flagsToNumber(flags !== undefined ? flags : 'r');
+    mode = validateMode(mode, 'mode', 0o666);
     validateCallback(cb);
     queueMicrotask(() => {
         try {
-            const fd = openSync(path, flags, mode);
-            cb(null, fd);
+            const result = native.fs_open(pathToString(path), flags, mode);
+            if (result.error) {
+                cb(createSystemError(result.error));
+            } else {
+                cb(null, result.fd);
+            }
         } catch (err) {
             cb(err);
         }
@@ -2470,7 +2479,7 @@ export function writev(fd, buffers, positionOrCallback, callback) {
     if (typeof positionOrCallback === 'function') {
         cb = positionOrCallback;
     } else {
-        position = positionOrCallback;
+        position = positionOrCallback != null ? positionOrCallback : null;
         cb = callback;
     }
     if (!Array.isArray(buffers)) {

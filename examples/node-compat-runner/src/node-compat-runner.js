@@ -77,7 +77,11 @@ export const runTest = async (testPath) => {
 
         restorePromise = installRejectionTracking();
 
-        require(testPath);
+        if (testPath.endsWith('.mjs')) {
+            await import(testPath);
+        } else {
+            require(testPath);
+        }
         // Await any pending async tests from node:test
         var testModule = require('node:test');
         if (testModule && typeof testModule._awaitPendingTests === 'function') {

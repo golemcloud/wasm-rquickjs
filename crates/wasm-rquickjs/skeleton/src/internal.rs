@@ -1,7 +1,7 @@
 use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
 use rquickjs::function::{Args, Constructor};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ScriptLoader};
+use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, ScriptLoader};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
     Object, Promise, Value, async_with,
@@ -63,12 +63,19 @@ impl JsState {
                 .await;
             rt.idle().await;
 
-            let mut resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
+            let mut builtin_resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
             for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-                resolver = resolver.with_module(name.to_string());
+                builtin_resolver = builtin_resolver.with_module(name.to_string());
             }
-            let resolver = crate::modules::add_native_module_resolvers(resolver);
-            let resolver = crate::builtin::add_module_resolvers(resolver);
+            let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
+            let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
+
+            let file_resolver = FileResolver::default()
+                .with_path("/")
+                .with_pattern("{}.js")
+                .with_pattern("{}.mjs");
+
+            let resolver = (builtin_resolver, file_resolver);
 
             let mut builtin_loader = BuiltinLoader::default()
                 .with_module(crate::JS_EXPORT_MODULE_NAME, crate::JS_EXPORT_MODULE);
@@ -80,7 +87,7 @@ impl JsState {
                 builtin_loader,
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
-                ScriptLoader::default(),
+                ScriptLoader::default().with_extension("mjs"),
             );
 
             rt.set_loader(resolver, loader).await;

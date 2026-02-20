@@ -64,7 +64,10 @@ function describeType(value) {
 }
 
 function flagsToNumber(flags) {
-    if (typeof flags === 'number') return flags;
+    if (typeof flags === 'number') {
+        validateInteger(flags, 'flags', -2147483648, 2147483647);
+        return flags;
+    }
     if (typeof flags !== 'string') return 0;
     switch (flags) {
         case 'r': return 0;
@@ -128,6 +131,25 @@ function validateUid(id, name) {
         throw err;
     }
     validateInteger(id, name, -1, 4294967295);
+}
+
+function validateMode(mode, name, def) {
+    if (mode === undefined) return def;
+    if (typeof mode === 'string') {
+        if (!/^[0-7]+$/.test(mode)) {
+            const err = new TypeError(`The argument '${name}' must be a 32-bit unsigned integer or an octal string. Received '${mode}'`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        return parseInt(mode, 8);
+    }
+    if (typeof mode !== 'number') {
+        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(mode)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    validateInteger(mode, name, 0, 4294967295);
+    return mode;
 }
 
 function validateFlush(flush) {
@@ -534,7 +556,7 @@ export class FileHandle {
 
 export async function open(path, flags, mode) {
     flags = flagsToNumber(flags !== undefined ? flags : 'r');
-    mode = mode !== undefined ? mode : 0o666;
+    mode = validateMode(mode, 'mode', 0o666);
     const result = native.fs_open(path, flags, mode);
     if (result.error) throw createSystemError(result.error);
     return new FileHandle(result.fd, path);

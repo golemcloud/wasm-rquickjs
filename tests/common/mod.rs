@@ -115,6 +115,12 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     let dst_shim = common_dir.join("index.js");
     fs::copy(src_shim, &dst_shim)?;
 
+    // Copy the common ESM shim if it exists
+    let src_shim_mjs = "tests/node_compat/common-shim/index.mjs";
+    if std::path::Path::new(src_shim_mjs).exists() {
+        fs::copy(src_shim_mjs, common_dir.join("index.mjs"))?;
+    }
+
     // Copy additional common shims if they exist
     for shim_name in &["tmpdir.js", "tick.js", "fixtures.js", "crypto.js"] {
         let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
@@ -129,6 +135,9 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     let test_common_dir = temp.join("test").join("common");
     fs::create_dir_all(&test_common_dir)?;
     fs::copy(src_shim, test_common_dir.join("index.js"))?;
+    if std::path::Path::new(src_shim_mjs).exists() {
+        fs::copy(src_shim_mjs, test_common_dir.join("index.mjs"))?;
+    }
     for shim_name in &["tmpdir.js", "tick.js", "fixtures.js", "crypto.js"] {
         let src_shim_extra = format!("tests/node_compat/common-shim/{shim_name}");
         if std::path::Path::new(&src_shim_extra).exists() {
