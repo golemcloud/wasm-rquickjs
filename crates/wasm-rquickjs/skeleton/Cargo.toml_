@@ -17,6 +17,7 @@ crate-type = ["cdylib"]
 default = ["http", "logging"]
 http = ["dep:golem-wasi-http"]
 logging = ["dep:wasi-logging"]
+golem = ["logging", "http", "dep:golem-rust"]
 
 [dependencies]
 # Core dependencies
@@ -71,6 +72,9 @@ golem-wasi-http = { version = "0.1.0", features = ["async"], optional = true }
 
 # Logging
 wasi-logging = { version = "0.0.1", optional = true }
+
+# Golem
+golem-rust = { version = "1.7", default-features = false, optional = true }
 
 [package.metadata.component.bindings]
 ownership = "owning"

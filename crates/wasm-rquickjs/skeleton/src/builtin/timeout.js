@@ -1,4 +1,5 @@
 import * as timeoutNative from '__wasm_rquickjs_builtin/timeout_native'
+import { _captureContext, _restoreContext } from 'node:async_hooks'
 
 class Timeout {
     constructor(id, callback, delay, args, isInterval) {
@@ -63,8 +64,12 @@ function validateCallback(callback) {
 }
 
 function scheduleTimeout(callback, time, args, isInterval) {
-    const timeout = new Timeout(0, callback, time, args, isInterval);
-    const bound = callback.bind(timeout);
+    const snapshot = _captureContext();
+    const wrapped = function(...a) {
+        return _restoreContext(snapshot, callback, this, a);
+    };
+    const timeout = new Timeout(0, wrapped, time, args, isInterval);
+    const bound = wrapped.bind(timeout);
     const id = timeoutNative.schedule(bound, time, isInterval, args);
     timeout._id = id;
     timeout._bound = bound;

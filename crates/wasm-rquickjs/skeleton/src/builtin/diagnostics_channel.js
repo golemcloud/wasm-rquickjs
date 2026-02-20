@@ -6,6 +6,7 @@ class Channel {
     constructor(name) {
         this._name = name;
         this._subscribers = [];
+        this._stores = new Map();
     }
 
     get name() {
@@ -13,12 +14,14 @@ class Channel {
     }
 
     get hasSubscribers() {
-        return this._subscribers.length > 0;
+        return this._subscribers.length > 0 || this._stores.size > 0;
     }
 
     subscribe(onMessage) {
         if (typeof onMessage !== 'function') {
-            throw new TypeError('onMessage must be a function');
+            const err = new TypeError('The "onMessage" argument must be of type function. Received ' + (onMessage === null ? 'null' : typeof onMessage) + ' [ERR_INVALID_ARG_TYPE]');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
         }
         this._subscribers.push(onMessage);
     }
@@ -33,28 +36,51 @@ class Channel {
     }
 
     publish(message) {
-        for (let i = 0; i < this._subscribers.length; i++) {
+        const subs = this._subscribers.slice();
+        for (let i = 0; i < subs.length; i++) {
             try {
-                this._subscribers[i](message, this._name);
-            } catch (_e) {
-                // subscriber errors must not prevent other subscribers from being called
+                subs[i](message, this._name);
+            } catch (e) {
+                queueMicrotask(() => { throw e; });
             }
         }
     }
 
-    bindStore(_store, _transform) {
-        // no-op stub (AsyncLocalStorage integration)
+    bindStore(store, transform) {
+        this._stores.set(store, transform);
     }
 
-    unbindStore(_store) {
-        // no-op stub
-        return false;
+    unbindStore(store) {
+        return this._stores.delete(store);
+    }
+
+    runStores(context, fn, thisArg, ...args) {
+        let run = () => {
+            this.publish(context);
+            return fn.apply(thisArg, args);
+        };
+        for (const [store, transform] of this._stores) {
+            const next = run;
+            run = () => {
+                let value;
+                try {
+                    value = typeof transform === 'function' ? transform(context) : context;
+                } catch (e) {
+                    queueMicrotask(() => { throw e; });
+                    return next();
+                }
+                return store.run(value, next);
+            };
+        }
+        return run();
     }
 }
 
 function channel(name) {
     if (typeof name !== 'string' && typeof name !== 'symbol') {
-        throw new TypeError('Channel name must be a string or Symbol');
+        const err = new TypeError('The "name" argument must be of type string or an instance of Symbol. Received ' + (name === null ? 'null' : typeof name) + ' [ERR_INVALID_ARG_TYPE]');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
     }
     let ch = channels.get(name);
     if (ch === undefined) {
@@ -90,12 +116,16 @@ class TracingChannel {
         } else if (nameOrChannels && typeof nameOrChannels === 'object') {
             for (const event of TRACE_EVENTS) {
                 if (!(nameOrChannels[event] instanceof Channel)) {
-                    throw new TypeError(`Expected a Channel instance for ${event}`);
+                    const err = new TypeError(`The "nameOrChannels.${event}" property must be an instance of Channel. Received ${nameOrChannels[event] === undefined ? 'undefined' : typeof nameOrChannels[event]} [ERR_INVALID_ARG_TYPE]`);
+                    err.code = 'ERR_INVALID_ARG_TYPE';
+                    throw err;
                 }
                 this[event] = nameOrChannels[event];
             }
         } else {
-            throw new TypeError('Expected a string or a channels object');
+            const err = new TypeError('The "nameOrChannels" argument must be of type string or an instance of TracingChannel or Object. Received ' + (nameOrChannels === null ? 'null' : typeof nameOrChannels) + ' [ERR_INVALID_ARG_TYPE]');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
         }
     }
 
@@ -107,74 +137,125 @@ class TracingChannel {
         }
     }
 
+    get hasSubscribers() {
+        return TRACE_EVENTS.some(e => this[e].hasSubscribers);
+    }
+
     unsubscribe(subscribers) {
+        let allRemoved = true;
         for (const event of TRACE_EVENTS) {
             if (typeof subscribers[event] === 'function') {
-                this[event].unsubscribe(subscribers[event]);
+                if (!this[event].unsubscribe(subscribers[event])) {
+                    allRemoved = false;
+                }
             }
         }
+        return allRemoved;
     }
 
     traceSync(fn, context, thisArg, ...args) {
+        if (!this.hasSubscribers) {
+            return fn.apply(thisArg, args);
+        }
         if (context === undefined || context === null) {
             context = {};
         }
-        this.start.publish(context);
-        try {
-            const result = fn.apply(thisArg, args);
-            context.result = result;
-            return result;
-        } catch (err) {
-            context.error = err;
-            this.error.publish(context);
-            throw err;
-        } finally {
-            this.end.publish(context);
-        }
+        // runStores publishes start, then calls doTrace inside store contexts
+        const doTrace = () => {
+            try {
+                const result = fn.apply(thisArg, args);
+                context.result = result;
+                return result;
+            } catch (err) {
+                context.error = err;
+                this.error.publish(context);
+                throw err;
+            } finally {
+                this.end.publish(context);
+            }
+        };
+        return this.start.runStores(context, doTrace);
     }
 
     tracePromise(fn, context, thisArg, ...args) {
+        if (!this.hasSubscribers) {
+            return fn.apply(thisArg, args);
+        }
         if (context === undefined || context === null) {
             context = {};
         }
-        this.start.publish(context);
-        try {
-            const promise = fn.apply(thisArg, args);
-            return Promise.resolve(promise).then(
-                (result) => {
-                    context.result = result;
-                    this.asyncStart.publish(context);
-                    this.asyncEnd.publish(context);
-                    return result;
-                },
-                (err) => {
-                    context.error = err;
-                    this.error.publish(context);
-                    this.asyncStart.publish(context);
-                    this.asyncEnd.publish(context);
-                    throw err;
-                }
-            ).finally(() => {
+        // runStores publishes start, then calls doTrace inside store contexts
+        // end fires after the synchronous portion (when fn returns a promise),
+        // asyncStart/asyncEnd fire when the promise settles
+        const doTrace = () => {
+            try {
+                const promise = fn.apply(thisArg, args);
+                // end fires here — after sync portion, before promise settles
                 this.end.publish(context);
-            });
-        } catch (err) {
-            context.error = err;
-            this.error.publish(context);
-            this.end.publish(context);
-            throw err;
-        }
+                return Promise.resolve(promise).then(
+                    (result) => {
+                        context.result = result;
+                        // asyncStart.runStores publishes asyncStart, restores store contexts
+                        return this.asyncStart.runStores(context, () => {
+                            try { return result; }
+                            finally { this.asyncEnd.publish(context); }
+                        });
+                    },
+                    (err) => {
+                        context.error = err;
+                        this.error.publish(context);
+                        return this.asyncStart.runStores(context, () => {
+                            try { throw err; }
+                            finally { this.asyncEnd.publish(context); }
+                        });
+                    }
+                );
+            } catch (err) {
+                context.error = err;
+                this.error.publish(context);
+                this.end.publish(context);
+                throw err;
+            }
+        };
+        return this.start.runStores(context, doTrace);
     }
 
     traceCallback(fn, position, context, thisArg, ...args) {
-        if (typeof position !== 'number') {
-            position = args.length;
+        if (!this.hasSubscribers) {
+            return fn.apply(thisArg, args);
         }
+        if (typeof position !== 'number') {
+            position = -1;
+        }
+        const idx = position < 0 ? args.length + position : position;
         if (context === undefined || context === null) {
             context = {};
         }
 
         const self = this;
-        const originalCb = typeof args[position] === 'function' ? args[position] : undefined;
+        const originalCb = args[idx];
+
+        if (idx >= 0 && idx < args.length && typeof originalCb !== 'function') {
+            const err = new TypeError('The "callback" argument must be of type function. Received ' + (originalCb === null ? 'null' : typeof originalCb) + ' [ERR_INVALID_ARG_TYPE]');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+
+        if (typeof originalCb !== 'function') {
+            // No callback at position; just trace the sync call
+            const doTrace = () => {
+                try {
+                    return fn.apply(thisArg, args);
+                } catch (err) {
+                    context.error = err;
+                    this.error.publish(context);
+                    throw err;
+                } finally {
+                    this.end.publish(context);
+                }
+            };
+            return this.start.runStores(context, doTrace);
+        }
 
         function wrappedCallback(err, ...cbArgs) {
             if (err) {
@@ -183,29 +264,34 @@ class TracingChannel {
             } else {
                 context.result = cbArgs[0];
             }
-            self.asyncStart.publish(context);
-            try {
-                if (originalCb) {
+            // Restore store contexts for async continuation
+            // asyncStart.runStores publishes asyncStart, then runs callback inside stores
+            const doAsync = () => {
+                try {
                     return originalCb.call(this, err, ...cbArgs);
+                } finally {
+                    self.asyncEnd.publish(context);
                 }
+            };
+            return self.asyncStart.runStores(context, doAsync);
+        }
+
+        args[idx] = wrappedCallback;
+
+        // runStores publishes start, then calls doTrace inside store contexts
+        const doTrace = () => {
+            try {
+                const result = fn.apply(thisArg, args);
+                return result;
+            } catch (err) {
+                context.error = err;
+                this.error.publish(context);
+                throw err;
             } finally {
-                self.asyncEnd.publish(context);
+                this.end.publish(context);
             }
-        }
-
-        args[position] = wrappedCallback;
-
-        this.start.publish(context);
-        try {
-            const result = fn.apply(thisArg, args);
-            return result;
-        } catch (err) {
-            context.error = err;
-            this.error.publish(context);
-            throw err;
-        } finally {
-            this.end.publish(context);
-        }
+        };
+        return this.start.runStores(context, doTrace);
     }
 }
 

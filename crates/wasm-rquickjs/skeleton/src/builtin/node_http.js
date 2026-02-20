@@ -2,6 +2,12 @@
 import { NodeHttpClientRequest, NodeHttpIncomingResponse } from '__wasm_rquickjs_builtin/node_http_native';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
+import { channel } from 'node:diagnostics_channel';
+
+const onClientRequestCreated = channel('http.client.request.created');
+const onClientRequestStart = channel('http.client.request.start');
+const onClientRequestError = channel('http.client.request.error');
+const onClientResponseFinish = channel('http.client.response.finish');
 
 // ===== Static Data =====
 
@@ -289,6 +295,10 @@ export class ClientRequest extends EventEmitter {
         if (typeof callback === 'function') {
             this.once('response', callback);
         }
+
+        if (onClientRequestCreated.hasSubscribers) {
+            onClientRequestCreated.publish({ request: this });
+        }
     }
 
     get writableEnded() {
@@ -401,6 +411,10 @@ export class ClientRequest extends EventEmitter {
 
     async _doSend() {
         try {
+            if (onClientRequestStart.hasSubscribers) {
+                onClientRequestStart.publish({ request: this });
+            }
+
             await this._nativeReq.end(undefined);
 
             this.headersSent = true;
@@ -411,12 +425,18 @@ export class ClientRequest extends EventEmitter {
             const nativeRes = this._nativeReq.getResponse();
             if (nativeRes) {
                 const res = new IncomingMessage(nativeRes);
+                if (onClientResponseFinish.hasSubscribers) {
+                    onClientResponseFinish.publish({ request: this, response: res });
+                }
                 this.emit('response', res);
                 await res._startReading();
             }
 
             if (typeof this._endCallback === 'function') this._endCallback();
         } catch (err) {
+            if (onClientRequestError.hasSubscribers) {
+                onClientRequestError.publish({ request: this, error: err });
+            }
             this.emit('error', err);
         }
         this.emit('close');

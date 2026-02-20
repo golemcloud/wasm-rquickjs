@@ -514,6 +514,29 @@ UDP datagram sockets built on WASI sockets. Supported API:
 
 **Not supported:** `setBroadcast`, `setMulticastTTL`, `setMulticastLoopback`, `setMulticastInterface`, `addMembership`, `dropMembership`, `addSourceSpecificMembership`, `dropSourceSpecificMembership` (throw `ENOSYS`).
 
+### `node:diagnostics_channel`
+
+Publish/subscribe diagnostic messaging and tracing.
+
+- `channel(name)` — get or create a named Channel
+- `subscribe(name, onMessage)` — subscribe to a named channel
+- `unsubscribe(name, onMessage)` — unsubscribe from a named channel
+- `hasSubscribers(name)` — check if a named channel has subscribers
+- `tracingChannel(name)` — create a TracingChannel
+- `Channel` — individual pub/sub channel (`subscribe`, `unsubscribe`, `publish`, `bindStore`, `unbindStore`, `runStores`, `hasSubscribers`, `name`)
+- `TracingChannel` — structured tracing across sync/async operations (`subscribe`, `unsubscribe`, `hasSubscribers`, `traceSync`, `tracePromise`, `traceCallback`)
+
+Built-in HTTP diagnostics channels: `http.client.request.created`, `http.client.request.start`, `http.client.request.error`, `http.client.response.finish`.
+
+### `node:async_hooks`
+
+- `AsyncLocalStorage` — `run`, `exit`, `getStore`, `enterWith`, `disable`, `snapshot`, `bind`
+- `AsyncResource` — `runInAsyncScope`, `asyncId`, `triggerAsyncId`, `bind`
+- `createHook` — stub (returns enable/disable no-ops)
+- `executionAsyncId`, `triggerAsyncId`, `executionAsyncResource` — stubs
+
+Context propagation works through `Promise.prototype.then/catch/finally` and `setTimeout`/`setInterval`. **Limitation:** QuickJS `await` uses internal C-level `perform_promise_then` which bypasses JS-visible `Promise.prototype.then`, so context is **not** propagated across `await` boundaries.
+
 ### Crypto (global)
 - `crypto.randomUUID`
 - `crypto.getRandomValues`
