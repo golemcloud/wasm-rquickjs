@@ -28,6 +28,9 @@ var common = {
     hasMultiLocalhost: false,
     hasQuic: false,
 
+    // Localhost addresses
+    localhostIPv4: '127.0.0.1',
+
     // Build type
     buildType: 'Release',
 

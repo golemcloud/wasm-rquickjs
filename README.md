@@ -493,6 +493,27 @@ Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createSe
 - `hkdf`
 - `hkdfSync`
 
+### `node:dgram`
+
+UDP datagram sockets built on WASI sockets. Supported API:
+
+- `dgram.createSocket(type[, listener])` — create a UDP socket (`udp4` or `udp6`)
+- `socket.bind([port][, address][, callback])` — bind to a local address/port
+- `socket.send(msg[, offset, length], port, address[, callback])` — send a datagram
+- `socket.sendto(msg, offset, length, port, address[, callback])` — send with explicit args
+- `socket.connect(port[, address][, callback])` — associate socket with remote address
+- `socket.disconnect()` — disassociate from remote address
+- `socket.close([callback])` — close the socket
+- `socket.address()` — get local address info
+- `socket.remoteAddress()` — get remote address info
+- `socket.setTTL(ttl)` — set IP TTL
+- `socket.setRecvBufferSize(size)` / `socket.getRecvBufferSize()`
+- `socket.setSendBufferSize(size)` / `socket.getSendBufferSize()`
+- `socket.ref()` / `socket.unref()` — no-op (WASI has no ref counting)
+- Events: `message`, `listening`, `close`, `error`, `connect`
+
+**Not supported:** `setBroadcast`, `setMulticastTTL`, `setMulticastLoopback`, `setMulticastInterface`, `addMembership`, `dropMembership`, `addSourceSpecificMembership`, `dropSourceSpecificMembership` (throw `ENOSYS`).
+
 ### Crypto (global)
 - `crypto.randomUUID`
 - `crypto.getRandomValues`

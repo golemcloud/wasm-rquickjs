@@ -365,11 +365,6 @@ export function aggregateTwoErrors(innerError, outerError) {
 
 export class ERR_SOCKET_BAD_PORT extends RangeError {
     constructor(name, port, allowZero = true) {
-        assert(
-            typeof allowZero === "boolean",
-            "The 'allowZero' argument must be of type boolean.",
-        );
-
         const operator = allowZero ? ">=" : ">";
 
         super(

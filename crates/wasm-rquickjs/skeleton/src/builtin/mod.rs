@@ -156,6 +156,7 @@ pub fn add_module_resolvers(
             .with_module("async_hooks")
             .with_module("node:cluster")
             .with_module("cluster")
+            .with_module("__wasm_rquickjs_builtin/dgram_native")
             .with_module("node:dgram")
             .with_module("dgram")
             .with_module("node:diagnostics_channel")
@@ -246,6 +247,10 @@ pub fn module_loader() -> (
             .with_module(
                 "__wasm_rquickjs_builtin/zlib_native",
                 zlib::js_native_module,
+            )
+            .with_module(
+                "__wasm_rquickjs_builtin/dgram_native",
+                dgram::js_native_module,
             )
             .with_module(
                 "__wasm_rquickjs_builtin/dns_native",

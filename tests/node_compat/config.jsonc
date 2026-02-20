@@ -2051,6 +2051,60 @@
       "reason": "requires --expose-internals and internalBinding('cares_wrap')"
     },
 
+    // === node:dgram tests ===
+    "parallel/test-dgram-createSocket-type.js": {},
+    "parallel/test-dgram-bind.js": {},
+    "parallel/test-dgram-bind-default-address.js": {},
+    "parallel/test-dgram-address.js": {
+      "skip": true,
+      "reason": "WASI runtime returns access-denied (EACCES) when binding to 127.0.0.1; wasmtime sandbox permissions issue"
+    },
+    "parallel/test-dgram-close-is-not-callback.js": {},
+    "parallel/test-dgram-connect.js": {},
+    "parallel/test-dgram-setTTL.js": {},
+    "parallel/test-dgram-send-bad-arguments.js": {},
+    "parallel/test-dgram-send-default-host.js": {},
+    "parallel/test-dgram-send-empty-buffer.js": {},
+    "parallel/test-dgram-send-empty-packet.js": {},
+    "parallel/test-dgram-send-empty-array.js": {},
+    "parallel/test-dgram-send-callback-buffer.js": {},
+    "parallel/test-dgram-send-callback-buffer-length.js": {},
+    "parallel/test-dgram-send-callback-buffer-empty-address.js": {},
+    "parallel/test-dgram-send-callback-buffer-length-empty-address.js": {},
+    "parallel/test-dgram-send-callback-multi-buffer.js": {},
+    "parallel/test-dgram-send-callback-multi-buffer-empty-address.js": {},
+    "parallel/test-dgram-send-multi-buffer-copy.js": {},
+    "parallel/test-dgram-send-multi-string-array.js": {},
+    "parallel/test-dgram-send-callback-recursive.js": {},
+    "parallel/test-dgram-send-address-types.js": {},
+    "parallel/test-dgram-send-invalid-msg-type.js": {},
+    "parallel/test-dgram-sendto.js": {},
+    "parallel/test-dgram-ref.js": {},
+    "parallel/test-dgram-unref.js": {},
+    "parallel/test-dgram-implicit-bind.js": {},
+    "parallel/test-dgram-udp4.js": {},
+    "parallel/test-dgram-bytes-length.js": {},
+    "parallel/test-dgram-listen-after-bind.js": {
+      "skip": true,
+      "reason": "WASI async bind may not complete within the 100ms timeout race in this test; binding is asynchronous in WASI"
+    },
+    "parallel/test-dgram-close-in-listening.js": {},
+    "parallel/test-dgram-connect-send-default-host.js": {},
+    "parallel/test-dgram-connect-send-callback-buffer.js": {},
+    "parallel/test-dgram-connect-send-callback-buffer-length.js": {},
+    "parallel/test-dgram-connect-send-multi-buffer-copy.js": {},
+    "parallel/test-dgram-connect-send-empty-buffer.js": {},
+    "parallel/test-dgram-connect-send-empty-packet.js": {},
+    "parallel/test-dgram-connect-send-empty-array.js": {},
+    "parallel/test-dgram-connect-send-callback-multi-buffer.js": {},
+    "parallel/test-dgram-connect-send-multi-string-array.js": {},
+    "parallel/test-dgram-oob-buffer.js": {},
+    "parallel/test-dgram-error-message-address.js": {
+      "skip": true,
+      "reason": "WASI runtime maps binding to non-local IPs as access-denied (EACCES) instead of EADDRNOTAVAIL"
+    },
+    "parallel/test-dgram-bind-error-repeat.js": {},
+
     // === HTTP server tests (skipped: we only support HTTP clients) ===
     "parallel/test-async-hooks-execution-async-resource-await.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-async-hooks-execution-async-resource.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
