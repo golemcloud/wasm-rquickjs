@@ -1235,6 +1235,7 @@
 
     // === miscellaneous tests ===
     "parallel/test-arm-math-illegal-instruction.js": {},
+    "parallel/test-common-gc.js": {},
     "parallel/test-async-hooks-run-in-async-scope-caught-exception.js": {},
     "parallel/test-async-hooks-run-in-async-scope-this-arg.js": {},
     "parallel/test-async-local-storage-exit-does-not-leak.js": {},
@@ -1401,8 +1402,10 @@
     "parallel/test-global-domexception.js": {},
     "parallel/test-global-encoder.js": {},
     "parallel/test-http-agent-getname.js": {},
+    "parallel/test-http-autoselectfamily.js": {},
     "parallel/test-http-client-defaults.js": {},
     "parallel/test-http-methods.js": {},
+    "parallel/test-https-autoselectfamily.js": {},
     "parallel/test-http2-client-upload-reject.js": {},
     "parallel/test-http2-request-response-proto.js": {},
     "parallel/test-instanceof.js": {},
@@ -1411,7 +1414,9 @@
     "parallel/test-module-circular-dependency-warning.js": {},
     "parallel/test-module-loading-deprecated.js": {},
     "parallel/test-module-parent-setter-deprecation.js": {},
+    "parallel/test-net-autoselectfamily-ipv4first.js": {},
     "parallel/test-net-isipv4.js": {},
+    "parallel/test-process-next-tick.js": {},
     "parallel/test-next-tick-doesnt-hang.js": {},
     "parallel/test-next-tick-fixed-queue-regression.js": {},
     "parallel/test-next-tick-intentional-starvation.js": {},
@@ -1436,6 +1441,7 @@
     "parallel/test-process-emit.js": {},
     "parallel/test-process-emitwarning.js": {},
     "parallel/test-process-euid-egid.js": { "skip": true, "reason": "process.getuid() returns 0 (root) in WASM but seteuid/setegid cannot actually change credentials" },
+    "parallel/test-process-env-deprecation.js": {},
     "parallel/test-process-env-delete.js": {},
     "parallel/test-process-env-ignore-getter-setter.js": {},
     "parallel/test-process-env-symbols.js": {},
@@ -1565,6 +1571,7 @@
     "parallel/test-stream-pipe-error-handling.js": {},
     "parallel/test-stream-pipe-flow-after-unpipe.js": {},
     "parallel/test-stream-pipe-flow.js": {},
+    "parallel/test-stream-pipe-same-destination-twice.js": {},
     "parallel/test-stream-pipe-manual-resume.js": {},
     "parallel/test-stream-pipe-needDrain.js": {},
     "parallel/test-stream-pipeline-async-iterator.js": {},
@@ -1891,6 +1898,8 @@
     // === es-module suite ===
     "es-module/test-dynamic-import-script-lifetime.js": {},
     "es-module/test-esm-loader-cache-clearing.js": {},
+    "es-module/test-vm-compile-function-leak.js": {},
+    "es-module/test-vm-contextified-script-leak.js": {},
 
     // === node:zlib tests ===
     "parallel/test-zlib-const.js": {},
@@ -2069,18 +2078,9 @@
       "skip": true,
       "reason": "requires dgram and DNS protocol-level testing"
     },
-    "parallel/test-dns-multi-channel.js": {
-      "skip": true,
-      "reason": "requires dgram and DNS protocol-level testing"
-    },
-    "parallel/test-dns-resolveany.js": {
-      "skip": true,
-      "reason": "requires dgram and DNS protocol-level testing"
-    },
-    "parallel/test-dns-resolveany-bad-ancount.js": {
-      "skip": true,
-      "reason": "requires dgram and DNS protocol-level testing"
-    },
+    "parallel/test-dns-multi-channel.js": {},
+    "parallel/test-dns-resolveany.js": {},
+    "parallel/test-dns-resolveany-bad-ancount.js": {},
     "parallel/test-dns-setserver-when-querying.js": {
       "skip": true,
       "reason": "requires dgram and DNS protocol-level testing"
@@ -2089,10 +2089,7 @@
       "skip": true,
       "reason": "requires dgram and DNS protocol-level testing"
     },
-    "parallel/test-dns-cancel-reverse-lookup.js": {
-      "skip": true,
-      "reason": "requires dgram and DNS protocol-level testing"
-    },
+    "parallel/test-dns-cancel-reverse-lookup.js": {},
     "parallel/test-dns-lookupService.js": {
       "skip": true,
       "reason": "requires dgram and DNS protocol-level testing"
@@ -2475,7 +2472,7 @@
     "parallel/test-http2-client-data-end.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-client-stream-destroy-before-connect.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-client-unescaped-path.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
-    "parallel/test-http2-client-upload.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
+    "parallel/test-http2-client-upload.js": {},
     "parallel/test-http2-compat-serverresponse-destroy.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-create-client-connect.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-create-client-session.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
