@@ -46,9 +46,10 @@ const _patched = Symbol('domain.patched');
 // Monkey-patch EventEmitter.prototype.emit to route unhandled 'error' events
 // through the emitter's domain (if set).
 if (!EventEmitter.prototype[_patched]) {
-    EventEmitter.prototype.emit = function domainAwareEmit(event) {
+    EventEmitter.prototype.emit = function emit(event) {
         if (
             event === 'error' &&
+            typeof this.listenerCount === 'function' &&
             this.listenerCount('error') === 0 &&
             this.domain &&
             this.domain !== this &&
@@ -56,7 +57,7 @@ if (!EventEmitter.prototype[_patched]) {
             !this.domain._disposed
         ) {
             var err = arguments[1];
-            if (err == null) {
+            if (!err) {
                 err = new Error('Unhandled error.');
             }
             var theDomain = this.domain;
