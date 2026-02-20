@@ -528,14 +528,25 @@ EventEmitter.prototype.rawListeners = function rawListeners(type) {
     return _arrayClone(evlistener);
 };
 
-EventEmitter.prototype.listenerCount = function listenerCount(type) {
+EventEmitter.prototype.listenerCount = function listenerCount(type, listener) {
     var events = this._events;
     if (events === undefined) return 0;
 
     var evlistener = events[type];
     if (evlistener === undefined) return 0;
-    if (typeof evlistener === 'function') return 1;
-    return evlistener.length;
+
+    if (typeof evlistener === 'function') {
+        if (listener === undefined) return 1;
+        return (evlistener === listener || evlistener.listener === listener) ? 1 : 0;
+    }
+
+    if (listener === undefined) return evlistener.length;
+
+    var count = 0;
+    for (var i = 0; i < evlistener.length; i++) {
+        if (evlistener[i] === listener || evlistener[i].listener === listener) count++;
+    }
+    return count;
 };
 
 EventEmitter.prototype.eventNames = function eventNames() {
