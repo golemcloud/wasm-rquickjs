@@ -232,6 +232,9 @@ function alloc (size, fill, encoding) {
         return createBuffer(size)
     }
     if (fill !== undefined) {
+        if (encoding !== undefined && typeof encoding !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('encoding', 'string', encoding)
+        }
         // Only pay attention to encoding if it's a string. This
         // prevents accidentally sending in a number that would
         // be interpreted as a start offset.
@@ -1017,8 +1020,11 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
         length = this.length
         offset = 0
         // Buffer#write(string, offset[, length][, encoding])
-    } else if (isFinite(offset)) {
+    } else if (typeof offset === 'number') {
         const originalOffset = offset
+        if (!Number.isFinite(offset)) {
+            throw new ERR_OUT_OF_RANGE('offset', '>= 0 && <= ' + this.length, originalOffset)
+        }
         offset = offset >>> 0
         if (offset < 0 || offset > this.length) {
             throw new ERR_OUT_OF_RANGE('offset', '>= 0 && <= ' + this.length, originalOffset)
@@ -1031,9 +1037,7 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
             length = undefined
         }
     } else {
-        throw new Error(
-            'Buffer.write(string, encoding, offset[, length]) is no longer supported'
-        )
+        throw new ERR_INVALID_ARG_TYPE('offset', 'number', offset)
     }
 
     const remaining = this.length - offset
@@ -1916,8 +1920,8 @@ Buffer.prototype.copy = function copy (target, targetStart, start, end) {
     if (targetStart < 0) {
         throw new ERR_OUT_OF_RANGE('targetStart', '>= 0', targetStart)
     }
-    if (start < 0 || start >= this.length) {
-        throw new ERR_OUT_OF_RANGE('sourceStart', '>= 0 and < ' + this.length, start)
+    if (start < 0 || start > this.length) {
+        throw new ERR_OUT_OF_RANGE('sourceStart', '>= 0 and <= ' + this.length, start)
     }
     if (end < 0) {
         throw new ERR_OUT_OF_RANGE('sourceEnd', '>= 0', end)
@@ -1972,7 +1976,7 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
             end = this.length
         }
         if (encoding !== undefined && typeof encoding !== 'string') {
-            throw new TypeError('encoding must be a string')
+            throw new ERR_INVALID_ARG_TYPE('encoding', 'string', encoding)
         }
         if (typeof encoding === 'string' && !Buffer.isEncoding(encoding)) {
             throw new ERR_UNKNOWN_ENCODING(encoding)
@@ -2016,8 +2020,7 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
             : Buffer.from(val, encoding)
         const len = bytes.length
         if (len === 0) {
-            throw new TypeError('The value "' + val +
-                '" is invalid for argument "value"')
+            throw new ERR_INVALID_ARG_VALUE('value', val)
         }
         for (i = 0; i < end - start; ++i) {
             this[i + start] = bytes[i % len]

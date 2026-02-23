@@ -210,6 +210,33 @@ function runInlineEval(command, args, options) {
     };
 }
 
+function installTypedArrayLengthErrorShim() {
+    var OriginalUint8Array = globalThis.Uint8Array;
+    if (typeof OriginalUint8Array !== 'function') {
+        return;
+    }
+
+    globalThis.Uint8Array = new Proxy(OriginalUint8Array, {
+        construct: function(target, args, newTarget) {
+            try {
+                return Reflect.construct(target, args, newTarget);
+            } catch (err) {
+                if (
+                    err instanceof RangeError &&
+                    err.message === 'invalid array buffer length' &&
+                    args.length === 1 &&
+                    typeof args[0] === 'number'
+                ) {
+                    throw new RangeError('Invalid typed array length: ' + args[0]);
+                }
+                throw err;
+            }
+        },
+    });
+}
+
+installTypedArrayLengthErrorShim();
+
 var common = {
     // Platform detection — always WASM
     isWindows: false,
