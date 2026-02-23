@@ -87,9 +87,19 @@ const utilTestBinding = Object.freeze({
     arrayBufferViewHasBuffer,
 });
 
+const bufferTestBinding = Object.freeze({
+    fill(target, value, start, end) {
+        return target.fill(value, start, end);
+    },
+});
+
 export function internalBinding(name) {
     if (name === "util") {
         return utilTestBinding;
+    }
+
+    if (name === "buffer") {
+        return bufferTestBinding;
     }
 
     throw new Error(`No such binding: ${name}`);

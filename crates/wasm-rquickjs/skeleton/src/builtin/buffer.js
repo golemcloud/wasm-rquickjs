@@ -2032,15 +2032,23 @@ Buffer.prototype.copy = function copy (target, targetStart, start, end) {
 //    buffer.fill(buffer[, offset[, end]])
 //    buffer.fill(string[, offset[, end]][, encoding])
 Buffer.prototype.fill = function fill (val, start, end, encoding) {
+    const length = this.byteLength
+
+    // Guard against length tampering. Node uses internal slots for bounds checks,
+    // while JS-visible `length` can be shadowed on the object.
+    if (this.length !== length) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS()
+    }
+
     // Handle string cases:
     if (typeof val === 'string') {
         if (typeof start === 'string') {
             encoding = start
             start = 0
-            end = this.length
+            end = length
         } else if (typeof end === 'string') {
             encoding = end
-            end = this.length
+            end = length
         }
         if (encoding !== undefined && typeof encoding !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('encoding', 'string', encoding)
@@ -2062,9 +2070,24 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
         val = Number(val)
     }
 
-    // Invalid ranges are not set to a default, so can range check early.
-    if (start < 0 || this.length < start || this.length < end) {
-        throw new RangeError('Out of range index')
+    if (start === undefined) {
+        start = 0
+    } else if (typeof start !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('offset', 'number', start)
+    }
+
+    if (end === undefined) {
+        end = length
+    } else if (typeof end !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('end', 'number', end)
+    }
+
+    if (start < 0 || length < start) {
+        throw new ERR_OUT_OF_RANGE('offset', `>= 0 and <= ${length}`, start)
+    }
+
+    if (end < 0 || length < end) {
+        throw new ERR_OUT_OF_RANGE('end', `>= 0 and <= ${length}`, end)
     }
 
     if (end <= start) {
@@ -2072,7 +2095,7 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
     }
 
     start = start >>> 0
-    end = end === undefined ? this.length : end >>> 0
+    end = end >>> 0
 
     if (!val) val = 0
 
@@ -2087,6 +2110,15 @@ Buffer.prototype.fill = function fill (val, start, end, encoding) {
             : Buffer.from(val, encoding)
         const len = bytes.length
         if (len === 0) {
+            if (Array.isArray(val)) {
+                for (i = start; i < end; ++i) {
+                    this[i] = 0
+                }
+                return this
+            }
+            if (typeof val === 'string') {
+                throw new ERR_INVALID_ARG_VALUE('value', val)
+            }
             throw new ERR_INVALID_ARG_VALUE('value', val)
         }
         for (i = 0; i < end - start; ++i) {
