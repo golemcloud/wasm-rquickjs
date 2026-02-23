@@ -31,7 +31,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn next_tick<'js>(ctx: Ctx<'js>, function: Function<'js>, args: Vec<Value<'js>>) {
-        let mut js_args = Args::new(ctx, args.len());
+        // `Args::defer` appends two internal arguments (`this` + `function`).
+        // Reserve those slots up front to avoid stack-backed overflow when
+        // users pass exactly 4 nextTick arguments.
+        let mut js_args = Args::new(ctx, args.len() + 2);
         js_args
             .push_args(args)
             .expect("Failed to set args for nextTick");

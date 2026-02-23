@@ -111,6 +111,7 @@ function Socket(options) {
     const streamOptions = {
         ...options,
         allowHalfOpen: options.allowHalfOpen !== undefined ? options.allowHalfOpen : false,
+        autoDestroy: false,
     };
 
     Duplex.call(this, streamOptions);
@@ -321,22 +322,27 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                 const chunk = await this._handle.read(16384);
                 if (token !== this._readToken) break;
                 if (chunk === null || chunk === undefined) {
-                    this.push(null);
                     if (!this.allowHalfOpen) {
-                        this.end();
+                        if (!this.writableEnded) {
+                            this.end();
+                        }
 
-                        // Ensure TCP sockets are fully torn down after FIN so
-                        // the stream emits `close` and clears `_handle`.
                         if (!this.destroyed) {
-                            if (this.writableFinished || this.writable === false) {
-                                this.destroy();
-                            } else {
-                                this.once('finish', () => {
+                            const destroyAfterTurn = () => {
+                                globalThis.setTimeout(() => {
                                     if (!this.destroyed) this.destroy();
-                                });
+                                }, 0);
+                            };
+
+                            if (this.writableFinished || this.writable === false) {
+                                destroyAfterTurn();
+                            } else {
+                                this.once('finish', destroyAfterTurn);
                             }
                         }
                     }
+
+                    this.push(null);
                     break;
                 }
                 this.bytesRead += chunk.length;
@@ -356,21 +362,22 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
 };
 
 Socket.prototype._write = function _write(chunk, encoding, callback) {
-    if (!this._handle) {
-        callback(new Error('Socket is closed'));
-        return;
-    }
     if (this.connecting) {
         this.once('connect', () => this._write(chunk, encoding, callback));
+        return;
+    }
+    if (!this._handle) {
+        callback(new Error('Socket is closed'));
         return;
     }
 
     const data = typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
     const buf = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    const byteArray = Array.from(buf);
 
     (async () => {
         try {
-            const written = await this._handle.write(buf);
+            const written = await this._handle.write(byteArray);
             this.bytesWritten += written;
             this._resetTimeout();
             callback(null);
@@ -381,6 +388,10 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
 };
 
 Socket.prototype._final = function _final(callback) {
+    if (this.connecting) {
+        this.once('connect', () => this._final(callback));
+        return;
+    }
     if (!this._handle) {
         callback();
         return;
