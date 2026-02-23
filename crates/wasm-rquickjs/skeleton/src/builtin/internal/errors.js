@@ -475,11 +475,16 @@ export class ERR_BUFFER_OUT_OF_BOUNDS extends RangeError {
 }
 
 function buildReturnPropertyType(value) {
-    if (value && value.constructor && value.constructor.name) {
-        return `instance of ${value.constructor.name}`;
-    } else {
-        return `type ${typeof value}`;
+    if (value === undefined) {
+        return 'undefined';
     }
+    if (value === null) {
+        return 'null';
+    }
+    if (value && value.constructor && value.constructor.name) {
+        return `an instance of ${value.constructor.name}`;
+    }
+    return `type ${typeof value}`;
 }
 
 export class ERR_INVALID_RETURN_VALUE extends TypeError {

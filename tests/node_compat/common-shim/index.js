@@ -64,9 +64,10 @@ var common = {
         return wrapper;
     },
     mustNotCall: function(msg) {
-        return function() {
+        function mustNotCall() {
             throw new Error(msg || 'function should not have been called');
-        };
+        }
+        return mustNotCall;
     },
     mustSucceed: function(fn, exact) {
         var expected = 1;

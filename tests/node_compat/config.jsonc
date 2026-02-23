@@ -36,10 +36,7 @@
       "skip": true,
       "reason": "requires source-code inspection (reading call-site expressions for assert.ok falsy messages) which is not available in QuickJS/WASM"
     },
-    "parallel/test-assert-async.js": {
-      "skip": true,
-      "reason": "assert.rejects does not set generatedMessage:true when rejection doesn't match; pre-existing issue"
-    },
+    "parallel/test-assert-async.js": {},
     "parallel/test-assert-builtins-not-read-from-filesystem.js": {
       "skip": true,
       "reason": "requires child_process.spawnSync which is not available in WASM"

@@ -1,4 +1,5 @@
 import { inspect, innerDeepEqual } from 'node:util';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_INVALID_RETURN_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 
 class AssertionError extends Error {
     constructor(options) {
@@ -263,6 +264,12 @@ class AssertionError extends Error {
         if (typeof this.stack === 'string' && !this.stack.includes(message)) {
             this.stack = this.name + ': ' + message + '\n' + this.stack;
         }
+        // In QuickJS stack traces may omit frames. For async assertion helpers,
+        // keep the entry point name visible so /rejects/ checks keep working.
+        var keepAsyncEntryPoint = options.stackStartFn === rejects || options.stackStartFn === doesNotReject;
+        if (keepAsyncEntryPoint && typeof this.stack === 'string' && options.stackStartFn && options.stackStartFn.name && !this.stack.includes(options.stackStartFn.name)) {
+            this.stack += '\n    at ' + options.stackStartFn.name + ' (native)';
+        }
     }
 
     toString() {
@@ -325,6 +332,8 @@ function innerFail(obj) {
     obj.message = msg;
     throw new AssertionError(obj);
 }
+
+var NO_EXCEPTION_SENTINEL = {};
 
 function fail(actual, expected, message, operator, stackStartFn) {
     if (arguments.length === 0) {
@@ -600,96 +609,153 @@ function innerPartialDeepEqual(actual, expected) {
 
 // --- throws / doesNotThrow / rejects / doesNotReject ---
 
-function expectedException(actual, expected, message, fn) {
-    if (typeof expected === 'string') {
-        if (arguments.length === 4 && fn !== undefined && message !== undefined && typeof message !== 'string') {
-            // The 3-arg form where error is string is okay (it becomes message)
-        }
-        if (typeof actual === 'object' && actual !== null) {
-            if (actual.message === expected) {
-                throw new TypeError('ERR_AMBIGUOUS_ARGUMENT: The "error" argument is ambiguous. The error message is identical to the expected value.');
-            }
-        }
-        message = expected;
-        expected = undefined;
+function makeAmbiguousArgumentError(arg, details) {
+    var err = new TypeError('The ' + arg + ' argument is ambiguous. ' + details);
+    err.code = 'ERR_AMBIGUOUS_ARGUMENT';
+    return err;
+}
+
+function compareExceptionKey(actual, expected, key, message, keys, fn) {
+    if ((key in actual) && innerDeepEqual(actual[key], expected[key], true, undefined)) {
+        return;
     }
 
-    if (expected === undefined) return { pass: true, message: message };
+    if (!message) {
+        // Build small placeholder objects to keep the generated diff readable.
+        var actualSubset = {};
+        var expectedSubset = {};
+        for (var i = 0; i < keys.length; i++) {
+            var currentKey = keys[i];
+            if (currentKey in actual) {
+                actualSubset[currentKey] = actual[currentKey];
+            }
+            if (currentKey in expected) {
+                if (typeof actual[currentKey] === 'string' && expected[currentKey] instanceof RegExp && expected[currentKey].test(actual[currentKey])) {
+                    expectedSubset[currentKey] = actual[currentKey];
+                } else {
+                    expectedSubset[currentKey] = expected[currentKey];
+                }
+            }
+        }
 
-    if (typeof expected === 'function') {
-        if (expected.prototype !== undefined && actual instanceof expected) {
-            return { pass: true, message: message };
-        }
-        if (Error.isPrototypeOf(expected)) {
-            var expectedName = expected.name || 'unknown';
-            var actualName = (actual && actual.constructor && actual.constructor.name) || 'unknown';
-            var actualMsg = actual != null && typeof actual === 'object' && 'message' in actual
-                ? String(actual.message)
-                : String(actual);
-            var genMsg = 'The error is expected to be an instance of "' + expectedName +
-                '". Received "' + actualName + '"\n\nError message:\n\n' + actualMsg;
-            return { pass: false, message: message || genMsg };
-        }
-        var result = expected.call({}, actual);
-        if (result === true) {
-            return { pass: true, message: message };
-        }
-        if (result) {
-            var valName = expected.name || 'validate';
-            throw new AssertionError({
+        var err = new AssertionError({
+            actual: actualSubset,
+            expected: expectedSubset,
+            operator: 'deepStrictEqual',
+            stackStartFn: fn
+        });
+        err.actual = actual;
+        err.expected = expected;
+        err.operator = fn.name;
+        throw err;
+    }
+
+    innerFail({
+        actual: actual,
+        expected: expected,
+        message: message,
+        operator: fn.name,
+        stackStartFn: fn
+    });
+}
+
+function expectedException(actual, expected, message, fn) {
+    var generatedMessage = false;
+    var throwError = false;
+
+    if (typeof expected !== 'function') {
+        if (expected instanceof RegExp) {
+            var str = String(actual);
+            if (expected.test(str)) {
+                return;
+            }
+
+            if (!message) {
+                generatedMessage = true;
+                message = 'The input did not match the regular expression ' + inspect(expected) + '. Input:\n\n' + inspect(str) + '\n';
+            }
+            throwError = true;
+        } else if (typeof actual !== 'object' || actual === null) {
+            var primitiveErr = new AssertionError({
                 actual: actual,
                 expected: expected,
-                message: 'The "' + valName + '" validation function is expected to ' +
-                         "return \"true\". Received " + inspect(result) +
-                         '\n\nCaught error:\n\n' + (actual instanceof Error ? actual.constructor.name + ': ' + actual.message : inspect(actual)),
-                operator: fn ? fn.name : 'throws',
-                stackStartFn: fn || expectedException
+                message: message,
+                operator: 'deepStrictEqual',
+                stackStartFn: fn
             });
-        }
-        return { pass: false, message: message };
-    }
-
-    if (expected instanceof RegExp) {
-        var str = String(actual);
-        if (expected.test(str)) {
-            return { pass: true, message: message };
-        }
-        var regMsg = message || ('The input did not match the regular expression ' + expected + '. ' +
-            'Input:\n\n' + inspect(str) + '\n');
-        return { pass: false, message: regMsg };
-    }
-
-    if (typeof expected === 'object' && expected !== null) {
-        // Guard against non-object actual
-        if (typeof actual !== 'object' || actual === null) {
-            return { pass: false, message: message };
-        }
-
-        var keys = Object.keys(expected);
-
-        // If expected is an Error instance, auto-include 'name' and 'message'
-        if (expected instanceof Error) {
-            if (keys.indexOf('name') === -1) keys.push('name');
-            if (keys.indexOf('message') === -1) keys.push('message');
-        }
-
-        for (var i = 0; i < keys.length; i++) {
-            var key = keys[i];
-            // Require property presence on actual
-            if (!(key in actual)) {
-                return { pass: false, message: message };
+            primitiveErr.operator = fn.name;
+            throw primitiveErr;
+        } else {
+            var keys = Object.keys(expected);
+            if (expected instanceof Error) {
+                if (keys.indexOf('name') === -1) {
+                    keys.push('name');
+                }
+                if (keys.indexOf('message') === -1) {
+                    keys.push('message');
+                }
+            } else if (keys.length === 0) {
+                throw new ERR_INVALID_ARG_VALUE('error', expected, 'may not be an empty object');
             }
-            // RegExp matching: if expected[key] is RegExp and actual[key] is string, test it
-            if (expected[key] instanceof RegExp && typeof actual[key] === 'string') {
-                if (!expected[key].test(actual[key])) return { pass: false, message: message };
-            } else if (!innerDeepEqual(actual[key], expected[key], true, undefined)) {
-                return { pass: false, message: message };
+
+            for (var keyIdx = 0; keyIdx < keys.length; keyIdx++) {
+                var key = keys[keyIdx];
+                if (typeof actual[key] === 'string' && expected[key] instanceof RegExp && expected[key].test(actual[key])) {
+                    continue;
+                }
+                compareExceptionKey(actual, expected, key, message, keys, fn);
+            }
+            return;
+        }
+    } else if (expected.prototype !== undefined && actual instanceof expected) {
+        return;
+    } else if (Error.isPrototypeOf(expected)) {
+        if (!message) {
+            generatedMessage = true;
+            message = 'The error is expected to be an instance of "' + expected.name + '". Received ';
+
+            if (actual instanceof Error) {
+                var name = (actual && actual.constructor && actual.constructor.name) || actual.name;
+                if (expected.name === name) {
+                    message += 'an error with identical name but a different prototype.';
+                } else {
+                    message += '"' + name + '"';
+                }
+
+                if (actual.message) {
+                    message += '\n\nError message:\n\n' + actual.message;
+                }
+            } else {
+                message += '"' + inspect(actual, { depth: -1 }) + '"';
             }
         }
-        return { pass: true, message: message };
+        throwError = true;
+    } else {
+        var result = expected.call({}, actual);
+        if (result !== true) {
+            if (!message) {
+                generatedMessage = true;
+                var name = expected.name ? '"' + expected.name + '" ' : '';
+                message = 'The ' + name + 'validation function is expected to return "true". Received ' + inspect(result);
+                if (actual instanceof Error) {
+                    message += '\n\nCaught error:\n\n' + actual;
+                }
+            }
+            throwError = true;
+        }
     }
 
-    return { pass: false, message: message };
+    if (throwError) {
+        var err = new AssertionError({
+            actual: actual,
+            expected: expected,
+            message: message,
+            operator: fn.name,
+            stackStartFn: fn
+        });
+        err.generatedMessage = generatedMessage;
+        throw err;
+    }
 }
 
 function invalidArgTypeHelper(input) {
@@ -703,11 +769,123 @@ function invalidArgTypeHelper(input) {
     return ' Received type ' + typeof input + ' (' + String(input) + ')';
 }
 
-function throws(fn, error, message) {
+function getActual(fn) {
     if (typeof fn !== 'function') {
-        var err = new TypeError('The "fn" argument must be of type function.' + invalidArgTypeHelper(fn));
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+        throw new ERR_INVALID_ARG_TYPE('fn', 'Function', fn);
+    }
+
+    try {
+        fn();
+    } catch (e) {
+        return e;
+    }
+
+    return NO_EXCEPTION_SENTINEL;
+}
+
+function checkIsPromise(obj) {
+    if (obj instanceof Promise) {
+        return true;
+    }
+    return obj !== null && typeof obj === 'object' && typeof obj.then === 'function' && typeof obj.catch === 'function';
+}
+
+async function waitForActual(promiseFn) {
+    var resultPromise;
+    if (typeof promiseFn === 'function') {
+        // If this throws synchronously, async function semantics make the returned
+        // promise reject with the thrown error, matching Node.js behavior.
+        resultPromise = promiseFn();
+        if (!checkIsPromise(resultPromise)) {
+            throw new ERR_INVALID_RETURN_VALUE('instance of Promise', 'promiseFn', resultPromise);
+        }
+    } else if (checkIsPromise(promiseFn)) {
+        resultPromise = promiseFn;
+    } else {
+        throw new ERR_INVALID_ARG_TYPE('promiseFn', ['Function', 'Promise'], promiseFn);
+    }
+
+    try {
+        await resultPromise;
+    } catch (e) {
+        return e;
+    }
+
+    return NO_EXCEPTION_SENTINEL;
+}
+
+function expectsError(stackStartFn, actual, error, message) {
+    if (typeof error === 'string') {
+        if (arguments.length === 4) {
+            throw new ERR_INVALID_ARG_TYPE('error', ['Object', 'Error', 'Function', 'RegExp'], error);
+        }
+
+        if (typeof actual === 'object' && actual !== null) {
+            if (actual.message === error) {
+                throw makeAmbiguousArgumentError(
+                    'error/message',
+                    'The error message "' + actual.message + '" is identical to the message.'
+                );
+            }
+        } else {
+            if (actual === error) {
+                throw makeAmbiguousArgumentError(
+                    'error/message',
+                    'The error "' + actual + '" is identical to the message.'
+                );
+            }
+        }
+
+        message = error;
+        error = undefined;
+    } else if (error != null && typeof error !== 'object' && typeof error !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('error', ['Object', 'Error', 'Function', 'RegExp'], error);
+    }
+
+    if (actual === NO_EXCEPTION_SENTINEL) {
+        var details = '';
+        if (error && error.name) {
+            details += ' (' + error.name + ')';
+        }
+        details += message ? ': ' + message : '.';
+        var fnType = stackStartFn === rejects ? 'rejection' : 'exception';
+
+        innerFail({
+            actual: undefined,
+            expected: error,
+            operator: stackStartFn.name,
+            message: 'Missing expected ' + fnType + details,
+            stackStartFn: stackStartFn
+        });
+    }
+
+    if (!error) {
+        return;
+    }
+
+    expectedException(actual, error, message, stackStartFn);
+}
+
+function hasMatchingError(actual, expected) {
+    if (typeof expected !== 'function') {
+        if (expected instanceof RegExp) {
+            return expected.test(String(actual));
+        }
+        throw new ERR_INVALID_ARG_TYPE('expected', ['Function', 'RegExp'], expected);
+    }
+
+    if (expected.prototype !== undefined && actual instanceof expected) {
+        return true;
+    }
+    if (Error.isPrototypeOf(expected)) {
+        return false;
+    }
+    return expected.call({}, actual) === true;
+}
+
+function expectsNoError(stackStartFn, actual, error, message) {
+    if (actual === NO_EXCEPTION_SENTINEL) {
+        return;
     }
 
     if (typeof error === 'string') {
@@ -715,186 +893,39 @@ function throws(fn, error, message) {
         error = undefined;
     }
 
-    var actual;
-    var threw = false;
-    try {
-        fn();
-    } catch (e) {
-        threw = true;
-        actual = e;
-    }
+    if (!error || hasMatchingError(actual, error)) {
+        var details = message ? ': ' + message : '.';
+        var fnType = stackStartFn === doesNotReject ? 'rejection' : 'exception';
+        var actualMessage = actual != null && typeof actual === 'object' && 'message' in actual
+            ? String(actual.message)
+            : String(actual);
 
-    if (!threw) {
-        var missingMsg = 'Missing expected exception';
-        if (typeof error === 'function' && error.name) {
-            missingMsg += ' (' + error.name + ')';
-        }
-        if (message) {
-            missingMsg += ': ' + message;
-        } else {
-            missingMsg += '.';
-        }
         innerFail({
-            actual: undefined,
+            actual: actual,
             expected: error,
-            message: missingMsg,
-            operator: 'throws',
-            stackStartFn: throws
+            operator: stackStartFn.name,
+            message: 'Got unwanted ' + fnType + details + '\nActual message: "' + actualMessage + '"',
+            stackStartFn: stackStartFn
         });
     }
 
-    if (error !== undefined) {
-        var result = expectedException(actual, error, message, throws);
-        if (!result.pass) {
-            innerFail({
-                actual: actual,
-                expected: error,
-                message: result.message || 'The error did not match the expected value.',
-                operator: 'throws',
-                generatedMessage: !message,
-                stackStartFn: throws
-            });
-        }
-    }
+    throw actual;
+}
+
+function throws(fn, error, message) {
+    expectsError(throws, getActual(fn), error, message);
 }
 
 function doesNotThrow(fn, error, message) {
-    if (typeof fn !== 'function') {
-        var err = new TypeError('The "fn" argument must be of type function.' + invalidArgTypeHelper(fn));
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-
-    if (typeof error === 'string') {
-        message = error;
-        error = undefined;
-    }
-
-    try {
-        fn();
-    } catch (e) {
-        if (error !== undefined) {
-            var result = expectedException(e, error, message, doesNotThrow);
-            if (result.pass) {
-                var actualMessage = e != null && typeof e === 'object' && 'message' in e
-                    ? String(e.message) : String(e);
-                var dntMsg = message
-                    ? 'Got unwanted exception: ' + message + '\nActual message: "' + actualMessage + '"'
-                    : 'Got unwanted exception.\nActual message: "' + actualMessage + '"';
-                innerFail({
-                    actual: e,
-                    expected: error,
-                    message: dntMsg,
-                    operator: 'doesNotThrow',
-                    stackStartFn: doesNotThrow
-                });
-            }
-            // Error was thrown but didn't match the expected type - rethrow
-            throw e;
-        } else {
-            var actualMessage = e != null && typeof e === 'object' && 'message' in e
-                ? String(e.message) : String(e);
-            var dntMsg = message
-                ? 'Got unwanted exception: ' + message + '\nActual message: "' + actualMessage + '"'
-                : 'Got unwanted exception.\nActual message: "' + actualMessage + '"';
-            innerFail({
-                actual: e,
-                expected: error,
-                message: dntMsg,
-                operator: 'doesNotThrow',
-                stackStartFn: doesNotThrow
-            });
-        }
-    }
+    expectsNoError(doesNotThrow, getActual(fn), error, message);
 }
 
-async function rejects(asyncFnOrPromise, error, message) {
-    if (typeof asyncFnOrPromise === 'function') {
-        asyncFnOrPromise = asyncFnOrPromise();
-    }
-
-    if (!asyncFnOrPromise || typeof asyncFnOrPromise.then !== 'function') {
-        throw new TypeError('The "asyncFnOrPromise" argument must be a Promise or async function');
-    }
-
-    if (typeof error === 'string') {
-        message = error;
-        error = undefined;
-    }
-
-    var actual;
-    var threw = false;
-    try {
-        await asyncFnOrPromise;
-    } catch (e) {
-        threw = true;
-        actual = e;
-    }
-
-    if (!threw) {
-        innerFail({
-            actual: undefined,
-            expected: error,
-            message: message || 'Missing expected rejection.',
-            operator: 'rejects',
-            stackStartFn: rejects
-        });
-    }
-
-    if (error !== undefined) {
-        var result = expectedException(actual, error, message, rejects);
-        if (!result.pass) {
-            innerFail({
-                actual: actual,
-                expected: error,
-                message: result.message || 'The rejection did not match the expected value.',
-                operator: 'rejects',
-                stackStartFn: rejects
-            });
-        }
-    }
+async function rejects(promiseFn, error, message) {
+    expectsError(rejects, await waitForActual(promiseFn), error, message);
 }
 
-async function doesNotReject(asyncFnOrPromise, error, message) {
-    if (typeof asyncFnOrPromise === 'function') {
-        asyncFnOrPromise = asyncFnOrPromise();
-    }
-
-    if (!asyncFnOrPromise || typeof asyncFnOrPromise.then !== 'function') {
-        throw new TypeError('The "asyncFnOrPromise" argument must be a Promise or async function');
-    }
-
-    if (typeof error === 'string') {
-        message = error;
-        error = undefined;
-    }
-
-    try {
-        await asyncFnOrPromise;
-    } catch (e) {
-        if (error !== undefined) {
-            var result = expectedException(e, error, message, doesNotReject);
-            if (result.pass) {
-                innerFail({
-                    actual: e,
-                    expected: error,
-                    message: result.message || 'Got unwanted rejection.',
-                    operator: 'doesNotReject',
-                    stackStartFn: doesNotReject
-                });
-            }
-            // Didn't match, rethrow
-            throw e;
-        } else {
-            innerFail({
-                actual: e,
-                expected: error,
-                message: message || 'Got unwanted rejection.',
-                operator: 'doesNotReject',
-                stackStartFn: doesNotReject
-            });
-        }
-    }
+async function doesNotReject(promiseFn, error, message) {
+    expectsNoError(doesNotReject, await waitForActual(promiseFn), error, message);
 }
 
 function ifError(value) {
