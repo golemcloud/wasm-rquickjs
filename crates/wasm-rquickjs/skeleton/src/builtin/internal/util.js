@@ -157,7 +157,8 @@ export function isError(e) {
     // An error could be an instance of Error while not being a native error
     // or could be from a different realm and not be instance of Error but still
     // be a native error.
-    return e instanceof Error;
+    return e instanceof Error ||
+        (e !== null && typeof e === 'object' && Object.prototype.toString.call(e) === '[object Error]');
 }
 
 export const kEmptyObject = Object.freeze(Object.create(null));

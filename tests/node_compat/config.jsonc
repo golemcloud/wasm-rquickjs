@@ -32,10 +32,7 @@
     "parallel/test-path-win32-exists.js": {},
 
     // === node:assert tests ===
-    "parallel/test-assert.js": {
-      "skip": true,
-      "reason": "requires source-code inspection (reading call-site expressions for assert.ok falsy messages) which is not available in QuickJS/WASM"
-    },
+    "parallel/test-assert.js": {},
     "parallel/test-assert-async.js": {},
     "parallel/test-assert-builtins-not-read-from-filesystem.js": {},
     "parallel/test-assert-calltracker-calls.js": {},

@@ -1,6 +1,6 @@
 import { inspect, innerDeepEqual } from 'node:util';
 import fs from 'node:fs';
-import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_INVALID_RETURN_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_INVALID_RETURN_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 
 const inspectDiffOptions = {
     depth: 1000,
@@ -14,7 +14,12 @@ function inspectForDiff(value) {
     return inspect(value, inspectDiffOptions);
 }
 
-const ESCAPE_SEQUENCES_REGEXP = /[\x00-\x1F]/g;
+function isError(e) {
+    return e instanceof Error ||
+        (e !== null && typeof e === 'object' && Object.prototype.toString.call(e) === '[object Error]');
+}
+
+const ESCAPE_SEQUENCES_REGEXP = /[\x00-\x09\x0B\x0C\x0E-\x1F]/g;
 
 function escapeControlCharacter(char) {
     switch (char) {
@@ -47,6 +52,341 @@ function isIdentifierPartCharacter(char) {
         code === 95 ||
         code === 36 ||
         code > 0x7f;
+}
+
+function normalizeExpressionIndentation(expression) {
+    if (typeof expression !== 'string' || expression.indexOf('\n') === -1) {
+        return expression;
+    }
+
+    var lines = expression.split('\n');
+    var minContinuationIndent = Infinity;
+    for (var i = 1; i < lines.length; i++) {
+        var line = lines[i];
+        if (!line) {
+            continue;
+        }
+
+        var indent = 0;
+        while (indent < line.length && line.charAt(indent) === ' ') {
+            indent++;
+        }
+
+        if (indent < minContinuationIndent) {
+            minContinuationIndent = indent;
+        }
+    }
+
+    if (!isFinite(minContinuationIndent) || minContinuationIndent <= 2) {
+        return expression;
+    }
+
+    var removeIndent = minContinuationIndent - 2;
+    for (var j = 1; j < lines.length; j++) {
+        var currentLine = lines[j];
+        var removed = 0;
+        while (removed < removeIndent && removed < currentLine.length && currentLine.charAt(removed) === ' ') {
+            removed++;
+        }
+        lines[j] = currentLine.slice(removed);
+    }
+
+    return lines.join('\n');
+}
+
+function normalizeExtractedExpression(expression) {
+    var normalizedExpression = normalizeExpressionIndentation(expression);
+    return normalizedExpression.replace(/^(?:assert|strict)\s*\n\s*\.\s*/, '');
+}
+
+function isInsideQuotedSection(source, index) {
+    var inSingleQuote = false;
+    var inDoubleQuote = false;
+    var inTemplateLiteral = false;
+    var inLineComment = false;
+    var inBlockComment = false;
+    var escaped = false;
+
+    for (var i = 0; i < index; i++) {
+        var char = source.charAt(i);
+        var nextChar = i + 1 < source.length ? source.charAt(i + 1) : '';
+
+        if (inLineComment) {
+            if (char === '\n') {
+                inLineComment = false;
+            }
+            continue;
+        }
+        if (inBlockComment) {
+            if (char === '*' && nextChar === '/') {
+                inBlockComment = false;
+                i++;
+            }
+            continue;
+        }
+
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (inSingleQuote) {
+            if (char === '\\') {
+                escaped = true;
+            } else if (char === "'") {
+                inSingleQuote = false;
+            }
+            continue;
+        }
+
+        if (inDoubleQuote) {
+            if (char === '\\') {
+                escaped = true;
+            } else if (char === '"') {
+                inDoubleQuote = false;
+            }
+            continue;
+        }
+
+        if (inTemplateLiteral) {
+            if (char === '\\') {
+                escaped = true;
+            } else if (char === '`') {
+                inTemplateLiteral = false;
+            }
+            continue;
+        }
+
+        if (char === '/' && nextChar === '/') {
+            inLineComment = true;
+            i++;
+            continue;
+        }
+        if (char === '/' && nextChar === '*') {
+            inBlockComment = true;
+            i++;
+            continue;
+        }
+        if (char === "'") {
+            inSingleQuote = true;
+            continue;
+        }
+        if (char === '"') {
+            inDoubleQuote = true;
+            continue;
+        }
+        if (char === '`') {
+            inTemplateLiteral = true;
+        }
+    }
+
+    return inSingleQuote || inDoubleQuote || inTemplateLiteral || inLineComment || inBlockComment;
+}
+
+function extractNamedCallExpression(sourceSnippet, names, preferLast) {
+    var lastExpression = '';
+
+    for (var nameIdx = 0; nameIdx < names.length; nameIdx++) {
+        var name = names[nameIdx];
+        var searchOffset = 0;
+
+        while (searchOffset < sourceSnippet.length) {
+            var start = sourceSnippet.indexOf(name, searchOffset);
+            if (start < 0) {
+                break;
+            }
+
+            if (isInsideQuotedSection(sourceSnippet, start)) {
+                searchOffset = start + name.length;
+                continue;
+            }
+
+            var previous = start > 0 ? sourceSnippet.charAt(start - 1) : '';
+            if (isIdentifierPartCharacter(previous) || previous === '.') {
+                searchOffset = start + name.length;
+                continue;
+            }
+
+            var openParenIndex = sourceSnippet.indexOf('(', start + name.length);
+            if (openParenIndex < 0) {
+                break;
+            }
+
+            if (openParenIndex - start > 80) {
+                searchOffset = start + name.length;
+                continue;
+            }
+
+            var closeParenIndex = findMatchingParenEnd(sourceSnippet, openParenIndex);
+            if (closeParenIndex < 0) {
+                searchOffset = start + name.length;
+                continue;
+            }
+
+            var expression = sourceSnippet.slice(start, closeParenIndex + 1).trim();
+            if (expression && expression.charAt(0) !== '(') {
+                var normalizedExpression = normalizeExtractedExpression(expression);
+                if (!preferLast) {
+                    return normalizedExpression;
+                }
+
+                lastExpression = normalizedExpression;
+            }
+
+            searchOffset = start + name.length;
+        }
+    }
+
+    return lastExpression;
+}
+
+function areDiffLinesEqual(actualLine, expectedLine, checkCommaDisparity) {
+    if (actualLine === expectedLine) {
+        return true;
+    }
+
+    if (checkCommaDisparity) {
+        return (actualLine + ',') === expectedLine || actualLine === (expectedLine + ',');
+    }
+
+    return false;
+}
+
+function myersBacktrack(trace, actual, expected, checkCommaDisparity) {
+    var actualLength = actual.length;
+    var expectedLength = expected.length;
+    var max = actualLength + expectedLength;
+    var x = actualLength;
+    var y = expectedLength;
+    var result = [];
+
+    for (var diffLevel = trace.length - 1; diffLevel >= 0; diffLevel--) {
+        var v = trace[diffLevel];
+        var diagonalIndex = x - y;
+        var offset = diagonalIndex + max;
+
+        var prevDiagonalIndex;
+        if (diagonalIndex === -diffLevel || (diagonalIndex !== diffLevel && v[offset - 1] < v[offset + 1])) {
+            prevDiagonalIndex = diagonalIndex + 1;
+        } else {
+            prevDiagonalIndex = diagonalIndex - 1;
+        }
+
+        var prevX = v[prevDiagonalIndex + max];
+        var prevY = prevX - prevDiagonalIndex;
+
+        while (x > prevX && y > prevY) {
+            var actualItem = actual[x - 1];
+            var value = (!checkCommaDisparity || actualItem.endsWith(',')) ? actualItem : expected[y - 1];
+            result.push({ type: 'nop', value: value });
+            x--;
+            y--;
+        }
+
+        if (diffLevel > 0) {
+            if (x > prevX) {
+                result.push({ type: 'insert', value: actual[x - 1] });
+                x--;
+            } else {
+                result.push({ type: 'delete', value: expected[y - 1] });
+                y--;
+            }
+        }
+    }
+
+    return result;
+}
+
+function myersDiff(actual, expected, checkCommaDisparity) {
+    var actualLength = actual.length;
+    var expectedLength = expected.length;
+    var max = actualLength + expectedLength;
+    var v = new Int32Array(2 * max + 1);
+    var trace = [];
+
+    for (var diffLevel = 0; diffLevel <= max; diffLevel++) {
+        trace.push(v.slice());
+
+        for (var diagonalIndex = -diffLevel; diagonalIndex <= diffLevel; diagonalIndex += 2) {
+            var offset = diagonalIndex + max;
+            var previousOffset = v[offset - 1];
+            var nextOffset = v[offset + 1];
+
+            var x;
+            if (diagonalIndex === -diffLevel || (diagonalIndex !== diffLevel && previousOffset < nextOffset)) {
+                x = nextOffset;
+            } else {
+                x = previousOffset + 1;
+            }
+
+            var y = x - diagonalIndex;
+            while (x < actualLength && y < expectedLength && areDiffLinesEqual(actual[x], expected[y], checkCommaDisparity)) {
+                x++;
+                y++;
+            }
+
+            v[offset] = x;
+            if (x >= actualLength && y >= expectedLength) {
+                return myersBacktrack(trace, actual, expected, checkCommaDisparity);
+            }
+        }
+    }
+
+    return [];
+}
+
+function printMyersDiff(diffEntries) {
+    var rendered = [];
+    var skipped = false;
+    var nopCount = 0;
+    var kNopLinesToCollapse = 5;
+
+    for (var diffIdx = diffEntries.length - 1; diffIdx >= 0; diffIdx--) {
+        var diffEntry = diffEntries[diffIdx];
+        var previousType = diffIdx < diffEntries.length - 1 ? diffEntries[diffIdx + 1].type : null;
+
+        if (previousType === 'nop' && diffEntry.type !== previousType) {
+            if (nopCount === kNopLinesToCollapse + 1) {
+                rendered.push('  ' + diffEntries[diffIdx + 1].value);
+            } else if (nopCount === kNopLinesToCollapse + 2) {
+                rendered.push('  ' + diffEntries[diffIdx + 2].value);
+                rendered.push('  ' + diffEntries[diffIdx + 1].value);
+            } else if (nopCount >= kNopLinesToCollapse + 3) {
+                rendered.push('...');
+                rendered.push('  ' + diffEntries[diffIdx + 1].value);
+                skipped = true;
+            }
+
+            nopCount = 0;
+        }
+
+        if (diffEntry.type === 'insert') {
+            rendered.push('+ ' + diffEntry.value);
+        } else if (diffEntry.type === 'delete') {
+            rendered.push('- ' + diffEntry.value);
+        } else if (diffEntry.type === 'nop') {
+            if (nopCount < kNopLinesToCollapse) {
+                rendered.push('  ' + diffEntry.value);
+            }
+            nopCount++;
+        }
+    }
+
+    // Flush trailing NOP run (when the sequence ends with or is entirely NOPs)
+    if (nopCount > kNopLinesToCollapse) {
+        if (nopCount === kNopLinesToCollapse + 1) {
+            rendered.push('  ' + diffEntries[0].value);
+        } else if (nopCount === kNopLinesToCollapse + 2) {
+            rendered.push('  ' + diffEntries[1].value);
+            rendered.push('  ' + diffEntries[0].value);
+        } else if (nopCount >= kNopLinesToCollapse + 3) {
+            rendered.push('...');
+            rendered.push('  ' + diffEntries[0].value);
+            skipped = true;
+        }
+    }
+
+    return { message: rendered.join('\n'), skipped: skipped };
 }
 
 function parseStackFrames(stack) {
@@ -88,6 +428,16 @@ function resolveSourceForFrame(frame, currentModuleSource) {
         return undefined;
     }
 
+    if (frame.fileName.startsWith('<') && frame.fileName !== '<input>') {
+        return undefined;
+    }
+
+    // Eval/Function contexts should not use the current module source
+    if (frame.fileName === '[eval]' || frame.fileName === 'eval' ||
+        frame.fileName.startsWith('[eval') || frame.fileName === 'anonymous') {
+        return undefined;
+    }
+
     if (!frame.fileName.startsWith('<')) {
         try {
             var fileSource = fs.readFileSync(frame.fileName, 'utf8');
@@ -125,9 +475,59 @@ function shouldSkipStackFrame(frame, stackStartFnName) {
     return false;
 }
 
+function expressionRelevanceScore(expression, stackStartFnName) {
+    if (!expression) {
+        return -1;
+    }
+
+    if (!stackStartFnName) {
+        return 0;
+    }
+
+    var score = 0;
+    var hasNameReference = expression.indexOf(stackStartFnName) !== -1;
+    if (hasNameReference) {
+        if (expression.startsWith(stackStartFnName + '(')) {
+            score += 5;
+        }
+        if (expression.indexOf('.' + stackStartFnName + '(') !== -1) {
+            score += 4;
+        }
+        if (expression.indexOf("['" + stackStartFnName + "']") !== -1 || expression.indexOf('["' + stackStartFnName + '"]') !== -1) {
+            score += 3;
+        }
+        if (
+            expression.indexOf("['" + stackStartFnName + "'][\"apply\"](") !== -1 ||
+            expression.indexOf("['" + stackStartFnName + "']['apply'](") !== -1 ||
+            expression.indexOf('["' + stackStartFnName + '"]["apply"](') !== -1 ||
+            expression.indexOf('["' + stackStartFnName + '"][\'apply\'](') !== -1
+        ) {
+            score += 6;
+        }
+        if (expression.startsWith(stackStartFnName + '(') || expression.indexOf(stackStartFnName + '(') !== -1) {
+            score += 2;
+        }
+    }
+
+    if (expression.length <= 120) {
+        score += 1;
+    }
+
+    if (expression.indexOf('\\n') !== -1) {
+        score -= 4;
+    }
+
+    if (hasNameReference && (expression.startsWith('assert.throws(') || expression.startsWith('strict.throws('))) {
+        score -= 5;
+    }
+
+    return score;
+}
+
 function findExpressionFromStack(stack, stackStartFnName, currentModuleSource) {
     var frames = parseStackFrames(stack);
     var checkedFrames = 0;
+
     for (var i = 0; i < frames.length; i++) {
         var frame = frames[i];
         if (shouldSkipStackFrame(frame, stackStartFnName)) {
@@ -145,17 +545,65 @@ function findExpressionFromStack(stack, stackStartFnName, currentModuleSource) {
         }
 
         var sourceLines = source.split(/\r?\n/);
-        var candidateLineNumbers = [frame.lineNumber, frame.lineNumber - 1, frame.lineNumber - 2];
+        var frameBestExpression = '';
+        var frameBestRank = -Infinity;
+        var candidateLineNumbers = [];
+        for (var lineOffset = 0; lineOffset <= 10; lineOffset++) {
+            candidateLineNumbers.push(frame.lineNumber - lineOffset);
+        }
         for (var j = 0; j < candidateLineNumbers.length; j++) {
             var lineNumber = candidateLineNumbers[j];
             if (lineNumber <= 0 || lineNumber > sourceLines.length) {
                 continue;
             }
 
-            var sourceExpression = extractCallExpression(sourceLines[lineNumber - 1], frame.columnNumber);
-            if (sourceExpression) {
-                return sourceExpression;
+            var sourceExpression = extractCallExpression(sourceLines, lineNumber, frame.columnNumber);
+            var lineExpression = extractNamedCallExpression(sourceLines[lineNumber - 1], ['assert', 'strict'], true);
+            var arrowExpression = '';
+            var arrowMatch = sourceLines[lineNumber - 1].match(/=>\s*([A-Za-z_$][\w$]*\([^)]*\))/);
+            if (arrowMatch) {
+                arrowExpression = normalizeExtractedExpression(arrowMatch[1]);
             }
+            var wrapperExpression = '';
+            if (sourceExpression) {
+                var wrapperInvocationMatch = sourceExpression.match(/^([A-Za-z_$][\w$]*)\([^)]*\)$/);
+                if (wrapperInvocationMatch) {
+                    var wrapperName = wrapperInvocationMatch[1];
+                    var wrapperDefinitionRegExp = new RegExp('\\b' + wrapperName + '\\s*=\\s*\\([^)]*\\)\\s*=>\\s*([A-Za-z_$][\\w$]*\\([^)]*\\))');
+                    var startSearchLine = Math.max(0, lineNumber - 4);
+                    for (var searchLine = startSearchLine; searchLine < lineNumber; searchLine++) {
+                        var wrapperDefinitionMatch = sourceLines[searchLine].match(wrapperDefinitionRegExp);
+                        if (wrapperDefinitionMatch) {
+                            wrapperExpression = normalizeExtractedExpression(wrapperDefinitionMatch[1]);
+                        }
+                    }
+                }
+            }
+
+            var candidates = [sourceExpression, lineExpression, arrowExpression, wrapperExpression];
+
+            for (var candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
+                var candidateExpression = candidates[candidateIdx];
+                if (!candidateExpression) {
+                    continue;
+                }
+
+                var relevanceScore = expressionRelevanceScore(candidateExpression, stackStartFnName);
+                if (relevanceScore < 0) {
+                    continue;
+                }
+
+                var lineDistance = frame.lineNumber - lineNumber;
+                var candidateRank = relevanceScore * 100 - lineDistance * 5 - i;
+                if (candidateRank > frameBestRank || (candidateRank === frameBestRank && (frameBestExpression === '' || candidateExpression.length < frameBestExpression.length))) {
+                    frameBestRank = candidateRank;
+                    frameBestExpression = candidateExpression;
+                }
+            }
+        }
+
+        if (frameBestExpression) {
+            return frameBestExpression;
         }
     }
 
@@ -233,8 +681,18 @@ function findMatchingParenEnd(source, openParenIndex) {
     return -1;
 }
 
-function extractCallExpression(sourceLine, columnNumber) {
-    if (typeof sourceLine !== 'string' || sourceLine.length === 0) {
+function extractCallExpression(sourceLines, lineNumber, columnNumber) {
+    if (!Array.isArray(sourceLines) || sourceLines.length === 0) {
+        return '';
+    }
+
+    if (lineNumber <= 0 || lineNumber > sourceLines.length) {
+        return '';
+    }
+
+    var startLineIndex = lineNumber - 1;
+    var sourceLine = sourceLines[startLineIndex];
+    if (typeof sourceLine !== 'string') {
         return '';
     }
 
@@ -242,9 +700,17 @@ function extractCallExpression(sourceLine, columnNumber) {
         return '';
     }
 
-    var index = Math.max(0, Math.min(sourceLine.length - 1, Math.max(1, columnNumber) - 1));
-    var beforeIndex = sourceLine.lastIndexOf('(', index);
-    var afterIndex = sourceLine.indexOf('(', index);
+    // Keep the scan local to avoid accidentally consuming surrounding unrelated code.
+    var maxSnippetLines = Math.min(sourceLines.length, startLineIndex + 20);
+    var sourceSnippet = sourceLines.slice(startLineIndex, maxSnippetLines).join('\n');
+
+    var index = 0;
+    if (sourceLine.length > 0) {
+        index = Math.max(0, Math.min(sourceLine.length - 1, Math.max(1, columnNumber) - 1));
+    }
+
+    var beforeIndex = sourceSnippet.lastIndexOf('(', index);
+    var afterIndex = sourceSnippet.indexOf('(', index);
     var openParenIndex = -1;
 
     if (beforeIndex >= 0 && afterIndex >= 0) {
@@ -259,14 +725,14 @@ function extractCallExpression(sourceLine, columnNumber) {
         return '';
     }
 
-    var closeParenIndex = findMatchingParenEnd(sourceLine, openParenIndex);
+    var closeParenIndex = findMatchingParenEnd(sourceSnippet, openParenIndex);
     if (closeParenIndex < 0) {
         return '';
     }
 
     var startIndex = openParenIndex;
     while (startIndex > 0) {
-        var previous = sourceLine.charAt(startIndex - 1);
+        var previous = sourceSnippet.charAt(startIndex - 1);
         if (isIdentifierPartCharacter(previous) || previous === '.' || previous === '?' || previous === '[' || previous === ']') {
             startIndex--;
             continue;
@@ -274,8 +740,21 @@ function extractCallExpression(sourceLine, columnNumber) {
         break;
     }
 
-    var expression = sourceLine.slice(startIndex, closeParenIndex + 1).trim();
+    var charBeforeStart = startIndex > 0 ? sourceSnippet.charAt(startIndex - 1) : '';
+    if (charBeforeStart === '"' || charBeforeStart === '\'' || charBeforeStart === '`') {
+        return '';
+    }
+
+    var expression = sourceSnippet.slice(startIndex, closeParenIndex + 1).trim();
     if (!expression) {
+        return '';
+    }
+
+    if (expression.charAt(0) === '(') {
+        return '';
+    }
+
+    if (expression.startsWith('eval(') || expression.startsWith('new Function(')) {
         return '';
     }
 
@@ -283,23 +762,53 @@ function extractCallExpression(sourceLine, columnNumber) {
         expression = expression.slice(1).trimStart();
     }
 
-    return expression;
+    var isLikelyAssertInvocation = expression.indexOf('assert') !== -1 ||
+        expression.indexOf('strict') !== -1 ||
+        expression.startsWith('ok(');
+
+    if (!isLikelyAssertInvocation) {
+        var assertionExpression = extractNamedCallExpression(sourceSnippet, ['assert', 'strict']);
+        if (assertionExpression) {
+            return assertionExpression;
+        }
+    } else if (expression.startsWith('assert(') && sourceLine.indexOf('assert(') !== sourceLine.lastIndexOf('assert(')) {
+        var sameLineAssertionExpression = extractNamedCallExpression(sourceLine, ['assert'], true);
+        if (sameLineAssertionExpression) {
+            return sameLineAssertionExpression;
+        }
+    }
+
+    return normalizeExtractedExpression(expression);
 }
 
 function getErrMessage(stackStartFn) {
     var stack;
-    if (typeof Error.captureStackTrace === 'function') {
-        var stackHolder = {};
-        Error.captureStackTrace(stackHolder, stackStartFn);
-        stack = stackHolder.stack;
+    var originalStackTraceLimit = Error.stackTraceLimit;
+    var restoreStackTraceLimit = false;
+
+    if (typeof originalStackTraceLimit === 'number' && originalStackTraceLimit < 4) {
+        Error.stackTraceLimit = 4;
+        restoreStackTraceLimit = true;
     }
 
-    if (typeof stack !== 'string' || stack.length === 0) {
-        stack = new Error().stack;
+    try {
+        if (typeof Error.captureStackTrace === 'function') {
+            var stackHolder = {};
+            Error.captureStackTrace(stackHolder, stackStartFn);
+            stack = stackHolder.stack;
+        }
+
+        if (typeof stack !== 'string' || stack.length === 0) {
+            stack = new Error().stack;
+        }
+    } finally {
+        if (restoreStackTraceLimit) {
+            Error.stackTraceLimit = originalStackTraceLimit;
+        }
     }
 
     var currentModule = globalThis.__wasm_rquickjs_current_module;
-    if (!currentModule || typeof currentModule.filename !== 'string' || currentModule.filename.indexOf('/test/fixtures/') === -1) {
+    if (!currentModule) {
         return undefined;
     }
 
@@ -310,7 +819,14 @@ function getErrMessage(stackStartFn) {
         return undefined;
     }
 
+    if (sourceExpression.indexOf('eval(') !== -1 || sourceExpression.indexOf('new Function(') !== -1) {
+        return undefined;
+    }
+
     sourceExpression = sourceExpression.replace(ESCAPE_SEQUENCES_REGEXP, escapeControlCharacter);
+    sourceExpression = sourceExpression.replace(/\\\\u([0-9a-fA-F]{4})/g, function(_, hex) {
+        return '\\u' + hex;
+    });
     return 'The expression evaluated to a falsy value:\n\n  ' + sourceExpression + '\n';
 }
 
@@ -356,7 +872,7 @@ class AssertionError extends Error {
                 } else {
                     message = actualInsp + '\n\nshould not loosely deep-equal\n\n' + expectedInsp;
                 }
-        } else if (operator === 'deepStrictEqual') {
+        } else if (operator === 'deepStrictEqual' || operator === 'partialDeepStrictEqual') {
                 var actualInsp = inspectForDiff(actual);
                 var expectedInsp = inspectForDiff(expected);
                 var actualIsPrimitive = actual === null || (typeof actual !== 'object' && typeof actual !== 'function');
@@ -367,26 +883,17 @@ class AssertionError extends Error {
                 var actualLines = actualInsp.split('\n');
                 var expectedLines = expectedInsp.split('\n');
                 var header = 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n';
-                // Check for comma disparity: lines differing only by trailing comma
                 var checkCommaDisparity = actual != null && typeof actual === 'object';
-                function linesEqual(a, b) {
-                    if (a === b) return true;
-                    if (checkCommaDisparity) {
-                        return (a + ',') === b || a === (b + ',');
-                    }
-                    return false;
-                }
-                // Diff generation
                 var m = actualLines.length;
                 var n = expectedLines.length;
-                var diffLines = [];
+
                 if (m > 500 || n > 500 || m * n > 100000) {
-                    // Fallback for very large inputs: simple line-by-line
+                    var diffLines = [];
                     var maxLen = Math.max(m, n);
                     for (var di = 0; di < maxLen; di++) {
                         var aLine = di < m ? actualLines[di] : undefined;
                         var eLine = di < n ? expectedLines[di] : undefined;
-                        if (aLine !== undefined && eLine !== undefined && linesEqual(aLine, eLine)) {
+                        if (aLine !== undefined && eLine !== undefined && areDiffLinesEqual(aLine, eLine, checkCommaDisparity)) {
                             var commonLine = checkCommaDisparity && !aLine.endsWith(',') ? eLine : aLine;
                             diffLines.push('  ' + commonLine);
                         } else {
@@ -394,87 +901,14 @@ class AssertionError extends Error {
                             if (eLine !== undefined) diffLines.push('- ' + eLine);
                         }
                     }
+                    message = header + diffLines.join('\n') + '\n';
                 } else {
-                    // LCS-based diff
-                    var dp = new Array(m + 1);
-                    for (var i = 0; i <= m; i++) {
-                        dp[i] = new Array(n + 1);
-                        for (var j = 0; j <= n; j++) dp[i][j] = 0;
+                    var diffResult = printMyersDiff(myersDiff(actualLines, expectedLines, checkCommaDisparity));
+                    if (diffResult.skipped) {
+                        header = header.replace('\n\n', '\n... Skipped lines\n\n');
                     }
-                    for (var i = 1; i <= m; i++) {
-                        for (var j = 1; j <= n; j++) {
-                            if (linesEqual(actualLines[i - 1], expectedLines[j - 1])) {
-                                dp[i][j] = dp[i - 1][j - 1] + 1;
-                            } else {
-                                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-                            }
-                        }
-                    }
-                    var ai = m, ei = n;
-                    var rawDiff = [];
-                    while (ai > 0 || ei > 0) {
-                        if (ai > 0 && ei > 0 && linesEqual(actualLines[ai - 1], expectedLines[ei - 1])) {
-                            var aItem = actualLines[ai - 1];
-                            var commonLine = checkCommaDisparity && !aItem.endsWith(',') ? expectedLines[ei - 1] : aItem;
-                            rawDiff.push({ type: ' ', line: commonLine });
-                            ai--; ei--;
-                        } else if (ei > 0 && (ai === 0 || dp[ai][ei - 1] >= dp[ai - 1][ei])) {
-                            rawDiff.push({ type: '-', line: expectedLines[ei - 1] });
-                            ei--;
-                        } else {
-                            rawDiff.push({ type: '+', line: actualLines[ai - 1] });
-                            ai--;
-                        }
-                    }
-                    rawDiff.reverse();
-                    for (var di = 0; di < rawDiff.length; di++) {
-                        diffLines.push(rawDiff[di].type + ' ' + rawDiff[di].line);
-                    }
+                    message = header + diffResult.message + '\n';
                 }
-                // Context collapsing: collapse runs of 8+ unchanged lines
-                var kNopLinesToCollapse = 5;
-                var collapsed = [];
-                var skipped = false;
-                var nopRun = [];
-                for (var ci = 0; ci < diffLines.length; ci++) {
-                    var dl = diffLines[ci];
-                    var isNop = dl.length >= 2 && dl[0] === ' ' && dl[1] === ' ';
-                    if (isNop) {
-                        nopRun.push(dl);
-                    } else {
-                        if (nopRun.length >= kNopLinesToCollapse + 3) {
-                            for (var ni = 0; ni < kNopLinesToCollapse; ni++) {
-                                collapsed.push(nopRun[ni]);
-                            }
-                            collapsed.push('...');
-                            collapsed.push(nopRun[nopRun.length - 1]);
-                            skipped = true;
-                        } else {
-                            for (var ni = 0; ni < nopRun.length; ni++) {
-                                collapsed.push(nopRun[ni]);
-                            }
-                        }
-                        nopRun = [];
-                        collapsed.push(dl);
-                    }
-                }
-                // Flush trailing NOP run
-                if (nopRun.length >= kNopLinesToCollapse + 3) {
-                    for (var ni = 0; ni < kNopLinesToCollapse; ni++) {
-                        collapsed.push(nopRun[ni]);
-                    }
-                    collapsed.push('...');
-                    collapsed.push(nopRun[nopRun.length - 1]);
-                    skipped = true;
-                } else {
-                    for (var ni = 0; ni < nopRun.length; ni++) {
-                        collapsed.push(nopRun[ni]);
-                    }
-                }
-                if (skipped) {
-                    header = header.replace('\n\n', '\n... Skipped lines\n\n');
-                }
-                message = header + collapsed.join('\n') + '\n';
                 }
         } else if (operator === 'notDeepStrictEqual') {
                     var actualInsp2 = inspectForDiff(actual);
@@ -493,6 +927,9 @@ class AssertionError extends Error {
         } else if (operator === 'notStrictEqual') {
                     var actualInsp2 = inspectForDiff(actual);
                     var base2 = 'Expected "actual" to be strictly unequal to:';
+                    if ((typeof actual === 'object' && actual !== null) || typeof actual === 'function') {
+                        base2 = 'Expected "actual" not to be reference-equal to "expected":';
+                    }
                     var lines2 = actualInsp2.split('\n');
                     if (lines2.length === 1) {
                         message = base2 + (lines2[0].length > 5 ? '\n\n' : ' ') + lines2[0];
@@ -506,23 +943,27 @@ class AssertionError extends Error {
                     if (isObjCompare) {
                         var actualInsp3 = inspectForDiff(actual);
                         var expectedInsp3 = inspectForDiff(expected);
-                        message = 'Expected "actual" to be reference-equal to "expected":\n' +
-                            '+ actual - expected\n\n';
-                        var aLines3 = actualInsp3.split('\n');
-                        var eLines3 = expectedInsp3.split('\n');
-                        var maxLen3 = Math.max(aLines3.length, eLines3.length);
-                        var diffParts3 = [];
-                        for (var si = 0; si < maxLen3; si++) {
-                            var aL3 = si < aLines3.length ? aLines3[si] : undefined;
-                            var eL3 = si < eLines3.length ? eLines3[si] : undefined;
-                            if (aL3 !== undefined && eL3 !== undefined && aL3 === eL3) {
-                                diffParts3.push('  ' + aL3);
-                            } else {
-                                if (aL3 !== undefined) diffParts3.push('+ ' + aL3);
-                                if (eL3 !== undefined) diffParts3.push('- ' + eL3);
+                        if (actualInsp3 === expectedInsp3) {
+                            message = 'Values have same structure but are not reference-equal:\n\n' + actualInsp3 + '\n';
+                        } else {
+                            message = 'Expected "actual" to be reference-equal to "expected":\n' +
+                                '+ actual - expected\n\n';
+                            var aLines3 = actualInsp3.split('\n');
+                            var eLines3 = expectedInsp3.split('\n');
+                            var maxLen3 = Math.max(aLines3.length, eLines3.length);
+                            var diffParts3 = [];
+                            for (var si = 0; si < maxLen3; si++) {
+                                var aL3 = si < aLines3.length ? aLines3[si] : undefined;
+                                var eL3 = si < eLines3.length ? eLines3[si] : undefined;
+                                if (aL3 !== undefined && eL3 !== undefined && aL3 === eL3) {
+                                    diffParts3.push('  ' + aL3);
+                                } else {
+                                    if (aL3 !== undefined) diffParts3.push('+ ' + aL3);
+                                    if (eL3 !== undefined) diffParts3.push('- ' + eL3);
+                                }
                             }
+                            message += diffParts3.join('\n') + '\n';
                         }
-                        message += diffParts3.join('\n') + '\n';
                     } else {
                         var actualStr = inspectForDiff(actual);
                         var expectedStr = inspectForDiff(expected);
@@ -539,6 +980,23 @@ class AssertionError extends Error {
                             var ePrefixed = eLines4.map(function(l) { return '- ' + l; }).join('\n');
                             message = 'Expected values to be strictly equal:\n+ actual - expected\n\n' +
                                 aPrefixed + '\n' + ePrefixed + '\n';
+
+                            if (typeof actual === 'string' && typeof expected === 'string' && isSingleLine) {
+                                var indicatorIdx = -1;
+                                var maxIdx = Math.min(actualStr.length, expectedStr.length);
+                                for (var idx = 0; idx < maxIdx; idx++) {
+                                    if (actualStr.charAt(idx) !== expectedStr.charAt(idx)) {
+                                        if (idx >= 3) {
+                                            indicatorIdx = idx;
+                                        }
+                                        break;
+                                    }
+                                }
+
+                                if (indicatorIdx !== -1) {
+                                    message += ' '.repeat(indicatorIdx + 2) + '^\n';
+                                }
+                            }
                         }
                     }
         } else {
@@ -564,11 +1022,16 @@ class AssertionError extends Error {
         if (options.message != null) {
             var userMsg = String(options.message);
             if (message != null) {
-                var nnIdx = message.indexOf('\n\n');
-                if (nnIdx >= 0) {
-                    message = userMsg + '\n\n' + message.slice(nnIdx + 2);
+                var diffStartIdx = message.indexOf('\n+ actual - expected\n\n');
+                if (diffStartIdx >= 0) {
+                    message = userMsg + message.slice(diffStartIdx);
                 } else {
-                    message = userMsg;
+                    var nnIdx = message.indexOf('\n\n');
+                    if (nnIdx >= 0) {
+                        message = userMsg + '\n\n' + message.slice(nnIdx + 2);
+                    } else {
+                        message = userMsg;
+                    }
                 }
             } else {
                 message = userMsg;
@@ -585,7 +1048,8 @@ class AssertionError extends Error {
         this.name = 'AssertionError';
 
         if (typeof Error.captureStackTrace === 'function') {
-            Error.captureStackTrace(this, options.stackStartFn || this.constructor);
+            var stackStartFunction = options.stackStartFn || options.stackStartFunction || this.constructor;
+            Error.captureStackTrace(this, stackStartFunction);
         }
         // QuickJS stacks don't include the error message; prepend it to match Node.js format
         if (typeof this.stack === 'string' && !this.stack.includes(message)) {
@@ -631,6 +1095,10 @@ class AssertionError extends Error {
         this.actual = tmpActual;
         this.expected = tmpExpected;
         return result;
+    }
+
+    [inspect.custom](depth, ctx) {
+        return this.inspect(depth, ctx);
     }
 }
 
@@ -731,6 +1199,10 @@ function ok(value, message) {
 }
 
 function equal(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     // eslint-disable-next-line eqeqeq
     if (actual != expected && !Object.is(actual, expected)) {
         innerFail({
@@ -744,6 +1216,10 @@ function equal(actual, expected, message) {
 }
 
 function notEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     // eslint-disable-next-line eqeqeq
     if (actual == expected || Object.is(actual, expected)) {
         innerFail({
@@ -757,6 +1233,10 @@ function notEqual(actual, expected, message) {
 }
 
 function strictEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     if (!Object.is(actual, expected)) {
         innerFail({
             actual: actual,
@@ -769,6 +1249,10 @@ function strictEqual(actual, expected, message) {
 }
 
 function notStrictEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     if (Object.is(actual, expected)) {
         innerFail({
             actual: actual,
@@ -791,6 +1275,10 @@ function hasOwn(obj, prop) {
 }
 
 function deepEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     if (!innerDeepEqual(actual, expected, false, undefined)) {
         innerFail({
             actual: actual,
@@ -803,6 +1291,10 @@ function deepEqual(actual, expected, message) {
 }
 
 function notDeepEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     if (innerDeepEqual(actual, expected, false, undefined)) {
         innerFail({
             actual: actual,
@@ -815,6 +1307,10 @@ function notDeepEqual(actual, expected, message) {
 }
 
 function deepStrictEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     if (!innerDeepEqual(actual, expected, true, undefined)) {
         innerFail({
             actual: actual,
@@ -827,6 +1323,10 @@ function deepStrictEqual(actual, expected, message) {
 }
 
 function notDeepStrictEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     if (innerDeepEqual(actual, expected, true, undefined)) {
         innerFail({
             actual: actual,
@@ -839,6 +1339,10 @@ function notDeepStrictEqual(actual, expected, message) {
 }
 
 function partialDeepStrictEqual(actual, expected, message) {
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('actual', 'expected');
+    }
+
     if (!innerPartialDeepEqual(actual, expected, createPartialDeepMemo())) {
         innerFail({
             actual: actual,
@@ -1252,7 +1756,7 @@ function innerPartialDeepEqual(actual, expected, memo) {
 // --- throws / doesNotThrow / rejects / doesNotReject ---
 
 function makeAmbiguousArgumentError(arg, details) {
-    var err = new TypeError('The ' + arg + ' argument is ambiguous. ' + details);
+    var err = new TypeError('The "' + arg + '" argument is ambiguous. ' + details);
     err.code = 'ERR_AMBIGUOUS_ARGUMENT';
     return err;
 }
@@ -1378,7 +1882,7 @@ function expectedException(actual, expected, message, fn) {
             generatedMessage = true;
             message = 'The error is expected to be an instance of "' + expected.name + '". Received ';
 
-            if (actual instanceof Error) {
+            if (isError(actual)) {
                 var name = (actual && actual.constructor && actual.constructor.name) || actual.name;
                 if (expected.name === name) {
                     message += 'an error with identical name but a different prototype.';
@@ -1430,7 +1934,7 @@ function invalidArgTypeHelper(input) {
         if (ctorName) return ' Received an instance of ' + ctorName;
         return ' Received [object]';
     }
-    return ' Received type ' + typeof input + ' (' + String(input) + ')';
+    return ' Received type ' + typeof input + ' (' + inspect(input) + ')';
 }
 
 function getActual(fn) {
@@ -1576,20 +2080,24 @@ function expectsNoError(stackStartFn, actual, error, message) {
     throw actual;
 }
 
-function throws(fn, error, message) {
-    expectsError(throws, getActual(fn), error, message);
+function throws(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    expectsError.apply(null, [throws, getActual(fn)].concat(args));
 }
 
-function doesNotThrow(fn, error, message) {
-    expectsNoError(doesNotThrow, getActual(fn), error, message);
+function doesNotThrow(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    expectsNoError.apply(null, [doesNotThrow, getActual(fn)].concat(args));
 }
 
-async function rejects(promiseFn, error, message) {
-    expectsError(rejects, await waitForActual(promiseFn), error, message);
+async function rejects(promiseFn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    expectsError.apply(null, [rejects, await waitForActual(promiseFn)].concat(args));
 }
 
-async function doesNotReject(promiseFn, error, message) {
-    expectsNoError(doesNotReject, await waitForActual(promiseFn), error, message);
+async function doesNotReject(promiseFn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn)].concat(args));
 }
 
 function ifError(value) {
@@ -1612,49 +2120,73 @@ function ifError(value) {
 }
 
 function match(string, regexp, message) {
+    if (!(regexp instanceof RegExp)) {
+        var err = new ERR_INVALID_ARG_TYPE('regexp', 'RegExp', regexp);
+        throw err;
+    }
     if (typeof string !== 'string') {
+        if (message) {
+            throw new AssertionError({
+                actual: string,
+                expected: regexp,
+                message: message,
+                operator: 'match',
+                stackStartFn: match
+            });
+        }
         innerFail({
             actual: string,
             expected: regexp,
-            message: message || 'The "string" argument must be of type string. Received type ' + typeof string,
+            message: 'The "string" argument must be of type string. Received type ' + typeof string + ' (' + inspect(string) + ')',
             operator: 'match',
-            stackStartFn: match
+            stackStartFn: match,
+            generatedMessage: true
         });
-    }
-    if (!(regexp instanceof RegExp)) {
-        throw new TypeError('The "regexp" argument must be an instance of RegExp');
     }
     if (!regexp.test(string)) {
         innerFail({
             actual: string,
             expected: regexp,
-            message: message || 'The input did not match the regular expression ' + inspect(regexp) + '. Input: ' + inspect(string),
+            message: message || 'The input did not match the regular expression ' + inspect(regexp) + '. Input:\n\n' + inspect(string) + '\n',
             operator: 'match',
-            stackStartFn: match
+            stackStartFn: match,
+            generatedMessage: !message
         });
     }
 }
 
 function doesNotMatch(string, regexp, message) {
+    if (!(regexp instanceof RegExp)) {
+        var err = new ERR_INVALID_ARG_TYPE('regexp', 'RegExp', regexp);
+        throw err;
+    }
     if (typeof string !== 'string') {
+        if (message) {
+            throw new AssertionError({
+                actual: string,
+                expected: regexp,
+                message: message,
+                operator: 'doesNotMatch',
+                stackStartFn: doesNotMatch
+            });
+        }
         innerFail({
             actual: string,
             expected: regexp,
-            message: message || 'The "string" argument must be of type string. Received type ' + typeof string,
+            message: 'The "string" argument must be of type string. Received type ' + typeof string + ' (' + inspect(string) + ')',
             operator: 'doesNotMatch',
-            stackStartFn: doesNotMatch
+            stackStartFn: doesNotMatch,
+            generatedMessage: true
         });
-    }
-    if (!(regexp instanceof RegExp)) {
-        throw new TypeError('The "regexp" argument must be an instance of RegExp');
     }
     if (regexp.test(string)) {
         innerFail({
             actual: string,
             expected: regexp,
-            message: message || 'The input was expected to not match the regular expression ' + inspect(regexp) + '. Input: ' + inspect(string),
+            message: message || 'The input was expected to not match the regular expression ' + inspect(regexp) + '. Input:\n\n' + inspect(string) + '\n',
             operator: 'doesNotMatch',
-            stackStartFn: doesNotMatch
+            stackStartFn: doesNotMatch,
+            generatedMessage: !message
         });
     }
 }
@@ -1848,7 +2380,7 @@ class CallTracker {
 // --- Wire up the main assert function ---
 
 var assert = function assert(value, message) {
-    ok(value, message);
+    innerOk(assert, arguments.length, value, message);
 };
 
 assert.ok = ok;
@@ -1873,7 +2405,7 @@ assert.AssertionError = AssertionError;
 assert.CallTracker = CallTracker;
 
 var strict = function strict(value, message) {
-    ok(value, message);
+    innerOk(strict, arguments.length, value, message);
 };
 
 strict.ok = ok;

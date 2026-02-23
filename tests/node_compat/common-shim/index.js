@@ -168,7 +168,15 @@ function runInlineEval(command, args, options) {
 
         var moduleObject = { exports: {} };
         var evalFn = new Function('require', 'module', 'exports', evalSource + '\n//# sourceURL=[eval]\n');
-        var result = evalFn(require, moduleObject, moduleObject.exports);
+        // Clear module context to prevent source inspection from reading the wrong source
+        var savedModuleContext = globalThis.__wasm_rquickjs_current_module;
+        globalThis.__wasm_rquickjs_current_module = undefined;
+        var result;
+        try {
+            result = evalFn(require, moduleObject, moduleObject.exports);
+        } finally {
+            globalThis.__wasm_rquickjs_current_module = savedModuleContext;
+        }
 
         if (parsed.printResult && result !== undefined) {
             stdout += String(result) + '\n';

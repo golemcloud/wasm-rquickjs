@@ -7,6 +7,159 @@ import { testPathToFilter } from "./tests.js";
 
 const MAX_PREVIEW_LINES = 20;
 
+// ANSI color helpers
+const c = {
+  reset: "\x1b[0m",
+  dim: "\x1b[2m",
+  bold: "\x1b[1m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+};
+
+function elapsed(startMs: number): string {
+  const s = Math.floor((Date.now() - startMs) / 1000);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m > 0 ? `${m}m${sec}s` : `${sec}s`;
+}
+
+function truncLine(text: string, max = 120): string {
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+function shortPath(p: string): string {
+  // Strip common prefixes for readability
+  return p
+    .replace(/^\/Users\/[^/]+\/projects\/[^/]+\/[^/]+\//, "")
+    .replace(/^\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/[^/]+\//, "");
+}
+
+const PATCH_MAX_LINES = 12;
+
+function formatPatch(icon: string, toolName: string, patchText: string): string {
+  const lines = patchText.split("\n");
+  const header: string[] = [];
+  const diffLines: string[] = [];
+  let filesChanged = 0;
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    // V4A format markers
+    if (line.startsWith("*** Begin Patch") || line.startsWith("*** End Patch")) continue;
+
+    // File headers
+    if (line.startsWith("*** ") || line.startsWith("--- ") || line.startsWith("+++ ")) {
+      // Extract file path from "*** path/to/file" or "+++ b/path/to/file"
+      const filePath = line.replace(/^(\*{3}|---|\+{3})\s+(b\/)?/, "");
+      if (filePath && !header.includes(filePath)) {
+        header.push(shortPath(filePath));
+        filesChanged++;
+      }
+      continue;
+    }
+
+    // Hunk headers
+    if (line.startsWith("@@")) {
+      diffLines.push(`${c.cyan}${truncLine(line, 80)}${c.reset}`);
+      continue;
+    }
+
+    // Diff content
+    if (line.startsWith("+")) {
+      diffLines.push(`${c.green}${truncLine(line, 100)}${c.reset}`);
+    } else if (line.startsWith("-")) {
+      diffLines.push(`${c.red}${truncLine(line, 100)}${c.reset}`);
+    } else if (line.length > 0) {
+      diffLines.push(`${c.dim}${truncLine(line, 100)}${c.reset}`);
+    }
+  }
+
+  const fileList = header.length > 0
+    ? header.map(f => `${c.cyan}${f}${c.reset}`).join(", ")
+    : `${c.dim}(unknown files)${c.reset}`;
+
+  const summary = `${icon} ${toolName} ${fileList} ${c.dim}(${filesChanged} file${filesChanged !== 1 ? "s" : ""})${c.reset}`;
+
+  if (diffLines.length === 0) return summary;
+
+  const shown = diffLines.slice(0, PATCH_MAX_LINES);
+  const remaining = diffLines.length - shown.length;
+  const truncNote = remaining > 0 ? `\n    ${c.dim}… ${remaining} more line${remaining !== 1 ? "s" : ""}${c.reset}` : "";
+
+  return `${summary}\n${shown.map(l => `    ${l}`).join("\n")}${truncNote}`;
+}
+
+function formatToolUse(name: string, input: Record<string, unknown>): string {
+  const icon = `${c.magenta}▶${c.reset}`;
+  const toolName = `${c.magenta}${c.bold}${name}${c.reset}`;
+
+  switch (name) {
+    case "Read": {
+      const p = shortPath(String(input.path ?? ""));
+      const range = input.read_range ? ` ${c.dim}L${(input.read_range as number[])[0]}-${(input.read_range as number[])[1]}${c.reset}` : "";
+      return `${icon} ${toolName} ${c.cyan}${p}${c.reset}${range}`;
+    }
+    case "edit_file": {
+      const p = shortPath(String(input.path ?? ""));
+      const old = String(input.old_str ?? "").split("\n")[0];
+      return `${icon} ${toolName} ${c.cyan}${p}${c.reset} ${c.dim}${truncLine(old, 60)}${c.reset}`;
+    }
+    case "create_file": {
+      const p = shortPath(String(input.path ?? ""));
+      return `${icon} ${toolName} ${c.cyan}${p}${c.reset}`;
+    }
+    case "Bash": {
+      const cmd = truncLine(String(input.cmd ?? ""), 90);
+      const cwd = input.cwd ? ` ${c.dim}in ${shortPath(String(input.cwd))}${c.reset}` : "";
+      return `${icon} ${toolName} ${c.yellow}$ ${cmd}${c.reset}${cwd}`;
+    }
+    case "Grep": {
+      const pattern = String(input.pattern ?? "");
+      const loc = input.path ? shortPath(String(input.path)) : input.glob ? String(input.glob) : "";
+      return `${icon} ${toolName} ${c.yellow}/${pattern}/${c.reset} ${c.dim}in ${loc}${c.reset}`;
+    }
+    case "glob": {
+      return `${icon} ${toolName} ${c.yellow}${input.filePattern}${c.reset}`;
+    }
+    case "finder": {
+      const q = truncLine(String(input.query ?? ""), 80);
+      return `${icon} ${toolName} ${c.dim}${q}${c.reset}`;
+    }
+    case "Task": {
+      const desc = truncLine(String(input.description ?? ""), 80);
+      return `${icon} ${toolName} ${c.blue}${desc}${c.reset}`;
+    }
+    case "oracle": {
+      const task = truncLine(String(input.task ?? ""), 80);
+      return `${icon} ${toolName} ${c.blue}${task}${c.reset}`;
+    }
+    case "librarian": {
+      const q = truncLine(String(input.query ?? ""), 80);
+      return `${icon} ${toolName} ${c.blue}${q}${c.reset}`;
+    }
+    case "apply_patch": {
+      return formatPatch(icon, toolName, String(input.patchText ?? input.patch ?? ""));
+    }
+    case "web_search":
+    case "read_web_page": {
+      const target = truncLine(String(input.url ?? input.objective ?? ""), 80);
+      return `${icon} ${toolName} ${c.blue}${target}${c.reset}`;
+    }
+    default: {
+      const keys = Object.keys(input);
+      const summary = keys.slice(0, 3).map(k => {
+        const v = String(input[k] ?? "");
+        return `${k}=${truncLine(v, 30)}`;
+      }).join(", ");
+      return `${icon} ${toolName} ${c.dim}${summary}${c.reset}`;
+    }
+  }
+}
+
 export function buildAmpPrompt(
   category: string,
   targetTest: string,
@@ -67,25 +220,40 @@ export async function runAmp(
   iteration: number,
 ): Promise<string> {
   const ampLog = path.join(LOG_DIR, `amp-${iteration}-${Date.now()}.txt`);
-  console.log("  Launching amp agent to fix the test...");
-  console.log(`  Log: ${ampLog}`);
+  console.log(`  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration})${c.reset}`);
+  console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);
   console.log();
 
   const logParts: string[] = [];
   const previewLines: string[] = [];
   let result = "";
   let isError = false;
+  let toolCount = 0;
+  let messageCount = 0;
+  const startTime = Date.now();
+
+  function statusHeader(): string {
+    const parts = [
+      `${c.cyan}${c.bold}⚡ Amp Agent${c.reset}`,
+      `${c.dim}│${c.reset}`,
+      `${c.yellow}⏱ ${elapsed(startTime)}${c.reset}`,
+      `${c.dim}│${c.reset}`,
+      `${c.blue}💬 ${messageCount}${c.reset}`,
+      `${c.magenta}🔧 ${toolCount}${c.reset}`,
+    ];
+    return parts.join(" ");
+  }
 
   function pushPreview(text: string) {
     for (const line of text.split("\n")) {
       if (line.length > 0) {
-        previewLines.push(line);
+        previewLines.push(truncLine(line));
         if (previewLines.length > MAX_PREVIEW_LINES) {
           previewLines.shift();
         }
       }
     }
-    logUpdate(previewLines.join("\n"));
+    logUpdate(`${statusHeader()}\n${c.dim}${"─".repeat(60)}${c.reset}\n${previewLines.join("\n")}`);
   }
 
   for await (const message of execute({
@@ -95,42 +263,54 @@ export async function runAmp(
       dangerouslyAllowAll: true,
       mode: "deep",
       archive: true,
-      labels: ["fix-node-compat", category, targetTest],
+      labels: ["fix-node-compat", category, targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)],
     },
   })) {
     if (message.type === "system") {
-      const text = `[system] session=${message.session_id}\n[system] tools=${message.tools.join(", ")}\n`;
-      logParts.push(text);
-      pushPreview(text);
+      const rawText = `[system] session=${message.session_id}\n[system] tools=${message.tools.join(", ")}\n`;
+      logParts.push(rawText);
+      pushPreview(`${c.dim}● session: ${message.session_id}${c.reset}`);
     } else if (message.type === "assistant") {
+      messageCount++;
       for (const content of message.message.content) {
         if (content.type === "text") {
           logParts.push(content.text);
-          pushPreview(content.text);
+          for (const line of content.text.split("\n")) {
+            const trimmed = line.trim();
+            if (trimmed.length > 0) {
+              pushPreview(`  ${trimmed}`);
+            }
+          }
         } else if (content.type === "tool_use") {
-          const text = `[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`;
-          logParts.push(text);
-          pushPreview(text);
+          toolCount++;
+          const rawText = `[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`;
+          logParts.push(rawText);
+          pushPreview(`  ${formatToolUse(content.name, content.input as Record<string, unknown>)}`);
         }
       }
     } else if (message.type === "result") {
       if (message.is_error) {
         logParts.push(`[error] ${message.error}\n`);
-        pushPreview(`[error] ${message.error}`);
+        pushPreview(`  ${c.red}${c.bold}✗ Error: ${message.error}${c.reset}`);
         result = message.error;
         isError = true;
       } else {
         logParts.push(`[result] ${message.result}\n`);
-        pushPreview(`[result] ${message.result}`);
+        pushPreview(`  ${c.green}${c.bold}✓ Result: ${message.result}${c.reset}`);
         result = message.result;
       }
     }
   }
 
   if (!isError) {
-    logUpdate(`  ✓ Amp agent completed successfully`);
+    logUpdate(
+      `  ${c.green}${c.bold}✓ Amp agent completed${c.reset} ${c.dim}(${elapsed(startTime)}, ${toolCount} tool calls, ${messageCount} messages)${c.reset}`,
+    );
     logUpdate.done();
   } else {
+    logUpdate(
+      `  ${c.red}${c.bold}✗ Amp agent failed${c.reset} ${c.dim}(${elapsed(startTime)}, ${toolCount} tool calls)${c.reset}`,
+    );
     logUpdate.done();
   }
 

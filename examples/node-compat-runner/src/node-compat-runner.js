@@ -102,6 +102,26 @@ function applyTestFlagsToProcess(testPath) {
 
 export const runTest = async (testPath) => {
     var restorePromise = null;
+    var restoreArgv = null;
+
+    if (globalThis.process) {
+        var originalArgv = Array.isArray(globalThis.process.argv) ? globalThis.process.argv.slice() : null;
+        var originalArgv0 = globalThis.process.argv0;
+        var execPath = (typeof globalThis.process.execPath === 'string' && globalThis.process.execPath.length > 0)
+            ? globalThis.process.execPath
+            : 'node';
+
+        globalThis.process.argv = [execPath, testPath];
+        globalThis.process.argv0 = execPath;
+
+        restoreArgv = function restoreArgv() {
+            if (originalArgv) {
+                globalThis.process.argv = originalArgv;
+            }
+            globalThis.process.argv0 = originalArgv0;
+        };
+    }
+
     try {
         applyTestFlagsToProcess(testPath);
 
@@ -177,5 +197,9 @@ export const runTest = async (testPath) => {
 
         var fullMsg = (e && e.message) ? (e.message + "\n" + msg) : msg;
         return "FAIL: " + fullMsg;
+    } finally {
+        if (restoreArgv) {
+            restoreArgv();
+        }
     }
 };

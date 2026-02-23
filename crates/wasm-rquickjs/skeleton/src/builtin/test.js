@@ -210,7 +210,16 @@ function parseTestArgs(nameOrOpts, optionsOrFn, maybeFn) {
     if (!options) options = {};
     if (!fn) fn = function () {};
 
-    return { name: name, options: options, fn: fn };
+    var moduleContext = globalThis.__wasm_rquickjs_current_module;
+    var capturedModuleContext = undefined;
+    if (moduleContext && typeof moduleContext.source === 'string') {
+        capturedModuleContext = {
+            filename: moduleContext.filename,
+            source: moduleContext.source
+        };
+    }
+
+    return { name: name, options: options, fn: fn, moduleContext: capturedModuleContext };
 }
 
 // --- Run a single test ---
@@ -219,9 +228,25 @@ function runTest(parsed, parentSuite) {
     var name = parsed.name;
     var options = parsed.options;
     var fn = parsed.fn;
+    var moduleContext = parsed.moduleContext;
+
+    var previousModuleContext = globalThis.__wasm_rquickjs_current_module;
+    var hasModuleContext = !!(moduleContext && typeof moduleContext.source === 'string');
+    if (hasModuleContext) {
+        globalThis.__wasm_rquickjs_current_module = moduleContext;
+    }
+
+    var restoreModuleContext = function () {
+        if (hasModuleContext) {
+            globalThis.__wasm_rquickjs_current_module = previousModuleContext;
+        }
+    };
+
+    var isAsync = false;
 
     // Handle skip
     if (options.skip === true || (typeof options.skip === 'string' && options.skip)) {
+        restoreModuleContext();
         return { status: 'skip', name: name, message: typeof options.skip === 'string' ? options.skip : '' };
     }
 
@@ -260,6 +285,7 @@ function runTest(parsed, parentSuite) {
             var asyncResult = result.then(function () {
                 ctx.mock.restoreAll();
                 runAfterEach();
+                restoreModuleContext();
                 if (isTodo) {
                     return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
                 }
@@ -267,6 +293,7 @@ function runTest(parsed, parentSuite) {
             }, function (e) {
                 ctx.mock.restoreAll();
                 runAfterEachSafe();
+                restoreModuleContext();
                 if (e instanceof SkipError) {
                     return { status: 'skip', name: name, message: e.message };
                 }
@@ -278,6 +305,7 @@ function runTest(parsed, parentSuite) {
                 }
                 return { status: 'fail', name: name, error: e };
             });
+            isAsync = true;
             return { status: 'async', name: name, promise: asyncResult };
         }
 
@@ -312,6 +340,10 @@ function runTest(parsed, parentSuite) {
             return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
         }
         return { status: 'fail', name: name, error: e };
+    } finally {
+        if (!isAsync) {
+            restoreModuleContext();
+        }
     }
 }
 

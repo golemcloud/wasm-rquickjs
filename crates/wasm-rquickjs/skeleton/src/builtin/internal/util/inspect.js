@@ -1113,14 +1113,12 @@ function getKeys(value, showHidden) {
             keys = Object.getOwnPropertyNames(value);
         }
         if (symbols.length !== 0) {
-            // TODO(wafuwafu13): Implement
-            // const filter = (key: any) =>
-            //
-            //   Object.prototype.propertyIsEnumerable(value, key);
-            // Array.prototype.push.apply(
-            //   keys,
-            //   symbols.filter(filter),
-            // );
+            for (let i = 0; i < symbols.length; i++) {
+                const symbol = symbols[i];
+                if (Object.prototype.propertyIsEnumerable.call(value, symbol)) {
+                    keys.push(symbol);
+                }
+            }
         }
     }
     return keys;
