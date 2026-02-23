@@ -8,6 +8,200 @@ var { inspect } = require('util');
 var noop = function() {};
 var _mustCallChecks = [];
 
+function copyEnv(env) {
+    var copy = {};
+    var keys = Object.keys(env || {});
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        copy[key] = env[key];
+    }
+    return copy;
+}
+
+function replaceEnv(targetEnv, sourceEnv) {
+    var existingKeys = Object.keys(targetEnv || {});
+    for (var i = 0; i < existingKeys.length; i++) {
+        delete targetEnv[existingKeys[i]];
+    }
+
+    if (!sourceEnv || typeof sourceEnv !== 'object') {
+        return;
+    }
+
+    var keys = Object.keys(sourceEnv);
+    for (var j = 0; j < keys.length; j++) {
+        var key = keys[j];
+        targetEnv[key] = String(sourceEnv[key]);
+    }
+}
+
+function formatSpawnError(err) {
+    var text = (err && err.stack) ? String(err.stack) : String(err);
+    if (!text.endsWith('\n')) {
+        text += '\n';
+    }
+    return text;
+}
+
+function parseInlineEvalArgs(args) {
+    var parsed = {
+        inputType: 'commonjs',
+        evalCode: null,
+        printResult: false,
+        scriptArgs: [],
+    };
+
+    for (var i = 0; i < args.length; i++) {
+        var arg = String(args[i]);
+        if (arg === '--input-type') {
+            i++;
+            if (i >= args.length) {
+                throw new Error('Missing value for --input-type');
+            }
+            parsed.inputType = String(args[i]);
+            continue;
+        }
+        if (arg.indexOf('--input-type=') === 0) {
+            parsed.inputType = arg.slice('--input-type='.length);
+            continue;
+        }
+        if (arg === '--eval' || arg === '-e' || arg === '-p' || arg === '-pe') {
+            i++;
+            if (i >= args.length) {
+                throw new Error('Missing value for ' + arg);
+            }
+            parsed.evalCode = String(args[i]);
+            parsed.printResult = (arg === '-p' || arg === '-pe');
+            continue;
+        }
+        if (arg.indexOf('--eval=') === 0) {
+            parsed.evalCode = arg.slice('--eval='.length);
+            continue;
+        }
+        if (arg === '--') {
+            parsed.scriptArgs = args.slice(i + 1).map(function(value) {
+                return String(value);
+            });
+            break;
+        }
+
+        throw new Error('Only --eval/-e and --input-type are supported in WASM child emulation');
+    }
+
+    if (parsed.evalCode === null) {
+        throw new Error('WASM child emulation currently requires --eval/-e');
+    }
+
+    return parsed;
+}
+
+function transpileModuleEvalToCommonJs(source) {
+    var transformed = String(source);
+
+    transformed = transformed.replace(
+        /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+(['"][^'"]+['"])\s*;?\s*$/gm,
+        'const $1 = require($2);'
+    );
+    transformed = transformed.replace(
+        /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+(['"][^'"]+['"])\s*;?\s*$/gm,
+        'const $1 = require($2);'
+    );
+    transformed = transformed.replace(
+        /^\s*import\s+\{([^}]+)\}\s+from\s+(['"][^'"]+['"])\s*;?\s*$/gm,
+        'const {$1} = require($2);'
+    );
+
+    if (/^\s*(import|export)\s+/m.test(transformed)) {
+        throw new Error('Unsupported ESM syntax in --eval for WASM child emulation');
+    }
+
+    return transformed;
+}
+
+function runInlineEval(command, args, options) {
+    var parsed = parseInlineEvalArgs(args || []);
+
+    var oldArgv = process.argv.slice();
+    var oldArgv0 = process.argv0;
+    var oldCwd = process.cwd;
+    var oldEnv = copyEnv(process.env);
+    var oldStdoutWrite = process.stdout && process.stdout.write;
+    var oldStderrWrite = process.stderr && process.stderr.write;
+
+    var stdout = '';
+    var stderr = '';
+    var code = 0;
+
+    try {
+        process.argv = [String(command)].concat(parsed.scriptArgs);
+        process.argv0 = String(command);
+
+        if (options && typeof options.cwd === 'string') {
+            var childCwd = String(options.cwd);
+            process.cwd = function cwd() {
+                return childCwd;
+            };
+        }
+        if (options && options.env) {
+            replaceEnv(process.env, options.env);
+        }
+
+        if (process.stdout && typeof oldStdoutWrite === 'function') {
+            process.stdout.write = function writeStdout(chunk) {
+                stdout += String(chunk);
+                return true;
+            };
+        }
+        if (process.stderr && typeof oldStderrWrite === 'function') {
+            process.stderr.write = function writeStderr(chunk) {
+                stderr += String(chunk);
+                return true;
+            };
+        }
+
+        var evalSource = parsed.evalCode;
+        if (parsed.inputType === 'module') {
+            evalSource = transpileModuleEvalToCommonJs(evalSource);
+        } else if (parsed.inputType !== 'commonjs') {
+            throw new Error('Unsupported --input-type value: ' + parsed.inputType);
+        }
+
+        var moduleObject = { exports: {} };
+        var evalFn = new Function('require', 'module', 'exports', evalSource + '\n//# sourceURL=[eval]\n');
+        var result = evalFn(require, moduleObject, moduleObject.exports);
+
+        if (parsed.printResult && result !== undefined) {
+            stdout += String(result) + '\n';
+        }
+    } catch (err) {
+        if (err && err.__isProcessExit) {
+            code = typeof err.code === 'number' ? err.code : 0;
+        } else {
+            code = 1;
+            stderr += formatSpawnError(err);
+        }
+    } finally {
+        process.argv = oldArgv;
+        process.argv0 = oldArgv0;
+        process.cwd = oldCwd;
+        replaceEnv(process.env, oldEnv);
+
+        if (process.stdout && typeof oldStdoutWrite === 'function') {
+            process.stdout.write = oldStdoutWrite;
+        }
+        if (process.stderr && typeof oldStderrWrite === 'function') {
+            process.stderr.write = oldStderrWrite;
+        }
+    }
+
+    return {
+        code: code,
+        signal: null,
+        stdout: stdout,
+        stderr: stderr,
+    };
+}
+
 var common = {
     // Platform detection — always WASM
     isWindows: false,
@@ -172,8 +366,15 @@ var common = {
     },
 
     // Process-related stubs
-    spawnPromisified: function() {
-        return Promise.reject(new Error('child_process not supported in WASM'));
+    spawnPromisified: function(command, args, options) {
+        if (String(command) !== String(process.execPath)) {
+            return Promise.reject(new Error('Only process.execPath is supported in WASM child emulation'));
+        }
+        try {
+            return Promise.resolve(runInlineEval(command, args, options));
+        } catch (err) {
+            return Promise.reject(err);
+        }
     },
 
     // Escape helpers

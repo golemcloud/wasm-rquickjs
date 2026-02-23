@@ -45,10 +45,7 @@
     "parallel/test-assert-checktag.js": {},
     "parallel/test-assert-deep-with-error.js": {},
     "parallel/test-assert-deep.js": {},
-    "parallel/test-assert-esm-cjs-message-verify.js": {
-      "skip": true,
-      "reason": "requires process spawning (spawnPromisified) which is not available in WASM"
-    },
+    "parallel/test-assert-esm-cjs-message-verify.js": {},
     "parallel/test-assert-fail-deprecation.js": {},
     "parallel/test-assert-fail.js": {},
     "parallel/test-assert-first-line.js": {
