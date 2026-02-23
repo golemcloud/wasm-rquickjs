@@ -839,7 +839,7 @@ function notDeepStrictEqual(actual, expected, message) {
 }
 
 function partialDeepStrictEqual(actual, expected, message) {
-    if (!innerPartialDeepEqual(actual, expected)) {
+    if (!innerPartialDeepEqual(actual, expected, createPartialDeepMemo())) {
         innerFail({
             actual: actual,
             expected: expected,
@@ -850,94 +850,403 @@ function partialDeepStrictEqual(actual, expected, message) {
     }
 }
 
-function innerPartialDeepEqual(actual, expected) {
-    if (Object.is(actual, expected)) return true;
-    if (actual === null || expected === null || typeof actual !== 'object' || typeof expected !== 'object')
+function createPartialDeepMemo() {
+    if (typeof WeakMap === 'function' && typeof WeakSet === 'function') {
+        return { weakMemo: new WeakMap(), pairsA: null, pairsB: null };
+    }
+
+    return { weakMemo: null, pairsA: [], pairsB: [] };
+}
+
+function partialMemoHas(memo, actual, expected) {
+    if (memo.weakMemo) {
+        var expectedSet = memo.weakMemo.get(actual);
+        return expectedSet !== undefined && expectedSet.has(expected);
+    }
+
+    for (var i = 0; i < memo.pairsA.length; i++) {
+        if (memo.pairsA[i] === actual && memo.pairsB[i] === expected) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function partialMemoAdd(memo, actual, expected) {
+    if (memo.weakMemo) {
+        var expectedSet = memo.weakMemo.get(actual);
+        if (expectedSet === undefined) {
+            expectedSet = new WeakSet();
+            memo.weakMemo.set(actual, expectedSet);
+        }
+        expectedSet.add(expected);
+        return;
+    }
+
+    memo.pairsA.push(actual);
+    memo.pairsB.push(expected);
+}
+
+function getTag(value) {
+    return Object.prototype.toString.call(value);
+}
+
+function getEnumerableSymbols(value) {
+    if (typeof Object.getOwnPropertySymbols !== 'function') {
+        return [];
+    }
+
+    var symbols = Object.getOwnPropertySymbols(value);
+    var enumerableSymbols = [];
+    for (var i = 0; i < symbols.length; i++) {
+        if (Object.prototype.propertyIsEnumerable.call(value, symbols[i])) {
+            enumerableSymbols.push(symbols[i]);
+        }
+    }
+
+    return enumerableSymbols;
+}
+
+function isArrayIndexKey(key, length) {
+    if (key === '') {
         return false;
-
-    if (Array.isArray(expected)) {
-        if (!Array.isArray(actual)) return false;
-        if (actual.length < expected.length) return false;
-        for (var i = 0; i < expected.length; i++) {
-            if (!innerPartialDeepEqual(actual[i], expected[i])) return false;
-        }
-        return true;
     }
 
-    if (expected instanceof Map) {
-        if (!(actual instanceof Map)) return false;
-        if (actual.size < expected.size) return false;
-        var entries = Array.from(expected.entries());
-        for (var i = 0; i < entries.length; i++) {
-            if (!actual.has(entries[i][0])) return false;
-            if (!innerPartialDeepEqual(actual.get(entries[i][0]), entries[i][1])) return false;
-        }
-        return true;
+    var index = Number(key);
+    if (!Number.isInteger(index) || index < 0 || index >= length) {
+        return false;
     }
 
-    if (expected instanceof Set) {
-        if (!(actual instanceof Set)) return false;
-        if (actual.size < expected.size) return false;
-        var arrExp = Array.from(expected);
-        for (var i = 0; i < arrExp.length; i++) {
-            if (!actual.has(arrExp[i])) {
-                var found = false;
-                var arrAct = Array.from(actual);
-                for (var j = 0; j < arrAct.length; j++) {
-                    if (innerPartialDeepEqual(arrAct[j], arrExp[i])) { found = true; break; }
-                }
-                if (!found) return false;
+    return String(index) === key;
+}
+
+function compareExpectedProperties(actual, expected, memo, skipArrayIndices) {
+    var expectedKeys = Object.keys(expected);
+    for (var i = 0; i < expectedKeys.length; i++) {
+        var key = expectedKeys[i];
+        if (skipArrayIndices && isArrayIndexKey(key, expected.length)) {
+            continue;
+        }
+
+        if (!hasOwn(actual, key)) {
+            return false;
+        }
+
+        if (!innerPartialDeepEqual(actual[key], expected[key], memo)) {
+            return false;
+        }
+    }
+
+    var expectedSymbols = getEnumerableSymbols(expected);
+    for (var i = 0; i < expectedSymbols.length; i++) {
+        var symbolKey = expectedSymbols[i];
+        if (!hasOwn(actual, symbolKey)) {
+            return false;
+        }
+
+        if (!innerPartialDeepEqual(actual[symbolKey], expected[symbolKey], memo)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function arraysEqual(actualBytes, expectedBytes) {
+    if (actualBytes.length !== expectedBytes.length) {
+        return false;
+    }
+
+    for (var i = 0; i < expectedBytes.length; i++) {
+        if (actualBytes[i] !== expectedBytes[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function isSubsequence(actualValues, expectedValues, compare) {
+    if (actualValues.length < expectedValues.length) {
+        return false;
+    }
+
+    var searchStart = 0;
+    for (var i = 0; i < expectedValues.length; i++) {
+        var found = false;
+        for (var j = searchStart; j < actualValues.length; j++) {
+            if (compare(actualValues[j], expectedValues[i])) {
+                searchStart = j + 1;
+                found = true;
+                break;
             }
         }
-        return true;
-    }
 
-    var expIsDate = Object.prototype.toString.call(expected) === '[object Date]';
-    var actIsDate = Object.prototype.toString.call(actual) === '[object Date]';
-    if (expIsDate || actIsDate) {
-        if (!expIsDate || !actIsDate) return false;
-        return expected.getTime() === actual.getTime();
-    }
-    if (expected instanceof RegExp && actual instanceof RegExp)
-        return expected.source === actual.source && expected.flags === actual.flags;
-
-    // ArrayBuffer / SharedArrayBuffer: must be same type, actual must have >= expected byteLength content
-    var expIsAB = expected instanceof ArrayBuffer;
-    var actIsAB = actual instanceof ArrayBuffer;
-    var expIsSAB = typeof SharedArrayBuffer !== 'undefined' && expected instanceof SharedArrayBuffer;
-    var actIsSAB = typeof SharedArrayBuffer !== 'undefined' && actual instanceof SharedArrayBuffer;
-    if (expIsAB || expIsSAB) {
-        if (expIsAB !== actIsAB || expIsSAB !== actIsSAB) return false;
-        if (actual.byteLength !== expected.byteLength) return false;
-        var va = new Uint8Array(actual);
-        var ve = new Uint8Array(expected);
-        for (var i = 0; i < ve.length; i++) {
-            if (va[i] !== ve[i]) return false;
+        if (!found) {
+            return false;
         }
-        return true;
     }
 
-    // Typed array views: must be same constructor type
-    var expIsView = ArrayBuffer.isView ? ArrayBuffer.isView(expected) : (expected && expected.buffer instanceof ArrayBuffer);
-    var actIsView = ArrayBuffer.isView ? ArrayBuffer.isView(actual) : (actual && actual.buffer instanceof ArrayBuffer);
-    if (expIsView) {
-        if (!actIsView) return false;
-        if (expected.constructor !== actual.constructor) return false;
-        if (actual.byteLength !== expected.byteLength) return false;
-        var uea = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
-        var uee = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
-        for (var i = 0; i < uee.length; i++) {
-            if (uea[i] !== uee[i]) return false;
-        }
-        return true;
-    }
-
-    var keys = Object.keys(expected);
-    for (var i = 0; i < keys.length; i++) {
-        if (!hasOwn(actual, keys[i])) return false;
-        if (!innerPartialDeepEqual(actual[keys[i]], expected[keys[i]])) return false;
-    }
     return true;
+}
+
+function isTypedArrayView(value, tag) {
+    if (tag === '[object DataView]') {
+        return false;
+    }
+
+    if (typeof ArrayBuffer.isView === 'function') {
+        return ArrayBuffer.isView(value);
+    }
+
+    return value && typeof value === 'object' && value.buffer instanceof ArrayBuffer;
+}
+
+function strictMapKeyEqual(actualKey, expectedKey) {
+    if (Object.is(actualKey, expectedKey)) {
+        return true;
+    }
+
+    if (actualKey === null || expectedKey === null ||
+        typeof actualKey !== 'object' || typeof expectedKey !== 'object') {
+        return false;
+    }
+
+    return innerDeepEqual(actualKey, expectedKey, true, undefined);
+}
+
+function isURLValue(value, tag) {
+    return tag === '[object URL]' ||
+        (value !== null && typeof value === 'object' &&
+            value.constructor && value.constructor.name === 'URL' &&
+            typeof value.href === 'string' &&
+            value.searchParams !== undefined && value.searchParams !== null);
+}
+
+function innerPartialDeepEqual(actual, expected, memo) {
+    if (Object.is(actual, expected)) {
+        return true;
+    }
+    if (actual === null || expected === null || typeof actual !== 'object' || typeof expected !== 'object') {
+        return false;
+    }
+
+    if (partialMemoHas(memo, actual, expected)) {
+        return true;
+    }
+    partialMemoAdd(memo, actual, expected);
+
+    var expectedTag = getTag(expected);
+    var actualTag = getTag(actual);
+
+    if (expectedTag === '[object Array]') {
+        if (actualTag !== '[object Array]') {
+            return false;
+        }
+
+        if (!isSubsequence(actual, expected, function(actualItem, expectedItem) {
+            return innerPartialDeepEqual(actualItem, expectedItem, memo);
+        })) {
+            return false;
+        }
+
+        return compareExpectedProperties(actual, expected, memo, true);
+    }
+
+    if (expectedTag === '[object Map]') {
+        if (actualTag !== '[object Map]' || actual.size < expected.size) {
+            return false;
+        }
+
+        var actualEntries = Array.from(actual.entries());
+
+        var expectedEntries = Array.from(expected.entries());
+        for (var i = 0; i < expectedEntries.length; i++) {
+            var expectedEntry = expectedEntries[i];
+            var foundMapEntry = false;
+
+            if (actual.has(expectedEntry[0])) {
+                if (!innerPartialDeepEqual(actual.get(expectedEntry[0]), expectedEntry[1], memo)) {
+                    return false;
+                }
+                foundMapEntry = true;
+            } else {
+                for (var j = 0; j < actualEntries.length; j++) {
+                    var actualEntry = actualEntries[j];
+                    if (strictMapKeyEqual(actualEntry[0], expectedEntry[0]) &&
+                        innerPartialDeepEqual(actualEntry[1], expectedEntry[1], memo)) {
+                        foundMapEntry = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!foundMapEntry) {
+                return false;
+            }
+        }
+
+        return compareExpectedProperties(actual, expected, memo, false);
+    }
+
+    if (expectedTag === '[object Set]') {
+        if (actualTag !== '[object Set]' || actual.size < expected.size) {
+            return false;
+        }
+
+        var actualValues = Array.from(actual.values());
+        var usedActualValues = new Array(actualValues.length);
+        for (var i = 0; i < usedActualValues.length; i++) {
+            usedActualValues[i] = false;
+        }
+
+        var expectedValues = Array.from(expected.values());
+        for (var i = 0; i < expectedValues.length; i++) {
+            var expectedValue = expectedValues[i];
+            var foundSetValue = false;
+
+            for (var j = 0; j < actualValues.length; j++) {
+                if (usedActualValues[j]) {
+                    continue;
+                }
+
+                if (innerPartialDeepEqual(actualValues[j], expectedValue, memo)) {
+                    usedActualValues[j] = true;
+                    foundSetValue = true;
+                    break;
+                }
+            }
+
+            if (!foundSetValue) {
+                return false;
+            }
+        }
+
+        return compareExpectedProperties(actual, expected, memo, false);
+    }
+
+    if (expectedTag === '[object Date]' || actualTag === '[object Date]') {
+        if (expectedTag !== '[object Date]' || actualTag !== '[object Date]') {
+            return false;
+        }
+
+        return Object.is(actual.getTime(), expected.getTime());
+    }
+
+    if (expectedTag === '[object RegExp]' || actualTag === '[object RegExp]') {
+        if (expectedTag !== '[object RegExp]' || actualTag !== '[object RegExp]') {
+            return false;
+        }
+
+        return actual.source === expected.source &&
+            actual.flags === expected.flags &&
+            actual.lastIndex === expected.lastIndex;
+    }
+
+    if (expectedTag === '[object ArrayBuffer]' || expectedTag === '[object SharedArrayBuffer]') {
+        if (actualTag !== expectedTag) {
+            return false;
+        }
+
+        var actualBuffer = new Uint8Array(actual);
+        var expectedBuffer = new Uint8Array(expected);
+        if (actualBuffer.length < expectedBuffer.length) {
+            return false;
+        }
+
+        if (actualBuffer.length === expectedBuffer.length) {
+            return arraysEqual(actualBuffer, expectedBuffer);
+        }
+
+        return isSubsequence(actualBuffer, expectedBuffer, function(actualByte, expectedByte) {
+            return actualByte === expectedByte;
+        });
+    }
+
+    if (expectedTag === '[object DataView]') {
+        if (actualTag !== '[object DataView]' || actual.byteLength < expected.byteLength) {
+            return false;
+        }
+
+        var actualDataView = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
+        var expectedDataView = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
+        if (actualDataView.length === expectedDataView.length) {
+            return arraysEqual(actualDataView, expectedDataView);
+        }
+
+        return isSubsequence(actualDataView, expectedDataView, function(actualByte, expectedByte) {
+            return actualByte === expectedByte;
+        });
+    }
+
+    if (isTypedArrayView(expected, expectedTag)) {
+        if (!isTypedArrayView(actual, actualTag) || actualTag !== expectedTag || actual.byteLength < expected.byteLength) {
+            return false;
+        }
+
+        var actualTypedArray = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
+        var expectedTypedArray = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
+        if (actualTypedArray.length === expectedTypedArray.length) {
+            if (!arraysEqual(actualTypedArray, expectedTypedArray)) {
+                return false;
+            }
+        } else if (!isSubsequence(actualTypedArray, expectedTypedArray, function(actualByte, expectedByte) {
+            return actualByte === expectedByte;
+        })) {
+            return false;
+        }
+
+        return compareExpectedProperties(actual, expected, memo, false);
+    }
+
+    var expectedIsURL = isURLValue(expected, expectedTag);
+    var actualIsURL = isURLValue(actual, actualTag);
+    if (expectedIsURL || actualIsURL) {
+        if (!expectedIsURL || !actualIsURL) {
+            return false;
+        }
+
+        return actual.href === expected.href;
+    }
+
+    if (expectedTag === '[object Error]' || expected instanceof Error) {
+        if (!(actual instanceof Error) && actualTag !== '[object Error]') {
+            return false;
+        }
+
+        if (typeof expected.name === 'string' && expected.name.length > 0 && actual.name !== expected.name) {
+            return false;
+        }
+        if (typeof expected.message === 'string' && expected.message.length > 0 &&
+            !isEquivalentEngineErrorMessage(actual.message, expected.message)) {
+            return false;
+        }
+        if (hasOwn(expected, 'cause')) {
+            if (!hasOwn(actual, 'cause')) {
+                return false;
+            }
+            if (!innerPartialDeepEqual(actual.cause, expected.cause, memo)) {
+                return false;
+            }
+        }
+        if (hasOwn(expected, 'errors')) {
+            if (!hasOwn(actual, 'errors')) {
+                return false;
+            }
+            if (!innerPartialDeepEqual(actual.errors, expected.errors, memo)) {
+                return false;
+            }
+        }
+
+        return compareExpectedProperties(actual, expected, memo, false);
+    }
+
+    if (expectedTag !== '[object Object]') {
+        return innerDeepEqual(actual, expected, true, undefined);
+    }
+
+    return compareExpectedProperties(actual, expected, memo, false);
 }
 
 // --- throws / doesNotThrow / rejects / doesNotReject ---

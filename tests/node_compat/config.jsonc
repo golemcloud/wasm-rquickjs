@@ -50,10 +50,7 @@
     "parallel/test-assert-fail.js": {},
     "parallel/test-assert-first-line.js": {},
     "parallel/test-assert-if-error.js": {},
-    "parallel/test-assert-objects.js": {
-      "skip": true,
-      "reason": "partialDeepStrictEqual tests cause WASM stack overflow due to deep recursion exceeding WASM stack limits"
-    },
+    "parallel/test-assert-objects.js": {},
     "parallel/test-assert-typedarray-deepequal.js": {},
 
     // === btoa/atob tests ===
