@@ -375,22 +375,50 @@ function fromArrayView (arrayView) {
     return fromArrayLike(arrayView)
 }
 
+function getArrayBufferByteLength (array) {
+    try {
+        return array.byteLength
+    } catch {
+        return undefined
+    }
+}
+
 function fromArrayBuffer (array, byteOffset, length) {
-    if (byteOffset < 0 || array.byteLength < byteOffset) {
+    let source = array
+    let byteLength = getArrayBufferByteLength(source)
+
+    if (typeof byteLength !== 'number' &&
+        source != null &&
+        (isInstance(source.buffer, ArrayBuffer) ||
+            (typeof SharedArrayBuffer !== 'undefined' &&
+                isInstance(source.buffer, SharedArrayBuffer)))) {
+        source = source.buffer
+        byteLength = getArrayBufferByteLength(source)
+    }
+
+    if (typeof byteLength !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE(
+            'first argument',
+            ['string', 'Buffer', 'ArrayBuffer', 'Array', 'Array-like Object'],
+            array
+        )
+    }
+
+    if (byteOffset < 0 || byteLength < byteOffset) {
         throw new ERR_BUFFER_OUT_OF_BOUNDS('offset')
     }
 
-    if (array.byteLength < byteOffset + (length || 0)) {
+    if (byteLength < byteOffset + (length || 0)) {
         throw new ERR_BUFFER_OUT_OF_BOUNDS('length')
     }
 
     let buf
     if (byteOffset === undefined && length === undefined) {
-        buf = new Uint8Array(array)
+        buf = new Uint8Array(source)
     } else if (length === undefined) {
-        buf = new Uint8Array(array, byteOffset)
+        buf = new Uint8Array(source, byteOffset)
     } else {
-        buf = new Uint8Array(array, byteOffset, length)
+        buf = new Uint8Array(source, byteOffset, length)
     }
 
     // Return an augmented `Uint8Array` instance
