@@ -69,6 +69,13 @@ function makeError(code, message) {
     return err;
 }
 
+function makeUnsupportedIpcListenError(path) {
+    const err = makeError('ERR_SOCKET_BAD_TYPE', 'IPC sockets not supported in WebAssembly');
+    err.syscall = 'listen';
+    err.address = path;
+    return err;
+}
+
 function parseNativeError(e) {
     try {
         const parsed = JSON.parse(e.message);
@@ -790,8 +797,12 @@ Server.prototype.listen = function listen(...args) {
         cb = args[idx];
     }
 
-    if (options.path) {
-        throw makeError('ERR_SOCKET_BAD_TYPE', 'IPC sockets not supported in WebAssembly');
+    // Node gives `port` precedence over `path` when both are present.
+    // Keep IPC unsupported in WASM, but report listen(path) failures via
+    // asynchronous `error` events so callers can observe `err.address`.
+    if (options.path && options.port === undefined) {
+        nextTick(() => this.emit('error', makeUnsupportedIpcListenError(options.path)));
+        return this;
     }
 
     if (this.listening) {

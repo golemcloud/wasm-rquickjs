@@ -63,9 +63,48 @@ function installRejectionTracking() {
     };
 }
 
+function parseTestFlags(testPath) {
+    var source;
+    try {
+        source = require('node:fs').readFileSync(testPath, 'utf8');
+    } catch (_) {
+        return [];
+    }
+
+    var flags = [];
+    var re = /^\/\/\s*Flags:\s*(.+)$/gm;
+    var match;
+    while ((match = re.exec(source)) !== null) {
+        var line = match[1] || '';
+        var parts = line.trim().split(/\s+/).filter(Boolean);
+        for (var i = 0; i < parts.length; i++) {
+            flags.push(parts[i]);
+        }
+    }
+
+    return flags;
+}
+
+function applyTestFlagsToProcess(testPath) {
+    if (!globalThis.process) return;
+
+    var flags = parseTestFlags(testPath);
+    if (!Array.isArray(globalThis.process.execArgv)) {
+        globalThis.process.execArgv = [];
+    }
+
+    // Keep the same array reference because other modules may hold it.
+    globalThis.process.execArgv.length = 0;
+    for (var i = 0; i < flags.length; i++) {
+        globalThis.process.execArgv.push(flags[i]);
+    }
+}
+
 export const runTest = async (testPath) => {
     var restorePromise = null;
     try {
+        applyTestFlagsToProcess(testPath);
+
         // Reset mustCall tracking for this test
         var commonMod;
         try {

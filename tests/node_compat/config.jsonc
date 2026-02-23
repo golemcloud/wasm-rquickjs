@@ -1426,7 +1426,7 @@
     "parallel/test-net-autoselectfamily-commandline-option.js": {},
     "parallel/test-net-autoselectfamily-default.js": {},
     "parallel/test-net-autoselectfamily.js": {},
-    "parallel/test-net-better-error-messages-listen-path.js": { "skip": true, "reason": "requires Unix domain sockets (IPC path)" },
+    "parallel/test-net-better-error-messages-listen-path.js": {},
     "parallel/test-net-better-error-messages-listen.js": { "skip": true, "reason": "error message format mismatch" },
     "parallel/test-net-better-error-messages-path.js": { "skip": true, "reason": "requires Unix domain sockets (IPC path)" },
     "parallel/test-net-better-error-messages-port-hostname.js": { "skip": true, "reason": "requires DNS lookup" },

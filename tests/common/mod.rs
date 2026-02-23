@@ -470,6 +470,8 @@ impl TestInstance {
             .env("TEST_KEY", "TEST_VALUE")
             .env("TEST_KEY_2", "TEST_VALUE_2")
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
+            .inherit_network()
+            .allow_ip_name_lookup(true)
             .build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {

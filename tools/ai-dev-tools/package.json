@@ -1,0 +1,25 @@
+{
+  "name": "ai-dev-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered development tools for wasm-rquickjs",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "fix": "tsx src/cli.ts fix"
+  },
+  "bin": {
+    "ai-dev-tools": "./dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@sourcegraph/amp-sdk": "^0.1.0-20260223122441-g31e6594",
+    "jsonc-parser": "^3.3.1",
+    "log-update": "^7.1.0",
+    "simple-git": "^3.32.2"
+  }
+}
