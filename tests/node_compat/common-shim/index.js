@@ -237,6 +237,24 @@ function installTypedArrayLengthErrorShim() {
 
 installTypedArrayLengthErrorShim();
 
+var sixtyFourBitArchitectures = {
+    arm64: true,
+    loong64: true,
+    mips: true,
+    mipsel: true,
+    ppc64: true,
+    riscv64: true,
+    s390x: true,
+    x64: true,
+};
+
+function is64BitArch() {
+    if (!globalThis.process || typeof globalThis.process.arch !== 'string') {
+        return false;
+    }
+    return sixtyFourBitArchitectures[globalThis.process.arch] === true;
+}
+
 var common = {
     // Platform detection — always WASM
     isWindows: false,
@@ -388,7 +406,11 @@ var common = {
     skipIfInspectorDisabled: function() {
         common.skip('Inspector not available in WASM');
     },
-    skipIf32Bits: noop,
+    skipIf32Bits: function() {
+        if (!is64BitArch()) {
+            common.skip('The tested feature is not available in 32bit builds');
+        }
+    },
     skipIfWorker: noop,
     skipIfDumbTerminal: noop,
 
