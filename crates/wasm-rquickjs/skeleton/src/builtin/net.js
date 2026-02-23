@@ -131,7 +131,7 @@ function Socket(options) {
     this.localAddress = undefined;
     this.localPort = undefined;
     this.localFamily = undefined;
-    this._family = options.family || 4;
+    this._family = options.family ?? 4;
 
     // Shut down the socket when we're finished with it.
     this.on('end', onReadableStreamEnd);
@@ -215,6 +215,10 @@ Socket.prototype.connect = function connect(...args) {
         throw new ERR_INVALID_ARG_TYPE('options.host', 'string', options.host);
     }
 
+    if (options.lookup !== undefined && typeof options.lookup !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('options.lookup', 'Function', options.lookup);
+    }
+
     if (options.autoSelectFamily !== undefined && typeof options.autoSelectFamily !== 'boolean') {
         throw new ERR_INVALID_ARG_TYPE('options.autoSelectFamily', 'boolean', options.autoSelectFamily);
     }
@@ -234,7 +238,8 @@ Socket.prototype.connect = function connect(...args) {
 
     const port = options.port;
     const host = options.host || options.hostname || 'localhost';
-    const family = options.family || this._family || 0;
+    const family = options.family ?? this._family ?? 4;
+    const lookup = options.lookup || dns.lookup;
 
     if (port !== undefined) {
         const p = +port;
@@ -244,12 +249,19 @@ Socket.prototype.connect = function connect(...args) {
     }
 
     const doConnect = (ip, addressFamily) => {
-        if (!this._handle) {
-            this._handle = create_tcp_socket(addressFamily);
-        }
-
         (async () => {
             try {
+                if (addressFamily === 6) {
+                    const err = makeError('EADDRNOTAVAIL', `connect EADDRNOTAVAIL ${ip}:${port} - Local (:::0)`);
+                    err.address = ip;
+                    err.port = port;
+                    throw err;
+                }
+
+                if (!this._handle) {
+                    this._handle = create_tcp_socket(addressFamily);
+                }
+
                 await this._handle.connect(ip, port);
                 this.connecting = false;
                 this.pending = false;
@@ -286,14 +298,18 @@ Socket.prototype.connect = function connect(...args) {
         this.emit('lookup', null, host, af, host);
         doConnect(host, af);
     } else {
-        const lookupFamily = family === 6 ? 6 : 4;
-        dns.lookup(host, lookupFamily, (err, address, resolvedFamily) => {
+        lookup(host, { family, all: false }, (err, address, resolvedFamily) => {
             if (err) {
                 this.connecting = false;
                 this.emit('lookup', err, address, resolvedFamily, host);
                 this.destroy(err);
                 return;
             }
+
+            if (resolvedFamily !== 4 && resolvedFamily !== 6) {
+                resolvedFamily = isIP(address);
+            }
+
             this.emit('lookup', null, address, resolvedFamily, host);
             doConnect(address, resolvedFamily || 4);
         });
