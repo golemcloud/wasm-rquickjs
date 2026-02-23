@@ -1,6 +1,6 @@
 # Node.js v22 Compatibility Report
 
-Generated: 2026-02-20 | Runtime: 4344s | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-02-23 | Runtime: 5342s | Engine: wasm-rquickjs (QuickJS)
 
 ## Summary (Public API Tests)
 
@@ -8,10 +8,10 @@ Tests that rely on Node.js internals (`--expose-internals`, `internalBinding`, `
 
 | Result | Count | Percentage |
 |--------|-------|------------|
-| ✅ PASS | 793 | 23.2% |
-| ⏭️ SKIP | 980 | 28.7% |
-| ❌ FAIL | 1608 | 47.1% |
-| 💥 ERROR | 31 | 0.9% |
+| ✅ PASS | 836 | 24.5% |
+| ⏭️ SKIP | 1435 | 42.1% |
+| ❌ FAIL | 1116 | 32.7% |
+| 💥 ERROR | 25 | 0.7% |
 | **Total** | **3412** | **100%** |
 
 ### All Tests (Public + Internals)
@@ -20,10 +20,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 | Result | Count | Percentage |
 |--------|-------|------------|
-| ✅ PASS | 797 | 21.3% |
-| ⏭️ SKIP | 1052 | 28.2% |
-| ❌ FAIL | 1854 | 49.7% |
-| 💥 ERROR | 31 | 0.8% |
+| ✅ PASS | 840 | 22.5% |
+| ⏭️ SKIP | 1554 | 41.6% |
+| ❌ FAIL | 1315 | 35.2% |
+| 💥 ERROR | 25 | 0.7% |
 | **Total** | **3734** | **100%** |
 
 ## Results by Module
@@ -37,28 +37,28 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | buffer | 61 | 47 | 5 | 1 | 8 | 77.0% |
 | child_process | 103 | 1 | 0 | 0 | 102 | 1.0% |
 | cluster | 85 | 1 | 0 | 0 | 84 | 1.2% |
-| console | 20 | 13 | 3 | 1 | 3 | 65.0% |
+| console | 20 | 14 | 3 | 1 | 2 | 70.0% |
 | crypto | 95 | 46 | 0 | 3 | 46 | 48.4% |
-| dgram | 68 | 46 | 15 | 0 | 7 | 67.6% |
+| dgram | 68 | 47 | 14 | 0 | 7 | 69.1% |
 | diagnostics_channel | 32 | 20 | 8 | 0 | 4 | 62.5% |
 | dns | 16 | 8 | 0 | 0 | 8 | 50.0% |
 | domain | 50 | 23 | 22 | 0 | 5 | 46.0% |
 | events | 32 | 30 | 0 | 0 | 2 | 93.8% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 100.0% |
-| fs | 227 | 132 | 7 | 1 | 87 | 58.1% |
-| http | 670 | 16 | 355 | 0 | 299 | 2.4% |
+| fs | 227 | 133 | 6 | 1 | 87 | 58.6% |
+| http | 670 | 16 | 1 | 0 | 653 | 2.4% |
 | inspector | 85 | 0 | 2 | 0 | 83 | 0.0% |
 | module | 120 | 11 | 103 | 0 | 6 | 9.2% |
-| net | 154 | 3 | 149 | 0 | 2 | 1.9% |
+| net | 154 | 33 | 13 | 0 | 108 | 21.4% |
 | os | 5 | 0 | 5 | 0 | 0 | 0.0% |
-| other | 498 | 53 | 343 | 5 | 97 | 10.6% |
+| other | 498 | 57 | 341 | 3 | 97 | 11.4% |
 | path | 16 | 16 | 0 | 0 | 0 | 100.0% |
 | perf_hooks | 18 | 5 | 13 | 0 | 0 | 27.8% |
 | process | 84 | 36 | 41 | 0 | 7 | 42.9% |
 | querystring | 4 | 4 | 0 | 0 | 0 | 100.0% |
 | readline | 14 | 0 | 12 | 0 | 2 | 0.0% |
 | repl | 66 | 1 | 39 | 0 | 26 | 1.5% |
-| stream | 201 | 151 | 26 | 12 | 12 | 75.1% |
+| stream | 201 | 154 | 28 | 8 | 11 | 76.6% |
 | string_decoder | 3 | 0 | 3 | 0 | 0 | 0.0% |
 | test_runner | 37 | 6 | 28 | 1 | 2 | 16.2% |
 | timers | 47 | 32 | 0 | 2 | 13 | 68.1% |
@@ -70,7 +70,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | v8 | 18 | 6 | 12 | 0 | 0 | 33.3% |
 | vm | 88 | 15 | 71 | 2 | 0 | 17.0% |
 | worker_threads | 131 | 1 | 125 | 1 | 4 | 0.8% |
-| zlib | 53 | 28 | 2 | 0 | 23 | 52.8% |
+| zlib | 53 | 31 | 2 | 0 | 20 | 58.5% |
 
 ## Passing Tests
 
@@ -170,6 +170,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-console-not-call-toString.js`
 - `parallel/test-console-self-assign.js`
 - `parallel/test-console-stdio-setters.js`
+- `parallel/test-console-sync-write-error.js`
 - `parallel/test-console-tty-colors.js`
 - `parallel/test-console-with-frozen-intrinsics.js`
 - `parallel/test-crypto-dh-constructor.js`
@@ -219,10 +220,12 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-crypto-stream.js`
 - `parallel/test-crypto-update-encoding.js`
 - `parallel/test-delayed-require.js`
+- `parallel/test-destroy-socket-in-lookup.js`
 - `parallel/test-dgram-abort-closed.js`
 - `parallel/test-dgram-bind-default-address.js`
 - `parallel/test-dgram-bind-error-repeat.js`
 - `parallel/test-dgram-bind.js`
+- `parallel/test-dgram-blocklist.js`
 - `parallel/test-dgram-bytes-length.js`
 - `parallel/test-dgram-close-in-listening.js`
 - `parallel/test-dgram-close-is-not-callback.js`
@@ -389,6 +392,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-fs-promises-file-handle-append-file.js`
 - `parallel/test-fs-promises-file-handle-close.js`
 - `parallel/test-fs-promises-file-handle-dispose.js`
+- `parallel/test-fs-promises-file-handle-read.js`
 - `parallel/test-fs-promises-file-handle-stat.js`
 - `parallel/test-fs-promises-file-handle-sync.js`
 - `parallel/test-fs-promises-file-handle-truncate.js`
@@ -511,14 +515,41 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-module-circular-dependency-warning.js`
 - `parallel/test-module-loading-deprecated.js`
 - `parallel/test-module-parent-setter-deprecation.js`
+- `parallel/test-net-access-byteswritten.js`
+- `parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js`
+- `parallel/test-net-autoselectfamily-attempt-timeout-default-value.js`
 - `parallel/test-net-autoselectfamily-ipv4first.js`
+- `parallel/test-net-better-error-messages-listen-path.js`
+- `parallel/test-net-better-error-messages-port-hostname.js`
+- `parallel/test-net-blocklist.js`
+- `parallel/test-net-connect-after-destroy.js`
+- `parallel/test-net-connect-destroy.js`
+- `parallel/test-net-connect-immediate-finish.js`
+- `parallel/test-net-connect-no-arg.js`
+- `parallel/test-net-connect-options-invalid.js`
+- `parallel/test-net-connect-reset.js`
+- `parallel/test-net-deprecated-setsimultaneousaccepts.js`
+- `parallel/test-net-end-without-connect.js`
+- `parallel/test-net-isip.js`
 - `parallel/test-net-isipv4.js`
+- `parallel/test-net-isipv6.js`
+- `parallel/test-net-listen-error.js`
+- `parallel/test-net-options-lookup.js`
+- `parallel/test-net-server-options.js`
+- `parallel/test-net-server-simultaneous-accepts-produce-warning-once.js`
+- `parallel/test-net-socket-connect-invalid-autoselectfamily.js`
+- `parallel/test-net-socket-connect-invalid-autoselectfamilyattempttimeout.js`
+- `parallel/test-net-socket-no-halfopen-enforcer.js`
+- `parallel/test-net-socket-setnodelay.js`
+- `parallel/test-net-timeout-no-handle.js`
+- `parallel/test-net-write-arguments.js`
 - `parallel/test-next-tick-doesnt-hang.js`
 - `parallel/test-next-tick-domain.js`
 - `parallel/test-next-tick-fixed-queue-regression.js`
 - `parallel/test-next-tick-intentional-starvation.js`
 - `parallel/test-next-tick-ordering2.js`
 - `parallel/test-next-tick-when-exiting.js`
+- `parallel/test-next-tick.js`
 - `parallel/test-no-node-snapshot.js`
 - `parallel/test-path-basename.js`
 - `parallel/test-path-dirname.js`
@@ -587,6 +618,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-readable-from-web-enqueue-then-close.js`
 - `parallel/test-readable-large-hwm.js`
 - `parallel/test-readable-single-end.js`
+- `parallel/test-ref-unref-return.js`
 - `parallel/test-regression-object-prototype.js`
 - `parallel/test-repl-programmatic-history.js`
 - `parallel/test-require-empty-main.js`
@@ -629,6 +661,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-events-prepend.js`
 - `parallel/test-stream-inheritance.js`
 - `parallel/test-stream-ispaused.js`
+- `parallel/test-stream-map.js`
 - `parallel/test-stream-objectmode-undefined.js`
 - `parallel/test-stream-once-readable-pipe.js`
 - `parallel/test-stream-passthrough-drain.js`
@@ -649,7 +682,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-pipe-needDrain.js`
 - `parallel/test-stream-pipe-same-destination-twice.js`
 - `parallel/test-stream-pipe-without-listenerCount.js`
-- `parallel/test-stream-pipeline-async-iterator.js`
 - `parallel/test-stream-pipeline-duplex.js`
 - `parallel/test-stream-pipeline-listeners.js`
 - `parallel/test-stream-pipeline-queued-end-in-destroy.js`
@@ -723,8 +755,11 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-writable-null.js`
 - `parallel/test-stream-writable-properties.js`
 - `parallel/test-stream-writable-samecb-singletick.js`
+- `parallel/test-stream-writable-writable.js`
+- `parallel/test-stream-writable-write-cb-error.js`
 - `parallel/test-stream-writable-write-cb-twice.js`
 - `parallel/test-stream-writable-write-error.js`
+- `parallel/test-stream-writable-write-writev-finish.js`
 - `parallel/test-stream-writableState-ending.js`
 - `parallel/test-stream-writableState-uncorked-bufferedRequestCount.js`
 - `parallel/test-stream-write-destroy.js`
@@ -829,6 +864,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-weakref.js`
 - `parallel/test-websocket-disabled.js`
 - `parallel/test-webstream-string-tag.js`
+- `parallel/test-webstreams-compose.js`
 - `parallel/test-whatwg-encoding-custom-api-basics.js`
 - `parallel/test-whatwg-encoding-custom-textdecoder-ignorebom.js`
 - `parallel/test-whatwg-readablebytestreambyob.js`
@@ -848,12 +884,15 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-zlib-deflate-constructors.js`
 - `parallel/test-zlib-destroy-pipe.js`
 - `parallel/test-zlib-destroy.js`
+- `parallel/test-zlib-dictionary-fail.js`
 - `parallel/test-zlib-empty-buffer.js`
 - `parallel/test-zlib-flush-drain.js`
 - `parallel/test-zlib-flush-flags.js`
 - `parallel/test-zlib-from-gzip.js`
 - `parallel/test-zlib-from-string.js`
 - `parallel/test-zlib-invalid-arg-value-brotli-compress.js`
+- `parallel/test-zlib-invalid-input-memory.js`
+- `parallel/test-zlib-invalid-input.js`
 - `parallel/test-zlib-no-stream.js`
 - `parallel/test-zlib-not-string-or-buffer.js`
 - `parallel/test-zlib-premature-end.js`
@@ -864,6 +903,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-zlib-write-after-flush.js`
 - `parallel/test-zlib-zero-byte.js`
 - `sequential/test-https-server-keep-alive-timeout.js`
+- `sequential/test-net-better-error-messages-port.js`
+- `sequential/test-net-connect-handle-econnrefused.js`
+- `sequential/test-net-connect-local-error.js`
+- `sequential/test-net-reconnect-error.js`
 - `sequential/test-net-server-listen-ipv6-link-local.js`
 - `sequential/test-require-cache-without-stat.js`
 - `sequential/test-stream2-fs.js`
@@ -911,7 +954,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 - `parallel/test-dgram-bind-socket-close-before-cluster-reply.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:9:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)    ...
 - `parallel/test-dgram-bind-socket-close-before-lookup.js`: Unhandled promise rejection:     at <anonymous> (<input>:70:23)     at apply (native)     at emit (node:events:300:27)     at apply (native)     at emit (node:domain:103:32)     at <anonymous> (node:d...
-- `parallel/test-dgram-blocklist.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
 - `parallel/test-dgram-close-signal.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:12:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
 - `parallel/test-dgram-cluster-close-during-bind.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:13:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
 - `parallel/test-dgram-cluster-close-in-listening.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:15:13)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
@@ -932,26 +974,26 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-diagnostics-channel-module-import.js`: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   { -     name: 'start', -     parentURL: 'file:///test/parallel/test-diagnostic...
 - `parallel/test-diagnostics-channel-module-require-error.js`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   { -     id: 'does-not-exist', -     name: 'start', -     parentFilename: '/test/parallel/test-diagnostics-channel-module-re...
 - `parallel/test-diagnostics-channel-module-require.js`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   { -     id: 'http', -     name: 'start', -     parentFilename: '/test/parallel/test-diagnostics-channel-module-require.js' ...
-- `parallel/test-diagnostics-channel-net.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-diagnostics-channel-net.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
 - `parallel/test-diagnostics-channel-process.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:14:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
 - `parallel/test-diagnostics-channel-worker-threads.js`: worker_threads is not supported in WebAssembly environment     at Worker (node:worker_threads:14:19)     at anonymous (<input>:13:5)     at loadModule (node:module:272:20)     at localRequire (node:mo...
 
 ### domain
 
 - `parallel/test-domain-abort-on-uncaught.js`: Test index 0 failed: Error: child_process is not supported in WebAssembly environment AssertionError: Test index 0 failed: Error: child_process is not supported in WebAssembly environment     at <anon...
-- `parallel/test-domain-crypto.js`: not a function     at anonymous (<input>:43:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
+- `parallel/test-domain-crypto.js`: not a function     at anonymous (<input>:43:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
 - `parallel/test-domain-load-after-set-uncaught-exception-capture.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:10:3)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
 - `parallel/test-domain-nested-throw.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-0.js`: not a function     at anonymous (<input>:19:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-1.js`: not a function     at anonymous (<input>:22:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-2.js`: not a function     at anonymous (<input>:21:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-3.js`: not a function     at anonymous (<input>:21:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-4.js`: not a function     at anonymous (<input>:21:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-5.js`: not a function     at anonymous (<input>:22:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-6.js`: not a function     at anonymous (<input>:27:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-7.js`: not a function     at anonymous (<input>:27:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-8.js`: not a function     at anonymous (<input>:27:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-domain-no-error-handler-abort-on-uncaught-9.js`: not a function     at anonymous (<input>:28:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-0.js`: not a function     at anonymous (<input>:19:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-1.js`: not a function     at anonymous (<input>:22:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-2.js`: not a function     at anonymous (<input>:21:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-3.js`: not a function     at anonymous (<input>:21:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-4.js`: not a function     at anonymous (<input>:21:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-5.js`: not a function     at anonymous (<input>:22:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-6.js`: not a function     at anonymous (<input>:27:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-7.js`: not a function     at anonymous (<input>:27:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-8.js`: not a function     at anonymous (<input>:27:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-domain-no-error-handler-abort-on-uncaught-9.js`: not a function     at anonymous (<input>:28:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-domain-promise.js`: Unhandled promise rejection:     at <anonymous> (<input>:138:24)     at apply (native)     at wrapper (<input>:51:34)     at apply (native)     at run (node:domain:170:29)     at anonymous (<input>:13...
 - `parallel/test-domain-set-uncaught-exception-capture-after-load.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:14:3)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
 - `parallel/test-domain-stack-empty-in-process-uncaughtexception.js`: boom     at <anonymous> (<input>:26:13)     at apply (native)     at run (node:domain:170:29)     at anonymous (<input>:25:7)     at loadModule (node:module:272:20)     at localRequire (node:module:30...
@@ -965,7 +1007,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 - `parallel/test-file.js`: Expected values to be strictly deep-equal: + actual - expected  + Blob { +   size: [Getter: <Inspection threw (private class field '#size' does not exist)>], - Object [Blob] { -   arrayBuffer: [AsyncF...
 - `parallel/test-filehandle-readablestream.js`: Unhandled promise rejection:     at <anonymous> (<input>:23:34)
-- `parallel/test-fs-promises-file-handle-read.js`: Unhandled promise rejection:     at next (__wasm_rquickjs_builtin/internal/streams/readable:1120:13)     at call (native)     at emit (node:events:302:26)     at apply (native)     at emit (node:domai...
 - `parallel/test-fs-promises-file-handle-stream.js`: Unhandled promise rejection:     at next (__wasm_rquickjs_builtin/internal/streams/readable:1120:13)     at call (native)     at emit (node:events:302:26)     at apply (native)     at emit (node:domai...
 - `sequential/test-fs-opendir-recursive.js`: EIO: EIO: input/output error, symlink '/tmp/node-test-tmpdir/symlinks/symlink-target-file', symlink '/tmp/node-test-tmpdir/symlinks/symlink-target-file'     at createSystemError (node:fs:138:21)     a...
 - `sequential/test-fs-readdir-recursive.js`: EIO: EIO: input/output error, symlink '/tmp/node-test-tmpdir/symlinks/symlink-target-file', symlink '/tmp/node-test-tmpdir/symlinks/symlink-target-file'     at createSystemError (node:fs:138:21)     a...
@@ -973,361 +1014,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### http
 
-- `parallel/test-http-1.0-keep-alive.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at check (<input>:112:32)     at anonymous (<input>:97:11)     at loadModule (node:module:272:2...
-- `parallel/test-http-1.0.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at test (<input>:33:36)     at anonymous (<input>:81:8)     at loadModule (node:module:272:20) ...
-- `parallel/test-http-abort-client.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:29:35)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-addrequest-localaddress.js`: not a function     at anonymous (<input>:22:18)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-agent-keepalive-delay.js`: Cannot find module '_http_agent'     at localRequire (node:module:309:59)     at anonymous (<input>:8:19)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require...
-- `parallel/test-http-agent-keepalive.js`: Cannot find module '_http_agent'     at localRequire (node:module:309:59)     at anonymous (<input>:28:15)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-agent-reuse-drained-socket-only.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-agent-timeout-option.js`: Unhandled promise rejection: Error: HTTP request failed: error sending request
-- `parallel/test-http-buffer-sanity.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:37:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-client-abort3.js`: Error borrowing class: can't borrow a value as it is already borrowed     at abort (node:http:446:25)     at anonymous (<input>:23:7)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-client-aborted-event.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:9:30)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at req...
-- `parallel/test-http-client-error-rawbytes.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-client-headers-host-array.js`: Missing expected exception: http request should throw when passing array as header host AssertionError: Missing expected exception: http request should throw when passing array as header host     at a...
-- `parallel/test-http-client-insecure-http-parser-error.js`: Missing expected exception: http request should throw when passing invalid insecureHTTPParser AssertionError: Missing expected exception: http request should throw when passing invalid insecureHTTPPar...
-- `parallel/test-http-client-invalid-path.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:8:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (n...
-- `parallel/test-http-client-override-global-agent.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:8:35)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at req...
-- `parallel/test-http-client-readable.js`: Unhandled promise rejection: Error: HTTP request failed: error sending request
-- `parallel/test-http-client-reject-chunked-with-content-length.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-client-reject-cr-no-lf.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-client-req-error-dont-double-fire.js`: Unhandled promise rejection:     at anonymous (<input>:22:17)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-c...
-- `parallel/test-http-client-timeout-option-with-agent.js`: Unhandled promise rejection: Error: HTTP request failed: error sending request
-- `parallel/test-http-client-timeout-option.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:8:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (n...
-- `parallel/test-http-client-unescaped-path.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:32:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
-- `parallel/test-http-common.js`: Cannot find module '_http_common'     at localRequire (node:module:309:59)     at anonymous (<input>:6:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-conn-reset.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-debug.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-http-default-encoding.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:32:21)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-dns-error.js`: Unhandled promise rejection: Error: HTTP request failed: error sending request
-- `parallel/test-http-extra-response.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-header-validators.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:32:5)     at forEach (native)     at anonymous (<input>:29:3)     at...
-- `parallel/test-http-hostname-typechecking.js`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (<input>:22:16)     at forEach (native)     at anonymous (<input>:13:6)     at loadModule (node:module:272:20...
-- `parallel/test-http-import-websocket.js`: WebSocket is not defined     at anonymous (<input>:13:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compa...
-- `parallel/test-http-incoming-matchKnownFields.js`: cannot read property 'Symbol.iterator' of undefined     at IncomingMessage (node:http:193:9)     at checkDest (<input>:11:31)     at anonymous (<input>:19:1)     at loadModule (node:module:272:20)    ...
-- `parallel/test-http-incoming-message-connection-setter.js`: cannot read property 'status' of undefined     at IncomingMessage (node:http:176:9)     at anonymous (<input>:12:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)    ...
-- `parallel/test-http-incoming-message-destroy.js`: cannot read property 'status' of undefined     at IncomingMessage (node:http:176:9)     at anonymous (<input>:10:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)    ...
-- `parallel/test-http-insecure-parser-per-stream.js`: not a function     at anonymous (<input>:13:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-invalid-path-chars.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:14:12)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require ...
-- `parallel/test-http-invalid-urls.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:25:21)     at forEach (native)     at <anonymous> (<input>:20:26)   ...
-- `parallel/test-http-invalidheaderfield2.js`: Cannot find module '_http_common'     at localRequire (node:module:309:59)     at anonymous (<input>:7:56)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-max-header-size-per-stream.js`: not a function     at anonymous (<input>:13:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-max-header-size.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-http-multi-line-headers.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-no-content-length.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-outgoing-destroy.js`: not a function     at anonymous (<input>:11:19)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-outgoing-internal-headernames-getter.js`: not a function     at anonymous (<input>:14:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-outgoing-internal-headernames-setter.js`: not a function     at anonymous (<input>:13:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-outgoing-message-inheritance.js`: parent class must be constructor     at anonymous (<input>:8:16)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (nod...
-- `parallel/test-http-outgoing-properties.js`: not a function     at anonymous (<input>:11:19)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-outgoing-proto.js`: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'      at ano...
-- `parallel/test-http-outgoing-settimeout.js`: not a function     at anonymous (<input>:12:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-parser-bad-ref.js`: Cannot find module '_http_common'     at localRequire (node:module:309:59)     at anonymous (<input>:11:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requi...
-- `parallel/test-http-parser-memory-retention.js`: Cannot find module '_http_common'     at localRequire (node:module:309:59)     at anonymous (<input>:8:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-parser-multiple-execute.js`: Unhandled promise rejection: Error: HTTP request failed: error sending request
-- `parallel/test-http-parser-timeout-reset.js`: process.binding is not supported in WASM environment     at binding (node:process:219:15)     at anonymous (<input>:7:32)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34...
-- `parallel/test-http-parser.js`: Cannot find module '_http_common'     at localRequire (node:module:309:59)     at anonymous (<input>:28:33)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requi...
-- `parallel/test-http-pause-resume-one-end.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:29:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-perf_hooks.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:26:35)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-req-res-close.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:12:37)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-request-agent.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-http-request-end-twice.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:29:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-request-end.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:32:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-request-invalid-method-error.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:9:3)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (n...
-- `parallel/test-http-res-write-after-end.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:29:44)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-response-no-headers.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-server-async-dispose.js`: Cannot find module '_http_server'     at localRequire (node:module:309:59)     at anonymous (<input>:7:42)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-server-clear-timer.js`: Cannot find module '_http_server'     at localRequire (node:module:309:59)     at anonymous (<input>:7:42)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-server-close-destroy-timeout.js`: Cannot find module '_http_server'     at localRequire (node:module:309:59)     at anonymous (<input>:7:42)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-server-connections-checking-leak.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:20:23)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-server-keepalive-req-gc.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:15:36)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-server-method.query.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:9:36)     at loadModule (node:module:272:20)     at localRequire (node:mo...
-- `parallel/test-http-server-multiple-client-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-server-options-server-response.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:23:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http-server.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:35:10)     at forEach (native)     at anonymous (<input>:34:17)     ...
-- `parallel/test-http-set-max-idle-http-parser.js`: Cannot find module '_http_common'     at localRequire (node:module:309:59)     at anonymous (<input>:6:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-http-sync-write-error-during-continue.js`: not a function     at anonymous (<input>:14:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http-upgrade-agent.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-upgrade-binary.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http-upgrade-server.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at call (native)     at testServer (<input>:42:20)     at createTestServer (<input>:38:14)     at anonymous (<input>:1...
-- `parallel/test-http-url.parse-auth-with-header-in-request.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:35:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-url.parse-auth.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:35:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-url.parse-basic.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:43:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-url.parse-https.request.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-http-url.parse-only-support-http-https-protocol.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:41:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
-- `parallel/test-http-url.parse-path.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:35:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-url.parse-post.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:42:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http-url.parse-search.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:35:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-http.js`: class constructors must be invoked with 'new'     at Server (node:http:471:5)     at anonymous (<input>:32:35)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-http2-allow-http1.js`: Unhandled promise rejection:     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-alpn.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:17:10)     at loadModule (node:module:272:20)     at localRequire (nod...
-- `parallel/test-http2-async-local-storage.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-backpressure.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-byteswritten-server.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-cancel-while-client-reading.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-clean-output.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-http2-client-connection-tunnelling.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http2-client-jsstream-destroy.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-port-80.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-priority-before-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-promisify-connect-error.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-promisify-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-proxy-over-http2.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-request-listeners-warning.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-request-options-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-rststream-before-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-set-priority.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setLocalWindowSize.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setNextStreamID-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-settings-before-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-shutdown-before-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-write-before-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-write-empty-string.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-close-while-writing.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-aborted.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-expect-continue-check.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-expect-continue.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-expect-handling.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-method-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-end.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-host.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-pause.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-pipe.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-settimeout.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-trailers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-close.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-createpushresponse.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-drain.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end-after-statuses-without-body.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-finished.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-flushheaders.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-headers-after-destroy.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-headers-send-date.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-settimeout.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-statuscode.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-statusmessage-property-set.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-statusmessage-property.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-statusmessage.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-trailers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-write.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead-array.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-short-stream-client-server.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-socket-destroy-delayed.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-socket-set.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints-invalid-argument-type.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints-invalid-argument-value.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-head-destroyed.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect-method-extended-cant-turn-off.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect-method-extended.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect-method.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http2-connect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-cookies.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-createsecureserver-options.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:21:44)     at forEach (native)     at anonymous (<input>:14:16)     ...
-- `parallel/test-http2-createserver-options.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:21:44)     at forEach (native)     at anonymous (<input>:14:16)     ...
-- `parallel/test-http2-createwritereq.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-date-header.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-debug.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-http2-destroy-after-write.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-dont-lose-data.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-dont-override.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-empty-frame-without-eof.js`: Unhandled promise rejection:     at <anonymous> (node:net:4:33)
-- `parallel/test-http2-error-order.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-exceeds-server-trailer-size.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-forget-closed-streams.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-generic-streams-sendfile.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-generic-streams.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-goaway-delayed-request.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-goaway-opaquedata.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-head-request.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-https-fallback-http-server-options.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-https-fallback.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-http2-info-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidargtypes-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfield.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfields-client.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-ip-address-host.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-large-write-close.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-large-write-destroy.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-large-write-multiple-requests.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-large-writes-session-memory-leak.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-malformed-altsvc.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-many-writes-and-destroy.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-max-invalid-frames.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-max-session-memory-leak.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-max-settings.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-methods.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-misbehaving-flow-control-paused.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-misbehaving-flow-control.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-misused-pseudoheaders.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-multiheaders-raw.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-multiheaders.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-multistream-destroy-on-read-tls.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-no-wanttrailers-listener.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-onping.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-options-max-headers-block-length.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-options-server-request.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-options-server-response.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-pack-end-stream-flag.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-padding-aligned.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-perf_hooks.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-perform-server-handshake.js`: not a function     at anonymous (<input>:17:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http2-ping-settings-heapdump.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-ping-unsolicited-ack.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-ping.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-pipe-named-pipe.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-pipe.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-priority-event.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-propagate-session-destroy-code.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-removed-header-stays-removed.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-request-remove-connect-listener.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-res-corked.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-res-writable-properties.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-reset-flood.js`: worker_threads is not supported in WebAssembly environment     at Worker (node:worker_threads:14:19)     at anonymous (<input>:31:20)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-http2-respond-file-204.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-304.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-404.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-compat.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-error-dir.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-error-pipe-offset.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-http2-respond-file-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-fd-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-fd-invalid.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-fd.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-filehandle.js`: Unhandled promise rejection:     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-push.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-range.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-file-with-pipe.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-http2-respond-file.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-no-data.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-respond-with-file-connection-abort.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-response-splitting.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-sensitive-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-sent-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-serve-file.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-async-dispose.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-push-disabled.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-push-stream-errors-args.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-push-stream.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-rst-before-respond.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-session-destroy.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-set-header.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-setLocalWindowSize.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-settimeout-no-callback.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-shutdown-before-respond.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-shutdown-options-errors.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-shutdown-redundant.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-stream-session-destroy.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-timeout.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-unknown-protocol.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-session-gc-while-write-scheduled.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-session-settings.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-session-stream-state.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-session-timeout.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-settings-unsolicited-ack.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-short-stream-client-server.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-single-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-socket-close.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-http2-socket-proxy-handler-for-has.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-status-code-invalid.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-status-code.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-stream-client.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-stream-destroy-event-order.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-stream-removelisteners-after-close.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-timeouts.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-tls-disconnect.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-too-large-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-too-many-headers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-too-many-settings.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-trailers-after-session-close.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-trailers.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-unbound-socket-proxy.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-update-settings.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-window-size.js`: Unhandled promise rejection:     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-write-callbacks.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-write-empty-string.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-write-finishes-after-stream-destroy.js`: not a function     at anonymous (<input>:17:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-http2-zero-length-header.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-zero-length-write.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-https-abortcontroller.js`: Unhandled promise rejection:     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-abort-controller.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-additional-options.js`: class constructors must be invoked with 'new'     at Server (node:https:37:5)     at anonymous (<input>:21:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-https-agent-constructor.js`: class constructors must be invoked with 'new'     at Agent (node:http:115:5)     at anonymous (<input>:11:17)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at req...
-- `parallel/test-https-agent-create-connection.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-disable-session-reuse.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-getname.js`: Expected values to be strictly equal: + actual - expected  + 'localhost::' - 'localhost::::::::::::::::::::::'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'localhost:...
-- `parallel/test-https-agent-keylog.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-servername.js`: class constructors must be invoked with 'new'     at Server (node:https:37:5)     at anonymous (<input>:20:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-https-agent-session-eviction.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-session-injection.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-session-reuse.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-sni.js`: class constructors must be invoked with 'new'     at Server (node:https:37:5)     at anonymous (<input>:20:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-https-agent-sockets-leak.js`: class constructors must be invoked with 'new'     at Server (node:https:37:5)     at anonymous (<input>:19:45)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-https-agent-unref-socket.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-https-agent.js`: class constructors must be invoked with 'new'     at Server (node:https:37:5)     at anonymous (<input>:40:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-https-argument-of-creating.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-byteswritten.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-client-checkServerIdentity.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-client-get-url.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-client-override-global-agent.js`: class constructors must be invoked with 'new'     at Server (node:https:37:5)     at anonymous (<input>:19:45)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at re...
-- `parallel/test-https-client-reject.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-client-resume.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-close.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-drain.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-eof-for-eom.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:48:27)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-https-host-headers.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-hwm.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-insecure-parse-per-stream.js`: not a function     at anonymous (<input>:26:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-https-keep-alive-drop-requests.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-localaddress-bind-error.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-max-header-size-per-stream.js`: not a function     at anonymous (<input>:28:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-https-max-headers-count.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-options-boolean-check.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-pfx.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-request-arguments.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-resume-after-renew.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-server-async-dispose.js`: Cannot find module '_http_server'     at localRequire (node:module:309:59)     at anonymous (<input>:12:42)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requi...
-- `parallel/test-https-server-close-all.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-server-close-destroy-timeout.js`: Cannot find module '_http_server'     at localRequire (node:module:309:59)     at anonymous (<input>:11:42)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requi...
-- `parallel/test-https-server-close-idle.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-server-connections-checking-leak.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-server-headers-timeout.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-server-options-incoming-message.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-server-options-server-response.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-server-request-timeout.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-simple.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:51:10)     at loadModule (node:module:272:20)     at localRequire (nod...
-- `parallel/test-https-strict.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-timeout-server-2.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-timeout-server.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-timeout.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-truncate.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-unix-socket-self-signed.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `sequential/test-http-econnrefused.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:37:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `sequential/test-http-keep-alive-large-write.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:15:41)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `sequential/test-http-keepalive-maxsockets.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:32:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `sequential/test-http-regr-gh-2928.js`: Cannot find module '_http_common'     at localRequire (node:module:309:59)     at anonymous (<input>:9:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `sequential/test-http-server-keep-alive-timeout-slow-client-headers.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:10:41)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `sequential/test-http-server-keep-alive-timeout-slow-server.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:9:41)     at loadModule (node:module:272:20)     at localRequire (node:mo...
-- `sequential/test-http-server-request-timeouts-mixed.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:27:11)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `sequential/test-http2-large-file.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `sequential/test-http2-max-session-memory.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `sequential/test-http2-ping-flood.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `sequential/test-http2-settings-flood.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `sequential/test-http2-timeout-large-write-file.js`: Error converting from js 'object' into type 'string'     at writeFileSync (node:fs:592:68)     at anonymous (<input>:35:18)     at loadModule (node:module:272:20)     at localRequire (node:module:305:...
-- `sequential/test-http2-timeout-large-write.js`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `sequential/test-https-connect-localport.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
 
 ### inspector
 
@@ -1345,7 +1032,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `es-module/test-esm-data-urls.js`: Unexpected token ','     at <input>:64:45     at Function (native)     at compileCjs (node:module:233:50)     at loadModule (node:module:271:37)     at localRequire (node:module:305:34)     at require...
 - `es-module/test-esm-dynamic-import-attribute.js`: Unexpected token ','     at <input>:10:35     at Function (native)     at compileCjs (node:module:233:50)     at loadModule (node:module:271:37)     at localRequire (node:module:305:34)     at require...
 - `es-module/test-esm-dynamic-import-commonjs.js`: Unhandled promise rejection: ReferenceError: Error resolving module 'file:///test/fixtures/empty.js' from '<input>'
-- `es-module/test-esm-dynamic-import-mutating-fs.js`: not a function     at anonymous (<input>:11:39)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `es-module/test-esm-dynamic-import-mutating-fs.js`: not a function     at anonymous (<input>:11:39)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `es-module/test-esm-dynamic-import.js`: Unhandled promise rejection: ReferenceError: Error resolving module '../fixtures/es-modules/test-esm-ok.mjs' from '<input>'
 - `es-module/test-esm-encoded-path-native.js`: child_process not supported in WASM     at spawnPromisified (<input>:177:35)     at <anonymous> (<input>:15:16)     at call (native)     at runTest (node:test:256:30)     at executeSuite (node:test:41...
 - `es-module/test-esm-error-cache.js`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + 'ReferenceError' - 'SyntaxError'      at <anonymous> (<input>:15:24)
@@ -1404,7 +1091,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-module-circular-symlinks.js`: EIO: EIO: input/output error, symlink '/tmp/node-test-tmpdir/node_modules/moduleA', symlink '/tmp/node-test-tmpdir/node_modules/moduleA'     at createSystemError (node:fs:138:21)     at symlinkSync (n...
 - `parallel/test-module-create-require-multibyte.js`: Cannot find module './experimental' from 'file:///test/fixtures'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:18:26)     at loadModule...
 - `parallel/test-module-create-require.js`: Cannot find module './experimental' from 'file:///test/fixtures'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:14:24)     at loadModule...
-- `parallel/test-module-globalpaths-nodepath.js`: not a function     at anonymous (<input>:42:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
+- `parallel/test-module-globalpaths-nodepath.js`: not a function     at anonymous (<input>:42:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
 - `parallel/test-module-isBuiltin.js`: false == true AssertionError: false == true     at apply (native)     at assert (node:assert:1156:14)     at anonymous (<input>:10:8)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-module-loading-error.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:61:3)     at loadModule (node:module:272:20)     at localRequire (node...
 - `parallel/test-module-loading-globalpaths.js`: Cannot find module '../common/shared-lib-util' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:12:28)     at loadMo...
@@ -1418,7 +1105,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-module-relative-lookup.js`: not a function     at testFirstInPath (<input>:15:43)     at anonymous (<input>:23:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26...
 - `parallel/test-module-run-main-monkey-patch.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-module-setsourcemapssupport.js`: The input did not match the regular expression /ERR_INVALID_ARG_TYPE/. Input:  'TypeError: not a function'  AssertionError: The input did not match the regular expression /ERR_INVALID_ARG_TYPE/. Input...
-- `parallel/test-module-stat.js`: not a function     at anonymous (<input>:21:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-module-stat.js`: not a function     at anonymous (<input>:21:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-module-symlinked-peer-modules.js`: EIO: EIO: input/output error, symlink '/tmp/node-test-tmpdir/moduleA', symlink '/tmp/node-test-tmpdir/moduleA'     at createSystemError (node:fs:138:21)     at symlinkSync (node:fs:922:33)     at anon...
 - `parallel/test-module-version.js`: false == true AssertionError: false == true     at apply (native)     at assert (node:assert:1156:14)     at anonymous (<input>:8:22)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-module-wrap.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
@@ -1442,155 +1129,19 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### net
 
-- `parallel/test-net-access-byteswritten.js`: cannot read property 'bytesWritten' of undefined     at anonymous (<input>:17:42)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)   ...
-- `parallel/test-net-after-close.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-allow-half-open.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js`: not a function     at anonymous (<input>:12:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-net-autoselectfamily-attempt-timeout-default-value.js`: not a function     at anonymous (<input>:10:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-net-autoselectfamily-commandline-option.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-autoselectfamily-default.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-autoselectfamily.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-better-error-messages-listen-path.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-better-error-messages-listen.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-better-error-messages-path.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-better-error-messages-port-hostname.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-binary.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at anonymous (<input>:39:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-net-bind-twice.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-blocklist.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-buffersize.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-bytes-read.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-bytes-stats.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at anonymous (<input>:33:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-net-bytes-written-large.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-can-reset-timeout.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-child-process-connect-reset.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-net-client-bind-twice.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-abort-controller.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-after-destroy.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-buffer.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at anonymous (<input>:29:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-net-connect-buffer2.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at anonymous (<input>:8:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requi...
-- `parallel/test-net-connect-call-socket-connect.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-destroy.js`: not a function     at anonymous (<input>:8:27)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
-- `parallel/test-net-connect-immediate-destroy.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-immediate-finish.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-keepalive.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-memleak.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-no-arg.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:11:8)     at loadModule (node:module:272:20)     at localRequire (node...
-- `parallel/test-net-connect-nodelay.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-options-allowhalfopen.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-options-invalid.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:26:20)     at forEach (native)     at anonymous (<input>:14:15)     ...
-- `parallel/test-net-connect-options-path.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-options-port.js`: createConnectionWithCb(true) AssertionError: createConnectionWithCb(true)     at syncFailToConnect (<input>:144:21)     at anonymous (<input>:37:21)     at loadModule (node:module:272:20)     at local...
-- `parallel/test-net-connect-paused-connection.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-reset-after-destroy.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-reset-before-connected.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-reset-until-connected.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-connect-reset.js`: not a function     at anonymous (<input>:8:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83:...
-- `parallel/test-net-deprecated-setsimultaneousaccepts.js`: not a function     at anonymous (<input>:20:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
-- `parallel/test-net-dns-custom-lookup.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-dns-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-dns-lookup-skip.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-dns-lookup.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-during-close.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-eaddrinuse.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-end-destroyed.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-end-without-connect.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-error-twice.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-isip.js`: Expected values to be strictly equal:  6 !== 0  AssertionError: Expected values to be strictly equal:  6 !== 0      at anonymous (<input>:44:24)     at loadModule (node:module:272:20)     at localRequ...
-- `parallel/test-net-isipv6.js`: Expected values to be strictly equal:  false !== true  AssertionError: Expected values to be strictly equal:  false !== true      at anonymous (<input>:241:33)     at loadModule (node:module:272:20)  ...
-- `parallel/test-net-keepalive.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-large-string.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-listen-after-destroying-stdin.js`: not a function     at anonymous (<input>:11:15)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-net-listen-close-server-callback-is-not-function.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-listen-close-server.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-listen-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-listen-exclusive-random-ports.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:11:27)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
-- `parallel/test-net-listen-fd0.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-listen-handle-in-cluster-1.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:11:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
-- `parallel/test-net-listen-invalid-port.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at anonymous (<input>:15:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requi...
-- `parallel/test-net-listen-twice.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:10:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
-- `parallel/test-net-listening.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-local-address-port.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-localerror.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at connect (<input>:31:5)     at anonymous (<input>:36:1)     at loadModule (node:module:272...
-- `parallel/test-net-onread-static-buffer.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-options-lookup.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at connectThrows (<input>:18:10)     at <anonymous> (<input>:8:56)     at forEach (native)  ...
-- `parallel/test-net-pause-resume-connecting.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-perf_hooks.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-persistent-keepalive.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-pingpong.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-pipe-connect-errors.js`: Expected values to be strictly equal: + actual - expected  + undefined - 'ENOENT'  AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - 'ENOENT'      at cleanup (<i...
-- `parallel/test-net-reconnect.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-remote-address-port.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-remote-address.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-reuseport.js`: Cannot find module '../common/net' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:5:44)     at loadModule (node:mo...
-- `parallel/test-net-server-blocklist.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-call-listen-multiple-times.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at anonymous (<input>:11:27)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-net-server-capture-rejection.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-close-before-calling-lookup-callback.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-close-before-ipc-response.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:11:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
-- `parallel/test-net-server-close.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-drop-connections-in-cluster.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:9:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)    ...
-- `parallel/test-net-server-drop-connections.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-keepalive.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-listen-options-signal.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-listen-options.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-listen-path.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-listen-remove-callback.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-max-connections-close-makes-more-available.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-max-connections.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-nodelay.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-options.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:8:8)     at loadModule (node:module:272:20)     at localRequire (node:...
-- `parallel/test-net-server-pause-on-connect.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-reset.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-simultaneous-accepts-produce-warning-once.js`: not a function     at anonymous (<input>:20:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
-- `parallel/test-net-server-try-ports.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at anonymous (<input>:31:21)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-net-server-unref-persistent.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-server-unref.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-settimeout.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-byteswritten.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-close-after-end.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-connect-invalid-autoselectfamily.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:9:8)     at loadModule (node:module:272:20)     at localRequire (node:...
-- `parallel/test-net-socket-connect-invalid-autoselectfamilyattempttimeout.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:11:10)     at loadModule (node:module:272:20)     at localRequire (nod...
-- `parallel/test-net-socket-connect-without-cb.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-connecting.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-constructor.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:10:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
-- `parallel/test-net-socket-destroy-send.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-destroy-twice.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-end-before-connect.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-end-callback.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-local-address.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-no-halfopen-enforcer.js`: not a function     at anonymous (<input>:13:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-net-socket-ready-without-cb.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-reset-send.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-reset-twice.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-setnodelay.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-timeout-unref.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-timeout.js`: 100 AssertionError: 100     at anonymous (<input>:42:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat...
-- `parallel/test-net-socket-write-after-close.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-socket-write-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-stream.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-sync-cork.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-throttle.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-timeout-no-handle.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-writable.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-write-after-close.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-write-after-end-nt.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-write-arguments.js`: not a function     at anonymous (<input>:7:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
-- `parallel/test-net-write-cb-on-destroy-before-connect.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-write-connect-write.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-write-fully-async-buffer.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-write-fully-async-hex-string.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-net-write-slow.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-GH-5504.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `sequential/test-net-better-error-messages-port.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-connect-econnrefused.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-connect-handle-econnrefused.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-connect-local-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-listen-shared-ports.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at anonymous (<input>:31:27)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)   ...
-- `sequential/test-net-localport.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-reconnect-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-response-size.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `sequential/test-net-server-address.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `sequential/test-net-server-bind.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-net-after-close.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-allow-half-open.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-autoselectfamily-commandline-option.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-autoselectfamily-default.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-autoselectfamily.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-listen-invalid-port.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-listening.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-server-nodelay.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-socket-connect-without-cb.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-socket-write-error.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-net-writable.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `sequential/test-net-connect-econnrefused.js`: Expected values to be strictly equal:  1 !== 5  AssertionError: Expected values to be strictly equal:  1 !== 5      at <anonymous> (<input>:68:22)     at apply (native)     at emit (node:events:300:27...
+- `sequential/test-net-server-address.js`: Unhandled promise rejection:     at <anonymous> (<input>:70:23)     at apply (native)     at emit (node:events:300:27)     at apply (native)     at emit (node:domain:103:32)     at <anonymous> (node:n...
 
 ### os
 
@@ -1614,8 +1165,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-atomics-wake.js`: Atomics is not defined     at anonymous (<input>:9:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-r...
 - `parallel/test-bash-completion.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-benchmark-cli.js`: Cannot find module '../../benchmark/_cli.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:11:13)     at loadModu...
-- `parallel/test-blocklist-clone.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-blocklist.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-blocklist-clone.js`: Unhandled promise rejection: AssertionError: Expected "actual" to be strictly unequal to:  BlockList {   _rules: [     {       address: '123.123.123.123',       family: 'ipv4',       type: 'address'  ...
+- `parallel/test-blocklist.js`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (<input>:18:12)     at forEach (native)     at anonymous (<input>:17:42)     at loadModule (node:module:272:2...
 - `parallel/test-bootstrap-modules.js`: cannot read property 'slice' of undefined     at anonymous (<input>:3:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runT...
 - `parallel/test-broadcastchannel-custom-inspect.js`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:20:19)     at anonymous (<input>:13:18)     at loadModule (node:module:272:20)     at localRequi...
 - `parallel/test-c-ares.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:76:5)     at forEach (native)     at anonymous (<input>:68:3)     at...
@@ -1654,7 +1205,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-cwd-enoent-preload.js`: ENOENT: no such file or directory, chdir '/' -> '/tmp/node-test-tmpdir/cwd-does-not-exist-1'     at chdir (node:process:300:112)     at anonymous (<input>:26:15)     at loadModule (node:module:272:20)...
 - `parallel/test-cwd-enoent-repl.js`: ENOENT: no such file or directory, chdir '/' -> '/tmp/node-test-tmpdir/cwd-does-not-exist-1'     at chdir (node:process:300:112)     at anonymous (<input>:25:15)     at loadModule (node:module:272:20)...
 - `parallel/test-cwd-enoent.js`: ENOENT: no such file or directory, chdir '/' -> '/tmp/node-test-tmpdir/cwd-does-not-exist-1'     at chdir (node:process:300:112)     at anonymous (<input>:25:15)     at loadModule (node:module:272:20)...
-- `parallel/test-destroy-socket-in-lookup.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
 - `parallel/test-directory-import.js`: Unhandled promise rejection: AssertionError: The input did not match the regular expression /ERR_UNSUPPORTED_DIR_IMPORT/. Input:  "ReferenceError: Error resolving module './' from '<input>'"
 - `parallel/test-disable-proto-delete.js`: Expected values to be strictly equal: + actual - expected  + null - undefined  AssertionError: Expected values to be strictly equal: + actual - expected  + null - undefined      at anonymous (<input>:...
 - `parallel/test-disable-proto-throw.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:14:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
@@ -1663,8 +1213,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-dotenv-edge-cases.js`: child_process not supported in WASM     at spawnPromisified (<input>:177:35)     at <anonymous> (<input>:50:36)     at call (native)     at runTest (node:test:256:30)     at executeSuite (node:test:41...
 - `parallel/test-dotenv-node-options.js`: child_process not supported in WASM     at spawnPromisified (<input>:177:35)     at <anonymous> (<input>:22:7)     at call (native)     at runTest (node:test:256:30)     at executeSuite (node:test:415...
 - `parallel/test-dotenv.js`: Expected values to be strictly equal: + actual - expected  + undefined - 'basic'  AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - 'basic'      at anonymous (<i...
-- `parallel/test-double-tls-client.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-double-tls-server.js`: Unhandled promise rejection:     at <anonymous> (node:net:4:33)
+- `parallel/test-double-tls-client.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-double-tls-server.js`: Unhandled promise rejection:     at ERR_SOCKET_BAD_PORT (__wasm_rquickjs_builtin/internal/errors:370:9)     at listen (node:net:818:23)     at <anonymous> (<input>:95:6)     at Promise (native)     at...
 - `parallel/test-env-var-no-warnings.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-err-name-deprecation.js`: process.binding is not supported in WASM environment     at binding (node:process:219:15)     at anonymous (<input>:18:9)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34...
 - `parallel/test-error-prepare-stack-trace.js`: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'      at ano...
@@ -1679,7 +1229,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-force-repl.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-freeze-intrinsics.js`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at anonymous (<input>:9:3)     at loadModule (node:module:272:20)     at localRequire (node:module:3...
 - `parallel/test-gc-http-client-connaborted.js`: http.createServer is not supported in WebAssembly environment     at createServer (node:http:467:15)     at anonymous (<input>:23:34)     at loadModule (node:module:272:20)     at localRequire (node:m...
-- `parallel/test-gc-net-timeout.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-gc-net-timeout.js`: cannot read property 'port' of null     at getAll (<input>:44:34)     at anonymous (<input>:58:3)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:m...
 - `parallel/test-gc-tls-external-memory.js`: not a function     at connect (<input>:42:38)     at anonymous (<input>:28:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at...
 - `parallel/test-global-console-exists.js`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (<input>:28:22)     at apply (native)     at emit (node:events:300:27...
 - `parallel/test-global-customevent-disabled.js`: Expected values to be strictly equal: + actual - expected  + 'function' - 'undefined'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'function' - 'undefined'      at ano...
@@ -1696,11 +1246,11 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-icu-minimum-version.js`: Cannot find module '/tools/icu/icu_versions.json' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:15:45)     at loa...
 - `parallel/test-internal-process-binding.js`: The input did not match the regular expression /No such module/. Input:  'Error: process.binding is not supported in WASM environment'  AssertionError: The input did not match the regular expression /...
 - `parallel/test-kill-segfault-freebsd.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-listen-fd-cluster.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-listen-fd-cluster.js`: undefined == true AssertionError: undefined == true     at <anonymous> (<input>:49:13)     at apply (native)     at emit (node:events:300:27)     at apply (native)     at emit (node:domain:103:32)    ...
 - `parallel/test-listen-fd-detached-inherit.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-listen-fd-detached.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-listen-fd-ebadf.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-listen-fd-server.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-listen-fd-ebadf.js`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal:  'EACCES' !== 'EINVAL'      at onError (<input>:47:22)     at apply (native)     at wrapper (<input>:51:34)     at ap...
+- `parallel/test-listen-fd-server.js`: undefined == true AssertionError: undefined == true     at <anonymous> (<input>:40:13)     at apply (native)     at emit (node:events:300:27)     at apply (native)     at emit (node:domain:103:32)    ...
 - `parallel/test-math-random.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-memory-usage-emfile.js`: EIO: EIO: input/output error, open '/test/parallel/test-memory-usage-emfile.js', open '/test/parallel/test-memory-usage-emfile.js'     at createSystemError (node:fs:138:21)     at openSync (node:fs:65...
 - `parallel/test-memory-usage.js`: false == true AssertionError: false == true     at anonymous (<input>:32:21)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at ...
@@ -1716,7 +1266,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-npm-install.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-npm-version.js`: Cannot find module '/deps/npm/package.json' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:18:21)     at loadModul...
 - `parallel/test-openssl-ca-options.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-outgoing-message-destroy.js`: not a function     at anonymous (<input>:10:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-outgoing-message-destroy.js`: not a function     at anonymous (<input>:10:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-outgoing-message-pipe.js`: Cannot find module '_http_outgoing'     at localRequire (node:module:309:59)     at anonymous (<input>:6:25)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
 - `parallel/test-permission-allow-addons-cli.js`: Cannot find module 'pkgexports/no-addons'     at localRequire (node:module:309:59)     at anonymous (<input>:21:15)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     ...
 - `parallel/test-permission-allow-child-process-cli.js`: cannot read property 'has' of undefined     at anonymous (<input>:30:13)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runT...
@@ -1742,11 +1292,11 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-permission-warning-flags.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-permission-wasi.js`: Cannot find module 'wasi'     at localRequire (node:module:309:59)     at anonymous (<input>:9:18)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:...
 - `parallel/test-permission-worker-threads-cli.js`: cannot read property 'has' of undefined     at anonymous (<input>:20:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runT...
-- `parallel/test-pipe-address.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-pipe-address.js`: Unhandled promise rejection:     at makeError (node:net:67:21)     at makeUnsupportedIpcListenError (node:net:73:17)     at <anonymous> (node:net:804:73)     at <anonymous> (node:net:93:34)     at app...
 - `parallel/test-pipe-head.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-pipe-stream.js`: class constructors must be invoked with 'new'     at Server (node:net:73:5)     at test (<input>:54:22)     at anonymous (<input>:63:6)     at loadModule (node:module:272:20)     at localRequire (node...
+- `parallel/test-pipe-stream.js`: Unhandled promise rejection:     at makeError (node:net:67:21)     at makeUnsupportedIpcListenError (node:net:73:17)     at <anonymous> (node:net:804:73)     at <anonymous> (node:net:93:34)     at app...
 - `parallel/test-pipe-unref.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-pipe-writev.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-pipe-writev.js`: Unhandled promise rejection:     at makeError (node:net:67:21)     at makeUnsupportedIpcListenError (node:net:73:17)     at <anonymous> (node:net:804:73)     at <anonymous> (node:net:93:34)     at app...
 - `parallel/test-preload-print-process-argv.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-preload-self-referential.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-preload-worker.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
@@ -1764,16 +1314,15 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-promise-unhandled-silent.js`: Unhandled promise rejection:     at <anonymous> (<input>:12:13)     at Promise (native)     at anonymous (<input>:11:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34) ...
 - `parallel/test-promise-unhandled-warn-no-hook.js`: Unhandled promise rejection:     at <anonymous> (<input>:11:13)     at Promise (native)     at anonymous (<input>:10:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34) ...
 - `parallel/test-promise-unhandled-warn.js`: Unhandled promise rejection:     at <anonymous> (<input>:13:13)     at Promise (native)     at anonymous (<input>:12:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34) ...
-- `parallel/test-promises-unhandled-proxy-rejections.js`: Error from proxy     at throwErr (<input>:8:13)     at runTest (node-compat-runner:107:37)
+- `parallel/test-promises-unhandled-proxy-rejections.js`: Error from proxy     at throwErr (<input>:8:13)     at runTest (node-compat-runner:146:37)
 - `parallel/test-promises-unhandled-symbol-rejections.js`: Unhandled promise rejection: Symbol()
 - `parallel/test-promises-warning-on-unhandled-rejection.js`: Unhandled promise rejection: 42
 - `parallel/test-punycode.js`: Cannot find module 'punycode'     at localRequire (node:module:309:59)     at anonymous (<input>:34:18)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
 - `parallel/test-queue-microtask-uncaught-asynchooks.js`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'init', -   'after', -   'before', -   'destroy' - ]  AssertionError: Expected values to be strictly deep-equal: + actual -...
 - `parallel/test-queue-microtask.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:16:24)     at forEach (native)     at anonymous (<input>:15:3)     a...
-- `parallel/test-ref-unref-return.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
 - `parallel/test-release-changelog.js`: Failed to read file "/src/node_version.h": No such file or directory (os error 44)     at readFileSync (node:fs:560:23)     at anonymous (<input>:22:37)     at loadModule (node:module:272:20)     at l...
 - `parallel/test-release-npm.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-resource-usage.js`: not a function     at anonymous (<input>:7:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
+- `parallel/test-resource-usage.js`: not a function     at anonymous (<input>:7:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
 - `parallel/test-security-revert-unknown.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-set-incoming-message-header.js`: cannot read property 'status' of undefined     at IncomingMessage (node:http:176:9)     at anonymous (<input>:11:18)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)    ...
 - `parallel/test-setproctitle.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
@@ -1816,11 +1365,11 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-snapshot-umd.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-snapshot-warning.js`: child_process.spawnSync is not available in WASM     at spawnSyncAndExitWithoutError (<input>:31:13)     at anonymous (<input>:24:32)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-snapshot-worker.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-socket-address.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-socket-options-invalid.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:26:20)     at forEach (native)     at anonymous (<input>:14:15)     ...
-- `parallel/test-socket-write-after-fin-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-socket-write-after-fin.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-socket-writes-before-passed-to-tls-socket.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-socket-address.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-socket-options-invalid.js`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (<input>:26:20)     at forEach (native)     at anonymous (<input>:14:15)     at loadModule (node:module:272:2...
+- `parallel/test-socket-write-after-fin-error.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-socket-write-after-fin.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-socket-writes-before-passed-to-tls-socket.js`: Port should be >= 0 and < 65536. Received function client() {   const socket = net.createConnection({     host: '127.0.0.1',     port: server.address().port,   });   socket.write(HEAD.subarray(0, HEAD...
 - `parallel/test-source-map-api.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:20:44)     at forEach (native)     at anonymous (<input>:13:20)     ...
 - `parallel/test-source-map-cjs-require-cache.js`: not a function     at run (<input>:27:39)     at anonymous (<input>:31:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at run...
 - `parallel/test-sqlite-custom-functions.js`: Cannot find module 'node:sqlite'     at localRequire (node:module:309:59)     at anonymous (<input>:6:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require...
@@ -1858,7 +1407,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-tracing-no-crash.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-unhandled-exception-rethrow-error.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-unhandled-exception-with-worker-inuse.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-vfs.js`: not a function     at anonymous (<input>:22:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-vfs.js`: not a function     at anonymous (<input>:22:26)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-warn-stream-wrap.js`: Cannot find module '_stream_wrap'     at localRequire (node:module:309:59)     at anonymous (<input>:12:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
 - `parallel/test-webcrypto-constructors.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:15:10)     at loadModule (node:module:272:20)     at localRequire (nod...
 - `parallel/test-webcrypto-cryptokey-workers.js`: Unhandled promise rejection:     at Worker (node:worker_threads:14:19)     at <anonymous> (<input>:45:22)     at anonymous (<input>:58:1)     at loadModule (node:module:272:20)     at localRequire (no...
@@ -1885,7 +1434,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-webcrypto-wrap-unwrap.js`: Unhandled promise rejection:     at generateKey (__wasm_rquickjs_builtin/web_crypto:1730:53)     at <anonymous> (<input>:52:7)     at map (native)     at generateWrappingKeys (<input>:50:53)     at <a...
 - `parallel/test-websocket.js`: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'      at ano...
 - `parallel/test-webstorage.js`: child_process not supported in WASM     at spawnPromisified (<input>:177:35)     at <anonymous> (<input>:21:39)     at call (native)     at runTest (node:test:256:30)     at test (node:test:525:26)   ...
-- `parallel/test-webstream-encoding-inspect.js`: not a function     at anonymous (<input>:11:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-webstream-encoding-inspect.js`: not a function     at anonymous (<input>:11:31)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-webstream-readable-from.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:9:3)     at loadModule (node:module:272:20)     at localRequire (node:...
 - `parallel/test-webstreams-abort-controller.js`: The "stream" argument must be an stream.Stream. Received an instance of ReadableStream     at ERR_INVALID_ARG_TYPE (__wasm_rquickjs_builtin/internal/errors:252:46)     at addAbortSignal (__wasm_rquick...
 - `parallel/test-webstreams-clone-unref.js`: Transfer list item is not transferable     at DOMException (__wasm_rquickjs_builtin/abort_controller:27:9)     at dataCloneError (__wasm_rquickjs_builtin/structured_clone:243:16)     at structuredClon...
@@ -1921,7 +1470,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-whatwg-url-properties.js`: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (<input>:104:22)     at <anonymous> (<input>:13:14...
 - `parallel/test-whatwg-webstreams-compression.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:49:10)     at forEach (native)     at anonymous (<input>:48:25)     ...
 - `parallel/test-whatwg-webstreams-encoding.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:18:10)     at forEach (native)     at anonymous (<input>:17:29)     ...
-- `parallel/test-x509-escaping.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-x509-escaping.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `sequential/test-cli-syntax-bad.js`: Expected values to be strictly equal:  undefined !== 1  AssertionError: Expected values to be strictly equal:  undefined !== 1      at <anonymous> (<input>:44:30)     at call (native)     at runTest (...
 - `sequential/test-cli-syntax-file-not-found.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `sequential/test-cli-syntax-good.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
@@ -1952,10 +1501,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-perf-hooks-resourcetiming.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:17:8)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
 - `parallel/test-perf-hooks-usertiming.js`: undefined == true AssertionError: undefined == true     at apply (native)     at assert (node:assert:1156:14)     at anonymous (<input>:20:8)     at loadModule (node:module:272:20)     at localRequire...
 - `parallel/test-perf-hooks-worker-timeorigin.js`: worker_threads is not supported in WebAssembly environment     at Worker (node:worker_threads:14:19)     at anonymous (<input>:9:15)     at loadModule (node:module:272:20)     at localRequire (node:mo...
-- `parallel/test-performance-eventlooputil.js`: not a function     at anonymous (<input>:15:13)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-performance-function-async.js`: not a function     at anonymous (<input>:37:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-performance-function.js`: not a function     at anonymous (<input>:20:34)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-performance-global.js`: Expected "actual" to be reference-equal to "expected": + actual - expected    { +   now: [Function: now], -   clearMarks: [Function: clearMarks], +   timeOrigin: 1.480875 -   clearMeasures: [Function:...
+- `parallel/test-performance-eventlooputil.js`: not a function     at anonymous (<input>:15:13)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-performance-function-async.js`: not a function     at anonymous (<input>:37:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-performance-function.js`: not a function     at anonymous (<input>:20:34)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-performance-global.js`: Expected "actual" to be reference-equal to "expected": + actual - expected    { +   now: [Function: now], -   clearMarks: [Function: clearMarks], +   timeOrigin: 1.702959 -   clearMeasures: [Function:...
 - `parallel/test-performance-nodetiming-uvmetricsinfo.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-performance-nodetiming.js`: false == true AssertionError: false == true     at anonymous (<input>:16:34)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at ...
 - `parallel/test-performance-resourcetimingbufferfull.js`: Unhandled promise rejection:     at main (<input>:38:15)     at anonymous (<input>:139:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:33...
@@ -1965,7 +1514,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 ### process
 
 - `parallel/test-process-argv-0.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-process-assert.js`: not a function     at anonymous (<input>:13:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-process-assert.js`: not a function     at anonymous (<input>:13:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-process-binding-internalbinding-allowlist.js`: process.binding is not supported in WASM environment     at binding (node:process:219:15)     at anonymous (<input>:11:16)     at loadModule (node:module:272:20)     at localRequire (node:module:305:3...
 - `parallel/test-process-binding-util.js`: process.binding is not supported in WASM environment     at binding (node:process:219:15)     at anonymous (<input>:8:29)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34...
 - `parallel/test-process-chdir.js`: ENOENT: no such file or directory, chdir '/' -> '..'     at chdir (node:process:300:112)     at anonymous (<input>:17:9)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)...
@@ -1973,23 +1522,23 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-process-env-allowed-flags-are-documented.js`: Failed to read file "/doc/api/cli.md": No such file or directory (os error 44)     at readFileSync (node:fs:560:23)     at anonymous (<input>:14:33)     at loadModule (node:module:272:20)     at local...
 - `parallel/test-process-env-allowed-flags.js`: flag should be in set: --perf_basic_prof  false !== true  AssertionError: flag should be in set: --perf_basic_prof  false !== true      at <anonymous> (<input>:38:47)     at forEach (native)     at an...
 - `parallel/test-process-env-tz.js`: The input did not match the regular expression /^Sat Apr 14 2018 14:34:56 GMT\+0200 \(.+\)$/. Input: 'Sat Apr 14 2018 12:34:56 GMT+0000' AssertionError: The input did not match the regular expression ...
-- `parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`: foo     at anonymous (<input>:15:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83:21)
-- `parallel/test-process-exception-capture-should-abort-on-uncaught.js`: foo     at anonymous (<input>:14:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83:21)
-- `parallel/test-process-exception-capture.js`: foo     at anonymous (<input>:15:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83:21)
+- `parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`: foo     at anonymous (<input>:15:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:122:21)
+- `parallel/test-process-exception-capture-should-abort-on-uncaught.js`: foo     at anonymous (<input>:14:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:122:21)
+- `parallel/test-process-exception-capture.js`: foo     at anonymous (<input>:15:11)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:122:21)
 - `parallel/test-process-exec-argv.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-process-execpath.js`: EIO: EIO: input/output error, realpath '/usr/local/bin/node', realpath '/usr/local/bin/node'     at createSystemError (node:fs:138:21)     at realpathSync (node:fs:877:33)     at anonymous (<input>:12...
 - `parallel/test-process-exit-code-validation.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:116:53)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require...
 - `parallel/test-process-exit-code.js`: Cannot find module '../common/process-exit-code-cases' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:29:26)     a...
 - `parallel/test-process-external-stdio-close-spawn.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-process-external-stdio-close.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-process-getactivehandles.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-process-getactiverequests.js`: not a function     at anonymous (<input>:12:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-process-getactiveresources-track-active-handles.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-process-getactiveresources-track-active-requests.js`: not a function     at anonymous (<input>:13:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-process-getactiveresources-track-interval-lifetime.js`: not a function     at anonymous (<input>:9:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
-- `parallel/test-process-getactiveresources-track-multiple-timers.js`: not a function     at anonymous (<input>:14:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-process-getactiveresources-track-timer-lifetime.js`: not a function     at anonymous (<input>:10:30)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-process-getactiveresources.js`: not a function     at anonymous (<input>:11:32)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-process-getactivehandles.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-process-getactiverequests.js`: not a function     at anonymous (<input>:12:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-process-getactiveresources-track-active-handles.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-process-getactiveresources-track-active-requests.js`: not a function     at anonymous (<input>:13:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-process-getactiveresources-track-interval-lifetime.js`: not a function     at anonymous (<input>:9:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
+- `parallel/test-process-getactiveresources-track-multiple-timers.js`: not a function     at anonymous (<input>:14:28)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-process-getactiveresources-track-timer-lifetime.js`: not a function     at anonymous (<input>:10:30)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-process-getactiveresources.js`: not a function     at anonymous (<input>:11:32)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-process-getgroups.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-process-kill-null.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-process-load-env-file.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at <anonymous> (<input>:50:12)     at call (native)     at runTest (node:test:256:30)     at...
@@ -2065,11 +1614,12 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### stream
 
-- `parallel/test-stream-base-typechecking.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-stream-base-typechecking.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
 - `parallel/test-stream-catch-rejections.js`: Unhandled promise rejection:     at anonymous (<input>:18:19)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-c...
 - `parallel/test-stream-compose-operator.js`: Readable.prototype.compose is not implemented     at compose (__wasm_rquickjs_builtin/internal/streams/readable:2471:15)     at anonymous (<input>:13:62)     at loadModule (node:module:272:20)     at ...
+- `parallel/test-stream-compose.js`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal:  false !== true      at <anonymous> (<input>:452:24)     at anonymous (<input>:460:3)     at loadModule (node:module:...
 - `parallel/test-stream-duplex-readable-writable.js`: function should not have been called     at <anonymous> (<input>:70:23)     at writeOrBuffer (__wasm_rquickjs_builtin/internal/streams/writable:401:23)     at _write (__wasm_rquickjs_builtin/internal/...
-- `parallel/test-stream-duplexpair.js`: not a function     at anonymous (<input>:10:16)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-stream-duplexpair.js`: not a function     at anonymous (<input>:10:16)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-stream-end-of-streams.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:10:3)     at loadModule (node:module:272:20)     at localRequire (node...
 - `parallel/test-stream-event-names.js`: Expected values to be strictly deep-equal: + actual - expected    [ +   'foo', +   'data',     'error', -   'data', -   'foo'   ]  AssertionError: Expected values to be strictly deep-equal: + actual -...
 - `parallel/test-stream-finished.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:266:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require ...
@@ -2086,6 +1636,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-uint8array.js`: Expected values to be strictly equal: + actual - expected  + 'utf8' - undefined  AssertionError: Expected values to be strictly equal: + actual - expected  + 'utf8' - undefined      at <anonymous> (<i...
 - `parallel/test-stream-writable-change-default-encoding.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:60:8)     at loadModule (node:module:272:20)     at localRequire (node...
 - `parallel/test-stream-writable-decoded-encoding.js`: Missing expected exception. AssertionError: Missing expected exception.     at anonymous (<input>:63:10)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require ...
+- `parallel/test-stream-writable-destroy.js`: not a function     at anonymous (<input>:502:16)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:...
 - `parallel/test-stream2-compatibility.js`: Expected values to be strictly equal:  true !== false  AssertionError: Expected values to be strictly equal:  true !== false      at <anonymous> (<input>:69:22)     at apply (native)     at emit (node...
 - `parallel/test-stream2-unpipe-leak.js`: Expected values to be strictly equal:  10 !== 0  AssertionError: Expected values to be strictly equal:  10 !== 0      at anonymous (<input>:60:24)     at loadModule (node:module:272:20)     at localRe...
 - `parallel/test-stream2-writable.js`: not a function     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/readable:683:10)     at anonymous (<input>:303:10)     at loadModule (node:module:272:20)     at localRequire (node:module:3...
@@ -2095,7 +1646,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 ### string_decoder
 
 - `parallel/test-string-decoder-end.js`: Expected values to be strictly equal: + actual - expected  + '4gmAgw8AnwkgqQ7wowvw' - '4piD8J-Sqe-jvw'  AssertionError: Expected values to be strictly equal: + actual - expected  + '4gmAgw8AnwkgqQ7wow...
-- `parallel/test-string-decoder-fuzz.js`: Mismatch: [   'jH-9nYEtFn2NXAfqrXdJMcqPtgXRevhA-8kA6lIP81J137Y',   'GTLjCjORWYGEUu-kdERZDLISPGc9BKkcrL7vfIvOsc_5h5KopvwWEgEzmRvs',   'weowCTefV44qanoYSTQeyRcudhoS',   '' ] [   '8c7fbd9d812d167d8d5c07e...
+- `parallel/test-string-decoder-fuzz.js`: Mismatch: [   '_fRkl2UwgWA',   'DNK6l1VKFX12taxhrMu61UYh_vdFHaVfyqdv-lIOJyRq_4ViuM6Wvb5KyRGrlik',   'KO8MMlAhlCmcTHwFwv_qlNG1yMcYiQ9iFWCrqBCHpRTgvGOu3LE',   'hagZBBOhJQ7XEwbyj8m86TMztt6pT49yc6KPuMY5xy...
 - `parallel/test-string-decoder.js`: Expected "\ufffd\u338", but got "\ufffd\ufffd\ufffd" input: cc,cc,b8 Write sequence: [[0,1],[1,3]] Full Decoder State: StringDecoder {   encoding: 'utf8',   surrogateSize: 3,   charBuffer: <Buffer cc ...
 
 ### test_runner
@@ -2131,19 +1682,19 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### tls
 
-- `parallel/test-tls-0-dns-altname.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-add-context.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-addca.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-alpn-server-client.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-async-cb-after-socket-end.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-0-dns-altname.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-add-context.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-addca.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-alpn-server-client.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-async-cb-after-socket-end.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-basic-validations.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:18:7)     at loadModule (node:module:272:20)     at localRequire (node...
-- `parallel/test-tls-buffersize.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-ca-concat.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-cert-chains-concat.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-buffersize.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-ca-concat.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-cert-chains-concat.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-cert-chains-in-ca.js`: ifError got unwanted exception: tls is not supported in WebAssembly environment AssertionError: ifError got unwanted exception: tls is not supported in WebAssembly environment     at <anonymous> (<inp...
-- `parallel/test-tls-cert-ext-encoding.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-cert-regression.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-check-server-identity.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-cert-ext-encoding.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-cert-regression.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-check-server-identity.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-cipher-list.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-tls-cli-max-version-1.2.js`: Expected values to be strictly equal: + actual - expected  + 'TLSv1.3' - 'TLSv1.2'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'TLSv1.3' - 'TLSv1.2'      at anonymous...
 - `parallel/test-tls-cli-max-version-1.3.js`: Cannot find module './test-tls-min-max-version.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:17:1)     at loa...
@@ -2152,152 +1703,152 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-tls-cli-min-version-1.1.js`: Expected values to be strictly equal: + actual - expected  + 'TLSv1.2' - 'TLSv1.1'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'TLSv1.2' - 'TLSv1.1'      at anonymous...
 - `parallel/test-tls-cli-min-version-1.2.js`: Cannot find module './test-tls-min-max-version.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:17:1)     at loa...
 - `parallel/test-tls-cli-min-version-1.3.js`: Expected values to be strictly equal: + actual - expected  + 'TLSv1.2' - 'TLSv1.3'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'TLSv1.2' - 'TLSv1.3'      at anonymous...
-- `parallel/test-tls-client-abort.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-client-abort2.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-client-allow-partial-trust-chain.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-client-abort.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-client-abort2.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-client-allow-partial-trust-chain.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-client-auth.js`: ifError got unwanted exception: tls is not supported in WebAssembly environment AssertionError: ifError got unwanted exception: tls is not supported in WebAssembly environment     at <anonymous> (<inp...
 - `parallel/test-tls-client-default-ciphers.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at test1 (<input>:42:17)     at anonymous (<input>:46:1)     at loadModule (node:module:272:...
-- `parallel/test-tls-client-destroy-soon.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-client-getephemeralkeyinfo.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-client-mindhsize.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-client-destroy-soon.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-client-getephemeralkeyinfo.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-client-mindhsize.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-client-reject-12.js`: Cannot find module './test-tls-client-reject.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:15:1)     at loadM...
-- `parallel/test-tls-client-reject.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-client-reject.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-client-renegotiation-13.js`: ifError got unwanted exception: tls is not supported in WebAssembly environment AssertionError: ifError got unwanted exception: tls is not supported in WebAssembly environment     at <anonymous> (<inp...
 - `parallel/test-tls-client-resume-12.js`: Cannot find module './test-tls-client-resume.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:15:1)     at loadM...
-- `parallel/test-tls-client-resume.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:43:43)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-tls-client-verify.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-client-resume.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:43:43)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-client-verify.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-clientcertengine-invalid-arg-type.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:14:5)     at loadModule (node:module:272:20)     at localRequire (node...
-- `parallel/test-tls-close-error.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-close-event-after-write.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-cnnic-whitelist.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-abort-controller.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-allow-half-open-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-given-socket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-hints-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-hwm-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-memleak.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-no-host.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-pipe.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:41:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-tls-connect-secure-context.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-simple.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:40:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-tls-connect-stream-writes.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-connect-timeout-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-delayed-attach-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-tls-delayed-attach.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-tls-close-error.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-close-event-after-write.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-cnnic-whitelist.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-abort-controller.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-allow-half-open-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-given-socket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-hints-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-hwm-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-memleak.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-no-host.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-pipe.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:41:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-connect-secure-context.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-simple.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:40:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-connect-stream-writes.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-connect-timeout-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-delayed-attach-error.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-tls-delayed-attach.js`: Expected values to be strictly equal:  '' !== 'hello world'  AssertionError: Expected values to be strictly equal:  '' !== 'hello world'      at <anonymous> (<input>:73:22)     at apply (native)     a...
 - `parallel/test-tls-destroy-stream-12.js`: Cannot find module './test-tls-destroy-stream.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:15:1)     at load...
-- `parallel/test-tls-destroy-stream.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-destroy-whilst-write.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-disable-renegotiation.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:23:43)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-tls-econnreset.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-empty-sni-context.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-destroy-stream.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-destroy-whilst-write.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-disable-renegotiation.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:23:43)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-econnreset.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-empty-sni-context.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-enable-keylog-cli.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-tls-env-bad-extra-ca.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
 - `parallel/test-tls-env-extra-ca-no-crypto.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-tls-env-extra-ca-with-options.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-env-extra-ca.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-error-servername.js`: not a function     at anonymous (<input>:16:36)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-tls-env-extra-ca-with-options.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-env-extra-ca.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-error-servername.js`: not a function     at anonymous (<input>:16:36)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-tls-error-stack.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:13:8)     at loadModule (node:module:272:20)     at localRequire (node...
-- `parallel/test-tls-exportkeyingmaterial.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-tls-external-accessor.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-fast-writing.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-finished.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-friendly-error-message.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-generic-stream.js`: not a function     at anonymous (<input>:17:36)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-tls-getcertificate-x509.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-getcipher.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-getprotocol.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-handshake-error.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-exportkeyingmaterial.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-tls-external-accessor.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-fast-writing.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-finished.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-friendly-error-message.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-generic-stream.js`: not a function     at anonymous (<input>:17:36)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-tls-getcertificate-x509.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-getcipher.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-getprotocol.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-handshake-error.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-handshake-exception.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-tls-handshake-nohang.js`: not a function     at anonymous (<input>:33:22)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-tls-hello-parser-failure.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-honorcipherorder.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-inception.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-interleave.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-handshake-nohang.js`: not a function     at anonymous (<input>:33:22)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-tls-hello-parser-failure.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-honorcipherorder.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-inception.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-interleave.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-invalid-pfx.js`: Expected values to be strictly equal: + actual - expected  + 'tls is not supported in WebAssembly environment' - 'Unable to load private key from PFX data'  AssertionError: Expected values to be stric...
-- `parallel/test-tls-invoke-queued.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-ip-servername-deprecation.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-js-stream.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-junk-closes-server.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-junk-server.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-tls-invoke-queued.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-ip-servername-deprecation.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-js-stream.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-junk-closes-server.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-junk-server.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
 - `parallel/test-tls-key-mismatch.js`: The input did not match the regular expression /^Error: error:0B080074:x509 certificate routines:X509_check_private_key:key values mismatch$/. Input:  'Error: tls is not supported in WebAssembly envir...
 - `parallel/test-tls-keyengine-invalid-arg-type.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:13:3)     at loadModule (node:module:272:20)     at localRequire (node...
-- `parallel/test-tls-keylog-tlsv13.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-legacy-deprecated.js`: not a function     at anonymous (<input>:17:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
-- `parallel/test-tls-max-send-fragment.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-keylog-tlsv13.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-legacy-deprecated.js`: not a function     at anonymous (<input>:17:5)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
+- `parallel/test-tls-max-send-fragment.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-min-max-version.js`: cannot read property 'replace' of undefined     at test (<input>:41:38)     at anonymous (<input>:97:6)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (...
-- `parallel/test-tls-multi-key.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-multi-pfx.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-multiple-cas-as-string.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-net-connect-prefer-path.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-tls-multi-key.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-multi-pfx.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-multiple-cas-as-string.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-net-connect-prefer-path.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
 - `parallel/test-tls-net-socket-keepalive-12.js`: Cannot find module './test-tls-net-socket-keepalive.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:15:1)     a...
-- `parallel/test-tls-net-socket-keepalive.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-no-cert-required.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-no-rsa-key.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-net-socket-keepalive.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-no-cert-required.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-no-rsa-key.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-no-sslv23.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:11:15)     at loadModule (node:module:272:20)     at localRequire (nod...
-- `parallel/test-tls-on-empty-socket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-onread-static-buffer.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-options-boolean-check.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-on-empty-socket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-onread-static-buffer.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-options-boolean-check.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-over-http-tunnel.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-tls-passphrase.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:46:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-tls-pause.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:45:43)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-tls-peer-certificate-encoding.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-peer-certificate-multi-keys.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-passphrase.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:46:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-pause.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:45:43)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-peer-certificate-encoding.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-peer-certificate-multi-keys.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-peer-certificate.js`: ifError got unwanted exception: tls is not supported in WebAssembly environment AssertionError: ifError got unwanted exception: tls is not supported in WebAssembly environment     at <anonymous> (<inp...
-- `parallel/test-tls-pfx-authorizationerror.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-psk-circuit.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-psk-errors.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-pfx-authorizationerror.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-psk-circuit.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-psk-errors.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-reduced-SECLEVEL-in-cipher.js`: The input did not match the regular expression /key too small/i. Input:  'Error: tls is not supported in WebAssembly environment'  AssertionError: The input did not match the regular expression /key t...
-- `parallel/test-tls-request-timeout.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:38:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
-- `parallel/test-tls-retain-handle-no-abort.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-reuse-host-from-socket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-request-timeout.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:38:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-retain-handle-no-abort.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-reuse-host-from-socket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-root-certificates.js`: false == true AssertionError: false == true     at apply (native)     at assert (node:assert:1156:14)     at anonymous (<input>:11:38)     at loadModule (node:module:272:20)     at localRequire (node:...
-- `parallel/test-tls-secure-context-usage-order.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-secure-session.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-securepair-fiftharg.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-securepair-leak.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-server-capture-rejection.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-server-connection-server.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-server-failed-handshake-emits-clienterror.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-server-parent-constructor-options.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-server-setkeycert.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-server-setoptions-clientcertengine.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-secure-context-usage-order.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-secure-session.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-securepair-fiftharg.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-securepair-leak.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-server-capture-rejection.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-server-connection-server.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-server-failed-handshake-emits-clienterror.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-server-parent-constructor-options.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-server-setkeycert.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-server-setoptions-clientcertengine.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-set-ciphers-error.js`: The input did not match the regular expression /no[_ ]cipher[_ ]match/i. Input:  'Error: tls is not supported in WebAssembly environment'  AssertionError: The input did not match the regular expressio...
-- `parallel/test-tls-set-encoding.js`: class constructors must be invoked with 'new'     at Server (node:tls:19:5)     at anonymous (<input>:44:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
+- `parallel/test-tls-set-encoding.js`: class constructors must be invoked with 'new'     at Server (node:tls:24:5)     at anonymous (<input>:44:52)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requ...
 - `parallel/test-tls-set-secure-context.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
 - `parallel/test-tls-set-sigalgs.js`: ifError got unwanted exception: tls is not supported in WebAssembly environment AssertionError: ifError got unwanted exception: tls is not supported in WebAssembly environment     at <anonymous> (<inp...
-- `parallel/test-tls-sni-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-sni-server-client.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-sni-servername.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-sni-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-sni-server-client.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-sni-servername.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-snicallback-error.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:13:10)     at loadModule (node:module:272:20)     at localRequire (nod...
-- `parallel/test-tls-socket-allow-half-open-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-socket-constructor-alpn-options-parsing.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-socket-allow-half-open-option.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-socket-constructor-alpn-options-parsing.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-socket-default-options.js`: Expected values to be strictly equal: + actual - expected  + 'tls is not supported in WebAssembly environment' - 'unable to verify the first certificate'  AssertionError: Expected values to be strictl...
-- `parallel/test-tls-socket-destroy.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-socket-failed-handshake-emits-error.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-tls-socket-snicallback-without-server.js`: not a function     at anonymous (<input>:17:36)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-tls-startcom-wosign-whitelist.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-starttls-server.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-tls-streamwrap-buffersize.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-socket-destroy.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-socket-failed-handshake-emits-error.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-tls-socket-snicallback-without-server.js`: not a function     at anonymous (<input>:17:36)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-tls-startcom-wosign-whitelist.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-starttls-server.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-tls-streamwrap-buffersize.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-ticket-12.js`: Cannot find module './test-tls-ticket.js' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:14:1)     at loadModule (...
 - `parallel/test-tls-ticket-cluster.js`: cluster is not supported in WebAssembly environment     at fork (node:cluster:17:15)     at fork (<input>:73:28)     at anonymous (<input>:89:5)     at loadModule (node:module:272:20)     at localRequ...
-- `parallel/test-tls-ticket-invalid-arg.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-ticket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-timeout-server-2.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-timeout-server.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-tlswrap-segfault-2.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `parallel/test-tls-tlswrap-segfault.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-ticket-invalid-arg.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-ticket.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-timeout-server-2.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-timeout-server.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-tlswrap-segfault-2.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-tls-tlswrap-segfault.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-translate-peer-certificate.js`: Cannot find module '_tls_common'     at localRequire (node:module:309:59)     at anonymous (<input>:11:38)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at requir...
-- `parallel/test-tls-transport-destroy-after-own-gc.js`: not a function     at anonymous (<input>:17:22)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-tls-transport-destroy-after-own-gc.js`: not a function     at anonymous (<input>:17:22)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-tls-use-after-free-regression.js`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-tls-wrap-econnreset-localaddress.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-tls-wrap-econnreset-localaddress.js`: Port should be >= 0 and < 65536. Received function() {             actual++;             return wrapped.apply(this, arguments);         }.     at ERR_SOCKET_BAD_PORT (__wasm_rquickjs_builtin/internal/...
 - `parallel/test-tls-wrap-econnreset-pipe.js`: child_process is not supported in WebAssembly environment     at <anonymous> (node:child_process:4:33)
-- `parallel/test-tls-wrap-econnreset-socket.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-tls-wrap-econnreset.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
+- `parallel/test-tls-wrap-econnreset-socket.js`: Port should be >= 0 and < 65536. Received function() {             actual++;             return wrapped.apply(this, arguments);         }.     at ERR_SOCKET_BAD_PORT (__wasm_rquickjs_builtin/internal/...
+- `parallel/test-tls-wrap-econnreset.js`: Port should be >= 0 and < 65536. Received function() {             actual++;             return wrapped.apply(this, arguments);         }.     at ERR_SOCKET_BAD_PORT (__wasm_rquickjs_builtin/internal/...
 - `parallel/test-tls-wrap-event-emmiter.js`: The error is expected to be an instance of "TypeError". Received "Error"  Error message:  tls is not supported in WebAssembly environment AssertionError: The error is expected to be an instance of "Ty...
 - `parallel/test-tls-write-error.js`: Cannot find module '../common/tls' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:8:32)     at loadModule (node:mo...
-- `parallel/test-tls-writewrap-leak.js`: net is not supported in WebAssembly environment     at <anonymous> (node:net:4:33)
-- `parallel/test-tls-zero-clear-in.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
-- `sequential/test-tls-connect.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:4:33)
+- `parallel/test-tls-writewrap-leak.js`: Unhandled promise rejection:     at parseNativeError (node:net:82:25)     at <anonymous> (node:net:838:46)
+- `parallel/test-tls-zero-clear-in.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `sequential/test-tls-connect.js`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `sequential/test-tls-lookup.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at connectThrows (<input>:18:10)     at forEach (native)     at anonymous (<input>:11:31)   ...
 - `sequential/test-tls-session-timeout.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:59:48)     at loadModule (node:module:272:20)     at localRequire (nod...
 
@@ -2332,7 +1883,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### tty
 
-- `parallel/test-tty-stdin-end.js`: not a function     at anonymous (<input>:9:15)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
+- `parallel/test-tty-stdin-end.js`: not a function     at anonymous (<input>:9:15)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
 - `parallel/test-tty-stdin-pipe.js`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
 
 ### url
@@ -2345,7 +1896,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### v8
 
-- `parallel/test-v8-collect-gc-profile-exit-before-stop.js`: not a function     at anonymous (<input>:9:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
+- `parallel/test-v8-collect-gc-profile-exit-before-stop.js`: not a function     at anonymous (<input>:9:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
 - `parallel/test-v8-collect-gc-profile-in-worker.js`: Cannot find module '../common/v8' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:7:28)     at loadModule (node:mod...
 - `parallel/test-v8-collect-gc-profile.js`: Cannot find module '../common/v8' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:6:28)     at loadModule (node:mod...
 - `parallel/test-v8-deserialize-buffer.js`: v8.serialize is not supported in WASM environment     at serialize (node:v8:57:15)     at anonymous (<input>:9:36)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     a...
@@ -2356,7 +1907,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-v8-serialize-leak.js`: v8.serialize is not supported in WASM environment     at serialize (node:v8:57:15)     at anonymous (<input>:18:6)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     a...
 - `parallel/test-v8-startup-snapshot-api.js`: Cannot convert undefined or null to object     at anonymous (<input>:6:16)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at ru...
 - `parallel/test-v8-stats.js`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'code_large_object_space', -   'code_space', -   'large_object_space', -   'new_large_object_space', -   'new_space', -   '...
-- `parallel/test-v8-version-tag.js`: not a function     at anonymous (<input>:8:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
+- `parallel/test-v8-version-tag.js`: not a function     at anonymous (<input>:8:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
 
 ### vm
 
@@ -2395,8 +1946,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-vm-measure-memory-lazy.js`: Cannot find module '../common/measure-memory' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:10:5)     at loadModu...
 - `parallel/test-vm-measure-memory-multi-context.js`: Cannot find module '../common/measure-memory' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:8:5)     at loadModul...
 - `parallel/test-vm-measure-memory.js`: Cannot find module '../common/measure-memory' from '/test/parallel'     at resolveFilename (node:module:221:80)     at localRequire (node:module:304:44)     at anonymous (<input>:9:5)     at loadModul...
-- `parallel/test-vm-module-basic.js`: not a function     at anonymous (<input>:76:17)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
-- `parallel/test-vm-module-cached-data.js`: not a function     at anonymous (<input>:13:17)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-vm-module-basic.js`: not a function     at anonymous (<input>:76:17)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
+- `parallel/test-vm-module-cached-data.js`: not a function     at anonymous (<input>:13:17)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-vm-module-dynamic-import.js`: Unhandled promise rejection:     at testNoCallback (<input>:13:17)     at <anonymous> (<input>:115:9)     at anonymous (<input>:119:1)     at loadModule (node:module:272:20)     at localRequire (node:...
 - `parallel/test-vm-module-dynamic-namespace.js`: Unhandled promise rejection:     at <anonymous> (<input>:16:46)     at anonymous (<input>:28:1)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:mod...
 - `parallel/test-vm-module-errors.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:174:5)     at loadModule (node:module:272:20)     at localRequire (nod...
@@ -2473,9 +2024,9 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-worker-message-channel-sharedarraybuffer.js`: worker_threads is not supported in WebAssembly environment     at Worker (node:worker_threads:14:19)     at anonymous (<input>:14:17)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-worker-message-channel.js`: Expected values to be strictly equal:  5 !== 0  AssertionError: Expected values to be strictly equal:  5 !== 0      at anonymous (<input>:20:22)     at loadModule (node:module:272:20)     at localRequ...
 - `parallel/test-worker-message-event.js`: MessageEvent is not defined     at anonymous (<input>:54:20)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-co...
-- `parallel/test-worker-message-mark-as-uncloneable.js`: not a function     at anonymous (<input>:15:21)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-worker-message-mark-as-uncloneable.js`: not a function     at anonymous (<input>:15:21)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-worker-message-port-arraybuffer.js`: Expected values to be strictly equal:  40 !== 0  AssertionError: Expected values to be strictly equal:  40 !== 0      at anonymous (<input>:17:22)     at loadModule (node:module:272:20)     at localRe...
-- `parallel/test-worker-message-port-close.js`: not a function     at anonymous (<input>:23:9)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:83...
+- `parallel/test-worker-message-port-close.js`: not a function     at anonymous (<input>:23:9)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:12...
 - `parallel/test-worker-message-port-constructor.js`: The error did not match the expected value. AssertionError: The error did not match the expected value.     at anonymous (<input>:16:8)     at loadModule (node:module:272:20)     at localRequire (node...
 - `parallel/test-worker-message-port-drain.js`: worker_threads is not supported in WebAssembly environment     at Worker (node:worker_threads:14:19)     at anonymous (<input>:23:24)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-worker-message-port-inspect-during-init-hook.js`: false == true AssertionError: false == true     at apply (native)     at assert (node:assert:1156:14)     at anonymous (<input>:23:19)     at loadModule (node:module:272:20)     at localRequire (node:...
@@ -2495,7 +2046,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-worker-message-port-transfer-terminate.js`: worker_threads is not supported in WebAssembly environment     at Worker (node:worker_threads:14:19)     at anonymous (<input>:11:17)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-worker-message-port-wasm-module.js`: WebAssembly is not defined     at anonymous (<input>:9:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-comp...
 - `parallel/test-worker-message-port-wasm-threads.js`: WebAssembly is not defined     at anonymous (<input>:13:24)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-com...
-- `parallel/test-worker-message-port.js`: not a function     at anonymous (<input>:24:40)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:8...
+- `parallel/test-worker-message-port.js`: not a function     at anonymous (<input>:24:40)     at loadModule (node:module:272:20)     at localRequire (node:module:305:34)     at require (node:module:338:26)     at runTest (node-compat-runner:1...
 - `parallel/test-worker-message-transfer-port-mark-as-untransferable.js`: worker_threads is not supported in WebAssembly environment     at markAsUntransferable (node:worker_threads:76:15)     at anonymous (<input>:11:24)     at loadModule (node:module:272:20)     at localR...
 - `parallel/test-worker-messageport-hasref.js`: worker_threads is not supported in WebAssembly environment     at Worker (node:worker_threads:14:19)     at anonymous (<input>:34:15)     at loadModule (node:module:272:20)     at localRequire (node:m...
 - `parallel/test-worker-messaging-errors-handler.js`: Unhandled promise rejection:     at Worker (node:worker_threads:14:19)     at test (<input>:15:22)     at anonymous (<input>:28:3)     at loadModule (node:module:272:20)     at localRequire (node:modu...
@@ -2567,40 +2118,34 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ## Error Tests (runtime/instantiation errors)
 
-31 tests had runtime errors.
+25 tests had runtime errors.
 
 <details>
 <summary>Click to expand</summary>
 
-- `parallel/test-async-local-storage-deep-stack.js`: error while executing at wasm backtrace:     0: 0x92c818 - node_compat_runner.wasm!JS_CallInternal     1: 0x9303cd - node_compat_runner.wasm!JS_CallInternal     2: 0x9303cd - node_compat_runner.wasm!J...
+- `parallel/test-async-local-storage-deep-stack.js`: error while executing at wasm backtrace:     0: 0x97a04d - node_compat_runner.wasm!JS_CallInternal     1: 0x97dc02 - node_compat_runner.wasm!JS_CallInternal     2: 0x97dc02 - node_compat_runner.wasm!J...
 - `parallel/test-buffer-tostring-rangeerror.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-console-no-swallow-stack-overflow.js`: error while executing at wasm backtrace:     0: 0x92c818 - node_compat_runner.wasm!JS_CallInternal     1: 0x9011d9 - node_compat_runner.wasm!JS_Call     2: 0x99cc30 - node_compat_runner.wasm!JS_GetIte...
+- `parallel/test-console-no-swallow-stack-overflow.js`: error while executing at wasm backtrace:     0: 0x9d8ec6 - node_compat_runner.wasm!js_def_malloc     1: 0x94908d - node_compat_runner.wasm!js_malloc_rt     2: 0x949321 - node_compat_runner.wasm!js_rea...
 - `parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-keygen-empty-passphrase-no-error.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-next-tick.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa5e55e - node_compat_runner.wasm!std::sys::pal::wasip1::helpers::abort_internal::h74119267dbd11bee    ...
 - `parallel/test-promises-unhandled-rejections.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-readable-from-iterator-closing.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa66d06 - node_compat_runner.wasm!__assert_fail     2: 0x98c195 - node_compat_runner.wasm!js_free_shape...
-- `parallel/test-readable-from.js`: error while executing at wasm backtrace:     0: 0x92cc15 - node_compat_runner.wasm!JS_CallInternal     1: 0x92fdfc - node_compat_runner.wasm!JS_CallInternal     2: 0x9011d9 - node_compat_runner.wasm!J...
+- `parallel/test-readable-from-iterator-closing.js`: error while executing at wasm backtrace:     0: 0x97a44a - node_compat_runner.wasm!JS_CallInternal     1: 0x97d631 - node_compat_runner.wasm!JS_CallInternal     2: 0x94ea0e - node_compat_runner.wasm!J...
+- `parallel/test-readable-from.js`: error while executing at wasm backtrace:     0: 0x97a44a - node_compat_runner.wasm!JS_CallInternal     1: 0x97d631 - node_compat_runner.wasm!JS_CallInternal     2: 0x94ea0e - node_compat_runner.wasm!J...
 - `parallel/test-runner-subtest-after-hook.js`: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-signal-handler.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-stream-compose.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa5e55e - node_compat_runner.wasm!std::sys::pal::wasip1::helpers::abort_internal::h74119267dbd11bee    ...
-- `parallel/test-stream-consumers.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0x925a7c - node_compat_runner.wasm!free_gc_object     2: 0x925792 - node_compat_runner.wasm!free_zero_re...
+- `parallel/test-stream-consumers.js`: error while executing at wasm backtrace:     0: 0x97a44a - node_compat_runner.wasm!JS_CallInternal     1: 0x97d631 - node_compat_runner.wasm!JS_CallInternal     2: 0x94ea0e - node_compat_runner.wasm!J...
+- `parallel/test-stream-pipeline-async-iterator.js`: error while executing at wasm backtrace:     0: 0x97a44a - node_compat_runner.wasm!JS_CallInternal     1: 0x97d631 - node_compat_runner.wasm!JS_CallInternal     2: 0x94ea0e - node_compat_runner.wasm!J...
 - `parallel/test-stream-readable-to-web.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-stream-reduce.js`: error while executing at wasm backtrace:     0: 0x921af8 - node_compat_runner.wasm!JS_GetPropertyInternal     1: 0x936500 - node_compat_runner.wasm!JS_CallInternal     2: 0x901839 - node_compat_runner...
-- `parallel/test-stream-toArray.js`: error while executing at wasm backtrace:     0: 0x921af8 - node_compat_runner.wasm!JS_GetPropertyInternal     1: 0x936500 - node_compat_runner.wasm!JS_CallInternal     2: 0x901839 - node_compat_runner...
-- `parallel/test-stream-writable-destroy.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa5e55e - node_compat_runner.wasm!std::sys::pal::wasip1::helpers::abort_internal::h74119267dbd11bee    ...
-- `parallel/test-stream-writable-writable.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa5e55e - node_compat_runner.wasm!std::sys::pal::wasip1::helpers::abort_internal::h74119267dbd11bee    ...
-- `parallel/test-stream-writable-write-cb-error.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa5e55e - node_compat_runner.wasm!std::sys::pal::wasip1::helpers::abort_internal::h74119267dbd11bee    ...
-- `parallel/test-stream-writable-write-writev-finish.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa5e55e - node_compat_runner.wasm!std::sys::pal::wasip1::helpers::abort_internal::h74119267dbd11bee    ...
+- `parallel/test-stream-reduce.js`: error while executing at wasm backtrace:     0: 0x97a44a - node_compat_runner.wasm!JS_CallInternal     1: 0x97d631 - node_compat_runner.wasm!JS_CallInternal     2: 0x94ea0e - node_compat_runner.wasm!J...
+- `parallel/test-stream-toArray.js`: error while executing at wasm backtrace:     0: 0x96f32d - node_compat_runner.wasm!JS_GetPropertyInternal     1: 0x983d35 - node_compat_runner.wasm!JS_CallInternal     2: 0x94f06e - node_compat_runner...
 - `parallel/test-stream2-large-read-stall.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-stringbytes-external.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-timers-user-call.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-timers.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-ttywrap-stack.js`: error while executing at wasm backtrace:     0: 0x92c818 - node_compat_runner.wasm!JS_CallInternal     1: 0x92fdfc - node_compat_runner.wasm!JS_CallInternal     2: 0x901839 - node_compat_runner.wasm!a...
-- `parallel/test-vm-low-stack-space.js`: error while executing at wasm backtrace:     0: 0x92c818 - node_compat_runner.wasm!JS_CallInternal     1: 0x92fdfc - node_compat_runner.wasm!JS_CallInternal     2: 0x92fdfc - node_compat_runner.wasm!J...
+- `parallel/test-ttywrap-stack.js`: error while executing at wasm backtrace:     0: 0x97a04d - node_compat_runner.wasm!JS_CallInternal     1: 0x97d631 - node_compat_runner.wasm!JS_CallInternal     2: 0x94f06e - node_compat_runner.wasm!a...
+- `parallel/test-vm-low-stack-space.js`: error while executing at wasm backtrace:     0: 0x97a04d - node_compat_runner.wasm!JS_CallInternal     1: 0x97d631 - node_compat_runner.wasm!JS_CallInternal     2: 0x97d631 - node_compat_runner.wasm!J...
 - `parallel/test-vm-timeout.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-webstreams-compose.js`: error while executing at wasm backtrace:     0: 0xa66531 - node_compat_runner.wasm!abort     1: 0xa5e55e - node_compat_runner.wasm!std::sys::pal::wasip1::helpers::abort_internal::h74119267dbd11bee    ...
 - `parallel/test-worker-message-port-infinite-message-loop.js`: Timeout (epoch deadline exceeded)
 - `sequential/test-fs-watch.js`: Timeout (epoch deadline exceeded)
 
@@ -2608,7 +2153,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ## Skipped Tests
 
-980 tests were skipped.
+1435 tests were skipped.
 
 <details>
 <summary>Click to expand</summary>
@@ -2815,7 +2360,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-cluster-worker-no-exit.js`: cluster is not supported in WebAssembly environment
 - `parallel/test-cluster-worker-wait-server-close.js`: cluster is not supported in WebAssembly environment
 - `parallel/test-console-group.js`: console.group indentation not implemented
-- `parallel/test-console-sync-write-error.js`: pre-existing process.nextTick crash when common.mustCall exit check fires with too many args
 - `parallel/test-console.js`: process.stdout.writable is undefined
 - `parallel/test-crypto-aes-wrap.js`: requires aes-wrap cipher modes which are not implemented
 - `parallel/test-crypto-async-sign-verify.js`: requires one-shot crypto.sign/verify callback form, KeyObject.export({format,type}), RSA-PSS padding, DSA/ECDSA dsaEncoding options
@@ -3043,21 +2587,29 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-heap-prof-loop-drained.js`: Inspector not available in WASM
 - `parallel/test-heap-prof-name.js`: Inspector not available in WASM
 - `parallel/test-heap-prof-sigint.js`: Inspector not available in WASM
+- `parallel/test-http-1.0-keep-alive.js`: requires HTTP server functionality
+- `parallel/test-http-1.0.js`: requires HTTP server functionality
 - `parallel/test-http-abort-before-end.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-abort-client.js`: requires HTTP server functionality
 - `parallel/test-http-abort-queued.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-abort-stream-end.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-aborted.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-addrequest-localaddress.js`: requires HTTP server functionality
 - `parallel/test-http-after-connect.js`: requires HTTP server functionality
 - `parallel/test-http-agent-abort-controller.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-agent-destroyed-socket.js`: requires HTTP server functionality
 - `parallel/test-http-agent-error-on-idle.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-agent-keepalive-delay.js`: requires HTTP server functionality
+- `parallel/test-http-agent-keepalive.js`: requires HTTP server functionality
 - `parallel/test-http-agent-maxsockets-respected.js`: requires HTTP server functionality
 - `parallel/test-http-agent-maxsockets.js`: requires HTTP server functionality
 - `parallel/test-http-agent-maxtotalsockets.js`: requires HTTP server functionality
 - `parallel/test-http-agent-no-protocol.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-agent-null.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-agent-remove.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-agent-reuse-drained-socket-only.js`: requires HTTP server functionality
 - `parallel/test-http-agent-scheduling.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-agent-timeout-option.js`: requires HTTP server functionality
 - `parallel/test-http-agent-timeout.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-agent-uninitialized-with-handle.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-agent-uninitialized.js`: requires HTTP server functionality, we only support clients
@@ -3067,6 +2619,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-automatic-headers.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-bind-twice.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-blank-header.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-buffer-sanity.js`: requires HTTP server functionality
 - `parallel/test-http-byteswritten.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-catch-uncaughtexception.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-chunk-extensions-limit.js`: requires HTTP server functionality, we only support clients
@@ -3084,6 +2637,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-client-abort-unix-socket.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-abort.js`: requires HTTP server functionality
 - `parallel/test-http-client-abort2.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-abort3.js`: requires HTTP server functionality
+- `parallel/test-http-client-aborted-event.js`: requires HTTP server functionality
 - `parallel/test-http-client-agent-abort-close-event.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-agent-end-close-event.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-agent.js`: requires HTTP server functionality
@@ -3092,18 +2647,27 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-client-close-with-default-agent.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-default-headers-exist.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-encoding.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-error-rawbytes.js`: requires HTTP server functionality
 - `parallel/test-http-client-finished.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-get-url.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-headers-array.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-headers-host-array.js`: requires HTTP server functionality
 - `parallel/test-http-client-incomingmessage-destroy.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-input-function.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-insecure-http-parser-error.js`: requires HTTP server functionality
+- `parallel/test-http-client-invalid-path.js`: requires HTTP server functionality
 - `parallel/test-http-client-keep-alive-hint.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-keep-alive-release-before-finish.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-override-global-agent.js`: requires HTTP server functionality
 - `parallel/test-http-client-parse-error.js`: requires HTTP server functionality
 - `parallel/test-http-client-pipe-end.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-race-2.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-race.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-readable.js`: requires HTTP server functionality
+- `parallel/test-http-client-reject-chunked-with-content-length.js`: requires HTTP server functionality
+- `parallel/test-http-client-reject-cr-no-lf.js`: requires HTTP server functionality
 - `parallel/test-http-client-reject-unexpected-agent.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-req-error-dont-double-fire.js`: requires HTTP server functionality
 - `parallel/test-http-client-request-options.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-res-destroyed.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-response-domain.js`: requires HTTP server functionality, we only support clients
@@ -3115,11 +2679,16 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-client-timeout-connect-listener.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-timeout-event.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-timeout-option-listeners.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-timeout-option-with-agent.js`: requires HTTP server functionality
+- `parallel/test-http-client-timeout-option.js`: requires HTTP server functionality
 - `parallel/test-http-client-timeout-with-data.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-timeout.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-client-unescaped-path.js`: requires HTTP server functionality
 - `parallel/test-http-client-upload-buf.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-upload.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-with-create-connection.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-common.js`: requires Node.js internal modules
+- `parallel/test-http-conn-reset.js`: requires HTTP server functionality
 - `parallel/test-http-connect-req-res.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-connect.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-content-length-mismatch.js`: requires HTTP server functionality, we only support clients
@@ -3127,9 +2696,12 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-contentLength0.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-createConnection.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-date-header.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-debug.js`: requires child_process which is not available in WASM
 - `parallel/test-http-decoded-auth.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-default-encoding.js`: requires HTTP server functionality
 - `parallel/test-http-default-port.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-destroyed-socket-write2.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-dns-error.js`: requires HTTP server functionality
 - `parallel/test-http-dont-set-default-headers-with-set-header.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-dont-set-default-headers-with-setHost.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-dont-set-default-headers.js`: requires HTTP server functionality, we only support clients
@@ -3143,6 +2715,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-exceptions.js`: requires HTTP server functionality
 - `parallel/test-http-expect-continue.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-expect-handling.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-extra-response.js`: requires HTTP server functionality
 - `parallel/test-http-flush-headers.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-flush-response-headers.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-full-response.js`: requires HTTP server functionality, we only support clients
@@ -3158,17 +2731,27 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-header-overflow.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-header-owstext.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-header-read.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-header-validators.js`: requires HTTP server functionality
 - `parallel/test-http-hex-write.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-highwatermark.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-host-header-ipv6-fail.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-host-headers.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-hostname-typechecking.js`: requires HTTP server functionality
+- `parallel/test-http-import-websocket.js`: requires HTTP server functionality
+- `parallel/test-http-incoming-matchKnownFields.js`: requires HTTP server functionality
+- `parallel/test-http-incoming-message-connection-setter.js`: requires HTTP server functionality
+- `parallel/test-http-incoming-message-destroy.js`: requires HTTP server functionality
 - `parallel/test-http-incoming-message-options.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-incoming-pipelined-socket-destroy.js`: requires HTTP server functionality
 - `parallel/test-http-information-headers.js`: requires HTTP server functionality
 - `parallel/test-http-information-processing.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-insecure-parser-per-stream.js`: requires HTTP server functionality
 - `parallel/test-http-insecure-parser.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-invalid-path-chars.js`: requires HTTP server functionality
 - `parallel/test-http-invalid-te.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-invalid-urls.js`: requires HTTP server functionality
 - `parallel/test-http-invalidheaderfield.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-invalidheaderfield2.js`: requires HTTP server functionality
 - `parallel/test-http-keep-alive-close-on-header.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-keep-alive-drop-requests.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-keep-alive-max-requests.js`: requires HTTP server functionality, we only support clients
@@ -3185,14 +2768,19 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-localaddress-bind-error.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-malformed-request.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-many-ended-pipelines.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-max-header-size-per-stream.js`: requires HTTP server functionality
+- `parallel/test-http-max-header-size.js`: requires child_process which is not available in WASM
 - `parallel/test-http-max-headers-count.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-max-sockets.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-missing-header-separator-cr.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-missing-header-separator-lf.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-multi-line-headers.js`: requires HTTP server functionality
 - `parallel/test-http-multiple-headers.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-mutable-headers.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-no-content-length.js`: requires HTTP server functionality
 - `parallel/test-http-no-read-no-dump.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-nodelay.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-outgoing-destroy.js`: requires HTTP server functionality
 - `parallel/test-http-outgoing-destroyed.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-outgoing-end-cork.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-outgoing-end-multiple.js`: requires HTTP server functionality, we only support clients
@@ -3201,15 +2789,28 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-outgoing-finish.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-outgoing-finished.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-outgoing-internal-headernames-getter.js`: requires HTTP server functionality
+- `parallel/test-http-outgoing-internal-headernames-setter.js`: requires HTTP server functionality
 - `parallel/test-http-outgoing-message-capture-rejection.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-outgoing-message-inheritance.js`: requires HTTP server functionality
 - `parallel/test-http-outgoing-message-write-callback.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-outgoing-properties.js`: requires HTTP server functionality
+- `parallel/test-http-outgoing-proto.js`: requires HTTP server functionality
+- `parallel/test-http-outgoing-settimeout.js`: requires HTTP server functionality
 - `parallel/test-http-outgoing-writableFinished.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-outgoing-write-types.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-parser-bad-ref.js`: requires Node.js internal modules
 - `parallel/test-http-parser-finish-error.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-parser-free.js`: requires HTTP server functionality
 - `parallel/test-http-parser-freed-before-upgrade.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-parser-memory-retention.js`: requires Node.js internal modules
+- `parallel/test-http-parser-multiple-execute.js`: requires HTTP server functionality
+- `parallel/test-http-parser-timeout-reset.js`: requires HTTP server functionality
+- `parallel/test-http-parser.js`: requires Node.js internal modules
 - `parallel/test-http-pause-no-dump.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-pause-resume-one-end.js`: requires HTTP server functionality
 - `parallel/test-http-pause.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-perf_hooks.js`: requires HTTP server functionality
 - `parallel/test-http-pipe-fs.js`: requires HTTP server functionality
 - `parallel/test-http-pipeline-assertionerror-finish.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-pipeline-flood.js`: requires HTTP server functionality, we only support clients
@@ -3221,20 +2822,27 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-remove-connection-header-persists-connection.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-remove-header-stays-removed.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-req-close-robust-from-tampering.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-req-res-close.js`: requires HTTP server functionality
+- `parallel/test-http-request-agent.js`: requires HTTP server functionality
 - `parallel/test-http-request-arguments.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-request-dont-override-options.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-request-end-twice.js`: requires HTTP server functionality
+- `parallel/test-http-request-end.js`: requires HTTP server functionality
 - `parallel/test-http-request-host-header.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-request-invalid-method-error.js`: requires HTTP server functionality
 - `parallel/test-http-request-join-authorization-headers.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-request-large-payload.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-request-method-delete-payload.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-request-methods.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-request-smuggling-content-length.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-res-write-after-end.js`: requires HTTP server functionality
 - `parallel/test-http-res-write-end-dont-take-array.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-response-add-header-after-sent.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-response-close.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-response-cork.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-response-multi-content-length.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-response-multiheaders.js`: requires HTTP server functionality
+- `parallel/test-http-response-no-headers.js`: requires HTTP server functionality
 - `parallel/test-http-response-readable.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-response-remove-header-after-sent.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-response-setheaders.js`: requires HTTP server functionality, we only support clients
@@ -3243,12 +2851,16 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-response-statuscode.js`: requires HTTP server functionality
 - `parallel/test-http-response-writehead-returns-this.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-same-map.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server-async-dispose.js`: requires HTTP server functionality
 - `parallel/test-http-server-capture-rejections.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server-clear-timer.js`: requires HTTP server functionality
 - `parallel/test-http-server-client-error.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-close-all.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server-close-destroy-timeout.js`: requires HTTP server functionality
 - `parallel/test-http-server-close-idle-wait-response.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-close-idle.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-connection-list-when-close.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server-connections-checking-leak.js`: requires HTTP server functionality
 - `parallel/test-http-server-consumed-timeout.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-de-chunked-trailer.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-delete-parser.js`: requires HTTP server functionality, we only support clients
@@ -3261,10 +2873,14 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-server-keep-alive-defaults.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-keep-alive-max-requests-null.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-keepalive-end.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server-keepalive-req-gc.js`: requires HTTP server functionality
+- `parallel/test-http-server-method.query.js`: requires HTTP server functionality
 - `parallel/test-http-server-multiheaders.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-multiheaders2.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server-multiple-client-error.js`: requires HTTP server functionality
 - `parallel/test-http-server-non-utf8-header.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-options-incoming-message.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server-options-server-response.js`: requires HTTP server functionality
 - `parallel/test-http-server-reject-chunked-with-content-length.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-reject-cr-no-lf.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-request-timeout-delayed-body.js`: requires HTTP server functionality, we only support clients
@@ -3281,8 +2897,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-server-unconsume.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-write-after-end.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-write-end-after-end.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-server.js`: requires HTTP server functionality
 - `parallel/test-http-set-cookies.js`: requires HTTP server functionality
 - `parallel/test-http-set-header-chain.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-set-max-idle-http-parser.js`: requires Node.js internal modules
 - `parallel/test-http-set-timeout.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-set-trailers.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-should-keep-alive.js`: requires HTTP server functionality
@@ -3291,6 +2909,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-status-code.js`: requires HTTP server functionality
 - `parallel/test-http-status-message.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-status-reason-invalid-chars.js`: requires HTTP server functionality
+- `parallel/test-http-sync-write-error-during-continue.js`: requires HTTP server functionality
 - `parallel/test-http-timeout-client-warning.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-timeout-overflow.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-timeout.js`: requires HTTP server functionality
@@ -3300,10 +2919,21 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-unix-socket-keep-alive.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-unix-socket.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-upgrade-advertise.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-upgrade-agent.js`: requires HTTP server functionality
+- `parallel/test-http-upgrade-binary.js`: requires HTTP server functionality
 - `parallel/test-http-upgrade-client.js`: requires HTTP server functionality
 - `parallel/test-http-upgrade-client2.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-upgrade-reconsume-stream.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-upgrade-server.js`: requires HTTP server functionality
 - `parallel/test-http-upgrade-server2.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http-url.parse-auth-with-header-in-request.js`: requires HTTP server functionality
+- `parallel/test-http-url.parse-auth.js`: requires HTTP server functionality
+- `parallel/test-http-url.parse-basic.js`: requires HTTP server functionality
+- `parallel/test-http-url.parse-https.request.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http-url.parse-only-support-http-https-protocol.js`: requires HTTP server functionality
+- `parallel/test-http-url.parse-path.js`: requires HTTP server functionality
+- `parallel/test-http-url.parse-post.js`: requires HTTP server functionality
+- `parallel/test-http-url.parse-search.js`: requires HTTP server functionality
 - `parallel/test-http-wget.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-writable-true-after-close.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-write-callbacks.js`: requires HTTP server functionality, we only support clients
@@ -3313,35 +2943,289 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-write-head.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-zero-length-write.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-zerolengthbuffer.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http2-allow-http1.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-alpn.js`: requires TLS/HTTPS which is not supported in WASM
 - `parallel/test-http2-altsvc.js`: requires HTTP2 server functionality
+- `parallel/test-http2-async-local-storage.js`: requires HTTP2 server functionality
 - `parallel/test-http2-autoselect-protocol.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-http2-backpressure.js`: requires HTTP2 server functionality
 - `parallel/test-http2-buffersize.js`: requires HTTP2 server functionality
+- `parallel/test-http2-byteswritten-server.js`: requires HTTP2 server functionality
+- `parallel/test-http2-cancel-while-client-reading.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-capture-rejection.js`: requires HTTP2 server functionality
+- `parallel/test-http2-clean-output.js`: requires child_process which is not available in WASM
+- `parallel/test-http2-client-connection-tunnelling.js`: requires TLS/HTTPS which is not supported in WASM
 - `parallel/test-http2-client-data-end.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-jsstream-destroy.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-client-port-80.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-priority-before-connect.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-promisify-connect-error.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-promisify-connect.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-proxy-over-http2.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-request-listeners-warning.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-request-options-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-rststream-before-connect.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-set-priority.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-setLocalWindowSize.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-setNextStreamID-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-settings-before-connect.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-shutdown-before-connect.js`: requires HTTP2 server functionality
 - `parallel/test-http2-client-stream-destroy-before-connect.js`: requires HTTP2 server functionality
 - `parallel/test-http2-client-unescaped-path.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-write-before-connect.js`: requires HTTP2 server functionality
+- `parallel/test-http2-client-write-empty-string.js`: requires HTTP2 server functionality
+- `parallel/test-http2-close-while-writing.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-compat-aborted.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-expect-continue-check.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-expect-continue.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-expect-handling.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-method-connect.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-end.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-host.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-pause.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-pipe.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-settimeout.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-trailers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-close.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-createpushresponse.js`: requires HTTP2 server functionality
 - `parallel/test-http2-compat-serverresponse-destroy.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-drain.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-end-after-statuses-without-body.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-end.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-finished.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-flushheaders.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-headers-after-destroy.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-headers-send-date.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-settimeout.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-statuscode.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-statusmessage-property-set.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-statusmessage-property.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-statusmessage.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-trailers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-write.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-writehead-array.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-writehead.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-short-stream-client-server.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-socket-destroy-delayed.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-socket-set.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-write-early-hints-invalid-argument-type.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-write-early-hints-invalid-argument-value.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-write-early-hints.js`: requires HTTP2 server functionality
+- `parallel/test-http2-compat-write-head-destroyed.js`: requires HTTP2 server functionality
+- `parallel/test-http2-connect-method-extended-cant-turn-off.js`: requires HTTP2 server functionality
+- `parallel/test-http2-connect-method-extended.js`: requires HTTP2 server functionality
+- `parallel/test-http2-connect-method.js`: requires HTTP2 server functionality
+- `parallel/test-http2-connect.js`: requires HTTP2 server functionality
+- `parallel/test-http2-cookies.js`: requires HTTP2 server functionality
 - `parallel/test-http2-create-client-connect.js`: requires HTTP2 server functionality
 - `parallel/test-http2-create-client-session.js`: requires HTTP2 server functionality
+- `parallel/test-http2-createsecureserver-options.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-createserver-options.js`: requires HTTP2 server functionality
+- `parallel/test-http2-createwritereq.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-date-header.js`: requires HTTP2 server functionality
+- `parallel/test-http2-debug.js`: requires child_process which is not available in WASM
+- `parallel/test-http2-destroy-after-write.js`: requires HTTP2 server functionality
+- `parallel/test-http2-dont-lose-data.js`: requires HTTP2 server functionality
+- `parallel/test-http2-dont-override.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-empty-frame-without-eof.js`: requires HTTP2 server functionality
 - `parallel/test-http2-endafterheaders.js`: requires HTTP2 server functionality
+- `parallel/test-http2-error-order.js`: requires HTTP2 server functionality
+- `parallel/test-http2-exceeds-server-trailer-size.js`: requires HTTP2 server functionality
+- `parallel/test-http2-forget-closed-streams.js`: requires HTTP2 server functionality
+- `parallel/test-http2-generic-streams-sendfile.js`: requires HTTP2 server functionality
+- `parallel/test-http2-generic-streams.js`: requires HTTP2 server functionality
+- `parallel/test-http2-getpackedsettings.js`: requires HTTP2 server functionality
+- `parallel/test-http2-goaway-delayed-request.js`: requires HTTP2 server functionality
+- `parallel/test-http2-goaway-opaquedata.js`: requires HTTP2 server functionality
+- `parallel/test-http2-head-request.js`: requires HTTP2 server functionality
+- `parallel/test-http2-https-fallback-http-server-options.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-https-fallback.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-info-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-invalidargtypes-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-invalidheaderfield.js`: requires HTTP2 server functionality
+- `parallel/test-http2-invalidheaderfields-client.js`: requires HTTP2 server functionality
+- `parallel/test-http2-ip-address-host.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-large-write-close.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-large-write-destroy.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-large-write-multiple-requests.js`: requires HTTP2 server functionality
+- `parallel/test-http2-large-writes-session-memory-leak.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-malformed-altsvc.js`: requires HTTP2 server functionality
+- `parallel/test-http2-many-writes-and-destroy.js`: requires HTTP2 server functionality
 - `parallel/test-http2-max-concurrent-streams.js`: requires HTTP2 server functionality
+- `parallel/test-http2-max-invalid-frames.js`: requires HTTP2 server functionality
+- `parallel/test-http2-max-session-memory-leak.js`: requires HTTP2 server functionality
+- `parallel/test-http2-max-settings.js`: requires HTTP2 server functionality
+- `parallel/test-http2-methods.js`: requires HTTP2 server functionality
+- `parallel/test-http2-misbehaving-flow-control-paused.js`: requires HTTP2 server functionality
+- `parallel/test-http2-misbehaving-flow-control.js`: requires HTTP2 server functionality
+- `parallel/test-http2-misused-pseudoheaders.js`: requires HTTP2 server functionality
 - `parallel/test-http2-multi-content-length.js`: requires HTTP2 server functionality
+- `parallel/test-http2-multiheaders-raw.js`: requires HTTP2 server functionality
+- `parallel/test-http2-multiheaders.js`: requires HTTP2 server functionality
 - `parallel/test-http2-multiplex.js`: requires HTTP2 server functionality
+- `parallel/test-http2-multistream-destroy-on-read-tls.js`: requires TLS/HTTPS which is not supported in WASM
 - `parallel/test-http2-no-more-streams.js`: requires HTTP2 server functionality
+- `parallel/test-http2-no-wanttrailers-listener.js`: requires HTTP2 server functionality
+- `parallel/test-http2-onping.js`: requires HTTP2 server functionality
+- `parallel/test-http2-options-max-headers-block-length.js`: requires HTTP2 server functionality
 - `parallel/test-http2-options-max-reserved-streams.js`: requires HTTP2 server functionality
+- `parallel/test-http2-options-server-request.js`: requires HTTP2 server functionality
+- `parallel/test-http2-options-server-response.js`: requires HTTP2 server functionality
 - `parallel/test-http2-origin.js`: requires HTTP2 server functionality
+- `parallel/test-http2-pack-end-stream-flag.js`: requires HTTP2 server functionality
+- `parallel/test-http2-padding-aligned.js`: requires HTTP2 server functionality
+- `parallel/test-http2-perf_hooks.js`: requires HTTP2 server functionality
+- `parallel/test-http2-perform-server-handshake.js`: requires HTTP2 server functionality
+- `parallel/test-http2-ping-settings-heapdump.js`: requires HTTP2 server functionality
+- `parallel/test-http2-ping-unsolicited-ack.js`: requires HTTP2 server functionality
+- `parallel/test-http2-ping.js`: requires HTTP2 server functionality
+- `parallel/test-http2-pipe-named-pipe.js`: requires HTTP2 server functionality
+- `parallel/test-http2-pipe.js`: requires HTTP2 server functionality
 - `parallel/test-http2-priority-cycle-.js`: requires HTTP2 server functionality
+- `parallel/test-http2-priority-event.js`: requires HTTP2 server functionality
+- `parallel/test-http2-propagate-session-destroy-code.js`: requires HTTP2 server functionality
+- `parallel/test-http2-removed-header-stays-removed.js`: requires HTTP2 server functionality
+- `parallel/test-http2-request-remove-connect-listener.js`: requires HTTP2 server functionality
+- `parallel/test-http2-res-corked.js`: requires HTTP2 server functionality
+- `parallel/test-http2-res-writable-properties.js`: requires HTTP2 server functionality
+- `parallel/test-http2-reset-flood.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-204.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-304.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-404.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-compat.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-error-dir.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-error-pipe-offset.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-fd-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-fd-invalid.js`: requires HTTP2 server functionality
 - `parallel/test-http2-respond-file-fd-range.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-fd.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-filehandle.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-push.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-range.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file-with-pipe.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-file.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-no-data.js`: requires HTTP2 server functionality
+- `parallel/test-http2-respond-with-file-connection-abort.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-response-splitting.js`: requires HTTP2 server functionality
+- `parallel/test-http2-sensitive-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-sent-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-serve-file.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-async-dispose.js`: requires HTTP2 server functionality
 - `parallel/test-http2-server-close-callback.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-push-disabled.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-push-stream-errors-args.js`: requires HTTP2 server functionality
 - `parallel/test-http2-server-push-stream-head.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-push-stream.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-rst-before-respond.js`: requires HTTP2 server functionality
 - `parallel/test-http2-server-rst-stream.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-session-destroy.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-set-header.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-setLocalWindowSize.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-settimeout-no-callback.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-shutdown-before-respond.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-shutdown-options-errors.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-shutdown-redundant.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-startup.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-stream-session-destroy.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-timeout.js`: requires HTTP2 server functionality
+- `parallel/test-http2-server-unknown-protocol.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-session-gc-while-write-scheduled.js`: requires HTTP2 server functionality
+- `parallel/test-http2-session-settings.js`: requires HTTP2 server functionality
+- `parallel/test-http2-session-stream-state.js`: requires HTTP2 server functionality
+- `parallel/test-http2-session-timeout.js`: requires HTTP2 server functionality
 - `parallel/test-http2-session-unref.js`: requires HTTP2 server functionality
+- `parallel/test-http2-settings-unsolicited-ack.js`: requires HTTP2 server functionality
+- `parallel/test-http2-short-stream-client-server.js`: requires HTTP2 server functionality
+- `parallel/test-http2-single-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-socket-close.js`: requires HTTP2 server functionality
+- `parallel/test-http2-socket-proxy-handler-for-has.js`: requires HTTP2 server functionality
+- `parallel/test-http2-status-code-invalid.js`: requires HTTP2 server functionality
+- `parallel/test-http2-status-code.js`: requires HTTP2 server functionality
+- `parallel/test-http2-stream-client.js`: requires HTTP2 server functionality
+- `parallel/test-http2-stream-destroy-event-order.js`: requires HTTP2 server functionality
+- `parallel/test-http2-stream-removelisteners-after-close.js`: requires HTTP2 server functionality
+- `parallel/test-http2-timeouts.js`: requires HTTP2 server functionality
+- `parallel/test-http2-tls-disconnect.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-http2-too-large-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-too-many-headers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-too-many-settings.js`: requires HTTP2 server functionality
 - `parallel/test-http2-too-many-streams.js`: requires HTTP2 server functionality
-- `parallel/test-https-client-renegotiation-limit.js`: node compiled without OpenSSL CLI.
-- `parallel/test-https-connect-address-family.js`: no IPv6 support
+- `parallel/test-http2-trailers-after-session-close.js`: requires HTTP2 server functionality
+- `parallel/test-http2-trailers.js`: requires HTTP2 server functionality
+- `parallel/test-http2-unbound-socket-proxy.js`: requires HTTP2 server functionality
+- `parallel/test-http2-update-settings.js`: requires HTTP2 server functionality
+- `parallel/test-http2-window-size.js`: requires HTTP2 server functionality
+- `parallel/test-http2-write-callbacks.js`: requires HTTP2 server functionality
+- `parallel/test-http2-write-empty-string.js`: requires HTTP2 server functionality
+- `parallel/test-http2-write-finishes-after-stream-destroy.js`: requires HTTP2 server functionality
+- `parallel/test-http2-zero-length-header.js`: requires HTTP2 server functionality
+- `parallel/test-http2-zero-length-write.js`: requires HTTP2 server functionality
+- `parallel/test-https-abortcontroller.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-abort-controller.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-additional-options.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-constructor.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-create-connection.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-disable-session-reuse.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-getname.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-keylog.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-servername.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-session-eviction.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-session-injection.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-session-reuse.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-sni.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-sockets-leak.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent-unref-socket.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-agent.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-argument-of-creating.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-byteswritten.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-client-checkServerIdentity.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-client-get-url.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-client-override-global-agent.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-client-reject.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-client-renegotiation-limit.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-client-resume.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-close.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-connect-address-family.js`: requires TLS/HTTPS which is not supported in WASM
 - `parallel/test-https-connecting-to-http.js`: requires HTTP server functionality, we only support clients
-- `parallel/test-https-foafssl.js`: node compiled without OpenSSL CLI.
-- `parallel/test-https-selfsigned-no-keycertsign-no-crash.js`: OpenSSL < 1.1.1h
+- `parallel/test-https-drain.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-eof-for-eom.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-foafssl.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-host-headers.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-hwm.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-insecure-parse-per-stream.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-keep-alive-drop-requests.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-localaddress-bind-error.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-max-header-size-per-stream.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-max-headers-count.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-options-boolean-check.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-pfx.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-request-arguments.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-resume-after-renew.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-selfsigned-no-keycertsign-no-crash.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-async-dispose.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-close-all.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-close-destroy-timeout.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-close-idle.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-connections-checking-leak.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-headers-timeout.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-options-incoming-message.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-options-server-response.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-server-request-timeout.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-simple.js`: requires TLS/HTTPS which is not supported in WASM
 - `parallel/test-https-socket-options.js`: requires HTTP server functionality, we only support clients
+- `parallel/test-https-strict.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-timeout-server-2.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-timeout-server.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-timeout.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-truncate.js`: requires TLS/HTTPS which is not supported in WASM
+- `parallel/test-https-unix-socket-self-signed.js`: requires TLS/HTTPS which is not supported in WASM
 - `parallel/test-icu-transcode.js`: missing Intl
 - `parallel/test-inspect-address-in-use.js`: Inspector not available in WASM
 - `parallel/test-inspect-async-hook-setup-at-inspect.js`: Inspector not available in WASM
@@ -3406,8 +3290,109 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-macos-app-sandbox.js`: App Sandbox is only available on Darwin
 - `parallel/test-module-readonly.js`: test only runs on Windows
 - `parallel/test-module-strip-types.js`: Requires Amaro
-- `parallel/test-net-connect-options-ipv6.js`: no IPv6 support
-- `parallel/test-net-listen-ipv6only.js`: no IPv6 support
+- `parallel/test-net-better-error-messages-listen.js`: error message format mismatch
+- `parallel/test-net-better-error-messages-path.js`: requires Unix domain sockets (IPC path)
+- `parallel/test-net-binary.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-bind-twice.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-buffersize.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-bytes-read.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-bytes-stats.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-bytes-written-large.js`: requires child_process
+- `parallel/test-net-can-reset-timeout.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-child-process-connect-reset.js`: requires child_process
+- `parallel/test-net-client-bind-twice.js`: requires socket.connect with localAddress/localPort binding
+- `parallel/test-net-connect-abort-controller.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-buffer.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-buffer2.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-call-socket-connect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-immediate-destroy.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-keepalive.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-memleak.js`: requires process.memoryUsage()
+- `parallel/test-net-connect-nodelay.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-options-allowhalfopen.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-options-ipv6.js`: requires DNS lookup for IPv6
+- `parallel/test-net-connect-options-path.js`: requires Unix domain sockets (IPC path)
+- `parallel/test-net-connect-options-port.js`: requires DNS lookup
+- `parallel/test-net-connect-paused-connection.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-reset-after-destroy.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-reset-before-connected.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-connect-reset-until-connected.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-dns-custom-lookup.js`: requires custom DNS lookup
+- `parallel/test-net-dns-error.js`: requires DNS lookup
+- `parallel/test-net-dns-lookup-skip.js`: requires DNS lookup
+- `parallel/test-net-dns-lookup.js`: requires DNS lookup
+- `parallel/test-net-during-close.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-eaddrinuse.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-end-destroyed.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-error-twice.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-keepalive.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-large-string.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-listen-after-destroying-stdin.js`: requires process.stdin
+- `parallel/test-net-listen-close-server-callback-is-not-function.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-listen-close-server.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-listen-exclusive-random-ports.js`: requires cluster
+- `parallel/test-net-listen-fd0.js`: requires fd option for listen
+- `parallel/test-net-listen-handle-in-cluster-1.js`: requires cluster
+- `parallel/test-net-listen-ipv6only.js`: requires IPv6 dual-stack and DNS resolution
+- `parallel/test-net-listen-twice.js`: requires cluster
+- `parallel/test-net-local-address-port.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-localerror.js`: requires DNS lookup
+- `parallel/test-net-onread-static-buffer.js`: requires onread option with buffer/callback
+- `parallel/test-net-pause-resume-connecting.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-perf_hooks.js`: requires perf_hooks.PerformanceObserver with net detail
+- `parallel/test-net-persistent-keepalive.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-pingpong.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-pipe-connect-errors.js`: requires Unix domain sockets (IPC path)
+- `parallel/test-net-reconnect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-remote-address-port.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-remote-address.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-reuseport.js`: requires reusePort option and cluster
+- `parallel/test-net-server-blocklist.js`: requires net.BlockList
+- `parallel/test-net-server-call-listen-multiple-times.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-capture-rejection.js`: requires captureRejections option
+- `parallel/test-net-server-close-before-calling-lookup-callback.js`: requires DNS lookup
+- `parallel/test-net-server-close-before-ipc-response.js`: requires cluster
+- `parallel/test-net-server-close.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-drop-connections-in-cluster.js`: requires cluster
+- `parallel/test-net-server-drop-connections.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-keepalive.js`: requires internal/test/binding
+- `parallel/test-net-server-listen-options-signal.js`: missing AbortSignal validation for listen
+- `parallel/test-net-server-listen-options.js`: missing ERR_INVALID_ARG_TYPE validation for listen options
+- `parallel/test-net-server-listen-path.js`: requires Unix domain sockets (IPC path)
+- `parallel/test-net-server-listen-remove-callback.js`: requires Unix domain sockets (IPC path)
+- `parallel/test-net-server-max-connections-close-makes-more-available.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-max-connections.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-pause-on-connect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-reset.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-try-ports.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-unref-persistent.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-server-unref.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-settimeout.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-byteswritten.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-close-after-end.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-connecting.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-constructor.js`: requires cluster
+- `parallel/test-net-socket-destroy-send.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-destroy-twice.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-end-before-connect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-end-callback.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-local-address.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-ready-without-cb.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-reset-send.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-reset-twice.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-timeout-unref.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-socket-timeout.js`: setTimeout validation works but test crashes in TCP server close (WASI resource drop issue)
+- `parallel/test-net-socket-write-after-close.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-stream.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-sync-cork.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-throttle.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-write-after-close.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-write-after-end-nt.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-write-cb-on-destroy-before-connect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-write-connect-write.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-write-fully-async-buffer.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-write-fully-async-hex-string.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `parallel/test-net-write-slow.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-permission-fs-symlink-target-write.js`: insufficient privileges
 - `parallel/test-permission-fs-symlink.js`: insufficient privileges
 - `parallel/test-permission-fs-traversal-path.js`: insufficient privileges
@@ -3474,7 +3459,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-filter.js`: QuickJS microtask timing differs from V8; concurrency count assertion fires before pump completes
 - `parallel/test-stream-flatMap.js`: requires common/fixtures for createReadStream test
 - `parallel/test-stream-forEach.js`: QuickJS microtask timing differs from V8; concurrency count assertion fires before pump completes
-- `parallel/test-stream-map.js`: QuickJS memory corruption with large concurrent promise chains (createDependentPromises(20))
 - `parallel/test-stream-readable-async-iterators.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-stream-readable-dispose.js`: requires Symbol.asyncDispose support in QuickJS engine
 - `parallel/test-stream-toWeb-allows-server-response.js`: requires HTTP server functionality, we only support clients
@@ -3545,7 +3529,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-zlib-brotli-kmaxlength-rangeerror.js`: Modifies buffer.kMaxLength at runtime before requiring zlib
 - `parallel/test-zlib-bytes-read.js`: Byte-by-byte streaming with flush hangs due to buffered gzip/brotli streaming implementation
 - `parallel/test-zlib-deflate-raw-inherits.js`: Requires Constructor.call(this) inheritance pattern which doesn't work with ES6 class-based internals
-- `parallel/test-zlib-dictionary-fail.js`: Dictionary support not available in flate2 rust_backend
 - `parallel/test-zlib-dictionary.js`: Dictionary support not available in flate2 rust_backend
 - `parallel/test-zlib-failed-init.js`: Tests internal _level/_strategy properties with NaN
 - `parallel/test-zlib-flush-drain-longblock.js`: Complex flush/drain/pipe interaction
@@ -3553,8 +3536,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-zlib-flush.js`: Tests precise byte-level flush output comparison
 - `parallel/test-zlib-from-concatenated-gzip.js`: Multi-member gzip with fs.createReadStream + pipe + tmpdir
 - `parallel/test-zlib-from-gzip-with-trailing-garbage.js`: Tests precise error code handling for trailing garbage
-- `parallel/test-zlib-invalid-input-memory.js`: Requires --expose-gc and globalThis.gc()
-- `parallel/test-zlib-invalid-input.js`: process.nextTick arg count panic when stream error events propagate through Transform internals
 - `parallel/test-zlib-kmaxlength-rangeerror.js`: Modifies buffer.kMaxLength at runtime before requiring zlib
 - `parallel/test-zlib-maxOutputLength.js`: maxOutputLength not implemented in native layer
 - `parallel/test-zlib-object-write.js`: process.nextTick arg count panic when Transform write validation triggers error propagation
@@ -3590,6 +3571,25 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `sequential/test-debugger-pid.js`: Inspector not available in WASM
 - `sequential/test-diagnostic-dir-cpu-prof.js`: Inspector not available in WASM
 - `sequential/test-diagnostic-dir-heap-prof.js`: Inspector not available in WASM
+- `sequential/test-http-econnrefused.js`: requires HTTP server functionality
+- `sequential/test-http-keep-alive-large-write.js`: requires HTTP server functionality
+- `sequential/test-http-keepalive-maxsockets.js`: requires HTTP server functionality
+- `sequential/test-http-regr-gh-2928.js`: requires HTTP server functionality
+- `sequential/test-http-server-keep-alive-timeout-slow-client-headers.js`: requires HTTP server functionality
+- `sequential/test-http-server-keep-alive-timeout-slow-server.js`: requires HTTP server functionality
+- `sequential/test-http-server-request-timeouts-mixed.js`: requires HTTP server functionality
+- `sequential/test-http2-large-file.js`: requires HTTP2 server functionality
+- `sequential/test-http2-max-session-memory.js`: requires HTTP2 server functionality
+- `sequential/test-http2-ping-flood.js`: requires HTTP2 server functionality
+- `sequential/test-http2-settings-flood.js`: requires HTTP2 server functionality
+- `sequential/test-http2-timeout-large-write-file.js`: requires HTTP2 server functionality
+- `sequential/test-http2-timeout-large-write.js`: requires HTTP2 server functionality
+- `sequential/test-https-connect-localport.js`: requires TLS/HTTPS which is not supported in WASM
+- `sequential/test-net-GH-5504.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `sequential/test-net-listen-shared-ports.js`: requires cluster
+- `sequential/test-net-localport.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `sequential/test-net-response-size.js`: net.js TCP implementation incomplete - needs event handling and API fixes
+- `sequential/test-net-server-bind.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `sequential/test-resolution-inspect-brk.js`: Inspector not available in WASM
 - `sequential/test-tls-psk-client.js`: missing openssl cli
 - `sequential/test-tls-securepair-client.js`: node compiled without OpenSSL CLI.
@@ -3601,13 +3601,20 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 These tests are marked with `"skip": true` in `config.jsonc` but actually pass.
 Consider removing the `skip` flag.
 
-5 test(s) should be unskipped:
+12 test(s) should be unskipped:
 
-- `parallel/test-dns-cancel-reverse-lookup.js`
-- `parallel/test-dns-multi-channel.js`
-- `parallel/test-dns-resolveany-bad-ancount.js`
-- `parallel/test-dns-resolveany.js`
-- `parallel/test-http2-client-upload.js`
+- `parallel/test-console-sync-write-error.js`
+- `parallel/test-net-better-error-messages-port-hostname.js`
+- `parallel/test-net-blocklist.js`
+- `parallel/test-net-connect-after-destroy.js`
+- `parallel/test-net-connect-immediate-finish.js`
+- `parallel/test-net-listen-error.js`
+- `parallel/test-net-options-lookup.js`
+- `parallel/test-net-server-simultaneous-accepts-produce-warning-once.js`
+- `parallel/test-stream-map.js`
+- `parallel/test-zlib-dictionary-fail.js`
+- `parallel/test-zlib-invalid-input-memory.js`
+- `parallel/test-zlib-invalid-input.js`
 
 ## All Results by Module (Public + Internals)
 
@@ -3620,28 +3627,28 @@ Consider removing the `skip` flag.
 | buffer | 64 | 47 | 8 | 1 | 8 | 73.4% |
 | child_process | 111 | 1 | 0 | 0 | 110 | 0.9% |
 | cluster | 87 | 1 | 2 | 0 | 84 | 1.1% |
-| console | 21 | 13 | 4 | 1 | 3 | 61.9% |
+| console | 21 | 14 | 4 | 1 | 2 | 66.7% |
 | crypto | 100 | 46 | 1 | 3 | 50 | 46.0% |
-| dgram | 79 | 46 | 26 | 0 | 7 | 58.2% |
+| dgram | 79 | 47 | 25 | 0 | 7 | 59.5% |
 | diagnostics_channel | 32 | 20 | 8 | 0 | 4 | 62.5% |
 | dns | 26 | 8 | 0 | 0 | 18 | 30.8% |
 | domain | 50 | 23 | 22 | 0 | 5 | 46.0% |
 | events | 36 | 30 | 0 | 0 | 6 | 83.3% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 100.0% |
-| fs | 246 | 132 | 7 | 1 | 106 | 53.7% |
-| http | 710 | 16 | 395 | 0 | 299 | 2.3% |
+| fs | 246 | 133 | 6 | 1 | 106 | 54.1% |
+| http | 710 | 16 | 1 | 0 | 693 | 2.3% |
 | inspector | 91 | 0 | 3 | 0 | 88 | 0.0% |
 | module | 128 | 11 | 110 | 0 | 7 | 8.6% |
-| net | 161 | 3 | 156 | 0 | 2 | 1.9% |
+| net | 161 | 33 | 13 | 0 | 115 | 20.5% |
 | os | 6 | 0 | 6 | 0 | 0 | 0.0% |
-| other | 618 | 57 | 454 | 5 | 102 | 9.2% |
+| other | 618 | 61 | 452 | 3 | 102 | 9.9% |
 | path | 16 | 16 | 0 | 0 | 0 | 100.0% |
 | perf_hooks | 20 | 5 | 15 | 0 | 0 | 25.0% |
 | process | 85 | 36 | 42 | 0 | 7 | 42.4% |
 | querystring | 4 | 4 | 0 | 0 | 0 | 100.0% |
 | readline | 20 | 0 | 18 | 0 | 2 | 0.0% |
 | repl | 77 | 1 | 50 | 0 | 26 | 1.3% |
-| stream | 206 | 151 | 31 | 12 | 12 | 73.3% |
+| stream | 206 | 154 | 33 | 8 | 11 | 74.8% |
 | string_decoder | 3 | 0 | 3 | 0 | 0 | 0.0% |
 | test_runner | 40 | 6 | 31 | 1 | 2 | 15.0% |
 | timers | 58 | 32 | 8 | 2 | 16 | 55.2% |
@@ -3653,5 +3660,5 @@ Consider removing the `skip` flag.
 | v8 | 19 | 6 | 13 | 0 | 0 | 31.6% |
 | vm | 88 | 15 | 71 | 2 | 0 | 17.0% |
 | worker_threads | 138 | 1 | 132 | 1 | 4 | 0.7% |
-| zlib | 53 | 28 | 2 | 0 | 23 | 52.8% |
+| zlib | 53 | 31 | 2 | 0 | 20 | 58.5% |
 

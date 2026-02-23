@@ -847,6 +847,54 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         report.push_str("\n");
     }
 
+    // Passing tests not in config.jsonc
+    report.push_str("## Passing Tests Not in Config\n\n");
+    report.push_str(
+        "These tests pass but are not listed in `config.jsonc`.\n\
+         Consider adding them.\n\n",
+    );
+    {
+        let config_content =
+            fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
+        let config_json_str = strip_jsonc_comments(&config_content);
+        let config_tests_for_report: BTreeSet<String> = {
+            let mut keys: BTreeSet<String> =
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
+                    val.get("tests")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| obj.keys().cloned().collect())
+                        .unwrap_or_default()
+                } else {
+                    BTreeSet::new()
+                };
+            keys.extend(config_skipped.keys().cloned());
+            keys
+        };
+
+        let missing_for_report: Vec<&String> = results
+            .iter()
+            .filter(|(path, result)| {
+                matches!(result, TestResult::Pass)
+                    && !internals_tests.contains(path.as_str())
+                    && !config_tests_for_report.contains(path.as_str())
+            })
+            .map(|(path, _)| path)
+            .collect();
+
+        if missing_for_report.is_empty() {
+            report.push_str("_All passing tests are already in config.jsonc._\n\n");
+        } else {
+            report.push_str(&format!(
+                "{} test(s) should be added:\n\n",
+                missing_for_report.len()
+            ));
+            for path in &missing_for_report {
+                report.push_str(&format!("- `{path}`\n"));
+            }
+            report.push_str("\n");
+        }
+    }
+
     // All tests by module (public + internals combined)
     report.push_str("## All Results by Module (Public + Internals)\n\n");
     let mut by_module_all: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
