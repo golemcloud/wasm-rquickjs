@@ -2,6 +2,46 @@
 // Multi-threading is not possible in WASM environment
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
+const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable')
+
+function createDataCloneError(message) {
+    if (typeof DOMException === 'function') {
+        return new DOMException(message, 'DataCloneError')
+    }
+
+    const error = new Error(message)
+    error.name = 'DataCloneError'
+    error.code = 25
+    return error
+}
+
+function isObjectLike(value) {
+    return value !== null && (typeof value === 'object' || typeof value === 'function')
+}
+
+function normalizeTransferList(transferListOrOptions) {
+    if (transferListOrOptions == null) {
+        return []
+    }
+
+    if (Array.isArray(transferListOrOptions)) {
+        return transferListOrOptions
+    }
+
+    if (typeof transferListOrOptions === 'object' && transferListOrOptions !== null) {
+        if (!Object.prototype.hasOwnProperty.call(transferListOrOptions, 'transfer')) {
+            return []
+        }
+        const transfer = transferListOrOptions.transfer
+        return transfer == null ? [] : [...transfer]
+    }
+
+    return [...transferListOrOptions]
+}
+
+function isMarkedAsUntransferableInternal(value) {
+    return isObjectLike(value) && value[UNTRANSFERABLE_SYMBOL] === true
+}
 
 export const isMainThread = true;
 export const parentPort = null;
@@ -39,8 +79,16 @@ export class MessagePort {
         }
     }
 
-    postMessage(value) {
+    postMessage(value, transferListOrOptions) {
         if (this.#closed) return
+
+        const transferList = normalizeTransferList(transferListOrOptions)
+        for (const transferItem of transferList) {
+            if (isMarkedAsUntransferableInternal(transferItem)) {
+                throw createDataCloneError('Cannot transfer object of unsupported type.')
+            }
+        }
+
         const target = this._target
         if (target) {
             Promise.resolve().then(() => target._deliver(value))
@@ -72,8 +120,21 @@ export class MessageChannel {
     }
 }
 
-export function markAsUntransferable() {
-    throw new Error(NOT_SUPPORTED_ERROR);
+export function markAsUntransferable(value) {
+    if (!isObjectLike(value)) {
+        return
+    }
+
+    try {
+        Object.defineProperty(value, UNTRANSFERABLE_SYMBOL, {
+            value: true,
+            enumerable: false,
+            configurable: false,
+            writable: false,
+        })
+    } catch {
+        // Ignore non-extensible values.
+    }
 }
 
 export function moveMessagePortToContext() {

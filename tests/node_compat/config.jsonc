@@ -1189,10 +1189,7 @@
     "parallel/test-buffer-writefloat.js": {},
     "parallel/test-buffer-writeint.js": {},
     "parallel/test-buffer-writeuint.js": {},
-    "parallel/test-buffer-pool-untransferable.js": {
-      "skip": true,
-      "reason": "requires worker_threads MessageChannel which is not available in WASM"
-    },
+    "parallel/test-buffer-pool-untransferable.js": {},
     "parallel/test-buffer-constructor-deprecation-error.js": {},
     "parallel/test-buffer-constructor-outside-node-modules.js": {},
     "parallel/test-buffer-pending-deprecation.js": {},

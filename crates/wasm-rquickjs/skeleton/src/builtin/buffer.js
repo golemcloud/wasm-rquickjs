@@ -25,6 +25,10 @@ export const INSPECT_MAX_BYTES = 50
 
 const K_MAX_LENGTH = 0x7fffffff
 export const kMaxLength = K_MAX_LENGTH
+const K_UNTRANSFERABLE_ARRAYBUFFER = Symbol.for('__wasm_rquickjs.untransferable')
+
+let allocationPool
+let allocationPoolOffset = 0
 
 /**
  * Not used internally, but exported to maintain api compatability
@@ -144,6 +148,54 @@ function createBuffer (length) {
     return buf
 }
 
+function markArrayBufferAsUntransferable (arrayBuffer) {
+    if (arrayBuffer == null || (typeof arrayBuffer !== 'object' && typeof arrayBuffer !== 'function')) {
+        return
+    }
+
+    try {
+        Object.defineProperty(arrayBuffer, K_UNTRANSFERABLE_ARRAYBUFFER, {
+            value: true,
+            enumerable: false,
+            configurable: false,
+            writable: false,
+        })
+    } catch {
+        // Ignore non-extensible buffers.
+    }
+}
+
+function alignPoolOffset () {
+    if ((allocationPoolOffset & 0x7) !== 0) {
+        allocationPoolOffset = (allocationPoolOffset + 7) & ~0x7
+    }
+}
+
+function createAllocationPool () {
+    const size = Buffer.poolSize > 0 ? Buffer.poolSize >>> 0 : 8192
+    allocationPool = new Uint8Array(size)
+    allocationPoolOffset = 0
+    markArrayBufferAsUntransferable(allocationPool.buffer)
+}
+
+function allocFromPool (size) {
+    if (size <= 0) {
+        return createBuffer(0)
+    }
+
+    if (allocationPool === undefined || allocationPoolOffset + size > allocationPool.length) {
+        createAllocationPool()
+    }
+
+    const start = allocationPoolOffset
+    allocationPoolOffset += size
+    alignPoolOffset()
+
+    const buf = allocationPool.subarray(start, start + size)
+    Object.setPrototypeOf(buf, Buffer.prototype)
+    return buf
+}
+
 /**
  * The Buffer constructor returns instances of `Uint8Array` that have their
  * prototype changed to `Buffer.prototype`. Furthermore, `Buffer` is a subclass of
@@ -165,7 +217,7 @@ export function Buffer (arg, encodingOrOffset, length) {
     return from(arg, encodingOrOffset, length)
 }
 
-Buffer.poolSize = 8192 // not used by this implementation
+Buffer.poolSize = 8192
 
 function from (value, encodingOrOffset, length) {
     if (typeof value === 'string') {
@@ -385,7 +437,9 @@ function fromString (string, encoding) {
     }
 
     const length = byteLength(string, encoding) | 0
-    let buf = createBuffer(length)
+    let buf = length <= (Buffer.poolSize >>> 1)
+        ? allocFromPool(length)
+        : createBuffer(length)
 
     const actual = buf.write(string, encoding)
 
