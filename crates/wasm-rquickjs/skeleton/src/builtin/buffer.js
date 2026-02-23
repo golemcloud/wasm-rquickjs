@@ -1166,6 +1166,63 @@ function ucs2Write (buf, string, offset, length) {
     return blitBuffer(utf16leToBytes(string, buf.length - offset), buf, offset, length)
 }
 
+function normalizeInternalWriteOffset (buf, offset) {
+    if (offset === undefined) {
+        return 0
+    }
+
+    const offsetNumber = Number(offset)
+    if (!Number.isFinite(offsetNumber)) {
+        if (Number.isNaN(offsetNumber)) {
+            return 0
+        }
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('offset')
+    }
+
+    if (offsetNumber < 0) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('offset')
+    }
+
+    const normalizedOffset = Math.floor(offsetNumber)
+    if (normalizedOffset > buf.length) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('offset')
+    }
+
+    return normalizedOffset
+}
+
+function normalizeInternalWriteLength (length, remaining) {
+    if (length === undefined) {
+        return remaining
+    }
+
+    const lengthNumber = Number(length)
+    if (!Number.isFinite(lengthNumber)) {
+        if (Number.isNaN(lengthNumber)) {
+            return 0
+        }
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('length')
+    }
+
+    if (lengthNumber < 0) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('length')
+    }
+
+    const normalizedLength = Math.floor(lengthNumber)
+    if (normalizedLength > remaining) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('length')
+    }
+
+    return normalizedLength
+}
+
+function writeWithBounds (writer, buf, string, offset, length) {
+    offset = normalizeInternalWriteOffset(buf, offset)
+    const remaining = buf.length - offset
+    length = normalizeInternalWriteLength(length, remaining)
+    return writer(buf, string, offset, length)
+}
+
 Buffer.prototype.write = function write (string, offset, length, encoding) {
     // Buffer#write(string)
     if (offset === undefined) {
@@ -1240,15 +1297,15 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
 }
 
 Buffer.prototype.utf8Write = function utf8Write_ (string, offset, length) {
-    return utf8Write(this, string, offset, length)
+    return writeWithBounds(utf8Write, this, string, offset, length)
 }
 
 Buffer.prototype.asciiWrite = function asciiWrite_ (string, offset, length) {
-    return asciiWrite(this, string, offset, length)
+    return writeWithBounds(asciiWrite, this, string, offset, length)
 }
 
 Buffer.prototype.latin1Write = function latin1Write (string, offset, length) {
-    return asciiWrite(this, string, offset, length)
+    return writeWithBounds(asciiWrite, this, string, offset, length)
 }
 
 Buffer.prototype.base64Write = function base64Write_ (string, offset, length) {

@@ -1178,10 +1178,7 @@
     "parallel/test-buffer-slow.js": {},
     "parallel/test-buffer-tostring.js": {},
     "parallel/test-buffer-tostring-range.js": {},
-    "parallel/test-buffer-write.js": {
-      "skip": true,
-      "reason": "requires internal asciiWrite/latin1Write/utf8Write prototype methods with bounds checking"
-    },
+    "parallel/test-buffer-write.js": {},
     "parallel/test-buffer-writedouble.js": {},
     "parallel/test-buffer-writefloat.js": {},
     "parallel/test-buffer-writeint.js": {},
