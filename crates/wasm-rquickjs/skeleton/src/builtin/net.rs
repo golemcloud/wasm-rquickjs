@@ -1010,7 +1010,11 @@ impl TcpListener {
 
     pub fn close(&self) {
         let mut inner = self.inner.borrow_mut();
-        inner.socket.take();
+        if let Some(socket) = inner.socket.take() {
+            // Explicitly shut down the listener first so dropping the WASI
+            // socket resource does not race with pending accept pollers.
+            let _ = socket.shutdown(ShutdownType::Both);
+        }
         inner.closed = true;
         inner.listening = false;
         inner.generation += 1;

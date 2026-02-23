@@ -324,6 +324,18 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                     this.push(null);
                     if (!this.allowHalfOpen) {
                         this.end();
+
+                        // Ensure TCP sockets are fully torn down after FIN so
+                        // the stream emits `close` and clears `_handle`.
+                        if (!this.destroyed) {
+                            if (this.writableFinished || this.writable === false) {
+                                this.destroy();
+                            } else {
+                                this.once('finish', () => {
+                                    if (!this.destroyed) this.destroy();
+                                });
+                            }
+                        }
                     }
                     break;
                 }
@@ -493,6 +505,8 @@ function Server(options, connectionListener) {
     this._connections = 0;
     this._accepting = false;
     this._acceptToken = 0;
+    this._acceptLoopActive = false;
+    this._closeRequested = false;
     this.listening = false;
     this.maxConnections = 0;
     this._pauseOnConnect = options.pauseOnConnect || false;
@@ -567,6 +581,7 @@ Server.prototype.listen = function listen(...args) {
                 await this._handle.listen();
                 this.listening = true;
                 this._accepting = true;
+                this._closeRequested = false;
                 this._connectionKey = (family === 6 ? '6' : '4') + ':' + ip + ':' + port;
                 this.emit('listening');
                 this._acceptLoop();
@@ -593,65 +608,115 @@ Server.prototype.listen = function listen(...args) {
     return this;
 };
 
+Server.prototype._closeHandle = function _closeHandle() {
+    if (!this._handle) return;
+    this._handle.close();
+    this._handle = null;
+};
+
+Server.prototype._maybeEmitClose = function _maybeEmitClose() {
+    if (!this.listening && !this._handle && this._connections === 0) {
+        nextTick(() => this.emit('close'));
+    }
+};
+
+Server.prototype._wakeAcceptLoop = function _wakeAcceptLoop() {
+    if (!this._handle) return;
+
+    let addr;
+    let port;
+    let family;
+    try {
+        [addr, port, family] = this._handle.local_address();
+    } catch (_) {
+        return;
+    }
+
+    const wakeFamily = family === 'IPv6' ? 6 : 4;
+    const wakeAddress =
+        addr === '0.0.0.0' ? '127.0.0.1' :
+            (addr === '::' ? '::1' : addr);
+
+    (async () => {
+        const wakeSocket = create_tcp_socket(wakeFamily);
+        try {
+            await wakeSocket.connect(wakeAddress, port);
+        } catch (_) {
+            // Best effort only: this is just to wake a blocked accept call.
+        } finally {
+            try {
+                wakeSocket.close();
+            } catch (_) {}
+        }
+    })();
+};
+
 Server.prototype._acceptLoop = function _acceptLoop() {
     const token = ++this._acceptToken;
+    this._acceptLoopActive = true;
     (async () => {
-        while (this._accepting && this._handle && token === this._acceptToken) {
-            try {
-                const [clientHandle, addr, port, family] = await this._handle.accept();
-                if (token !== this._acceptToken) { clientHandle.close(); break; }
-
-                if (this.maxConnections && this._connections >= this.maxConnections) {
-                    clientHandle.close();
-                    this.emit('drop', {
-                        localAddress: this._localAddress,
-                        localPort: this._localPort,
-                        localFamily: this._localFamily,
-                        remoteAddress: addr,
-                        remotePort: port,
-                        remoteFamily: family,
-                    });
-                    continue;
-                }
-
-                const socket = new Socket({ allowHalfOpen: this.allowHalfOpen });
-                socket._handle = clientHandle;
-                socket.connecting = false;
-                socket.pending = false;
-                socket.readable = true;
-                socket.writable = true;
-                socket.remoteAddress = addr;
-                socket.remotePort = port;
-                socket.remoteFamily = family;
+        try {
+            while (this._accepting && this._handle && token === this._acceptToken) {
                 try {
-                    const [la, lp, lf] = clientHandle.local_address();
-                    socket.localAddress = la;
-                    socket.localPort = lp;
-                    socket.localFamily = lf;
-                } catch (_) {}
+                    const [clientHandle, addr, port, family] = await this._handle.accept();
+                    if (token !== this._acceptToken) { clientHandle.close(); break; }
 
-                if (this._noDelay) socket.setNoDelay(true);
-                if (this._keepAlive) socket.setKeepAlive(true, this._keepAliveInitialDelay);
-                if (this._pauseOnConnect) socket.pause();
-
-                this._connections++;
-                socket.on('close', () => {
-                    this._connections--;
-                    if (!this.listening && !this._handle && this._connections === 0) {
-                        nextTick(() => this.emit('close'));
+                    if (this.maxConnections && this._connections >= this.maxConnections) {
+                        clientHandle.close();
+                        this.emit('drop', {
+                            localAddress: this._localAddress,
+                            localPort: this._localPort,
+                            localFamily: this._localFamily,
+                            remoteAddress: addr,
+                            remotePort: port,
+                            remoteFamily: family,
+                        });
+                        continue;
                     }
-                });
 
-                this.emit('connection', socket);
+                    const socket = new Socket({ allowHalfOpen: this.allowHalfOpen });
+                    socket._handle = clientHandle;
+                    socket.connecting = false;
+                    socket.pending = false;
+                    socket.readable = true;
+                    socket.writable = true;
+                    socket.remoteAddress = addr;
+                    socket.remotePort = port;
+                    socket.remoteFamily = family;
+                    try {
+                        const [la, lp, lf] = clientHandle.local_address();
+                        socket.localAddress = la;
+                        socket.localPort = lp;
+                        socket.localFamily = lf;
+                    } catch (_) {}
 
-                if (!this._pauseOnConnect) {
-                    socket.read(0);
+                    if (this._noDelay) socket.setNoDelay(true);
+                    if (this._keepAlive) socket.setKeepAlive(true, this._keepAliveInitialDelay);
+                    if (this._pauseOnConnect) socket.pause();
+
+                    this._connections++;
+                    socket.on('close', () => {
+                        this._connections--;
+                        this._maybeEmitClose();
+                    });
+
+                    this.emit('connection', socket);
+
+                    if (!this._pauseOnConnect) {
+                        socket.read(0);
+                    }
+                } catch (e) {
+                    if (token !== this._acceptToken) break;
+                    this.emit('error', parseNativeError(e));
+                    break;
                 }
-            } catch (e) {
-                if (token !== this._acceptToken) break;
-                this.emit('error', parseNativeError(e));
-                break;
             }
+        } finally {
+            this._acceptLoopActive = false;
+            if (this._closeRequested) {
+                this._closeHandle();
+            }
+            this._maybeEmitClose();
         }
     })();
 };
@@ -667,16 +732,18 @@ Server.prototype.close = function close(cb) {
 
     this._accepting = false;
     this._acceptToken++;
+    this.listening = false;
+    this._closeRequested = true;
 
     if (this._handle) {
-        this._handle.close();
-        this._handle = null;
+        if (this._acceptLoopActive) {
+            this._wakeAcceptLoop();
+        } else {
+            this._closeHandle();
+        }
     }
-    this.listening = false;
 
-    if (this._connections === 0) {
-        nextTick(() => this.emit('close'));
-    }
+    this._maybeEmitClose();
 
     return this;
 };
