@@ -227,11 +227,40 @@ function resolveFilename(id, parentDir) {
     throw err;
 }
 
+function hasAllowNativesSyntaxFlag() {
+    var processObject = globalThis.process;
+    if (!processObject || !Array.isArray(processObject.execArgv)) {
+        return false;
+    }
+
+    for (var i = 0; i < processObject.execArgv.length; i++) {
+        if (processObject.execArgv[i] === '--allow-natives-syntax') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function stripV8OptimizationIntrinsics(source) {
+    if (!hasAllowNativesSyntaxFlag()) {
+        return source;
+    }
+
+    // QuickJS cannot parse V8-native `%...` syntax used in eval strings.
+    // These intrinsics only force optimization and are semantically no-ops.
+    return source
+        .replace(/eval\(\s*(['"])%PrepareFunctionForOptimization\([^'"\\\r\n]*\)\1\s*\)\s*;?/g, 'undefined;')
+        .replace(/eval\(\s*(['"])%OptimizeFunctionOnNextCall\([^'"\\\r\n]*\)\1\s*\)\s*;?/g, 'undefined;');
+}
+
 function compileCjs(filename, source) {
     // Strip shebang
     if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
         source = '//' + source;
     }
+
+    source = stripV8OptimizationIntrinsics(source);
 
     return new Function('exports', 'require', 'module', '__filename', '__dirname',
         source + '\n//# sourceURL=' + filename + '\n');

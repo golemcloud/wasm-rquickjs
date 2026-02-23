@@ -1195,10 +1195,7 @@
     "parallel/test-buffer-constructor-node-modules.js": {},
     "parallel/test-buffer-fill.js": {},
     "parallel/test-buffer-tostring-rangeerror.js": {},
-    "parallel/test-buffer-write-fast.js": {
-      "skip": true,
-      "reason": "not yet triaged"
-    },
+    "parallel/test-buffer-write-fast.js": {},
 
     // === miscellaneous tests ===
     "parallel/test-arm-math-illegal-instruction.js": {},
