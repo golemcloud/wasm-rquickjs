@@ -1421,7 +1421,7 @@
     "parallel/test-net-access-byteswritten.js": {},
     "parallel/test-net-after-close.js": {},
     "parallel/test-net-allow-half-open.js": {},
-    "parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js": { "skip": true, "reason": "requires child_process.spawnSync" },
+    "parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js": {},
     "parallel/test-net-autoselectfamily-attempt-timeout-default-value.js": { "skip": true, "reason": "requires DNS lookup connecting to external hosts" },
     "parallel/test-net-autoselectfamily-commandline-option.js": { "skip": true, "reason": "requires child_process.spawnSync" },
     "parallel/test-net-autoselectfamily-default.js": { "skip": true, "reason": "requires DNS lookup connecting to external hosts" },

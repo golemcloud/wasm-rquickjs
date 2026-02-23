@@ -189,8 +189,13 @@ var common = {
     // Timeout
     platformTimeout: function(ms) { return ms; },
 
-    // Parse test flags (no-op in WASM)
-    parseTestFlags: function() { return []; },
+    // Parse test flags from the runner-populated process.execArgv.
+    parseTestFlags: function() {
+        if (!globalThis.process || !Array.isArray(globalThis.process.execArgv)) {
+            return [];
+        }
+        return globalThis.process.execArgv.slice();
+    },
 
     // isAlive (no processes in WASM)
     isAlive: function() { return false; },
@@ -247,5 +252,41 @@ var common = {
         _mustCallChecks = [];
     },
 };
+
+function applyNetFlagsAndDefaults() {
+    var net;
+    try {
+        net = require('net');
+    } catch (_) {
+        return;
+    }
+
+    var flags = common.parseTestFlags();
+    for (var i = 0; i < flags.length; i++) {
+        var flag = flags[i];
+        if (flag === '--no-network-family-autoselection') {
+            net.setDefaultAutoSelectFamily(false);
+            continue;
+        }
+        if (flag === '--network-family-autoselection') {
+            net.setDefaultAutoSelectFamily(true);
+            continue;
+        }
+        if (flag.indexOf('--network-family-autoselection-attempt-timeout=') === 0) {
+            var rawValue = flag.slice('--network-family-autoselection-attempt-timeout='.length);
+            var value = Number(rawValue);
+            if (Number.isFinite(value)) {
+                net.setDefaultAutoSelectFamilyAttemptTimeout(value);
+            }
+        }
+    }
+
+    // Match Node's test/common behavior: inflate this timeout to reduce flakes.
+    net.setDefaultAutoSelectFamilyAttemptTimeout(
+        common.platformTimeout(net.getDefaultAutoSelectFamilyAttemptTimeout() * 10)
+    );
+}
+
+applyNetFlagsAndDefaults();
 
 module.exports = common;
