@@ -48,10 +48,7 @@
     "parallel/test-assert-esm-cjs-message-verify.js": {},
     "parallel/test-assert-fail-deprecation.js": {},
     "parallel/test-assert-fail.js": {},
-    "parallel/test-assert-first-line.js": {
-      "skip": true,
-      "reason": "requires loading fixture files from filesystem which is not available in WASM"
-    },
+    "parallel/test-assert-first-line.js": {},
     "parallel/test-assert-if-error.js": {},
     "parallel/test-assert-objects.js": {
       "skip": true,

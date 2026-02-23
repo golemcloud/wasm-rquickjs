@@ -269,7 +269,16 @@ function loadModule(resolvedFilename, source, parentModule) {
         var dirname = pathModule.dirname(resolvedFilename);
         var childRequire = makeRequire(dirname, mod);
         var compiledFn = compileCjs(resolvedFilename, source);
-        compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
+        var previousModuleContext = globalThis.__wasm_rquickjs_current_module;
+        globalThis.__wasm_rquickjs_current_module = {
+            filename: resolvedFilename,
+            source: source
+        };
+        try {
+            compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
+        } finally {
+            globalThis.__wasm_rquickjs_current_module = previousModuleContext;
+        }
     }
 
     mod.loaded = true;

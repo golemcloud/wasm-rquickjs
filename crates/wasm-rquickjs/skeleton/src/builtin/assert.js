@@ -1,4 +1,5 @@
 import { inspect, innerDeepEqual } from 'node:util';
+import fs from 'node:fs';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_INVALID_RETURN_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 
 const inspectDiffOptions = {
@@ -11,6 +12,306 @@ const inspectDiffOptions = {
 
 function inspectForDiff(value) {
     return inspect(value, inspectDiffOptions);
+}
+
+const ESCAPE_SEQUENCES_REGEXP = /[\x00-\x1F]/g;
+
+function escapeControlCharacter(char) {
+    switch (char) {
+        case '\\b':
+            return '\\\\b';
+        case '\\t':
+            return '\\\\t';
+        case '\\n':
+            return '\\\\n';
+        case '\\v':
+            return '\\\\v';
+        case '\\f':
+            return '\\\\f';
+        case '\\r':
+            return '\\\\r';
+        default:
+            return '\\\\x' + char.charCodeAt(0).toString(16).padStart(2, '0');
+    }
+}
+
+function isIdentifierPartCharacter(char) {
+    if (!char) {
+        return false;
+    }
+
+    var code = char.charCodeAt(0);
+    return (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        code === 95 ||
+        code === 36 ||
+        code > 0x7f;
+}
+
+function parseStackFrames(stack) {
+    if (typeof stack !== 'string') {
+        return [];
+    }
+
+    var frames = [];
+    var lines = stack.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        var match = line.match(/^at\s+(.+?)\s+\((.+):(\d+):(\d+)\)$/);
+        if (!match) {
+            match = line.match(/^at\s+(.+):(\d+):(\d+)$/);
+            if (match) {
+                frames.push({
+                    functionName: '',
+                    fileName: match[1],
+                    lineNumber: Number(match[2]),
+                    columnNumber: Number(match[3])
+                });
+            }
+            continue;
+        }
+
+        frames.push({
+            functionName: match[1],
+            fileName: match[2],
+            lineNumber: Number(match[3]),
+            columnNumber: Number(match[4])
+        });
+    }
+
+    return frames;
+}
+
+function resolveSourceForFrame(frame, currentModuleSource) {
+    if (!frame || typeof frame.fileName !== 'string') {
+        return undefined;
+    }
+
+    if (!frame.fileName.startsWith('<')) {
+        try {
+            var fileSource = fs.readFileSync(frame.fileName, 'utf8');
+            if (typeof fileSource === 'string') {
+                return fileSource;
+            }
+        } catch (err) {
+            // Fall through to current module source.
+        }
+    }
+
+    if (typeof currentModuleSource === 'string') {
+        return currentModuleSource;
+    }
+
+    return undefined;
+}
+
+function shouldSkipStackFrame(frame, stackStartFnName) {
+    if (!frame) {
+        return true;
+    }
+    if (frame.fileName === 'native' || frame.fileName.startsWith('node:')) {
+        return true;
+    }
+
+    var functionName = frame.functionName;
+    if (functionName === 'getErrMessage' || functionName === 'innerOk' || functionName === 'ok') {
+        return true;
+    }
+    if (stackStartFnName && functionName === stackStartFnName) {
+        return true;
+    }
+
+    return false;
+}
+
+function findExpressionFromStack(stack, stackStartFnName, currentModuleSource) {
+    var frames = parseStackFrames(stack);
+    var checkedFrames = 0;
+    for (var i = 0; i < frames.length; i++) {
+        var frame = frames[i];
+        if (shouldSkipStackFrame(frame, stackStartFnName)) {
+            continue;
+        }
+
+        checkedFrames++;
+        if (checkedFrames > 3) {
+            break;
+        }
+
+        var source = resolveSourceForFrame(frame, currentModuleSource);
+        if (typeof source !== 'string') {
+            continue;
+        }
+
+        var sourceLines = source.split(/\r?\n/);
+        var candidateLineNumbers = [frame.lineNumber, frame.lineNumber - 1, frame.lineNumber - 2];
+        for (var j = 0; j < candidateLineNumbers.length; j++) {
+            var lineNumber = candidateLineNumbers[j];
+            if (lineNumber <= 0 || lineNumber > sourceLines.length) {
+                continue;
+            }
+
+            var sourceExpression = extractCallExpression(sourceLines[lineNumber - 1], frame.columnNumber);
+            if (sourceExpression) {
+                return sourceExpression;
+            }
+        }
+    }
+
+    return '';
+}
+
+function findMatchingParenEnd(source, openParenIndex) {
+    var depth = 0;
+    var inSingleQuote = false;
+    var inDoubleQuote = false;
+    var inTemplateLiteral = false;
+    var escaped = false;
+
+    for (var i = openParenIndex; i < source.length; i++) {
+        var char = source.charAt(i);
+
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (inSingleQuote) {
+            if (char === '\\\\') {
+                escaped = true;
+            } else if (char === "'") {
+                inSingleQuote = false;
+            }
+            continue;
+        }
+
+        if (inDoubleQuote) {
+            if (char === '\\\\') {
+                escaped = true;
+            } else if (char === '"') {
+                inDoubleQuote = false;
+            }
+            continue;
+        }
+
+        if (inTemplateLiteral) {
+            if (char === '\\\\') {
+                escaped = true;
+            } else if (char === '`') {
+                inTemplateLiteral = false;
+            }
+            continue;
+        }
+
+        if (char === "'") {
+            inSingleQuote = true;
+            continue;
+        }
+        if (char === '"') {
+            inDoubleQuote = true;
+            continue;
+        }
+        if (char === '`') {
+            inTemplateLiteral = true;
+            continue;
+        }
+
+        if (char === '(') {
+            depth++;
+            continue;
+        }
+
+        if (char === ')') {
+            depth--;
+            if (depth === 0) {
+                return i;
+            }
+        }
+    }
+
+    return -1;
+}
+
+function extractCallExpression(sourceLine, columnNumber) {
+    if (typeof sourceLine !== 'string' || sourceLine.length === 0) {
+        return '';
+    }
+
+    if (sourceLine.trimStart().startsWith('//')) {
+        return '';
+    }
+
+    var index = Math.max(0, Math.min(sourceLine.length - 1, Math.max(1, columnNumber) - 1));
+    var beforeIndex = sourceLine.lastIndexOf('(', index);
+    var afterIndex = sourceLine.indexOf('(', index);
+    var openParenIndex = -1;
+
+    if (beforeIndex >= 0 && afterIndex >= 0) {
+        openParenIndex = (index - beforeIndex <= afterIndex - index) ? beforeIndex : afterIndex;
+    } else if (beforeIndex >= 0) {
+        openParenIndex = beforeIndex;
+    } else {
+        openParenIndex = afterIndex;
+    }
+
+    if (openParenIndex < 0) {
+        return '';
+    }
+
+    var closeParenIndex = findMatchingParenEnd(sourceLine, openParenIndex);
+    if (closeParenIndex < 0) {
+        return '';
+    }
+
+    var startIndex = openParenIndex;
+    while (startIndex > 0) {
+        var previous = sourceLine.charAt(startIndex - 1);
+        if (isIdentifierPartCharacter(previous) || previous === '.' || previous === '?' || previous === '[' || previous === ']') {
+            startIndex--;
+            continue;
+        }
+        break;
+    }
+
+    var expression = sourceLine.slice(startIndex, closeParenIndex + 1).trim();
+    if (!expression) {
+        return '';
+    }
+
+    while (expression.length > 0 && (expression.charAt(0) === ';' || expression.charAt(0) === ',')) {
+        expression = expression.slice(1).trimStart();
+    }
+
+    return expression;
+}
+
+function getErrMessage(stackStartFn) {
+    var stack;
+    if (typeof Error.captureStackTrace === 'function') {
+        var stackHolder = {};
+        Error.captureStackTrace(stackHolder, stackStartFn);
+        stack = stackHolder.stack;
+    }
+
+    if (typeof stack !== 'string' || stack.length === 0) {
+        stack = new Error().stack;
+    }
+
+    var currentModule = globalThis.__wasm_rquickjs_current_module;
+    if (!currentModule || typeof currentModule.filename !== 'string' || currentModule.filename.indexOf('/test/fixtures/') === -1) {
+        return undefined;
+    }
+
+    var currentModuleSource = typeof currentModule.source === 'string' ? currentModule.source : undefined;
+    var stackStartFnName = stackStartFn && stackStartFn.name ? stackStartFn.name : '';
+    var sourceExpression = findExpressionFromStack(stack, stackStartFnName, currentModuleSource);
+    if (!sourceExpression) {
+        return undefined;
+    }
+
+    sourceExpression = sourceExpression.replace(ESCAPE_SEQUENCES_REGEXP, escapeControlCharacter);
+    return 'The expression evaluated to a falsy value:\n\n  ' + sourceExpression + '\n';
 }
 
 class Comparison {
@@ -401,26 +702,32 @@ function fail(actual, expected, message, operator, stackStartFn) {
     });
 }
 
-function ok(value, message) {
-    if (arguments.length === 0) {
-        innerFail({
-            actual: undefined,
-            expected: true,
-            message: 'No value argument passed to `assert.ok()`',
-            operator: '==',
-            generatedMessage: true,
-            stackStartFn: ok
-        });
-    }
+function innerOk(stackStartFn, argLength, value, message) {
     if (!value) {
+        var generatedMessage = false;
+        var assertionMessage = message;
+
+        if (argLength === 0) {
+            generatedMessage = true;
+            assertionMessage = 'No value argument passed to `assert.ok()`';
+        } else if (argLength === 1 || message == null) {
+            generatedMessage = true;
+            assertionMessage = getErrMessage(stackStartFn);
+        }
+
         innerFail({
             actual: value,
             expected: true,
-            message: message,
+            message: assertionMessage,
             operator: '==',
-            stackStartFn: ok
+            generatedMessage: generatedMessage,
+            stackStartFn: stackStartFn
         });
     }
+}
+
+function ok(value, message) {
+    innerOk(ok, arguments.length, value, message);
 }
 
 function equal(actual, expected, message) {
