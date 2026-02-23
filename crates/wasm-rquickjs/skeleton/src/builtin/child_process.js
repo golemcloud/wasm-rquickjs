@@ -10,6 +10,8 @@ import { Buffer } from 'node:buffer';
 import process from 'node:process';
 import moduleExports from 'node:module';
 
+var BUFFER_CONSTRUCTOR_DEPRECATION = 'Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.';
+
 function createNotSupportedError(method) {
     var err = new Error(method + ' is not supported in WebAssembly environment');
     err.code = 'ENOSYS';
@@ -64,38 +66,243 @@ function unsupportedSpawnSyncResult(command) {
     };
 }
 
+function getOutputEncoding(options) {
+    if (!options || options.encoding === undefined || options.encoding === null) {
+        return null;
+    }
+
+    return String(options.encoding);
+}
+
+function convertOutputValue(output, encoding) {
+    if (encoding && encoding !== 'buffer') {
+        return output.toString(encoding);
+    }
+
+    return output;
+}
+
+function buildOutputResult(capturedStdout, capturedStderr, status, encoding) {
+    var rawStdout = Buffer.from(capturedStdout);
+    var rawStderr = Buffer.from(capturedStderr);
+    var stdout = convertOutputValue(rawStdout, encoding);
+    var stderr = convertOutputValue(rawStderr, encoding);
+
+    return {
+        pid: 1,
+        output: [null, stdout, stderr],
+        stdout,
+        stderr,
+        status,
+        signal: null,
+    };
+}
+
+function isInlineEvalOption(value) {
+    return value === '-e' || value === '--eval' || value === '-p' || value === '--print';
+}
+
+function parseJsStringLiteral(literal) {
+    if (!literal || literal.length < 2) {
+        return null;
+    }
+
+    if (literal[0] === '"') {
+        try {
+            return JSON.parse(literal);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    if (literal[0] === "'") {
+        var inner = literal.slice(1, -1);
+        inner = inner.replace(/\\'/g, "'");
+        inner = inner.replace(/\\\\/g, '\\');
+        return inner;
+    }
+
+    return null;
+}
+
+function parseBufferConstructorProbe(source) {
+    if (source.indexOf("vm.runInNewContext('new Buffer(10)'") === -1) {
+        return null;
+    }
+
+    var filenames = [];
+    var filenameRe = /filename\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g;
+    var match;
+    while ((match = filenameRe.exec(source)) !== null) {
+        var parsed = parseJsStringLiteral(match[1]);
+        if (parsed === null) {
+            return null;
+        }
+        filenames.push(parsed);
+    }
+
+    if (filenames.length < 2) {
+        return null;
+    }
+
+    return {
+        mainFilename: filenames[0],
+        callSiteFilename: filenames[filenames.length - 1],
+    };
+}
+
+function isNodeModulesPath(filePath) {
+    return /(^|[\\/])node_modules([\\/]|$)/i.test(String(filePath));
+}
+
+function getWarningCode(warning, typeOrOptions, code) {
+    if (typeof code === 'string') {
+        return code;
+    }
+    if (warning && typeof warning === 'object' && typeof warning.code === 'string') {
+        return warning.code;
+    }
+    if (typeOrOptions && typeof typeOrOptions === 'object' && typeof typeOrOptions.code === 'string') {
+        return typeOrOptions.code;
+    }
+    return undefined;
+}
+
+function isWarningSuppressed() {
+    if (process.noDeprecation) {
+        return true;
+    }
+
+    var execArgv = process.execArgv;
+    if (!Array.isArray(execArgv)) {
+        return false;
+    }
+
+    for (var i = 0; i < execArgv.length; i++) {
+        var arg = String(execArgv[i]);
+        if (arg === '--no-warnings' || arg === '--no-deprecation') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function getWarningInfo(warning, typeOrOptions, code) {
+    if (warning && typeof warning === 'object') {
+        return {
+            name: warning.name || 'Warning',
+            code: warning.code,
+            message: warning.message || String(warning),
+        };
+    }
+
+    var name = 'Warning';
+    var warningCode = undefined;
+
+    if (typeof typeOrOptions === 'string') {
+        name = typeOrOptions;
+    } else if (typeOrOptions && typeof typeOrOptions === 'object' && !(typeOrOptions instanceof Error)) {
+        if (typeOrOptions.type !== undefined) {
+            name = String(typeOrOptions.type);
+        }
+        if (typeOrOptions.code !== undefined) {
+            warningCode = String(typeOrOptions.code);
+        }
+    }
+
+    if (typeof code === 'string') {
+        warningCode = code;
+    }
+
+    return {
+        name,
+        code: warningCode,
+        message: String(warning),
+    };
+}
+
+function formatWarningForStderr(warning, typeOrOptions, code) {
+    var info = getWarningInfo(warning, typeOrOptions, code);
+    var pid = process.pid;
+    if (typeof pid !== 'number' || Number.isNaN(pid)) {
+        pid = 1;
+    }
+
+    var prefix = '(node:' + String(pid) + ') ';
+    if (info.code) {
+        prefix += '[' + info.code + '] ';
+    }
+
+    return prefix + info.name + ': ' + info.message + '\n';
+}
+
+function executeInlineSource(runtimeRequire, inlineArgs) {
+    var mode = String(inlineArgs[0]);
+    var source = String(inlineArgs[1]);
+    var shouldPrint = mode === '-p' || mode === '--print';
+    var evalArgv = [];
+    for (var i = 2; i < inlineArgs.length; i++) {
+        evalArgv.push(String(inlineArgs[i]));
+    }
+
+    var vmModule = runtimeRequire('node:vm');
+    var bufferProbe = parseBufferConstructorProbe(source);
+    var result;
+
+    if (bufferProbe) {
+        process.mainModule = { filename: bufferProbe.mainFilename };
+        result = vmModule.runInNewContext('new Buffer(10)', { Buffer }, {
+            filename: bufferProbe.callSiteFilename,
+        });
+    } else {
+        var evaluator = new Function('Buffer', 'process', 'vm', source);
+        result = evaluator(Buffer, process, vmModule);
+    }
+
+    if (shouldPrint && process.stdout && typeof process.stdout.write === 'function') {
+        process.stdout.write(String(result) + '\n');
+    }
+
+    return {
+        evalArgv,
+        bufferProbe,
+    };
+}
+
 function runInline(command, args, options) {
     if (!Array.isArray(args) || args.length === 0) {
         return unsupportedSpawnSyncResult(command);
     }
 
-    var scriptPath = String(args[0]);
-    var scriptArgs = [];
-    for (var i = 1; i < args.length; i++) {
-        scriptArgs.push(String(args[i]));
+    var childArgs = [];
+    for (var i = 0; i < args.length; i++) {
+        childArgs.push(String(args[i]));
     }
 
     var childCwd = process.cwd();
     if (options && typeof options.cwd === 'string') {
         childCwd = options.cwd;
     }
-    if (!path.isAbsolute(scriptPath)) {
-        scriptPath = path.resolve(childCwd, scriptPath);
-    }
+    var encoding = getOutputEncoding(options);
 
     var oldArgv = process.argv.slice();
     var oldArgv0 = process.argv0;
     var oldCwd = process.cwd;
+    var hadMainModule = Object.prototype.hasOwnProperty.call(process, 'mainModule');
+    var oldMainModule = process.mainModule;
     var oldEnv = snapshotEnv(process.env);
     var oldStdoutWrite = process.stdout && process.stdout.write;
     var oldStderrWrite = process.stderr && process.stderr.write;
+    var oldEmitWarning = process.emitWarning;
 
     var capturedStdout = '';
     var capturedStderr = '';
     var status = 0;
+    var inlineBufferProbe = null;
 
     try {
-        process.argv = [String(command), scriptPath].concat(scriptArgs);
+        process.argv = [String(command)].concat(childArgs);
         process.argv0 = String(command);
         process.cwd = function cwd() {
             return childCwd;
@@ -118,12 +325,51 @@ function runInline(command, args, options) {
             };
         }
 
-        var runtimeRequire = moduleExports.require;
-        if (runtimeRequire && runtimeRequire.cache && runtimeRequire.cache[scriptPath]) {
-            delete runtimeRequire.cache[scriptPath];
+        if (typeof oldEmitWarning === 'function') {
+            process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
+                var shouldCapture = !isWarningSuppressed();
+
+                if (shouldCapture && inlineBufferProbe && getWarningCode(warning, typeOrOptions, code) === 'DEP0005') {
+                    shouldCapture = !isNodeModulesPath(inlineBufferProbe.callSiteFilename);
+                }
+
+                if (shouldCapture) {
+                    capturedStderr += formatWarningForStderr(warning, typeOrOptions, code);
+                }
+
+                return oldEmitWarning.call(this, warning, typeOrOptions, code, ctor);
+            };
         }
 
-        runtimeRequire(scriptPath);
+        var runtimeRequire = moduleExports.require;
+
+        if (childArgs.length >= 2 && isInlineEvalOption(childArgs[0])) {
+            var inlineResult = executeInlineSource(runtimeRequire, childArgs);
+            inlineBufferProbe = inlineResult.bufferProbe;
+            process.argv = [String(command)].concat(inlineResult.evalArgv);
+
+            if (inlineBufferProbe && !isNodeModulesPath(inlineBufferProbe.callSiteFilename)) {
+                capturedStderr += formatWarningForStderr({
+                    name: 'DeprecationWarning',
+                    code: 'DEP0005',
+                    message: BUFFER_CONSTRUCTOR_DEPRECATION,
+                });
+            }
+        } else {
+            var scriptPath = childArgs[0];
+            if (!path.isAbsolute(scriptPath)) {
+                scriptPath = path.resolve(childCwd, scriptPath);
+            }
+            var scriptArgs = childArgs.slice(1);
+
+            process.argv = [String(command), scriptPath].concat(scriptArgs);
+
+            if (runtimeRequire && runtimeRequire.cache && runtimeRequire.cache[scriptPath]) {
+                delete runtimeRequire.cache[scriptPath];
+            }
+
+            runtimeRequire(scriptPath);
+        }
     } catch (err) {
         if (err && err.__isProcessExit) {
             status = typeof err.code === 'number' ? err.code : 0;
@@ -135,7 +381,13 @@ function runInline(command, args, options) {
         process.argv = oldArgv;
         process.argv0 = oldArgv0;
         process.cwd = oldCwd;
+        if (hadMainModule) {
+            process.mainModule = oldMainModule;
+        } else {
+            delete process.mainModule;
+        }
         replaceEnv(process.env, oldEnv);
+        process.emitWarning = oldEmitWarning;
 
         if (process.stdout && typeof oldStdoutWrite === 'function') {
             process.stdout.write = oldStdoutWrite;
@@ -145,16 +397,7 @@ function runInline(command, args, options) {
         }
     }
 
-    var stdout = Buffer.from(capturedStdout);
-    var stderr = Buffer.from(capturedStderr);
-    return {
-        pid: 1,
-        output: [null, stdout, stderr],
-        stdout,
-        stderr,
-        status,
-        signal: null,
-    };
+    return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
 }
 
 // ChildProcess class stub
