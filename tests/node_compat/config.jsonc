@@ -1160,10 +1160,7 @@
     "parallel/test-buffer-constants.js": {},
     "parallel/test-buffer-copy.js": {},
     "parallel/test-buffer-equals.js": {},
-    "parallel/test-buffer-from.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-buffer-from.js": {},
     "parallel/test-buffer-includes.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
