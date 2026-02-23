@@ -1180,6 +1180,11 @@ function _getEnumSymbols(obj) {
     return result;
 }
 
+function _isSingletonRuntimeObject(value) {
+    if (value === globalThis) return true;
+    return typeof process !== 'undefined' && value === process;
+}
+
 function _deepObjEquiv(a, b, strict, memo) {
     if (a === null || a === undefined || b === null || b === undefined)
         return false;
@@ -1194,6 +1199,12 @@ function _deepObjEquiv(a, b, strict, memo) {
 
     if (_isWeakCollTag(aTag) || _isWeakCollTag(bTag)) return false;
     if (_isPromiseLikeTag(aTag) || _isPromiseLikeTag(bTag)) return false;
+
+    // Node treats runtime singleton objects (global and process) with identity
+    // semantics in deep comparisons; faked copies must not compare equal.
+    if (_isSingletonRuntimeObject(a) || _isSingletonRuntimeObject(b)) {
+        return a === b;
+    }
 
     if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
         return false;

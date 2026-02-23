@@ -42,10 +42,7 @@
     "parallel/test-assert-calltracker-getCalls.js": {},
     "parallel/test-assert-calltracker-report.js": {},
     "parallel/test-assert-calltracker-verify.js": {},
-    "parallel/test-assert-checktag.js": {
-      "skip": true,
-      "reason": "QuickJS globalThis/process lack V8 internal type tags; notDeepEqual cannot distinguish faked copies"
-    },
+    "parallel/test-assert-checktag.js": {},
     "parallel/test-assert-deep-with-error.js": {},
     "parallel/test-assert-deep.js": {
       "skip": true,
