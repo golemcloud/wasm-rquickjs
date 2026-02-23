@@ -1,38 +1,40 @@
-// node:net stub implementation
-// isIP, isIPv4, isIPv6 are fully implemented; everything else throws
+import Duplex from '__wasm_rquickjs_builtin/internal/streams/duplex';
+import { EventEmitter } from 'node:events';
+import { Buffer } from 'node:buffer';
+import dns from 'node:dns';
+import { create_tcp_socket, create_tcp_listener } from '__wasm_rquickjs_builtin/net_native';
+import {
+    ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
+    ERR_MISSING_ARGS,
+    ERR_OUT_OF_RANGE,
+    ERR_SOCKET_BAD_PORT,
+} from '__wasm_rquickjs_builtin/internal/errors';
 
-const NOT_SUPPORTED_ERROR = new Error('net is not supported in WebAssembly environment');
+// --- IP address utilities ---
 
-// --- Real implementations ---
+const v4Seg = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])';
+const v4Str = `(?:${v4Seg}\\.){3}${v4Seg}`;
+const IPv4Reg = new RegExp(`^${v4Str}$`);
+
+const v6Seg = '(?:[0-9a-fA-F]{1,4})';
+const IPv6Reg = new RegExp('^(?:' +
+  `(?:${v6Seg}:){7}(?:${v6Seg}|:)|` +
+  `(?:${v6Seg}:){6}(?:${v4Str}|:${v6Seg}|:)|` +
+  `(?:${v6Seg}:){5}(?::${v4Str}|(?::${v6Seg}){1,2}|:)|` +
+  `(?:${v6Seg}:){4}(?:(?::${v6Seg}){0,1}:${v4Str}|(?::${v6Seg}){1,3}|:)|` +
+  `(?:${v6Seg}:){3}(?:(?::${v6Seg}){0,2}:${v4Str}|(?::${v6Seg}){1,4}|:)|` +
+  `(?:${v6Seg}:){2}(?:(?::${v6Seg}){0,3}:${v4Str}|(?::${v6Seg}){1,5}|:)|` +
+  `(?:${v6Seg}:){1}(?:(?::${v6Seg}){0,4}:${v4Str}|(?::${v6Seg}){1,6}|:)|` +
+  `(?::(?:(?::${v6Seg}){0,5}:${v4Str}|(?::${v6Seg}){1,7}|:))` +
+')(?:%[0-9a-zA-Z-.:]{1,})?$');
 
 export function isIPv4(input) {
-    if (typeof input !== 'string') return false;
-    const parts = input.split('.');
-    if (parts.length !== 4) return false;
-    for (const part of parts) {
-        if (!/^\d+$/.test(part)) return false;
-        const num = parseInt(part, 10);
-        if (num < 0 || num > 255) return false;
-        if (part.length > 1 && part[0] === '0') return false;
-    }
-    return true;
+    return IPv4Reg.test(input);
 }
 
 export function isIPv6(input) {
-    if (typeof input !== 'string') return false;
-    const parts = input.split(':');
-    if (parts.length < 2 || parts.length > 8) return false;
-    let hasEmptyGroup = false;
-    for (let i = 0; i < parts.length; i++) {
-        if (parts[i] === '') {
-            if (i === 0 || i === parts.length - 1) continue;
-            if (hasEmptyGroup) return false;
-            hasEmptyGroup = true;
-            continue;
-        }
-        if (!/^[0-9a-fA-F]{1,4}$/.test(parts[i])) return false;
-    }
-    return true;
+    return IPv6Reg.test(input);
 }
 
 export function isIP(input) {
@@ -41,79 +43,836 @@ export function isIP(input) {
     return 0;
 }
 
-// --- Stub classes ---
+// --- Helpers ---
 
-export class Socket {
-    constructor(options) {
-        this.remoteAddress = undefined;
-        this.remotePort = undefined;
-        this.localAddress = undefined;
-        this.localPort = undefined;
-        this.bytesRead = 0;
-        this.bytesWritten = 0;
-        this.connecting = false;
-        this.destroyed = false;
-        this.readyState = 'closed';
-    }
-    connect() { throw NOT_SUPPORTED_ERROR; }
-    write() { throw NOT_SUPPORTED_ERROR; }
-    end() { throw NOT_SUPPORTED_ERROR; }
-    destroy() { throw NOT_SUPPORTED_ERROR; }
-    setTimeout() { throw NOT_SUPPORTED_ERROR; }
-    setNoDelay() { throw NOT_SUPPORTED_ERROR; }
-    setKeepAlive() { throw NOT_SUPPORTED_ERROR; }
-    address() { throw NOT_SUPPORTED_ERROR; }
-    ref() { throw NOT_SUPPORTED_ERROR; }
-    unref() { throw NOT_SUPPORTED_ERROR; }
-    pause() { throw NOT_SUPPORTED_ERROR; }
-    resume() { throw NOT_SUPPORTED_ERROR; }
+const errnoMap = {
+    ENOSYS: -38,
+    EBADF: -9,
+    EINVAL: -22,
+    EADDRINUSE: -48,
+    EADDRNOTAVAIL: -49,
+    EACCES: -13,
+    EHOSTUNREACH: -65,
+    ECONNREFUSED: -61,
+    ECONNRESET: -54,
+    ECONNABORTED: -53,
+    ETIMEDOUT: -60,
+    EPIPE: -32,
+    ENOTCONN: -57,
+    EMFILE: -24,
+    EIO: -5,
+};
+
+function makeError(code, message) {
+    const err = new Error(message);
+    err.code = code;
+    return err;
 }
 
-export class Server {
+function parseNativeError(e) {
+    try {
+        const parsed = JSON.parse(e.message);
+        const err = new Error(parsed.message || `${parsed.syscall} ${parsed.code}`);
+        err.code = parsed.code;
+        if (parsed.syscall) err.syscall = parsed.syscall;
+        if (parsed.code) err.errno = errnoMap[parsed.code] || 0;
+        return err;
+    } catch (_) {
+        return e;
+    }
+}
+
+function nextTick(fn, ...args) {
+    Promise.resolve().then(() => fn(...args));
+}
+
+function isIPAddress(addr) {
+    if (!addr || typeof addr !== 'string') return false;
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(addr)) return true;
+    if (addr.indexOf(':') !== -1) return true;
+    return false;
+}
+
+function ipv4ToNum(ip) {
+    const parts = ip.split('.').map(Number);
+    return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+}
+
+// --- Socket (extends Duplex) ---
+
+function Socket(options) {
+    if (!(this instanceof Socket)) return new Socket(options);
+
+    if (typeof options === 'number') {
+        options = { fd: options };
+    }
+    options = options || {};
+
+    const streamOptions = {
+        ...options,
+        allowHalfOpen: options.allowHalfOpen !== undefined ? options.allowHalfOpen : false,
+    };
+
+    Duplex.call(this, streamOptions);
+
+    this._handle = null;
+    this._reading = false;
+    this._readToken = 0;
+    this.connecting = false;
+    this.pending = true;
+    this._timeout = null;
+    this._timeoutValue = 0;
+    this.bytesRead = 0;
+    this.bytesWritten = 0;
+    this.remoteAddress = undefined;
+    this.remotePort = undefined;
+    this.remoteFamily = undefined;
+    this.localAddress = undefined;
+    this.localPort = undefined;
+    this.localFamily = undefined;
+    this._family = options.family || 4;
+
+    // Shut down the socket when we're finished with it.
+    this.on('end', onReadableStreamEnd);
+}
+
+function onReadableStreamEnd() {
+    if (!this.allowHalfOpen) {
+        this.write = writeAfterFIN;
+    }
+}
+
+function writeAfterFIN(chunk, encoding, cb) {
+    if (typeof encoding === 'function') {
+        cb = encoding;
+        encoding = null;
+    }
+    const er = makeError('EPIPE', 'This socket has been ended by the other party');
+    if (typeof cb === 'function') {
+        nextTick(cb, er);
+    }
+    this.destroy(er);
+    return false;
+}
+
+Object.setPrototypeOf(Socket.prototype, Duplex.prototype);
+Object.setPrototypeOf(Socket, Duplex);
+
+Object.defineProperty(Socket.prototype, 'readyState', {
+    get() {
+        if (this.connecting) return 'opening';
+        if (this.readable && this.writable) return 'open';
+        if (this.readable && !this.writable) return 'readOnly';
+        if (!this.readable && this.writable) return 'writeOnly';
+        return 'closed';
+    },
+});
+
+Socket.prototype.connect = function connect(...args) {
+    let options, cb;
+
+    if (args.length === 0) {
+        throw new ERR_MISSING_ARGS(['options', 'port', 'path']);
+    }
+
+    // connect(options[, cb])
+    if (typeof args[0] === 'object' && args[0] !== null) {
+        options = args[0];
+        cb = args[1];
+    }
+    // connect(path[, cb]) — IPC
+    else if (typeof args[0] === 'string' && !isFinite(args[0])) {
+        options = { path: args[0] };
+        cb = args[1];
+    }
+    // connect(port[, host][, cb])
+    else {
+        options = { port: args[0] };
+        if (typeof args[1] === 'string') {
+            options.host = args[1];
+            cb = args[2];
+        } else {
+            cb = args[1];
+        }
+    }
+
+    if (options.port === undefined && !options.path && !options.host) {
+        throw new ERR_MISSING_ARGS(['options', 'port', 'path']);
+    }
+
+    if (options.objectMode) {
+        throw new ERR_INVALID_ARG_VALUE('options.objectMode', options.objectMode, 'is not supported');
+    }
+    if (options.readableObjectMode) {
+        throw new ERR_INVALID_ARG_VALUE('options.readableObjectMode', options.readableObjectMode, 'is not supported');
+    }
+    if (options.writableObjectMode) {
+        throw new ERR_INVALID_ARG_VALUE('options.writableObjectMode', options.writableObjectMode, 'is not supported');
+    }
+
+    if (options.host !== undefined && typeof options.host !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('options.host', 'string', options.host);
+    }
+
+    if (options.autoSelectFamily !== undefined && typeof options.autoSelectFamily !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.autoSelectFamily', 'boolean', options.autoSelectFamily);
+    }
+
+    if (options.autoSelectFamilyAttemptTimeout !== undefined && options.autoSelectFamilyAttemptTimeout <= 0) {
+        throw new ERR_OUT_OF_RANGE('options.autoSelectFamilyAttemptTimeout', '>= 1', options.autoSelectFamilyAttemptTimeout);
+    }
+
+    if (options.path) {
+        throw makeError('ERR_SOCKET_BAD_TYPE', 'IPC sockets are not supported in WebAssembly');
+    }
+
+    this.connecting = true;
+    this.writable = true;
+
+    if (cb) this.once('connect', cb);
+
+    const port = options.port;
+    const host = options.host || options.hostname || 'localhost';
+    const family = options.family || this._family || 0;
+
+    if (port !== undefined) {
+        const p = +port;
+        if (p !== p || p < 0 || p > 65535 || p !== (p | 0)) {
+            throw new ERR_SOCKET_BAD_PORT('Port', port, false);
+        }
+    }
+
+    const doConnect = (ip, addressFamily) => {
+        if (!this._handle) {
+            this._handle = create_tcp_socket(addressFamily);
+        }
+
+        (async () => {
+            try {
+                await this._handle.connect(ip, port);
+                this.connecting = false;
+                this.pending = false;
+
+                try {
+                    const [ra, rp, rf] = this._handle.remote_address();
+                    this.remoteAddress = ra;
+                    this.remotePort = rp;
+                    this.remoteFamily = rf;
+                } catch (_) {}
+                try {
+                    const [la, lp, lf] = this._handle.local_address();
+                    this.localAddress = la;
+                    this.localPort = lp;
+                    this.localFamily = lf;
+                } catch (_) {}
+
+                this.emit('connect');
+                this.emit('ready');
+
+                this.read(0);
+            } catch (e) {
+                this.connecting = false;
+                const err = parseNativeError(e);
+                err.address = ip;
+                err.port = port;
+                this.destroy(err);
+            }
+        })();
+    };
+
+    if (isIPAddress(host)) {
+        const af = isIPv4(host) ? 4 : 6;
+        this.emit('lookup', null, host, af, host);
+        doConnect(host, af);
+    } else {
+        const lookupFamily = family === 6 ? 6 : 4;
+        dns.lookup(host, lookupFamily, (err, address, resolvedFamily) => {
+            if (err) {
+                this.connecting = false;
+                this.emit('lookup', err, address, resolvedFamily, host);
+                this.destroy(err);
+                return;
+            }
+            this.emit('lookup', null, address, resolvedFamily, host);
+            doConnect(address, resolvedFamily || 4);
+        });
+    }
+
+    return this;
+};
+
+Socket.prototype._read = function _read(n) {
+    if (this.connecting) {
+        this.once('connect', () => this._read(n));
+        return;
+    }
+    if (!this._handle || this.destroyed) return;
+    if (!this._reading) {
+        this._reading = true;
+        this._startPollLoop();
+    }
+};
+
+Socket.prototype._startPollLoop = function _startPollLoop() {
+    const token = ++this._readToken;
+    (async () => {
+        while (this._reading && this._handle && token === this._readToken) {
+            try {
+                const chunk = await this._handle.read(16384);
+                if (token !== this._readToken) break;
+                if (chunk === null || chunk === undefined) {
+                    this.push(null);
+                    if (!this.allowHalfOpen) {
+                        this.end();
+                    }
+                    break;
+                }
+                this.bytesRead += chunk.length;
+                this._resetTimeout();
+                const keepGoing = this.push(Buffer.from(chunk));
+                if (!keepGoing) {
+                    this._reading = false;
+                    break;
+                }
+            } catch (e) {
+                if (token !== this._readToken) break;
+                this.destroy(parseNativeError(e));
+                break;
+            }
+        }
+    })();
+};
+
+Socket.prototype._write = function _write(chunk, encoding, callback) {
+    if (!this._handle) {
+        callback(new Error('Socket is closed'));
+        return;
+    }
+    if (this.connecting) {
+        this.once('connect', () => this._write(chunk, encoding, callback));
+        return;
+    }
+
+    const data = typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
+    const buf = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+
+    (async () => {
+        try {
+            const written = await this._handle.write(buf);
+            this.bytesWritten += written;
+            this._resetTimeout();
+            callback(null);
+        } catch (e) {
+            callback(parseNativeError(e));
+        }
+    })();
+};
+
+Socket.prototype._final = function _final(callback) {
+    if (!this._handle) {
+        callback();
+        return;
+    }
+    try {
+        this._handle.shutdown(1); // SHUT_WR
+        callback();
+    } catch (e) {
+        callback(parseNativeError(e));
+    }
+};
+
+Socket.prototype._destroy = function _destroy(err, callback) {
+    this._reading = false;
+    this._readToken++;
+    this._clearTimeout();
+    if (this._handle) {
+        this._handle.close();
+        this._handle = null;
+    }
+    this.connecting = false;
+    callback(err);
+};
+
+Socket.prototype.setTimeout = function setTimeout(timeout, callback) {
+    if (typeof timeout !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('msecs', 'number', timeout);
+    }
+    if (timeout < 0 || !Number.isFinite(timeout)) {
+        throw new ERR_OUT_OF_RANGE('msecs', 'a non-negative finite number', timeout);
+    }
+    if (this.destroyed) return this;
+    this._clearTimeout();
+    this._timeoutValue = timeout;
+    if (timeout === 0) {
+        if (callback !== undefined) {
+            if (typeof callback !== 'function') {
+                throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
+            }
+            this.removeListener('timeout', callback);
+        }
+        return this;
+    }
+    if (callback !== undefined) {
+        if (typeof callback !== 'function') {
+            throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
+        }
+        this.once('timeout', callback);
+    }
+    this._resetTimeout();
+    return this;
+};
+
+Socket.prototype._resetTimeout = function _resetTimeout() {
+    if (this._timeoutValue > 0) {
+        this._clearTimeout();
+        this._timeout = globalThis.setTimeout(() => {
+            this.emit('timeout');
+        }, this._timeoutValue);
+    }
+};
+
+Socket.prototype._clearTimeout = function _clearTimeout() {
+    if (this._timeout) {
+        globalThis.clearTimeout(this._timeout);
+        this._timeout = null;
+    }
+};
+
+Socket.prototype.setNoDelay = function setNoDelay(noDelay) {
+    if (this._handle) this._handle.set_no_delay(noDelay !== false);
+    return this;
+};
+
+Socket.prototype.setKeepAlive = function setKeepAlive(enable, initialDelay) {
+    if (this._handle) {
+        this._handle.set_keep_alive(!!enable, (initialDelay || 0));
+    }
+    return this;
+};
+
+Socket.prototype.address = function address() {
+    if (!this._handle) return {};
+    try {
+        const [addr, port, family] = this._handle.local_address();
+        return { address: addr, family, port };
+    } catch (_) {
+        return {};
+    }
+};
+
+Socket.prototype.resetAndDestroy = function resetAndDestroy() {
+    if (this._handle) {
+        this._handle.close();
+    }
+    this.destroy();
+    return this;
+};
+
+Socket.prototype.destroySoon = function destroySoon() {
+    if (this.writable) this.end();
+    if (this.writableFinished) this.destroy();
+    else this.once('finish', this.destroy);
+};
+
+Socket.prototype.ref = function ref() { return this; };
+Socket.prototype.unref = function unref() { return this; };
+
+// --- Server (extends EventEmitter) ---
+
+function Server(options, connectionListener) {
+    if (!(this instanceof Server)) return new Server(options, connectionListener);
+    EventEmitter.call(this);
+
+    if (typeof options === 'function') {
+        connectionListener = options;
+        options = {};
+    }
+    options = options || {};
+
+    this._handle = null;
+    this._connections = 0;
+    this._accepting = false;
+    this._acceptToken = 0;
+    this.listening = false;
+    this.maxConnections = 0;
+    this._pauseOnConnect = options.pauseOnConnect || false;
+    this._noDelay = options.noDelay || false;
+    this._keepAlive = options.keepAlive || false;
+    this._keepAliveInitialDelay = options.keepAliveInitialDelay || 0;
+    this.allowHalfOpen = options.allowHalfOpen || false;
+
+    if (connectionListener) this.on('connection', connectionListener);
+}
+
+Object.setPrototypeOf(Server.prototype, EventEmitter.prototype);
+Object.setPrototypeOf(Server, EventEmitter);
+
+Server.prototype.listen = function listen(...args) {
+    let options, cb;
+
+    if (args.length === 0) {
+        options = {};
+    } else if (typeof args[0] === 'object' && args[0] !== null && !('port' in args[0] === false && typeof args[0] === 'number')) {
+        // listen(options[, cb])
+        options = args[0];
+        cb = args[1];
+    } else if (typeof args[0] === 'string' && !isFinite(args[0])) {
+        // listen(path[, backlog][, cb]) — IPC
+        options = { path: args[0] };
+        if (typeof args[1] === 'function') {
+            cb = args[1];
+        } else {
+            if (args[1] !== undefined) options.backlog = args[1];
+            cb = args[2];
+        }
+    } else {
+        // listen(port[, host][, backlog][, cb])
+        options = { port: args[0] };
+        let idx = 1;
+        if (typeof args[idx] === 'string') {
+            options.host = args[idx++];
+        }
+        if (typeof args[idx] === 'number') {
+            options.backlog = args[idx++];
+        }
+        cb = args[idx];
+    }
+
+    if (options.path) {
+        throw makeError('ERR_SOCKET_BAD_TYPE', 'IPC sockets not supported in WebAssembly');
+    }
+
+    if (this.listening) {
+        throw makeError('ERR_SERVER_ALREADY_LISTEN', 'Server is already listening');
+    }
+
+    if (cb) this.once('listening', cb);
+
+    const port = options.port !== undefined ? options.port : 0;
+    if (port !== undefined) {
+        const p = +port;
+        if (p !== p || p < 0 || p > 65535 || p !== (p | 0)) {
+            throw new ERR_SOCKET_BAD_PORT('Port', port, true);
+        }
+    }
+    const host = options.host || '0.0.0.0';
+    const backlog = options.backlog || 511;
+
+    const doListen = (ip, family) => {
+        (async () => {
+            try {
+                this._handle = create_tcp_listener(family);
+                await this._handle.bind(ip, port);
+                this._handle.set_backlog(backlog);
+                await this._handle.listen();
+                this.listening = true;
+                this._accepting = true;
+                this._connectionKey = (family === 6 ? '6' : '4') + ':' + ip + ':' + port;
+                this.emit('listening');
+                this._acceptLoop();
+            } catch (e) {
+                const err = parseNativeError(e);
+                err.address = ip;
+                err.port = port;
+                this.emit('error', err);
+            }
+        })();
+    };
+
+    if (isIPAddress(host)) {
+        doListen(host, isIPv4(host) ? 4 : 6);
+    } else if (host === '0.0.0.0' || host === '::') {
+        doListen(host, host === '::' ? 6 : 4);
+    } else {
+        dns.lookup(host, (err, address, family) => {
+            if (err) { this.emit('error', err); return; }
+            doListen(address, family || 4);
+        });
+    }
+
+    return this;
+};
+
+Server.prototype._acceptLoop = function _acceptLoop() {
+    const token = ++this._acceptToken;
+    (async () => {
+        while (this._accepting && this._handle && token === this._acceptToken) {
+            try {
+                const [clientHandle, addr, port, family] = await this._handle.accept();
+                if (token !== this._acceptToken) { clientHandle.close(); break; }
+
+                if (this.maxConnections && this._connections >= this.maxConnections) {
+                    clientHandle.close();
+                    this.emit('drop', {
+                        localAddress: this._localAddress,
+                        localPort: this._localPort,
+                        localFamily: this._localFamily,
+                        remoteAddress: addr,
+                        remotePort: port,
+                        remoteFamily: family,
+                    });
+                    continue;
+                }
+
+                const socket = new Socket({ allowHalfOpen: this.allowHalfOpen });
+                socket._handle = clientHandle;
+                socket.connecting = false;
+                socket.pending = false;
+                socket.readable = true;
+                socket.writable = true;
+                socket.remoteAddress = addr;
+                socket.remotePort = port;
+                socket.remoteFamily = family;
+                try {
+                    const [la, lp, lf] = clientHandle.local_address();
+                    socket.localAddress = la;
+                    socket.localPort = lp;
+                    socket.localFamily = lf;
+                } catch (_) {}
+
+                if (this._noDelay) socket.setNoDelay(true);
+                if (this._keepAlive) socket.setKeepAlive(true, this._keepAliveInitialDelay);
+                if (this._pauseOnConnect) socket.pause();
+
+                this._connections++;
+                socket.on('close', () => {
+                    this._connections--;
+                    if (!this.listening && !this._handle && this._connections === 0) {
+                        nextTick(() => this.emit('close'));
+                    }
+                });
+
+                this.emit('connection', socket);
+
+                if (!this._pauseOnConnect) {
+                    socket.read(0);
+                }
+            } catch (e) {
+                if (token !== this._acceptToken) break;
+                this.emit('error', parseNativeError(e));
+                break;
+            }
+        }
+    })();
+};
+
+Server.prototype.close = function close(cb) {
+    if (typeof cb === 'function') {
+        if (!this.listening) {
+            this.once('close', () => cb(makeError('ERR_SERVER_NOT_RUNNING', 'Server is not running')));
+        } else {
+            this.once('close', cb);
+        }
+    }
+
+    this._accepting = false;
+    this._acceptToken++;
+
+    if (this._handle) {
+        this._handle.close();
+        this._handle = null;
+    }
+    this.listening = false;
+
+    if (this._connections === 0) {
+        nextTick(() => this.emit('close'));
+    }
+
+    return this;
+};
+
+Server.prototype.address = function address() {
+    if (!this._handle || !this.listening) return null;
+    try {
+        const [addr, port, family] = this._handle.local_address();
+        return { address: addr, family, port };
+    } catch (_) {
+        return null;
+    }
+};
+
+Server.prototype.getConnections = function getConnections(cb) {
+    nextTick(cb, null, this._connections);
+};
+
+Server.prototype.ref = function ref() { return this; };
+Server.prototype.unref = function unref() { return this; };
+
+Server.prototype[Symbol.asyncDispose] = function () {
+    if (!this._handle) {
+        return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+        this.close(() => resolve());
+    });
+};
+
+// --- BlockList ---
+
+class BlockList {
     constructor() {
-        this.maxConnections = undefined;
+        this._rules = [];
     }
-    listen() { throw NOT_SUPPORTED_ERROR; }
-    close() { throw NOT_SUPPORTED_ERROR; }
-    address() { throw NOT_SUPPORTED_ERROR; }
-    getConnections() { throw NOT_SUPPORTED_ERROR; }
-    ref() { throw NOT_SUPPORTED_ERROR; }
-    unref() { throw NOT_SUPPORTED_ERROR; }
+
+    addAddress(address, type) {
+        if (address && typeof address === 'object' && address.address) {
+            type = address.family;
+            address = address.address;
+        }
+        type = type || (isIPv6(address) ? 'ipv6' : 'ipv4');
+        this._rules.push({ type: 'address', address, family: type });
+    }
+
+    addRange(start, end, type) {
+        if (start && typeof start === 'object' && start.address) {
+            type = start.family;
+            end = typeof end === 'object' ? end.address : end;
+            start = start.address;
+        }
+        type = type || (isIPv6(start) ? 'ipv6' : 'ipv4');
+        this._rules.push({ type: 'range', start, end, family: type });
+    }
+
+    addSubnet(net, prefix, type) {
+        if (net && typeof net === 'object' && net.address) {
+            type = net.family;
+            net = net.address;
+        }
+        type = type || (isIPv6(net) ? 'ipv6' : 'ipv4');
+        this._rules.push({ type: 'subnet', network: net, prefix, family: type });
+    }
+
+    check(address, type) {
+        if (address && typeof address === 'object' && address.address) {
+            type = address.family;
+            address = address.address;
+        }
+        type = type || (isIPv6(address) ? 'ipv6' : 'ipv4');
+        for (const rule of this._rules) {
+            if (rule.family !== type) continue;
+            if (rule.type === 'address' && rule.address === address) return true;
+            if (rule.type === 'range') {
+                if (type === 'ipv4') {
+                    const ip = ipv4ToNum(address);
+                    if (ip >= ipv4ToNum(rule.start) && ip <= ipv4ToNum(rule.end)) return true;
+                }
+            }
+            if (rule.type === 'subnet') {
+                if (type === 'ipv4') {
+                    const ip = ipv4ToNum(address);
+                    const net = ipv4ToNum(rule.network);
+                    const mask = (~0 << (32 - rule.prefix)) >>> 0;
+                    if ((ip & mask) === (net & mask)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    get rules() {
+        return this._rules.map(r => {
+            if (r.type === 'address') return `Address: ${r.family} ${r.address}`;
+            if (r.type === 'range') return `Range: ${r.family} ${r.start}-${r.end}`;
+            if (r.type === 'subnet') return `Subnet: ${r.family} ${r.network}/${r.prefix}`;
+            return '';
+        });
+    }
+
+    static isBlockList(value) {
+        return value instanceof BlockList;
+    }
 }
 
-export class BlockList {
-    constructor() {
-        throw NOT_SUPPORTED_ERROR;
+// --- SocketAddress ---
+
+class SocketAddress {
+    constructor(options = {}) {
+        this.address = options.address || '127.0.0.1';
+        this.family = options.family || 'ipv4';
+        this.port = options.port || 0;
+        this.flowlabel = options.flowlabel || 0;
+    }
+
+    static parse(input) {
+        if (typeof input !== 'string') return undefined;
+        const v6Match = input.match(/^\[([^\]]+)\]:(\d+)$/);
+        if (v6Match) {
+            return new SocketAddress({ address: v6Match[1], family: 'ipv6', port: parseInt(v6Match[2], 10) });
+        }
+        const v4Match = input.match(/^(.+):(\d+)$/);
+        if (v4Match && isIPv4(v4Match[1])) {
+            return new SocketAddress({ address: v4Match[1], family: 'ipv4', port: parseInt(v4Match[2], 10) });
+        }
+        return undefined;
     }
 }
 
-export class SocketAddress {
-    constructor() {
-        throw NOT_SUPPORTED_ERROR;
-    }
-}
+// --- Factory functions ---
 
 export function createServer(options, connectionListener) {
-    throw NOT_SUPPORTED_ERROR;
+    if (options !== undefined && options !== null && typeof options !== 'object' && typeof options !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+    }
+    return new Server(options, connectionListener);
 }
 
-export function connect(options, connectListener) {
-    throw NOT_SUPPORTED_ERROR;
+export function createConnection(...args) {
+    const socket = new Socket();
+    return socket.connect(...args);
 }
 
-export function createConnection(options, connectListener) {
-    throw NOT_SUPPORTED_ERROR;
+export const connect = createConnection;
+
+// --- Auto-select family stubs ---
+
+let _defaultAutoSelectFamily = false;
+let _defaultAutoSelectFamilyAttemptTimeout = 250;
+
+export function getDefaultAutoSelectFamily() { return _defaultAutoSelectFamily; }
+export function setDefaultAutoSelectFamily(value) { _defaultAutoSelectFamily = !!value; }
+export function getDefaultAutoSelectFamilyAttemptTimeout() { return _defaultAutoSelectFamilyAttemptTimeout; }
+export function setDefaultAutoSelectFamilyAttemptTimeout(value) {
+    if (value <= 0) {
+        throw new ERR_OUT_OF_RANGE('value', '>= 1', value);
+    }
+    if (value < 10) value = 10;
+    _defaultAutoSelectFamilyAttemptTimeout = value;
 }
+
+// --- Deprecated ---
+
+let _warnSimultaneousAccepts = true;
+
+export function _setSimultaneousAccepts() {
+    if (_warnSimultaneousAccepts) {
+        process.emitWarning(
+            'net._setSimultaneousAccepts() is deprecated and will be removed.',
+            'DeprecationWarning',
+            'DEP0121'
+        );
+        _warnSimultaneousAccepts = false;
+    }
+}
+
+export const Stream = Socket;
+
+export { Socket, Server, BlockList, SocketAddress };
 
 export default {
-    isIP,
-    isIPv4,
-    isIPv6,
     Socket,
     Server,
+    Stream: Socket,
     BlockList,
     SocketAddress,
     createServer,
-    connect,
     createConnection,
+    connect,
+    isIP,
+    isIPv4,
+    isIPv6,
+    getDefaultAutoSelectFamily,
+    setDefaultAutoSelectFamily,
+    getDefaultAutoSelectFamilyAttemptTimeout,
+    setDefaultAutoSelectFamilyAttemptTimeout,
+    _setSimultaneousAccepts,
 };

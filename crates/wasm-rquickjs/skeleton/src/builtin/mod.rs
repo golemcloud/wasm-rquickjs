@@ -33,6 +33,7 @@ mod ieee754;
 mod internal;
 mod module;
 mod net;
+mod socket_helpers;
 
 #[cfg(feature = "http")]
 mod node_http;
@@ -174,6 +175,7 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/node_http_native")
         .with_module("node:http")
         .with_module("http")
+        .with_module("__wasm_rquickjs_builtin/net_native")
         .with_module("node:net")
         .with_module("net")
         .with_module("node:perf_hooks")
@@ -257,6 +259,10 @@ pub fn module_loader() -> (
         .with_module(
             "__wasm_rquickjs_builtin/node_http_native",
             node_http::js_native_module,
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/net_native",
+            net::js_native_module,
         );
 
     #[cfg(feature = "golem")]

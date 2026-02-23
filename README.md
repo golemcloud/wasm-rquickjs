@@ -514,6 +514,43 @@ UDP datagram sockets built on WASI sockets. Supported API:
 
 **Not supported:** `setBroadcast`, `setMulticastTTL`, `setMulticastLoopback`, `setMulticastInterface`, `addMembership`, `dropMembership`, `addSourceSpecificMembership`, `dropSourceSpecificMembership` (throw `ENOSYS`).
 
+### `node:net`
+
+TCP sockets and servers built on WASI sockets. Supported API:
+
+- `net.createServer([options][, connectionListener])` — create a TCP server
+- `net.createConnection(options[, connectListener])` — create a client connection
+- `net.connect(...)` — alias for `createConnection`
+- `net.isIP(input)` / `net.isIPv4(input)` / `net.isIPv6(input)` — IP address validation
+- `net.getDefaultAutoSelectFamily()` / `net.setDefaultAutoSelectFamily(value)` — stubs
+- `net.getDefaultAutoSelectFamilyAttemptTimeout()` / `net.setDefaultAutoSelectFamilyAttemptTimeout(value)` — stubs
+- `net.Socket` (extends `stream.Duplex`):
+  - `connect(port[, host][, connectListener])` — connect to a TCP server
+  - `write(data[, encoding][, callback])` — write data
+  - `end([data][, encoding][, callback])` — half-close (send FIN)
+  - `destroy([error])` — destroy the socket
+  - `resetAndDestroy()` — immediately close without graceful shutdown
+  - `setTimeout(timeout[, callback])` — set idle timeout (emits `'timeout'`, does not close)
+  - `setNoDelay([noDelay])` — no-op (WASI has no `TCP_NODELAY`)
+  - `setKeepAlive([enable][, initialDelay])` — configure TCP keep-alive
+  - `address()` — get local address info
+  - `ref()` / `unref()` — no-op
+  - Properties: `remoteAddress`, `remotePort`, `remoteFamily`, `localAddress`, `localPort`, `localFamily`, `bytesRead`, `bytesWritten`, `connecting`, `pending`, `readyState`
+  - Events: `connect`, `ready`, `data`, `end`, `close`, `error`, `timeout`, `drain`, `lookup`
+- `net.Server` (extends `EventEmitter`):
+  - `listen(port[, host][, backlog][, callback])` — start listening
+  - `close([callback])` — stop accepting, close when all connections drain
+  - `address()` — get server address info
+  - `getConnections(callback)` — get active connection count
+  - `ref()` / `unref()` — no-op
+  - Properties: `listening`, `maxConnections`
+  - Events: `listening`, `connection`, `close`, `error`, `drop`
+- `net.BlockList` — IP address filtering (addAddress, addRange, addSubnet, check)
+- `net.SocketAddress` — IP address + port value object
+- `net.Stream` — alias for `net.Socket`
+
+**Not supported:** IPC/Unix domain sockets (`path` option throws), Happy Eyeballs/`autoSelectFamily` (stubbed), `cluster` integration.
+
 ### `node:diagnostics_channel`
 
 Publish/subscribe diagnostic messaging and tracing.

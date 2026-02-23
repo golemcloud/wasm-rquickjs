@@ -4,14 +4,17 @@ use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime};
 use wasi::sockets::instance_network::instance_network;
-use wasi::sockets::network::{
-    ErrorCode, IpAddress, IpAddressFamily, IpSocketAddress, Ipv4SocketAddress, Ipv6SocketAddress,
-};
+use wasi::sockets::network::{ErrorCode, IpAddressFamily, IpSocketAddress};
 use wasi::sockets::udp::{
     IncomingDatagramStream, OutgoingDatagram, OutgoingDatagramStream, UdpSocket,
 };
 use wasi::sockets::udp_create_socket::create_udp_socket;
 use wstd::runtime::AsyncPollable;
+
+use super::socket_helpers::{
+    error_code_to_errno, ip_address_to_string, ip_socket_address, ip_socket_address_family,
+    ip_socket_address_port, parse_ip_address, throw_socket_error,
+};
 
 #[rquickjs::module]
 pub mod native_module {
@@ -28,7 +31,7 @@ fn create_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<DgramSocke
         4 => IpAddressFamily::Ipv4,
         6 => IpAddressFamily::Ipv6,
         _ => {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 ctx,
                 "EINVAL",
                 "socket",
@@ -38,7 +41,7 @@ fn create_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<DgramSocke
     };
 
     let socket = create_udp_socket(ip_family).map_err(|e| {
-        throw_dgram_error(
+        throw_socket_error(
             ctx,
             error_code_to_errno(e),
             "socket",
@@ -88,7 +91,7 @@ impl DgramSocket {
 
     pub async fn bind(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
         let ip = parse_ip_address(&addr).ok_or_else(|| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 "EINVAL",
                 "bind",
@@ -107,7 +110,7 @@ impl DgramSocket {
         {
             let inner = self.inner.borrow();
             if inner.closed {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EBADF",
                     "bind",
@@ -115,7 +118,7 @@ impl DgramSocket {
                 ));
             }
             if inner.bound {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EINVAL",
                     "bind",
@@ -124,10 +127,10 @@ impl DgramSocket {
             }
             let network = instance_network();
             let socket = inner.socket.as_ref().ok_or_else(|| {
-                throw_dgram_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
+                throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
             })?;
             socket.start_bind(&network, sock_addr).map_err(|e| {
-                throw_dgram_error(
+                throw_socket_error(
                     &ctx,
                     error_code_to_errno(e),
                     "bind",
@@ -141,7 +144,7 @@ impl DgramSocket {
             let result = {
                 let inner = self.inner.borrow();
                 let socket = inner.socket.as_ref().ok_or_else(|| {
-                    throw_dgram_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
+                    throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
                 })?;
                 socket.finish_bind()
             };
@@ -151,7 +154,7 @@ impl DgramSocket {
                     let pollable = {
                         let inner = self.inner.borrow();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
-                            throw_dgram_error(
+                            throw_socket_error(
                                 &ctx,
                                 "EBADF",
                                 "bind",
@@ -164,7 +167,7 @@ impl DgramSocket {
                     {
                         let inner = self.inner.borrow();
                         if inner.closed || inner.generation != start_gen {
-                            return Err(throw_dgram_error(
+                            return Err(throw_socket_error(
                                 &ctx,
                                 "EBADF",
                                 "bind",
@@ -174,7 +177,7 @@ impl DgramSocket {
                     }
                 }
                 Err(e) => {
-                    return Err(throw_dgram_error(
+                    return Err(throw_socket_error(
                         &ctx,
                         error_code_to_errno(e),
                         "bind",
@@ -188,10 +191,10 @@ impl DgramSocket {
         let (incoming, outgoing) = {
             let inner = self.inner.borrow();
             let socket = inner.socket.as_ref().ok_or_else(|| {
-                throw_dgram_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
+                throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
             })?;
             socket.stream(None).map_err(|e| {
-                throw_dgram_error(
+                throw_socket_error(
                     &ctx,
                     error_code_to_errno(e),
                     "bind",
@@ -212,7 +215,7 @@ impl DgramSocket {
 
     pub async fn connect(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
         let ip = parse_ip_address(&addr).ok_or_else(|| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 "EINVAL",
                 "connect",
@@ -225,7 +228,7 @@ impl DgramSocket {
         let needs_bind = {
             let inner = self.inner.borrow();
             if inner.closed {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EBADF",
                     "connect",
@@ -239,7 +242,7 @@ impl DgramSocket {
             let family = {
                 let inner = self.inner.borrow();
                 let socket = inner.socket.as_ref().ok_or_else(|| {
-                    throw_dgram_error(&ctx, "EBADF", "connect", "Socket was closed or reset")
+                    throw_socket_error(&ctx, "EBADF", "connect", "Socket was closed or reset")
                 })?;
                 socket.address_family()
             };
@@ -253,7 +256,7 @@ impl DgramSocket {
             {
                 let inner = self.inner.borrow();
                 if inner.closed {
-                    return Err(throw_dgram_error(
+                    return Err(throw_socket_error(
                         &ctx,
                         "EBADF",
                         "connect",
@@ -274,7 +277,7 @@ impl DgramSocket {
         let stream_result = {
             let inner = self.inner.borrow();
             let socket = inner.socket.as_ref().ok_or_else(|| {
-                throw_dgram_error(&ctx, "EBADF", "connect", "Socket was closed or reset")
+                throw_socket_error(&ctx, "EBADF", "connect", "Socket was closed or reset")
             })?;
             socket.stream(Some(remote_addr))
         };
@@ -292,7 +295,7 @@ impl DgramSocket {
                 let restore_result = {
                     let inner = self.inner.borrow();
                     let socket = inner.socket.as_ref().ok_or_else(|| {
-                        throw_dgram_error(
+                        throw_socket_error(
                             &ctx,
                             "EBADF",
                             "connect",
@@ -306,7 +309,7 @@ impl DgramSocket {
                     inner.incoming = Some(incoming);
                     inner.outgoing = Some(outgoing);
                 }
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     error_code_to_errno(e),
                     "connect",
@@ -321,7 +324,7 @@ impl DgramSocket {
     pub fn disconnect(&self, ctx: Ctx<'_>) -> rquickjs::Result<()> {
         let mut inner = self.inner.borrow_mut();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "disconnect",
@@ -329,7 +332,7 @@ impl DgramSocket {
             ));
         }
         if !inner.connected {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "ENOTCONN",
                 "disconnect",
@@ -342,12 +345,12 @@ impl DgramSocket {
         inner.outgoing = None;
 
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(&ctx, "EBADF", "disconnect", "Socket was closed or reset")
+            throw_socket_error(&ctx, "EBADF", "disconnect", "Socket was closed or reset")
         })?;
 
         // Re-open unconnected streams
         let (incoming, outgoing) = socket.stream(None).map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "disconnect",
@@ -374,7 +377,7 @@ impl DgramSocket {
         let remote_address = match (addr, port) {
             (Some(a), Some(p)) => {
                 let ip = parse_ip_address(&a).ok_or_else(|| {
-                    throw_dgram_error(
+                    throw_socket_error(
                         &ctx,
                         "EINVAL",
                         "send",
@@ -385,7 +388,7 @@ impl DgramSocket {
             }
             (None, None) => None,
             _ => {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EINVAL",
                     "send",
@@ -398,7 +401,7 @@ impl DgramSocket {
         let needs_bind = {
             let inner = self.inner.borrow();
             if inner.closed {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EBADF",
                     "send",
@@ -412,7 +415,7 @@ impl DgramSocket {
             let family = {
                 let inner = self.inner.borrow();
                 let socket = inner.socket.as_ref().ok_or_else(|| {
-                    throw_dgram_error(&ctx, "EBADF", "send", "Socket was closed or reset")
+                    throw_socket_error(&ctx, "EBADF", "send", "Socket was closed or reset")
                 })?;
                 socket.address_family()
             };
@@ -427,7 +430,7 @@ impl DgramSocket {
         let start_gen = {
             let inner = self.inner.borrow();
             if inner.closed {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EBADF",
                     "send",
@@ -447,10 +450,10 @@ impl DgramSocket {
             let check_result = {
                 let inner = self.inner.borrow();
                 let outgoing = inner.outgoing.as_ref().ok_or_else(|| {
-                    throw_dgram_error(&ctx, "EINVAL", "send", "No outgoing stream")
+                    throw_socket_error(&ctx, "EINVAL", "send", "No outgoing stream")
                 })?;
                 outgoing.check_send().map_err(|e| {
-                    throw_dgram_error(
+                    throw_socket_error(
                         &ctx,
                         error_code_to_errno(e),
                         "send",
@@ -467,7 +470,7 @@ impl DgramSocket {
             let pollable = {
                 let inner = self.inner.borrow();
                 let outgoing = inner.outgoing.as_ref().ok_or_else(|| {
-                    throw_dgram_error(&ctx, "EINVAL", "send", "No outgoing stream")
+                    throw_socket_error(&ctx, "EINVAL", "send", "No outgoing stream")
                 })?;
                 outgoing.subscribe()
             };
@@ -475,7 +478,7 @@ impl DgramSocket {
             {
                 let inner = self.inner.borrow();
                 if inner.closed || inner.generation != start_gen {
-                    return Err(throw_dgram_error(
+                    return Err(throw_socket_error(
                         &ctx,
                         "EBADF",
                         "send",
@@ -489,10 +492,10 @@ impl DgramSocket {
         let sent = {
             let inner = self.inner.borrow();
             let outgoing = inner.outgoing.as_ref().ok_or_else(|| {
-                throw_dgram_error(&ctx, "EINVAL", "send", "No outgoing stream")
+                throw_socket_error(&ctx, "EINVAL", "send", "No outgoing stream")
             })?;
             outgoing.send(&[datagram]).map_err(|e| {
-                throw_dgram_error(
+                throw_socket_error(
                     &ctx,
                     error_code_to_errno(e),
                     "send",
@@ -511,7 +514,7 @@ impl DgramSocket {
         let start_gen = {
             let inner = self.inner.borrow();
             if inner.closed {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EBADF",
                     "receive",
@@ -519,7 +522,7 @@ impl DgramSocket {
                 ));
             }
             if !inner.bound {
-                return Err(throw_dgram_error(
+                return Err(throw_socket_error(
                     &ctx,
                     "EINVAL",
                     "receive",
@@ -534,10 +537,10 @@ impl DgramSocket {
             let result = {
                 let inner = self.inner.borrow();
                 let incoming = inner.incoming.as_ref().ok_or_else(|| {
-                    throw_dgram_error(&ctx, "EINVAL", "receive", "No incoming stream")
+                    throw_socket_error(&ctx, "EINVAL", "receive", "No incoming stream")
                 })?;
                 incoming.receive(1).map_err(|e| {
-                    throw_dgram_error(
+                    throw_socket_error(
                         &ctx,
                         error_code_to_errno(e),
                         "receive",
@@ -560,7 +563,7 @@ impl DgramSocket {
             let pollable = {
                 let inner = self.inner.borrow();
                 let incoming = inner.incoming.as_ref().ok_or_else(|| {
-                    throw_dgram_error(&ctx, "EINVAL", "receive", "No incoming stream")
+                    throw_socket_error(&ctx, "EINVAL", "receive", "No incoming stream")
                 })?;
                 incoming.subscribe()
             };
@@ -568,7 +571,7 @@ impl DgramSocket {
             {
                 let inner = self.inner.borrow();
                 if inner.closed || inner.generation != start_gen {
-                    return Err(throw_dgram_error(
+                    return Err(throw_socket_error(
                         &ctx,
                         "EBADF",
                         "receive",
@@ -582,7 +585,7 @@ impl DgramSocket {
     pub fn local_address(&self, ctx: Ctx<'_>) -> rquickjs::Result<List<(String, u32, String)>> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "address",
@@ -590,10 +593,10 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(&ctx, "EBADF", "address", "Socket was closed or reset")
+            throw_socket_error(&ctx, "EBADF", "address", "Socket was closed or reset")
         })?;
         let addr = socket.local_address().map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "address",
@@ -609,7 +612,7 @@ impl DgramSocket {
     pub fn remote_address(&self, ctx: Ctx<'_>) -> rquickjs::Result<List<(String, u32, String)>> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "remoteAddress",
@@ -617,10 +620,10 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(&ctx, "EBADF", "remoteAddress", "Socket was closed or reset")
+            throw_socket_error(&ctx, "EBADF", "remoteAddress", "Socket was closed or reset")
         })?;
         let addr = socket.remote_address().map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "remoteAddress",
@@ -636,7 +639,7 @@ impl DgramSocket {
     pub fn set_ttl(&self, ctx: Ctx<'_>, ttl: u32) -> rquickjs::Result<()> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "setTTL",
@@ -644,10 +647,10 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(&ctx, "EBADF", "setTTL", "Socket was closed or reset")
+            throw_socket_error(&ctx, "EBADF", "setTTL", "Socket was closed or reset")
         })?;
         socket.set_unicast_hop_limit(ttl as u8).map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "setTTL",
@@ -659,7 +662,7 @@ impl DgramSocket {
     pub fn get_ttl(&self, ctx: Ctx<'_>) -> rquickjs::Result<u32> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "getTTL",
@@ -667,10 +670,10 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(&ctx, "EBADF", "getTTL", "Socket was closed or reset")
+            throw_socket_error(&ctx, "EBADF", "getTTL", "Socket was closed or reset")
         })?;
         let ttl = socket.unicast_hop_limit().map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "getTTL",
@@ -683,7 +686,7 @@ impl DgramSocket {
     pub fn set_recv_buffer_size(&self, ctx: Ctx<'_>, size: u64) -> rquickjs::Result<()> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "setRecvBufferSize",
@@ -691,7 +694,7 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 "EBADF",
                 "setRecvBufferSize",
@@ -699,7 +702,7 @@ impl DgramSocket {
             )
         })?;
         socket.set_receive_buffer_size(size).map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "setRecvBufferSize",
@@ -711,7 +714,7 @@ impl DgramSocket {
     pub fn get_recv_buffer_size(&self, ctx: Ctx<'_>) -> rquickjs::Result<u64> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "getRecvBufferSize",
@@ -719,7 +722,7 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 "EBADF",
                 "getRecvBufferSize",
@@ -727,7 +730,7 @@ impl DgramSocket {
             )
         })?;
         socket.receive_buffer_size().map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "getRecvBufferSize",
@@ -739,7 +742,7 @@ impl DgramSocket {
     pub fn set_send_buffer_size(&self, ctx: Ctx<'_>, size: u64) -> rquickjs::Result<()> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "setSendBufferSize",
@@ -747,7 +750,7 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 "EBADF",
                 "setSendBufferSize",
@@ -755,7 +758,7 @@ impl DgramSocket {
             )
         })?;
         socket.set_send_buffer_size(size).map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "setSendBufferSize",
@@ -767,7 +770,7 @@ impl DgramSocket {
     pub fn get_send_buffer_size(&self, ctx: Ctx<'_>) -> rquickjs::Result<u64> {
         let inner = self.inner.borrow();
         if inner.closed {
-            return Err(throw_dgram_error(
+            return Err(throw_socket_error(
                 &ctx,
                 "EBADF",
                 "getSendBufferSize",
@@ -775,7 +778,7 @@ impl DgramSocket {
             ));
         }
         let socket = inner.socket.as_ref().ok_or_else(|| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 "EBADF",
                 "getSendBufferSize",
@@ -783,7 +786,7 @@ impl DgramSocket {
             )
         })?;
         socket.send_buffer_size().map_err(|e| {
-            throw_dgram_error(
+            throw_socket_error(
                 &ctx,
                 error_code_to_errno(e),
                 "getSendBufferSize",
@@ -808,92 +811,6 @@ impl DgramSocket {
         inner.closed = true;
         inner.generation += 1;
     }
-}
-
-// Address parsing and formatting helpers
-
-fn parse_ip_address(addr: &str) -> Option<IpAddress> {
-    use std::net::IpAddr;
-    match addr.parse::<IpAddr>() {
-        Ok(IpAddr::V4(v4)) => {
-            let octets = v4.octets();
-            Some(IpAddress::Ipv4((octets[0], octets[1], octets[2], octets[3])))
-        }
-        Ok(IpAddr::V6(v6)) => {
-            let segs = v6.segments();
-            Some(IpAddress::Ipv6((
-                segs[0], segs[1], segs[2], segs[3], segs[4], segs[5], segs[6], segs[7],
-            )))
-        }
-        Err(_) => None,
-    }
-}
-
-fn ip_socket_address(ip: IpAddress, port: u16) -> IpSocketAddress {
-    match ip {
-        IpAddress::Ipv4(addr) => IpSocketAddress::Ipv4(Ipv4SocketAddress {
-            port,
-            address: addr,
-        }),
-        IpAddress::Ipv6(addr) => IpSocketAddress::Ipv6(Ipv6SocketAddress {
-            port,
-            flow_info: 0,
-            address: addr,
-            scope_id: 0,
-        }),
-    }
-}
-
-fn ip_address_to_string(addr: &IpSocketAddress) -> String {
-    match addr {
-        IpSocketAddress::Ipv4(a) => {
-            let (a1, b, c, d) = a.address;
-            format!("{a1}.{b}.{c}.{d}")
-        }
-        IpSocketAddress::Ipv6(a) => {
-            let (a1, b, c, d, e, f, g, h) = a.address;
-            format!("{a1:x}:{b:x}:{c:x}:{d:x}:{e:x}:{f:x}:{g:x}:{h:x}")
-        }
-    }
-}
-
-fn ip_socket_address_port(addr: &IpSocketAddress) -> u16 {
-    match addr {
-        IpSocketAddress::Ipv4(a) => a.port,
-        IpSocketAddress::Ipv6(a) => a.port,
-    }
-}
-
-fn ip_socket_address_family(addr: &IpSocketAddress) -> &str {
-    match addr {
-        IpSocketAddress::Ipv4(_) => "IPv4",
-        IpSocketAddress::Ipv6(_) => "IPv6",
-    }
-}
-
-// Error handling
-
-fn error_code_to_errno(error: ErrorCode) -> &'static str {
-    match error {
-        ErrorCode::AddressInUse => "EADDRINUSE",
-        ErrorCode::AddressNotBindable => "EADDRNOTAVAIL",
-        ErrorCode::InvalidArgument => "EINVAL",
-        ErrorCode::InvalidState => "EINVAL",
-        ErrorCode::AccessDenied => "EACCES",
-        ErrorCode::RemoteUnreachable => "EHOSTUNREACH",
-        ErrorCode::ConnectionRefused => "ECONNREFUSED",
-        ErrorCode::DatagramTooLarge => "EMSGSIZE",
-        ErrorCode::NewSocketLimit => "EMFILE",
-        _ => "EIO",
-    }
-}
-
-fn throw_dgram_error(ctx: &Ctx<'_>, code: &str, syscall: &str, message: &str) -> rquickjs::Error {
-    let escaped = message.replace('\\', "\\\\").replace('"', "\\\"");
-    Exception::throw_message(
-        ctx,
-        &format!("{{\"code\":\"{code}\",\"syscall\":\"{syscall}\",\"message\":\"{escaped}\"}}"),
-    )
 }
 
 pub const DGRAM_JS: &str = include_str!("dgram.js");

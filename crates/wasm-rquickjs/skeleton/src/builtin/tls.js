@@ -1,6 +1,8 @@
 // node:tls stub implementation
 // All functions throw errors as TLS is not supported in WASM environment
 
+import net from 'node:net';
+
 const NOT_SUPPORTED_ERROR = new Error('tls is not supported in WebAssembly environment');
 
 export class SecureContext {
@@ -9,11 +11,14 @@ export class SecureContext {
     }
 }
 
-export class TLSSocket {
-    constructor() {
-        throw NOT_SUPPORTED_ERROR;
-    }
+export function TLSSocket() {
+    throw NOT_SUPPORTED_ERROR;
 }
+
+// Keep the same inheritance shape as Node.js:
+// TLSSocket -> net.Socket so prototype accessors (e.g. bytesWritten) work.
+Object.setPrototypeOf(TLSSocket.prototype, net.Socket.prototype);
+Object.setPrototypeOf(TLSSocket, net.Socket);
 
 export class Server {
     constructor() {

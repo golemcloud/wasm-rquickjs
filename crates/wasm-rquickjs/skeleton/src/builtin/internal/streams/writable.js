@@ -310,13 +310,13 @@ function _write(stream, chunk, encoding, cb) {
             }
         } else if (chunk instanceof Buffer) {
             encoding = "buffer";
-        } else if (isUint8Array(chunk)) {
-            chunk = _uint8ArrayToBuffer(chunk);
+        } else if (ArrayBuffer.isView(chunk)) {
+            chunk = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
             encoding = "buffer";
         } else {
             throw new ERR_INVALID_ARG_TYPE(
                 "chunk",
-                ["string", "Buffer", "Uint8Array"],
+                ["string", "Buffer", "TypedArray", "DataView"],
                 chunk,
             );
         }
