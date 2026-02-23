@@ -45,6 +45,7 @@ import * as v8 from 'node:v8';
 import * as worker_threads from 'node:worker_threads';
 import * as zlib from 'node:zlib';
 import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstreams/util';
+import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
@@ -173,6 +174,7 @@ const builtinModules = {
     '_stream_transform': cjsExport(stream) && cjsExport(stream).Transform,
     '_stream_passthrough': cjsExport(stream) && cjsExport(stream).PassThrough,
     'internal/webstreams/util': cjsExport(internalWebstreamsUtil),
+    'internal/test/binding': cjsExport(internalTestBinding),
 };
 
 // Self-reference will be added after the module object is created (see bottom of file)

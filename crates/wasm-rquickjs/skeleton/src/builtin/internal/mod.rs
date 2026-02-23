@@ -8,6 +8,7 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/validators")
         .with_module("__wasm_rquickjs_builtin/internal/streams/add-abort-signal")
         .with_module("__wasm_rquickjs_builtin/internal/binding/util")
+        .with_module("__wasm_rquickjs_builtin/internal/test/binding")
         .with_module("__wasm_rquickjs_builtin/internal/streams/buffer_list")
         .with_module("__wasm_rquickjs_builtin/internal/streams/compose")
         .with_module("__wasm_rquickjs_builtin/internal/streams/destroy")
@@ -50,6 +51,10 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/binding/util",
             include_str!("binding/util.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/test/binding",
+            include_str!("test/binding.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/streams/add-abort-signal",

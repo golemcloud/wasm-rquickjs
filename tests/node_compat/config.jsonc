@@ -1211,10 +1211,7 @@
     "parallel/test-buffer-constructor-deprecation-error.js": {},
     "parallel/test-buffer-constructor-outside-node-modules.js": {},
     "parallel/test-buffer-pending-deprecation.js": {},
-    "parallel/test-buffer-backing-arraybuffer.js": {
-      "skip": true,
-      "reason": "not yet triaged"
-    },
+    "parallel/test-buffer-backing-arraybuffer.js": {},
     "parallel/test-buffer-constructor-node-modules-paths.js": {
       "skip": true,
       "reason": "not yet triaged"
