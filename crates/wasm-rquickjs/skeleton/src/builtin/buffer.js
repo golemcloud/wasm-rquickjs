@@ -12,6 +12,8 @@ import * as base64 from "base64-js"
 import * as ieee754 from "ieee754"
 import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING, ERR_BUFFER_OUT_OF_BOUNDS, ERR_INVALID_ARG_VALUE, ERR_INVALID_THIS } from "__wasm_rquickjs_builtin/internal/errors"
 import { Blob as _BlobImport, File as _FileImport } from "__wasm_rquickjs_builtin/http_blob"
+import { inspect as utilInspect } from "__wasm_rquickjs_builtin/internal/util/inspect"
+import { ALL_PROPERTIES, ONLY_ENUMERABLE, getOwnNonIndexProperties } from "__wasm_rquickjs_builtin/internal/binding/util"
 
 const customInspectSymbol =
     (typeof Symbol === 'function' && typeof Symbol['for'] === 'function') // eslint-disable-line dot-notation
@@ -794,14 +796,49 @@ Buffer.prototype.equals = function equals (b) {
     return Buffer.compare(this, b) === 0
 }
 
-Buffer.prototype.inspect = function inspect () {
+Buffer.prototype.inspect = function inspect (_recurseTimes, ctx) {
     let str = ''
     const max = _inspectMaxBytes
     const actualMax = Math.min(max, this.length)
     str = this.toString('hex', 0, actualMax).replace(/(.{2})/g, '$1 ').trim()
-    const remaining = this.length - actualMax
+    const remaining = this.length - max
     if (remaining > 0) str += ' ... ' + remaining + ' more byte' + (remaining > 1 ? 's' : '')
-    return '<Buffer ' + str + '>'
+
+    if (ctx) {
+        const filter = ctx.showHidden ? ALL_PROPERTIES : ONLY_ENUMERABLE
+        const extraProperties = { __proto__: null }
+        let hasExtraProperties = false
+        const keys = getOwnNonIndexProperties(this, filter)
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i]
+            extraProperties[key] = this[key]
+            hasExtraProperties = true
+        }
+
+        if (hasExtraProperties) {
+            if (this.length !== 0) {
+                str += ', '
+            }
+
+            str += utilInspect(extraProperties, {
+                ...ctx,
+                breakLength: Infinity,
+                compact: true
+            }).slice(27, -2)
+        }
+    }
+
+    let constructorName = 'Buffer'
+    try {
+        const { constructor } = this
+        if (typeof constructor === 'function' && Object.prototype.hasOwnProperty.call(constructor, 'name')) {
+            constructorName = constructor.name
+        }
+    } catch {
+        // Keep the default constructor name.
+    }
+
+    return '<' + constructorName + ' ' + str + '>'
 }
 if (customInspectSymbol) {
     Buffer.prototype[customInspectSymbol] = Buffer.prototype.inspect
