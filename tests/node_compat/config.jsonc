@@ -1210,10 +1210,7 @@
     "parallel/test-buffer-pending-deprecation.js": {},
     "parallel/test-buffer-backing-arraybuffer.js": {},
     "parallel/test-buffer-constructor-node-modules-paths.js": {},
-    "parallel/test-buffer-constructor-node-modules.js": {
-      "skip": true,
-      "reason": "not yet triaged"
-    },
+    "parallel/test-buffer-constructor-node-modules.js": {},
     "parallel/test-buffer-fill.js": {
       "skip": true,
       "reason": "not yet triaged"
