@@ -238,8 +238,13 @@ Socket.prototype.connect = function connect(...args) {
 
     const port = options.port;
     const host = options.host || options.hostname || 'localhost';
-    const family = options.family ?? this._family ?? 4;
+    const autoSelectFamily = options.autoSelectFamily ?? _defaultAutoSelectFamily;
+    const family = options.family ?? (autoSelectFamily ? 0 : this._family ?? 4);
     const lookup = options.lookup || dns.lookup;
+    const autoSelectFamilyAttemptTimeout = Math.max(
+        10,
+        options.autoSelectFamilyAttemptTimeout ?? _defaultAutoSelectFamilyAttemptTimeout
+    );
 
     if (port !== undefined) {
         const p = +port;
@@ -248,49 +253,269 @@ Socket.prototype.connect = function connect(...args) {
         }
     }
 
-    const doConnect = (ip, addressFamily) => {
+    const completeConnection = (handle) => {
+        this._handle = handle;
+        this.connecting = false;
+        this.pending = false;
+
+        try {
+            const [ra, rp, rf] = this._handle.remote_address();
+            this.remoteAddress = ra;
+            this.remotePort = rp;
+            this.remoteFamily = rf;
+        } catch (_) {}
+        try {
+            const [la, lp, lf] = this._handle.local_address();
+            this.localAddress = la;
+            this.localPort = lp;
+            this.localFamily = lf;
+        } catch (_) {}
+
+        this.emit('connect');
+        this.emit('ready');
+
+        this.read(0);
+    };
+
+    const createConnectError = (ip) => {
+        const err = makeError('EADDRNOTAVAIL', `connect EADDRNOTAVAIL ${ip}:${port} - Local (:::0)`);
+        err.address = ip;
+        err.port = port;
+        return err;
+    };
+
+    const connectAttempt = (ip, addressFamily, onResult) => {
+        if (addressFamily === 6) {
+            nextTick(onResult, createConnectError(ip));
+            return;
+        }
+
+        const handle = create_tcp_socket(addressFamily);
+
         (async () => {
             try {
-                if (addressFamily === 6) {
-                    const err = makeError('EADDRNOTAVAIL', `connect EADDRNOTAVAIL ${ip}:${port} - Local (:::0)`);
-                    err.address = ip;
-                    err.port = port;
-                    throw err;
-                }
-
-                if (!this._handle) {
-                    this._handle = create_tcp_socket(addressFamily);
-                }
-
-                await this._handle.connect(ip, port);
-                this.connecting = false;
-                this.pending = false;
-
-                try {
-                    const [ra, rp, rf] = this._handle.remote_address();
-                    this.remoteAddress = ra;
-                    this.remotePort = rp;
-                    this.remoteFamily = rf;
-                } catch (_) {}
-                try {
-                    const [la, lp, lf] = this._handle.local_address();
-                    this.localAddress = la;
-                    this.localPort = lp;
-                    this.localFamily = lf;
-                } catch (_) {}
-
-                this.emit('connect');
-                this.emit('ready');
-
-                this.read(0);
+                await handle.connect(ip, port);
+                onResult(null, handle);
             } catch (e) {
-                this.connecting = false;
                 const err = parseNativeError(e);
                 err.address = ip;
                 err.port = port;
-                this.destroy(err);
+                try {
+                    handle.close();
+                } catch (_) {}
+                onResult(err);
             }
         })();
+    };
+
+    const doConnect = (ip, addressFamily) => {
+        connectAttempt(ip, addressFamily, (err, handle) => {
+            if (!this.connecting || this.destroyed) {
+                if (handle) {
+                    try {
+                        handle.close();
+                    } catch (_) {}
+                }
+                return;
+            }
+
+            if (err) {
+                this.connecting = false;
+                this.destroy(err);
+                return;
+            }
+
+            completeConnection(handle);
+        });
+    };
+
+    const normalizeLookupEntries = (address, resolvedFamily) => {
+        const results = [];
+        const pushAddress = (candidate, candidateFamily) => {
+            if (typeof candidate !== 'string') return;
+
+            const familyNumber =
+                candidateFamily === 4 || candidateFamily === 6
+                    ? candidateFamily
+                    : isIP(candidate);
+            if (familyNumber !== 4 && familyNumber !== 6) return;
+
+            results.push({ address: candidate, family: familyNumber });
+        };
+
+        if (Array.isArray(address)) {
+            for (const entry of address) {
+                if (entry && typeof entry === 'object') {
+                    pushAddress(entry.address, entry.family);
+                }
+            }
+        } else {
+            pushAddress(address, resolvedFamily);
+        }
+
+        return results;
+    };
+
+    const interleaveLookupAddresses = (entries) => {
+        if (entries.length <= 1) return entries;
+
+        const firstFamily = entries[0].family;
+        const preferred = [];
+        const alternate = [];
+
+        for (const entry of entries) {
+            if (entry.family === firstFamily) {
+                preferred.push(entry);
+            } else {
+                alternate.push(entry);
+            }
+        }
+
+        const ordered = [];
+        const maxLen = Math.max(preferred.length, alternate.length);
+        for (let i = 0; i < maxLen; i++) {
+            if (i < preferred.length) ordered.push(preferred[i]);
+            if (i < alternate.length) ordered.push(alternate[i]);
+        }
+
+        return ordered;
+    };
+
+    const doAutoSelectConnect = (addresses) => {
+        if (addresses.length <= 1) {
+            if (addresses.length === 0) {
+                this.connecting = false;
+                this.destroy(makeError('ENOTFOUND', `lookup ${host} returned no valid address`));
+                return;
+            }
+
+            doConnect(addresses[0].address, addresses[0].family);
+            return;
+        }
+
+        this.autoSelectFamilyAttemptedAddresses = [];
+
+        const errors = [];
+        let index = 0;
+        let attemptTimer = null;
+        let activeAttemptId = 0;
+
+        const clearAttemptTimer = () => {
+            if (attemptTimer !== null) {
+                globalThis.clearTimeout(attemptTimer);
+                attemptTimer = null;
+            }
+        };
+
+        const failWithErrors = () => {
+            this.connecting = false;
+            if (errors.length === 1) {
+                this.destroy(errors[0]);
+            } else {
+                this.destroy(new AggregateError(errors, 'All connection attempts failed'));
+            }
+        };
+
+        const tryNext = () => {
+            if (!this.connecting || this.destroyed) return;
+
+            if (index >= addresses.length) {
+                failWithErrors();
+                return;
+            }
+
+            const current = addresses[index++];
+            const attemptId = ++activeAttemptId;
+            this.autoSelectFamilyAttemptedAddresses.push(`${current.address}:${port}`);
+
+            if (index < addresses.length) {
+                attemptTimer = globalThis.setTimeout(() => {
+                    if (attemptId !== activeAttemptId || !this.connecting || this.destroyed) {
+                        return;
+                    }
+
+                    attemptTimer = null;
+
+                    const timeoutError = makeError(
+                        'ETIMEDOUT',
+                        `connect ETIMEDOUT ${current.address}:${port}`
+                    );
+                    timeoutError.address = current.address;
+                    timeoutError.port = port;
+                    errors.push(timeoutError);
+
+                    tryNext();
+                }, autoSelectFamilyAttemptTimeout);
+            }
+
+            connectAttempt(current.address, current.family, (err, handle) => {
+                if (!this.connecting || this.destroyed) {
+                    if (handle) {
+                        try {
+                            handle.close();
+                        } catch (_) {}
+                    }
+                    return;
+                }
+
+                if (attemptId !== activeAttemptId) {
+                    if (handle) {
+                        try {
+                            handle.close();
+                        } catch (_) {}
+                    }
+                    return;
+                }
+
+                clearAttemptTimer();
+
+                if (err) {
+                    errors.push(err);
+                    tryNext();
+                    return;
+                }
+
+                completeConnection(handle);
+            });
+        };
+
+        tryNext();
+    };
+
+    const shouldAutoSelectFamily =
+        autoSelectFamily === true &&
+        family !== 4 &&
+        family !== 6 &&
+        options.localAddress === undefined;
+
+    const handleLookupResult = (err, address, resolvedFamily) => {
+        if (err) {
+            this.connecting = false;
+            this.emit('lookup', err, address, resolvedFamily, host);
+            this.destroy(err);
+            return;
+        }
+
+        const normalized = normalizeLookupEntries(address, resolvedFamily);
+        const first = normalized[0];
+        this.emit('lookup', null, first?.address, first?.family, host);
+
+        if (this.destroyed || !this.connecting) {
+            return;
+        }
+
+        if (shouldAutoSelectFamily) {
+            doAutoSelectConnect(interleaveLookupAddresses(normalized));
+            return;
+        }
+
+        if (!first) {
+            this.connecting = false;
+            this.destroy(makeError('ENOTFOUND', `lookup ${host} returned no valid address`));
+            return;
+        }
+
+        doConnect(first.address, first.family);
     };
 
     if (isIPAddress(host)) {
@@ -298,21 +523,7 @@ Socket.prototype.connect = function connect(...args) {
         this.emit('lookup', null, host, af, host);
         doConnect(host, af);
     } else {
-        lookup(host, { family, all: false }, (err, address, resolvedFamily) => {
-            if (err) {
-                this.connecting = false;
-                this.emit('lookup', err, address, resolvedFamily, host);
-                this.destroy(err);
-                return;
-            }
-
-            if (resolvedFamily !== 4 && resolvedFamily !== 6) {
-                resolvedFamily = isIP(address);
-            }
-
-            this.emit('lookup', null, address, resolvedFamily, host);
-            doConnect(address, resolvedFamily || 4);
-        });
+        lookup(host, { family, all: shouldAutoSelectFamily }, handleLookupResult);
     }
 
     return this;
