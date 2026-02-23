@@ -1242,6 +1242,8 @@
     "parallel/test-async-wrap-trigger-id.js": {},
     "parallel/test-bad-unicode.js": {},
     "parallel/test-beforeexit-event-exit.js": {},
+    "parallel/test-destroy-socket-in-lookup.js": {},
+    "parallel/test-ref-unref-return.js": {},
     // === node:child_process tests ===
     // child_process is not available in WASM — all tests skipped
     "parallel/test-child-process-advanced-serialization-largebuffer.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
@@ -1569,6 +1571,7 @@
     "parallel/test-next-tick-domain.js": {},
     "parallel/test-next-tick-ordering2.js": {},
     "parallel/test-next-tick-when-exiting.js": {},
+    "parallel/test-next-tick.js": {},
     "parallel/test-no-node-snapshot.js": {},
     "parallel/test-path-posix-relative-on-windows.js": {},
     "parallel/test-perf-gc-crash.js": {},
@@ -1823,8 +1826,11 @@
     "parallel/test-stream-writable-needdrain-state.js": {},
     "parallel/test-stream-writable-null.js": {},
     "parallel/test-stream-writable-properties.js": {},
+    "parallel/test-stream-writable-writable.js": {},
+    "parallel/test-stream-writable-write-cb-error.js": {},
     "parallel/test-stream-writable-write-cb-twice.js": {},
     "parallel/test-stream-writable-write-error.js": {},
+    "parallel/test-stream-writable-write-writev-finish.js": {},
     "parallel/test-stream-writableState-ending.js": {},
     "parallel/test-stream-writableState-uncorked-bufferedRequestCount.js": {},
     "parallel/test-stream-write-destroy.js": {},
@@ -2297,6 +2303,7 @@
       "reason": "WASI runtime maps binding to non-local IPs as access-denied (EACCES) instead of EADDRNOTAVAIL"
     },
     "parallel/test-dgram-bind-error-repeat.js": {},
+    "parallel/test-dgram-blocklist.js": {},
 
     // === HTTP server tests (skipped: we only support HTTP clients) ===
     "parallel/test-async-hooks-execution-async-resource-await.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -2556,6 +2563,7 @@
     "parallel/test-stream-readable-async-iterators.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-stream-toWeb-allows-server-response.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-stream2-httpclient-response-end.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-webstreams-compose.js": {},
     "parallel/test-webstreams-pipeline.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
 
     // === Tests unblocked by providing common test helpers ===
