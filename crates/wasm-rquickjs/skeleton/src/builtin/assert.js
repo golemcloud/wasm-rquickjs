@@ -389,6 +389,34 @@ function printMyersDiff(diffEntries) {
     return { message: rendered.join('\n'), skipped: skipped };
 }
 
+function normalizeStackFrameFormatting(stack) {
+    if (typeof stack !== 'string') {
+        return stack;
+    }
+
+    var lines = stack.split('\n');
+    var normalizedLines = [];
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (/^\s*at\s+apply\s+\(native\)\s*$/.test(line)) {
+            continue;
+        }
+
+        var bareFrameMatch = line.match(/^(\s*at)\s+(.+):(\d+):(\d+)\s*$/);
+        if (!bareFrameMatch) {
+            normalizedLines.push(line);
+            continue;
+        }
+
+        var location = bareFrameMatch[2];
+        normalizedLines.push(
+            bareFrameMatch[1] + ' anonymous (' + location + ':' + bareFrameMatch[3] + ':' + bareFrameMatch[4] + ')'
+        );
+    }
+
+    return normalizedLines.join('\n');
+}
+
 function parseStackFrames(stack) {
     if (typeof stack !== 'string') {
         return [];
@@ -807,6 +835,18 @@ function getErrMessage(stackStartFn) {
         }
     }
 
+    var stackFrames = parseStackFrames(stack);
+    for (var i = 0; i < stackFrames.length; i++) {
+        var frame = stackFrames[i];
+        if (frame.fileName === 'native') {
+            continue;
+        }
+        if (typeof frame.fileName === 'string' && frame.fileName.startsWith('node:')) {
+            return undefined;
+        }
+        break;
+    }
+
     var currentModule = globalThis.__wasm_rquickjs_current_module;
     if (!currentModule) {
         return undefined;
@@ -1055,6 +1095,7 @@ class AssertionError extends Error {
         if (typeof this.stack === 'string' && !this.stack.includes(message)) {
             this.stack = this.name + ': ' + message + '\n' + this.stack;
         }
+        this.stack = normalizeStackFrameFormatting(this.stack);
         // In QuickJS stack traces may omit frames. For async assertion helpers,
         // keep the entry point name visible so /rejects/ checks keep working.
         var keepAsyncEntryPoint = options.stackStartFn === rejects || options.stackStartFn === doesNotReject;
