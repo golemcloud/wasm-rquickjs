@@ -590,25 +590,33 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             }
             braces = [`${prefix}{`, "}"];
         } else if (types.isTypedArray(value)) {
-            keys = getOwnNonIndexProperties(value, filter);
-            const bound = value;
-            const fallback = "";
-            if (constructor === null) {
-                // TODO(wafuwafu13): Implement
-                // fallback = TypedArrayPrototypeGetSymbolToStringTag(value);
-                // // Reconstruct the array information.
-                // bound = new primordials[fallback](value);
+            let size;
+            try {
+                size = value.length;
+            } catch {
+                noIterator = true;
             }
-            const size = value.length;
-            const prefix = getPrefix(constructor, tag, fallback, `(${size})`);
-            braces = [`${prefix}[`, "]"];
-            if (value.length === 0 && keys.length === 0 && !ctx.showHidden) {
-                return `${braces[0]}]`;
+
+            if (!noIterator) {
+                keys = getOwnNonIndexProperties(value, filter);
+                const bound = value;
+                const fallback = "";
+                if (constructor === null) {
+                    // TODO(wafuwafu13): Implement
+                    // fallback = TypedArrayPrototypeGetSymbolToStringTag(value);
+                    // // Reconstruct the array information.
+                    // bound = new primordials[fallback](value);
+                }
+                const prefix = getPrefix(constructor, tag, fallback, `(${size})`);
+                braces = [`${prefix}[`, "]"];
+                if (size === 0 && keys.length === 0 && !ctx.showHidden) {
+                    return `${braces[0]}]`;
+                }
+                // Special handle the value. The original value is required below. The
+                // bound function is required to reconstruct missing information.
+                (formatter) = formatTypedArray.bind(null, bound, size);
+                extrasType = kArrayExtrasType;
             }
-            // Special handle the value. The original value is required below. The
-            // bound function is required to reconstruct missing information.
-            (formatter) = formatTypedArray.bind(null, bound, size);
-            extrasType = kArrayExtrasType;
         } else if (types.isMapIterator(value)) {
             keys = getKeys(value, ctx.showHidden);
             braces = getIteratorBraces("Map", tag);
@@ -640,10 +648,29 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             if (keys.length === 0 && protoProps === undefined) {
                 return ctx.stylize(base, "special");
             }
+        } else if (typeof URL === "function" && value instanceof URL) {
+            let href;
+            try {
+                href = String(value);
+            } catch {
+                href = "";
+            }
+            base = `${getPrefix(constructor, tag, "URL")}${href}`.trim();
+            if (keys.length === 0 && protoProps === undefined) {
+                return ctx.stylize(base, "special");
+            }
         } else if (types.isRegExp(value)) {
             // Make RegExps say that they are RegExps
-            base = RegExp(constructor !== null ? value : new RegExp(value))
-                .toString();
+            try {
+                base = RegExp(constructor !== null ? value : new RegExp(value))
+                    .toString();
+            } catch {
+                if (keys.length === 0 && protoProps === undefined) {
+                    return `${getCtxStyle(value, constructor, tag)}{}`;
+                }
+                braces[0] = `${getCtxStyle(value, constructor, tag)}{`;
+                base = "";
+            }
             const prefix = getPrefix(constructor, tag, "RegExp");
             if (prefix !== "RegExp ") {
                 base = `${prefix}${base}`;
@@ -656,9 +683,17 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             }
         } else if (types.isDate(value)) {
             // Make dates with properties first say the date
-            base = Number.isNaN(value.getTime())
-                ? value.toString()
-                : value.toISOString();
+            try {
+                base = Number.isNaN(Date.prototype.getTime.call(value))
+                    ? Date.prototype.toString.call(value)
+                    : Date.prototype.toISOString.call(value);
+            } catch {
+                if (keys.length === 0 && protoProps === undefined) {
+                    return `${getCtxStyle(value, constructor, tag)}{}`;
+                }
+                braces[0] = `${getCtxStyle(value, constructor, tag)}{`;
+                base = "";
+            }
             const prefix = getPrefix(constructor, tag, "Date");
             if (prefix !== "Date ") {
                 base = `${prefix}${base}`;
@@ -709,9 +744,16 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             // Special handle keys for namespace objects.
             (formatter) = formatNamespaceObject.bind(null, keys);
         } else if (types.isBoxedPrimitive(value)) {
-            base = getBoxedBase(value, ctx, keys, constructor, tag);
-            if (keys.length === 0 && protoProps === undefined) {
-                return base;
+            try {
+                base = getBoxedBase(value, ctx, keys, constructor, tag);
+                if (keys.length === 0 && protoProps === undefined) {
+                    return base;
+                }
+            } catch {
+                if (keys.length === 0 && protoProps === undefined) {
+                    return `${getCtxStyle(value, constructor, tag)}{}`;
+                }
+                braces[0] = `${getCtxStyle(value, constructor, tag)}{`;
             }
         } else {
             if (keys.length === 0 && protoProps === undefined) {

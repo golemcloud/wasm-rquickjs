@@ -1,6 +1,26 @@
 import { inspect, innerDeepEqual } from 'node:util';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_INVALID_RETURN_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 
+const inspectDiffOptions = {
+    depth: 1000,
+    compact: false,
+    sorted: true,
+    getters: true,
+    customInspect: false
+};
+
+function inspectForDiff(value) {
+    return inspect(value, inspectDiffOptions);
+}
+
+class Comparison {
+    constructor(properties) {
+        if (properties && typeof properties === 'object') {
+            Object.assign(this, properties);
+        }
+    }
+}
+
 class AssertionError extends Error {
     constructor(options) {
         if (typeof options !== 'object' || options === null) {
@@ -15,13 +35,13 @@ class AssertionError extends Error {
 
         try {
         if (operator === 'deepEqual') {
-                var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
-                var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                var actualInsp = inspectForDiff(actual);
+                var expectedInsp = inspectForDiff(expected);
                 message = 'Expected values to be loosely deep-equal:\n\n' +
                     actualInsp + '\n\nshould loosely deep-equal\n\n' + expectedInsp;
         } else if (operator === 'notDeepEqual') {
-                var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
-                var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                var actualInsp = inspectForDiff(actual);
+                var expectedInsp = inspectForDiff(expected);
                 if (actualInsp === expectedInsp) {
                     var base2 = 'Expected "actual" not to be loosely deep-equal to:';
                     var lines2 = actualInsp.split('\n');
@@ -36,8 +56,13 @@ class AssertionError extends Error {
                     message = actualInsp + '\n\nshould not loosely deep-equal\n\n' + expectedInsp;
                 }
         } else if (operator === 'deepStrictEqual') {
-                var actualInsp = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
-                var expectedInsp = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                var actualInsp = inspectForDiff(actual);
+                var expectedInsp = inspectForDiff(expected);
+                var actualIsPrimitive = actual === null || (typeof actual !== 'object' && typeof actual !== 'function');
+                var expectedIsPrimitive = expected === null || (typeof expected !== 'object' && typeof expected !== 'function');
+                if (actualIsPrimitive && expectedIsPrimitive) {
+                    message = 'Expected values to be strictly deep-equal:\n\n' + actualInsp + ' !== ' + expectedInsp + '\n';
+                } else {
                 var actualLines = actualInsp.split('\n');
                 var expectedLines = expectedInsp.split('\n');
                 var header = 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n';
@@ -149,8 +174,9 @@ class AssertionError extends Error {
                     header = header.replace('\n\n', '\n... Skipped lines\n\n');
                 }
                 message = header + collapsed.join('\n') + '\n';
+                }
         } else if (operator === 'notDeepStrictEqual') {
-                    var actualInsp2 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                    var actualInsp2 = inspectForDiff(actual);
                     var base2 = 'Expected "actual" not to be strictly deep-equal to:';
                     var lines2 = actualInsp2.split('\n');
                     // Truncate at ~50 lines
@@ -164,7 +190,7 @@ class AssertionError extends Error {
                         message = base2 + '\n\n' + lines2.join('\n') + '\n';
                     }
         } else if (operator === 'notStrictEqual') {
-                    var actualInsp2 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
+                    var actualInsp2 = inspectForDiff(actual);
                     var base2 = 'Expected "actual" to be strictly unequal to:';
                     var lines2 = actualInsp2.split('\n');
                     if (lines2.length === 1) {
@@ -177,8 +203,8 @@ class AssertionError extends Error {
                         typeof expected === 'object' && expected !== null) ||
                         (typeof actual === 'function' && typeof expected === 'function');
                     if (isObjCompare) {
-                        var actualInsp3 = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
-                        var expectedInsp3 = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                        var actualInsp3 = inspectForDiff(actual);
+                        var expectedInsp3 = inspectForDiff(expected);
                         message = 'Expected "actual" to be reference-equal to "expected":\n' +
                             '+ actual - expected\n\n';
                         var aLines3 = actualInsp3.split('\n');
@@ -197,8 +223,8 @@ class AssertionError extends Error {
                         }
                         message += diffParts3.join('\n') + '\n';
                     } else {
-                        var actualStr = inspect(actual, { depth: 1000, compact: false, sorted: true, getters: true });
-                        var expectedStr = inspect(expected, { depth: 1000, compact: false, sorted: true, getters: true });
+                        var actualStr = inspectForDiff(actual);
+                        var expectedStr = inspectForDiff(expected);
                         var aLines4 = actualStr.split('\n');
                         var eLines4 = expectedStr.split('\n');
                         var stringsLen = actualStr.length + expectedStr.length;
@@ -615,8 +641,30 @@ function makeAmbiguousArgumentError(arg, details) {
     return err;
 }
 
+function isEquivalentEngineErrorMessage(actualMessage, expectedMessage) {
+    if (actualMessage === expectedMessage) {
+        return true;
+    }
+
+    // QuickJS reports proxy ownKeys invariant violations with a different
+    // wording than V8/Node.js.
+    if (expectedMessage === "'ownKeys' on proxy: trap result did not include 'length'" &&
+        actualMessage === 'proxy: target property must be present in proxy ownKeys') {
+        return true;
+    }
+
+    return false;
+}
+
 function compareExceptionKey(actual, expected, key, message, keys, fn) {
     if ((key in actual) && innerDeepEqual(actual[key], expected[key], true, undefined)) {
+        return;
+    }
+
+    if (key === 'message' &&
+        typeof actual[key] === 'string' &&
+        typeof expected[key] === 'string' &&
+        isEquivalentEngineErrorMessage(actual[key], expected[key])) {
         return;
     }
 
@@ -639,8 +687,8 @@ function compareExceptionKey(actual, expected, key, message, keys, fn) {
         }
 
         var err = new AssertionError({
-            actual: actualSubset,
-            expected: expectedSubset,
+            actual: new Comparison(actualSubset),
+            expected: new Comparison(expectedSubset),
             operator: 'deepStrictEqual',
             stackStartFn: fn
         });

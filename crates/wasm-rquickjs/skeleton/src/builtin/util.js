@@ -26,6 +26,7 @@ import {
     formatWithOptions,
     stripVTControlCharacters
 } from '__wasm_rquickjs_builtin/internal/util/inspect';
+import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native';
 
 import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
 
@@ -44,11 +45,22 @@ var _ArrayBufferIsView = ArrayBuffer.isView;
 var _JSONStringify = JSON.stringify;
 var _RegExpPrototypeToString = RegExp.prototype.toString;
 var _DatePrototypeToISOString = Date.prototype.toISOString;
+var _DatePrototypeGetTime = Date.prototype.getTime;
 var _ErrorPrototypeToString = Error.prototype.toString;
 var _NumberIsInteger = Number.isInteger;
 var _NumberPrototypeValueOf = Number.prototype.valueOf;
 var _StringPrototypeValueOf = String.prototype.valueOf;
 var _BooleanPrototypeValueOf = Boolean.prototype.valueOf;
+
+var _TypedArrayToStringTagGetter = (function() {
+    try {
+        var typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype);
+        var desc = Object.getOwnPropertyDescriptor(typedArrayProto, Symbol.toStringTag);
+        return desc && typeof desc.get === 'function' ? desc.get : null;
+    } catch (_) {
+        return null;
+    }
+})();
 
 var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors ||
     function getOwnPropertyDescriptors(obj) {
@@ -1134,6 +1146,63 @@ function _isView(v) {
     return ArrayBuffer.isView(v);
 }
 
+function _getTypedArrayBrand(v) {
+    if (!ArrayBuffer.isView(v) || v instanceof DataView) {
+        return '';
+    }
+    if (_TypedArrayToStringTagGetter) {
+        try {
+            return _TypedArrayToStringTagGetter.call(v);
+        } catch (_) {
+            // Fall back to Object.prototype.toString for engines without full support.
+        }
+    }
+    var fallbackTag = Object.prototype.toString.call(v);
+    return fallbackTag.slice(8, -1);
+}
+
+function _isKeyObjectLike(v) {
+    return !!v && typeof v === 'object' &&
+        typeof v.export === 'function' &&
+        (typeof v.type === 'string' || typeof v._type === 'string') &&
+        ('_handle' in v || '_type' in v);
+}
+
+function _toBytesForCompare(value) {
+    if (ArrayBuffer.isView(value)) {
+        return new Uint8Array(value.buffer, value.byteOffset || 0, value.byteLength || value.length);
+    }
+    if (value instanceof ArrayBuffer) {
+        return new Uint8Array(value);
+    }
+    return null;
+}
+
+function _exportKeyForCompare(key, keyType) {
+    try {
+        return key.export();
+    } catch (_) {
+        // Some key object implementations require at least one argument.
+    }
+
+    try {
+        return key.export({});
+    } catch (_) {
+        // Try a more explicit export signature.
+    }
+
+    try {
+        return key.export('der');
+    } catch (_) {
+        var formatType = keyType === 'public' ? 'spki' : 'pkcs8';
+        try {
+            return key.export('der', formatType, undefined);
+        } catch (_) {
+            return key.export(key._handle, 'der', undefined);
+        }
+    }
+}
+
 function _isBoxedTag(tag) {
     return tag === '[object Number]' ||
            tag === '[object String]' ||
@@ -1196,6 +1265,8 @@ function _deepObjEquiv(a, b, strict, memo) {
     // Compute tags once to avoid repeated Object.prototype.toString.call (expensive in WASM/QuickJS)
     var aTag = Object.prototype.toString.call(a);
     var bTag = Object.prototype.toString.call(b);
+    var aIsErrorLike = (a instanceof Error) || aTag === '[object Error]';
+    var bIsErrorLike = (b instanceof Error) || bTag === '[object Error]';
 
     if (_isWeakCollTag(aTag) || _isWeakCollTag(bTag)) return false;
     if (_isPromiseLikeTag(aTag) || _isPromiseLikeTag(bTag)) return false;
@@ -1215,15 +1286,19 @@ function _deepObjEquiv(a, b, strict, memo) {
     if (a instanceof Map !== b instanceof Map) return false;
     if (a instanceof Set !== b instanceof Set) return false;
     if (Array.isArray(a) !== Array.isArray(b)) return false;
-    if (a instanceof Error !== b instanceof Error) return false;
+    if (aIsErrorLike !== bIsErrorLike) return false;
     var _aIsArgs = 'length' in a && 'callee' in a && !Array.isArray(a) && !(a instanceof Function);
     var _bIsArgs = 'length' in b && 'callee' in b && !Array.isArray(b) && !(b instanceof Function);
     if (_aIsArgs !== _bIsArgs) return false;
     var aIsView = ArrayBuffer.isView(a) && !(a instanceof DataView);
     var bIsView = ArrayBuffer.isView(b) && !(b instanceof DataView);
+    var aTypedBrand = '';
+    var bTypedBrand = '';
     if (aIsView || bIsView) {
         if (aIsView !== bIsView) return false;
-        if (!strict && aTag !== bTag) return false;
+        aTypedBrand = _getTypedArrayBrand(a);
+        bTypedBrand = _getTypedArrayBrand(b);
+        if (aTypedBrand !== bTypedBrand) return false;
     }
 
     var aBoxed = _isBoxedTag(aTag);
@@ -1244,7 +1319,15 @@ function _deepObjEquiv(a, b, strict, memo) {
     var bIsDate = bTag === '[object Date]';
     if (aIsDate || bIsDate) {
         if (!aIsDate || !bIsDate) return false;
-        if (a.getTime() !== b.getTime()) return false;
+        var aDateTime;
+        var bDateTime;
+        try {
+            aDateTime = _DatePrototypeGetTime.call(a);
+            bDateTime = _DatePrototypeGetTime.call(b);
+        } catch (_) {
+            return false;
+        }
+        if (aDateTime !== bDateTime) return false;
         // In strict mode, also check constructor and own properties
         if (strict && a.constructor !== b.constructor) return false;
         var dKeysA = Object.keys(a);
@@ -1259,8 +1342,113 @@ function _deepObjEquiv(a, b, strict, memo) {
         return true;
     }
 
+    var hasURLCtor = typeof URL === 'function';
+    var aIsURL = aTag === '[object URL]' || (hasURLCtor && a instanceof URL);
+    var bIsURL = bTag === '[object URL]' || (hasURLCtor && b instanceof URL);
+    if (aIsURL || bIsURL) {
+        if (!aIsURL || !bIsURL) return false;
+        var aHref;
+        var bHref;
+        try {
+            aHref = String(a);
+            bHref = String(b);
+        } catch (_) {
+            return false;
+        }
+        if (aHref !== bHref) return false;
+        var uKeysA = Object.keys(a);
+        var uKeysB = Object.keys(b);
+        if (uKeysA.length !== uKeysB.length) return false;
+        uKeysA.sort();
+        uKeysB.sort();
+        for (var i = 0; i < uKeysA.length; i++) {
+            if (uKeysA[i] !== uKeysB[i]) return false;
+            if (!_innerDeep(a[uKeysA[i]], b[uKeysB[i]], strict, memo)) return false;
+        }
+        if (strict) {
+            var uSymA = _getEnumSymbols(a);
+            var uSymB = _getEnumSymbols(b);
+            if (uSymA.length !== uSymB.length) return false;
+            for (var i = 0; i < uSymA.length; i++) {
+                if (uSymB.indexOf(uSymA[i]) === -1) return false;
+                if (!_innerDeep(a[uSymA[i]], b[uSymA[i]], strict, memo)) return false;
+            }
+        }
+        return true;
+    }
+
+    var aIsKeyObject = _isKeyObjectLike(a);
+    var bIsKeyObject = _isKeyObjectLike(b);
+    if (aIsKeyObject || bIsKeyObject) {
+        if (!aIsKeyObject || !bIsKeyObject) return false;
+        var aKeyType = typeof a.type === 'string' ? a.type : a._type;
+        var bKeyType = typeof b.type === 'string' ? b.type : b._type;
+        if (aKeyType !== bKeyType) return false;
+
+        var aExport;
+        var bExport;
+        try {
+            if (typeof a._handle === 'number' && typeof b._handle === 'number') {
+                aExport = webCryptoNative.key_export(a._handle, 'der', undefined);
+                bExport = webCryptoNative.key_export(b._handle, 'der', undefined);
+            } else {
+                aExport = _exportKeyForCompare(a, aKeyType);
+                bExport = _exportKeyForCompare(b, bKeyType);
+            }
+        } catch (e) {
+            return false;
+        }
+
+        var aExportBytes = _toBytesForCompare(aExport);
+        var bExportBytes = _toBytesForCompare(bExport);
+        if (aExportBytes && bExportBytes) {
+            if (aExportBytes.length !== bExportBytes.length) return false;
+            for (var i = 0; i < aExportBytes.length; i++) {
+                if (aExportBytes[i] !== bExportBytes[i]) return false;
+            }
+        } else {
+            if (!_innerDeep(aExport, bExport, strict, memo)) return false;
+        }
+
+        var keyObjKeysA = Object.keys(a).filter(function(key) { return key !== '_handle'; });
+        var keyObjKeysB = Object.keys(b).filter(function(key) { return key !== '_handle'; });
+        if (keyObjKeysA.length !== keyObjKeysB.length) return false;
+        keyObjKeysA.sort();
+        keyObjKeysB.sort();
+        for (var i = 0; i < keyObjKeysA.length; i++) {
+            if (keyObjKeysA[i] !== keyObjKeysB[i]) return false;
+            if (!_innerDeep(a[keyObjKeysA[i]], b[keyObjKeysB[i]], strict, memo)) return false;
+        }
+        if (strict) {
+            var keyObjSymA = _getEnumSymbols(a);
+            var keyObjSymB = _getEnumSymbols(b);
+            if (keyObjSymA.length !== keyObjSymB.length) return false;
+            for (var i = 0; i < keyObjSymA.length; i++) {
+                if (keyObjSymB.indexOf(keyObjSymA[i]) === -1) return false;
+                if (!_innerDeep(a[keyObjSymA[i]], b[keyObjSymA[i]], strict, memo)) return false;
+            }
+        }
+        return true;
+    }
+
     if (a instanceof RegExp && b instanceof RegExp) {
-        if (a.source !== b.source || a.flags !== b.flags || a.lastIndex !== b.lastIndex) return false;
+        var aSource;
+        var bSource;
+        var aFlags;
+        var bFlags;
+        var aLastIndex;
+        var bLastIndex;
+        try {
+            aSource = a.source;
+            bSource = b.source;
+            aFlags = a.flags;
+            bFlags = b.flags;
+            aLastIndex = a.lastIndex;
+            bLastIndex = b.lastIndex;
+        } catch (_) {
+            return false;
+        }
+        if (aSource !== bSource || aFlags !== bFlags || aLastIndex !== bLastIndex) return false;
         if (strict && a.constructor !== b.constructor) return false;
         var rKeysA = Object.keys(a);
         var rKeysB = Object.keys(b);
@@ -1274,7 +1462,7 @@ function _deepObjEquiv(a, b, strict, memo) {
         return true;
     }
 
-    if (a instanceof Error && b instanceof Error) {
+    if (aIsErrorLike && bIsErrorLike) {
         if (a.message !== b.message || a.name !== b.name) return false;
         var aHasCause = _hasOwnProp(a, 'cause') || 'cause' in a;
         var bHasCause = _hasOwnProp(b, 'cause') || 'cause' in b;
@@ -1284,6 +1472,28 @@ function _deepObjEquiv(a, b, strict, memo) {
         var bHasErrors = _hasOwnProp(b, 'errors');
         if (aHasErrors !== bHasErrors) return false;
         if (aHasErrors && !_innerDeep(a.errors, b.errors, strict, memo)) return false;
+        var eKeysA = Object.keys(a).filter(function(k) {
+            return k !== 'cause' && k !== 'errors';
+        });
+        var eKeysB = Object.keys(b).filter(function(k) {
+            return k !== 'cause' && k !== 'errors';
+        });
+        if (eKeysA.length !== eKeysB.length) return false;
+        eKeysA.sort();
+        eKeysB.sort();
+        for (var i = 0; i < eKeysA.length; i++) {
+            if (eKeysA[i] !== eKeysB[i]) return false;
+            if (!_innerDeep(a[eKeysA[i]], b[eKeysB[i]], strict, memo)) return false;
+        }
+        if (strict) {
+            var eSymA = _getEnumSymbols(a);
+            var eSymB = _getEnumSymbols(b);
+            if (eSymA.length !== eSymB.length) return false;
+            for (var i = 0; i < eSymA.length; i++) {
+                if (eSymB.indexOf(eSymA[i]) === -1) return false;
+                if (!_innerDeep(a[eSymA[i]], b[eSymA[i]], strict, memo)) return false;
+            }
+        }
         return true;
     }
 
@@ -1306,10 +1516,12 @@ function _deepObjEquiv(a, b, strict, memo) {
 
     if (_isView(a) && _isView(b)) {
         if (a.byteLength !== b.byteLength) return false;
-        if (strict) {
-            if (a.constructor !== b.constructor) return false;
-        } else {
-            if (aTag !== bTag) return false;
+        if (aTypedBrand === '' || bTypedBrand === '') {
+            if (strict) {
+                if (a.constructor !== b.constructor) return false;
+            } else {
+                if (aTag !== bTag) return false;
+            }
         }
         if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
             if (a.length !== b.length) return false;
@@ -1388,7 +1600,10 @@ function _deepObjEquiv(a, b, strict, memo) {
                 for (var j = 0; j < bEntries.length; j++) {
                     if (matchedB[j]) continue;
                     if (Object.is(aKey, bEntries[j][0])) {
-                        if (_innerDeep(aEntries[i][1], bEntries[j][1], strict, memo)) {
+                        var valueMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                        if (_innerDeep(aEntries[i][1], bEntries[j][1], strict, valueMemo)) {
+                            memo.a = valueMemo.a;
+                            memo.b = valueMemo.b;
                             matchedB[j] = true;
                             found = true;
                             break;
@@ -1405,8 +1620,12 @@ function _deepObjEquiv(a, b, strict, memo) {
             var found = false;
             for (var j = 0; j < bEntries.length; j++) {
                 if (matchedB[j]) continue;
-                if (_innerDeep(aEntries[ai][0], bEntries[j][0], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
-                    if (_innerDeep(aEntries[ai][1], bEntries[j][1], strict, memo)) {
+                var keyMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                if (_innerDeep(aEntries[ai][0], bEntries[j][0], strict, keyMemo)) {
+                    var valueMemo = { a: keyMemo.a.slice(), b: keyMemo.b.slice() };
+                    if (_innerDeep(aEntries[ai][1], bEntries[j][1], strict, valueMemo)) {
+                        memo.a = valueMemo.a;
+                        memo.b = valueMemo.b;
                         matchedB[j] = true;
                         found = true;
                         break;

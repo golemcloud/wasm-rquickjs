@@ -44,10 +44,7 @@
     "parallel/test-assert-calltracker-verify.js": {},
     "parallel/test-assert-checktag.js": {},
     "parallel/test-assert-deep-with-error.js": {},
-    "parallel/test-assert-deep.js": {
-      "skip": true,
-      "reason": "notDeepEqual/notDeepStrictEqual fails on some edge cases (missing exception for equivalent boxed primitives)"
-    },
+    "parallel/test-assert-deep.js": {},
     "parallel/test-assert-esm-cjs-message-verify.js": {
       "skip": true,
       "reason": "requires process spawning (spawnPromisified) which is not available in WASM"

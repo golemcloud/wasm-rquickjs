@@ -1204,7 +1204,7 @@ class KeyObject {
     export(options) {
         if (!options) options = {};
         if (this._type === 'secret') {
-            const raw = webCryptoNative.key_export(this._handle, 'der');
+            const raw = webCryptoNative.key_export(this._handle, 'der', undefined);
             if (raw === null || raw === undefined) {
                 throw new Error('Failed to export secret key');
             }

@@ -118,7 +118,7 @@ export function getOwnNonIndexProperties(
         ...Object.getOwnPropertySymbols(obj),
     ];
 
-    if (Array.isArray(obj)) {
+    if (Array.isArray(obj) || (ArrayBuffer.isView(obj) && !(obj instanceof DataView))) {
         allProperties = allProperties.filter((k) => !isArrayIndex(k));
     }
 
