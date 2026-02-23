@@ -10,7 +10,7 @@
 
 import * as base64 from "base64-js"
 import * as ieee754 from "ieee754"
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING, ERR_BUFFER_OUT_OF_BOUNDS, ERR_INVALID_ARG_VALUE, ERR_INVALID_THIS } from "__wasm_rquickjs_builtin/internal/errors"
+import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING, ERR_BUFFER_OUT_OF_BOUNDS, ERR_INVALID_ARG_VALUE, ERR_INVALID_THIS, ERR_STRING_TOO_LONG } from "__wasm_rquickjs_builtin/internal/errors"
 import { Blob as _BlobImport, File as _FileImport } from "__wasm_rquickjs_builtin/http_blob"
 import { inspect as utilInspect } from "__wasm_rquickjs_builtin/internal/util/inspect"
 import { ALL_PROPERTIES, ONLY_ENUMERABLE, getOwnNonIndexProperties } from "__wasm_rquickjs_builtin/internal/binding/util"
@@ -1280,6 +1280,9 @@ function base64Slice (buf, start, end) {
 
 function utf8Slice (buf, start, end) {
     end = Math.min(buf.length, end)
+    if (end - start > K_STRING_MAX_LENGTH) {
+        throw new ERR_STRING_TOO_LONG(K_STRING_MAX_LENGTH)
+    }
     const res = []
 
     let i = start

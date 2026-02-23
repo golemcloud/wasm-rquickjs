@@ -1194,10 +1194,7 @@
     "parallel/test-buffer-constructor-node-modules-paths.js": {},
     "parallel/test-buffer-constructor-node-modules.js": {},
     "parallel/test-buffer-fill.js": {},
-    "parallel/test-buffer-tostring-rangeerror.js": {
-      "skip": true,
-      "reason": "not yet triaged"
-    },
+    "parallel/test-buffer-tostring-rangeerror.js": {},
     "parallel/test-buffer-write-fast.js": {
       "skip": true,
       "reason": "not yet triaged"

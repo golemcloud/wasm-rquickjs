@@ -463,6 +463,16 @@ export class ERR_UNKNOWN_ENCODING extends TypeError {
     }
 }
 
+export class ERR_STRING_TOO_LONG extends Error {
+    constructor(maxLength) {
+        const maxLengthHex = Number.isFinite(maxLength)
+            ? `0x${Math.floor(maxLength).toString(16)}`
+            : String(maxLength);
+        super(`Cannot create a string longer than ${maxLengthHex} characters`);
+        addCodeToMessage(this, "ERR_STRING_TOO_LONG");
+    }
+}
+
 export class ERR_BUFFER_OUT_OF_BOUNDS extends RangeError {
     constructor(name) {
         if (name) {
@@ -1014,6 +1024,7 @@ export const codes = Object.freeze({
     ERR_OPERATION_FAILED,
     ERR_OUT_OF_RANGE,
     ERR_SOCKET_BAD_PORT,
+    ERR_STRING_TOO_LONG,
     ERR_STREAM_ALREADY_FINISHED,
     ERR_STREAM_CANNOT_PIPE,
     ERR_STREAM_DESTROYED,
