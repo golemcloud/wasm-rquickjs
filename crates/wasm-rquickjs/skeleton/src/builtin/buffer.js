@@ -40,6 +40,45 @@ export const constants = {
     MAX_STRING_LENGTH: K_STRING_MAX_LENGTH
 }
 
+const REPEAT_LIMIT_GUARD_MARKER = '__wasm_rquickjs_repeat_limit_guard'
+
+function installRepeatLimitGuard (maxStringLength) {
+    const repeatDescriptor = Object.getOwnPropertyDescriptor(String.prototype, 'repeat')
+    if (!repeatDescriptor || typeof repeatDescriptor.value !== 'function') {
+        return
+    }
+
+    const currentRepeat = repeatDescriptor.value
+    if (currentRepeat[REPEAT_LIMIT_GUARD_MARKER] === true) {
+        return
+    }
+
+    const repeatWithLimit = function repeat (count) {
+        const input = String(this)
+        const numericCount = Number(count)
+
+        if (input.length > 0 && Number.isFinite(numericCount) && numericCount > 0) {
+            const integerCount = Math.floor(numericCount)
+            if (integerCount > Math.floor(maxStringLength / input.length)) {
+                throw new RangeError('Invalid string length')
+            }
+        }
+
+        return currentRepeat.call(this, count)
+    }
+
+    repeatWithLimit[REPEAT_LIMIT_GUARD_MARKER] = true
+
+    Object.defineProperty(String.prototype, 'repeat', {
+        configurable: repeatDescriptor.configurable,
+        enumerable: repeatDescriptor.enumerable,
+        writable: repeatDescriptor.writable,
+        value: repeatWithLimit
+    })
+}
+
+installRepeatLimitGuard(K_STRING_MAX_LENGTH)
+
 /**
  * If `Buffer.TYPED_ARRAY_SUPPORT`:
  *   === true    Use Uint8Array implementation (fastest)
