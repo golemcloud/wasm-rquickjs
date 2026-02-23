@@ -1183,8 +1183,8 @@ class CallTracker {
 
 // --- Wire up the main assert function ---
 
-var assert = function assert() {
-    ok.apply(null, arguments);
+var assert = function assert(value, message) {
+    ok(value, message);
 };
 
 assert.ok = ok;
@@ -1208,8 +1208,8 @@ assert.fail = fail;
 assert.AssertionError = AssertionError;
 assert.CallTracker = CallTracker;
 
-var strict = function strict() {
-    ok.apply(null, arguments);
+var strict = function strict(value, message) {
+    ok(value, message);
 };
 
 strict.ok = ok;

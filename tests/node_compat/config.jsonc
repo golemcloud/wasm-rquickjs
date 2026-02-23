@@ -37,10 +37,7 @@
       "reason": "requires source-code inspection (reading call-site expressions for assert.ok falsy messages) which is not available in QuickJS/WASM"
     },
     "parallel/test-assert-async.js": {},
-    "parallel/test-assert-builtins-not-read-from-filesystem.js": {
-      "skip": true,
-      "reason": "requires child_process.spawnSync which is not available in WASM"
-    },
+    "parallel/test-assert-builtins-not-read-from-filesystem.js": {},
     "parallel/test-assert-calltracker-calls.js": {},
     "parallel/test-assert-calltracker-getCalls.js": {},
     "parallel/test-assert-calltracker-report.js": {},
