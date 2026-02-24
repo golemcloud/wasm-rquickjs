@@ -112,3 +112,6 @@ Tests `require('../common')` which resolves to `tests/node_compat/common-shim/in
 
 ### Adding new Rust dependencies
 If you need a new crate in the skeleton, add it to `crates/wasm-rquickjs/skeleton/Cargo.toml_` with `default-features = false`. Use pure-Rust backends to ensure `wasm32-wasip2` compatibility.
+
+### No platform-conditional code
+The skeleton is **always compiled to `wasm32-wasip1`**. Never write conditional code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`, `#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`, `path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code complexity.

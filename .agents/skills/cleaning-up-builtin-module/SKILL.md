@@ -190,6 +190,9 @@ cargo clippy -- -Dwarnings
 
 ## Common Cleanup Patterns
 
+### JS/Rust: Remove platform-conditional code
+The skeleton is **always compiled to `wasm32-wasip1`**. Never write conditional code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`, `#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`, `path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code complexity. If existing code has these, remove them as part of cleanup.
+
 ### JS: Remove browser-only guards
 Our environment is QuickJS compiled to WASM — we always have `Uint8Array`, `ArrayBuffer`, `Symbol`, typed array support, etc. Guards like `typeof Uint8Array !== 'undefined'` or `Buffer.TYPED_ARRAY_SUPPORT` checks can often be simplified.
 

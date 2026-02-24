@@ -115,6 +115,9 @@ Use `Object.defineProperty` with `writable: false, configurable: false` on defau
 ### WASM-compatible dependencies
 Always use `default-features = false` for crates that may pull in C libraries. Use pure-Rust backends to ensure `wasm32-wasip2` target compatibility.
 
+### No platform-conditional code
+The skeleton is **always compiled to `wasm32-wasip1`**. Never write conditional code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`, `#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`, `path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code complexity.
+
 ## Testing
 
 1. Define an example in `examples/` (JS file + WIT interface pair)
