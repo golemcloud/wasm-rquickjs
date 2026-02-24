@@ -196,10 +196,7 @@
     "parallel/test-fs-fmap.js": {},
     "parallel/test-fs-fsync.js": {},
     "parallel/test-fs-lchmod.js": {},
-    "parallel/test-fs-lchown.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-lchown.js": {},
     "parallel/test-fs-link.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
