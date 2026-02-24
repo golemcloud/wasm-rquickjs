@@ -1218,14 +1218,19 @@ export function getCiphers() {
 
 const CIPHER_INFO = {
     'aes-128-cbc': { name: 'aes-128-cbc', nid: 419, blockSize: 16, ivLength: 16, keyLength: 16, mode: 'cbc' },
+    'aes-192-cbc': { name: 'aes-192-cbc', nid: 423, blockSize: 16, ivLength: 16, keyLength: 24, mode: 'cbc' },
     'aes-256-cbc': { name: 'aes-256-cbc', nid: 427, blockSize: 16, ivLength: 16, keyLength: 32, mode: 'cbc' },
     'aes-128-ecb': { name: 'aes-128-ecb', nid: 418, blockSize: 16, ivLength: 0, keyLength: 16, mode: 'ecb' },
     'aes-256-ecb': { name: 'aes-256-ecb', nid: 426, blockSize: 16, ivLength: 0, keyLength: 32, mode: 'ecb' },
     'bf-ecb': { name: 'bf-ecb', nid: 92, blockSize: 8, ivLength: 0, mode: 'ecb' },
     'aes-128-ctr': { name: 'aes-128-ctr', nid: 904, blockSize: 1, ivLength: 16, keyLength: 16, mode: 'ctr' },
     'aes-256-ctr': { name: 'aes-256-ctr', nid: 906, blockSize: 1, ivLength: 16, keyLength: 32, mode: 'ctr' },
+    'aes-128-ccm': { name: 'id-aes128-ccm', nid: 896, blockSize: 1, ivLength: 12, keyLength: 16, mode: 'ccm' },
+    'aes-256-ccm': { name: 'id-aes256-ccm', nid: 902, blockSize: 1, ivLength: 12, keyLength: 32, mode: 'ccm' },
     'aes-128-gcm': { name: 'aes-128-gcm', nid: 895, blockSize: 1, ivLength: 12, keyLength: 16, mode: 'gcm' },
     'aes-256-gcm': { name: 'aes-256-gcm', nid: 901, blockSize: 1, ivLength: 12, keyLength: 32, mode: 'gcm' },
+    'aes-128-ocb': { name: 'aes-128-ocb', nid: 958, blockSize: 16, ivLength: 12, keyLength: 16, mode: 'ocb' },
+    'aes-256-ocb': { name: 'aes-256-ocb', nid: 960, blockSize: 16, ivLength: 12, keyLength: 32, mode: 'ocb' },
     'aes-128-wrap': { name: 'aes-128-wrap', nid: 1228, blockSize: 8, ivLength: 8, keyLength: 16, mode: 'wrap' },
     'aes-192-wrap': { name: 'aes-192-wrap', nid: 1229, blockSize: 8, ivLength: 8, keyLength: 24, mode: 'wrap' },
     'aes-256-wrap': { name: 'aes-256-wrap', nid: 1230, blockSize: 8, ivLength: 8, keyLength: 32, mode: 'wrap' },
@@ -1245,6 +1250,26 @@ for (const [name, info] of Object.entries(CIPHER_INFO)) {
     CIPHER_NID_MAP[info.nid] = info;
 }
 
+function validateGetCipherInfoOption(value, propertyName) {
+    if (typeof value !== 'number') {
+        const err = new TypeError(`The "${propertyName}" property must be of type number.`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    if (!Number.isInteger(value) || value < 0 || value > 0xFFFFFFFF) {
+        const err = new RangeError(`The value of "${propertyName}" is out of range. It must be >= 0 and <= 4294967295. Received ${value}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+}
+
+function acceptsIvLength(info, ivLength) {
+    if (info.mode === 'ccm') return ivLength >= 7 && ivLength <= 13;
+    if (info.mode === 'gcm') return true;
+    if (info.mode === 'ocb') return ivLength >= 1 && ivLength <= 15;
+    return ivLength === info.ivLength;
+}
+
 export function getCipherInfo(nameOrNid, options) {
     if (typeof nameOrNid !== 'string' && typeof nameOrNid !== 'number') {
         const err = new TypeError('The "nameOrNid" argument must be of type string or number.');
@@ -1257,6 +1282,19 @@ export function getCipherInfo(nameOrNid, options) {
         throw err;
     }
     
+    let keyLength;
+    let ivLength;
+    if (options) {
+        if (options.keyLength !== undefined) {
+            validateGetCipherInfoOption(options.keyLength, 'options.keyLength');
+            keyLength = options.keyLength;
+        }
+        if (options.ivLength !== undefined) {
+            validateGetCipherInfoOption(options.ivLength, 'options.ivLength');
+            ivLength = options.ivLength;
+        }
+    }
+
     let info;
     if (typeof nameOrNid === 'number') {
         info = CIPHER_NID_MAP[nameOrNid];
@@ -1268,25 +1306,9 @@ export function getCipherInfo(nameOrNid, options) {
     
     if (!info) return undefined;
     
-    if (options) {
-        if (options.keyLength !== undefined) {
-            if (typeof options.keyLength !== 'number') {
-                const err = new TypeError('The "options.keyLength" property must be of type number.');
-                err.code = 'ERR_INVALID_ARG_TYPE';
-                throw err;
-            }
-            if (options.keyLength !== info.keyLength) return undefined;
-        }
-        if (options.ivLength !== undefined) {
-            if (typeof options.ivLength !== 'number') {
-                const err = new TypeError('The "options.ivLength" property must be of type number.');
-                err.code = 'ERR_INVALID_ARG_TYPE';
-                throw err;
-            }
-            if (options.ivLength !== info.ivLength) return undefined;
-        }
-    }
-    
+    if (keyLength !== undefined && keyLength !== info.keyLength) return undefined;
+    if (ivLength !== undefined && !acceptsIvLength(info, ivLength)) return undefined;
+
     return { ...info };
 }
 
