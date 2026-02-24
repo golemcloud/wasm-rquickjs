@@ -875,10 +875,7 @@
     "parallel/test-crypto-dh-padding.js": {},
     "parallel/test-crypto-dh-shared.js": {},
     "parallel/test-crypto-dh-stateless.js": {},
-    "parallel/test-crypto-dh.js": {
-       "skip": true,
-       "reason": "requires aes-128-ecb cipher which is not implemented"
-     },
+    "parallel/test-crypto-dh.js": {},
     "parallel/test-crypto-domain.js": {},
     "parallel/test-crypto-domains.js": {},
     "parallel/test-crypto-ecb.js": {

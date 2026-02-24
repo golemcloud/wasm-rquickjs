@@ -1895,7 +1895,11 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return Some(Vec::new());
+                return if auto_padding {
+                    None
+                } else {
+                    Some(Vec::new())
+                };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -1929,7 +1933,11 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return Some(Vec::new());
+                return if auto_padding {
+                    None
+                } else {
+                    Some(Vec::new())
+                };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -1963,7 +1971,11 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 8;
             if tail.is_empty() {
-                return Some(Vec::new());
+                return if auto_padding {
+                    None
+                } else {
+                    Some(Vec::new())
+                };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -1998,7 +2010,11 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return Some(Vec::new());
+                return if auto_padding {
+                    None
+                } else {
+                    Some(Vec::new())
+                };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -2032,7 +2048,11 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return Some(Vec::new());
+                return if auto_padding {
+                    None
+                } else {
+                    Some(Vec::new())
+                };
             }
             if tail.len() % block_size != 0 {
                 return None;

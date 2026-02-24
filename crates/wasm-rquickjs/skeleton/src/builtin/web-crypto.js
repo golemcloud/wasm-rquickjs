@@ -698,6 +698,49 @@ function getCipherValidationInfo(algorithm) {
     return CIPHER_INFO[algorithm] || CIPHER_INFO[resolveNativeCipherAlgorithm(algorithm)];
 }
 
+function isPkcsBlockCipherMode(algorithm) {
+    const info = getCipherValidationInfo(algorithm);
+    return !!info && (info.mode === 'cbc' || info.mode === 'ecb');
+}
+
+function createLegacyOpenSslError(message, code, reason, fnName) {
+    const err = new Error(message);
+    err.code = code;
+    err.library = 'digital envelope routines';
+    err.reason = reason;
+    if (fnName) {
+        err.function = fnName;
+    }
+    return err;
+}
+
+function createWrongFinalBlockLengthError() {
+    return createLegacyOpenSslError(
+        'error:0606506D:digital envelope routines:EVP_DecryptFinal_ex:wrong final block length',
+        'ERR_OSSL_EVP_WRONG_FINAL_BLOCK_LENGTH',
+        'wrong final block length',
+        'EVP_DecryptFinal_ex'
+    );
+}
+
+function createBadDecryptError() {
+    return createLegacyOpenSslError(
+        'error:06065064:digital envelope routines:EVP_DecryptFinal_ex:bad decrypt',
+        'ERR_OSSL_EVP_BAD_DECRYPT',
+        'bad decrypt',
+        'EVP_DecryptFinal_ex'
+    );
+}
+
+function createDataNotMultipleOfBlockLengthError() {
+    return createLegacyOpenSslError(
+        'error:0607F08A:digital envelope routines:EVP_EncryptFinal_ex:data not multiple of block length',
+        'ERR_OSSL_EVP_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH',
+        'data not multiple of block length',
+        'EVP_EncryptFinal_ex'
+    );
+}
+
 function validateCipherKeyLength(algorithm, keyBytes) {
     const info = getCipherValidationInfo(algorithm);
     if (info && info.keyLength !== undefined && keyBytes.length !== info.keyLength) {
@@ -828,6 +871,7 @@ function Cipheriv(algorithm, key, iv, options) {
     }
     this._handle = handle;
     this._finalized = false;
+    this._autoPadding = true;
     this._decoder = null;
     Transform.call(this, options);
 }
@@ -904,6 +948,9 @@ Cipheriv.prototype.final = function(outputEncoding) {
     this._finalized = true;
     const result = webCryptoNative.cipher_final(this._handle);
     if (result === null || result === undefined) {
+        if (isPkcsBlockCipherMode(this._algorithm) && this._autoPadding === false) {
+            throw createDataNotMultipleOfBlockLengthError();
+        }
         const err = new Error('Cipher final failed');
         err.code = 'ERR_CRYPTO_INVALID_STATE';
         throw err;
@@ -951,7 +998,8 @@ Cipheriv.prototype.getAuthTag = function() {
 };
 
 Cipheriv.prototype.setAutoPadding = function(autoPadding) {
-    webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
+    this._autoPadding = autoPadding !== false;
+    webCryptoNative.cipher_set_auto_padding(this._handle, this._autoPadding);
     return this;
 };
 
@@ -1011,6 +1059,7 @@ function Decipheriv(algorithm, key, iv, options) {
     }
     this._handle = handle;
     this._finalized = false;
+    this._autoPadding = true;
     this._decoder = null;
     Transform.call(this, options);
 }
@@ -1057,6 +1106,17 @@ Decipheriv.prototype.final = function(outputEncoding) {
         const isMissingTag =
             (this._aeadConfig.mode === 'chacha20-poly1305' || this._aeadConfig.mode === 'ccm') &&
             !this._authTagWasSet;
+        if (!isMissingTag && isPkcsBlockCipherMode(this._algorithm)) {
+            const info = getCipherValidationInfo(this._algorithm);
+            const blockSize = info && info.blockSize ? info.blockSize : 16;
+            if (this._totalInputLength === 0 || (this._totalInputLength % blockSize) !== 0) {
+                throw createWrongFinalBlockLengthError();
+            }
+            if (this._autoPadding !== false) {
+                throw createBadDecryptError();
+            }
+            throw createWrongFinalBlockLengthError();
+        }
         const err = new Error(
             isMissingTag
                 ? 'Unsupported state or unable to authenticate data'
@@ -1111,7 +1171,8 @@ Decipheriv.prototype.setAuthTag = function(buffer) {
 };
 
 Decipheriv.prototype.setAutoPadding = function(autoPadding) {
-    webCryptoNative.cipher_set_auto_padding(this._handle, autoPadding !== false);
+    this._autoPadding = autoPadding !== false;
+    webCryptoNative.cipher_set_auto_padding(this._handle, this._autoPadding);
     return this;
 };
 
@@ -1366,23 +1427,27 @@ Object.defineProperty(DiffieHellman.prototype, 'verifyError', {
 
 export { DiffieHellman };
 
+function isValidBufferEncoding(encoding) {
+    return typeof encoding === 'string' && (
+        encoding === 'buffer' ||
+        (typeof Buffer !== 'undefined' && typeof Buffer.isEncoding === 'function' && Buffer.isEncoding(encoding))
+    );
+}
+
 export function createDiffieHellman(sizeOrKey, encodingOrGenerator, generator, genEncoding) {
-    if (typeof sizeOrKey === 'number') {
-        return new DiffieHellman(sizeOrKey);
+    let keyEncoding = encodingOrGenerator;
+    let generatorValue = generator;
+    let generatorEncoding = genEncoding;
+
+    // Match Node.js legacy overload behavior:
+    // if the second argument is not a valid encoding (or "buffer"), treat it as the generator.
+    if (keyEncoding && !isValidBufferEncoding(keyEncoding)) {
+        generatorEncoding = generatorValue;
+        generatorValue = keyEncoding;
+        keyEncoding = undefined;
     }
-    if (arguments.length >= 4) {
-        return new DiffieHellman(sizeOrKey, encodingOrGenerator, generator, genEncoding);
-    }
-    if (arguments.length === 3) {
-        if (typeof sizeOrKey === 'string') {
-            return new DiffieHellman(sizeOrKey, encodingOrGenerator, generator);
-        }
-        return new DiffieHellman(sizeOrKey, undefined, encodingOrGenerator, generator);
-    }
-    if (typeof sizeOrKey === 'string' && typeof encodingOrGenerator === 'string') {
-        return new DiffieHellman(sizeOrKey, encodingOrGenerator);
-    }
-    return new DiffieHellman(sizeOrKey, undefined, encodingOrGenerator);
+
+    return new DiffieHellman(sizeOrKey, keyEncoding, generatorValue, generatorEncoding);
 }
 
 // ===== DiffieHellmanGroup =====
