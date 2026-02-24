@@ -4938,8 +4938,18 @@ function generateEcFallbackKeyPair(namedCurve, options) {
     };
 }
 
+function isJwkEncodingOption(encodingOption) {
+    return encodingOption && typeof encodingOption === 'object' && encodingOption.format === 'jwk';
+}
+
 export function generateKeyPairSync(type_, options) {
     options = options || {};
+    if (type_ === 'dsa' &&
+        (isJwkEncodingOption(options.publicKeyEncoding) || isJwkEncodingOption(options.privateKeyEncoding))) {
+        const err = new Error('Unsupported JWK Key Type.');
+        err.code = 'ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE';
+        throw err;
+    }
     if (type_ === 'dh') {
         return generateDhKeyPair(options);
     }
