@@ -175,10 +175,7 @@
       "skip": true,
       "reason": "requires fixtures module and process.umask()"
     },
-    "parallel/test-fs-append-file-flush.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-append-file-flush.js": {},
     "parallel/test-fs-append-file-sync.js": {
       "skip": true,
       "reason": "requires fixtures module and process.umask()"
