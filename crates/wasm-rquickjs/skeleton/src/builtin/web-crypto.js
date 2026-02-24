@@ -4976,12 +4976,99 @@ function normalizeGenerateKeyPairOptions(type_, options) {
     return options === undefined ? {} : options;
 }
 
+function isStringOrBufferLike(value) {
+    return typeof value === 'string' || ArrayBuffer.isView(value) || isAnyArrayBuffer(value);
+}
+
+function validateGeneratedKeyEncodingFormat(optionName, encodingOptions) {
+    const format = encodingOptions.format;
+    if (format !== 'pem' && format !== 'der' && format !== 'jwk') {
+        throw createInvalidKeygenPropertyError(`${optionName}.format`, format);
+    }
+    return format;
+}
+
+function validateGeneratedPublicKeyEncodingType(type_, encodingOptions, format) {
+    const keyType = encodingOptions.type;
+    if ((format !== 'jwk' && keyType === undefined) ||
+        (keyType !== undefined && keyType !== 'pkcs1' && keyType !== 'spki')) {
+        throw createInvalidKeygenPropertyError('publicKeyEncoding.type', keyType);
+    }
+
+    if (keyType === 'pkcs1' && type_ !== 'rsa') {
+        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('pkcs1', 'can only be used for RSA keys');
+    }
+}
+
+function validateGeneratedPrivateKeyEncodingType(type_, encodingOptions, format) {
+    const keyType = encodingOptions.type;
+    if ((format !== 'jwk' && keyType === undefined) ||
+        (keyType !== undefined && keyType !== 'pkcs1' && keyType !== 'pkcs8' && keyType !== 'sec1')) {
+        throw createInvalidKeygenPropertyError('privateKeyEncoding.type', keyType);
+    }
+
+    if (keyType === 'pkcs1' && type_ !== 'rsa') {
+        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('pkcs1', 'can only be used for RSA keys');
+    }
+    if (keyType === 'sec1' && type_ !== 'ec') {
+        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('sec1', 'can only be used for EC keys');
+    }
+}
+
+function validateGeneratedPublicKeyEncoding(type_, publicKeyEncoding) {
+    if (publicKeyEncoding == null) {
+        return;
+    }
+    if (typeof publicKeyEncoding !== 'object' || Array.isArray(publicKeyEncoding)) {
+        throw createInvalidKeygenPropertyError('publicKeyEncoding', publicKeyEncoding);
+    }
+
+    const format = validateGeneratedKeyEncodingFormat('publicKeyEncoding', publicKeyEncoding);
+    validateGeneratedPublicKeyEncodingType(type_, publicKeyEncoding, format);
+}
+
+function validateGeneratedPrivateKeyEncoding(type_, privateKeyEncoding) {
+    if (privateKeyEncoding == null) {
+        return;
+    }
+    if (typeof privateKeyEncoding !== 'object' || Array.isArray(privateKeyEncoding)) {
+        throw createInvalidKeygenPropertyError('privateKeyEncoding', privateKeyEncoding);
+    }
+
+    const format = validateGeneratedKeyEncodingFormat('privateKeyEncoding', privateKeyEncoding);
+    validateGeneratedPrivateKeyEncodingType(type_, privateKeyEncoding, format);
+
+    const cipher = privateKeyEncoding.cipher;
+    const passphrase = privateKeyEncoding.passphrase;
+    if (format === 'jwk' && (cipher !== undefined || passphrase !== undefined)) {
+        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('jwk', 'does not support encryption');
+    }
+    if (cipher != null && typeof cipher !== 'string') {
+        throw createInvalidKeygenPropertyError('privateKeyEncoding.cipher', cipher);
+    }
+    if (cipher == null && passphrase !== undefined) {
+        throw createInvalidKeygenPropertyError('privateKeyEncoding.cipher', cipher);
+    }
+    if (cipher != null && !isStringOrBufferLike(passphrase)) {
+        throw createInvalidKeygenPropertyError('privateKeyEncoding.passphrase', passphrase);
+    }
+    if (cipher != null) {
+        privateKeyEncoding.cipher = normalizeCipherAlgorithm(cipher);
+    }
+}
+
+function validateGeneratedKeyEncodings(type_, options) {
+    validateGeneratedPublicKeyEncoding(type_, options.publicKeyEncoding);
+    validateGeneratedPrivateKeyEncoding(type_, options.privateKeyEncoding);
+}
+
 export function generateKeyPairSync(type_, options) {
     if (typeof type_ !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('type', 'string', type_);
     }
 
     options = normalizeGenerateKeyPairOptions(type_, options);
+    validateGeneratedKeyEncodings(type_, options);
     if (type_ === 'dsa' &&
         (isJwkEncodingOption(options.publicKeyEncoding) || isJwkEncodingOption(options.privateKeyEncoding))) {
         const err = new Error('Unsupported JWK Key Type.');
