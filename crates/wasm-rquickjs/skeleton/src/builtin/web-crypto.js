@@ -509,6 +509,72 @@ export function hkdf(digest, ikm, salt, info, keylen, callback) {
     }
 }
 
+const MAX_SPKAC_SIZE = 0x7FFFFFFF;
+
+function toSpkacBytes(spkac, encoding) {
+    const bytes = toBytes(spkac, encoding === 'buffer' ? 'utf8' : encoding);
+    if (bytes.length > MAX_SPKAC_SIZE) {
+        const err = new RangeError('spkac is too large');
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    return bytes;
+}
+
+function asBuffer(value) {
+    const bytes = new Uint8Array(value);
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    }
+    return bytes;
+}
+
+function certificateVerifySpkac(spkac, encoding) {
+    const bytes = toSpkacBytes(spkac, encoding);
+    if (bytes.length === 0) {
+        return '';
+    }
+    const verified = webCryptoNative.certificate_verify_spkac(bytes);
+    return verified === null || verified === undefined ? false : verified;
+}
+
+function certificateExportPublicKey(spkac, encoding) {
+    const bytes = toSpkacBytes(spkac, encoding);
+    if (bytes.length === 0) {
+        return '';
+    }
+    const result = webCryptoNative.certificate_export_public_key(bytes);
+    if (result === null || result === undefined) {
+        return '';
+    }
+    return asBuffer(result);
+}
+
+function certificateExportChallenge(spkac, encoding) {
+    const bytes = toSpkacBytes(spkac, encoding);
+    if (bytes.length === 0) {
+        return '';
+    }
+    const result = webCryptoNative.certificate_export_challenge(bytes);
+    if (result === null || result === undefined) {
+        return '';
+    }
+    return asBuffer(result);
+}
+
+export function Certificate() {
+    if (!new.target) {
+        return new Certificate();
+    }
+}
+
+Certificate.verifySpkac = certificateVerifySpkac;
+Certificate.exportPublicKey = certificateExportPublicKey;
+Certificate.exportChallenge = certificateExportChallenge;
+Certificate.prototype.verifySpkac = certificateVerifySpkac;
+Certificate.prototype.exportPublicKey = certificateExportPublicKey;
+Certificate.prototype.exportChallenge = certificateExportChallenge;
+
 const CIPHER_ALIASES = {
     'aes-128-cbc': 'aes-128-cbc',
     'aes-256-cbc': 'aes-256-cbc',

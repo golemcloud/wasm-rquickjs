@@ -859,10 +859,7 @@
     "parallel/test-crypto-async-sign-verify.js": {},
     "parallel/test-crypto-authenticated-stream.js": {},
     "parallel/test-crypto-authenticated.js": {},
-    "parallel/test-crypto-certificate.js": {
-      "skip": true,
-      "reason": "requires crypto.Certificate and SPKAC support"
-    },
+    "parallel/test-crypto-certificate.js": {},
     "parallel/test-crypto-cipheriv-decipheriv.js": {
       "skip": true,
       "reason": "requires des-ede3-cbc cipher, ECB mode, id-aes128-wrap cipher, and non-standard GCM IV lengths"

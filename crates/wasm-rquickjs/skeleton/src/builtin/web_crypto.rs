@@ -5,6 +5,7 @@ use std::slice;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex};
 
+use base64ct::Encoding;
 use digest::Digest;
 use hmac::{Hmac, Mac};
 use md5::Md5;
@@ -2995,6 +2996,11 @@ fn rsa_sign(key: &RsaPrivateKey, digest: &[u8], hash_algo: &str) -> Option<Vec<u
     use signature::SignatureEncoding;
     use signature::hazmat::PrehashSigner;
     match hash_algo {
+        "md5" => {
+            let signing_key = SigningKey::<Md5>::new(key.clone());
+            let sig = signing_key.sign_prehash(digest).ok()?;
+            Some(sig.to_vec())
+        }
         "sha1" => {
             let signing_key = SigningKey::<Sha1>::new(key.clone());
             let sig = signing_key.sign_prehash(digest).ok()?;
@@ -3027,6 +3033,10 @@ fn rsa_verify(key: &RsaPublicKey, digest: &[u8], signature: &[u8], hash_algo: &s
         Err(_) => return false,
     };
     match hash_algo {
+        "md5" => {
+            let verifying_key = VerifyingKey::<Md5>::new(key.clone());
+            verifying_key.verify_prehash(digest, &sig).is_ok()
+        }
         "sha1" => {
             let verifying_key = VerifyingKey::<Sha1>::new(key.clone());
             verifying_key.verify_prehash(digest, &sig).is_ok()
@@ -3045,6 +3055,200 @@ fn rsa_verify(key: &RsaPublicKey, digest: &[u8], signature: &[u8], hash_algo: &s
         }
         _ => false,
     }
+}
+
+struct DerTlv<'a> {
+    tag: u8,
+    full: &'a [u8],
+    content: &'a [u8],
+    next: usize,
+}
+
+fn parse_der_length(data: &[u8], length_offset: usize) -> Option<(usize, usize)> {
+    let first = *data.get(length_offset)?;
+    if first & 0x80 == 0 {
+        return Some((first as usize, 1));
+    }
+
+    let count = (first & 0x7f) as usize;
+    if count == 0 || count > 4 {
+        return None;
+    }
+
+    let mut length = 0usize;
+    for i in 0..count {
+        let byte = *data.get(length_offset + 1 + i)?;
+        length = length.checked_mul(256)?;
+        length = length.checked_add(byte as usize)?;
+    }
+
+    Some((length, 1 + count))
+}
+
+fn parse_der_tlv_at(data: &[u8], offset: usize) -> Option<DerTlv<'_>> {
+    let tag = *data.get(offset)?;
+    let (length, length_bytes) = parse_der_length(data, offset + 1)?;
+    let content_start = offset + 1 + length_bytes;
+    let content_end = content_start.checked_add(length)?;
+    if content_end > data.len() {
+        return None;
+    }
+
+    Some(DerTlv {
+        tag,
+        full: &data[offset..content_end],
+        content: &data[content_start..content_end],
+        next: content_end,
+    })
+}
+
+fn decode_oid(oid: &[u8]) -> Option<String> {
+    let first = *oid.first()? as u32;
+    let mut components = vec![(first / 40).to_string(), (first % 40).to_string()];
+
+    let mut value = 0u32;
+    for byte in &oid[1..] {
+        value = value.checked_mul(128)?;
+        value = value.checked_add((byte & 0x7f) as u32)?;
+        if byte & 0x80 == 0 {
+            components.push(value.to_string());
+            value = 0;
+        }
+    }
+
+    if oid.len() > 1 && oid.last()? & 0x80 != 0 {
+        return None;
+    }
+
+    Some(components.join("."))
+}
+
+fn decode_spkac_der(input: &[u8]) -> Option<Vec<u8>> {
+    if input.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let compact: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .collect();
+
+    let maybe_base64 = !compact.is_empty()
+        && compact.iter().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(*byte, b'+' | b'/' | b'=')
+        });
+
+    if maybe_base64 {
+        if let Ok(text) = std::str::from_utf8(&compact) {
+            if let Ok(decoded) = base64ct::Base64::decode_vec(text) {
+                return Some(decoded);
+            }
+        }
+    }
+
+    Some(input.to_vec())
+}
+
+struct ParsedSpkac {
+    public_key_and_challenge_der: Vec<u8>,
+    public_key_info_der: Vec<u8>,
+    challenge: Vec<u8>,
+    signature_algorithm_oid: String,
+    signature: Vec<u8>,
+}
+
+fn parse_spkac(spkac: &[u8]) -> Option<ParsedSpkac> {
+    let der = decode_spkac_der(spkac)?;
+    let outer = parse_der_tlv_at(&der, 0)?;
+    if outer.tag != 0x30 || outer.next != der.len() {
+        return None;
+    }
+
+    let mut outer_offset = 0;
+    let public_key_and_challenge = parse_der_tlv_at(outer.content, outer_offset)?;
+    outer_offset = public_key_and_challenge.next;
+    let signature_algorithm = parse_der_tlv_at(outer.content, outer_offset)?;
+    outer_offset = signature_algorithm.next;
+    let signature_bit_string = parse_der_tlv_at(outer.content, outer_offset)?;
+    outer_offset = signature_bit_string.next;
+
+    if outer_offset != outer.content.len()
+        || public_key_and_challenge.tag != 0x30
+        || signature_algorithm.tag != 0x30
+        || signature_bit_string.tag != 0x03
+    {
+        return None;
+    }
+
+    let mut pkac_offset = 0;
+    let public_key_info = parse_der_tlv_at(public_key_and_challenge.content, pkac_offset)?;
+    pkac_offset = public_key_info.next;
+    let challenge = parse_der_tlv_at(public_key_and_challenge.content, pkac_offset)?;
+    pkac_offset = challenge.next;
+
+    if public_key_info.tag != 0x30 || pkac_offset != public_key_and_challenge.content.len() {
+        return None;
+    }
+
+    let mut algo_offset = 0;
+    let oid = parse_der_tlv_at(signature_algorithm.content, algo_offset)?;
+    algo_offset = oid.next;
+    if oid.tag != 0x06 || algo_offset > signature_algorithm.content.len() {
+        return None;
+    }
+
+    if signature_bit_string.content.is_empty() || signature_bit_string.content[0] != 0 {
+        return None;
+    }
+
+    Some(ParsedSpkac {
+        public_key_and_challenge_der: public_key_and_challenge.full.to_vec(),
+        public_key_info_der: public_key_info.full.to_vec(),
+        challenge: challenge.content.to_vec(),
+        signature_algorithm_oid: decode_oid(oid.content)?,
+        signature: signature_bit_string.content[1..].to_vec(),
+    })
+}
+
+fn spkac_signature_hash_algorithm(oid: &str) -> Option<&'static str> {
+    match oid {
+        "1.2.840.113549.1.1.4" => Some("md5"),   // md5WithRSAEncryption
+        "1.2.840.113549.1.1.5" => Some("sha1"),  // sha1WithRSAEncryption
+        "1.2.840.113549.1.1.14" => Some("sha224"), // sha224WithRSAEncryption
+        "1.2.840.113549.1.1.11" => Some("sha256"), // sha256WithRSAEncryption
+        "1.2.840.113549.1.1.12" => Some("sha384"), // sha384WithRSAEncryption
+        "1.2.840.113549.1.1.13" => Some("sha512"), // sha512WithRSAEncryption
+        _ => None,
+    }
+}
+
+fn certificate_verify_spkac_impl(spkac: &[u8]) -> Option<bool> {
+    use pkcs8::DecodePublicKey;
+
+    let parsed = parse_spkac(spkac)?;
+    let key = RsaPublicKey::from_public_key_der(&parsed.public_key_info_der).ok()?;
+    let hash_algorithm = spkac_signature_hash_algorithm(&parsed.signature_algorithm_oid)?;
+
+    let mut hasher = create_hasher(hash_algorithm)?;
+    hasher.update(&parsed.public_key_and_challenge_der);
+    let digest = hasher.finalize();
+
+    Some(rsa_verify(&key, &digest, &parsed.signature, hash_algorithm))
+}
+
+fn certificate_export_public_key_impl(spkac: &[u8]) -> Option<Vec<u8>> {
+    use pkcs8::{DecodePublicKey, EncodePublicKey};
+
+    let parsed = parse_spkac(spkac)?;
+    let key = RsaPublicKey::from_public_key_der(&parsed.public_key_info_der).ok()?;
+    key.to_public_key_pem(pkcs8::LineEnding::LF)
+        .ok()
+        .map(|pem| pem.into_bytes())
+}
+
+fn certificate_export_challenge_impl(spkac: &[u8]) -> Option<Vec<u8>> {
+    parse_spkac(spkac).map(|parsed| parsed.challenge)
 }
 
 fn rsa_public_encrypt(key: &RsaPublicKey, data: &[u8], padding: u32) -> Option<Vec<u8>> {
@@ -3812,6 +4016,33 @@ pub mod native_module {
         let b_slice = unsafe { std::slice::from_raw_parts(b_raw.ptr.as_ptr(), b_raw.len) };
         use subtle::ConstantTimeEq;
         Some(a_slice.ct_eq(b_slice).into())
+    }
+
+    #[rquickjs::function]
+    pub fn certificate_verify_spkac(spkac: TypedArray<'_, u8>) -> Option<bool> {
+        let slice = spkac
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        super::certificate_verify_spkac_impl(slice)
+    }
+
+    #[rquickjs::function]
+    pub fn certificate_export_public_key(spkac: TypedArray<'_, u8>) -> Option<Vec<u8>> {
+        let slice = spkac
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        super::certificate_export_public_key_impl(slice)
+    }
+
+    #[rquickjs::function]
+    pub fn certificate_export_challenge(spkac: TypedArray<'_, u8>) -> Option<Vec<u8>> {
+        let slice = spkac
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        super::certificate_export_challenge_impl(slice)
     }
 
     #[rquickjs::function]
