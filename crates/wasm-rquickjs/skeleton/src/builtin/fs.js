@@ -101,6 +101,8 @@ const COPYFILE_FICLONE_FORCE = 4;
 const MAX_COPYFILE_MODE = COPYFILE_EXCL | COPYFILE_FICLONE | COPYFILE_FICLONE_FORCE;
 const MKDIR_MODE_MASK = 0o7777;
 const HAS_LCHMOD = false;
+const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
+const FILE_HANDLE_IN_USE_COUNT_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUseCount');
 
 export const constants = {
     F_OK, R_OK, W_OK, X_OK,
@@ -193,6 +195,36 @@ function describeType(value) {
     }
     if (typeof value === 'string') return "type string ('" + value + "')";
     return 'type ' + typeof value + ' (' + String(value) + ')';
+}
+
+function retainFileHandleForTransfer(fileHandle) {
+    if (!fileHandle || typeof fileHandle !== 'object') {
+        return;
+    }
+
+    const current = Number.isInteger(fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL])
+        ? fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL]
+        : 0;
+
+    fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL] = current + 1;
+    fileHandle[FILE_HANDLE_IN_USE_SYMBOL] = true;
+}
+
+function releaseFileHandleForTransfer(fileHandle) {
+    if (!fileHandle || typeof fileHandle !== 'object') {
+        return;
+    }
+
+    const current = Number.isInteger(fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL])
+        ? fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL]
+        : 0;
+
+    if (current <= 1) {
+        fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL] = 0;
+        fileHandle[FILE_HANDLE_IN_USE_SYMBOL] = false;
+    } else {
+        fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL] = current - 1;
+    }
 }
 
 function validateInteger(value, name, min, max) {
@@ -2405,6 +2437,7 @@ export function ReadStream(path, options) {
 
     this.bytesRead = 0;
     this._fs = opts.fs || _default;
+    this._fileHandleTransferRef = false;
 
     if (this._fileHandle && opts.fs) {
         const err = new Error('The FileHandle with fs method is not implemented');
@@ -2414,6 +2447,11 @@ export function ReadStream(path, options) {
     }
 
     _Readable.call(this, opts);
+
+    if (this._fileHandle) {
+        retainFileHandleForTransfer(this._fileHandle);
+        this._fileHandleTransferRef = true;
+    }
 
     // When a FileHandle is passed, listen for its 'close' event so that
     // closing the handle externally also destroys the stream (Node.js compat).
@@ -2525,6 +2563,11 @@ ReadStream.prototype._read = function(n) {
 ReadStream.prototype._destroy = function(err, cb) {
     if (this.fd === null) { cb(err); return; }
     if (this._fileHandle) {
+        if (this._fileHandleTransferRef) {
+            releaseFileHandleForTransfer(this._fileHandle);
+            this._fileHandleTransferRef = false;
+        }
+
         this.fd = null;
         if (this._fileHandle._closed) {
             cb(err);
@@ -2627,8 +2670,14 @@ export function WriteStream(path, options) {
     validateFlush(opts.flush);
     opts.decodeStrings = true;
     this._fs = opts.fs || _default;
+    this._fileHandleTransferRef = false;
 
     _Writable.call(this, opts);
+
+    if (this._fileHandle) {
+        retainFileHandleForTransfer(this._fileHandle);
+        this._fileHandleTransferRef = true;
+    }
 
     if (this._fileHandle && typeof this._fileHandle.on === 'function') {
         const self = this;
@@ -2718,6 +2767,11 @@ WriteStream.prototype._writev = function(data, cb) {
 WriteStream.prototype._destroy = function(err, cb) {
     if (this.fd === null) { cb(err); return; }
     if (this._fileHandle) {
+        if (this._fileHandleTransferRef) {
+            releaseFileHandleForTransfer(this._fileHandle);
+            this._fileHandleTransferRef = false;
+        }
+
         this.fd = null;
         if (this._fileHandle._closed) {
             cb(err);

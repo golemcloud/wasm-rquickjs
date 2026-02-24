@@ -4,6 +4,7 @@ const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly envi
 const FIPS_IN_WORKER_ERROR = 'Calling crypto.setFips() is not supported in workers';
 const ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE = 'ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE';
 const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
+const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
 
 function createDataCloneError(message) {
     if (typeof DOMException === 'function') {
@@ -48,6 +49,22 @@ function normalizeTransferList(transferListOrOptions) {
 
 function isMarkedAsUntransferableInternal(value) {
     return isObjectLike(value) && value[UNTRANSFERABLE_SYMBOL] === true;
+}
+
+function isFileHandleTransferInUse(value) {
+    return isObjectLike(value) && value[FILE_HANDLE_IN_USE_SYMBOL] === true;
+}
+
+function ensureTransferListItemsAreTransferable(transferList) {
+    for (const transferItem of transferList) {
+        if (isFileHandleTransferInUse(transferItem)) {
+            throw createDataCloneError('Cannot transfer FileHandle while in use');
+        }
+
+        if (isMarkedAsUntransferableInternal(transferItem)) {
+            throw createDataCloneError('Cannot transfer object of unsupported type.');
+        }
+    }
 }
 
 function bytesToHex(bytes) {
@@ -139,6 +156,9 @@ export class Worker {
         ) {
             throw new Error(FIPS_IN_WORKER_ERROR);
         }
+
+        const transferList = normalizeTransferList(options && options.transferList);
+        ensureTransferListItemsAreTransferable(transferList);
 
         this.filename = filename;
     }
@@ -255,11 +275,7 @@ export class MessagePort {
         }
 
         const transferList = normalizeTransferList(transferListOrOptions);
-        for (const transferItem of transferList) {
-            if (isMarkedAsUntransferableInternal(transferItem)) {
-                throw createDataCloneError('Cannot transfer object of unsupported type.');
-            }
-        }
+        ensureTransferListItemsAreTransferable(transferList);
 
         const target = this._target;
         if (target && typeof target._enqueueDelivery === 'function') {
