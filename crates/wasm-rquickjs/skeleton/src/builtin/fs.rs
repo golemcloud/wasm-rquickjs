@@ -352,9 +352,32 @@ pub mod native_module {
     use encoding_rs::Encoding;
     use rquickjs::prelude::List;
     use rquickjs::{Array, Ctx, Object, TypedArray, Value};
-    use std::path::Path;
+    use std::path::{Component, Path, PathBuf};
 
     // --- Existing functions (unchanged) ---
+
+    fn normalize_existing_path_for_realpath(path: &Path) -> std::io::Result<String> {
+        let absolute_path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(path)
+        };
+
+        let mut normalized = PathBuf::new();
+        for component in absolute_path.components() {
+            match component {
+                Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+                Component::RootDir => normalized.push(component.as_os_str()),
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    let _ = normalized.pop();
+                }
+                Component::Normal(segment) => normalized.push(segment),
+            }
+        }
+
+        Ok(normalized.to_string_lossy().to_string())
+    }
 
     #[rquickjs::function]
     pub fn read_file_with_encoding(
@@ -929,23 +952,50 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
-        if let Err(err) = std::fs::symlink_metadata(&path) {
-            result
-                .set(
-                    "error",
-                    super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
-                )
-                .unwrap();
-            return result;
-        }
+        let path_obj = Path::new(&path);
+        let metadata = match std::fs::symlink_metadata(path_obj) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                result
+                    .set(
+                        "error",
+                        super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
+                    )
+                    .unwrap();
+                return result;
+            }
+        };
 
-        match std::fs::canonicalize(&path) {
+        match std::fs::canonicalize(path_obj) {
             Ok(resolved) => {
                 result
                     .set("result", resolved.to_string_lossy().to_string())
                     .unwrap();
             }
             Err(err) => {
+                if !metadata.file_type().is_symlink() {
+                    match normalize_existing_path_for_realpath(path_obj) {
+                        Ok(normalized) => {
+                            result.set("result", normalized).unwrap();
+                            return result;
+                        }
+                        Err(normalization_err) => {
+                            result
+                                .set(
+                                    "error",
+                                    super::make_fs_error(
+                                        &ctx,
+                                        &normalization_err,
+                                        "realpath",
+                                        Some(&path),
+                                    ),
+                                )
+                                .unwrap();
+                            return result;
+                        }
+                    }
+                }
+
                 result
                     .set(
                         "error",
