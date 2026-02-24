@@ -27,8 +27,9 @@ encoding_rs = "0.8.35"
 sha1 = { version = "0.10", features = ["oid"] }
 sha2 = { version = "0.10", features = ["oid"] }
 sha3 = "0.10"
-md-5 = "0.10"
+md-5 = { version = "0.10", features = ["oid"] }
 ripemd = "0.1"
+whirlpool = "0.10"
 digest = "0.10"
 hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
@@ -37,7 +38,11 @@ scrypt = { version = "0.11", default-features = false }
 subtle = "2"
 aes = "0.8"
 aes-gcm = "0.10"
+ccm = "0.5"
 chacha20poly1305 = "0.10"
+chacha20 = "0.9"
+des = "0.8"
+blowfish = "0.9.1"
 cbc = { version = "0.1", features = ["alloc"] }
 ctr = "0.9"
 cipher = "0.4"
@@ -48,7 +53,7 @@ k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8
 num-bigint-dig = { version = "0.8", features = ["prime", "rand"] }
 num-traits = "0.2"
 pkcs8 = { version = "0.10", default-features = false, features = ["pem", "alloc", "encryption"] }
-rsa = { version = "0.9", default-features = false, features = ["pem"] }
+rsa = { version = "0.9", default-features = false, features = ["pem", "hazmat"] }
 elliptic-curve = { version = "0.13", default-features = false, features = ["sec1", "pem", "alloc"] }
 ecdsa = { version = "0.16", default-features = false, features = ["signing", "verifying", "der"] }
 signature = "2"
