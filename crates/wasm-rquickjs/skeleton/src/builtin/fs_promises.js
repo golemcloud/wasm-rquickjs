@@ -930,6 +930,14 @@ export async function readdir(path, options) {
     return entries;
 }
 
+export async function opendir(path, options) {
+    const fs = globalThis.require ? globalThis.require('node:fs') : null;
+    if (!fs || typeof fs.opendirSync !== 'function') {
+        throw new Error('fs.opendirSync is not available');
+    }
+    return fs.opendirSync(path, options);
+}
+
 export async function access(path, mode) {
     mode = mode !== undefined ? mode : F_OK;
     if (typeof mode !== 'number') {
@@ -1090,6 +1098,7 @@ const _defaultExport = {
     stat,
     lstat,
     readdir,
+    opendir,
     access,
     realpath,
     truncate,

@@ -1,4 +1,10 @@
 import * as native from '__wasm_rquickjs_builtin/fs_native';
+import {
+    ERR_DIR_CLOSED,
+    ERR_DIR_CONCURRENT_OPERATION,
+    ERR_INVALID_ARG_TYPE,
+    ERR_OUT_OF_RANGE,
+} from '__wasm_rquickjs_builtin/internal/errors';
 
 let _Buffer = null;
 function getBuffer() {
@@ -231,9 +237,7 @@ function validateBuffer(buffer, name) {
 
 function validateCallback(cb) {
     if (typeof cb !== 'function') {
-        const err = new TypeError(`The "callback" argument must be of type function. Received ${describeType(cb)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+        throw new ERR_INVALID_ARG_TYPE('callback', 'function', cb);
     }
 }
 
@@ -242,6 +246,25 @@ function validateFlush(flush) {
         const err = new TypeError('The "flush" argument must be of type boolean. Received ' + describeType(flush));
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
+    }
+}
+
+function validateOpendirOptions(options) {
+    if (options === undefined || options === null || typeof options === 'string') {
+        return;
+    }
+    if (typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+    }
+    if (options.bufferSize === undefined) {
+        return;
+    }
+    const { bufferSize } = options;
+    if (typeof bufferSize !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('options.bufferSize', 'number', bufferSize);
+    }
+    if (!Number.isFinite(bufferSize) || !Number.isInteger(bufferSize) || bufferSize < 1) {
+        throw new ERR_OUT_OF_RANGE('options.bufferSize', 'an integer >= 1', bufferSize, true);
     }
 }
 
@@ -569,58 +592,122 @@ export class Dir {
         this._entries = entries;
         this._index = 0;
         this._closed = false;
+        this._pendingAsyncOps = 0;
     }
 
-    readSync() {
-        if (this._closed) throw new Error('Directory handle was closed');
+    _assertNotClosed() {
+        if (this._closed) throw new ERR_DIR_CLOSED();
+    }
+
+    _assertNoConcurrentAsyncOps() {
+        if (this._pendingAsyncOps > 0) throw new ERR_DIR_CONCURRENT_OPERATION();
+    }
+
+    _nextEntry() {
         if (this._index >= this._entries.length) return null;
         return this._entries[this._index++];
     }
 
+    readSync() {
+        this._assertNoConcurrentAsyncOps();
+        this._assertNotClosed();
+        return this._nextEntry();
+    }
+
     read(cb) {
+        if (cb !== undefined && typeof cb !== 'function') {
+            throw new ERR_INVALID_ARG_TYPE('callback', 'function', cb);
+        }
+        const withPendingOp = (action, onError) => {
+            this._pendingAsyncOps += 1;
+            queueMicrotask(() => {
+                try {
+                    this._assertNotClosed();
+                    action();
+                } catch (err) {
+                    onError(err);
+                } finally {
+                    this._pendingAsyncOps -= 1;
+                }
+            });
+        };
+
         if (typeof cb === 'function') {
-            try {
-                const result = this.readSync();
-                queueMicrotask(() => cb(null, result));
-            } catch (err) {
-                queueMicrotask(() => cb(err));
-            }
+            withPendingOp(() => cb(null, this._nextEntry()), (err) => cb(err));
             return;
         }
         return new Promise((resolve, reject) => {
-            try {
-                resolve(this.readSync());
-            } catch (err) {
-                reject(err);
-            }
+            withPendingOp(() => resolve(this._nextEntry()), reject);
         });
     }
 
     closeSync() {
+        this._assertNoConcurrentAsyncOps();
+        this._assertNotClosed();
         this._closed = true;
     }
 
     close(cb) {
-        this._closed = true;
+        if (cb !== undefined && typeof cb !== 'function') {
+            throw new ERR_INVALID_ARG_TYPE('callback', 'function', cb);
+        }
+        const closeInternal = () => {
+            this._assertNotClosed();
+            this._closed = true;
+        };
         if (typeof cb === 'function') {
-            queueMicrotask(() => cb(null));
+            this._pendingAsyncOps += 1;
+            queueMicrotask(() => {
+                try {
+                    closeInternal();
+                    cb(null);
+                } catch (err) {
+                    cb(err);
+                } finally {
+                    this._pendingAsyncOps -= 1;
+                }
+            });
             return;
         }
-        return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            this._pendingAsyncOps += 1;
+            queueMicrotask(() => {
+                try {
+                    closeInternal();
+                    resolve();
+                } catch (err) {
+                    reject(err);
+                } finally {
+                    this._pendingAsyncOps -= 1;
+                }
+            });
+        });
     }
 
     [Symbol.asyncIterator]() {
         const self = this;
         return {
-            next() {
-                if (self._closed) return Promise.resolve({ done: true, value: undefined });
-                const entry = self.readSync();
-                if (entry === null) return Promise.resolve({ done: true, value: undefined });
-                return Promise.resolve({ done: false, value: entry });
+            async next() {
+                const entry = await self.read();
+                if (entry !== null) {
+                    return { done: false, value: entry };
+                }
+                if (!self._closed) {
+                    await self.close();
+                }
+                return { done: true, value: undefined };
             },
-            return() {
-                self._closed = true;
-                return Promise.resolve({ done: true, value: undefined });
+            async return() {
+                if (!self._closed) {
+                    try {
+                        await self.close();
+                    } catch (err) {
+                        if (!err || err.code !== 'ERR_DIR_CLOSED') {
+                            throw err;
+                        }
+                    }
+                }
+                return { done: true, value: undefined };
             }
         };
     }
@@ -1299,6 +1386,8 @@ export function mkdtempSync(prefix, options) {
 }
 
 export function opendirSync(path, options) {
+    validatePath(path);
+    validateOpendirOptions(options);
     const result = native.fs_readdir(path, true);
     if (result.error) {
         throw createSystemError(result.error);
@@ -2155,10 +2244,12 @@ export function mkdtemp(prefix, optionsOrCallback, callback) {
 }
 
 export function opendir(path, optionsOrCallback, callback) {
+    validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
         optionsOrCallback = {};
     }
+    validateOpendirOptions(optionsOrCallback);
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
