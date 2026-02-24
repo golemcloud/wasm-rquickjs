@@ -221,6 +221,16 @@ function validateFlush(flush) {
     }
 }
 
+function validateAppendFileData(data) {
+    if (typeof data === 'string' || ArrayBuffer.isView(data)) {
+        return;
+    }
+
+    const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ' + describeType(data));
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
 function validateMode(mode, name, def) {
     if (mode === undefined) return def;
     if (typeof mode === 'string') {
@@ -622,15 +632,29 @@ export function writeFileSync(path, data, options) {
 }
 
 export function appendFileSync(path, data, options) {
-    if (typeof path !== 'number') validatePath(path);
+    if (typeof path === 'number') {
+        validateFd(path);
+    } else {
+        validatePath(path);
+    }
     if (typeof options === 'string') {
         options = { encoding: options };
     }
     if (options && options.encoding) validateEncoding(options.encoding, 'encoding');
+    validateAppendFileData(data);
     const flush = options ? options.flush : undefined;
     validateFlush(flush);
     let error;
-    if (typeof data === 'string') {
+    if (typeof path === 'number') {
+        if (typeof data === 'string') {
+            const result = native.fs_write_string(path, data, null);
+            error = result.error;
+        } else {
+            const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
+            const result = native.fs_write_buffer(path, dataArray, 0, dataArray.length, null);
+            error = result.error;
+        }
+    } else if (typeof data === 'string') {
         error = native.fs_append_file_string(path, data);
     } else {
         const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
@@ -640,11 +664,15 @@ export function appendFileSync(path, data, options) {
         throw createSystemError(error);
     }
     if (flush === true) {
-        const fd = openSync(path, 'r');
-        try {
-            _default.fsyncSync(fd);
-        } finally {
-            closeSync(fd);
+        if (typeof path === 'number') {
+            fsyncSync(path);
+        } else {
+            const fd = openSync(path, 'r');
+            try {
+                _default.fsyncSync(fd);
+            } finally {
+                closeSync(fd);
+            }
         }
     }
 }
@@ -1182,7 +1210,11 @@ export function writeFile(path, data, optionsOrCallback, callback) {
 }
 
 export function appendFile(path, data, optionsOrCallback, callback) {
-    if (typeof path !== 'number') validatePath(path);
+    if (typeof path === 'number') {
+        validateFd(path);
+    } else {
+        validatePath(path);
+    }
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
         optionsOrCallback = {};
@@ -1192,6 +1224,7 @@ export function appendFile(path, data, optionsOrCallback, callback) {
     }
     const opts = optionsOrCallback || {};
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding');
+    validateAppendFileData(data);
     const flush = opts.flush;
     validateFlush(flush);
     const cb = callback;
@@ -1201,11 +1234,17 @@ export function appendFile(path, data, optionsOrCallback, callback) {
             const appendOpts = flush !== undefined ? Object.assign({}, opts, { flush: undefined }) : opts;
             appendFileSync(path, data, appendOpts);
             if (flush === true) {
-                const fd = openSync(path, 'r');
-                _default.fsync(fd, (err) => {
-                    closeSync(fd);
-                    cb(err || null);
-                });
+                if (typeof path === 'number') {
+                    _default.fsync(path, (err) => {
+                        cb(err || null);
+                    });
+                } else {
+                    const fd = openSync(path, 'r');
+                    _default.fsync(fd, (err) => {
+                        closeSync(fd);
+                        cb(err || null);
+                    });
+                }
                 return;
             }
             cb(null);

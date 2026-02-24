@@ -176,10 +176,7 @@
       "reason": "requires fixtures module and process.umask()"
     },
     "parallel/test-fs-append-file-flush.js": {},
-    "parallel/test-fs-append-file-sync.js": {
-      "skip": true,
-      "reason": "requires fixtures module and process.umask()"
-    },
+    "parallel/test-fs-append-file-sync.js": {},
     "parallel/test-fs-assert-encoding-error.js": {
       "skip": true,
       "reason": "assert.throws does not match: ERR_INVALID_ARG_VALUE with expected message format not thrown by fs encoding validation"
