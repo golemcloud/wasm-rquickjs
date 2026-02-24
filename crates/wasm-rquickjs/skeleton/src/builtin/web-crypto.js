@@ -5,7 +5,9 @@ import {
     ERR_CRYPTO_INVALID_DIGEST,
     ERR_CRYPTO_INVALID_JWK,
     ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE,
+    ERR_INCOMPATIBLE_OPTION_PAIR,
     ERR_INVALID_ARG_TYPE,
+    ERR_MISSING_OPTION,
     ERR_OUT_OF_RANGE,
     ERR_UNKNOWN_ENCODING,
 } from '__wasm_rquickjs_builtin/internal/errors'
@@ -4870,18 +4872,68 @@ function maybeApplyGeneratedKeyEncoding(key, encodingOptions) {
     return key.export(encodingOptions);
 }
 
+const SUPPORTED_DH_GROUP_NAMES = new Set([
+    'modp1',
+    'modp2',
+    'modp5',
+    'modp14',
+    'modp15',
+    'modp16',
+    'modp17',
+    'modp18',
+]);
+
+function validateDhKeyPairOptions(options) {
+    const hasGroup = options.group !== undefined;
+    const hasPrime = options.prime !== undefined;
+    const hasPrimeLength = options.primeLength !== undefined;
+
+    if (!hasGroup && !hasPrime && !hasPrimeLength) {
+        throw new ERR_MISSING_OPTION('At least one of the group, prime, or primeLength options');
+    }
+
+    if (hasGroup && hasPrime) {
+        throw new ERR_INCOMPATIBLE_OPTION_PAIR('group', 'prime');
+    }
+    if (hasGroup && hasPrimeLength) {
+        throw new ERR_INCOMPATIBLE_OPTION_PAIR('group', 'primeLength');
+    }
+    if (hasGroup && options.generator !== undefined) {
+        throw new ERR_INCOMPATIBLE_OPTION_PAIR('group', 'generator');
+    }
+    if (hasPrime && hasPrimeLength) {
+        throw new ERR_INCOMPATIBLE_OPTION_PAIR('prime', 'primeLength');
+    }
+
+    if (hasPrimeLength) {
+        validateInt32KeygenOption(options.primeLength, 'options.primeLength', 0);
+    }
+    if (options.generator !== undefined) {
+        validateInt32KeygenOption(options.generator, 'options.generator', 0);
+    }
+
+    if (hasGroup) {
+        if (typeof options.group !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('options.group', 'string', options.group);
+        }
+        if (!SUPPORTED_DH_GROUP_NAMES.has(options.group)) {
+            const err = new Error('Unknown DH group');
+            err.code = 'ERR_CRYPTO_UNKNOWN_DH_GROUP';
+            throw err;
+        }
+    }
+}
+
 function generateDhKeyPair(options) {
+    validateDhKeyPairOptions(options);
+
     let dh;
     if (options.group !== undefined) {
         dh = getDiffieHellman(options.group);
     } else if (options.prime !== undefined) {
         dh = createDiffieHellman(options.prime, options.primeEncoding, options.generator, options.generatorEncoding);
-    } else if (options.primeLength !== undefined) {
-        dh = createDiffieHellman(options.primeLength);
     } else {
-        const err = new Error('Invalid DH key generation options');
-        err.code = 'ERR_INVALID_ARG_VALUE';
-        throw err;
+        dh = createDiffieHellman(options.primeLength, undefined, options.generator);
     }
 
     const publicKeyBytes = toBytes(dh.generateKeys());
@@ -5268,6 +5320,10 @@ export function generateKeyPair(type_, options, callback) {
         validateRsaKeyPairOptions(options);
     } else if (type_ === 'dsa') {
         validateDsaKeyPairOptions(options);
+    } else if (type_ === 'dh') {
+        const result = generateKeyPairSync(type_, options);
+        queueMicrotask(() => callback(null, result.publicKey, result.privateKey));
+        return;
     }
 
     try {

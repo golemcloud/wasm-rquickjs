@@ -1922,7 +1922,7 @@
         "block_04_test_rsa_parameters": {},
         "block_05_test_dsa_parameters": {},
         "block_06_test_ec_parameters": {},
-        "block_07_block_07": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
+        "block_07_block_07": {},
         "block_08_test_invalid_key_encoding_types": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
         "block_09_block_09": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
         "block_10_block_10": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" }
