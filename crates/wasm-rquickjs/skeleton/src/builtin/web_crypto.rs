@@ -3388,7 +3388,7 @@ enum SignContext {
         hasher: Option<HashContext>,
     },
     Rsa {
-        key: RsaPrivateKey,
+        key_id: u32,
         hasher: Option<HashContext>,
         hash_algo: String,
     },
@@ -3412,7 +3412,8 @@ enum VerifyContext {
         hasher: Option<HashContext>,
     },
     Rsa {
-        key: RsaPublicKey,
+        key_id: u32,
+        key_is_private: bool,
         hasher: Option<HashContext>,
         hash_algo: String,
     },
@@ -3456,11 +3457,11 @@ fn sign_init_impl(algorithm: Option<&str>, key_id: u32) -> Option<u32> {
                 hasher: Some(hasher),
             }
         }
-        KeyData::RsaPrivate(sk) => {
+        KeyData::RsaPrivate(_) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
             SignContext::Rsa {
-                key: sk.clone(),
+                key_id,
                 hasher: Some(hasher),
                 hash_algo: algo.to_string(),
             }
@@ -3528,12 +3529,17 @@ fn sign_final_impl(id: u32) -> Option<Vec<u8>> {
             Some(sig.as_bytes().to_vec())
         }
         SignContext::Rsa {
-            key,
+            key_id,
             hasher,
             hash_algo,
         } => {
             let digest = hasher?.finalize();
-            rsa_sign(&key, &digest, &hash_algo)
+            let store = KEY_STORE.lock().unwrap();
+            let key = match store.get(&key_id) {
+                Some(KeyData::RsaPrivate(sk)) => sk,
+                _ => return None,
+            };
+            rsa_sign(key, &digest, &hash_algo)
         }
     }
 }
@@ -3601,20 +3607,22 @@ fn verify_init_impl(algorithm: Option<&str>, key_id: u32) -> Option<u32> {
                 hasher: Some(hasher),
             }
         }
-        KeyData::RsaPublic(pk) => {
+        KeyData::RsaPublic(_) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
             VerifyContext::Rsa {
-                key: pk.clone(),
+                key_id,
+                key_is_private: false,
                 hasher: Some(hasher),
                 hash_algo: algo.to_string(),
             }
         }
-        KeyData::RsaPrivate(sk) => {
+        KeyData::RsaPrivate(_) => {
             let algo = algorithm.unwrap_or("sha256");
             let hasher = create_hasher(algo)?;
             VerifyContext::Rsa {
-                key: sk.to_public_key(),
+                key_id,
+                key_is_private: true,
                 hasher: Some(hasher),
                 hash_algo: algo.to_string(),
             }
@@ -3687,78 +3695,61 @@ fn verify_final_impl(id: u32, signature: &[u8]) -> Option<bool> {
             Some(key.verify(&digest, &sig).is_ok())
         }
         VerifyContext::Rsa {
-            key,
+            key_id,
+            key_is_private,
             hasher,
             hash_algo,
         } => {
             let digest = hasher?.finalize();
-            Some(rsa_verify(&key, &digest, signature, &hash_algo))
+            let store = KEY_STORE.lock().unwrap();
+            if key_is_private {
+                let key = match store.get(&key_id) {
+                    Some(KeyData::RsaPrivate(sk)) => sk,
+                    _ => return None,
+                };
+                let public_key = key.to_public_key();
+                Some(rsa_verify(&public_key, &digest, signature, &hash_algo))
+            } else {
+                let key = match store.get(&key_id) {
+                    Some(KeyData::RsaPublic(pk)) => pk,
+                    _ => return None,
+                };
+                Some(rsa_verify(key, &digest, signature, &hash_algo))
+            }
         }
     }
 }
 
 fn rsa_sign(key: &RsaPrivateKey, digest: &[u8], hash_algo: &str) -> Option<Vec<u8>> {
-    use rsa::pkcs1v15::SigningKey;
-    use signature::SignatureEncoding;
-    use signature::hazmat::PrehashSigner;
+    use rsa::pkcs1v15::Pkcs1v15Sign;
     match hash_algo {
-        "md5" => {
-            let signing_key = SigningKey::<Md5>::new(key.clone());
-            let sig = signing_key.sign_prehash(digest).ok()?;
-            Some(sig.to_vec())
-        }
-        "sha1" => {
-            let signing_key = SigningKey::<Sha1>::new(key.clone());
-            let sig = signing_key.sign_prehash(digest).ok()?;
-            Some(sig.to_vec())
-        }
-        "sha256" => {
-            let signing_key = SigningKey::<Sha256>::new(key.clone());
-            let sig = signing_key.sign_prehash(digest).ok()?;
-            Some(sig.to_vec())
-        }
-        "sha384" => {
-            let signing_key = SigningKey::<Sha384>::new(key.clone());
-            let sig = signing_key.sign_prehash(digest).ok()?;
-            Some(sig.to_vec())
-        }
-        "sha512" => {
-            let signing_key = SigningKey::<Sha512>::new(key.clone());
-            let sig = signing_key.sign_prehash(digest).ok()?;
-            Some(sig.to_vec())
-        }
+        "md5" => key.sign(Pkcs1v15Sign::new::<Md5>(), digest).ok(),
+        "sha1" => key.sign(Pkcs1v15Sign::new::<Sha1>(), digest).ok(),
+        "sha224" => key.sign(Pkcs1v15Sign::new::<Sha224>(), digest).ok(),
+        "sha256" => key.sign(Pkcs1v15Sign::new::<Sha256>(), digest).ok(),
+        "sha384" => key.sign(Pkcs1v15Sign::new::<Sha384>(), digest).ok(),
+        "sha512" => key.sign(Pkcs1v15Sign::new::<Sha512>(), digest).ok(),
         _ => None,
     }
 }
 
 fn rsa_verify(key: &RsaPublicKey, digest: &[u8], signature: &[u8], hash_algo: &str) -> bool {
-    use rsa::pkcs1v15::{Signature, VerifyingKey};
-    use signature::hazmat::PrehashVerifier;
-    let sig = match Signature::try_from(signature) {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
+    use rsa::pkcs1v15::Pkcs1v15Sign;
     match hash_algo {
-        "md5" => {
-            let verifying_key = VerifyingKey::<Md5>::new(key.clone());
-            verifying_key.verify_prehash(digest, &sig).is_ok()
-        }
-        "sha1" => {
-            let verifying_key = VerifyingKey::<Sha1>::new(key.clone());
-            verifying_key.verify_prehash(digest, &sig).is_ok()
-        }
-        "sha256" => {
-            let verifying_key = VerifyingKey::<Sha256>::new(key.clone());
-            verifying_key.verify_prehash(digest, &sig).is_ok()
-        }
-        "sha384" => {
-            let verifying_key = VerifyingKey::<Sha384>::new(key.clone());
-            verifying_key.verify_prehash(digest, &sig).is_ok()
-        }
-        "sha512" => {
-            let verifying_key = VerifyingKey::<Sha512>::new(key.clone());
-            verifying_key.verify_prehash(digest, &sig).is_ok()
-        }
+        "md5" => key.verify(Pkcs1v15Sign::new::<Md5>(), digest, signature).is_ok(),
+        "sha1" => key.verify(Pkcs1v15Sign::new::<Sha1>(), digest, signature).is_ok(),
+        "sha224" => key
+            .verify(Pkcs1v15Sign::new::<Sha224>(), digest, signature)
+            .is_ok(),
+        "sha256" => key
+            .verify(Pkcs1v15Sign::new::<Sha256>(), digest, signature)
+            .is_ok(),
+        "sha384" => key
+            .verify(Pkcs1v15Sign::new::<Sha384>(), digest, signature)
+            .is_ok(),
+        "sha512" => key
+            .verify(Pkcs1v15Sign::new::<Sha512>(), digest, signature)
+            .is_ok(),
         _ => false,
     }
 }

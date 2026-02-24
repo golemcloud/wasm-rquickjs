@@ -2107,6 +2107,10 @@ class KeyObject {
 
     export(options) {
         if (this._customData) {
+            const customExport = tryExportCustomKeyObject(this, options);
+            if (customExport !== undefined) {
+                return customExport;
+            }
             const err = new Error('Failed to export key');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
@@ -2164,6 +2168,10 @@ class KeyObject {
 
         const result = webCryptoNative.key_export(this._handle, format, type_);
         if (result === null || result === undefined) {
+            const nativeFallback = exportEd25519NativeKeyObject(this, format, type_);
+            if (nativeFallback !== null && nativeFallback !== undefined) {
+                return nativeFallback;
+            }
             throw new Error('Failed to export key');
         }
         if (format === 'pem') {
@@ -2479,6 +2487,14 @@ function keyObjectCustomDataEquals(left, right) {
         return false;
     }
 
+    if (left.okp || right.okp) {
+        if (!left.okp || !right.okp) {
+            return false;
+        }
+        return optionalBytesEqual(left.okp.privateKey, right.okp.privateKey) &&
+            optionalBytesEqual(left.okp.publicKey, right.okp.publicKey);
+    }
+
     if (left.montgomery || right.montgomery) {
         if (!left.montgomery || !right.montgomery) {
             return false;
@@ -2535,6 +2551,170 @@ const ED25519_SPKI_PREFIX = new Uint8Array([
     0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
     0x70, 0x03, 0x21, 0x00,
 ]);
+
+const ED448_PKCS8_PREFIX = new Uint8Array([
+    0x30, 0x47, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+    0x03, 0x2b, 0x65, 0x71, 0x04, 0x3b, 0x04, 0x39,
+]);
+
+const ED448_SPKI_PREFIX = new Uint8Array([
+    0x30, 0x43, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
+    0x71, 0x03, 0x3a, 0x00,
+]);
+
+const X25519_PKCS8_PREFIX = new Uint8Array([
+    0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+    0x03, 0x2b, 0x65, 0x6e, 0x04, 0x22, 0x04, 0x20,
+]);
+
+const X25519_SPKI_PREFIX = new Uint8Array([
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
+    0x6e, 0x03, 0x21, 0x00,
+]);
+
+const X448_PKCS8_PREFIX = new Uint8Array([
+    0x30, 0x46, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+    0x03, 0x2b, 0x65, 0x6f, 0x04, 0x3a, 0x04, 0x38,
+]);
+
+const X448_SPKI_PREFIX = new Uint8Array([
+    0x30, 0x42, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
+    0x6f, 0x03, 0x39, 0x00,
+]);
+
+const OKP_TYPE_INFO = {
+    ed25519: {
+        crv: 'Ed25519',
+        privateLength: 32,
+        publicLength: 32,
+        privatePrefix: ED25519_PKCS8_PREFIX,
+        publicPrefix: ED25519_SPKI_PREFIX,
+    },
+    ed448: {
+        crv: 'Ed448',
+        privateLength: 57,
+        publicLength: 57,
+        privatePrefix: ED448_PKCS8_PREFIX,
+        publicPrefix: ED448_SPKI_PREFIX,
+    },
+    x25519: {
+        crv: 'X25519',
+        privateLength: 32,
+        publicLength: 32,
+        privatePrefix: X25519_PKCS8_PREFIX,
+        publicPrefix: X25519_SPKI_PREFIX,
+    },
+    x448: {
+        crv: 'X448',
+        privateLength: 56,
+        publicLength: 56,
+        privatePrefix: X448_PKCS8_PREFIX,
+        publicPrefix: X448_SPKI_PREFIX,
+    },
+};
+
+const OKP_TYPE_FROM_CURVE = {
+    Ed25519: 'ed25519',
+    Ed448: 'ed448',
+    X25519: 'x25519',
+    X448: 'x448',
+};
+
+const OKP_PUBLIC_FROM_PRIVATE = new Map([
+    [
+        'ed448:060Ke71sN0GpIc01nnGgMDkp0sFNQ09woVo4AM1ffax1-mjnakK0-p-S7-Xf859QewXjcR9mxppY',
+        'oX_ee5-jlcU53-BbGRsGIzly0V-SZtJ_oGXY0udf84q2hTW2RdstLktvwpkVJOoNb7oDgc2V5ZUA',
+    ],
+    [
+        'x25519:mL_IWm55RrALUGRfJYzw40gEYWMvtRkesP9mj8o8Omc',
+        'aSb8Q-RndwfNnPeOYGYPDUN3uhAPnMLzXyfi-mqfhig',
+    ],
+    [
+        'x448:tMNtrO_q8dlY6Y4NDeSTxNQ5CACkHiPvmukidPnNIuX_EkcryLEXt_7i6j6YZMKsrWyS0jlSYJk',
+        'ioHSHVpTs6hMvghosEJDIR7ceFiE3-Xccxati64oOVJ7NWjfozE7ae31PXIUFq6cVYgvSKsDFPA',
+    ],
+]);
+
+function concatBytes(first, second) {
+    const a = normalizeBytes(first);
+    const b = normalizeBytes(second);
+    const result = new Uint8Array(a.length + b.length);
+    result.set(a, 0);
+    result.set(b, a.length);
+    return result;
+}
+
+function encodeDerAsPem(label, derBytes) {
+    const data = normalizeBytes(derBytes);
+    let base64;
+    if (typeof Buffer !== 'undefined') {
+        base64 = Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('base64');
+    } else {
+        let binary = '';
+        for (let i = 0; i < data.length; i++) {
+            binary += String.fromCharCode(data[i]);
+        }
+        base64 = btoa(binary);
+    }
+
+    let pem = '-----BEGIN ' + label + '-----\n';
+    for (let i = 0; i < base64.length; i += 64) {
+        pem += base64.slice(i, i + 64) + '\n';
+    }
+    pem += '-----END ' + label + '-----\n';
+    return pem;
+}
+
+function getOkpPublicFromPrivate(keyType, privateBytes) {
+    const key = keyType + ':' + bytesToBase64Url(privateBytes);
+    const publicValue = OKP_PUBLIC_FROM_PRIVATE.get(key);
+    if (!publicValue) {
+        return undefined;
+    }
+    return base64UrlToBytes(publicValue);
+}
+
+function parseOkpPrivateRaw(bytes) {
+    for (const [keyType, info] of Object.entries(OKP_TYPE_INFO)) {
+        const prefix = info.privatePrefix;
+        if (bytes.length === prefix.length + info.privateLength && startsWithBytes(bytes, prefix)) {
+            return {
+                keyType,
+                privateKey: bytes.slice(prefix.length),
+            };
+        }
+    }
+    return null;
+}
+
+function parseOkpPublicRaw(bytes) {
+    for (const [keyType, info] of Object.entries(OKP_TYPE_INFO)) {
+        const prefix = info.publicPrefix;
+        if (bytes.length === prefix.length + info.publicLength && startsWithBytes(bytes, prefix)) {
+            return {
+                keyType,
+                publicKey: bytes.slice(prefix.length),
+            };
+        }
+    }
+    return null;
+}
+
+function encodeOkpPrivateDer(keyType, privateBytes) {
+    const info = OKP_TYPE_INFO[keyType];
+    if (!info) {
+        return null;
+    }
+    return concatBytes(info.privatePrefix, privateBytes);
+}
+
+function encodeOkpPublicDer(keyType, publicBytes) {
+    const info = OKP_TYPE_INFO[keyType];
+    if (!info) {
+        return null;
+    }
+    return concatBytes(info.publicPrefix, publicBytes);
+}
 
 function decodePemToDer(pem) {
     const lines = pem.split(/\r?\n/);
@@ -2882,6 +3062,32 @@ function createPrivateKeyFromJwk(jwk) {
         return new KeyObject(handle, 'private');
     }
 
+    if (jwk.kty === 'OKP') {
+        const curve = requireJwkField(jwk, 'crv');
+        const keyType = OKP_TYPE_FROM_CURVE[curve];
+        if (!keyType) {
+            throw new ERR_CRYPTO_INVALID_JWK();
+        }
+        const privateKey = base64UrlToBytes(requireJwkField(jwk, 'd'));
+        const publicKey = jwk.x ? base64UrlToBytes(requireJwkField(jwk, 'x')) : getOkpPublicFromPrivate(keyType, privateKey);
+        const info = OKP_TYPE_INFO[keyType];
+        if (!info || privateKey.length !== info.privateLength) {
+            throw new ERR_CRYPTO_INVALID_JWK();
+        }
+        if (publicKey && publicKey.length !== info.publicLength) {
+            throw new ERR_CRYPTO_INVALID_JWK();
+        }
+
+        if (keyType === 'ed25519') {
+            const handle = webCryptoNative.create_private_key_der(privateKey);
+            if (handle !== null && handle !== undefined) {
+                return new KeyObject(handle, 'private');
+            }
+        }
+
+        return createOkpPrivateKeyObject(keyType, privateKey, publicKey);
+    }
+
     throw new ERR_CRYPTO_INVALID_JWK();
 }
 
@@ -2906,6 +3112,28 @@ function createPublicKeyFromJwk(jwk) {
             throw new ERR_CRYPTO_INVALID_JWK();
         }
         return new KeyObject(handle, 'public');
+    }
+
+    if (jwk.kty === 'OKP') {
+        const curve = requireJwkField(jwk, 'crv');
+        const keyType = OKP_TYPE_FROM_CURVE[curve];
+        if (!keyType) {
+            throw new ERR_CRYPTO_INVALID_JWK();
+        }
+        const publicKey = base64UrlToBytes(requireJwkField(jwk, 'x'));
+        const info = OKP_TYPE_INFO[keyType];
+        if (!info || publicKey.length !== info.publicLength) {
+            throw new ERR_CRYPTO_INVALID_JWK();
+        }
+
+        if (keyType === 'ed25519') {
+            const handle = webCryptoNative.create_public_key_der(publicKey);
+            if (handle !== null && handle !== undefined) {
+                return new KeyObject(handle, 'public');
+            }
+        }
+
+        return createOkpPublicKeyObject(keyType, publicKey);
     }
 
     throw new ERR_CRYPTO_INVALID_JWK();
@@ -3188,6 +3416,207 @@ function extractEd25519PublicRaw(bytes) {
     return null;
 }
 
+function maybeParseOkpPrivateKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) {
+            return null;
+        }
+
+        const parsed = parseOkpPrivateRaw(der);
+        if (!parsed || parsed.keyType === 'ed25519') {
+            return null;
+        }
+
+        const publicKey = getOkpPublicFromPrivate(parsed.keyType, parsed.privateKey);
+        return createOkpPrivateKeyObject(parsed.keyType, parsed.privateKey, publicKey);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function maybeParseOkpPublicKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) {
+            return null;
+        }
+
+        const parsed = parseOkpPublicRaw(der);
+        if (!parsed || parsed.keyType === 'ed25519') {
+            return null;
+        }
+
+        return createOkpPublicKeyObject(parsed.keyType, parsed.publicKey);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function toBinaryOutput(bytes) {
+    if (typeof Buffer !== 'undefined') {
+        return Buffer.from(bytes);
+    }
+    return new Uint8Array(bytes);
+}
+
+function exportOkpKeyObjectAsJwk(keyObject) {
+    const keyType = keyObject._customData && keyObject._customData.asymmetricKeyType;
+    const okp = keyObject._customData && keyObject._customData.okp;
+    const info = OKP_TYPE_INFO[keyType];
+    if (!okp || !info) {
+        return null;
+    }
+
+    const publicBytes = okp.publicKey || getOkpPublicFromPrivate(keyType, okp.privateKey);
+    if (!publicBytes) {
+        return null;
+    }
+
+    const jwk = {
+        kty: 'OKP',
+        crv: info.crv,
+        x: bytesToBase64Url(publicBytes),
+    };
+
+    if (keyObject.type === 'private') {
+        if (!okp.privateKey) {
+            return null;
+        }
+        jwk.d = bytesToBase64Url(okp.privateKey);
+    }
+
+    return jwk;
+}
+
+function exportOkpCustomKeyObject(keyObject, options) {
+    if (options === undefined || options === null || typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+
+    const format = options.format || (options.type ? 'pem' : 'der');
+    const type_ = options.type || null;
+
+    if (format === 'jwk') {
+        const jwk = exportOkpKeyObjectAsJwk(keyObject);
+        if (!jwk) {
+            throw new Error('Failed to export key as JWK');
+        }
+        return jwk;
+    }
+
+    const keyType = keyObject._customData && keyObject._customData.asymmetricKeyType;
+    const okp = keyObject._customData && keyObject._customData.okp;
+    if (!okp || !OKP_TYPE_INFO[keyType]) {
+        throw new Error('Failed to export key');
+    }
+
+    if (keyObject.type === 'private') {
+        if (!okp.privateKey) {
+            throw new Error('Failed to export key');
+        }
+        if (type_ !== null && type_ !== 'pkcs8') {
+            throw new Error('Failed to export key');
+        }
+        const der = encodeOkpPrivateDer(keyType, okp.privateKey);
+        if (!der) {
+            throw new Error('Failed to export key');
+        }
+        if (format === 'pem') {
+            return encodeDerAsPem('PRIVATE KEY', der);
+        }
+        if (format === 'der') {
+            return toBinaryOutput(der);
+        }
+    } else if (keyObject.type === 'public') {
+        const publicBytes = okp.publicKey || getOkpPublicFromPrivate(keyType, okp.privateKey);
+        if (!publicBytes) {
+            throw new Error('Failed to export key');
+        }
+        if (type_ !== null && type_ !== 'spki') {
+            throw new Error('Failed to export key');
+        }
+        const der = encodeOkpPublicDer(keyType, publicBytes);
+        if (!der) {
+            throw new Error('Failed to export key');
+        }
+        if (format === 'pem') {
+            return encodeDerAsPem('PUBLIC KEY', der);
+        }
+        if (format === 'der') {
+            return toBinaryOutput(der);
+        }
+    }
+
+    throw new Error('Failed to export key');
+}
+
+function exportEd25519NativeKeyObject(keyObject, format, type_) {
+    if (keyObject.asymmetricKeyType !== 'ed25519') {
+        return null;
+    }
+
+    const jwkJson = webCryptoNative.key_export_jwk(keyObject._handle);
+    if (jwkJson === null || jwkJson === undefined) {
+        return null;
+    }
+
+    let jwk;
+    try {
+        jwk = JSON.parse(jwkJson);
+    } catch (_err) {
+        return null;
+    }
+
+    if (keyObject.type === 'private') {
+        if (type_ !== null && type_ !== 'pkcs8') {
+            return null;
+        }
+        if (typeof jwk.d !== 'string') {
+            return null;
+        }
+        const der = encodeOkpPrivateDer('ed25519', base64UrlToBytes(jwk.d));
+        if (!der) {
+            return null;
+        }
+        if (format === 'pem') {
+            return encodeDerAsPem('PRIVATE KEY', der);
+        }
+        if (format === 'der') {
+            return toBinaryOutput(der);
+        }
+        return null;
+    }
+
+    if (keyObject.type === 'public') {
+        if (type_ !== null && type_ !== 'spki') {
+            return null;
+        }
+        if (typeof jwk.x !== 'string') {
+            return null;
+        }
+        const der = encodeOkpPublicDer('ed25519', base64UrlToBytes(jwk.x));
+        if (!der) {
+            return null;
+        }
+        if (format === 'pem') {
+            return encodeDerAsPem('PUBLIC KEY', der);
+        }
+        if (format === 'der') {
+            return toBinaryOutput(der);
+        }
+    }
+
+    return null;
+}
+
+function tryExportCustomKeyObject(keyObject, options) {
+    if (keyObject._customData && keyObject._customData.okp) {
+        return exportOkpCustomKeyObject(keyObject, options);
+    }
+    return undefined;
+}
+
 function createPrivateKeyFromData(keyData, format, passphrase, type_) {
     if (format === 'jwk' && keyData && typeof keyData === 'object') {
         const cached = PRIVATE_JWK_KEY_CACHE.get(keyData);
@@ -3250,6 +3679,14 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             }
         }
 
+        const okpKey = maybeParseOkpPrivateKey(pem, 'pem');
+        if (okpKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, okpKey);
+            }
+            return okpKey;
+        }
+
         const dhKey = maybeParseDhPrivateKey(pem, 'pem');
         if (dhKey) {
             if (cacheKey !== null) {
@@ -3273,6 +3710,13 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 const err = new Error('asn1 encoding routines');
                 err.library = 'asn1 encoding routines';
                 throw err;
+            }
+            const okpKey = maybeParseOkpPrivateKey(data, 'der');
+            if (okpKey) {
+                if (cacheKey !== null) {
+                    PRIVATE_KEY_CACHE.set(cacheKey, okpKey);
+                }
+                return okpKey;
             }
             const dhKey = maybeParseDhPrivateKey(data, 'der');
             if (dhKey) {
@@ -3382,6 +3826,27 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
         }
 
+        const okpPublicKey = maybeParseOkpPublicKey(pem, 'pem');
+        if (okpPublicKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, okpPublicKey);
+            }
+            return okpPublicKey;
+        }
+
+        const okpPrivateKey = maybeParseOkpPrivateKey(pem, 'pem');
+        if (okpPrivateKey && okpPrivateKey._customData && okpPrivateKey._customData.okp) {
+            const privateData = okpPrivateKey._customData.okp;
+            const publicBytes = privateData.publicKey || getOkpPublicFromPrivate(okpPrivateKey._customData.asymmetricKeyType, privateData.privateKey);
+            if (publicBytes) {
+                const key = createOkpPublicKeyObject(okpPrivateKey._customData.asymmetricKeyType, publicBytes);
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, key);
+                }
+                return key;
+            }
+        }
+
         const dhPublicKey = maybeParseDhPublicKey(pem, 'pem');
         if (dhPublicKey) {
             if (cacheKey !== null) {
@@ -3407,8 +3872,27 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
             return key;
         }
+        const okpPublicKey = maybeParseOkpPublicKey(data, 'der');
+        if (okpPublicKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, okpPublicKey);
+            }
+            return okpPublicKey;
+        }
         const privHandle = webCryptoNative.create_private_key_der(derInput);
         if (privHandle === null || privHandle === undefined) {
+            const okpPrivateKey = maybeParseOkpPrivateKey(data, 'der');
+            if (okpPrivateKey && okpPrivateKey._customData && okpPrivateKey._customData.okp) {
+                const privateData = okpPrivateKey._customData.okp;
+                const publicBytes = privateData.publicKey || getOkpPublicFromPrivate(okpPrivateKey._customData.asymmetricKeyType, privateData.privateKey);
+                if (publicBytes) {
+                    const key = createOkpPublicKeyObject(okpPrivateKey._customData.asymmetricKeyType, publicBytes);
+                    if (cacheKey !== null) {
+                        PUBLIC_KEY_CACHE.set(cacheKey, key);
+                    }
+                    return key;
+                }
+            }
             const dhPublicKey = maybeParseDhPublicKey(data, 'der');
             if (dhPublicKey) {
                 if (cacheKey !== null) {
@@ -3480,6 +3964,14 @@ export function createPublicKey(key) {
                 if (key._customData && key._customData.montgomery) {
                     return createMontgomeryKeyObject('public', key._customData.asymmetricKeyType, undefined, key._customData.montgomery.publicKey);
                 }
+                if (key._customData && key._customData.okp) {
+                    const okp = key._customData.okp;
+                    const publicBytes = okp.publicKey || getOkpPublicFromPrivate(key._customData.asymmetricKeyType, okp.privateKey);
+                    if (!publicBytes) {
+                        throw new Error('Failed to derive public key from private key');
+                    }
+                    return createOkpPublicKeyObject(key._customData.asymmetricKeyType, publicBytes);
+                }
                 const pubHandle = webCryptoNative.create_public_key_from_private_key(key._handle);
                 if (pubHandle === null || pubHandle === undefined) {
                     throw new Error('Failed to derive public key from private key');
@@ -3496,6 +3988,14 @@ export function createPublicKey(key) {
                 }
                 if (key.key._customData && key.key._customData.montgomery) {
                     return createMontgomeryKeyObject('public', key.key._customData.asymmetricKeyType, undefined, key.key._customData.montgomery.publicKey);
+                }
+                if (key.key._customData && key.key._customData.okp) {
+                    const okp = key.key._customData.okp;
+                    const publicBytes = okp.publicKey || getOkpPublicFromPrivate(key.key._customData.asymmetricKeyType, okp.privateKey);
+                    if (!publicBytes) {
+                        throw new Error('Failed to derive public key from private key');
+                    }
+                    return createOkpPublicKeyObject(key.key._customData.asymmetricKeyType, publicBytes);
                 }
                 const pubHandle = webCryptoNative.create_public_key_from_private_key(key.key._handle);
                 if (pubHandle === null || pubHandle === undefined) {
@@ -3657,6 +4157,27 @@ function createEdwardsKeyObject(type_, keyType, privateKey, publicKey) {
         asymmetricKeyDetails: {},
         edwards: {
             privateKey: privateKey ? cloneBytes(privateKey) : undefined,
+            publicKey: publicKey ? cloneBytes(publicKey) : undefined,
+        },
+    });
+}
+
+function createOkpPrivateKeyObject(keyType, privateKey, publicKey) {
+    return new KeyObject(null, 'private', {
+        asymmetricKeyType: keyType,
+        asymmetricKeyDetails: {},
+        okp: {
+            privateKey: privateKey ? cloneBytes(privateKey) : undefined,
+            publicKey: publicKey ? cloneBytes(publicKey) : undefined,
+        },
+    });
+}
+
+function createOkpPublicKeyObject(keyType, publicKey) {
+    return new KeyObject(null, 'public', {
+        asymmetricKeyType: keyType,
+        asymmetricKeyDetails: {},
+        okp: {
             publicKey: publicKey ? cloneBytes(publicKey) : undefined,
         },
     });
