@@ -1280,15 +1280,184 @@ class KeyObject {
 
 export { KeyObject };
 
-export function createPrivateKey(key) {
-    if (typeof key === 'string') {
-        const handle = webCryptoNative.create_private_key_pem(key);
+function toPemString(keyData) {
+    if (typeof keyData === 'string') {
+        return keyData;
+    }
+    const bytes = toBytes(keyData);
+    const decoder = new TextDecoder();
+    return decoder.decode(bytes);
+}
+
+const ED25519_PKCS8_PREFIX = new Uint8Array([
+    0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+    0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+]);
+
+const ED25519_SPKI_PREFIX = new Uint8Array([
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
+    0x70, 0x03, 0x21, 0x00,
+]);
+
+function decodePemToDer(pem) {
+    const lines = pem.split(/\r?\n/);
+    let base64 = '';
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('-----') || trimmed.includes(':')) {
+            continue;
+        }
+        base64 += trimmed;
+    }
+    if (!base64) {
+        return null;
+    }
+    return toBytes(base64, 'base64');
+}
+
+function startsWithBytes(data, prefix) {
+    if (data.length < prefix.length) {
+        return false;
+    }
+    for (let i = 0; i < prefix.length; i++) {
+        if (data[i] !== prefix[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function extractEd25519PrivateRaw(bytes) {
+    if (bytes.length === ED25519_PKCS8_PREFIX.length + 32 && startsWithBytes(bytes, ED25519_PKCS8_PREFIX)) {
+        return bytes.slice(ED25519_PKCS8_PREFIX.length);
+    }
+    return null;
+}
+
+function extractEd25519PublicRaw(bytes) {
+    if (bytes.length === ED25519_SPKI_PREFIX.length + 32 && startsWithBytes(bytes, ED25519_SPKI_PREFIX)) {
+        return bytes.slice(ED25519_SPKI_PREFIX.length);
+    }
+    return null;
+}
+
+function createPrivateKeyFromData(keyData, format, passphrase) {
+    if (format === 'pem') {
+        const pem = toPemString(keyData);
+        const pemDer = decodePemToDer(pem);
+        const ed25519Raw = pemDer ? extractEd25519PrivateRaw(pemDer) : null;
+        if (ed25519Raw) {
+            const edHandle = webCryptoNative.create_private_key_der(ed25519Raw);
+            if (edHandle !== null && edHandle !== undefined) {
+                return new KeyObject(edHandle, 'private');
+            }
+        }
+        if (passphrase !== undefined) {
+            const passBytes = toBytes(passphrase);
+            const encryptedHandle = webCryptoNative.create_private_key_encrypted_pem(pem, passBytes);
+            if (encryptedHandle !== null && encryptedHandle !== undefined) {
+                return new KeyObject(encryptedHandle, 'private');
+            }
+        }
+        const handle = webCryptoNative.create_private_key_pem(pem);
         if (handle === null || handle === undefined) {
             const err = new Error('Failed to parse private key');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
         }
         return new KeyObject(handle, 'private');
+    }
+
+    if (format === 'der') {
+        const data = toBytes(keyData);
+        const ed25519Raw = extractEd25519PrivateRaw(data);
+        const derInput = ed25519Raw || data;
+        const handle = webCryptoNative.create_private_key_der(derInput);
+        if (handle === null || handle === undefined) {
+            const err = new Error('Failed to parse private key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        return new KeyObject(handle, 'private');
+    }
+
+    const err = new TypeError('Unsupported key format: ' + format);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+}
+
+function createPublicKeyFromData(keyData, format) {
+    if (format === 'pem') {
+        const pem = toPemString(keyData);
+        const pemDer = decodePemToDer(pem);
+        const ed25519Raw = pemDer ? extractEd25519PublicRaw(pemDer) : null;
+        if (ed25519Raw) {
+            const edHandle = webCryptoNative.create_public_key_der(ed25519Raw);
+            if (edHandle !== null && edHandle !== undefined) {
+                return new KeyObject(edHandle, 'public');
+            }
+        }
+        const ed25519PrivateRaw = pemDer ? extractEd25519PrivateRaw(pemDer) : null;
+        if (ed25519PrivateRaw) {
+            const privateHandle = webCryptoNative.create_private_key_der(ed25519PrivateRaw);
+            if (privateHandle !== null && privateHandle !== undefined) {
+                const derived = webCryptoNative.create_public_key_from_private_key(privateHandle);
+                if (derived !== null && derived !== undefined) {
+                    return new KeyObject(derived, 'public');
+                }
+            }
+        }
+        const pubHandle = webCryptoNative.create_public_key_pem(pem);
+        if (pubHandle !== null && pubHandle !== undefined) {
+            return new KeyObject(pubHandle, 'public');
+        }
+        // Node accepts private key inputs in createPublicKey() and derives a public key.
+        const privHandle = webCryptoNative.create_private_key_pem(pem);
+        if (privHandle === null || privHandle === undefined) {
+            const err = new Error('Failed to parse public key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        const derived = webCryptoNative.create_public_key_from_private_key(privHandle);
+        if (derived === null || derived === undefined) {
+            const err = new Error('Failed to parse public key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        return new KeyObject(derived, 'public');
+    }
+
+    if (format === 'der') {
+        const data = toBytes(keyData);
+        const ed25519Raw = extractEd25519PublicRaw(data);
+        const derInput = ed25519Raw || data;
+        const pubHandle = webCryptoNative.create_public_key_der(derInput);
+        if (pubHandle !== null && pubHandle !== undefined) {
+            return new KeyObject(pubHandle, 'public');
+        }
+        const privHandle = webCryptoNative.create_private_key_der(derInput);
+        if (privHandle === null || privHandle === undefined) {
+            const err = new Error('Failed to parse public key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        const derived = webCryptoNative.create_public_key_from_private_key(privHandle);
+        if (derived === null || derived === undefined) {
+            const err = new Error('Failed to parse public key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
+        return new KeyObject(derived, 'public');
+    }
+
+    const err = new TypeError('Unsupported key format: ' + format);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+}
+
+export function createPrivateKey(key) {
+    if (typeof key === 'string') {
+        return createPrivateKeyFromData(key, 'pem');
     }
     if (key && typeof key === 'object') {
         if (key instanceof KeyObject) {
@@ -1299,27 +1468,16 @@ export function createPrivateKey(key) {
         }
         if (key.key !== undefined) {
             const innerKey = key.key;
-            const passphrase = key.passphrase;
-            if (passphrase !== undefined && typeof innerKey === 'string') {
-                const passBytes = toBytes(passphrase);
-                const handle = webCryptoNative.create_private_key_encrypted_pem(innerKey, passBytes);
-                if (handle === null || handle === undefined) {
-                    const err = new Error('Failed to parse encrypted private key');
-                    err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-                    throw err;
+            if (innerKey instanceof KeyObject) {
+                if (innerKey.type !== 'private') {
+                    throw new Error('Cannot create private key from non-private KeyObject');
                 }
-                return new KeyObject(handle, 'private');
+                return innerKey;
             }
-            return createPrivateKey(innerKey);
+            const format = key.format || 'pem';
+            return createPrivateKeyFromData(innerKey, format, key.passphrase);
         }
-        const data = toBytes(key);
-        const handle = webCryptoNative.create_private_key_der(data);
-        if (handle === null || handle === undefined) {
-            const err = new Error('Failed to parse private key');
-            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-            throw err;
-        }
-        return new KeyObject(handle, 'private');
+        return createPrivateKeyFromData(key, 'pem');
     }
     const err = new TypeError('Invalid key argument');
     err.code = 'ERR_INVALID_ARG_TYPE';
@@ -1328,13 +1486,7 @@ export function createPrivateKey(key) {
 
 export function createPublicKey(key) {
     if (typeof key === 'string') {
-        const handle = webCryptoNative.create_public_key_pem(key);
-        if (handle === null || handle === undefined) {
-            const err = new Error('Failed to parse public key');
-            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-            throw err;
-        }
-        return new KeyObject(handle, 'public');
+        return createPublicKeyFromData(key, 'pem');
     }
     if (key && typeof key === 'object') {
         if (key instanceof KeyObject) {
@@ -1356,16 +1508,10 @@ export function createPublicKey(key) {
                 }
                 return new KeyObject(pubHandle, 'public');
             }
-            return createPublicKey(key.key);
+            const format = key.format || 'pem';
+            return createPublicKeyFromData(key.key, format);
         }
-        const data = toBytes(key);
-        const handle = webCryptoNative.create_public_key_der(data);
-        if (handle === null || handle === undefined) {
-            const err = new Error('Failed to parse public key');
-            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-            throw err;
-        }
-        return new KeyObject(handle, 'public');
+        return createPublicKeyFromData(key, 'pem');
     }
     const err = new TypeError('Invalid key argument');
     err.code = 'ERR_INVALID_ARG_TYPE';
@@ -1574,7 +1720,7 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
             const privKey = createPrivateKey(publicKey);
             keyObj = createPublicKey(privKey);
         } else {
-            keyObj = createPublicKey(publicKey.key);
+            keyObj = createPublicKey(publicKey);
         }
     } else {
         keyObj = createPublicKey(publicKey);
