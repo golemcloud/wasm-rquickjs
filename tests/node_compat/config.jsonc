@@ -185,10 +185,7 @@
     "parallel/test-fs-constants.js": {},
     "parallel/test-fs-copyfile.js": {},
     "parallel/test-fs-copyfile-respect-permissions.js": {},
-    "parallel/test-fs-empty-readStream.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-empty-readStream.js": {},
     "parallel/test-fs-error-messages.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
