@@ -177,10 +177,7 @@
     "parallel/test-fs-assert-encoding-error.js": {},
     "parallel/test-fs-buffer.js": {},
     "parallel/test-fs-buffertype-writesync.js": {},
-    "parallel/test-fs-chmod.js": {
-      "skip": true,
-      "reason": "symlink returns EIO in WASI filesystem"
-    },
+    "parallel/test-fs-chmod.js": {},
     "parallel/test-fs-chmod-mask.js": {},
     "parallel/test-fs-chown-type-check.js": {
       "skip": true,
