@@ -187,10 +187,7 @@
     "parallel/test-fs-copyfile-respect-permissions.js": {},
     "parallel/test-fs-empty-readStream.js": {},
     "parallel/test-fs-error-messages.js": {},
-    "parallel/test-fs-exists.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-exists.js": {},
     "parallel/test-fs-existssync-false.js": {
       "skip": true,
       "reason": "path length exceeds WASI limits"
