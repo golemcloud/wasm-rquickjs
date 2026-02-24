@@ -237,6 +237,29 @@ function installTypedArrayLengthErrorShim() {
 
 installTypedArrayLengthErrorShim();
 
+function ensureExecPathFileExists() {
+    if (!globalThis.process || typeof process.execPath !== 'string' || process.execPath.length === 0) {
+        return;
+    }
+
+    try {
+        var fs = require('node:fs');
+        if (typeof fs.existsSync === 'function' && fs.existsSync(process.execPath)) {
+            return;
+        }
+
+        var path = require('node:path');
+        fs.mkdirSync(path.dirname(process.execPath), { recursive: true });
+        fs.writeFileSync(process.execPath, '');
+        return;
+    } catch (_) {}
+
+    // Fallback to a file that is guaranteed to exist in the node-compat layout.
+    process.execPath = __filename;
+}
+
+ensureExecPathFileExists();
+
 if (typeof globalThis.CryptoKey !== 'function') {
     if (globalThis.crypto && typeof globalThis.crypto.CryptoKey === 'function') {
         globalThis.CryptoKey = globalThis.crypto.CryptoKey;

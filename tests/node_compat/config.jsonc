@@ -195,7 +195,7 @@
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
     },
-    "parallel/test-fs-filehandle-use-after-close.js": { "skip": true, "reason": "requires process.execPath to point to a valid file" },
+    "parallel/test-fs-filehandle-use-after-close.js": {},
     "parallel/test-fs-fmap.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
