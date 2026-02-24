@@ -699,10 +699,7 @@
     "parallel/test-fs-open-flags.js": {},
     "parallel/test-fs-open-mode-mask.js": {},
     "parallel/test-fs-open-no-close.js": {},
-    "parallel/test-fs-open-numeric-flags.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-open-numeric-flags.js": {},
     "parallel/test-fs-opendir.js": {
       "skip": true,
       "reason": "requires ERR_DIR_CLOSED, ERR_DIR_CONCURRENT_OPERATION, ERR_INVALID_ARG_TYPE error codes",
