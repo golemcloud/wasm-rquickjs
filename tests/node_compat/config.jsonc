@@ -874,10 +874,7 @@
     "parallel/test-crypto-dh-odd-key.js": {},
     "parallel/test-crypto-dh-padding.js": {},
     "parallel/test-crypto-dh-shared.js": {},
-    "parallel/test-crypto-dh-stateless.js": {
-       "skip": true,
-       "reason": "requires crypto.diffieHellman() stateless API and DH key pair generation"
-     },
+    "parallel/test-crypto-dh-stateless.js": {},
     "parallel/test-crypto-dh.js": {
        "skip": true,
        "reason": "requires aes-128-ecb cipher which is not implemented"

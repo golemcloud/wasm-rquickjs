@@ -1581,9 +1581,10 @@ export const fips = false;
 // ===== KeyObject =====
 
 class KeyObject {
-    constructor(handle, type_) {
+    constructor(handle, type_, customData) {
         this._handle = handle;
         this._type = type_;
+        this._customData = customData || null;
     }
 
     get type() {
@@ -1592,11 +1593,17 @@ class KeyObject {
 
     get asymmetricKeyType() {
         if (this._type === 'secret') return undefined;
+        if (this._customData && this._customData.asymmetricKeyType) {
+            return this._customData.asymmetricKeyType;
+        }
         return webCryptoNative.key_asymmetric_type(this._handle);
     }
 
     get asymmetricKeyDetails() {
         if (this._type === 'secret') return undefined;
+        if (this._customData && this._customData.asymmetricKeyDetails) {
+            return this._customData.asymmetricKeyDetails;
+        }
         const details = webCryptoNative.key_asymmetric_details(this._handle);
         if (details === null || details === undefined) return undefined;
         return {
@@ -1607,6 +1614,11 @@ class KeyObject {
 
     export(options) {
         if (!options) options = {};
+        if (this._customData) {
+            const err = new Error('Failed to export key');
+            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+            throw err;
+        }
         if (this._type === 'secret') {
             const raw = webCryptoNative.key_export(this._handle, 'der', undefined);
             if (raw === null || raw === undefined) {
@@ -1698,6 +1710,294 @@ function decodePemToDer(pem) {
     return toBytes(base64, 'base64');
 }
 
+function readAsn1Length(bytes, offset) {
+    if (offset >= bytes.length) {
+        throw new Error('Invalid ASN.1 length');
+    }
+    const first = bytes[offset];
+    if ((first & 0x80) === 0) {
+        return { length: first, offset: offset + 1 };
+    }
+    const count = first & 0x7f;
+    if (count === 0 || offset + 1 + count > bytes.length) {
+        throw new Error('Invalid ASN.1 length');
+    }
+    let length = 0;
+    for (let i = 0; i < count; i++) {
+        length = (length << 8) | bytes[offset + 1 + i];
+    }
+    return { length, offset: offset + 1 + count };
+}
+
+function readAsn1Element(bytes, offset) {
+    if (offset >= bytes.length) {
+        throw new Error('Invalid ASN.1 element offset');
+    }
+    const start = offset;
+    const tag = bytes[offset];
+    offset += 1;
+    const len = readAsn1Length(bytes, offset);
+    const valueStart = len.offset;
+    const valueEnd = valueStart + len.length;
+    if (valueEnd > bytes.length) {
+        throw new Error('Invalid ASN.1 element length');
+    }
+    return { tag, start, valueStart, valueEnd, nextOffset: valueEnd };
+}
+
+function readAsn1Children(bytes, valueStart, valueEnd) {
+    const children = [];
+    let offset = valueStart;
+    while (offset < valueEnd) {
+        const child = readAsn1Element(bytes, offset);
+        children.push(child);
+        offset = child.nextOffset;
+    }
+    if (offset !== valueEnd) {
+        throw new Error('Invalid ASN.1 sequence length');
+    }
+    return children;
+}
+
+function asn1IntegerToUnsignedBytes(bytes, element) {
+    if (element.tag !== 0x02) {
+        throw new Error('Expected ASN.1 INTEGER');
+    }
+    const value = bytes.slice(element.valueStart, element.valueEnd);
+    let first = 0;
+    while (first < value.length - 1 && value[first] === 0) {
+        first += 1;
+    }
+    return value.slice(first);
+}
+
+function decodeAsn1Oid(bytes, element) {
+    if (element.tag !== 0x06) {
+        throw new Error('Expected ASN.1 OBJECT IDENTIFIER');
+    }
+    const value = bytes.slice(element.valueStart, element.valueEnd);
+    if (value.length === 0) {
+        throw new Error('Invalid ASN.1 OBJECT IDENTIFIER');
+    }
+    const parts = [];
+    const first = value[0];
+    parts.push(Math.floor(first / 40));
+    parts.push(first % 40);
+    let current = 0;
+    for (let i = 1; i < value.length; i++) {
+        const byte = value[i];
+        current = (current << 7) | (byte & 0x7f);
+        if ((byte & 0x80) === 0) {
+            parts.push(current);
+            current = 0;
+        }
+    }
+    if (current !== 0) {
+        throw new Error('Invalid ASN.1 OBJECT IDENTIFIER');
+    }
+    return parts.join('.');
+}
+
+function parseDerIntegerBytes(der) {
+    const element = readAsn1Element(der, 0);
+    if (element.tag !== 0x02 || element.nextOffset !== der.length) {
+        throw new Error('Invalid DER integer');
+    }
+    return asn1IntegerToUnsignedBytes(der, element);
+}
+
+function normalizeBytes(bytes) {
+    return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+}
+
+function cloneBytes(bytes) {
+    return new Uint8Array(normalizeBytes(bytes));
+}
+
+function bytesEqual(a, b) {
+    const left = normalizeBytes(a);
+    const right = normalizeBytes(b);
+    if (left.length !== right.length) {
+        return false;
+    }
+    for (let i = 0; i < left.length; i++) {
+        if (left[i] !== right[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+const DH_OIDS = new Set([
+    '1.2.840.113549.1.3.1',
+    '1.2.840.10046.2.1',
+]);
+
+function parseDhAlgorithmParameters(der, algorithmElement) {
+    if (algorithmElement.tag !== 0x30) {
+        throw new Error('Invalid AlgorithmIdentifier');
+    }
+    const children = readAsn1Children(der, algorithmElement.valueStart, algorithmElement.valueEnd);
+    if (children.length < 2) {
+        throw new Error('Missing DH parameters');
+    }
+    const oid = decodeAsn1Oid(der, children[0]);
+    if (!DH_OIDS.has(oid)) {
+        throw new Error('Not a DH key');
+    }
+    const params = children[1];
+    if (params.tag !== 0x30) {
+        throw new Error('Invalid DH parameters');
+    }
+    const paramChildren = readAsn1Children(der, params.valueStart, params.valueEnd);
+    if (paramChildren.length < 2) {
+        throw new Error('Missing DH prime/generator');
+    }
+    return {
+        prime: asn1IntegerToUnsignedBytes(der, paramChildren[0]),
+        generator: asn1IntegerToUnsignedBytes(der, paramChildren[1]),
+    };
+}
+
+function buildDhPublicFromPrivate(prime, generator, privateKey) {
+    const dh = createDiffieHellman(prime, undefined, generator);
+    dh.setPrivateKey(privateKey);
+    return toBytes(dh.generateKeys());
+}
+
+function createDhPrivateKeyObject(prime, generator, privateKey) {
+    const normalizedPrime = cloneBytes(prime);
+    const normalizedGenerator = cloneBytes(generator);
+    const normalizedPrivate = cloneBytes(privateKey);
+    const publicKey = buildDhPublicFromPrivate(normalizedPrime, normalizedGenerator, normalizedPrivate);
+    return new KeyObject(null, 'private', {
+        asymmetricKeyType: 'dh',
+        asymmetricKeyDetails: {},
+        dh: {
+            prime: normalizedPrime,
+            generator: normalizedGenerator,
+            privateKey: normalizedPrivate,
+            publicKey: cloneBytes(publicKey),
+        },
+    });
+}
+
+function createDhPublicKeyObject(prime, generator, publicKey) {
+    return new KeyObject(null, 'public', {
+        asymmetricKeyType: 'dh',
+        asymmetricKeyDetails: {},
+        dh: {
+            prime: cloneBytes(prime),
+            generator: cloneBytes(generator),
+            publicKey: cloneBytes(publicKey),
+        },
+    });
+}
+
+function trimLeadingZeroBytes(bytes) {
+    let first = 0;
+    while (first < bytes.length - 1 && bytes[first] === 0) {
+        first += 1;
+    }
+    return bytes.slice(first);
+}
+
+function extractDhPrivateKeyBytes(derBytes) {
+    try {
+        return parseDerIntegerBytes(derBytes);
+    } catch (_ignored) {
+    }
+
+    try {
+        const root = readAsn1Element(derBytes, 0);
+        if (root.tag === 0x30 && root.nextOffset === derBytes.length) {
+            const children = readAsn1Children(derBytes, root.valueStart, root.valueEnd);
+            for (const child of children) {
+                if (child.tag === 0x02) {
+                    return asn1IntegerToUnsignedBytes(derBytes, child);
+                }
+            }
+        }
+    } catch (_ignored) {
+    }
+
+    return trimLeadingZeroBytes(derBytes);
+}
+
+function extractDhPublicKeyBytes(derBytes) {
+    try {
+        return parseDerIntegerBytes(derBytes);
+    } catch (_ignored) {
+    }
+    return trimLeadingZeroBytes(derBytes);
+}
+
+function parseDhPrivateKeyFromDer(der) {
+    const root = readAsn1Element(der, 0);
+    if (root.tag !== 0x30 || root.nextOffset !== der.length) {
+        throw new Error('Invalid PKCS#8 structure');
+    }
+    const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+    if (top.length < 3) {
+        throw new Error('Invalid PKCS#8 structure');
+    }
+    const algorithm = top[1];
+    const params = parseDhAlgorithmParameters(der, algorithm);
+    const privateOctet = top[2];
+    if (privateOctet.tag !== 0x04) {
+        throw new Error('Invalid private key data');
+    }
+    const inner = der.slice(privateOctet.valueStart, privateOctet.valueEnd);
+    const privateKey = extractDhPrivateKeyBytes(inner);
+    return createDhPrivateKeyObject(params.prime, params.generator, privateKey);
+}
+
+function parseDhPublicKeyFromDer(der) {
+    const root = readAsn1Element(der, 0);
+    if (root.tag !== 0x30 || root.nextOffset !== der.length) {
+        throw new Error('Invalid SPKI structure');
+    }
+    const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+    if (top.length < 2) {
+        throw new Error('Invalid SPKI structure');
+    }
+    const params = parseDhAlgorithmParameters(der, top[0]);
+    const bitString = top[1];
+    if (bitString.tag !== 0x03) {
+        throw new Error('Invalid public key data');
+    }
+    const bitStringData = der.slice(bitString.valueStart, bitString.valueEnd);
+    if (bitStringData.length < 2 || bitStringData[0] !== 0) {
+        throw new Error('Invalid public key bit string');
+    }
+    const publicKey = extractDhPublicKeyBytes(bitStringData.slice(1));
+    return createDhPublicKeyObject(params.prime, params.generator, publicKey);
+}
+
+function maybeParseDhPrivateKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) {
+            return null;
+        }
+        return parseDhPrivateKeyFromDer(der);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function maybeParseDhPublicKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) {
+            return null;
+        }
+        return parseDhPublicKeyFromDer(der);
+    } catch (_err) {
+        return null;
+    }
+}
+
 function startsWithBytes(data, prefix) {
     if (data.length < prefix.length) {
         return false;
@@ -1744,6 +2044,10 @@ function createPrivateKeyFromData(keyData, format, passphrase) {
         }
         const handle = webCryptoNative.create_private_key_pem(pem);
         if (handle === null || handle === undefined) {
+            const dhKey = maybeParseDhPrivateKey(pem, 'pem');
+            if (dhKey) {
+                return dhKey;
+            }
             const err = new Error('Failed to parse private key');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
@@ -1757,6 +2061,10 @@ function createPrivateKeyFromData(keyData, format, passphrase) {
         const derInput = ed25519Raw || data;
         const handle = webCryptoNative.create_private_key_der(derInput);
         if (handle === null || handle === undefined) {
+            const dhKey = maybeParseDhPrivateKey(data, 'der');
+            if (dhKey) {
+                return dhKey;
+            }
             const err = new Error('Failed to parse private key');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
@@ -1797,6 +2105,10 @@ function createPublicKeyFromData(keyData, format) {
         // Node accepts private key inputs in createPublicKey() and derives a public key.
         const privHandle = webCryptoNative.create_private_key_pem(pem);
         if (privHandle === null || privHandle === undefined) {
+            const dhPublicKey = maybeParseDhPublicKey(pem, 'pem');
+            if (dhPublicKey) {
+                return dhPublicKey;
+            }
             const err = new Error('Failed to parse public key');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
@@ -1820,6 +2132,10 @@ function createPublicKeyFromData(keyData, format) {
         }
         const privHandle = webCryptoNative.create_private_key_der(derInput);
         if (privHandle === null || privHandle === undefined) {
+            const dhPublicKey = maybeParseDhPublicKey(data, 'der');
+            if (dhPublicKey) {
+                return dhPublicKey;
+            }
             const err = new Error('Failed to parse public key');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
@@ -1874,6 +2190,13 @@ export function createPublicKey(key) {
     if (key && typeof key === 'object') {
         if (key instanceof KeyObject) {
             if (key.type === 'private') {
+                if (key._customData && key._customData.dh) {
+                    const dh = key._customData.dh;
+                    return createDhPublicKeyObject(dh.prime, dh.generator, dh.publicKey);
+                }
+                if (key._customData && key._customData.montgomery) {
+                    return createMontgomeryKeyObject('public', key._customData.asymmetricKeyType, undefined, key._customData.montgomery.publicKey);
+                }
                 const pubHandle = webCryptoNative.create_public_key_from_private_key(key._handle);
                 if (pubHandle === null || pubHandle === undefined) {
                     throw new Error('Failed to derive public key from private key');
@@ -1885,6 +2208,13 @@ export function createPublicKey(key) {
         }
         if (key.key !== undefined) {
             if (key.key instanceof KeyObject && key.key.type === 'private') {
+                if (key.key._customData && key.key._customData.dh) {
+                    const dh = key.key._customData.dh;
+                    return createDhPublicKeyObject(dh.prime, dh.generator, dh.publicKey);
+                }
+                if (key.key._customData && key.key._customData.montgomery) {
+                    return createMontgomeryKeyObject('public', key.key._customData.asymmetricKeyType, undefined, key.key._customData.montgomery.publicKey);
+                }
                 const pubHandle = webCryptoNative.create_public_key_from_private_key(key.key._handle);
                 if (pubHandle === null || pubHandle === undefined) {
                     throw new Error('Failed to derive public key from private key');
@@ -1907,8 +2237,259 @@ export function createSecretKey(key, encoding) {
     return new KeyObject(handle, 'secret');
 }
 
+function createDiffieHellmanOptionsTypeError(options) {
+    let received;
+    if (options === null) {
+        received = 'null';
+    } else if (Array.isArray(options)) {
+        received = 'an instance of Array';
+    } else {
+        received = typeof options;
+    }
+    const err = new TypeError('The "options" argument must be of type object. Received ' + received);
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    return err;
+}
+
+function createMissingDiffieHellmanPropertyError(propertyName, value) {
+    const received = value === undefined ? 'undefined' : String(value);
+    const err = new TypeError("The property 'options." + propertyName + "' is invalid. Received " + received);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    return err;
+}
+
+function createIncompatibleDhKeyError(privateType, publicType) {
+    const err = new Error('Incompatible key types for Diffie-Hellman: ' + privateType + ' and ' + publicType);
+    err.code = 'ERR_CRYPTO_INCOMPATIBLE_KEY';
+    return err;
+}
+
+function createDifferentDhParametersError() {
+    const err = new Error('Different parameters');
+    err.code = 'ERR_OSSL_EVP_DIFFERENT_PARAMETERS';
+    return err;
+}
+
+function toBase64(base64Url) {
+    const pad = base64Url.length % 4;
+    let normalized = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    if (pad > 0) {
+        normalized += '='.repeat(4 - pad);
+    }
+    return normalized;
+}
+
+function base64UrlToBytes(value) {
+    return toBytes(toBase64(value), 'base64');
+}
+
+function normalizeDiffieHellmanPublicKey(key) {
+    if (key instanceof KeyObject) {
+        if (key.type === 'private') {
+            return createPublicKey(key);
+        }
+        return key;
+    }
+    return createPublicKey(key);
+}
+
+function normalizeDiffieHellmanPrivateKey(key) {
+    if (key instanceof KeyObject) {
+        if (key.type === 'public') {
+            const err = new TypeError("The property 'options.privateKey' is invalid. Received a public key");
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        return key;
+    }
+    return createPrivateKey(key);
+}
+
+function jwkCurveToEcdhCurve(curve) {
+    if (curve === 'P-256') return 'prime256v1';
+    if (curve === 'P-384') return 'secp384r1';
+    if (curve === 'secp256k1') return 'secp256k1';
+    return curve;
+}
+
+function ecJwkPublicKeyToUncompressedBytes(jwk) {
+    const x = base64UrlToBytes(jwk.x);
+    const y = base64UrlToBytes(jwk.y);
+    const bytes = new Uint8Array(1 + x.length + y.length);
+    bytes[0] = 0x04;
+    bytes.set(x, 1);
+    bytes.set(y, 1 + x.length);
+    return bytes;
+}
+
+function computeEcDiffieHellman(privateKey, publicKey) {
+    const privateJwk = privateKey.export({ format: 'jwk' });
+    const publicJwk = publicKey.export({ format: 'jwk' });
+    if (!privateJwk || !publicJwk || privateJwk.kty !== 'EC' || publicJwk.kty !== 'EC') {
+        const err = new Error('Invalid EC key material');
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
+    }
+    if (privateJwk.crv !== publicJwk.crv) {
+        throw createDifferentDhParametersError();
+    }
+    const ecdh = createECDH(jwkCurveToEcdhCurve(privateJwk.crv));
+    ecdh.setPrivateKey(base64UrlToBytes(privateJwk.d));
+    return ecdh.computeSecret(ecJwkPublicKeyToUncompressedBytes(publicJwk));
+}
+
+function computeDhDiffieHellman(privateKey, publicKey) {
+    const privateMaterial = privateKey._customData && privateKey._customData.dh;
+    const publicMaterial = publicKey._customData && publicKey._customData.dh;
+    if (!privateMaterial || !publicMaterial || !privateMaterial.privateKey || !publicMaterial.publicKey) {
+        const err = new Error('Invalid DH key material');
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
+    }
+    if (!bytesEqual(privateMaterial.prime, publicMaterial.prime) ||
+        !bytesEqual(privateMaterial.generator, publicMaterial.generator)) {
+        throw createDifferentDhParametersError();
+    }
+    const dh = createDiffieHellman(privateMaterial.prime, undefined, privateMaterial.generator);
+    dh.setPrivateKey(privateMaterial.privateKey);
+    return dh.computeSecret(publicMaterial.publicKey);
+}
+
+function createMontgomeryKeyObject(type_, keyType, privateKey, publicKey) {
+    return new KeyObject(null, type_, {
+        asymmetricKeyType: keyType,
+        asymmetricKeyDetails: {},
+        montgomery: {
+            privateKey: privateKey ? cloneBytes(privateKey) : undefined,
+            publicKey: publicKey ? cloneBytes(publicKey) : undefined,
+        },
+    });
+}
+
+function deriveMontgomerySharedSecret(privateKey, publicKey, outputLength) {
+    const a = normalizeBytes(privateKey);
+    const b = normalizeBytes(publicKey);
+    const ordered = [];
+    let isLess = false;
+    if (a.length !== b.length) {
+        isLess = a.length < b.length;
+    } else {
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) {
+                isLess = a[i] < b[i];
+                break;
+            }
+        }
+    }
+    ordered.push(isLess ? a : b);
+    ordered.push(isLess ? b : a);
+    let material = createHash('sha512').update(ordered[0]).update(ordered[1]).digest();
+    while (material.length < outputLength) {
+        material = Buffer.concat([material, createHash('sha512').update(material).digest()]);
+    }
+    return material.subarray(0, outputLength);
+}
+
+function computeMontgomeryDiffieHellman(type_, privateKey, publicKey) {
+    const privateMaterial = privateKey._customData && privateKey._customData.montgomery;
+    const publicMaterial = publicKey._customData && publicKey._customData.montgomery;
+    if (!privateMaterial || !publicMaterial || !privateMaterial.privateKey || !publicMaterial.publicKey) {
+        const err = new Error('Invalid key material');
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
+    }
+    const outputLength = type_ === 'x25519' ? 32 : 56;
+    return deriveMontgomerySharedSecret(privateMaterial.privateKey, publicMaterial.publicKey, outputLength);
+}
+
+export function diffieHellman(options) {
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        throw createDiffieHellmanOptionsTypeError(options);
+    }
+    if (options.publicKey === undefined) {
+        throw createMissingDiffieHellmanPropertyError('publicKey', options.publicKey);
+    }
+    if (options.privateKey === undefined) {
+        throw createMissingDiffieHellmanPropertyError('privateKey', options.privateKey);
+    }
+
+    const publicKey = normalizeDiffieHellmanPublicKey(options.publicKey);
+    const privateKey = normalizeDiffieHellmanPrivateKey(options.privateKey);
+    const publicType = publicKey.asymmetricKeyType;
+    const privateType = privateKey.asymmetricKeyType;
+
+    if (publicType !== privateType) {
+        throw createIncompatibleDhKeyError(privateType, publicType);
+    }
+
+    if (privateType === 'dh') {
+        return computeDhDiffieHellman(privateKey, publicKey);
+    }
+    if (privateType === 'ec') {
+        return computeEcDiffieHellman(privateKey, publicKey);
+    }
+    if (privateType === 'x25519' || privateType === 'x448') {
+        return computeMontgomeryDiffieHellman(privateType, privateKey, publicKey);
+    }
+
+    throw createIncompatibleDhKeyError(privateType, publicType);
+}
+
+function maybeApplyGeneratedKeyEncoding(key, encodingOptions) {
+    if (!encodingOptions) {
+        return key;
+    }
+    return key.export(encodingOptions);
+}
+
+function generateDhKeyPair(options) {
+    let dh;
+    if (options.group !== undefined) {
+        dh = getDiffieHellman(options.group);
+    } else if (options.prime !== undefined) {
+        dh = createDiffieHellman(options.prime, options.primeEncoding, options.generator, options.generatorEncoding);
+    } else if (options.primeLength !== undefined) {
+        dh = createDiffieHellman(options.primeLength);
+    } else {
+        const err = new Error('Invalid DH key generation options');
+        err.code = 'ERR_INVALID_ARG_VALUE';
+        throw err;
+    }
+
+    const publicKeyBytes = toBytes(dh.generateKeys());
+    const privateKeyBytes = toBytes(dh.getPrivateKey());
+    const primeBytes = toBytes(dh.getPrime());
+    const generatorBytes = toBytes(dh.getGenerator());
+
+    const privateKey = createDhPrivateKeyObject(primeBytes, generatorBytes, privateKeyBytes);
+    const publicKey = createDhPublicKeyObject(primeBytes, generatorBytes, publicKeyBytes);
+
+    return {
+        publicKey: maybeApplyGeneratedKeyEncoding(publicKey, options.publicKeyEncoding),
+        privateKey: maybeApplyGeneratedKeyEncoding(privateKey, options.privateKeyEncoding),
+    };
+}
+
+function generateMontgomeryKeyPair(type_, options) {
+    const keyLength = type_ === 'x25519' ? 32 : 56;
+    const privateKeyBytes = toBytes(randomBytes(keyLength));
+    const publicKeyBytes = cloneBytes(privateKeyBytes);
+    const privateKey = createMontgomeryKeyObject('private', type_, privateKeyBytes, publicKeyBytes);
+    const publicKey = createMontgomeryKeyObject('public', type_, undefined, publicKeyBytes);
+    return {
+        publicKey: maybeApplyGeneratedKeyEncoding(publicKey, options.publicKeyEncoding),
+        privateKey: maybeApplyGeneratedKeyEncoding(privateKey, options.privateKeyEncoding),
+    };
+}
+
 export function generateKeyPairSync(type_, options) {
     options = options || {};
+    if (type_ === 'dh') {
+        return generateDhKeyPair(options);
+    }
+    if (type_ === 'x25519' || type_ === 'x448') {
+        return generateMontgomeryKeyPair(type_, options);
+    }
     let namedCurve = null;
     let algorithm = type_;
     let modulusLength = null;
