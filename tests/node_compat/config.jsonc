@@ -1904,10 +1904,7 @@
     "parallel/test-crypto-keygen-non-standard-public-exponent.js": {
       "skip": false
     },
-    "parallel/test-crypto-keygen-promisify.js": {
-      "skip": true,
-      "reason": "requires RSA key generation and util.promisify"
-    },
+    "parallel/test-crypto-keygen-promisify.js": {},
     "parallel/test-crypto-keygen-rfc8017-9-1.js": {},
     "parallel/test-crypto-keygen-rfc8017-a-2-3.js": {},
     "parallel/test-crypto-keygen-rsa-pss.js": {},

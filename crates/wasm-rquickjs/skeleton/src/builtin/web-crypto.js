@@ -5038,6 +5038,14 @@ export function generateKeyPair(type_, options, callback) {
     }
 }
 
+const kCustomPromisifyArgsSymbol = Symbol.for('nodejs.util.promisify.customArgs');
+Object.defineProperty(generateKeyPair, kCustomPromisifyArgsSymbol, {
+    value: ['publicKey', 'privateKey'],
+    enumerable: false,
+    writable: false,
+    configurable: true,
+});
+
 export function generateKeySync(type_, options) {
     if (type_ === 'hmac') {
         const length = (options && options.length) || 256;
