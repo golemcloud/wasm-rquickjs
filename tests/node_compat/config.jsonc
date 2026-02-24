@@ -190,10 +190,7 @@
     "parallel/test-fs-exists.js": {},
     "parallel/test-fs-existssync-false.js": {},
     "parallel/test-fs-fchmod.js": {},
-    "parallel/test-fs-fchown.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-fchown.js": {},
     "parallel/test-fs-filehandle.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
