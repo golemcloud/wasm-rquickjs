@@ -184,10 +184,7 @@
       "skip": true,
       "reason": "regression: was enabled but started failing"
     },
-    "parallel/test-fs-close-errors.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-close-errors.js": {},
     "parallel/test-fs-constants.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
