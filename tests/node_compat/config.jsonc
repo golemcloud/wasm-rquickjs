@@ -712,7 +712,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "skip": true, "reason": "inherited: realpath returns EIO on WASI-mounted paths" },
+        "block_01_block_01": {},
         "block_02_block_02": { "skip": true, "reason": "inherited: realpath returns EIO on WASI-mounted paths" },
         "block_03_block_03": { "skip": true, "reason": "inherited: realpath returns EIO on WASI-mounted paths" },
         "block_04_block_04": { "skip": true, "reason": "inherited: realpath returns EIO on WASI-mounted paths" },
