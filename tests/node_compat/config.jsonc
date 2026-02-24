@@ -195,10 +195,7 @@
     "parallel/test-fs-filehandle-use-after-close.js": {},
     "parallel/test-fs-fmap.js": {},
     "parallel/test-fs-fsync.js": {},
-    "parallel/test-fs-lchmod.js": {
-      "skip": true,
-      "reason": "platform-specific lchmod behavior"
-    },
+    "parallel/test-fs-lchmod.js": {},
     "parallel/test-fs-lchown.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
