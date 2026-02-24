@@ -861,10 +861,7 @@
     "parallel/test-crypto-authenticated.js": {},
     "parallel/test-crypto-certificate.js": {},
     "parallel/test-crypto-cipheriv-decipheriv.js": {},
-    "parallel/test-crypto-classes.js": {
-      "skip": true,
-      "reason": "requires des-ede3-cbc cipher, DiffieHellman, DiffieHellmanGroup, and ECDH classes"
-    },
+    "parallel/test-crypto-classes.js": {},
     "parallel/test-crypto-des3-wrap.js": {
       "skip": true,
       "reason": "requires des3/des-ede3-cbc cipher which is not implemented"
