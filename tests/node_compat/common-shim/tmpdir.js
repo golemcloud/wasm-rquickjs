@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 
 // Keep this path intentionally short because some WASI runtimes hit much
 // lower effective path-length limits than native Node.js environments.
@@ -116,6 +117,10 @@ const tmpdir = {
     },
     resolve: function(...paths) {
         return path.resolve(tmpPath, ...paths);
+    },
+    fileURL: function(...paths) {
+        const fullPath = path.resolve(tmpPath + path.sep, ...paths);
+        return pathToFileURL(fullPath);
     },
     hasEnoughSpace: function() {
         return true;

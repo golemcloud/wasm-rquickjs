@@ -417,12 +417,40 @@ function validatePath(path, propName) {
     throw err;
 }
 
+function validateMkdtempPrefix(prefix) {
+    if (prefix instanceof Uint8Array) {
+        if (prefix.includes(0)) {
+            const err = new TypeError(`The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received ${describeType(prefix)}`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        return;
+    }
+    validatePath(prefix, 'prefix');
+}
+
 function pathToString(path) {
     if (typeof path === 'string') return path;
     if (getBuffer() && path instanceof getBuffer()) return path.toString();
+    if (path instanceof Uint8Array) {
+        const BufferCtor = getBuffer();
+        if (BufferCtor && typeof BufferCtor.from === 'function') {
+            const asBuffer = BufferCtor.from(path);
+            if (asBuffer && typeof asBuffer.toString === 'function') {
+                return asBuffer.toString();
+            }
+        }
+        if (typeof TextDecoder === 'function') {
+            return new TextDecoder().decode(path);
+        }
+    }
     if (path instanceof URL) {
         if (path.protocol !== 'file:') return path.toString();
-        return path.pathname;
+        const urlModule = globalThis.require ? globalThis.require('node:url') : null;
+        if (urlModule && typeof urlModule.fileURLToPath === 'function') {
+            return urlModule.fileURLToPath(path);
+        }
+        return decodeURIComponent(path.pathname);
     }
     return String(path);
 }
@@ -1256,10 +1284,10 @@ export function rmSync(path, options) {
 }
 
 export function mkdtempSync(prefix, options) {
-    validatePath(prefix, 'prefix');
+    validateMkdtempPrefix(prefix);
     const opts = getOptions(options, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
-    const result = native.fs_mkdtemp(prefix);
+    const result = native.fs_mkdtemp(pathToString(prefix));
     if (result.error) {
         throw createSystemError(result.error);
     }
@@ -2107,7 +2135,7 @@ export function rm(path, optionsOrCallback, callback) {
 }
 
 export function mkdtemp(prefix, optionsOrCallback, callback) {
-    validatePath(prefix, 'prefix');
+    validateMkdtempPrefix(prefix);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
         optionsOrCallback = {};

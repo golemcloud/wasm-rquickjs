@@ -205,10 +205,7 @@
     "parallel/test-fs-mkdir-mode-mask.js": {},
     "parallel/test-fs-mkdir-recursive-eaccess.js": {},
     "parallel/test-fs-mkdir-rmdir.js": {},
-    "parallel/test-fs-mkdtemp.js": {
-      "skip": true,
-      "reason": "assert.throws callback is 'not a function' — ERR_INVALID_ARG_TYPE constructor not available"
-    },
+    "parallel/test-fs-mkdtemp.js": {},
     "parallel/test-fs-mkdtemp-prefix-check.js": {},
     "parallel/test-fs-non-number-arguments-throw.js": {
       "skip": true,

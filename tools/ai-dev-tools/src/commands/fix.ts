@@ -160,7 +160,9 @@ export async function fixCommand(category: string): Promise<void> {
 
     const testFile = path.join(REPO_ROOT, "tests", "node_compat", "suite", target.path);
     if (!fs.existsSync(testFile)) {
-      console.log(`  ⚠ Test file not found: ${testFile} — skipping`);
+      console.log(`  ⚠ Test file not found: ${testFile}`);
+      console.log(`    Run tests/node_compat/vendor.sh to fetch the vendored test suite.`);
+      updateSkipReason(target.path, "test file not vendored");
       continue;
     }
 
