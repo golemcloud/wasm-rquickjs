@@ -690,10 +690,7 @@
       }
     },
     "parallel/test-fs-mkdtemp-prefix-check.js": {},
-    "parallel/test-fs-non-number-arguments-throw.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-non-number-arguments-throw.js": {},
     "parallel/test-fs-null-bytes.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
