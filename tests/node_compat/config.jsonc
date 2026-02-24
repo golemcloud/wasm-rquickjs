@@ -726,10 +726,7 @@
     "parallel/test-fs-promises-file-handle-close-errors.js": {},
     "parallel/test-fs-promises-file-handle-close.js": {},
     "parallel/test-fs-promises-file-handle-dispose.js": {},
-    "parallel/test-fs-promises-file-handle-op-errors.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules not available in WASM"
-    },
+    "parallel/test-fs-promises-file-handle-op-errors.js": {},
     "parallel/test-fs-promises-file-handle-read-worker.js": {
       "skip": true,
       "reason": "requires worker_threads which is not available in WASM"
