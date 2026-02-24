@@ -189,10 +189,7 @@
     "parallel/test-fs-error-messages.js": {},
     "parallel/test-fs-exists.js": {},
     "parallel/test-fs-existssync-false.js": {},
-    "parallel/test-fs-fchmod.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-fchmod.js": {},
     "parallel/test-fs-fchown.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
