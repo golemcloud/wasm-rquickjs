@@ -464,8 +464,8 @@ Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createSe
 ### `node:crypto`
 - `createHash`
 - `createHmac`
-- `createCipheriv` (aes-128-cbc, aes-256-cbc, aes-128-ctr, aes-256-ctr, aes-128-gcm, aes-256-gcm, aes-128-wrap, aes-192-wrap, aes-256-wrap, id-aes128-wrap, id-aes192-wrap, id-aes256-wrap, id-aes128-wrap-pad, id-aes192-wrap-pad, id-aes256-wrap-pad, chacha20-poly1305)
-- `createDecipheriv` (aes-128-cbc, aes-256-cbc, aes-128-ctr, aes-256-ctr, aes-128-gcm, aes-256-gcm, aes-128-wrap, aes-192-wrap, aes-256-wrap, id-aes128-wrap, id-aes192-wrap, id-aes256-wrap, id-aes128-wrap-pad, id-aes192-wrap-pad, id-aes256-wrap-pad, chacha20-poly1305)
+- `createCipheriv` (aes-128-cbc, aes-256-cbc, aes-128-ctr, aes-256-ctr, aes-128-gcm, aes-256-gcm, aes-128-wrap, aes-192-wrap, aes-256-wrap, id-aes128-wrap, id-aes192-wrap, id-aes256-wrap, id-aes128-wrap-pad, id-aes192-wrap-pad, id-aes256-wrap-pad, des-ede3-cbc, des3-wrap, chacha20-poly1305)
+- `createDecipheriv` (aes-128-cbc, aes-256-cbc, aes-128-ctr, aes-256-ctr, aes-128-gcm, aes-256-gcm, aes-128-wrap, aes-192-wrap, aes-256-wrap, id-aes128-wrap, id-aes192-wrap, id-aes256-wrap, id-aes128-wrap-pad, id-aes192-wrap-pad, id-aes256-wrap-pad, des-ede3-cbc, des3-wrap, chacha20-poly1305)
 - `createSign` (Ed25519, ECDSA with P-256, P-384, secp256k1)
 - `createVerify` (Ed25519, ECDSA with P-256, P-384, secp256k1)
 - `createPublicKey`

@@ -342,6 +342,7 @@ fn scrypt_derive_impl(
 
 const AES_WRAP_DEFAULT_IV: [u8; 8] = [0xA6; 8];
 const AES_WRAP_PAD_DEFAULT_IV_PREFIX: [u8; 4] = [0xA6, 0x59, 0x59, 0xA6];
+const DES3_WRAP_DEFAULT_IV: [u8; 8] = [0x4A, 0xDD, 0xA2, 0x2C, 0x79, 0xE8, 0x21, 0x05];
 
 fn aes_encrypt_block(key: &[u8], block: &mut [u8; 16]) -> Option<()> {
     use aes::cipher::BlockEncrypt;
@@ -565,6 +566,99 @@ fn aes_wrap_pad_decrypt(key: &[u8], iv_prefix: [u8; 4], ciphertext: &[u8]) -> Op
     let mut plaintext = padded_plaintext;
     plaintext.truncate(mli);
     Some(plaintext)
+}
+
+fn des3_cbc_encrypt_no_padding(key: &[u8], iv: &[u8; 8], data: &[u8]) -> Option<Vec<u8>> {
+    use cipher::BlockEncryptMut;
+    use cipher::KeyIvInit;
+
+    if data.len() % 8 != 0 {
+        return None;
+    }
+
+    let mut enc = cbc::Encryptor::<des::TdesEde3>::new_from_slices(key, iv).ok()?;
+    let mut output = Vec::with_capacity(data.len());
+    for chunk in data.chunks_exact(8) {
+        let mut block = cipher::Block::<des::TdesEde3>::default();
+        block.copy_from_slice(chunk);
+        enc.encrypt_block_mut(&mut block);
+        output.extend_from_slice(&block);
+    }
+    Some(output)
+}
+
+fn des3_cbc_decrypt_no_padding(key: &[u8], iv: &[u8; 8], data: &[u8]) -> Option<Vec<u8>> {
+    use cipher::BlockDecryptMut;
+    use cipher::KeyIvInit;
+
+    if data.len() % 8 != 0 {
+        return None;
+    }
+
+    let mut dec = cbc::Decryptor::<des::TdesEde3>::new_from_slices(key, iv).ok()?;
+    let mut output = Vec::with_capacity(data.len());
+    for chunk in data.chunks_exact(8) {
+        let mut block = cipher::Block::<des::TdesEde3>::default();
+        block.copy_from_slice(chunk);
+        dec.decrypt_block_mut(&mut block);
+        output.extend_from_slice(&block);
+    }
+    Some(output)
+}
+
+fn des3_wrap_encrypt(key: &[u8], plaintext: &[u8]) -> Option<Vec<u8>> {
+    if plaintext.len() % 8 != 0 {
+        return None;
+    }
+
+    let mut sha1 = Sha1::new();
+    sha1.update(plaintext);
+    let checksum = sha1.finalize();
+
+    let mut random_iv = [0u8; 8];
+    rand::rng().fill_bytes(&mut random_iv);
+
+    let mut payload = Vec::with_capacity(plaintext.len() + 8);
+    payload.extend_from_slice(plaintext);
+    payload.extend_from_slice(&checksum[..8]);
+
+    let encrypted_payload = des3_cbc_encrypt_no_padding(key, &random_iv, &payload)?;
+
+    let mut wrapped = Vec::with_capacity(plaintext.len() + 16);
+    wrapped.extend_from_slice(&random_iv);
+    wrapped.extend_from_slice(&encrypted_payload);
+    wrapped.reverse();
+
+    des3_cbc_encrypt_no_padding(key, &DES3_WRAP_DEFAULT_IV, &wrapped)
+}
+
+fn des3_wrap_decrypt(key: &[u8], ciphertext: &[u8]) -> Option<Vec<u8>> {
+    use subtle::ConstantTimeEq;
+
+    if ciphertext.len() < 24 || ciphertext.len() % 8 != 0 {
+        return None;
+    }
+
+    let mut wrapped = des3_cbc_decrypt_no_padding(key, &DES3_WRAP_DEFAULT_IV, ciphertext)?;
+    wrapped.reverse();
+
+    let mut random_iv = [0u8; 8];
+    random_iv.copy_from_slice(&wrapped[..8]);
+    let payload = des3_cbc_decrypt_no_padding(key, &random_iv, &wrapped[8..])?;
+
+    if payload.len() < 8 {
+        return None;
+    }
+
+    let (plaintext, checksum) = payload.split_at(payload.len() - 8);
+    let mut sha1 = Sha1::new();
+    sha1.update(plaintext);
+    let expected_checksum = sha1.finalize();
+    if !bool::from(checksum.ct_eq(&expected_checksum[..8])) {
+        return None;
+    }
+
+    Some(plaintext.to_vec())
 }
 
 const GCM_R: u128 = 0xE100_0000_0000_0000_0000_0000_0000_0000;
@@ -941,6 +1035,13 @@ enum CipherContext {
         tail: Vec<u8>,
         auto_padding: bool,
     },
+    // 3DES wrap (RFC 3217)
+    Des3WrapEnc {
+        key: [u8; 24],
+    },
+    Des3WrapDec {
+        key: [u8; 24],
+    },
     // CTR
     Aes128CtrCtx {
         stream: ctr::Ctr128BE<aes::Aes128>,
@@ -1152,6 +1253,18 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
                     tail: Vec::new(),
                     auto_padding: true,
                 }
+            }
+        }
+        "des3-wrap" => {
+            if key.len() != 24 || !iv.is_empty() {
+                return None;
+            }
+            let mut key_bytes = [0u8; 24];
+            key_bytes.copy_from_slice(key);
+            if decrypt {
+                CipherContext::Des3WrapDec { key: key_bytes }
+            } else {
+                CipherContext::Des3WrapEnc { key: key_bytes }
             }
         }
         "aes-128-ctr" => {
@@ -1527,6 +1640,8 @@ fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
             stream.apply_keystream(&mut output);
             Some(output)
         }
+        CipherContext::Des3WrapEnc { key } => des3_wrap_encrypt(key, data),
+        CipherContext::Des3WrapDec { key } => des3_wrap_decrypt(key, data),
         CipherContext::AesKwEnc { key, iv } => aes_wrap_nopad_encrypt(key, *iv, data),
         CipherContext::AesKwDec { key, iv } => aes_wrap_nopad_decrypt(key, *iv, data),
         CipherContext::AesKwpEnc { key, iv_prefix } => aes_wrap_pad_encrypt(key, *iv_prefix, data),
@@ -1947,6 +2062,8 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         // CTR final: nothing to do
         CipherContext::Aes128CtrCtx { .. }
         | CipherContext::Aes256CtrCtx { .. }
+        | CipherContext::Des3WrapEnc { .. }
+        | CipherContext::Des3WrapDec { .. }
         | CipherContext::AesKwEnc { .. }
         | CipherContext::AesKwDec { .. }
         | CipherContext::AesKwpEnc { .. }
@@ -2039,6 +2156,7 @@ const SUPPORTED_CIPHERS: &[&str] = &[
     "aes-256-wrap",
     "chacha20-poly1305",
     "des-ede3-cbc",
+    "des3-wrap",
     "id-aes128-wrap",
     "id-aes192-wrap",
     "id-aes256-wrap",

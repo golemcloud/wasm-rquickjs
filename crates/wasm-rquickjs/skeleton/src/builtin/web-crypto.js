@@ -602,6 +602,8 @@ const CIPHER_ALIASES = {
     'id-aes256-wrap-pad': 'id-aes256-wrap-pad',
     'des-ede3-cbc': 'des-ede3-cbc',
     'des3': 'des-ede3-cbc',
+    'des3-wrap': 'des3-wrap',
+    'id-smime-alg-cms3deswrap': 'des3-wrap',
     'chacha20-poly1305': 'chacha20-poly1305',
     'aes256': 'aes-256-cbc',
     'aes-256': 'aes-256-cbc',
@@ -1146,6 +1148,7 @@ const CIPHER_INFO = {
     'id-aes192-wrap-pad': { name: 'id-aes192-wrap-pad', nid: 1235, blockSize: 8, ivLength: 4, keyLength: 24, mode: 'wrap' },
     'id-aes256-wrap-pad': { name: 'id-aes256-wrap-pad', nid: 1236, blockSize: 8, ivLength: 4, keyLength: 32, mode: 'wrap' },
     'des-ede3-cbc': { name: 'des-ede3-cbc', nid: 44, blockSize: 8, ivLength: 8, keyLength: 24, mode: 'cbc' },
+    'des3-wrap': { name: 'des3-wrap', nid: 246, blockSize: 8, ivLength: 0, keyLength: 24, mode: 'wrap' },
     'chacha20-poly1305': { name: 'chacha20-poly1305', nid: 1018, blockSize: 1, ivLength: 12, keyLength: 32, mode: 'wrap' },
 };
 
