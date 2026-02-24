@@ -889,10 +889,7 @@
     "parallel/test-crypto-hash-stream-pipe.js": {},
     "parallel/test-crypto-hash.js": {},
     "parallel/test-crypto-hkdf.js": {},
-    "parallel/test-crypto-hmac.js": {
-      "skip": true,
-      "reason": "requires specific error message format ('The \"hmac\" argument...') and createSecretKey in HMAC"
-    },
+    "parallel/test-crypto-hmac.js": {},
     "parallel/test-crypto-key-objects-messageport.js": {
       "skip": true,
       "reason": "requires MessagePort and structured clone which is not available in WASM"

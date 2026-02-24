@@ -1,6 +1,12 @@
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
 import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING } from '__wasm_rquickjs_builtin/internal/errors'
+import {
+    ERR_CRYPTO_INVALID_DIGEST,
+    ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE,
+    ERR_INVALID_ARG_TYPE,
+    ERR_OUT_OF_RANGE,
+    ERR_UNKNOWN_ENCODING,
+} from '__wasm_rquickjs_builtin/internal/errors'
 import { normalizeEncoding } from '__wasm_rquickjs_builtin/internal/util'
 import { kMaxLength } from 'buffer'
 
@@ -230,6 +236,19 @@ function normalizeHashAlgorithm(algorithm) {
     return normalized;
 }
 
+function normalizeHmacAlgorithm(hmac) {
+    if (typeof hmac !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('hmac', 'string', hmac);
+    }
+
+    const normalized = HASH_ALIASES[hmac.toLowerCase()];
+    if (!normalized) {
+        throw new ERR_CRYPTO_INVALID_DIGEST(hmac);
+    }
+
+    return normalized;
+}
+
 function toBytes(data, inputEncoding) {
     if (typeof data === 'string') {
         if (inputEncoding === 'hex') {
@@ -266,6 +285,32 @@ function toBytes(data, inputEncoding) {
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
+}
+
+function toHmacKeyBytes(key) {
+    if (key instanceof KeyObject) {
+        if (key.type !== 'secret') {
+            throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.type, 'secret');
+        }
+        return toBytes(key.export());
+    }
+
+    if (typeof CryptoKey === 'function' && key instanceof CryptoKey) {
+        if (key.type !== 'secret') {
+            throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.type, 'secret');
+        }
+        return toBytes(key._keyObject.export());
+    }
+
+    if (typeof key === 'string' || ArrayBuffer.isView(key) || isAnyArrayBuffer(key)) {
+        return toBytes(key);
+    }
+
+    throw new ERR_INVALID_ARG_TYPE(
+        'key',
+        ['string', 'ArrayBuffer', 'TypedArray', 'DataView', 'Buffer', 'KeyObject', 'CryptoKey'],
+        key
+    );
 }
 
 function encodeOutput(result, encoding) {
@@ -419,13 +464,11 @@ export function createHash(algorithm, options) {
 
 function Hmac(algorithm, key, options) {
     if (!(this instanceof Hmac)) return new Hmac(algorithm, key, options);
-    this._algorithm = normalizeHashAlgorithm(algorithm);
-    const keyBytes = toBytes(key);
+    this._algorithm = normalizeHmacAlgorithm(algorithm);
+    const keyBytes = toHmacKeyBytes(key);
     const handle = webCryptoNative.hmac_init(this._algorithm, keyBytes);
     if (handle === null || handle === undefined) {
-        const err = new Error('Digest method not supported: ' + algorithm);
-        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
-        throw err;
+        throw new ERR_CRYPTO_INVALID_DIGEST(algorithm);
     }
     this._handle = handle;
     this._finalized = false;
@@ -456,9 +499,7 @@ Hmac.prototype.update = function(data, inputEncoding) {
 
 Hmac.prototype.digest = function(encoding) {
     if (this._finalized) {
-        const err = new Error('Digest already called');
-        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
-        throw err;
+        return encodeOutput(new Uint8Array(0), encoding);
     }
     this._finalized = true;
     const hmacBytes = webCryptoNative.hmac_final(this._handle);
