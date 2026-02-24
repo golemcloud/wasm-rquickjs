@@ -4955,12 +4955,33 @@ function createUnsupportedKeyTypeError(type_) {
     return err;
 }
 
+function requiresGenerateKeyPairOptions(type_) {
+    return type_ === 'rsa' ||
+        type_ === 'rsa-pss' ||
+        type_ === 'dsa' ||
+        type_ === 'ec' ||
+        type_ === 'dh';
+}
+
+function normalizeGenerateKeyPairOptions(type_, options) {
+    if (options !== undefined &&
+        (typeof options !== 'object' || options === null || Array.isArray(options))) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+
+    if (options === undefined && requiresGenerateKeyPairOptions(type_)) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+
+    return options === undefined ? {} : options;
+}
+
 export function generateKeyPairSync(type_, options) {
     if (typeof type_ !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('type', 'string', type_);
     }
 
-    options = options || {};
+    options = normalizeGenerateKeyPairOptions(type_, options);
     if (type_ === 'dsa' &&
         (isJwkEncodingOption(options.publicKeyEncoding) || isJwkEncodingOption(options.privateKeyEncoding))) {
         const err = new Error('Unsupported JWK Key Type.');
@@ -5050,6 +5071,21 @@ export function generateKeyPairSync(type_, options) {
 }
 
 export function generateKeyPair(type_, options, callback) {
+    if (typeof options === 'function' && callback === undefined) {
+        callback = options;
+        options = undefined;
+    }
+
+    if (typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
+    }
+
+    if (typeof type_ !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('type', 'string', type_);
+    }
+
+    options = normalizeGenerateKeyPairOptions(type_, options);
+
     try {
         const result = generateKeyPairSync(type_, options);
         queueMicrotask(() => callback(null, result.publicKey, result.privateKey));
