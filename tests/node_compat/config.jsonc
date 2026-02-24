@@ -884,10 +884,7 @@
     "parallel/test-crypto-fips.js": {},
     "parallel/test-crypto-from-binary.js": {},
     "parallel/test-crypto-gcm-explicit-short-tag.js": {},
-    "parallel/test-crypto-gcm-implicit-short-tag.js": {
-      "skip": true,
-      "reason": "requires non-standard GCM auth tag lengths"
-    },
+    "parallel/test-crypto-gcm-implicit-short-tag.js": {},
     "parallel/test-crypto-getcipherinfo.js": {
       "skip": true,
       "reason": "requires aes-128-ccm, aes-128-ocb cipher modes and NID lookup"
