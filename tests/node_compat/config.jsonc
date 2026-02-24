@@ -880,10 +880,7 @@
     "parallel/test-crypto-domains.js": {},
     "parallel/test-crypto-ecb.js": {},
     "parallel/test-crypto-ecdh-convert-key.js": {},
-    "parallel/test-crypto-encoding-validation-error.js": {
-      "skip": true,
-      "reason": "requires encoding change tracking in cipher update/final"
-    },
+    "parallel/test-crypto-encoding-validation-error.js": {},
     "parallel/test-crypto-fips.js": {
       "skip": true,
       "reason": "requires OpenSSL FIPS mode support"

@@ -1,5 +1,7 @@
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
 import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
+import { ERR_UNKNOWN_ENCODING } from '__wasm_rquickjs_builtin/internal/errors'
+import { normalizeEncoding } from '__wasm_rquickjs_builtin/internal/util'
 
 const HASH_ALIASES = {
     'md5': 'md5',
@@ -118,6 +120,17 @@ function encodeOutput(result, encoding) {
         }
         return Array.from(result).map(b => b.toString(16).padStart(2, '0')).join('');
     }
+}
+
+function trackCipherOutputEncoding(currentEncoding, outputEncoding) {
+    const normalizedEncoding = normalizeEncoding(outputEncoding);
+    if (normalizedEncoding === undefined) {
+        throw new ERR_UNKNOWN_ENCODING(outputEncoding);
+    }
+    if (currentEncoding !== null && currentEncoding !== normalizedEncoding) {
+        throw new Error('Cannot change encoding');
+    }
+    return normalizedEncoding;
 }
 
 function Hash(algorithm, options) {
@@ -932,6 +945,9 @@ Cipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
         throw err;
     }
     const out = new Uint8Array(result);
+    if (outputEncoding && outputEncoding !== 'buffer') {
+        this._decoder = trackCipherOutputEncoding(this._decoder, outputEncoding);
+    }
     return encodeOutput(out, outputEncoding);
 };
 
@@ -957,6 +973,9 @@ Cipheriv.prototype.final = function(outputEncoding) {
         throw err;
     }
     const out = new Uint8Array(result);
+    if (outputEncoding && outputEncoding !== 'buffer') {
+        this._decoder = trackCipherOutputEncoding(this._decoder, outputEncoding);
+    }
     return encodeOutput(out, outputEncoding);
 };
 
@@ -1092,6 +1111,9 @@ Decipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
         throw err;
     }
     const out = new Uint8Array(result);
+    if (outputEncoding && outputEncoding !== 'buffer') {
+        this._decoder = trackCipherOutputEncoding(this._decoder, outputEncoding);
+    }
     return encodeOutput(out, outputEncoding);
 };
 
@@ -1127,6 +1149,9 @@ Decipheriv.prototype.final = function(outputEncoding) {
         throw err;
     }
     const out = new Uint8Array(result);
+    if (outputEncoding && outputEncoding !== 'buffer') {
+        this._decoder = trackCipherOutputEncoding(this._decoder, outputEncoding);
+    }
     return encodeOutput(out, outputEncoding);
 };
 
