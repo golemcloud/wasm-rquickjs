@@ -5363,4 +5363,5 @@ pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/web_cryp
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_web_crypto from '__wasm_rquickjs_builtin/web_crypto';
         globalThis.crypto = __wasm_rquickjs_web_crypto;
+        globalThis.CryptoKey = __wasm_rquickjs_web_crypto.CryptoKey;
     "#;

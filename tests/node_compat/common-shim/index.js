@@ -237,6 +237,14 @@ function installTypedArrayLengthErrorShim() {
 
 installTypedArrayLengthErrorShim();
 
+if (typeof globalThis.CryptoKey !== 'function') {
+    if (globalThis.crypto && typeof globalThis.crypto.CryptoKey === 'function') {
+        globalThis.CryptoKey = globalThis.crypto.CryptoKey;
+    } else {
+        globalThis.CryptoKey = function CryptoKey() {};
+    }
+}
+
 var sixtyFourBitArchitectures = {
     arm64: true,
     loong64: true,

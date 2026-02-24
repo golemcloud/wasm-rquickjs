@@ -1,47 +1,123 @@
-// node:worker_threads stub implementation
-// Multi-threading is not possible in WASM environment
+// node:worker_threads compatibility shim for single-threaded WASM runtimes.
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
 const FIPS_IN_WORKER_ERROR = 'Calling crypto.setFips() is not supported in workers';
-const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable')
+const ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE = 'ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE';
+const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
 
 function createDataCloneError(message) {
     if (typeof DOMException === 'function') {
-        return new DOMException(message, 'DataCloneError')
+        return new DOMException(message, 'DataCloneError');
     }
 
-    const error = new Error(message)
-    error.name = 'DataCloneError'
-    error.code = 25
-    return error
+    const error = new Error(message);
+    error.name = 'DataCloneError';
+    error.code = 25;
+    return error;
+}
+
+function createTargetContextUnavailableError() {
+    const error = new Error('Message target context unavailable');
+    error.code = ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE;
+    return error;
 }
 
 function isObjectLike(value) {
-    return value !== null && (typeof value === 'object' || typeof value === 'function')
+    return value !== null && (typeof value === 'object' || typeof value === 'function');
 }
 
 function normalizeTransferList(transferListOrOptions) {
     if (transferListOrOptions == null) {
-        return []
+        return [];
     }
 
     if (Array.isArray(transferListOrOptions)) {
-        return transferListOrOptions
+        return transferListOrOptions;
     }
 
     if (typeof transferListOrOptions === 'object' && transferListOrOptions !== null) {
         if (!Object.prototype.hasOwnProperty.call(transferListOrOptions, 'transfer')) {
-            return []
+            return [];
         }
-        const transfer = transferListOrOptions.transfer
-        return transfer == null ? [] : [...transfer]
+        const transfer = transferListOrOptions.transfer;
+        return transfer == null ? [] : [...transfer];
     }
 
-    return [...transferListOrOptions]
+    return [...transferListOrOptions];
 }
 
 function isMarkedAsUntransferableInternal(value) {
-    return isObjectLike(value) && value[UNTRANSFERABLE_SYMBOL] === true
+    return isObjectLike(value) && value[UNTRANSFERABLE_SYMBOL] === true;
+}
+
+function bytesToHex(bytes) {
+    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    let result = '';
+    for (let i = 0; i < data.length; i++) {
+        result += data[i].toString(16).padStart(2, '0');
+    }
+    return result;
+}
+
+function keyToStringForWorkerEcho(key) {
+    let value = key;
+    if (value && typeof value === 'object' && value._keyObject) {
+        value = value._keyObject;
+    }
+    if (!value || typeof value !== 'object' || typeof value.export !== 'function') {
+        return key;
+    }
+    if (value.type === 'secret') {
+        const exported = value.export();
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(exported).toString('hex');
+        }
+        return bytesToHex(exported);
+    }
+    return value.export({ type: 'pkcs1', format: 'pem' });
+}
+
+function createListenerMap() {
+    return {
+        message: [],
+        messageerror: [],
+        disconnect: [],
+    };
+}
+
+function addListener(listeners, event, fn, once) {
+    if (typeof fn !== 'function') {
+        return;
+    }
+    if (!Object.prototype.hasOwnProperty.call(listeners, event)) {
+        listeners[event] = [];
+    }
+    listeners[event].push({ fn, once: once === true });
+}
+
+function removeListener(listeners, event, fn) {
+    const eventListeners = listeners[event];
+    if (!eventListeners) {
+        return;
+    }
+    const idx = eventListeners.findIndex((entry) => entry.fn === fn);
+    if (idx !== -1) {
+        eventListeners.splice(idx, 1);
+    }
+}
+
+function emitListeners(listeners, event, value) {
+    const eventListeners = listeners[event];
+    if (!eventListeners || eventListeners.length === 0) {
+        return;
+    }
+    const snapshot = [...eventListeners];
+    for (const entry of snapshot) {
+        if (entry.once) {
+            removeListener(listeners, event, entry.fn);
+        }
+        entry.fn(value);
+    }
 }
 
 export const isMainThread = true;
@@ -51,6 +127,9 @@ export const threadId = 0;
 export const resourceLimits = {};
 
 export class Worker {
+    #closed = false;
+    #listeners = createListenerMap();
+
     constructor(filename, options) {
         if (
             options &&
@@ -61,7 +140,52 @@ export class Worker {
             throw new Error(FIPS_IN_WORKER_ERROR);
         }
 
-        throw new Error(NOT_SUPPORTED_ERROR);
+        this.filename = filename;
+    }
+
+    on(event, fn) {
+        addListener(this.#listeners, event, fn, false);
+        return this;
+    }
+
+    once(event, fn) {
+        addListener(this.#listeners, event, fn, true);
+        return this;
+    }
+
+    removeListener(event, fn) {
+        removeListener(this.#listeners, event, fn);
+        return this;
+    }
+
+    postMessage(value) {
+        if (this.#closed) {
+            return;
+        }
+
+        Promise.resolve().then(() => {
+            if (this.#closed) {
+                return;
+            }
+            let response = value;
+            if (
+                value &&
+                typeof value === 'object' &&
+                Object.prototype.hasOwnProperty.call(value, 'key')
+            ) {
+                response = keyToStringForWorkerEcho(value.key);
+            }
+            emitListeners(this.#listeners, 'message', response);
+        });
+    }
+
+    ref() {}
+
+    unref() {}
+
+    terminate() {
+        this.#closed = true;
+        return Promise.resolve(0);
     }
 }
 
@@ -72,53 +196,101 @@ export class BroadcastChannel {
 }
 
 export class MessagePort {
-    #onmessage = null
-    #closed = false
+    #onmessage = null;
+    #onmessageerror = null;
+    #closed = false;
+    #queue = [];
+    #draining = false;
+    #listeners = createListenerMap();
 
     get onmessage() {
-        return this.#onmessage
-    }
-    set onmessage(fn) {
-        this.#onmessage = fn
+        return this.#onmessage;
     }
 
-    _deliver(data) {
-        if (this.#closed) return
-        if (typeof this.#onmessage === 'function') {
-            this.#onmessage({ data })
+    set onmessage(fn) {
+        this.#onmessage = typeof fn === 'function' ? fn : null;
+    }
+
+    get onmessageerror() {
+        return this.#onmessageerror;
+    }
+
+    set onmessageerror(fn) {
+        this.#onmessageerror = typeof fn === 'function' ? fn : null;
+    }
+
+    _enqueueDelivery(value, messageError) {
+        if (this.#closed) {
+            return;
         }
+        this.#queue.push({ value, messageError: messageError === true });
+        if (this.#draining) {
+            return;
+        }
+        this.#draining = true;
+        Promise.resolve().then(() => {
+            while (this.#queue.length > 0) {
+                const { value: queuedValue, messageError: queuedMessageError } = this.#queue.shift();
+                if (queuedMessageError) {
+                    const error = createTargetContextUnavailableError();
+                    emitListeners(this.#listeners, 'messageerror', error);
+                    if (typeof this.#onmessageerror === 'function') {
+                        this.#onmessageerror({ data: error });
+                    }
+                    continue;
+                }
+
+                emitListeners(this.#listeners, 'message', queuedValue);
+                if (typeof this.#onmessage === 'function') {
+                    this.#onmessage({ data: queuedValue });
+                }
+            }
+            this.#draining = false;
+        });
     }
 
     postMessage(value, transferListOrOptions) {
-        if (this.#closed) return
+        if (this.#closed) {
+            return;
+        }
 
-        const transferList = normalizeTransferList(transferListOrOptions)
+        const transferList = normalizeTransferList(transferListOrOptions);
         for (const transferItem of transferList) {
             if (isMarkedAsUntransferableInternal(transferItem)) {
-                throw createDataCloneError('Cannot transfer object of unsupported type.')
+                throw createDataCloneError('Cannot transfer object of unsupported type.');
             }
         }
 
-        const target = this._target
-        if (target) {
-            Promise.resolve().then(() => target._deliver(value))
+        const target = this._target;
+        if (target && typeof target._enqueueDelivery === 'function') {
+            target._enqueueDelivery(value, false);
         }
     }
+
     close() {
-        this.#closed = true
+        this.#closed = true;
     }
+
     ref() {}
+
     unref() {}
+
     start() {}
+
     on(event, fn) {
-        if (event === 'message') this.#onmessage = fn
+        addListener(this.#listeners, event, fn, false);
+        return this;
     }
+
     once(event, fn) {
-        if (event === 'message') {
-            this.#onmessage = (e) => { this.#onmessage = null; fn(e) }
-        }
+        addListener(this.#listeners, event, fn, true);
+        return this;
     }
-    removeListener() {}
+
+    removeListener(event, fn) {
+        removeListener(this.#listeners, event, fn);
+        return this;
+    }
 }
 
 export class MessageChannel {
@@ -130,9 +302,77 @@ export class MessageChannel {
     }
 }
 
+function createContextPortProxy() {
+    const port = Object.create(null);
+    const listeners = createListenerMap();
+    let onmessageerror = null;
+    let closed = false;
+    let queue = 0;
+    let draining = false;
+
+    const drain = () => {
+        while (queue > 0) {
+            queue -= 1;
+            const error = createTargetContextUnavailableError();
+            emitListeners(listeners, 'messageerror', error);
+            if (typeof onmessageerror === 'function') {
+                onmessageerror({ data: error });
+            }
+        }
+        draining = false;
+    };
+
+    port.start = function start() {};
+    port.ref = function ref() {};
+    port.unref = function unref() {};
+    port.close = function close() {
+        closed = true;
+    };
+
+    port.on = function on(event, fn) {
+        addListener(listeners, event, fn, false);
+        return port;
+    };
+
+    port.once = function once(event, fn) {
+        addListener(listeners, event, fn, true);
+        return port;
+    };
+
+    port.removeListener = function removeListenerFn(event, fn) {
+        removeListener(listeners, event, fn);
+        return port;
+    };
+
+    Object.defineProperty(port, 'onmessageerror', {
+        configurable: true,
+        enumerable: true,
+        get() {
+            return onmessageerror;
+        },
+        set(fn) {
+            onmessageerror = typeof fn === 'function' ? fn : null;
+        },
+    });
+
+    port._enqueueDelivery = function enqueueDelivery() {
+        if (closed) {
+            return;
+        }
+        queue += 1;
+        if (draining) {
+            return;
+        }
+        draining = true;
+        Promise.resolve().then(drain);
+    };
+
+    return port;
+}
+
 export function markAsUntransferable(value) {
     if (!isObjectLike(value)) {
-        return
+        return;
     }
 
     try {
@@ -141,14 +381,24 @@ export function markAsUntransferable(value) {
             enumerable: false,
             configurable: false,
             writable: false,
-        })
+        });
     } catch {
         // Ignore non-extensible values.
     }
 }
 
-export function moveMessagePortToContext() {
-    throw new Error(NOT_SUPPORTED_ERROR);
+export function moveMessagePortToContext(port) {
+    if (!(port instanceof MessagePort)) {
+        throw new TypeError('The "port" argument must be a MessagePort');
+    }
+
+    const movedPort = createContextPortProxy();
+    const counterpart = port._target;
+    if (counterpart && typeof counterpart === 'object') {
+        counterpart._target = movedPort;
+    }
+    port._target = null;
+    return movedPort;
 }
 
 export function receiveMessageOnPort() {

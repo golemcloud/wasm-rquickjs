@@ -890,10 +890,7 @@
     "parallel/test-crypto-hash.js": {},
     "parallel/test-crypto-hkdf.js": {},
     "parallel/test-crypto-hmac.js": {},
-    "parallel/test-crypto-key-objects-messageport.js": {
-      "skip": true,
-      "reason": "requires MessagePort and structured clone which is not available in WASM"
-    },
+    "parallel/test-crypto-key-objects-messageport.js": {},
     "parallel/test-crypto-key-objects-to-crypto-key.js": {
       "skip": true,
       "reason": "requires KeyObject.from() which is not implemented"

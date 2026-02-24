@@ -2079,6 +2079,21 @@ class KeyObject {
     }
 }
 
+KeyObject.from = function from(value) {
+    if (
+        value &&
+        typeof value === 'object' &&
+        value._keyObject &&
+        typeof value._keyObject.export === 'function'
+    ) {
+        return value._keyObject;
+    }
+    if (value && typeof value === 'object' && typeof value.export === 'function' && typeof value.type === 'string') {
+        return value;
+    }
+    return value;
+}
+
 export { KeyObject };
 
 function toPemString(keyData) {
@@ -3263,6 +3278,14 @@ class SubtleCrypto {
             const keyBytes = randomBytes(length / 8);
             const secretKey = createSecretKey(keyBytes);
             return new CryptoKey('secret', { name: 'HMAC', hash: { name: hashName }, length }, extractable, keyUsages, secretKey);
+        } else if (name === 'AES-CBC' || name === 'AES-CTR' || name === 'AES-GCM' || name === 'AES-KW') {
+            const length = Number(algorithm && algorithm.length);
+            if (length !== 128 && length !== 192 && length !== 256) {
+                throw new TypeError('AES key length must be 128, 192, or 256 bits');
+            }
+            const keyBytes = randomBytes(length / 8);
+            const secretKey = createSecretKey(keyBytes);
+            return new CryptoKey('secret', { name: algoName, length }, extractable, keyUsages, secretKey);
         }
         throw new Error('Unsupported algorithm: ' + algoName);
     }
@@ -3393,6 +3416,14 @@ class CryptoKey {
     get algorithm() { return this._algorithm; }
     get extractable() { return this._extractable; }
     get usages() { return this._usages; }
+
+    export(options) {
+        return this._keyObject.export(options);
+    }
+}
+
+if (typeof globalThis.CryptoKey !== 'function') {
+    globalThis.CryptoKey = CryptoKey;
 }
 
 const subtleCrypto = new SubtleCrypto();
