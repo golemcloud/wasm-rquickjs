@@ -193,10 +193,7 @@
     "parallel/test-fs-fchown.js": {},
     "parallel/test-fs-filehandle.js": {},
     "parallel/test-fs-filehandle-use-after-close.js": {},
-    "parallel/test-fs-fmap.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-fmap.js": {},
     "parallel/test-fs-fsync.js": {
       "skip": true,
       "reason": "requires fixtures module (../common/fixtures)"
