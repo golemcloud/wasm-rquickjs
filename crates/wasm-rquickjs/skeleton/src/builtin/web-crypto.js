@@ -1208,6 +1208,29 @@ export function getCurves() {
 
 // ===== DiffieHellman =====
 
+function createDhBitsTooSmallError() {
+    const err = new Error('bits too small');
+    err.code = 'ERR_OSSL_BN_BITS_TOO_SMALL';
+    return err;
+}
+
+function createDhBadGeneratorError() {
+    const err = new Error('bad generator');
+    err.code = 'ERR_OSSL_DH_BAD_GENERATOR';
+    return err;
+}
+
+function isBadDhGeneratorBytes(bytes) {
+    let firstNonZero = 0;
+    while (firstNonZero < bytes.length && bytes[firstNonZero] === 0) {
+        firstNonZero += 1;
+    }
+    if (firstNonZero === bytes.length) {
+        return true;
+    }
+    return firstNonZero === bytes.length - 1 && bytes[firstNonZero] === 1;
+}
+
 function DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding) {
     if (!(this instanceof DiffieHellman)) return new DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding);
     if (typeof sizeOrKey === 'number') {
@@ -1215,6 +1238,9 @@ function DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding) {
             const err = new RangeError('The value of "sizeOrKey" is out of range. It must be an integer. Received ' + sizeOrKey);
             err.code = 'ERR_OUT_OF_RANGE';
             throw err;
+        }
+        if (sizeOrKey <= 1) {
+            throw createDhBitsTooSmallError();
         }
         const result = webCryptoNative.dh_create_from_size_err(sizeOrKey);
         if (result[0] === 'error') {
@@ -1239,10 +1265,12 @@ function DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding) {
                 err.code = 'ERR_OUT_OF_RANGE';
                 throw err;
             }
-            if (generator < 0 || generator > 0xFFFFFFFF) {
+            if (generator === 0) {
                 genBytes = new Uint8Array([2]);
-            } else if (generator === 0) {
-                genBytes = new Uint8Array([0]);
+            } else if (generator < 0 || generator === 1) {
+                throw createDhBadGeneratorError();
+            } else if (generator > 0xFFFFFFFF) {
+                genBytes = new Uint8Array([2]);
             } else {
                 const buf = [];
                 let g = generator;
@@ -1257,6 +1285,9 @@ function DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding) {
             const err = new TypeError('The "generator" argument must be of type number or string or an instance of Buffer, TypedArray, or DataView.');
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
+        }
+        if (isBadDhGeneratorBytes(genBytes)) {
+            throw createDhBadGeneratorError();
         }
         this._handle = webCryptoNative.dh_create_from_prime(primeBytes, genBytes);
     }
