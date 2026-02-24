@@ -475,8 +475,9 @@ const validEncodings = new Set([
     'base64url',
 ]);
 
-function validateEncoding(enc, name) {
+function validateEncoding(enc, name, allowBuffer) {
     if (enc === null || enc === undefined || enc === '') return;
+    if (allowBuffer === true && enc === 'buffer') return;
     if (typeof enc !== 'string') {
         const err = new TypeError(`The "${name || 'encoding'}" argument must be of type string. Received ${describeType(enc)}`);
         err.code = 'ERR_INVALID_ARG_TYPE';
@@ -584,6 +585,7 @@ export function writeFileSync(path, data, options) {
     if (typeof options === 'string') {
         options = {encoding: options};
     }
+    if (options && options.encoding) validateEncoding(options.encoding, 'encoding');
     const flush = options ? options.flush : undefined;
     validateFlush(flush);
     const encoding = options && options.encoding && options.encoding !== '' ? normalizeEncoding(options.encoding) : null;
@@ -823,6 +825,7 @@ export function fstatSync(fd, options) {
 export function readdirSync(path, options) {
     validatePath(path);
     const opts = getOptions(options, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const withFileTypes = opts.withFileTypes || false;
     const recursive = opts.recursive || false;
     const result = native.fs_readdir(pathToString(path), withFileTypes);
@@ -900,11 +903,13 @@ export function existsSync(path) {
 
 export function realpathSync(path, options) {
     validatePath(path);
+    const opts = getOptions(options, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const result = native.fs_realpath(path);
     if (result.error) {
         throw createSystemError(result.error);
     }
-    const encoding = getOptions(options, {}).encoding;
+    const encoding = opts.encoding;
     if (encoding === 'buffer') {
         return getBuffer().from(result.result);
     }
@@ -953,11 +958,13 @@ export function symlinkSync(target, path, type) {
 
 export function readlinkSync(path, options) {
     validatePath(path);
+    const opts = getOptions(options, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const result = native.fs_readlink(path);
     if (result.error) {
         throw createSystemError(result.error);
     }
-    const encoding = getOptions(options, {}).encoding;
+    const encoding = opts.encoding;
     if (encoding === 'buffer') {
         return getBuffer().from(result.result);
     }
@@ -1105,11 +1112,13 @@ export function rmSync(path, options) {
 
 export function mkdtempSync(prefix, options) {
     validatePath(prefix, 'prefix');
+    const opts = getOptions(options, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const result = native.fs_mkdtemp(prefix);
     if (result.error) {
         throw createSystemError(result.error);
     }
-    const encoding = getOptions(options, {}).encoding;
+    const encoding = opts.encoding;
     if (encoding === 'buffer') {
         return getBuffer().from(result.result);
     }
@@ -1160,6 +1169,7 @@ export function writeFile(path, data, optionsOrCallback, callback) {
         optionsOrCallback = {encoding: optionsOrCallback};
     }
     const opts = optionsOrCallback || {};
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding');
     const flush = opts.flush;
     validateFlush(flush);
     const signal = opts.signal;
@@ -1553,11 +1563,13 @@ export function readdir(path, optionsOrCallback, callback) {
         callback = optionsOrCallback;
         optionsOrCallback = {};
     }
+    const opts = getOptions(optionsOrCallback, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
         try {
-            const result = readdirSync(path, optionsOrCallback);
+            const result = readdirSync(path, opts);
             cb(null, result);
         } catch (err) {
             cb(err);
@@ -1604,11 +1616,13 @@ export function realpath(path, optionsOrCallback, callback) {
         callback = optionsOrCallback;
         optionsOrCallback = {};
     }
+    const opts = getOptions(optionsOrCallback, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
         try {
-            const result = realpathSync(path, optionsOrCallback);
+            const result = realpathSync(path, opts);
             cb(null, result);
         } catch (err) {
             cb(err);
@@ -1701,11 +1715,13 @@ export function readlink(path, optionsOrCallback, callback) {
         callback = optionsOrCallback;
         optionsOrCallback = {};
     }
+    const opts = getOptions(optionsOrCallback, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
         try {
-            const result = readlinkSync(path, optionsOrCallback);
+            const result = readlinkSync(path, opts);
             cb(null, result);
         } catch (err) {
             cb(err);
@@ -1929,11 +1945,13 @@ export function mkdtemp(prefix, optionsOrCallback, callback) {
         callback = optionsOrCallback;
         optionsOrCallback = {};
     }
+    const opts = getOptions(optionsOrCallback, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
         try {
-            const result = mkdtempSync(prefix, optionsOrCallback);
+            const result = mkdtempSync(prefix, opts);
             cb(null, result);
         } catch (err) {
             cb(err);
@@ -1989,7 +2007,15 @@ export class StatWatcher {
 
 export function watch(filename, optionsOrListener, listener) {
     validatePath(filename, 'filename');
+    if (typeof optionsOrListener === 'function') {
+        listener = optionsOrListener;
+        optionsOrListener = {};
+    }
+    const opts = getOptions(optionsOrListener, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
+    if (listener !== undefined) validateCallback(listener);
     const watcher = new FSWatcher();
+    if (listener) watcher.on('change', listener);
     return watcher;
 }
 
@@ -2018,6 +2044,7 @@ export function ReadStream(path, options) {
     }
 
     if (typeof options === 'string') options = { encoding: options };
+    if (options && options.encoding) validateEncoding(options.encoding, 'encoding');
     const opts = {};
     if (options) {
         for (const k in options) opts[k] = options[k];
@@ -2268,6 +2295,7 @@ export function WriteStream(path, options) {
     }
 
     if (typeof options === 'string') options = { encoding: options };
+    if (options && options.encoding) validateEncoding(options.encoding, 'encoding');
     const opts = {};
     if (options) {
         for (const k in options) opts[k] = options[k];
