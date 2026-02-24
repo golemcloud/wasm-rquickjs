@@ -721,10 +721,7 @@
     },
     "parallel/test-fs-promises-exists.js": {},
     "parallel/test-fs-promises-file-handle-aggregate-errors.js": {},
-    "parallel/test-fs-promises-file-handle-append-file.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-promises-file-handle-append-file.js": {},
     "parallel/test-fs-promises-file-handle-chmod.js": { "skip": true, "reason": "fchmod/chmod not supported on WASI (no PermissionsExt)" },
     "parallel/test-fs-promises-file-handle-close-errors.js": {
       "skip": true,
