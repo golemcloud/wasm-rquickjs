@@ -132,13 +132,24 @@ function flagsToNumber(flags) {
     }
 }
 
+function getSystemErrorDescription(message) {
+    if (typeof message !== 'string' || message.length === 0) {
+        return 'unknown error';
+    }
+    const parsedMessage = /^\s*[A-Z0-9_]+:\s*([^,]+),/.exec(message);
+    if (parsedMessage && parsedMessage[1]) {
+        return parsedMessage[1];
+    }
+    return message;
+}
+
 function createSystemError(errObj) {
     if (!errObj) return null;
-    // Format message like Node.js: "ECODE: description, syscall 'path'"
-    let msg = errObj.message;
+    let msg = typeof errObj.message === 'string' ? errObj.message : 'unknown error';
     if (errObj.code && errObj.syscall) {
-        msg = errObj.code + ': ' + (errObj.message || 'unknown error') + ', ' + errObj.syscall;
+        msg = errObj.code + ': ' + getSystemErrorDescription(errObj.message) + ', ' + errObj.syscall;
         if (errObj.path !== undefined) msg += " '" + errObj.path + "'";
+        if (errObj.dest !== undefined) msg += " -> '" + errObj.dest + "'";
     }
     const err = new Error(msg);
     err.code = errObj.code;
@@ -590,48 +601,31 @@ export function readFileSync(path, options) {
         return getBuffer().from(result);
     }
 
-    const flag = options && options.flag;
-    if (flag && flag !== 'r') {
-        // Use openSync to respect the flag (e.g., 'ax+' should fail with EEXIST)
-        const fd = openSync(path, flag);
-        try {
-            const chunks = [];
-            let totalLength = 0;
-            const buf = new Uint8Array(8192);
-            while (true) {
-                const bytesRead = readSync(fd, buf, 0, buf.length, null);
-                if (bytesRead === 0) break;
-                chunks.push(buf.slice(0, bytesRead));
-                totalLength += bytesRead;
-            }
-            const result = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of chunks) {
-                result.set(chunk, offset);
-                offset += chunk.length;
-            }
-            if (encoding) {
-                return new TextDecoder(encoding).decode(result);
-            }
-            return getBuffer().from(result);
-        } finally {
-            closeSync(fd);
+    const flag = options && options.flag ? options.flag : 'r';
+    // Use openSync so readFile errors match Node's syscall/path metadata exactly.
+    const fd = openSync(path, flag);
+    try {
+        const chunks = [];
+        let totalLength = 0;
+        const buf = new Uint8Array(8192);
+        while (true) {
+            const bytesRead = readSync(fd, buf, 0, buf.length, null);
+            if (bytesRead === 0) break;
+            chunks.push(buf.slice(0, bytesRead));
+            totalLength += bytesRead;
         }
-    }
-    if (encoding) {
-        const [contents, error] = native.read_file_with_encoding(path, encoding);
-        if (error === undefined) {
-            return contents;
-        } else {
-            throw new Error(error);
+        const result = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+            result.set(chunk, offset);
+            offset += chunk.length;
         }
-    } else {
-        const [contents, error] = native.read_file(path);
-        if (error === undefined) {
-            return getBuffer().from(contents);
-        } else {
-            throw new Error(error);
+        if (encoding) {
+            return new TextDecoder(encoding).decode(result);
         }
+        return getBuffer().from(result);
+    } finally {
+        closeSync(fd);
     }
 }
 
@@ -956,11 +950,20 @@ export function existsSync(path) {
     }
 }
 
-export function realpathSync(path, options) {
+function realpathSyncImpl(path, options, useNative) {
     validatePath(path);
     const opts = getOptions(options, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
-    const result = native.fs_realpath(path);
+    const pathString = pathToString(path);
+
+    if (!useNative) {
+        const lstatResult = native.fs_lstat(pathString);
+        if (lstatResult.error) {
+            throw createSystemError(lstatResult.error);
+        }
+    }
+
+    const result = native.fs_realpath(pathString);
     if (result.error) {
         throw createSystemError(result.error);
     }
@@ -970,7 +973,16 @@ export function realpathSync(path, options) {
     }
     return result.result;
 }
-realpathSync.native = realpathSync;
+
+export function realpathSync(path, options) {
+    return realpathSyncImpl(path, options, false);
+}
+
+function realpathSyncNative(path, options) {
+    return realpathSyncImpl(path, options, true);
+}
+
+realpathSync.native = realpathSyncNative;
 
 export function truncateSync(path, len) {
     if (typeof path === 'number') {
@@ -991,8 +1003,14 @@ export function copyFileSync(src, dest, mode) {
     const srcPath = pathToString(src);
     const destPath = pathToString(dest);
 
-    if ((copyMode & COPYFILE_EXCL) !== 0 && existsSync(destPath)) {
-        throw createCopyFileError('EEXIST', -17, 'file already exists', srcPath, destPath);
+    if ((copyMode & COPYFILE_EXCL) !== 0) {
+        // Node checks source existence before COPYFILE_EXCL destination checks.
+        if (!existsSync(srcPath)) {
+            throw createCopyFileError('ENOENT', -2, 'no such file or directory', srcPath, destPath);
+        }
+        if (existsSync(destPath)) {
+            throw createCopyFileError('EEXIST', -17, 'file already exists', srcPath, destPath);
+        }
     }
 
     const error = native.fs_copy_file(srcPath, destPath);
@@ -1111,18 +1129,20 @@ export function lutimesSync(path, atime, mtime) {
 
 export function unlinkSync(path) {
     validatePath(path);
-    const error = native.unlink(path);
-    if (error !== undefined) {
-        throw new Error(error);
+    const error = native.unlink(pathToString(path));
+    if (error) {
+        throw createSystemError(error);
     }
 }
 
 export function renameSync(oldPath, newPath) {
     validatePath(oldPath, 'oldPath');
     validatePath(newPath, 'newPath');
-    const error = native.rename(oldPath, newPath);
-    if (error !== undefined) {
-        throw new Error(error);
+    const oldPathString = pathToString(oldPath);
+    const newPathString = pathToString(newPath);
+    const error = native.rename(oldPathString, newPathString);
+    if (error) {
+        throw createSystemError(error);
     }
 }
 
@@ -1692,7 +1712,28 @@ export function realpath(path, optionsOrCallback, callback) {
         }
     });
 }
-realpath.native = realpath;
+
+function realpathNative(path, optionsOrCallback, callback) {
+    validatePath(path);
+    if (typeof optionsOrCallback === 'function') {
+        callback = optionsOrCallback;
+        optionsOrCallback = {};
+    }
+    const opts = getOptions(optionsOrCallback, {});
+    if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
+    const cb = callback;
+    validateCallback(cb);
+    queueMicrotask(() => {
+        try {
+            const result = realpathSyncNative(path, opts);
+            cb(null, result);
+        } catch (err) {
+            cb(err);
+        }
+    });
+}
+
+realpath.native = realpathNative;
 
 export function truncate(path, lenOrCallback, callback) {
     if (typeof path === 'number') {
@@ -1918,9 +1959,9 @@ export function lutimes(path, atime, mtime, callback) {
 export function unlink(path, callback) {
     validatePath(path);
     validateCallback(callback);
-    const error = native.unlink(path);
-    if (error !== undefined) {
-        queueMicrotask(() => callback(new Error(error)));
+    const error = native.unlink(pathToString(path));
+    if (error) {
+        queueMicrotask(() => callback(createSystemError(error)));
     } else {
         queueMicrotask(() => callback(null));
     }
@@ -1930,9 +1971,11 @@ export function rename(oldPath, newPath, callback) {
     validatePath(oldPath, 'oldPath');
     validatePath(newPath, 'newPath');
     validateCallback(callback);
-    const error = native.rename(oldPath, newPath);
-    if (error !== undefined) {
-        queueMicrotask(() => callback(new Error(error)));
+    const oldPathString = pathToString(oldPath);
+    const newPathString = pathToString(newPath);
+    const error = native.rename(oldPathString, newPathString);
+    if (error) {
+        queueMicrotask(() => callback(createSystemError(error)));
     } else {
         queueMicrotask(() => callback(null));
     }

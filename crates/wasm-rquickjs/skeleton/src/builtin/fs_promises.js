@@ -95,12 +95,24 @@ function makeEBADF(syscall) {
     return err;
 }
 
+function getSystemErrorDescription(message) {
+    if (typeof message !== 'string' || message.length === 0) {
+        return 'unknown error';
+    }
+    const parsedMessage = /^\s*[A-Z0-9_]+:\s*([^,]+),/.exec(message);
+    if (parsedMessage && parsedMessage[1]) {
+        return parsedMessage[1];
+    }
+    return message;
+}
+
 function createSystemError(errObj) {
     if (!errObj) return null;
-    let msg = errObj.message;
+    let msg = typeof errObj.message === 'string' ? errObj.message : 'unknown error';
     if (errObj.code && errObj.syscall) {
-        msg = errObj.code + ': ' + (errObj.message || 'unknown error') + ', ' + errObj.syscall;
+        msg = errObj.code + ': ' + getSystemErrorDescription(errObj.message) + ', ' + errObj.syscall;
         if (errObj.path !== undefined) msg += " '" + errObj.path + "'";
+        if (errObj.dest !== undefined) msg += " -> '" + errObj.dest + "'";
     }
     const err = new Error(msg);
     err.code = errObj.code;
@@ -701,12 +713,12 @@ export async function appendFile(path, data, options) {
 
 export async function unlink(path) {
     const error = native.unlink(path);
-    if (error !== undefined) throw new Error(error);
+    if (error) throw createSystemError(error);
 }
 
 export async function rename(oldPath, newPath) {
     const error = native.rename(oldPath, newPath);
-    if (error !== undefined) throw new Error(error);
+    if (error) throw createSystemError(error);
 }
 
 export async function mkdir(path, options) {

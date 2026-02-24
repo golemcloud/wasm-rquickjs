@@ -148,12 +148,49 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
         std::io::ErrorKind::PermissionDenied => ("EACCES", -13, "permission denied"),
         std::io::ErrorKind::InvalidInput => ("EINVAL", -22, "invalid argument"),
         _ => {
+            let err_text = err.to_string().to_lowercase();
+            if err_text.contains("file exists") {
+                return ("EEXIST", -17, "file already exists");
+            }
+            if err_text.contains("no such file") || err_text.contains("not found") {
+                return ("ENOENT", -2, "no such file or directory");
+            }
+            if err_text.contains("not a directory") {
+                return ("ENOTDIR", -20, "not a directory");
+            }
+            if err_text.contains("directory not empty") {
+                return ("ENOTEMPTY", -39, "directory not empty");
+            }
+            if err_text.contains("bad file descriptor") {
+                return ("EBADF", -9, "bad file descriptor");
+            }
+
             if let Some(raw) = err.raw_os_error() {
+                #[cfg(target_os = "wasi")]
+                {
+                    return match raw {
+                        44 => ("ENOENT", -2, "no such file or directory"),
+                        20 => ("EEXIST", -17, "file already exists"),
+                        54 => ("ENOTDIR", -20, "not a directory"),
+                        55 => ("ENOTEMPTY", -39, "directory not empty"),
+                        8 => ("EBADF", -9, "bad file descriptor"),
+                        52 => ("ENOSYS", -38, "function not implemented"),
+                        63 | 1 => ("EPERM", -1, "operation not permitted"),
+                        18 => ("EXDEV", -18, "cross-device link not permitted"),
+                        28 => ("EINVAL", -22, "invalid argument"),
+                        31 => ("EISDIR", -21, "illegal operation on a directory"),
+                        _ => ("EIO", -5, "input/output error"),
+                    };
+                }
+
+                #[cfg(not(target_os = "wasi"))]
                 match raw {
                     21 => ("EISDIR", -21, "illegal operation on a directory"),
                     20 => ("ENOTDIR", -20, "not a directory"),
                     39 => ("ENOTEMPTY", -39, "directory not empty"),
                     9 => ("EBADF", -9, "bad file descriptor"),
+                    1 => ("EPERM", -1, "operation not permitted"),
+                    18 => ("EXDEV", -18, "cross-device link not permitted"),
                     38 => ("ENOSYS", -38, "function not implemented"),
                     _ => ("EIO", -5, "input/output error"),
                 }
@@ -170,19 +207,36 @@ fn make_fs_error<'js>(
     syscall: &str,
     path: Option<&str>,
 ) -> rquickjs::Object<'js> {
+    make_fs_error_with_dest(ctx, err, syscall, path, None)
+}
+
+fn make_fs_error_with_dest<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    err: &std::io::Error,
+    syscall: &str,
+    path: Option<&str>,
+    dest: Option<&str>,
+) -> rquickjs::Object<'js> {
     let obj = rquickjs::Object::new(ctx.clone()).unwrap();
     let (code, errno, description) = map_error_code(err);
     obj.set("errno", errno).unwrap();
     obj.set("code", code).unwrap();
     obj.set("syscall", syscall).unwrap();
     let msg = if let Some(p) = path {
-        format!("{code}: {description}, {syscall} '{p}'")
+        if let Some(d) = dest {
+            format!("{code}: {description}, {syscall} '{p}' -> '{d}'")
+        } else {
+            format!("{code}: {description}, {syscall} '{p}'")
+        }
     } else {
         format!("{code}: {description}, {syscall}")
     };
     obj.set("message", msg.clone()).unwrap();
     if let Some(p) = path {
         obj.set("path", p).unwrap();
+    }
+    if let Some(d) = dest {
+        obj.set("dest", d).unwrap();
     }
     obj
 }
@@ -392,19 +446,19 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn unlink(path: String) -> Option<String> {
+    pub fn unlink(ctx: Ctx<'_>, path: String) -> Option<Object<'_>> {
         match std::fs::remove_file(Path::new(&path)) {
             Ok(_) => {
                 #[cfg(not(unix))]
                 super::remove_mode_override_for_path(&path);
                 None
             }
-            Err(err) => Some(format!("Failed to unlink {path:?}: {err}")),
+            Err(err) => Some(super::make_fs_error(&ctx, &err, "unlink", Some(&path))),
         }
     }
 
     #[rquickjs::function]
-    pub fn rename(old_path: String, new_path: String) -> Option<String> {
+    pub fn rename(ctx: Ctx<'_>, old_path: String, new_path: String) -> Option<Object<'_>> {
         match std::fs::rename(Path::new(&old_path), Path::new(&new_path)) {
             Ok(_) => {
                 #[cfg(not(unix))]
@@ -414,8 +468,12 @@ pub mod native_module {
                 }
                 None
             }
-            Err(err) => Some(format!(
-                "Failed to rename {old_path:?} to {new_path:?}: {err}"
+            Err(err) => Some(super::make_fs_error_with_dest(
+                &ctx,
+                &err,
+                "rename",
+                Some(&old_path),
+                Some(&new_path),
             )),
         }
     }
@@ -868,6 +926,16 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
+        if let Err(err) = std::fs::symlink_metadata(&path) {
+            result
+                .set(
+                    "error",
+                    super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
+                )
+                .unwrap();
+            return result;
+        }
+
         match std::fs::canonicalize(&path) {
             Ok(resolved) => {
                 result
@@ -904,7 +972,13 @@ pub mod native_module {
     pub fn fs_copy_file(ctx: Ctx<'_>, src: String, dest: String) -> Option<Object<'_>> {
         match std::fs::copy(&src, &dest) {
             Ok(_) => None,
-            Err(err) => Some(super::make_fs_error(&ctx, &err, "copyfile", Some(&src))),
+            Err(err) => Some(super::make_fs_error_with_dest(
+                &ctx,
+                &err,
+                "copyfile",
+                Some(&src),
+                Some(&dest),
+            )),
         }
     }
 
@@ -912,28 +986,52 @@ pub mod native_module {
     pub fn fs_link(ctx: Ctx<'_>, existing_path: String, new_path: String) -> Option<Object<'_>> {
         match std::fs::hard_link(&existing_path, &new_path) {
             Ok(_) => None,
-            Err(err) => Some(super::make_fs_error(
+            Err(err) => Some(super::make_fs_error_with_dest(
                 &ctx,
                 &err,
                 "link",
                 Some(&existing_path),
+                Some(&new_path),
             )),
         }
     }
 
     #[rquickjs::function]
-    pub fn fs_symlink(ctx: Ctx<'_>, target: String, _path: String) -> Option<Object<'_>> {
+    pub fn fs_symlink(ctx: Ctx<'_>, target: String, path: String) -> Option<Object<'_>> {
+        if Path::new(&path).exists() {
+            let err = std::io::Error::new(std::io::ErrorKind::AlreadyExists, "file already exists");
+            return Some(super::make_fs_error_with_dest(
+                &ctx,
+                &err,
+                "symlink",
+                Some(&target),
+                Some(&path),
+            ));
+        }
+
         #[cfg(unix)]
         {
-            match std::os::unix::fs::symlink(&target, &_path) {
+            match std::os::unix::fs::symlink(&target, &path) {
                 Ok(_) => None,
-                Err(err) => Some(super::make_fs_error(&ctx, &err, "symlink", Some(&target))),
+                Err(err) => Some(super::make_fs_error_with_dest(
+                    &ctx,
+                    &err,
+                    "symlink",
+                    Some(&target),
+                    Some(&path),
+                )),
             }
         }
         #[cfg(not(unix))]
         {
             let err = std::io::Error::new(std::io::ErrorKind::Unsupported, "symlink not supported");
-            Some(super::make_fs_error(&ctx, &err, "symlink", Some(&target)))
+            Some(super::make_fs_error_with_dest(
+                &ctx,
+                &err,
+                "symlink",
+                Some(&target),
+                Some(&path),
+            ))
         }
     }
 
@@ -1047,7 +1145,7 @@ pub mod native_module {
         // utimes is not well-supported on WASI; verify path exists, no-op otherwise
         match std::fs::metadata(&path) {
             Ok(_) => None,
-            Err(err) => Some(super::make_fs_error(&ctx, &err, "utimes", Some(&path))),
+            Err(err) => Some(super::make_fs_error(&ctx, &err, "utime", Some(&path))),
         }
     }
 
@@ -1061,7 +1159,7 @@ pub mod native_module {
         let mut table = super::FD_TABLE.lock().unwrap();
         match table.get_mut(fd) {
             Some(_) => None,
-            None => Some(super::make_badf_error(&ctx, "futimes")),
+            None => Some(super::make_badf_error(&ctx, "futime")),
         }
     }
 
