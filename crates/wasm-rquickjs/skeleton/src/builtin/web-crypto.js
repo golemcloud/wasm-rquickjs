@@ -578,6 +578,8 @@ Certificate.prototype.exportChallenge = certificateExportChallenge;
 const CIPHER_ALIASES = {
     'aes-128-cbc': 'aes-128-cbc',
     'aes-256-cbc': 'aes-256-cbc',
+    'aes-128-ecb': 'aes-128-ecb',
+    'aes-256-ecb': 'aes-256-ecb',
     'aes-128-ctr': 'aes-128-ctr',
     'aes-256-ctr': 'aes-256-ctr',
     'aes-128-ccm': 'aes-128-ccm',
@@ -598,6 +600,8 @@ const CIPHER_ALIASES = {
     'id-aes128-wrap-pad': 'id-aes128-wrap-pad',
     'id-aes192-wrap-pad': 'id-aes192-wrap-pad',
     'id-aes256-wrap-pad': 'id-aes256-wrap-pad',
+    'des-ede3-cbc': 'des-ede3-cbc',
+    'des3': 'des-ede3-cbc',
     'chacha20-poly1305': 'chacha20-poly1305',
     'aes256': 'aes-256-cbc',
     'aes-256': 'aes-256-cbc',
@@ -607,13 +611,14 @@ const CIPHER_ALIASES = {
 
 function normalizeCipherAlgorithm(algorithm) {
     if (typeof algorithm !== 'string') {
-        const err = new TypeError('The "algorithm" argument must be of type string.');
+        const received = algorithm === null ? 'null' : typeof algorithm;
+        const err = new TypeError(`The "cipher" argument must be of type string. Received ${received}`);
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
     const normalized = CIPHER_ALIASES[algorithm.toLowerCase()];
     if (!normalized) {
-        const err = new Error('Unknown cipher: ' + algorithm);
+        const err = new Error('Unknown cipher');
         err.code = 'ERR_CRYPTO_UNKNOWN_CIPHER';
         throw err;
     }
@@ -667,6 +672,70 @@ function throwInvalidIV() {
     const err = new TypeError('Invalid initialization vector');
     err.code = 'ERR_CRYPTO_INVALID_IV';
     throw err;
+}
+
+function throwInvalidKeyLength() {
+    const err = new RangeError('Invalid key length');
+    err.code = 'ERR_CRYPTO_INVALID_KEYLEN';
+    throw err;
+}
+
+function normalizeCipherIv(iv) {
+    if (iv === undefined) {
+        const err = new TypeError('The "iv" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    if (iv === null) {
+        return new Uint8Array(0);
+    }
+    return toBytes(iv);
+}
+
+function getCipherValidationInfo(algorithm) {
+    return CIPHER_INFO[algorithm] || CIPHER_INFO[resolveNativeCipherAlgorithm(algorithm)];
+}
+
+function validateCipherKeyLength(algorithm, keyBytes) {
+    const info = getCipherValidationInfo(algorithm);
+    if (info && info.keyLength !== undefined && keyBytes.length !== info.keyLength) {
+        throwInvalidKeyLength();
+    }
+}
+
+function validateCipherIvLength(algorithm, mode, ivBytes) {
+    if (mode === 'ccm') {
+        if (ivBytes.length < 7 || ivBytes.length > 13) {
+            throwInvalidIV();
+        }
+        return;
+    }
+    if (mode === 'gcm') {
+        if (ivBytes.length === 0) {
+            throwInvalidIV();
+        }
+        return;
+    }
+    if (mode === 'chacha20-poly1305') {
+        if (ivBytes.length === 0 || ivBytes.length > 12) {
+            throwInvalidIV();
+        }
+        return;
+    }
+
+    const info = getCipherValidationInfo(algorithm);
+    if (!info || info.ivLength === undefined) {
+        return;
+    }
+    if (info.mode === 'ecb') {
+        if (ivBytes.length !== 0) {
+            throwInvalidIV();
+        }
+        return;
+    }
+    if (ivBytes.length !== info.ivLength) {
+        throwInvalidIV();
+    }
 }
 
 function isValidGcmAuthTagLength(length) {
@@ -739,12 +808,12 @@ function Cipheriv(algorithm, key, iv, options) {
     this._totalInputLength = 0;
     this._ccmPlaintextLength = undefined;
     const keyBytes = toBytes(key);
-    const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
+    const ivBytes = normalizeCipherIv(iv);
+
+    validateCipherKeyLength(this._algorithm, keyBytes);
+    validateCipherIvLength(this._algorithm, this._aeadConfig.mode, ivBytes);
 
     if (this._isCcmMode) {
-        if (ivBytes.length < 7 || ivBytes.length > 13) {
-            throwInvalidIV();
-        }
         this._ccmMaxMessageSize = computeCcmMaxMessageSize(ivBytes.length);
     } else {
         this._ccmMaxMessageSize = undefined;
@@ -922,12 +991,12 @@ function Decipheriv(algorithm, key, iv, options) {
     this._ccmPlaintextLength = undefined;
     this._authTagWasSet = false;
     const keyBytes = toBytes(key);
-    const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
+    const ivBytes = normalizeCipherIv(iv);
+
+    validateCipherKeyLength(this._algorithm, keyBytes);
+    validateCipherIvLength(this._algorithm, this._aeadConfig.mode, ivBytes);
 
     if (this._isCcmMode) {
-        if (ivBytes.length < 7 || ivBytes.length > 13) {
-            throwInvalidIV();
-        }
         this._ccmMaxMessageSize = computeCcmMaxMessageSize(ivBytes.length);
     } else {
         this._ccmMaxMessageSize = undefined;
@@ -1061,6 +1130,8 @@ export function getCiphers() {
 const CIPHER_INFO = {
     'aes-128-cbc': { name: 'aes-128-cbc', nid: 419, blockSize: 16, ivLength: 16, keyLength: 16, mode: 'cbc' },
     'aes-256-cbc': { name: 'aes-256-cbc', nid: 427, blockSize: 16, ivLength: 16, keyLength: 32, mode: 'cbc' },
+    'aes-128-ecb': { name: 'aes-128-ecb', nid: 418, blockSize: 16, ivLength: 0, keyLength: 16, mode: 'ecb' },
+    'aes-256-ecb': { name: 'aes-256-ecb', nid: 426, blockSize: 16, ivLength: 0, keyLength: 32, mode: 'ecb' },
     'aes-128-ctr': { name: 'aes-128-ctr', nid: 904, blockSize: 1, ivLength: 16, keyLength: 16, mode: 'ctr' },
     'aes-256-ctr': { name: 'aes-256-ctr', nid: 906, blockSize: 1, ivLength: 16, keyLength: 32, mode: 'ctr' },
     'aes-128-gcm': { name: 'aes-128-gcm', nid: 895, blockSize: 1, ivLength: 12, keyLength: 16, mode: 'gcm' },
@@ -1074,6 +1145,7 @@ const CIPHER_INFO = {
     'id-aes128-wrap-pad': { name: 'id-aes128-wrap-pad', nid: 1234, blockSize: 8, ivLength: 4, keyLength: 16, mode: 'wrap' },
     'id-aes192-wrap-pad': { name: 'id-aes192-wrap-pad', nid: 1235, blockSize: 8, ivLength: 4, keyLength: 24, mode: 'wrap' },
     'id-aes256-wrap-pad': { name: 'id-aes256-wrap-pad', nid: 1236, blockSize: 8, ivLength: 4, keyLength: 32, mode: 'wrap' },
+    'des-ede3-cbc': { name: 'des-ede3-cbc', nid: 44, blockSize: 8, ivLength: 8, keyLength: 24, mode: 'cbc' },
     'chacha20-poly1305': { name: 'chacha20-poly1305', nid: 1018, blockSize: 1, ivLength: 12, keyLength: 32, mode: 'wrap' },
 };
 

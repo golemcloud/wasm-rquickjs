@@ -909,6 +909,38 @@ enum CipherContext {
         tail: Vec<u8>,
         auto_padding: bool,
     },
+    // ECB
+    Aes128EcbEnc {
+        enc: aes::Aes128,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    Aes256EcbEnc {
+        enc: aes::Aes256,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    Aes128EcbDec {
+        dec: aes::Aes128,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    Aes256EcbDec {
+        dec: aes::Aes256,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    // 3DES CBC
+    DesEde3CbcEnc {
+        enc: cbc::Encryptor<des::TdesEde3>,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    DesEde3CbcDec {
+        dec: cbc::Decryptor<des::TdesEde3>,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
     // CTR
     Aes128CtrCtx {
         stream: ctr::Ctr128BE<aes::Aes128>,
@@ -940,7 +972,7 @@ static CIPHER_CONTEXTS: LazyLock<Mutex<HashMap<u32, CipherContext>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Option<u32> {
-    use cipher::KeyIvInit;
+    use cipher::{KeyInit, KeyIvInit};
 
     let ctx = match algorithm {
         "aes-128-gcm" => {
@@ -1056,6 +1088,66 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             } else {
                 let enc = cbc::Encryptor::<aes::Aes256>::new_from_slices(key, iv).ok()?;
                 CipherContext::Aes256CbcEnc {
+                    enc,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            }
+        }
+        "aes-128-ecb" => {
+            if key.len() != 16 || !iv.is_empty() {
+                return None;
+            }
+            if decrypt {
+                let dec = aes::Aes128::new_from_slice(key).ok()?;
+                CipherContext::Aes128EcbDec {
+                    dec,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            } else {
+                let enc = aes::Aes128::new_from_slice(key).ok()?;
+                CipherContext::Aes128EcbEnc {
+                    enc,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            }
+        }
+        "aes-256-ecb" => {
+            if key.len() != 32 || !iv.is_empty() {
+                return None;
+            }
+            if decrypt {
+                let dec = aes::Aes256::new_from_slice(key).ok()?;
+                CipherContext::Aes256EcbDec {
+                    dec,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            } else {
+                let enc = aes::Aes256::new_from_slice(key).ok()?;
+                CipherContext::Aes256EcbEnc {
+                    enc,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            }
+        }
+        "des-ede3-cbc" => {
+            if key.len() != 24 || iv.len() != 8 {
+                return None;
+            }
+            if decrypt {
+                let dec = cbc::Decryptor::<des::TdesEde3>::new_from_slices(key, iv).ok()?;
+                CipherContext::DesEde3CbcDec {
+                    dec,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            } else {
+                let enc = cbc::Encryptor::<des::TdesEde3>::new_from_slices(key, iv).ok()?;
+                CipherContext::DesEde3CbcEnc {
                     enc,
                     tail: Vec::new(),
                     auto_padding: true,
@@ -1262,6 +1354,61 @@ fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
             }
             Some(output)
         }
+        CipherContext::DesEde3CbcEnc { enc, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 8;
+            let full_blocks = tail.len() / block_size;
+            if full_blocks == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = full_blocks * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = cipher::Block::<des::TdesEde3>::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        // ECB encrypt: process full blocks, keep remainder in tail
+        CipherContext::Aes128EcbEnc { enc, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            let full_blocks = tail.len() / block_size;
+            if full_blocks == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = full_blocks * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        CipherContext::Aes256EcbEnc { enc, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            let full_blocks = tail.len() / block_size;
+            if full_blocks == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = full_blocks * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
         // CBC decrypt: buffer and keep last block for final (padding)
         CipherContext::Aes128CbcDec { dec, tail, .. } => {
             tail.extend_from_slice(data);
@@ -1285,6 +1432,70 @@ fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
             Some(output)
         }
         CipherContext::Aes256CbcDec { dec, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            if tail.len() <= block_size {
+                return Some(Vec::new());
+            }
+            let blocks_to_process = (tail.len() / block_size) - 1;
+            if blocks_to_process == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = blocks_to_process * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        CipherContext::DesEde3CbcDec { dec, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 8;
+            if tail.len() <= block_size {
+                return Some(Vec::new());
+            }
+            let blocks_to_process = (tail.len() / block_size) - 1;
+            if blocks_to_process == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = blocks_to_process * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = cipher::Block::<des::TdesEde3>::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        // ECB decrypt: buffer and keep last block for final (padding)
+        CipherContext::Aes128EcbDec { dec, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 16;
+            if tail.len() <= block_size {
+                return Some(Vec::new());
+            }
+            let blocks_to_process = (tail.len() / block_size) - 1;
+            if blocks_to_process == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = blocks_to_process * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        CipherContext::Aes256EcbDec { dec, tail, .. } => {
             tail.extend_from_slice(data);
             let block_size = 16;
             if tail.len() <= block_size {
@@ -1485,6 +1696,82 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
                 Some(Vec::new())
             }
         }
+        CipherContext::DesEde3CbcEnc {
+            mut enc,
+            tail,
+            auto_padding,
+        } => {
+            if auto_padding {
+                let block_size = 8;
+                let pad_len = block_size - (tail.len() % block_size);
+                let mut padded = tail;
+                padded.extend(vec![pad_len as u8; pad_len]);
+                let mut output = Vec::new();
+                for chunk in padded.chunks(block_size) {
+                    let mut block = cipher::Block::<des::TdesEde3>::default();
+                    block.copy_from_slice(chunk);
+                    enc.encrypt_block_mut(&mut block);
+                    output.extend_from_slice(&block);
+                }
+                Some(output)
+            } else {
+                if !tail.is_empty() {
+                    return None;
+                }
+                Some(Vec::new())
+            }
+        }
+        // ECB encrypt final: PKCS7 pad and encrypt remaining
+        CipherContext::Aes128EcbEnc {
+            mut enc,
+            tail,
+            auto_padding,
+        } => {
+            if auto_padding {
+                let block_size = 16;
+                let pad_len = block_size - (tail.len() % block_size);
+                let mut padded = tail;
+                padded.extend(vec![pad_len as u8; pad_len]);
+                let mut output = Vec::new();
+                for chunk in padded.chunks(block_size) {
+                    let mut block = aes::Block::default();
+                    block.copy_from_slice(chunk);
+                    enc.encrypt_block_mut(&mut block);
+                    output.extend_from_slice(&block);
+                }
+                Some(output)
+            } else {
+                if !tail.is_empty() {
+                    return None;
+                }
+                Some(Vec::new())
+            }
+        }
+        CipherContext::Aes256EcbEnc {
+            mut enc,
+            tail,
+            auto_padding,
+        } => {
+            if auto_padding {
+                let block_size = 16;
+                let pad_len = block_size - (tail.len() % block_size);
+                let mut padded = tail;
+                padded.extend(vec![pad_len as u8; pad_len]);
+                let mut output = Vec::new();
+                for chunk in padded.chunks(block_size) {
+                    let mut block = aes::Block::default();
+                    block.copy_from_slice(chunk);
+                    enc.encrypt_block_mut(&mut block);
+                    output.extend_from_slice(&block);
+                }
+                Some(output)
+            } else {
+                if !tail.is_empty() {
+                    return None;
+                }
+                Some(Vec::new())
+            }
+        }
         // CBC decrypt final: decrypt remaining block(s) and PKCS7 unpad
         CipherContext::Aes128CbcDec {
             mut dec,
@@ -1521,6 +1808,109 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             Some(output)
         }
         CipherContext::Aes256CbcDec {
+            mut dec,
+            tail,
+            auto_padding,
+        } => {
+            let block_size = 16;
+            if tail.is_empty() {
+                return Some(Vec::new());
+            }
+            if tail.len() % block_size != 0 {
+                return None;
+            }
+            let mut output = Vec::new();
+            for chunk in tail.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            if auto_padding {
+                let pad_byte = *output.last()? as usize;
+                if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
+                    return None;
+                }
+                if !output[output.len() - pad_byte..]
+                    .iter()
+                    .all(|&b| b as usize == pad_byte)
+                {
+                    return None;
+                }
+                output.truncate(output.len() - pad_byte);
+            }
+            Some(output)
+        }
+        CipherContext::DesEde3CbcDec {
+            mut dec,
+            tail,
+            auto_padding,
+        } => {
+            let block_size = 8;
+            if tail.is_empty() {
+                return Some(Vec::new());
+            }
+            if tail.len() % block_size != 0 {
+                return None;
+            }
+            let mut output = Vec::new();
+            for chunk in tail.chunks(block_size) {
+                let mut block = cipher::Block::<des::TdesEde3>::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            if auto_padding {
+                let pad_byte = *output.last()? as usize;
+                if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
+                    return None;
+                }
+                if !output[output.len() - pad_byte..]
+                    .iter()
+                    .all(|&b| b as usize == pad_byte)
+                {
+                    return None;
+                }
+                output.truncate(output.len() - pad_byte);
+            }
+            Some(output)
+        }
+        // ECB decrypt final: decrypt remaining block(s) and PKCS7 unpad
+        CipherContext::Aes128EcbDec {
+            mut dec,
+            tail,
+            auto_padding,
+        } => {
+            let block_size = 16;
+            if tail.is_empty() {
+                return Some(Vec::new());
+            }
+            if tail.len() % block_size != 0 {
+                return None;
+            }
+            let mut output = Vec::new();
+            for chunk in tail.chunks(block_size) {
+                let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            if auto_padding {
+                let pad_byte = *output.last()? as usize;
+                if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
+                    return None;
+                }
+                if !output[output.len() - pad_byte..]
+                    .iter()
+                    .all(|&b| b as usize == pad_byte)
+                {
+                    return None;
+                }
+                output.truncate(output.len() - pad_byte);
+            }
+            Some(output)
+        }
+        CipherContext::Aes256EcbDec {
             mut dec,
             tail,
             auto_padding,
@@ -1618,7 +2008,13 @@ fn cipher_set_auto_padding_impl(id: u32, enabled: bool) -> bool {
             CipherContext::Aes128CbcEnc { auto_padding, .. }
             | CipherContext::Aes256CbcEnc { auto_padding, .. }
             | CipherContext::Aes128CbcDec { auto_padding, .. }
-            | CipherContext::Aes256CbcDec { auto_padding, .. } => {
+            | CipherContext::Aes256CbcDec { auto_padding, .. }
+            | CipherContext::Aes128EcbEnc { auto_padding, .. }
+            | CipherContext::Aes256EcbEnc { auto_padding, .. }
+            | CipherContext::Aes128EcbDec { auto_padding, .. }
+            | CipherContext::Aes256EcbDec { auto_padding, .. }
+            | CipherContext::DesEde3CbcEnc { auto_padding, .. }
+            | CipherContext::DesEde3CbcDec { auto_padding, .. } => {
                 *auto_padding = enabled;
                 true
             }
@@ -1631,15 +2027,18 @@ fn cipher_set_auto_padding_impl(id: u32, enabled: bool) -> bool {
 
 const SUPPORTED_CIPHERS: &[&str] = &[
     "aes-128-cbc",
+    "aes-128-ecb",
     "aes-128-ctr",
     "aes-128-gcm",
     "aes-128-wrap",
     "aes-192-wrap",
     "aes-256-cbc",
+    "aes-256-ecb",
     "aes-256-ctr",
     "aes-256-gcm",
     "aes-256-wrap",
     "chacha20-poly1305",
+    "des-ede3-cbc",
     "id-aes128-wrap",
     "id-aes192-wrap",
     "id-aes256-wrap",
@@ -3135,9 +3534,9 @@ fn decode_spkac_der(input: &[u8]) -> Option<Vec<u8>> {
         .collect();
 
     let maybe_base64 = !compact.is_empty()
-        && compact.iter().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(*byte, b'+' | b'/' | b'=')
-        });
+        && compact
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'+' | b'/' | b'='));
 
     if maybe_base64 {
         if let Ok(text) = std::str::from_utf8(&compact) {
@@ -3213,8 +3612,8 @@ fn parse_spkac(spkac: &[u8]) -> Option<ParsedSpkac> {
 
 fn spkac_signature_hash_algorithm(oid: &str) -> Option<&'static str> {
     match oid {
-        "1.2.840.113549.1.1.4" => Some("md5"),   // md5WithRSAEncryption
-        "1.2.840.113549.1.1.5" => Some("sha1"),  // sha1WithRSAEncryption
+        "1.2.840.113549.1.1.4" => Some("md5"),  // md5WithRSAEncryption
+        "1.2.840.113549.1.1.5" => Some("sha1"), // sha1WithRSAEncryption
         "1.2.840.113549.1.1.14" => Some("sha224"), // sha224WithRSAEncryption
         "1.2.840.113549.1.1.11" => Some("sha256"), // sha256WithRSAEncryption
         "1.2.840.113549.1.1.12" => Some("sha384"), // sha384WithRSAEncryption
