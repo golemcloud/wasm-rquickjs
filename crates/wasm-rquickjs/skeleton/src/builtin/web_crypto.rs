@@ -1024,6 +1024,16 @@ enum CipherContext {
         tail: Vec<u8>,
         auto_padding: bool,
     },
+    BlowfishEcbEnc {
+        enc: blowfish::Blowfish,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
+    BlowfishEcbDec {
+        dec: blowfish::Blowfish,
+        tail: Vec<u8>,
+        auto_padding: bool,
+    },
     // 3DES CBC
     DesEde3CbcEnc {
         enc: cbc::Encryptor<des::TdesEde3>,
@@ -1229,6 +1239,26 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             } else {
                 let enc = aes::Aes256::new_from_slice(key).ok()?;
                 CipherContext::Aes256EcbEnc {
+                    enc,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            }
+        }
+        "bf-ecb" => {
+            if key.len() < 4 || key.len() > 56 || !iv.is_empty() {
+                return None;
+            }
+            if decrypt {
+                let dec = blowfish::Blowfish::new_from_slice(key).ok()?;
+                CipherContext::BlowfishEcbDec {
+                    dec,
+                    tail: Vec::new(),
+                    auto_padding: true,
+                }
+            } else {
+                let enc = blowfish::Blowfish::new_from_slice(key).ok()?;
+                CipherContext::BlowfishEcbEnc {
                     enc,
                     tail: Vec::new(),
                     auto_padding: true,
@@ -1522,6 +1552,24 @@ fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
             }
             Some(output)
         }
+        CipherContext::BlowfishEcbEnc { enc, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 8;
+            let full_blocks = tail.len() / block_size;
+            if full_blocks == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = full_blocks * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = cipher::Block::<blowfish::Blowfish>::default();
+                block.copy_from_slice(chunk);
+                enc.encrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
         // CBC decrypt: buffer and keep last block for final (padding)
         CipherContext::Aes128CbcDec { dec, tail, .. } => {
             tail.extend_from_slice(data);
@@ -1623,6 +1671,27 @@ fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
             let mut output = Vec::new();
             for chunk in to_process.chunks(block_size) {
                 let mut block = aes::Block::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            Some(output)
+        }
+        CipherContext::BlowfishEcbDec { dec, tail, .. } => {
+            tail.extend_from_slice(data);
+            let block_size = 8;
+            if tail.len() <= block_size {
+                return Some(Vec::new());
+            }
+            let blocks_to_process = (tail.len() / block_size) - 1;
+            if blocks_to_process == 0 {
+                return Some(Vec::new());
+            }
+            let process_len = blocks_to_process * block_size;
+            let to_process: Vec<u8> = tail.drain(..process_len).collect();
+            let mut output = Vec::new();
+            for chunk in to_process.chunks(block_size) {
+                let mut block = cipher::Block::<blowfish::Blowfish>::default();
                 block.copy_from_slice(chunk);
                 dec.decrypt_block_mut(&mut block);
                 output.extend_from_slice(&block);
@@ -1887,6 +1956,31 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
                 Some(Vec::new())
             }
         }
+        CipherContext::BlowfishEcbEnc {
+            mut enc,
+            tail,
+            auto_padding,
+        } => {
+            if auto_padding {
+                let block_size = 8;
+                let pad_len = block_size - (tail.len() % block_size);
+                let mut padded = tail;
+                padded.extend(vec![pad_len as u8; pad_len]);
+                let mut output = Vec::new();
+                for chunk in padded.chunks(block_size) {
+                    let mut block = cipher::Block::<blowfish::Blowfish>::default();
+                    block.copy_from_slice(chunk);
+                    enc.encrypt_block_mut(&mut block);
+                    output.extend_from_slice(&block);
+                }
+                Some(output)
+            } else {
+                if !tail.is_empty() {
+                    return None;
+                }
+                Some(Vec::new())
+            }
+        }
         // CBC decrypt final: decrypt remaining block(s) and PKCS7 unpad
         CipherContext::Aes128CbcDec {
             mut dec,
@@ -2079,6 +2173,44 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             }
             Some(output)
         }
+        CipherContext::BlowfishEcbDec {
+            mut dec,
+            tail,
+            auto_padding,
+        } => {
+            let block_size = 8;
+            if tail.is_empty() {
+                return if auto_padding {
+                    None
+                } else {
+                    Some(Vec::new())
+                };
+            }
+            if tail.len() % block_size != 0 {
+                return None;
+            }
+            let mut output = Vec::new();
+            for chunk in tail.chunks(block_size) {
+                let mut block = cipher::Block::<blowfish::Blowfish>::default();
+                block.copy_from_slice(chunk);
+                dec.decrypt_block_mut(&mut block);
+                output.extend_from_slice(&block);
+            }
+            if auto_padding {
+                let pad_byte = *output.last()? as usize;
+                if pad_byte == 0 || pad_byte > block_size || pad_byte > output.len() {
+                    return None;
+                }
+                if !output[output.len() - pad_byte..]
+                    .iter()
+                    .all(|&b| b as usize == pad_byte)
+                {
+                    return None;
+                }
+                output.truncate(output.len() - pad_byte);
+            }
+            Some(output)
+        }
         // CTR final: nothing to do
         CipherContext::Aes128CtrCtx { .. }
         | CipherContext::Aes256CtrCtx { .. }
@@ -2150,6 +2282,8 @@ fn cipher_set_auto_padding_impl(id: u32, enabled: bool) -> bool {
             | CipherContext::Aes256EcbEnc { auto_padding, .. }
             | CipherContext::Aes128EcbDec { auto_padding, .. }
             | CipherContext::Aes256EcbDec { auto_padding, .. }
+            | CipherContext::BlowfishEcbEnc { auto_padding, .. }
+            | CipherContext::BlowfishEcbDec { auto_padding, .. }
             | CipherContext::DesEde3CbcEnc { auto_padding, .. }
             | CipherContext::DesEde3CbcDec { auto_padding, .. } => {
                 *auto_padding = enabled;
@@ -2174,6 +2308,7 @@ const SUPPORTED_CIPHERS: &[&str] = &[
     "aes-256-ctr",
     "aes-256-gcm",
     "aes-256-wrap",
+    "bf-ecb",
     "chacha20-poly1305",
     "des-ede3-cbc",
     "des3-wrap",

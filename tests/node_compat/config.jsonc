@@ -878,10 +878,7 @@
     "parallel/test-crypto-dh.js": {},
     "parallel/test-crypto-domain.js": {},
     "parallel/test-crypto-domains.js": {},
-    "parallel/test-crypto-ecb.js": {
-      "skip": true,
-      "reason": "requires ECB cipher mode which is not implemented"
-    },
+    "parallel/test-crypto-ecb.js": {},
     "parallel/test-crypto-ecdh-convert-key.js": {
       "skip": true,
       "reason": "requires ECDH class and convertKey which is not implemented"
