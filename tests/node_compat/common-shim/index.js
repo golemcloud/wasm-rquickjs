@@ -245,6 +245,13 @@ if (typeof globalThis.CryptoKey !== 'function') {
     }
 }
 
+try {
+    var cryptoModule = require('node:crypto');
+    if (cryptoModule && typeof cryptoModule.CryptoKey === 'function') {
+        globalThis.CryptoKey = cryptoModule.CryptoKey;
+    }
+} catch (_) {}
+
 var sixtyFourBitArchitectures = {
     arm64: true,
     loong64: true,

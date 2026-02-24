@@ -891,10 +891,7 @@
     "parallel/test-crypto-hkdf.js": {},
     "parallel/test-crypto-hmac.js": {},
     "parallel/test-crypto-key-objects-messageport.js": {},
-    "parallel/test-crypto-key-objects-to-crypto-key.js": {
-      "skip": true,
-      "reason": "requires KeyObject.from() which is not implemented"
-    },
+    "parallel/test-crypto-key-objects-to-crypto-key.js": {},
     "parallel/test-crypto-key-objects.js": {
       "skip": true,
       "reason": "requires full KeyObject API (symmetricKeySize, equals, asymmetricKeyType, asymmetricKeySize)"

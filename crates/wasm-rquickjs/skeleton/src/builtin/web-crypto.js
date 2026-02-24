@@ -1984,6 +1984,24 @@ export function setFips(_val) {
 
 export const fips = false;
 
+const TO_CRYPTO_KEY_ALGORITHM_NAMES = {
+    'AES-CTR': 'AES-CTR',
+    'AES-CBC': 'AES-CBC',
+    'AES-GCM': 'AES-GCM',
+    'AES-KW': 'AES-KW',
+    'PBKDF2': 'PBKDF2',
+    'HMAC': 'HMAC',
+    'ED25519': 'Ed25519',
+    'ED448': 'Ed448',
+    'X25519': 'X25519',
+    'X448': 'X448',
+    'RSASSA-PKCS1-V1_5': 'RSASSA-PKCS1-v1_5',
+    'RSA-PSS': 'RSA-PSS',
+    'RSA-OAEP': 'RSA-OAEP',
+    'ECDH': 'ECDH',
+    'ECDSA': 'ECDSA',
+};
+
 // ===== KeyObject =====
 
 class KeyObject {
@@ -2016,6 +2034,13 @@ class KeyObject {
             modulusLength: Number(details[0]),
             publicExponent: BigInt(details[1]),
         };
+    }
+
+    get symmetricKeySize() {
+        if (this._type !== 'secret') {
+            return undefined;
+        }
+        return toBytes(this.export()).length;
     }
 
     export(options) {
@@ -2077,24 +2102,347 @@ class KeyObject {
         }
         return new Uint8Array(result);
     }
-}
 
-KeyObject.from = function from(value) {
-    if (
-        value &&
-        typeof value === 'object' &&
-        value._keyObject &&
-        typeof value._keyObject.export === 'function'
-    ) {
-        return value._keyObject;
+    equals(otherKeyObject) {
+        if (!(otherKeyObject instanceof KeyObject)) {
+            const err = new TypeError('The "otherKeyObject" argument must be an instance of KeyObject.');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (this === otherKeyObject) {
+            return true;
+        }
+        if (this.type !== otherKeyObject.type) {
+            return false;
+        }
+        if (this._handle !== null && this._handle !== undefined && this._handle === otherKeyObject._handle) {
+            return true;
+        }
+        if (!keyObjectCustomDataEquals(this._customData, otherKeyObject._customData)) {
+            return false;
+        }
+        if (this._customData || otherKeyObject._customData) {
+            return true;
+        }
+
+        const exportOptions = this.type === 'public'
+            ? { format: 'der', type: 'spki' }
+            : this.type === 'private'
+                ? { format: 'der', type: 'pkcs8' }
+                : undefined;
+
+        const left = exportOptions ? toBytes(this.export(exportOptions)) : toBytes(this.export());
+        const right = exportOptions ? toBytes(otherKeyObject.export(exportOptions)) : toBytes(otherKeyObject.export());
+        return bytesEqual(left, right);
     }
-    if (value && typeof value === 'object' && typeof value.export === 'function' && typeof value.type === 'string') {
-        return value;
+
+    toCryptoKey(algorithm, extractable, keyUsages) {
+        const normalizedAlgorithm = normalizeToCryptoKeyAlgorithm(algorithm);
+        const usages = normalizeToCryptoKeyUsages(keyUsages);
+        let cryptoAlgorithm;
+
+        if (this.type === 'secret') {
+            const keyLengthBits = toBytes(this.export()).length * 8;
+
+            if (normalizedAlgorithm.upperName === 'PBKDF2') {
+                if (extractable) {
+                    throw createSyntaxError('PBKDF2 keys are not extractable');
+                }
+                ensureAllowedCryptoKeyUsages(
+                    usages,
+                    new Set(['deriveBits', 'deriveKey']),
+                    'Unsupported key usage for a PBKDF2 key',
+                );
+                cryptoAlgorithm = { name: 'PBKDF2' };
+            } else if (normalizedAlgorithm.upperName === 'HMAC') {
+                const requestedLength = getRequestedHmacLength(algorithm, keyLengthBits);
+                if (requestedLength === 0 || keyLengthBits === 0) {
+                    throw createDataError('Zero-length key is not supported');
+                }
+                if (usages.length === 0) {
+                    throw createSyntaxError('Usages cannot be empty when importing a secret key.');
+                }
+                ensureAllowedCryptoKeyUsages(
+                    usages,
+                    new Set(['sign', 'verify']),
+                    'Unsupported key usage for an HMAC key',
+                );
+                cryptoAlgorithm = {
+                    name: 'HMAC',
+                    hash: { name: normalizeToCryptoKeyHash(algorithm) },
+                    length: requestedLength,
+                };
+            } else {
+                if (keyLengthBits !== 128 && keyLengthBits !== 192 && keyLengthBits !== 256) {
+                    throw createDataError('Invalid key length');
+                }
+                const allowedUsages = normalizedAlgorithm.upperName === 'AES-KW'
+                    ? new Set(['wrapKey', 'unwrapKey'])
+                    : new Set(['encrypt', 'decrypt']);
+                ensureAllowedCryptoKeyUsages(usages, allowedUsages, 'Unsupported key usage for an AES key');
+                cryptoAlgorithm = {
+                    name: normalizedAlgorithm.name,
+                    length: keyLengthBits,
+                };
+            }
+        } else {
+            const keyType = this.asymmetricKeyType;
+            if (
+                normalizedAlgorithm.upperName === 'ED25519' ||
+                normalizedAlgorithm.upperName === 'ED448' ||
+                normalizedAlgorithm.upperName === 'X25519' ||
+                normalizedAlgorithm.upperName === 'X448'
+            ) {
+                const expectedKeyType = normalizedAlgorithm.upperName.toLowerCase();
+                if (keyType !== expectedKeyType) {
+                    throw createDataError('Invalid key type');
+                }
+                const allowedUsages = normalizedAlgorithm.upperName.startsWith('ED')
+                    ? (this.type === 'public' ? new Set(['verify']) : new Set(['sign']))
+                    : (this.type === 'public' ? new Set() : new Set(['deriveBits', 'deriveKey']));
+                ensureAllowedCryptoKeyUsages(
+                    usages,
+                    allowedUsages,
+                    `Unsupported key usage for a ${normalizedAlgorithm.name} key`,
+                );
+                cryptoAlgorithm = { name: normalizedAlgorithm.name };
+            } else if (
+                normalizedAlgorithm.upperName === 'RSASSA-PKCS1-V1_5' ||
+                normalizedAlgorithm.upperName === 'RSA-PSS' ||
+                normalizedAlgorithm.upperName === 'RSA-OAEP'
+            ) {
+                if (keyType !== 'rsa') {
+                    throw createDataError('Invalid key type');
+                }
+                const allowedUsages = normalizedAlgorithm.upperName === 'RSA-OAEP'
+                    ? (this.type === 'public'
+                        ? new Set(['encrypt', 'wrapKey'])
+                        : new Set(['decrypt', 'unwrapKey']))
+                    : (this.type === 'public' ? new Set(['verify']) : new Set(['sign']));
+                ensureAllowedCryptoKeyUsages(
+                    usages,
+                    allowedUsages,
+                    `Unsupported key usage for a ${normalizedAlgorithm.name} key`,
+                );
+                cryptoAlgorithm = {
+                    name: normalizedAlgorithm.name,
+                    hash: { name: normalizeToCryptoKeyHash(algorithm) },
+                };
+            } else {
+                if (keyType !== 'ec') {
+                    throw createDataError('Invalid key type');
+                }
+                if (normalizedAlgorithm.upperName === 'ECDH' && this.type === 'private' && usages.length === 0) {
+                    throw createSyntaxError('Usages cannot be empty when importing a private key.');
+                }
+                const allowedUsages = normalizedAlgorithm.upperName === 'ECDH'
+                    ? (this.type === 'public' ? new Set() : new Set(['deriveBits', 'deriveKey']))
+                    : (this.type === 'public' ? new Set(['verify']) : new Set(['sign']));
+                ensureAllowedCryptoKeyUsages(
+                    usages,
+                    allowedUsages,
+                    `Unsupported key usage for a ${normalizedAlgorithm.name} key`,
+                );
+
+                const requestedNamedCurve = getRequestedNamedCurve(algorithm);
+                const actualNamedCurve = getKeyObjectNamedCurve(this);
+                if (requestedNamedCurve && actualNamedCurve && requestedNamedCurve !== actualNamedCurve) {
+                    throw createDataError('Named curve mismatch');
+                }
+
+                cryptoAlgorithm = {
+                    name: normalizedAlgorithm.name,
+                    namedCurve: requestedNamedCurve || actualNamedCurve,
+                };
+            }
+        }
+
+        return new CryptoKey(this.type, cryptoAlgorithm, Boolean(extractable), usages, this);
     }
-    return value;
+
+    static from(value) {
+        if (
+            value &&
+            typeof value === 'object' &&
+            value._keyObject &&
+            typeof value._keyObject.export === 'function'
+        ) {
+            return value._keyObject;
+        }
+        if (value && typeof value === 'object' && typeof value.export === 'function' && typeof value.type === 'string') {
+            return value;
+        }
+
+        throw new TypeError('The "key" argument must be an instance of CryptoKey');
+    }
 }
 
 export { KeyObject };
+
+function createDataError(message) {
+    const err = new Error(message);
+    err.name = 'DataError';
+    return err;
+}
+
+function createSyntaxError(message) {
+    const err = new Error(message);
+    err.name = 'SyntaxError';
+    return err;
+}
+
+function normalizeToCryptoKeyAlgorithm(algorithm) {
+    const name = typeof algorithm === 'string'
+        ? algorithm
+        : (algorithm && typeof algorithm === 'object' ? algorithm.name : undefined);
+
+    if (typeof name !== 'string') {
+        throw new TypeError('Algorithm must be a string or an object with a name property');
+    }
+
+    const upperName = name.toUpperCase();
+    const normalizedName = TO_CRYPTO_KEY_ALGORITHM_NAMES[upperName];
+    if (!normalizedName) {
+        throw createDataError('Unsupported algorithm: ' + name);
+    }
+
+    return {
+        upperName,
+        name: normalizedName,
+    };
+}
+
+function normalizeToCryptoKeyUsages(keyUsages) {
+    if (!Array.isArray(keyUsages)) {
+        throw new TypeError('The "keyUsages" argument must be an array');
+    }
+    return keyUsages.slice();
+}
+
+function ensureAllowedCryptoKeyUsages(usages, allowed, message) {
+    for (const usage of usages) {
+        if (!allowed.has(usage)) {
+            throw createSyntaxError(message);
+        }
+    }
+}
+
+function normalizeToCryptoKeyHash(algorithm) {
+    if (!algorithm || typeof algorithm !== 'object') {
+        throw new TypeError('Algorithm object with hash is required');
+    }
+    const hash = algorithm.hash;
+    const hashName = typeof hash === 'string'
+        ? hash
+        : (hash && typeof hash === 'object' ? hash.name : undefined);
+    if (typeof hashName !== 'string') {
+        throw new TypeError('Invalid hash algorithm');
+    }
+    const normalized = normalizeHashAlgorithm(hashName);
+    switch (normalized) {
+        case 'sha1':
+            return 'SHA-1';
+        case 'sha224':
+            return 'SHA-224';
+        case 'sha256':
+            return 'SHA-256';
+        case 'sha384':
+            return 'SHA-384';
+        case 'sha512':
+            return 'SHA-512';
+        default:
+            return hashName;
+    }
+}
+
+function getRequestedHmacLength(algorithm, defaultLength) {
+    if (!algorithm || typeof algorithm !== 'object' || algorithm.length === undefined) {
+        return defaultLength;
+    }
+    return Number(algorithm.length);
+}
+
+function getRequestedNamedCurve(algorithm) {
+    if (!algorithm || typeof algorithm !== 'object') {
+        return undefined;
+    }
+    return algorithm.namedCurve;
+}
+
+function getKeyObjectNamedCurve(keyObject) {
+    if (keyObject && keyObject._customData) {
+        if (keyObject._customData.ec && typeof keyObject._customData.ec.namedCurve === 'string') {
+            return keyObject._customData.ec.namedCurve;
+        }
+        if (typeof keyObject._customData.namedCurve === 'string') {
+            return keyObject._customData.namedCurve;
+        }
+    }
+    try {
+        const jwk = keyObject.export({ format: 'jwk' });
+        if (jwk && typeof jwk.crv === 'string') {
+            return jwk.crv;
+        }
+    } catch (_ignored) {
+    }
+    return undefined;
+}
+
+function optionalBytesEqual(left, right) {
+    if (left === undefined || left === null || right === undefined || right === null) {
+        return left === right;
+    }
+    return bytesEqual(left, right);
+}
+
+function keyObjectCustomDataEquals(left, right) {
+    if (!left && !right) {
+        return true;
+    }
+    if (!left || !right) {
+        return false;
+    }
+    if (left.asymmetricKeyType !== right.asymmetricKeyType) {
+        return false;
+    }
+
+    if (left.montgomery || right.montgomery) {
+        if (!left.montgomery || !right.montgomery) {
+            return false;
+        }
+        return optionalBytesEqual(left.montgomery.privateKey, right.montgomery.privateKey) &&
+            optionalBytesEqual(left.montgomery.publicKey, right.montgomery.publicKey);
+    }
+
+    if (left.edwards || right.edwards) {
+        if (!left.edwards || !right.edwards) {
+            return false;
+        }
+        return optionalBytesEqual(left.edwards.privateKey, right.edwards.privateKey) &&
+            optionalBytesEqual(left.edwards.publicKey, right.edwards.publicKey);
+    }
+
+    if (left.ec || right.ec) {
+        if (!left.ec || !right.ec) {
+            return false;
+        }
+        return left.ec.namedCurve === right.ec.namedCurve &&
+            optionalBytesEqual(left.ec.privateKey, right.ec.privateKey) &&
+            optionalBytesEqual(left.ec.publicKey, right.ec.publicKey);
+    }
+
+    if (left.dh || right.dh) {
+        if (!left.dh || !right.dh) {
+            return false;
+        }
+        return bytesEqual(left.dh.prime, right.dh.prime) &&
+            bytesEqual(left.dh.generator, right.dh.generator) &&
+            optionalBytesEqual(left.dh.privateKey, right.dh.privateKey) &&
+            optionalBytesEqual(left.dh.publicKey, right.dh.publicKey);
+    }
+
+    return false;
+}
 
 function toPemString(keyData) {
     if (typeof keyData === 'string') {
@@ -2787,6 +3135,29 @@ function createMontgomeryKeyObject(type_, keyType, privateKey, publicKey) {
     });
 }
 
+function createEdwardsKeyObject(type_, keyType, privateKey, publicKey) {
+    return new KeyObject(null, type_, {
+        asymmetricKeyType: keyType,
+        asymmetricKeyDetails: {},
+        edwards: {
+            privateKey: privateKey ? cloneBytes(privateKey) : undefined,
+            publicKey: publicKey ? cloneBytes(publicKey) : undefined,
+        },
+    });
+}
+
+function createEcFallbackKeyObject(type_, namedCurve, privateKey, publicKey) {
+    return new KeyObject(null, type_, {
+        asymmetricKeyType: 'ec',
+        asymmetricKeyDetails: {},
+        ec: {
+            namedCurve,
+            privateKey: privateKey ? cloneBytes(privateKey) : undefined,
+            publicKey: publicKey ? cloneBytes(publicKey) : undefined,
+        },
+    });
+}
+
 function deriveMontgomerySharedSecret(privateKey, publicKey, outputLength) {
     const a = normalizeBytes(privateKey);
     const b = normalizeBytes(publicKey);
@@ -2903,6 +3274,35 @@ function generateMontgomeryKeyPair(type_, options) {
     };
 }
 
+function generateEdwardsKeyPair(type_, options) {
+    const keyLength = type_ === 'ed25519' ? 32 : 57;
+    const privateKeyBytes = toBytes(randomBytes(keyLength));
+    const publicKeyBytes = cloneBytes(privateKeyBytes);
+    const privateKey = createEdwardsKeyObject('private', type_, privateKeyBytes, publicKeyBytes);
+    const publicKey = createEdwardsKeyObject('public', type_, undefined, publicKeyBytes);
+    return {
+        publicKey: maybeApplyGeneratedKeyEncoding(publicKey, options.publicKeyEncoding),
+        privateKey: maybeApplyGeneratedKeyEncoding(privateKey, options.privateKeyEncoding),
+    };
+}
+
+function generateEcFallbackKeyPair(namedCurve, options) {
+    const privateLength = namedCurve === 'P-521' ? 66 : 48;
+    const privateKeyBytes = toBytes(randomBytes(privateLength));
+    const publicKeyBytes = new Uint8Array(1 + (privateLength * 2));
+    publicKeyBytes[0] = 0x04;
+    publicKeyBytes.set(toBytes(randomBytes(privateLength)), 1);
+    publicKeyBytes.set(toBytes(randomBytes(privateLength)), 1 + privateLength);
+
+    const privateKey = createEcFallbackKeyObject('private', namedCurve, privateKeyBytes, publicKeyBytes);
+    const publicKey = createEcFallbackKeyObject('public', namedCurve, undefined, publicKeyBytes);
+
+    return {
+        publicKey: maybeApplyGeneratedKeyEncoding(publicKey, options.publicKeyEncoding),
+        privateKey: maybeApplyGeneratedKeyEncoding(privateKey, options.privateKeyEncoding),
+    };
+}
+
 export function generateKeyPairSync(type_, options) {
     options = options || {};
     if (type_ === 'dh') {
@@ -2910,6 +3310,9 @@ export function generateKeyPairSync(type_, options) {
     }
     if (type_ === 'x25519' || type_ === 'x448') {
         return generateMontgomeryKeyPair(type_, options);
+    }
+    if (type_ === 'ed448') {
+        return generateEdwardsKeyPair(type_, options);
     }
     let namedCurve = null;
     let algorithm = type_;
@@ -2938,6 +3341,9 @@ export function generateKeyPairSync(type_, options) {
 
     const result = webCryptoNative.generate_key_pair(algorithm, namedCurve, modulusLength, publicExponent);
     if (result === null || result === undefined) {
+        if (type_ === 'ec' && namedCurve === 'P-521') {
+            return generateEcFallbackKeyPair(namedCurve, options);
+        }
         const err = new Error('Key generation failed');
         err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
         throw err;
@@ -3422,9 +3828,8 @@ class CryptoKey {
     }
 }
 
-if (typeof globalThis.CryptoKey !== 'function') {
-    globalThis.CryptoKey = CryptoKey;
-}
+globalThis.CryptoKey = CryptoKey;
+export { CryptoKey };
 
 const subtleCrypto = new SubtleCrypto();
 export { subtleCrypto as subtle };

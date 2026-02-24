@@ -475,9 +475,9 @@ Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createSe
 - `ECDH` (`generateKeys`, `computeSecret`, `getPublicKey`, `getPrivateKey`, `setPublicKey`, `setPrivateKey`, `convertKey`)
 - `diffieHellman`
 - `Certificate` (`verifySpkac`, `exportPublicKey`, `exportChallenge`)
-- `generateKeyPairSync` (ed25519, ec with prime256v1/P-256, secp384r1/P-384, secp256k1, dh, x25519, x448)
+- `generateKeyPairSync` (ed25519, ed448, ec with prime256v1/P-256, secp384r1/P-384, secp256k1, P-521, dh, x25519, x448)
 - `generateKeyPair`
-- `KeyObject` (type, asymmetricKeyType, export)
+- `KeyObject` (`type`, `asymmetricKeyType`, `asymmetricKeyDetails`, `symmetricKeySize`, `export`, `equals`, `toCryptoKey`, `from`)
 - `hash`
 - `getHashes`
 - `getCiphers`
