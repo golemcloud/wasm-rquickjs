@@ -156,7 +156,7 @@ function validateUid(id, name) {
 }
 
 function validateMode(mode, name, def) {
-    if (mode === undefined) return def;
+    mode = mode ?? def;
     if (typeof mode === 'string') {
         if (!/^[0-7]+$/.test(mode)) {
             const err = new TypeError(`The argument '${name}' must be a 32-bit unsigned integer or an octal string. Received '${mode}'`);
@@ -201,6 +201,35 @@ function parseMkdirOptions(options) {
         recursive,
         mode: validateMode(mode, 'mode', 0o777) & MKDIR_MODE_MASK,
     };
+}
+
+function validatePath(path, propName) {
+    if (typeof path === 'string') {
+        if (path.indexOf('\u0000') !== -1) {
+            const err = new TypeError(`The argument '${propName || 'path'}' must be a string, Uint8Array, or URL without null bytes. Received ${JSON.stringify(path)}`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        return;
+    }
+    if (getBuffer() && path instanceof getBuffer()) return;
+    if (path instanceof URL) {
+        if (path.protocol !== 'file:') {
+            const err = new TypeError('The URL must be of scheme file');
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        const urlStr = path.toString();
+        if (urlStr.indexOf('\u0000') !== -1 || urlStr.indexOf('%00') !== -1) {
+            const err = new TypeError(`The argument '${propName || 'path'}' must be a string, Uint8Array, or URL without null bytes. Received ${path.toString()}`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        return;
+    }
+    const err = new TypeError(`The "${propName || 'path'}" argument must be of type string or an instance of Buffer or URL. Received ${describeType(path)}`);
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
 }
 
 function pathToString(path) {
@@ -657,9 +686,10 @@ export class FileHandle {
 // --- Promise-based fs functions ---
 
 export async function open(path, flags, mode) {
+    validatePath(path);
     flags = flagsToNumber(flags !== undefined ? flags : 'r');
     mode = validateMode(mode, 'mode', 0o666);
-    const result = native.fs_open(path, flags, mode);
+    const result = native.fs_open(pathToString(path), flags, mode);
     if (result.error) throw createSystemError(result.error);
     return new FileHandle(result.fd, path);
 }

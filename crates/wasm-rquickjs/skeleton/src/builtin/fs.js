@@ -256,7 +256,7 @@ function validateAppendFileData(data) {
 }
 
 function validateMode(mode, name, def) {
-    if (mode === undefined) return def;
+    mode = mode ?? def;
     if (typeof mode === 'string') {
         if (!/^[0-7]+$/.test(mode)) {
             const err = new TypeError(`The argument '${name}' must be a 32-bit unsigned integer or an octal string. Received '${mode}'`);
