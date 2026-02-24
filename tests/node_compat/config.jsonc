@@ -691,10 +691,7 @@
     },
     "parallel/test-fs-mkdtemp-prefix-check.js": {},
     "parallel/test-fs-non-number-arguments-throw.js": {},
-    "parallel/test-fs-null-bytes.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-null-bytes.js": {},
     "parallel/test-fs-open.js": {
       "skip": true,
       "reason": "assert.throws fails: openSync with null mode throws plain Error instead of ERR_INVALID_ARG_VALUE"
