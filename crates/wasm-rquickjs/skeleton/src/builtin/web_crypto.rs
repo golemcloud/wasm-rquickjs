@@ -4248,14 +4248,22 @@ fn ecdh_generate_keys_impl(id: u32) -> Option<Vec<u8>> {
 
 fn ecdh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, String> {
     use elliptic_curve::ecdh::diffie_hellman;
-    use elliptic_curve::sec1::FromEncodedPoint;
+    use elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 
     let contexts = ECDH_CONTEXTS.lock().unwrap();
     let state = contexts.get(&id).ok_or("ECDH context not found")?;
 
     match state {
-        EcdhState::P256 { sk, .. } => {
+        EcdhState::P256 { sk, pk } => {
             let secret_key = sk.as_ref().ok_or("No private key")?;
+            if let Some(configured_public) = pk.as_ref() {
+                let derived_public = secret_key.public_key();
+                if derived_public.to_encoded_point(false).as_bytes()
+                    != configured_public.to_encoded_point(false).as_bytes()
+                {
+                    return Err("Invalid key pair".to_string());
+                }
+            }
             let point = p256::EncodedPoint::from_bytes(other_pub_bytes)
                 .map_err(|_| "Public key is not valid for specified curve".to_string())?;
             let public = p256::PublicKey::from_encoded_point(&point);
@@ -4266,8 +4274,16 @@ fn ecdh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, 
                 diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
             Ok(shared.raw_secret_bytes().to_vec())
         }
-        EcdhState::P384 { sk, .. } => {
+        EcdhState::P384 { sk, pk } => {
             let secret_key = sk.as_ref().ok_or("No private key")?;
+            if let Some(configured_public) = pk.as_ref() {
+                let derived_public = secret_key.public_key();
+                if derived_public.to_encoded_point(false).as_bytes()
+                    != configured_public.to_encoded_point(false).as_bytes()
+                {
+                    return Err("Invalid key pair".to_string());
+                }
+            }
             let point = p384::EncodedPoint::from_bytes(other_pub_bytes)
                 .map_err(|_| "Public key is not valid for specified curve".to_string())?;
             let public = p384::PublicKey::from_encoded_point(&point);
@@ -4278,8 +4294,16 @@ fn ecdh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, 
                 diffie_hellman(secret_key.to_nonzero_scalar(), public.unwrap().as_affine());
             Ok(shared.raw_secret_bytes().to_vec())
         }
-        EcdhState::K256 { sk, .. } => {
+        EcdhState::K256 { sk, pk } => {
             let secret_key = sk.as_ref().ok_or("No private key")?;
+            if let Some(configured_public) = pk.as_ref() {
+                let derived_public = secret_key.public_key();
+                if derived_public.to_encoded_point(false).as_bytes()
+                    != configured_public.to_encoded_point(false).as_bytes()
+                {
+                    return Err("Invalid key pair".to_string());
+                }
+            }
             let point = k256::EncodedPoint::from_bytes(other_pub_bytes)
                 .map_err(|_| "Public key is not valid for specified curve".to_string())?;
             let public = k256::PublicKey::from_encoded_point(&point);
