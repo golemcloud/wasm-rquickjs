@@ -188,10 +188,7 @@
     "parallel/test-fs-empty-readStream.js": {},
     "parallel/test-fs-error-messages.js": {},
     "parallel/test-fs-exists.js": {},
-    "parallel/test-fs-existssync-false.js": {
-      "skip": true,
-      "reason": "path length exceeds WASI limits"
-    },
+    "parallel/test-fs-existssync-false.js": {},
     "parallel/test-fs-fchmod.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"

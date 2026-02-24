@@ -164,6 +164,9 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
             if err_text.contains("bad file descriptor") {
                 return ("EBADF", -9, "bad file descriptor");
             }
+            if err_text.contains("name too long") || err_text.contains("path too long") {
+                return ("ENAMETOOLONG", -36, "name too long");
+            }
 
             if let Some(raw) = err.raw_os_error() {
                 #[cfg(target_os = "wasi")]
