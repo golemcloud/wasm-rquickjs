@@ -206,10 +206,7 @@
       "reason": "requires worker_threads which is not available in WASM"
     },
     "parallel/test-fs-mkdir-mode-mask.js": {},
-    "parallel/test-fs-mkdir-recursive-eaccess.js": {
-      "skip": true,
-      "reason": "requires process.getuid()"
-    },
+    "parallel/test-fs-mkdir-recursive-eaccess.js": {},
     "parallel/test-fs-mkdir-rmdir.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
