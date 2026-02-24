@@ -187,10 +187,7 @@
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
     },
-    "parallel/test-fs-copyfile-respect-permissions.js": {
-      "skip": true,
-      "reason": "requires process.getuid and permission checks"
-    },
+    "parallel/test-fs-copyfile-respect-permissions.js": {},
     "parallel/test-fs-empty-readStream.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
