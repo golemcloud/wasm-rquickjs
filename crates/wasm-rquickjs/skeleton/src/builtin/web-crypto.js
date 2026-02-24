@@ -18,9 +18,65 @@ const HASH_ALIASES = {
     'sha3-256': 'sha3-256',
     'sha3-384': 'sha3-384',
     'sha3-512': 'sha3-512',
+    'shake128': 'shake128',
+    'shake-128': 'shake128',
+    'shake256': 'shake256',
+    'shake-256': 'shake256',
     'ripemd160': 'ripemd160',
     'rmd160': 'ripemd160',
 };
+
+const XOF_DEFAULT_OUTPUT_LENGTHS = {
+    'shake128': 16,
+    'shake256': 32,
+};
+
+const HASH_OUTPUT_LENGTHS = {
+    'md5': 16,
+    'sha1': 20,
+    'sha224': 28,
+    'sha256': 32,
+    'sha384': 48,
+    'sha512': 64,
+    'sha3-256': 32,
+    'sha3-384': 48,
+    'sha3-512': 64,
+    'ripemd160': 20,
+};
+
+function getHashOutputLength(algorithm, options) {
+    let outputLength;
+    if (options && typeof options === 'object') {
+        outputLength = options.outputLength;
+    }
+
+    if (outputLength === undefined) {
+        if (Object.prototype.hasOwnProperty.call(XOF_DEFAULT_OUTPUT_LENGTHS, algorithm)) {
+            return XOF_DEFAULT_OUTPUT_LENGTHS[algorithm];
+        }
+        return undefined;
+    }
+
+    if (typeof outputLength !== 'number') {
+        const err = new TypeError(`The "options.outputLength" property must be of type number. Received type ${typeof outputLength}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    if (!Number.isFinite(outputLength) || !Number.isInteger(outputLength) || outputLength < 0 || outputLength > 0xFFFFFFFF) {
+        const err = new RangeError(`The value of "options.outputLength" is out of range. It must be >= 0 and <= 4294967295. Received ${outputLength}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(XOF_DEFAULT_OUTPUT_LENGTHS, algorithm) && outputLength !== HASH_OUTPUT_LENGTHS[algorithm]) {
+        const err = new Error('not XOF or invalid length');
+        err.code = 'ERR_OSSL_EVP_NOT_XOF_OR_INVALID_LENGTH';
+        throw err;
+    }
+
+    return outputLength;
+}
 
 function normalizeHashAlgorithm(algorithm) {
     if (typeof algorithm !== 'string') {
@@ -136,6 +192,7 @@ function trackCipherOutputEncoding(currentEncoding, outputEncoding) {
 function Hash(algorithm, options) {
     if (!(this instanceof Hash)) return new Hash(algorithm, options);
     this._algorithm = normalizeHashAlgorithm(algorithm);
+    this._outputLength = getHashOutputLength(this._algorithm, options);
     const handle = webCryptoNative.hash_init(this._algorithm);
     if (handle === null || handle === undefined) {
         const err = new Error('Digest method not supported: ' + algorithm);
@@ -191,7 +248,7 @@ Hash.prototype.digest = function(encoding) {
         throw err;
     }
     this._finalized = true;
-    const hashBytes = webCryptoNative.hash_final(this._handle);
+    const hashBytes = webCryptoNative.hash_final(this._handle, this._outputLength);
     const result = new Uint8Array(hashBytes);
     return encodeOutput(result, encoding);
 };
@@ -203,7 +260,16 @@ Hash.prototype.copy = function(options) {
         throw err;
     }
     const newHash = new Hash(this._algorithm, options);
-    newHash._handle = webCryptoNative.hash_copy(this._handle);
+    const newHandle = webCryptoNative.hash_copy(this._handle);
+    const temporaryHandle = newHash._handle;
+    if (newHandle === null || newHandle === undefined) {
+        webCryptoNative.hash_free(temporaryHandle);
+        const err = new Error('Hash copy failed');
+        err.code = 'ERR_CRYPTO_HASH_FINALIZED';
+        throw err;
+    }
+    newHash._handle = newHandle;
+    webCryptoNative.hash_free(temporaryHandle);
     newHash._finalized = false;
     return newHash;
 };

@@ -887,10 +887,7 @@
     "parallel/test-crypto-gcm-implicit-short-tag.js": {},
     "parallel/test-crypto-getcipherinfo.js": {},
     "parallel/test-crypto-hash-stream-pipe.js": {},
-    "parallel/test-crypto-hash.js": {
-      "skip": true,
-      "reason": "requires fixtures module (sample.png) and shake128/256 XOF hash support"
-    },
+    "parallel/test-crypto-hash.js": {},
     "parallel/test-crypto-hkdf.js": {
       "skip": true,
       "reason": "requires buffer.kMaxLength, SharedArrayBuffer, specific error messages, and info length validation"

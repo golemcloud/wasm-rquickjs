@@ -6,13 +6,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use base64ct::Encoding;
-use digest::Digest;
+use digest::{Digest, ExtendableOutput, XofReader};
 use hmac::{Hmac, Mac};
 use md5::Md5;
 use ripemd::Ripemd160;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
-use sha3::{Sha3_256, Sha3_384, Sha3_512};
+use sha3::{Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 
 use ecdsa::signature::Signer;
 use ecdsa::signature::Verifier;
@@ -29,6 +29,8 @@ enum HashContext {
     Sha256(Sha256),
     Sha384(Sha384),
     Sha512(Sha512),
+    Shake128(Shake128),
+    Shake256(Shake256),
     Sha3_256(Sha3_256),
     Sha3_384(Sha3_384),
     Sha3_512(Sha3_512),
@@ -44,6 +46,8 @@ impl HashContext {
             HashContext::Sha256(h) => h.update(data),
             HashContext::Sha384(h) => h.update(data),
             HashContext::Sha512(h) => h.update(data),
+            HashContext::Shake128(h) => digest::Update::update(h, data),
+            HashContext::Shake256(h) => digest::Update::update(h, data),
             HashContext::Sha3_256(h) => h.update(data),
             HashContext::Sha3_384(h) => h.update(data),
             HashContext::Sha3_512(h) => h.update(data),
@@ -52,6 +56,10 @@ impl HashContext {
     }
 
     fn finalize(self) -> Vec<u8> {
+        self.finalize_with_output_length(None)
+    }
+
+    fn finalize_with_output_length(self, output_length: Option<u32>) -> Vec<u8> {
         match self {
             HashContext::Md5(h) => h.finalize().to_vec(),
             HashContext::Sha1(h) => h.finalize().to_vec(),
@@ -59,6 +67,20 @@ impl HashContext {
             HashContext::Sha256(h) => h.finalize().to_vec(),
             HashContext::Sha384(h) => h.finalize().to_vec(),
             HashContext::Sha512(h) => h.finalize().to_vec(),
+            HashContext::Shake128(h) => {
+                let len = output_length.unwrap_or(16) as usize;
+                let mut result = vec![0u8; len];
+                let mut reader = h.finalize_xof();
+                reader.read(&mut result);
+                result
+            }
+            HashContext::Shake256(h) => {
+                let len = output_length.unwrap_or(32) as usize;
+                let mut result = vec![0u8; len];
+                let mut reader = h.finalize_xof();
+                reader.read(&mut result);
+                result
+            }
             HashContext::Sha3_256(h) => h.finalize().to_vec(),
             HashContext::Sha3_384(h) => h.finalize().to_vec(),
             HashContext::Sha3_512(h) => h.finalize().to_vec(),
@@ -74,6 +96,8 @@ impl HashContext {
             HashContext::Sha256(h) => HashContext::Sha256(h.clone()),
             HashContext::Sha384(h) => HashContext::Sha384(h.clone()),
             HashContext::Sha512(h) => HashContext::Sha512(h.clone()),
+            HashContext::Shake128(h) => HashContext::Shake128(h.clone()),
+            HashContext::Shake256(h) => HashContext::Shake256(h.clone()),
             HashContext::Sha3_256(h) => HashContext::Sha3_256(h.clone()),
             HashContext::Sha3_384(h) => HashContext::Sha3_384(h.clone()),
             HashContext::Sha3_512(h) => HashContext::Sha3_512(h.clone()),
@@ -90,6 +114,8 @@ fn create_hasher(algorithm: &str) -> Option<HashContext> {
         "sha256" => Some(HashContext::Sha256(Sha256::new())),
         "sha384" => Some(HashContext::Sha384(Sha384::new())),
         "sha512" => Some(HashContext::Sha512(Sha512::new())),
+        "shake128" => Some(HashContext::Shake128(Shake128::default())),
+        "shake256" => Some(HashContext::Shake256(Shake256::default())),
         "sha3-256" => Some(HashContext::Sha3_256(Sha3_256::new())),
         "sha3-384" => Some(HashContext::Sha3_384(Sha3_384::new())),
         "sha3-512" => Some(HashContext::Sha3_512(Sha3_512::new())),
@@ -105,6 +131,8 @@ const SUPPORTED_HASHES: &[&str] = &[
     "sha256",
     "sha384",
     "sha512",
+    "shake128",
+    "shake256",
     "sha3-256",
     "sha3-384",
     "sha3-512",
@@ -137,8 +165,12 @@ fn hash_update_impl(id: u32, data: &[u8]) -> bool {
     }
 }
 
-fn hash_final_impl(id: u32) -> Option<Vec<u8>> {
-    CONTEXTS.lock().unwrap().remove(&id).map(|h| h.finalize())
+fn hash_final_impl(id: u32, output_length: Option<u32>) -> Option<Vec<u8>> {
+    CONTEXTS
+        .lock()
+        .unwrap()
+        .remove(&id)
+        .map(|h| h.finalize_with_output_length(output_length))
 }
 
 fn hash_copy_impl(id: u32) -> Option<u32> {
@@ -4614,8 +4646,8 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn hash_final(id: u32) -> Option<Vec<u8>> {
-        super::hash_final_impl(id)
+    pub fn hash_final(id: u32, output_length: Option<u32>) -> Option<Vec<u8>> {
+        super::hash_final_impl(id, output_length)
     }
 
     #[rquickjs::function]
