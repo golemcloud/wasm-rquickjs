@@ -3990,6 +3990,85 @@ fn rsa_private_decrypt(key: &RsaPrivateKey, data: &[u8], padding: u32) -> Option
     }
 }
 
+fn left_pad_biguint(value: BigUint, size: usize) -> Option<Vec<u8>> {
+    let bytes = value.to_bytes_be();
+    if bytes.len() > size {
+        return None;
+    }
+    let mut result = vec![0u8; size - bytes.len()];
+    result.extend_from_slice(&bytes);
+    Some(result)
+}
+
+fn rsa_pkcs1_type1_pad(data: &[u8], size: usize) -> Option<Vec<u8>> {
+    if data.len() + 11 > size {
+        return None;
+    }
+    let padding_len = size - data.len() - 3;
+    if padding_len < 8 {
+        return None;
+    }
+
+    let mut result = Vec::with_capacity(size);
+    result.push(0x00);
+    result.push(0x01);
+    result.extend(std::iter::repeat(0xff).take(padding_len));
+    result.push(0x00);
+    result.extend_from_slice(data);
+    Some(result)
+}
+
+fn rsa_pkcs1_type1_unpad(data: &[u8]) -> Option<Vec<u8>> {
+    if data.len() < 11 || data[0] != 0x00 || data[1] != 0x01 {
+        return None;
+    }
+    let mut idx = 2;
+    while idx < data.len() && data[idx] == 0xff {
+        idx += 1;
+    }
+    if idx < 10 || idx >= data.len() || data[idx] != 0x00 {
+        return None;
+    }
+    Some(data[(idx + 1)..].to_vec())
+}
+
+fn rsa_private_encrypt(key: &RsaPrivateKey, data: &[u8], padding: u32) -> Option<Vec<u8>> {
+    use rsa::traits::PublicKeyParts;
+
+    match padding {
+        // RSA_PKCS1_PADDING
+        1 => {
+            let size = key.size();
+            let padded = rsa_pkcs1_type1_pad(data, size)?;
+            let encoded = BigUint::from_bytes_be(&padded);
+            let raw = rsa::hazmat::rsa_decrypt_and_check(
+                key,
+                Option::<&mut rsa::rand_core::OsRng>::None,
+                &encoded,
+            )
+            .ok()?;
+            left_pad_biguint(raw, size)
+        }
+        _ => None,
+    }
+}
+
+fn rsa_public_decrypt(key: &RsaPublicKey, data: &[u8], padding: u32) -> Option<Vec<u8>> {
+    use rsa::traits::PublicKeyParts;
+
+    match padding {
+        // RSA_PKCS1_PADDING
+        1 => {
+            let size = key.size();
+            let encrypted = BigUint::from_bytes_be(data);
+            let raw = rsa::hazmat::rsa_encrypt(key, &encrypted).ok()?;
+            let padded = left_pad_biguint(raw, size)?;
+            rsa_pkcs1_type1_unpad(&padded)
+        }
+        _ => None,
+    }
+}
+
 fn public_encrypt_impl(key_id: u32, data: &[u8], padding: u32) -> Option<Vec<u8>> {
     let store = KEY_STORE.lock().unwrap();
     let key = store.get(&key_id)?;
@@ -4009,6 +4088,27 @@ fn private_decrypt_impl(key_id: u32, data: &[u8], padding: u32) -> Option<Vec<u8
         }
         _ => None,
     }
+}
+
+fn private_encrypt_impl(key_id: u32, data: &[u8], padding: u32) -> Option<Vec<u8>> {
+    let store = KEY_STORE.lock().unwrap();
+    let key = store.get(&key_id)?;
+    match key {
+        KeyData::RsaPrivate(sk) => {
+            let sk = sk.clone();
+            drop(store);
+            rsa_private_encrypt(&sk, data, padding)
+        }
+        _ => None,
+    }
+}
+
+fn public_decrypt_impl(key_id: u32, data: &[u8], padding: u32) -> Option<Vec<u8>> {
+    let store = KEY_STORE.lock().unwrap();
+    let key = store.get(&key_id)?;
+    let pk = key.rsa_public_key()?;
+    drop(store);
+    rsa_public_decrypt(&pk, data, padding)
 }
 
 fn create_rsa_private_key_from_der(der: &[u8]) -> Option<u32> {
@@ -5131,6 +5231,24 @@ pub mod native_module {
             .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
             .unwrap_or(&[]);
         super::private_decrypt_impl(key_id, slice, padding)
+    }
+
+    #[rquickjs::function]
+    pub fn private_encrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        super::private_encrypt_impl(key_id, slice, padding)
+    }
+
+    #[rquickjs::function]
+    pub fn public_decrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
+        let slice = data
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        super::public_decrypt_impl(key_id, slice, padding)
     }
 
     // ===== DH native functions =====
