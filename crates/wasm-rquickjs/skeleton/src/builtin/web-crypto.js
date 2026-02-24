@@ -1507,6 +1507,58 @@ function ECDH(curve) {
     this._handle = handle;
 }
 
+const ECDH_CONVERT_KEY_CURVES = new Set([
+    'prime256v1',
+    'P-256',
+    'p256',
+    'secp384r1',
+    'P-384',
+    'p384',
+    'secp256k1',
+    'K-256',
+    'k256',
+    // Node/OpenSSL supports this for convertKey(), but our runtime does not yet
+    // expose full secp521r1 ECDH support.
+    'secp521r1',
+    'P-521',
+    'p521',
+]);
+
+ECDH.convertKey = function(key, curve, inputEncoding, outputEncoding, format) {
+    if (typeof curve !== 'string') {
+        const err = new TypeError('The "curve" argument must be of type string. Received ' + (curve === undefined ? 'undefined' : typeof curve));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    const keyBytes = toBytes(key, inputEncoding);
+
+    let normalizedFormat = format;
+    if (normalizedFormat) {
+        if (normalizedFormat !== 'compressed' && normalizedFormat !== 'hybrid' && normalizedFormat !== 'uncompressed') {
+            const err = new TypeError('Invalid ECDH format: ' + normalizedFormat);
+            err.code = 'ERR_CRYPTO_ECDH_INVALID_FORMAT';
+            throw err;
+        }
+    } else {
+        normalizedFormat = undefined;
+    }
+
+    if (!ECDH_CONVERT_KEY_CURVES.has(curve)) {
+        const err = new TypeError('Invalid EC curve name');
+        err.code = 'ERR_CRYPTO_INVALID_CURVE';
+        throw err;
+    }
+
+    if (curve === 'secp521r1' || curve === 'P-521' || curve === 'p521') {
+        throw new Error('Failed to convert Buffer to EC_POINT');
+    }
+
+    const ecdh = new ECDH(curve);
+    ecdh.setPublicKey(keyBytes);
+    return ecdh.getPublicKey(outputEncoding, normalizedFormat);
+};
+
 ECDH.prototype.generateKeys = function(encoding, format) {
     const bytes = webCryptoNative.ecdh_generate_keys(this._handle);
     if (bytes === null || bytes === undefined) throw new Error('Failed to generate keys');
