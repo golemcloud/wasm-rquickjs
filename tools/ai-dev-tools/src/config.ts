@@ -132,8 +132,30 @@ export function enableTestInConfig(testPath: string): void {
 
 export function enableSubtestInConfig(testPath: string, subtestName: string): void {
   editConfig((content) => {
-    const edits = jsonc.modify(content, ["tests", testPath, "subtests", subtestName], {}, { formattingOptions });
-    return jsonc.applyEdits(content, edits);
+    const parsed = jsonc.parse(content) as Config;
+    const entry = parsed.tests?.[testPath];
+    let result = content;
+
+    // If parent is skipped, lift the parent skip and explicitly skip all other subtests
+    if (entry?.skip && entry?.subtests) {
+      const parentReason = entry.reason ?? "no reason given";
+      let edits = jsonc.modify(result, ["tests", testPath, "skip"], undefined, { formattingOptions });
+      result = jsonc.applyEdits(result, edits);
+      edits = jsonc.modify(result, ["tests", testPath, "reason"], undefined, { formattingOptions });
+      result = jsonc.applyEdits(result, edits);
+
+      for (const otherName of Object.keys(entry.subtests)) {
+        if (otherName !== subtestName && !entry.subtests[otherName].skip) {
+          const val: SubtestEntry = { skip: true, reason: parentReason };
+          edits = jsonc.modify(result, ["tests", testPath, "subtests", otherName], val, { formattingOptions });
+          result = jsonc.applyEdits(result, edits);
+        }
+      }
+    }
+
+    // Enable the target subtest
+    const edits = jsonc.modify(result, ["tests", testPath, "subtests", subtestName], {}, { formattingOptions });
+    return jsonc.applyEdits(result, edits);
   });
   console.log(`  Enabled subtest "${subtestName}" in "${testPath}"`);
 }
