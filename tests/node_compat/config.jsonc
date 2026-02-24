@@ -199,10 +199,7 @@
     "parallel/test-fs-lchown.js": {},
     "parallel/test-fs-link.js": {},
     "parallel/test-fs-long-path.js": {},
-    "parallel/test-fs-make-callback.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-make-callback.js": {},
     "parallel/test-fs-makeStatsCallback.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
