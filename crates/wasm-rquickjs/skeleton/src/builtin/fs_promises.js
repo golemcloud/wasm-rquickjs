@@ -135,18 +135,29 @@ function createSystemError(errObj) {
 }
 
 async function handleFdClose(fileOpPromise, closeFunc) {
+    let result;
+    let opError;
+
     try {
-        const result = await fileOpPromise;
+        result = await fileOpPromise;
+    } catch (error) {
+        opError = error;
+    }
+
+    try {
         await closeFunc();
-        return result;
-    } catch (opError) {
-        try {
-            await closeFunc();
-        } catch (closeError) {
+    } catch (closeError) {
+        if (opError) {
             throw aggregateTwoErrors(closeError, opError);
         }
+        throw closeError;
+    }
+
+    if (opError) {
         throw opError;
     }
+
+    return result;
 }
 
 async function readFileHandle(fileHandle, options) {
