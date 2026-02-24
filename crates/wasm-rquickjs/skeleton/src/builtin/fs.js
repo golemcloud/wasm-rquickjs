@@ -86,6 +86,7 @@ const COPYFILE_EXCL = 1;
 const COPYFILE_FICLONE = 2;
 const COPYFILE_FICLONE_FORCE = 4;
 const MAX_COPYFILE_MODE = COPYFILE_EXCL | COPYFILE_FICLONE | COPYFILE_FICLONE_FORCE;
+const MKDIR_MODE_MASK = 0o7777;
 const HAS_LCHMOD = false;
 
 export const constants = {
@@ -264,6 +265,23 @@ function validateMode(mode, name, def) {
     }
     validateInteger(mode, name, 0, 4294967295);
     return mode;
+}
+
+function parseMkdirOptions(options) {
+    let recursive = false;
+    let mode = 0o777;
+
+    if (typeof options === 'number' || typeof options === 'string') {
+        mode = options;
+    } else if (options && typeof options === 'object') {
+        recursive = options.recursive === true;
+        mode = options.mode;
+    }
+
+    return {
+        recursive,
+        mode: validateMode(mode, 'mode', 0o777) & MKDIR_MODE_MASK,
+    };
 }
 
 function validateUid(id, name) {
@@ -1150,14 +1168,9 @@ export function renameSync(oldPath, newPath) {
 
 export function mkdirSync(path, options) {
     validatePath(path);
-    let recursive = false;
-    if (typeof options === 'number') {
-        // mode only
-    } else if (options && options.recursive) {
-        recursive = true;
-    }
+    const { recursive, mode } = parseMkdirOptions(options);
 
-    const error = native.fs_mkdir(path, recursive);
+    const error = native.fs_mkdir(pathToString(path), recursive, mode);
     if (error) {
         throw createSystemError(error);
     }
@@ -1985,27 +1998,20 @@ export function rename(oldPath, newPath, callback) {
 
 export function mkdir(path, optionsOrCallback, callback) {
     validatePath(path);
-    let recursive = false;
-    let mode = 0o777;
     let cb;
+    let options;
 
     if (typeof optionsOrCallback === 'function') {
         cb = optionsOrCallback;
-    } else if (typeof optionsOrCallback === 'number') {
-        mode = optionsOrCallback;
-        cb = callback;
-    } else if (optionsOrCallback) {
-        if (optionsOrCallback.recursive) recursive = true;
-        if (optionsOrCallback.mode !== undefined) mode = optionsOrCallback.mode;
-        cb = callback;
     } else {
+        options = optionsOrCallback;
         cb = callback;
     }
 
     validateCallback(cb);
     queueMicrotask(() => {
         try {
-            const result = mkdirSync(path, { recursive, mode });
+            const result = mkdirSync(path, options);
             cb(null, result);
         } catch (err) {
             cb(err);

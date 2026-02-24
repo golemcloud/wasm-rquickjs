@@ -205,10 +205,7 @@
       "skip": true,
       "reason": "requires worker_threads which is not available in WASM"
     },
-    "parallel/test-fs-mkdir-mode-mask.js": {
-      "skip": true,
-      "reason": "mkdir does not preserve mode bits in WASI"
-    },
+    "parallel/test-fs-mkdir-mode-mask.js": {},
     "parallel/test-fs-mkdir-recursive-eaccess.js": {
       "skip": true,
       "reason": "requires process.getuid()"

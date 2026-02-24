@@ -1,5 +1,7 @@
 import * as native from '__wasm_rquickjs_builtin/fs_native';
 
+const MKDIR_MODE_MASK = 0o7777;
+
 let _Buffer = null;
 function getBuffer() {
     if (!_Buffer) {
@@ -162,6 +164,23 @@ function validateMode(mode, name, def) {
     }
     validateInteger(mode, name, 0, 4294967295);
     return mode;
+}
+
+function parseMkdirOptions(options) {
+    let recursive = false;
+    let mode = 0o777;
+
+    if (typeof options === 'number' || typeof options === 'string') {
+        mode = options;
+    } else if (options && typeof options === 'object') {
+        recursive = options.recursive === true;
+        mode = options.mode;
+    }
+
+    return {
+        recursive,
+        mode: validateMode(mode, 'mode', 0o777) & MKDIR_MODE_MASK,
+    };
 }
 
 function validateFlush(flush) {
@@ -722,11 +741,8 @@ export async function rename(oldPath, newPath) {
 }
 
 export async function mkdir(path, options) {
-    let recursive = false;
-    if (options && options.recursive) {
-        recursive = true;
-    }
-    const error = native.fs_mkdir(path, recursive);
+    const { recursive, mode } = parseMkdirOptions(options);
+    const error = native.fs_mkdir(path, recursive, mode);
     if (error) throw createSystemError(error);
     if (recursive) return path;
     return undefined;

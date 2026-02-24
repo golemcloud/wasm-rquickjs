@@ -1167,15 +1167,38 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn fs_mkdir(ctx: Ctx<'_>, path: String, recursive: bool) -> Option<Object<'_>> {
+    pub fn fs_mkdir(ctx: Ctx<'_>, path: String, recursive: bool, mode: u32) -> Option<Object<'_>> {
         let p = Path::new(&path);
+        let mode = mode & 0o7777;
+
+        #[cfg(not(unix))]
+        let existed_before = p.exists();
+
+        #[cfg(unix)]
+        let result = {
+            use std::os::unix::fs::DirBuilderExt;
+
+            let mut builder = std::fs::DirBuilder::new();
+            builder.recursive(recursive);
+            builder.mode(mode);
+            builder.create(p)
+        };
+
+        #[cfg(not(unix))]
         let result = if recursive {
             std::fs::create_dir_all(p)
         } else {
             std::fs::create_dir(p)
         };
+
         match result {
-            Ok(_) => None,
+            Ok(_) => {
+                #[cfg(not(unix))]
+                if !recursive || !existed_before {
+                    super::set_mode_override_for_path(&path, mode);
+                }
+                None
+            }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "mkdir", Some(&path))),
         }
     }
