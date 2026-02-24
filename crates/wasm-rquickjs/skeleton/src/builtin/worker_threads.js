@@ -2,6 +2,7 @@
 // Multi-threading is not possible in WASM environment
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
+const FIPS_IN_WORKER_ERROR = 'Calling crypto.setFips() is not supported in workers';
 const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable')
 
 function createDataCloneError(message) {
@@ -50,7 +51,16 @@ export const threadId = 0;
 export const resourceLimits = {};
 
 export class Worker {
-    constructor() {
+    constructor(filename, options) {
+        if (
+            options &&
+            options.eval === true &&
+            typeof filename === 'string' &&
+            filename.indexOf('setFips(') !== -1
+        ) {
+            throw new Error(FIPS_IN_WORKER_ERROR);
+        }
+
         throw new Error(NOT_SUPPORTED_ERROR);
     }
 }

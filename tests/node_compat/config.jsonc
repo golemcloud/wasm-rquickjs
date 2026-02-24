@@ -881,10 +881,7 @@
     "parallel/test-crypto-ecb.js": {},
     "parallel/test-crypto-ecdh-convert-key.js": {},
     "parallel/test-crypto-encoding-validation-error.js": {},
-    "parallel/test-crypto-fips.js": {
-      "skip": true,
-      "reason": "requires OpenSSL FIPS mode support"
-    },
+    "parallel/test-crypto-fips.js": {},
     "parallel/test-crypto-from-binary.js": {},
     "parallel/test-crypto-gcm-explicit-short-tag.js": {
       "skip": true,

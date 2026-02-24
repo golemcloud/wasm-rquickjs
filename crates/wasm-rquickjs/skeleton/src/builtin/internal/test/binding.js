@@ -93,6 +93,13 @@ const bufferTestBinding = Object.freeze({
     },
 });
 
+const cryptoTestBinding = Object.freeze({
+    // Mirrors Node's non-FIPS build semantics for test helpers.
+    testFipsCrypto() {
+        return 0;
+    },
+});
+
 export function internalBinding(name) {
     if (name === "util") {
         return utilTestBinding;
@@ -100,6 +107,10 @@ export function internalBinding(name) {
 
     if (name === "buffer") {
         return bufferTestBinding;
+    }
+
+    if (name === "crypto") {
+        return cryptoTestBinding;
     }
 
     throw new Error(`No such binding: ${name}`);

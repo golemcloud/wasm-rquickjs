@@ -11,6 +11,7 @@ import process from 'node:process';
 import moduleExports from 'node:module';
 
 var BUFFER_CONSTRUCTOR_DEPRECATION = 'Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.';
+var FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode not supported';
 
 function createNotSupportedError(method) {
     var err = new Error(method + ' is not supported in WebAssembly environment');
@@ -19,7 +20,19 @@ function createNotSupportedError(method) {
 }
 
 function formatErrorForStderr(err) {
-    var text = (err && err.stack) ? String(err.stack) : String(err);
+    var text;
+    if (err && err.stack) {
+        text = String(err.stack);
+        if (err && err.message) {
+            var message = String(err.message);
+            if (text.indexOf(message) === -1) {
+                text = 'Error: ' + message + '\n' + text;
+            }
+        }
+    } else {
+        text = String(err);
+    }
+
     if (!text.endsWith('\n')) {
         text += '\n';
     }
@@ -100,6 +113,65 @@ function buildOutputResult(capturedStdout, capturedStderr, status, encoding) {
 
 function isInlineEvalOption(value) {
     return value === '-e' || value === '--eval' || value === '-p' || value === '--print';
+}
+
+function execArgTakesValue(arg) {
+    return arg === '--openssl-config' || arg === '--input-type';
+}
+
+function splitExecArgvAndInvocationArgs(args) {
+    var execArgv = [];
+    var invocationArgs = [];
+
+    for (var i = 0; i < args.length; i++) {
+        var arg = String(args[i]);
+
+        if (isInlineEvalOption(arg)) {
+            invocationArgs = args.slice(i).map(function(value) {
+                return String(value);
+            });
+            break;
+        }
+
+        if (arg === '--') {
+            invocationArgs = args.slice(i + 1).map(function(value) {
+                return String(value);
+            });
+            break;
+        }
+
+        if (arg.length > 0 && arg[0] === '-') {
+            execArgv.push(arg);
+
+            if (execArgTakesValue(arg) && i + 1 < args.length) {
+                i += 1;
+                execArgv.push(String(args[i]));
+            }
+
+            continue;
+        }
+
+        invocationArgs = args.slice(i).map(function(value) {
+            return String(value);
+        });
+        break;
+    }
+
+    return {
+        execArgv,
+        invocationArgs,
+    };
+}
+
+function hasFipsStartupFlag(execArgv) {
+    for (var i = 0; i < execArgv.length; i++) {
+        var arg = String(execArgv[i]);
+        if (arg === '--enable-fips' || arg === '--force-fips') {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function parseJsStringLiteral(literal) {
@@ -280,6 +352,14 @@ function runInline(command, args, options) {
         childArgs.push(String(args[i]));
     }
 
+    var parsedChildArgs = splitExecArgvAndInvocationArgs(childArgs);
+    var execArgv = parsedChildArgs.execArgv;
+    var invocationArgs = parsedChildArgs.invocationArgs;
+
+    if (invocationArgs.length === 0) {
+        return unsupportedSpawnSyncResult(command);
+    }
+
     var childCwd = process.cwd();
     if (options && typeof options.cwd === 'string') {
         childCwd = options.cwd;
@@ -287,6 +367,7 @@ function runInline(command, args, options) {
     var encoding = getOutputEncoding(options);
 
     var oldArgv = process.argv.slice();
+    var oldExecArgv = Array.isArray(process.execArgv) ? process.execArgv.slice() : [];
     var oldArgv0 = process.argv0;
     var oldCwd = process.cwd;
     var hadMainModule = Object.prototype.hasOwnProperty.call(process, 'mainModule');
@@ -302,11 +383,16 @@ function runInline(command, args, options) {
     var inlineBufferProbe = null;
 
     try {
-        process.argv = [String(command)].concat(childArgs);
+        process.argv = [String(command)].concat(invocationArgs);
+        process.execArgv = execArgv;
         process.argv0 = String(command);
         process.cwd = function cwd() {
             return childCwd;
         };
+
+        if (hasFipsStartupFlag(execArgv)) {
+            throw new Error(FIPS_STARTUP_ERROR);
+        }
 
         if (options && options.env) {
             replaceEnv(process.env, options.env);
@@ -343,8 +429,8 @@ function runInline(command, args, options) {
 
         var runtimeRequire = moduleExports.require;
 
-        if (childArgs.length >= 2 && isInlineEvalOption(childArgs[0])) {
-            var inlineResult = executeInlineSource(runtimeRequire, childArgs);
+        if (invocationArgs.length >= 2 && isInlineEvalOption(invocationArgs[0])) {
+            var inlineResult = executeInlineSource(runtimeRequire, invocationArgs);
             inlineBufferProbe = inlineResult.bufferProbe;
             process.argv = [String(command)].concat(inlineResult.evalArgv);
 
@@ -379,6 +465,7 @@ function runInline(command, args, options) {
         }
     } finally {
         process.argv = oldArgv;
+        process.execArgv = oldExecArgv;
         process.argv0 = oldArgv0;
         process.cwd = oldCwd;
         if (hadMainModule) {

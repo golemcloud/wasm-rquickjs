@@ -1715,8 +1715,12 @@ export function getFips() {
 }
 
 export function setFips(_val) {
-    const err = new Error('Cannot set FIPS mode in a WASM environment');
-    err.code = 'ERR_CRYPTO_FIPS_FORCED';
+    if (!_val) {
+        return;
+    }
+
+    const err = new Error('error:0308010C:digital envelope routines::unsupported: fips mode not supported');
+    err.code = 'ERR_CRYPTO_OPERATION_FAILED';
     throw err;
 }
 
