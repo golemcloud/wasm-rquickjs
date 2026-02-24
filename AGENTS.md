@@ -21,52 +21,9 @@ wasm-rquickjs/
 └── README.md                   # Main documentation
 ```
 
-## Important Notes About @crates/wasm-rquickjs/skeleton
+## Skeleton Crate
 
-The `skeleton` crate is a **separate project** that is embedded within the `wasm-rquickjs` crate. It is crucial to understand the following:
-
-### Cargo.toml Naming Convention
-
-**The skeleton's `Cargo.toml` MUST be renamed to `Cargo.toml_` in the repository.**
-
-- The file is stored as `Cargo.toml_` to avoid conflicts with Rust packaging when embedded
-- When working on the skeleton locally, rename it to `Cargo.toml` before building
-- Before committing changes back, rename it back to `Cargo.toml_`
-- The embedded file in the final package uses the renamed `Cargo.toml_`
-
-### Building and Testing the Skeleton
-
-The skeleton crate can be compiled separately from the main project:
-
-```bash
-cd crates/wasm-rquickjs/skeleton
-
-# Rename Cargo.toml_ to Cargo.toml for local development
-mv Cargo.toml_ Cargo.toml
-
-# Build/test the skeleton
-cargo build
-cargo test
-
-# Rename back before committing
-mv Cargo.toml Cargo.toml_
-```
-
-### Runtime tests
-To test the builtin module of the skeleton, first define an example in `examples`, consisting of a pair of a JS file and a WIT interface,
-and then add one or more tests in `tests/runtime.rs` that use the example.
-
-### Cleaning Skeleton Build Artifacts
-
-After compiling the skeleton for testing, **always clean its build artifacts** before compiling the main `wasm-rquickjs` crate:
-
-```bash
-./cleanup-skeleton.sh
-```
-
-**Why?** The `include_dir!` macro embeds the entire skeleton directory into the main package during compilation. If the skeleton's `target/` directory is present, it will be embedded, causing:
-- Dramatically slower compilation times
-- Significantly larger resulting binaries
+The `skeleton` crate (`crates/wasm-rquickjs/skeleton/`) is a **separate project** embedded via `include_dir!`. It has special build requirements — **load the `skeleton-development` skill** for the full workflow (Cargo.toml_ convention, cleanup, test rules).
 
 ## Build Commands
 
@@ -80,59 +37,9 @@ cargo build --release
 cargo test
 ```
 
-### ⚠️ CRITICAL TEST RULES — READ BEFORE RUNNING ANY TESTS
+### ⚠️ CRITICAL TEST RULES
 
-**RULE 1: DO NOT run `cargo test --test compilation` unless files in `crates/wasm-rquickjs/src/` (the code generator) were modified.** Skeleton-only changes (`crates/wasm-rquickjs/skeleton/`) do NOT require compilation tests. Violating this wastes significant time.
-
-**RULE 2: NEVER run `cargo test --test runtime` without a filter.** The full runtime suite is extremely slow. ALWAYS run a specific submodule instead:
-
-```bash
-# ✅ CORRECT — run only the relevant submodule:
-cargo test --test runtime url -- --nocapture
-cargo test --test runtime crypto -- --nocapture
-cargo test --test runtime fs -- --nocapture
-
-# ❌ WRONG — never do this, it runs ALL runtime tests and takes too long:
-cargo test --test runtime -- --nocapture
-```
-
-**RULE 2b: NEVER run `cargo test --test node_compat` without a filter** unless you intend to run the full suite. The node_compat suite contains 800+ dynamically generated tests (one per entry in `config.jsonc`). ALWAYS filter to a specific test or group when working on individual features:
-
-```bash
-# ✅ CORRECT — run only specific tests or groups:
-cargo test --test node_compat parallel__test_assert_calltracker -- --nocapture
-cargo test --test node_compat parallel__test_fs -- --nocapture
-cargo test --test node_compat parallel__test_btoa_atob -- --nocapture
-
-# ✅ CORRECT — run ALL enabled vendor tests in parallel:
-cargo test --test node_compat -- --report-time --nocapture
-
-# ❌ WRONG — running the full suite unintentionally when only a subset is needed
-```
-
-**RULE 3: DO NOT run `cargo test` (without arguments) as it runs everything including compilation and all runtime tests.** Always run only the specific test harness relevant to your changes.
-
-### Build specific test harness
-
-Always pass `-- --nocapture` to `cargo test` so you can see the output.
-
-```bash
-cargo test --test compilation -- --nocapture   # ONLY if code generator changed
-cargo test --test runtime <module> -- --nocapture  # ALWAYS specify a module
-cargo test --test dts -- --nocapture
-cargo test --test errors -- --nocapture
-```
-
-### Saving test output for runtime and node_compat tests
-
-Runtime and node_compat tests are slow to run. **Always redirect test output to a temp file** so you can inspect, grep, or re-analyze results without re-running the tests:
-
-```bash
-cargo test --test runtime url -- --nocapture 2>&1 | tee /tmp/test-output.txt
-cargo test --test node_compat parallel__test_fs -- --nocapture 2>&1 | tee /tmp/test-output.txt
-```
-
-Then use the saved file for further checks (e.g., `grep`, `Read`) instead of re-running the test.
+**DO NOT run `cargo test` without arguments** — it runs everything and takes too long. **ALWAYS filter** to a specific test harness and module. Load the `skeleton-development` skill for full test rules and examples.
 
 ### Generate code for a JavaScript module
 ```bash
@@ -201,14 +108,9 @@ The workspace is configured in the root `Cargo.toml` with the following members:
 
 ## Development Workflow
 
-### When working on the skeleton (JavaScript APIs, core functionality):
+### When working on the skeleton:
 
-1. Navigate to the skeleton directory
-2. Rename `Cargo.toml_` to `Cargo.toml`
-3. Make changes and test with `cargo build`/`cargo test`
-4. When done, run from the repo root: `./cleanup-skeleton.sh`
-5. Rename skeleton's `Cargo.toml` back to `Cargo.toml_`
-6. Commit your changes
+Load the `skeleton-development` skill. For Node.js compat test work, also load `fixing-node-compat-test`. For adding new modules, load `adding-builtin-module`.
 
 ### When working on code generation:
 
@@ -228,13 +130,7 @@ When adding a new built-in API — such as a new Node.js-compatible module or a 
 
 ## Regenerating DTS Goldenfiles
 
-The `dts` tests use the [goldenfile](https://github.com/calder/rust-goldenfile) crate to compare generated `.d.ts` output against checked-in golden files in `tests/goldenfiles/`. When the d.ts generation logic changes and the new output is correct, regenerate the goldenfiles by running:
-
-```bash
-UPDATE_GOLDENFILES=1 cargo test --test dts
-```
-
-This overwrites the golden files with the new output. Review the changes with `git diff` before committing to ensure they are intentional.
+Load the `regenerating-goldenfiles` skill for the workflow.
 
 ## Node.js Compatibility Tests
 
@@ -246,6 +142,8 @@ The `tests/node_compat/` directory contains vendored Node.js test files used to 
 - Tests are **dynamically generated** by `tests/node_compat.rs` using test-r's `#[test_gen]`: one test case per entry in `config.jsonc`. A shared `PreparedComponent` (compiled WASM) is created once as a test dependency and reused across all tests.
 - Tests with `"skip": true` in `config.jsonc` are marked as `is_ignored` and reported as `IGNORED` by the test runner.
 - Test names follow the pattern `gen_node_compat_tests::<suite>__<test_file>` (e.g., `parallel__test_btoa_atob_js`).
+
+Load the `fixing-node-compat-test` skill for the full workflow when making a test pass.
 
 ## Built-in Module Architecture
 
@@ -259,35 +157,7 @@ This separation keeps Rust code focused on performance-critical operations while
 
 ### How to Add a New Built-in Module
 
-1. **Create the Rust native module** at `crates/wasm-rquickjs/skeleton/src/builtin/<name>.rs`. Define a `#[rquickjs::module]` block exporting functions.
-2. **Create the JS wrapper** at `crates/wasm-rquickjs/skeleton/src/builtin/<name>.js`. Import native functions from `__wasm_rquickjs_builtin/<name>_native`.
-3. **Add dependencies** (if any) to `crates/wasm-rquickjs/skeleton/Cargo.toml_` — use `default-features = false` for crates that may pull in C libraries.
-4. **Register in `crates/wasm-rquickjs/skeleton/src/builtin/mod.rs`**:
-   - Add `mod <name>;`
-   - In `add_module_resolvers`: add `.with_module("__wasm_rquickjs_builtin/<name>_native")` and the public names (e.g., `node:<name>`, `<name>`)
-   - In `module_loader` (ModuleLoader): map `__wasm_rquickjs_builtin/<name>_native` → `<name>::js_native_module`
-   - In `module_loader` (BuiltinLoader): map public names → JS constants (e.g., `<name>::<NAME>_JS`, `<name>::REEXPORT_JS`)
-5. **Update `README.md`** with the newly supported API.
-
-### `#[rquickjs::module(rename = ...)]` Does NOT Affect JS Imports
-
-The `rename` attribute (e.g., `rename = "camelCase"` or `rename_vars`) on a `#[rquickjs::module]` block does **not** rename the exports as seen by JavaScript `import` statements. JS code must always import using the **original Rust `snake_case` names** (e.g., `import { zlib_compress_sync } from ...`). Attempting to import the camelCase version will cause a "Could not find export" runtime error.
-
-### `u32` Return Value Truncation
-
-When a Rust function returns `u32`, `rquickjs` may deliver it to JavaScript as a signed 32-bit integer (e.g., `0xFFFFFFFF` becomes `-1`). In the JS wrapper, always apply the unsigned right shift operator (`>>> 0`) to recover the correct unsigned value:
-
-```javascript
-const result = native_crc32(data) >>> 0;
-```
-
-### CJS Default Export Immutability
-
-To emulate Node.js behavior where module-level constants are immutable (e.g., `require('zlib').codes`), use `Object.defineProperty` on the default export object with `writable: false` and `configurable: false`.
-
-### WASM-Compatible Dependencies
-
-When adding crate dependencies to the skeleton (`Cargo.toml_`), always use `default-features = false` for crates that may optionally pull in C/native libraries (e.g., `libz-sys`). Use pure-Rust backends or features (e.g., `rust_backend`) to ensure compatibility with the `wasm32-wasip2` target.
+Load the `adding-builtin-module` skill for the full checklist, code templates, and gotchas.
 
 ## Key Files
 
