@@ -1,3 +1,4 @@
+pub mod js_subtest_parser;
 pub mod test_server;
 
 use crate::common::WasmSource::Precompiled;
@@ -641,7 +642,6 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
-        let feature_combination = feature_combination;
         let name = path.file_name().unwrap();
         let wrapper_crate_root = Utf8Path::new("tmp")
             .join(name)

@@ -39,6 +39,10 @@ test-r = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 uuid = { version = "1.18.1", features = ["v4"] }
+oxc_parser = { workspace = true }
+oxc_allocator = { workspace = true }
+oxc_ast = { workspace = true }
+oxc_span = { workspace = true }
 wac-graph = { workspace = true }
 wasmtime = { workspace = true, features = ["async", "component-model", "cache"] }
 wasmtime-wasi = { workspace = true }
@@ -66,6 +70,14 @@ harness = false
 
 [[test]]
 name = "node_compat_report"
+harness = false
+
+[[test]]
+name = "migrate_config_split"
+harness = false
+
+[[test]]
+name = "js_subtest_parser"
 harness = false
 
 [workspace]
@@ -118,3 +130,7 @@ wasmtime-wasi-http = "34.0.1"
 wit-bindgen-core = "0.43.0"
 wit-encoder = "0.235.0"
 wit-parser = "0.235.0"
+oxc_parser = "0.115"
+oxc_allocator = "0.115"
+oxc_ast = "0.115"
+oxc_span = "0.115"

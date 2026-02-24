@@ -165,9 +165,14 @@ export function buildAmpPrompt(
   targetTest: string,
   targetReason: string,
   failureOutput: string,
+  subtestName?: string,
 ): string {
-  const filt = testPathToFilter(targetTest);
+  const filt = testPathToFilter(targetTest, subtestName);
   const truncatedOutput = failureOutput.slice(-4000);
+
+  const subtestInfo = subtestName
+    ? `\n- **Subtest**: ${subtestName} (this is one of multiple sub-tests in the file; focus on the specific block/test case that this subtest targets)`
+    : '';
 
   return `\
 You are working on the wasm-rquickjs project which wraps JavaScript in WebAssembly Components using QuickJS.
@@ -176,7 +181,7 @@ We are trying to make a Node.js compatibility test pass. The test is a vendored 
 
 ## Test to fix
 - **Test file**: tests/node_compat/suite/${targetTest}
-- **Current skip reason**: ${targetReason}
+- **Current skip reason**: ${targetReason}${subtestInfo}
 
 ## Test failure output
 ${truncatedOutput}

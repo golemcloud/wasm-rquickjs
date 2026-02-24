@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { REPO_ROOT } from "../paths.js";
-import { enableTestInConfig, loadConfig } from "../config.js";
+import { enableTestInConfig, enableSubtestInConfig, loadConfig } from "../config.js";
 import * as jsonc from "jsonc-parser";
 
 const REPORT_PATH = path.join(REPO_ROOT, "tests", "node_compat", "report.md");
@@ -13,8 +13,13 @@ const formattingOptions: jsonc.FormattingOptions = {
   eol: "\n",
 };
 
-/** Parse a report section that lists test paths as `- \`path\`` bullet items. */
-function parseTestList(report: string, sectionHeading: string): string[] {
+interface ParsedTestEntry {
+  path: string;
+  subtestName?: string;
+}
+
+/** Parse a report section that lists test paths as `- \`path\`` or `- \`path#subtest\`` bullet items. */
+function parseTestList(report: string, sectionHeading: string): ParsedTestEntry[] {
   const headingIdx = report.indexOf(`## ${sectionHeading}`);
   if (headingIdx === -1) return [];
 
@@ -26,14 +31,23 @@ function parseTestList(report: string, sectionHeading: string): string[] {
       ? afterHeading
       : afterHeading.slice(0, nextHeadingIdx);
 
-  const paths: string[] = [];
+  const entries: ParsedTestEntry[] = [];
   for (const line of sectionContent.split("\n")) {
     const match = line.match(/^- `([^`]+)`/);
     if (match) {
-      paths.push(match[1]);
+      const fullPath = match[1];
+      const hashIdx = fullPath.indexOf('#');
+      if (hashIdx >= 0) {
+        entries.push({
+          path: fullPath.substring(0, hashIdx),
+          subtestName: fullPath.substring(hashIdx + 1),
+        });
+      } else {
+        entries.push({ path: fullPath });
+      }
     }
   }
-  return paths;
+  return entries;
 }
 
 export async function syncConfigCommand(
@@ -65,8 +79,9 @@ export async function syncConfigCommand(
     console.log(
       `\n🔄 ${shouldUnskip.length} test(s) to unskip (marked skip but actually pass):`,
     );
-    for (const p of shouldUnskip) {
-      console.log(`  • ${p}`);
+    for (const entry of shouldUnskip) {
+      const label = entry.subtestName ? `${entry.path}#${entry.subtestName}` : entry.path;
+      console.log(`  • ${label}`);
     }
   }
 
@@ -74,8 +89,9 @@ export async function syncConfigCommand(
     console.log(
       `\n➕ ${missingFromConfig.length} passing test(s) to add to config:`,
     );
-    for (const p of missingFromConfig) {
-      console.log(`  • ${p}`);
+    for (const entry of missingFromConfig) {
+      const label = entry.subtestName ? `${entry.path}#${entry.subtestName}` : entry.path;
+      console.log(`  • ${label}`);
     }
   }
 
@@ -86,30 +102,42 @@ export async function syncConfigCommand(
 
   console.log();
 
-  // Apply unskips: remove skip flag by setting the entry to {}
-  for (const testPath of shouldUnskip) {
-    enableTestInConfig(testPath);
+  // Apply unskips
+  for (const entry of shouldUnskip) {
+    if (entry.subtestName) {
+      enableSubtestInConfig(entry.path, entry.subtestName);
+    } else {
+      enableTestInConfig(entry.path);
+    }
   }
 
-  // Apply additions: add as enabled ({}) entries
+  // Apply additions: add as enabled entries
   if (missingFromConfig.length > 0) {
     let content = fs.readFileSync(CONFIG_PATH, "utf-8");
-    for (const testPath of missingFromConfig) {
-      const edits = jsonc.modify(content, ["tests", testPath], {}, {
-        formattingOptions,
-        getInsertionIndex: (properties) => {
-          // Insert in sorted position
-          for (let i = 0; i < properties.length; i++) {
-            if (properties[i] > testPath) return i;
-          }
-          return properties.length;
-        },
-      });
-      content = jsonc.applyEdits(content, edits);
+    for (const entry of missingFromConfig) {
+      if (entry.subtestName) {
+        // Add subtest to existing split entry
+        const edits = jsonc.modify(content, ["tests", entry.path, "subtests", entry.subtestName], {}, { formattingOptions });
+        content = jsonc.applyEdits(content, edits);
+      } else {
+        // Add new file entry
+        const edits = jsonc.modify(content, ["tests", entry.path], {}, {
+          formattingOptions,
+          getInsertionIndex: (properties) => {
+            // Insert in sorted position
+            for (let i = 0; i < properties.length; i++) {
+              if (properties[i] > entry.path) return i;
+            }
+            return properties.length;
+          },
+        });
+        content = jsonc.applyEdits(content, edits);
+      }
     }
     fs.writeFileSync(CONFIG_PATH, content);
-    for (const testPath of missingFromConfig) {
-      console.log(`  Added "${testPath}" to config.jsonc`);
+    for (const entry of missingFromConfig) {
+      const label = entry.subtestName ? `${entry.path}#${entry.subtestName}` : entry.path;
+      console.log(`  Added "${label}" to config.jsonc`);
     }
   }
 

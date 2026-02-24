@@ -5,6 +5,8 @@ import { REPO_ROOT, LOG_DIR } from "../paths.js";
 import {
   addTestsToConfigSkippedBatch,
   enableTestInConfig,
+  enableSubtestInConfig,
+  skipSubtestInConfig,
   loadConfig,
   updateSkipReason,
 } from "../config.js";
@@ -18,6 +20,11 @@ import {
 import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted } from "../amp.js";
 import { commitProgress } from "../git.js";
 
+interface FailingTest {
+  path: string;
+  subtestName?: string;
+}
+
 /**
  * Parse cargo test output to find failing test names and map them back
  * to config.jsonc test paths.
@@ -28,7 +35,7 @@ import { commitProgress } from "../git.js";
  * We extract the filter names and match them against enabled config entries
  * using testPathToFilter (which is the canonical forward mapping).
  */
-function extractFailingTests(output: string): string[] {
+function extractFailingTests(output: string): FailingTest[] {
   // Match both formats:
   //   Finished test: node_compat::gen_node_compat_tests::parallel__test_foo_js  [FAILED]
   //   test gen_node_compat_tests::parallel__test_foo_js ... FAILED
@@ -44,13 +51,25 @@ function extractFailingTests(output: string): string[] {
 
   // Build reverse lookup from filter name -> config path using all enabled config entries
   const config = loadConfig();
-  const results: string[] = [];
+  const results: FailingTest[] = [];
 
   for (const [testPath, opts] of Object.entries(config.tests)) {
     if (opts.skip) continue;
-    const filter = testPathToFilter(testPath);
-    if (failingFilters.has(filter)) {
-      results.push(testPath);
+
+    if (opts.split && opts.subtests) {
+      // Check each subtest
+      for (const [subtestName, subOpts] of Object.entries(opts.subtests)) {
+        if (subOpts.skip) continue;
+        const filter = testPathToFilter(testPath, subtestName);
+        if (failingFilters.has(filter)) {
+          results.push({ path: testPath, subtestName });
+        }
+      }
+    } else {
+      const filter = testPathToFilter(testPath);
+      if (failingFilters.has(filter)) {
+        results.push({ path: testPath });
+      }
     }
   }
 
@@ -110,9 +129,14 @@ export async function fixCommand(category: string): Promise<void> {
       throw new Error("Enabled tests are failing but could not parse which ones. Fix regressions before proceeding.");
     }
 
-    for (const testPath of failingTests) {
-      console.log(`  Skipping failing test: ${testPath}`);
-      updateSkipReason(testPath, "regression: was enabled but started failing");
+    for (const ft of failingTests) {
+      const label = ft.subtestName ? `${ft.path}#${ft.subtestName}` : ft.path;
+      console.log(`  Skipping failing test: ${label}`);
+      if (ft.subtestName) {
+        skipSubtestInConfig(ft.path, ft.subtestName, "regression: was enabled but started failing");
+      } else {
+        updateSkipReason(ft.path, "regression: was enabled but started failing");
+      }
     }
 
     // Verify the remaining enabled tests now pass
@@ -148,13 +172,15 @@ export async function fixCommand(category: string): Promise<void> {
     console.log();
     console.log("Skipped tests:");
     for (const st of skipped) {
-      console.log(`  • ${st.path}`);
+      const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
+      console.log(`  • ${label}`);
       console.log(`    Reason: ${st.reason}`);
     }
     console.log();
 
     const target = skipped[0];
-    console.log(`▶ Attempting to fix: ${target.path}`);
+    const targetLabel = target.subtestName ? `${target.path}#${target.subtestName}` : target.path;
+    console.log(`▶ Attempting to fix: ${targetLabel}`);
     console.log(`  Current skip reason: ${target.reason}`);
     console.log();
 
@@ -168,19 +194,23 @@ export async function fixCommand(category: string): Promise<void> {
 
     // Run the test to check if it already passes
     console.log("  Running test to check current status...");
-    const { ok: alreadyPasses, output: failureOutput } = await runSingleTest(target.path);
+    const { ok: alreadyPasses, output: failureOutput } = await runSingleTest(target.path, target.subtestName);
     console.log();
 
     if (alreadyPasses) {
       console.log("  🎉 Test already passes! Enabling in config.jsonc...");
-      enableTestInConfig(target.path);
+      if (target.subtestName) {
+        enableSubtestInConfig(target.path, target.subtestName);
+      } else {
+        enableTestInConfig(target.path);
+      }
       await commitProgress(category, target.path);
       console.log();
       continue;
     }
 
     // Build prompt and run amp
-    const prompt = buildAmpPrompt(category, target.path, target.reason, failureOutput);
+    const prompt = buildAmpPrompt(category, target.path, target.reason, failureOutput, target.subtestName);
     const ampResult = await runAmp(prompt, category, target.path, iteration);
 
     console.log();
@@ -214,7 +244,11 @@ export async function fixCommand(category: string): Promise<void> {
     if (result === "CANNOT_FIX") {
       const reasonNew = extractCannotFixReason(ampOutput);
       console.log(`  ⏭ Test cannot be fixed: ${reasonNew}`);
-      updateSkipReason(target.path, reasonNew);
+      if (target.subtestName) {
+        skipSubtestInConfig(target.path, target.subtestName, reasonNew);
+      } else {
+        updateSkipReason(target.path, reasonNew);
+      }
       console.log();
       await commitProgress(category, target.path);
       console.log();
@@ -227,7 +261,11 @@ export async function fixCommand(category: string): Promise<void> {
 
       // Enable first, then verify with a single category run (which includes the target)
       console.log("  Enabling in config.jsonc and verifying...");
-      enableTestInConfig(target.path);
+      if (target.subtestName) {
+        enableSubtestInConfig(target.path, target.subtestName);
+      } else {
+        enableTestInConfig(target.path);
+      }
 
       console.log(`  Running ${category} tests (includes target)...`);
       const { ok: categoryOk } = await runCategoryTests(category);
@@ -236,7 +274,11 @@ export async function fixCommand(category: string): Promise<void> {
       } else {
         // Revert: re-skip the test since it or something else is failing
         console.log("  ❌ Tests failed after enabling. Reverting to skipped.");
-        updateSkipReason(target.path, "amp fix attempt failed verification");
+        if (target.subtestName) {
+          skipSubtestInConfig(target.path, target.subtestName, "amp fix attempt failed verification");
+        } else {
+          updateSkipReason(target.path, "amp fix attempt failed verification");
+        }
       }
     } else if (result === "PARTIAL") {
       console.log("  ⚠ Partial progress made. Running regression check...");
@@ -252,10 +294,14 @@ export async function fixCommand(category: string): Promise<void> {
       const { ok: regrOk } = await runCategoryTests(category);
       if (regrOk) {
         console.log("  ✅ No regressions.");
-        const { ok: ok2 } = await runSingleTest(target.path);
+        const { ok: ok2 } = await runSingleTest(target.path, target.subtestName);
         if (ok2) {
           console.log(`  🎉 Test actually passes now! Enabling in config.`);
-          enableTestInConfig(target.path);
+          if (target.subtestName) {
+            enableSubtestInConfig(target.path, target.subtestName);
+          } else {
+            enableTestInConfig(target.path);
+          }
         }
       } else {
         throw new Error("Regressions detected. Stopping.");

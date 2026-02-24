@@ -6,6 +6,11 @@
 import assert from 'node:assert';
 
 var currentSuite = null;
+// Check for globalThis-based filter (set by test harness before file execution)
+var _subtestFilter = (typeof globalThis.__wasm_rquickjs_node_test_filter === 'number')
+    ? globalThis.__wasm_rquickjs_node_test_filter
+    : null;
+var _subtestRegistrationIndex = 0;
 
 // --- Suite context ---
 
@@ -553,6 +558,13 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
         return;
     }
 
+    // Index-based subtest filtering
+    var currentIndex = _subtestRegistrationIndex++;
+    if (_subtestFilter !== null && currentIndex !== _subtestFilter) {
+        // Silently skip — filtered out
+        return;
+    }
+
     // Top-level test — run immediately
     var result = runTest(parsed, rootSuite);
     if (result.status === 'async') {
@@ -786,6 +798,16 @@ function run() {
     return { on: function () { return this; }, once: function () { return this; } };
 }
 
+function __setFilterIndex(idx) {
+    _subtestFilter = idx;
+    _subtestRegistrationIndex = 0;
+}
+
+function __clearFilter() {
+    _subtestFilter = null;
+    _subtestRegistrationIndex = 0;
+}
+
 async function _awaitPendingTests() {
     while (_pendingTestPromises.length > 0) {
         var promises = _pendingTestPromises;
@@ -805,7 +827,9 @@ export {
     afterEach,
     mock,
     run,
-    _awaitPendingTests
+    _awaitPendingTests,
+    __setFilterIndex,
+    __clearFilter
 };
 
 export default test;

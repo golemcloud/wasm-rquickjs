@@ -10,10 +10,14 @@
 
 test_r::enable!();
 
+#[allow(dead_code)]
 mod common;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
+use common::js_subtest_parser::{
+    SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
+};
 use common::{setup_node_compat_test_files, strip_jsonc_comments};
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
@@ -153,6 +157,97 @@ impl SharedRunner {
 
         let _stdout = fs::read_to_string(&stdout_file).unwrap_or_default();
         let _stderr = fs::read_to_string(&stderr_file).unwrap_or_default();
+
+        match invoke_result {
+            Ok(()) => match &results[0] {
+                Val::String(s) => {
+                    if s.starts_with("PASS") {
+                        Ok(TestResult::Pass)
+                    } else if let Some(reason) = s.strip_prefix("SKIP:") {
+                        Ok(TestResult::Skip(reason.trim().to_string()))
+                    } else if let Some(msg) = s.strip_prefix("FAIL:") {
+                        Ok(TestResult::Fail(msg.trim().to_string()))
+                    } else {
+                        Ok(TestResult::Fail(s.clone()))
+                    }
+                }
+                other => Ok(TestResult::Fail(format!("Unexpected return: {other:?}"))),
+            },
+            Err(e) => Ok(TestResult::Error(format!("{e:#}"))),
+        }
+    }
+
+    async fn run_subtest(
+        &self,
+        test_rel_path: &str,
+        source: &str,
+        discovery: &SubtestDiscovery,
+        subtest_index: usize,
+    ) -> anyhow::Result<TestResult> {
+        let stdout_file = NamedUtf8TempFile::new()?;
+        let stderr_file = NamedUtf8TempFile::new()?;
+        let temp_dir = Utf8TempDir::new()?;
+
+        // Setup test files in temp dir
+        setup_node_compat_test_files(temp_dir.path(), test_rel_path)?;
+
+        // Rewrite the test file to isolate the target subtest
+        let rewritten = match discovery {
+            SubtestDiscovery::Block(blocks) => rewrite_for_block(source, blocks, subtest_index),
+            SubtestDiscovery::NodeTest(_) => rewrite_for_node_test(source, subtest_index),
+            SubtestDiscovery::None => source.to_string(),
+        };
+
+        // Write the rewritten file
+        let test_filename = test_rel_path.rsplit('/').next().unwrap_or(test_rel_path);
+        let suite = test_rel_path.split('/').next().unwrap_or("parallel");
+        let rewritten_path = temp_dir.path().join("test").join(suite).join(test_filename);
+        fs::write(&rewritten_path, &rewritten)?;
+
+        // Create store with fresh WASI context
+        let ctx = WasiCtx::builder()
+            .stdout(OutputFile::new(stdout_file.reopen()?))
+            .stderr(OutputFile::new(stderr_file.reopen()?))
+            .arg("test")
+            .env("TEST_KEY", "TEST_VALUE")
+            .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
+            .build();
+        let http_ctx = WasiHttpCtx::new();
+        let host = Host {
+            table: Arc::new(Mutex::new(ResourceTable::new())),
+            wasi: Arc::new(Mutex::new(ctx)),
+            wasi_http: Arc::new(http_ctx),
+        };
+
+        let mut store = Store::new(&self.engine, host);
+        store.set_epoch_deadline(30);
+        let instance = self
+            .linker
+            .instantiate_async(&mut store, &self.component)
+            .await?;
+
+        let guest_path = format!("/test/{}", test_rel_path);
+        let func = instance
+            .get_func(&mut store, "run-test")
+            .ok_or_else(|| anyhow::anyhow!("Function run-test not found"))?;
+
+        let args = [Val::String(guest_path)];
+        let mut results = vec![Val::Bool(false)];
+
+        let invoke_result = match func.call_async(&mut store, &args, &mut results).await {
+            Ok(()) => {
+                let _ = func.post_return_async(&mut store).await;
+                Ok(())
+            }
+            Err(e) => {
+                let msg = format!("{e:#}");
+                if msg.contains("epoch") || msg.contains("interrupt") {
+                    Err(anyhow::anyhow!("Timeout (epoch deadline exceeded)"))
+                } else {
+                    Err(e)
+                }
+            }
+        };
 
         match invoke_result {
             Ok(()) => match &results[0] {
@@ -477,9 +572,37 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         }
     };
 
+    // Load full config to detect split entries
+    let config_split_entries: BTreeMap<String, Vec<String>> = {
+        let config_content =
+            fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
+        let config_json_str = strip_jsonc_comments(&config_content);
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
+            val.get("tests")
+                .and_then(|v| v.as_object())
+                .map(|obj| {
+                    obj.iter()
+                        .filter_map(|(key, entry)| {
+                            let is_split = entry.get("split")?.as_bool()?;
+                            if is_split {
+                                let subtests = entry.get("subtests")?.as_object()?;
+                                let names: Vec<String> = subtests.keys().cloned().collect();
+                                Some((key.clone(), names))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            BTreeMap::new()
+        }
+    };
+
     // Also include config-skipped tests that weren't found in the suite directory scan
     // (e.g. .mjs files) so they still appear in the report
-    for (path, _) in &config_skipped {
+    for path in config_skipped.keys() {
         if !test_files.contains(path) {
             let suite_file = format!("tests/node_compat/suite/{path}");
             if std::path::Path::new(&suite_file).exists() {
@@ -624,6 +747,65 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         }
 
         results.insert(test_path.clone(), result);
+
+        // If this is a split file, also run subtests individually
+        if config_split_entries.contains_key(test_path) {
+            let source = fs::read_to_string(format!("tests/node_compat/suite/{}", test_path))
+                .unwrap_or_default();
+            let discovery = discover_subtests(test_path, &source);
+
+            let subtest_list = match &discovery {
+                SubtestDiscovery::None => vec![],
+                SubtestDiscovery::Block(blocks) => {
+                    blocks.iter().map(|b| (b.index, b.name.clone())).collect()
+                }
+                SubtestDiscovery::NodeTest(tests) => {
+                    tests.iter().map(|t| (t.index, t.name.clone())).collect()
+                }
+            };
+
+            for (idx, subtest_name) in &subtest_list {
+                let subtest_key = format!("{}#{}", test_path, subtest_name);
+                let sub_result = match tokio::time::timeout(
+                    Duration::from_secs(60),
+                    runner.run_subtest(test_path, &source, &discovery, *idx),
+                )
+                .await
+                {
+                    Ok(Ok(r)) => r,
+                    Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
+                    Err(_) => TestResult::Error("Timeout".to_string()),
+                };
+
+                let sub_filename = format!("{}#{}", filename, subtest_name);
+                let sub_tag = if is_internal { " [internal]" } else { "" };
+
+                match &sub_result {
+                    TestResult::Pass => println!("         ├─ PASS  {sub_filename}{sub_tag}"),
+                    TestResult::Skip(r) => {
+                        println!("         ├─ SKIP  {sub_filename}{sub_tag} ({r})")
+                    }
+                    TestResult::Fail(msg) => {
+                        let short = if msg.len() > 100 {
+                            &msg[..100]
+                        } else {
+                            msg.as_str()
+                        };
+                        println!("         ├─ FAIL  {sub_filename}{sub_tag}: {short}");
+                    }
+                    TestResult::Error(msg) => {
+                        let short = if msg.len() > 100 {
+                            &msg[..100]
+                        } else {
+                            msg.as_str()
+                        };
+                        println!("         ├─ ERROR {sub_filename}{sub_tag}: {short}");
+                    }
+                }
+
+                results.insert(subtest_key, sub_result);
+            }
+        }
     }
 
     let total_elapsed = total_start.elapsed();
@@ -702,11 +884,13 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     report.push_str("## Results by Module\n\n");
     let mut by_module_public: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
     for (path, result) in &results {
-        if internals_tests.contains(path) {
+        let base_path = path.split('#').next().unwrap_or(path);
+        if internals_tests.contains(base_path) {
             continue;
         }
         let filename = path.rsplit('/').next().unwrap_or(path);
-        let module = classify_test(filename).to_string();
+        let base_filename = filename.split('#').next().unwrap_or(filename);
+        let module = classify_test(base_filename).to_string();
         by_module_public
             .entry(module)
             .or_default()
@@ -748,7 +932,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     report.push_str("\n## Passing Tests\n\n");
     let passing: Vec<_> = results
         .iter()
-        .filter(|(p, r)| matches!(r, TestResult::Pass) && !internals_tests.contains(p.as_str()))
+        .filter(|(p, r)| {
+            matches!(r, TestResult::Pass)
+                && !internals_tests.contains(p.split('#').next().unwrap_or(p))
+        })
         .collect();
     if passing.is_empty() {
         report.push_str("_No tests passed._\n\n");
@@ -756,7 +943,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         for (path, _) in &passing {
             report.push_str(&format!("- `{path}`\n"));
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     // Failing tests with error messages (grouped by module, public API only)
@@ -781,14 +968,17 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 report.push_str(&format!("- `{path}`: {short}\n"));
             }
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     // Error tests (public API only)
     report.push_str("## Error Tests (runtime/instantiation errors)\n\n");
     let errors: Vec<_> = results
         .iter()
-        .filter(|(p, r)| matches!(r, TestResult::Error(_)) && !internals_tests.contains(p.as_str()))
+        .filter(|(p, r)| {
+            matches!(r, TestResult::Error(_))
+                && !internals_tests.contains(p.split('#').next().unwrap_or(p))
+        })
         .collect();
     if errors.is_empty() {
         report.push_str("_No errors._\n\n");
@@ -813,7 +1003,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     report.push_str("## Skipped Tests\n\n");
     let skipped: Vec<_> = results
         .iter()
-        .filter(|(p, r)| matches!(r, TestResult::Skip(_)) && !internals_tests.contains(p.as_str()))
+        .filter(|(p, r)| {
+            matches!(r, TestResult::Skip(_))
+                && !internals_tests.contains(p.split('#').next().unwrap_or(p))
+        })
         .collect();
     if skipped.is_empty() {
         report.push_str("_No tests skipped._\n\n");
@@ -826,6 +1019,78 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             }
         }
         report.push_str("\n</details>\n\n");
+    }
+
+    // Split Test Summary
+    report.push_str("## Split Test Summary\n\n");
+    if !config_split_entries.is_empty() {
+        report.push_str("| File | Subtests | Pass | Fail | Error | Skip |\n");
+        report.push_str("|------|----------|------|------|-------|------|\n");
+
+        for split_path in config_split_entries.keys() {
+            let split_filename = split_path.rsplit('/').next().unwrap_or(split_path);
+            let prefix = format!("{}#", split_path);
+            let sub_results: Vec<(&String, &TestResult)> = results
+                .iter()
+                .filter(|(k, _)| k.starts_with(&prefix))
+                .collect();
+
+            if sub_results.is_empty() {
+                continue;
+            }
+
+            let total = sub_results.len();
+            let pass = sub_results
+                .iter()
+                .filter(|(_, r)| matches!(r, TestResult::Pass))
+                .count();
+            let fail = sub_results
+                .iter()
+                .filter(|(_, r)| matches!(r, TestResult::Fail(_)))
+                .count();
+            let error = sub_results
+                .iter()
+                .filter(|(_, r)| matches!(r, TestResult::Error(_)))
+                .count();
+            let skip = sub_results
+                .iter()
+                .filter(|(_, r)| matches!(r, TestResult::Skip(_)))
+                .count();
+
+            report.push_str(&format!(
+                "| {split_filename} | {total} | {pass} | {fail} | {error} | {skip} |\n"
+            ));
+        }
+        report.push('\n');
+    } else {
+        report.push_str("_No split test entries in config.jsonc._\n\n");
+    }
+
+    // Check subtest-level skips that actually pass
+    {
+        let config_content =
+            fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
+        let config_json_str = strip_jsonc_comments(&config_content);
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str)
+            && let Some(tests_obj) = val.get("tests").and_then(|v| v.as_object())
+        {
+            for (key, entry) in tests_obj {
+                if let Some(subtests) = entry.get("subtests").and_then(|v| v.as_object()) {
+                    for (subtest_name, subtest_entry) in subtests {
+                        let is_skipped = subtest_entry
+                            .get("skip")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if is_skipped {
+                            let subtest_key = format!("{}#{}", key, subtest_name);
+                            if let Some(TestResult::Pass) = results.get(&subtest_key) {
+                                should_not_be_skipped.push(subtest_key);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Tests that should not be skipped (marked skip in config.jsonc but actually pass)
@@ -844,7 +1109,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         for path in &should_not_be_skipped {
             report.push_str(&format!("- `{path}`\n"));
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     // Passing tests not in config.jsonc
@@ -874,9 +1139,25 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         let missing_for_report: Vec<&String> = results
             .iter()
             .filter(|(path, result)| {
-                matches!(result, TestResult::Pass)
-                    && !internals_tests.contains(path.as_str())
-                    && !config_tests_for_report.contains(path.as_str())
+                if !matches!(result, TestResult::Pass) {
+                    return false;
+                }
+                // For subtest keys like "parallel/test.js#subtest_name",
+                // check the base path for internals and config membership,
+                // and check subtest name against config subtests list
+                let base_path = path.split('#').next().unwrap_or(path);
+                if internals_tests.contains(base_path) {
+                    return false;
+                }
+                if let Some(subtest_name) = path.split('#').nth(1) {
+                    // It's a subtest — check if it's in the config's subtests list
+                    if let Some(config_subtests) = config_split_entries.get(base_path) {
+                        return !config_subtests.contains(&subtest_name.to_string());
+                    }
+                    // Split file not in config at all
+                    return true;
+                }
+                !config_tests_for_report.contains(path.as_str())
             })
             .map(|(path, _)| path)
             .collect();
@@ -891,7 +1172,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             for path in &missing_for_report {
                 report.push_str(&format!("- `{path}`\n"));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
     }
 
@@ -900,7 +1181,8 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut by_module_all: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
     for (path, result) in &results {
         let filename = path.rsplit('/').next().unwrap_or(path);
-        let module = classify_test(filename).to_string();
+        let base_filename = filename.split('#').next().unwrap_or(filename);
+        let module = classify_test(base_filename).to_string();
         by_module_all
             .entry(module)
             .or_default()
@@ -936,7 +1218,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {pass_pct:.1}% |\n"
         ));
     }
-    report.push_str("\n");
+    report.push('\n');
 
     // Write report
     fs::write("tests/node_compat/report.md", &report)?;
@@ -1028,9 +1310,20 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let missing_from_config: Vec<&String> = results
         .iter()
         .filter(|(path, result)| {
-            matches!(result, TestResult::Pass)
-                && !internals_tests.contains(path.as_str())
-                && !config_tests.contains(path.as_str())
+            if !matches!(result, TestResult::Pass) {
+                return false;
+            }
+            let base_path = path.split('#').next().unwrap_or(path);
+            if internals_tests.contains(base_path) {
+                return false;
+            }
+            if let Some(subtest_name) = path.split('#').nth(1) {
+                if let Some(config_subtests) = config_split_entries.get(base_path) {
+                    return !config_subtests.contains(&subtest_name.to_string());
+                }
+                return true;
+            }
+            !config_tests.contains(path.as_str())
         })
         .map(|(path, _)| path)
         .collect();
