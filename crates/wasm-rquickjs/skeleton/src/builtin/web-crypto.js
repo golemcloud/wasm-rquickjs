@@ -4939,6 +4939,41 @@ function generateEcFallbackKeyPair(namedCurve, options) {
     };
 }
 
+const EC_KEYGEN_KNOWN_CURVES = new Set([
+    'prime256v1',
+    'P-256',
+    'p256',
+    'secp384r1',
+    'P-384',
+    'p384',
+    'secp256k1',
+    'secp521r1',
+    'P-521',
+    'p521',
+    'secp224r1',
+    'P-224',
+    'p224',
+]);
+
+const EC_KEYGEN_FALLBACK_CURVES = new Set([
+    'secp521r1',
+    'P-521',
+    'p521',
+]);
+
+function createInvalidEcCurveNameError() {
+    const err = new TypeError('Invalid EC curve name');
+    err.code = 'ERR_CRYPTO_INVALID_CURVE';
+    return err;
+}
+
+function normalizeEcFallbackCurveName(namedCurve) {
+    if (namedCurve === 'secp521r1' || namedCurve === 'p521') {
+        return 'P-521';
+    }
+    return namedCurve;
+}
+
 function isJwkEncodingOption(encodingOption) {
     return encodingOption && typeof encodingOption === 'object' && encodingOption.format === 'jwk';
 }
@@ -5135,11 +5170,18 @@ export function generateKeyPairSync(type_, options) {
     let modulusLength = null;
     let publicExponent = null;
     if (type_ === 'ec') {
-        namedCurve = options.namedCurve || options.curve;
-        if (!namedCurve) {
+        const namedCurveOption = options.namedCurve !== undefined ? options.namedCurve : options.curve;
+        if (namedCurveOption === undefined) {
             const err = new Error('namedCurve is required for EC key generation');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
+        }
+        if (typeof namedCurveOption !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('options.namedCurve', 'string', namedCurveOption);
+        }
+        namedCurve = namedCurveOption;
+        if (!EC_KEYGEN_KNOWN_CURVES.has(namedCurve)) {
+            throw createInvalidEcCurveNameError();
         }
 
         const { paramEncoding } = options;
@@ -5164,8 +5206,8 @@ export function generateKeyPairSync(type_, options) {
 
     const result = webCryptoNative.generate_key_pair(algorithm, namedCurve, modulusLength, publicExponent);
     if (result === null || result === undefined) {
-        if (type_ === 'ec' && namedCurve === 'P-521') {
-            return generateEcFallbackKeyPair(namedCurve, options);
+        if (type_ === 'ec' && EC_KEYGEN_FALLBACK_CURVES.has(namedCurve)) {
+            return generateEcFallbackKeyPair(normalizeEcFallbackCurveName(namedCurve), options);
         }
         if (type_ === 'ec' && namedCurve) {
             const stubPublic = new KeyObject(null, 'public', {
