@@ -4949,7 +4949,17 @@ function createInvalidKeygenPropertyError(propertyName, value) {
     return err;
 }
 
+function createUnsupportedKeyTypeError(type_) {
+    const err = new TypeError(`The argument 'type' must be a supported key type. Received ${formatInvalidArgValue(type_)}`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    return err;
+}
+
 export function generateKeyPairSync(type_, options) {
+    if (typeof type_ !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('type', 'string', type_);
+    }
+
     options = options || {};
     if (type_ === 'dsa' &&
         (isJwkEncodingOption(options.publicKeyEncoding) || isJwkEncodingOption(options.privateKeyEncoding))) {
@@ -4991,9 +5001,7 @@ export function generateKeyPairSync(type_, options) {
             publicExponent = options.publicExponent;
         }
     } else {
-        const err = new Error('Unsupported key type: ' + type_);
-        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-        throw err;
+        throw createUnsupportedKeyTypeError(type_);
     }
 
     const result = webCryptoNative.generate_key_pair(algorithm, namedCurve, modulusLength, publicExponent);
