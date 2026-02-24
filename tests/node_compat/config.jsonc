@@ -728,10 +728,7 @@
     "parallel/test-fs-promises-file-handle-dispose.js": {},
     "parallel/test-fs-promises-file-handle-op-errors.js": {},
     "parallel/test-fs-promises-file-handle-read-worker.js": {},
-    "parallel/test-fs-promises-file-handle-read.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-promises-file-handle-read.js": {},
     "parallel/test-fs-promises-file-handle-readFile.js": { "skip": true, "reason": "abort signal timing during readFile not reliable in WASI" },
     "parallel/test-fs-promises-file-handle-stat.js": {
       "skip": true,
