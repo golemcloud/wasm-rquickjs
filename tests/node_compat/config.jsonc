@@ -719,10 +719,7 @@
         "block_05_block_05": {}
       }
     },
-    "parallel/test-fs-promises-exists.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-promises-exists.js": {},
     "parallel/test-fs-promises-file-handle-aggregate-errors.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
