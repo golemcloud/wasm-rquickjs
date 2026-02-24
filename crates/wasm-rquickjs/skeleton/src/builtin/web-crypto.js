@@ -4955,6 +4955,30 @@ function createUnsupportedKeyTypeError(type_) {
     return err;
 }
 
+function validateUint32KeygenOption(value, optionName) {
+    const maxUint32 = 0xFFFFFFFF;
+    if (typeof value !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE(optionName, 'number', value);
+    }
+    if (!Number.isInteger(value)) {
+        throw new ERR_OUT_OF_RANGE(optionName, 'an integer', value);
+    }
+    if (value < 0 || value > maxUint32) {
+        throw new ERR_OUT_OF_RANGE(optionName, `>= 0 && <= ${maxUint32}`, value);
+    }
+}
+
+function validateRsaKeyPairOptions(options) {
+    validateUint32KeygenOption(options.modulusLength, 'options.modulusLength');
+    if (options.publicExponent != null) {
+        validateUint32KeygenOption(options.publicExponent, 'options.publicExponent');
+    }
+}
+
+function createInvalidRsaExponentError() {
+    return new Error('bad e value: exponent must be an odd number greater than 1');
+}
+
 function requiresGenerateKeyPairOptions(type_) {
     return type_ === 'rsa' ||
         type_ === 'rsa-pss' ||
@@ -5103,10 +5127,14 @@ export function generateKeyPairSync(type_, options) {
     } else if (type_ === 'ed25519') {
         algorithm = 'ed25519';
     } else if (type_ === 'rsa' || type_ === 'rsa-pss') {
+        validateRsaKeyPairOptions(options);
         algorithm = 'rsa';
         modulusLength = options.modulusLength;
-        if (options.publicExponent !== undefined) {
+        if (options.publicExponent != null) {
             publicExponent = options.publicExponent;
+            if (publicExponent <= 1 || publicExponent % 2 === 0) {
+                throw createInvalidRsaExponentError();
+            }
         }
     } else {
         throw createUnsupportedKeyTypeError(type_);
@@ -5172,6 +5200,9 @@ export function generateKeyPair(type_, options, callback) {
     }
 
     options = normalizeGenerateKeyPairOptions(type_, options);
+    if (type_ === 'rsa' || type_ === 'rsa-pss') {
+        validateRsaKeyPairOptions(options);
+    }
 
     try {
         const result = generateKeyPairSync(type_, options);
