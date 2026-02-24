@@ -725,10 +725,7 @@
     "parallel/test-fs-promises-file-handle-chmod.js": {},
     "parallel/test-fs-promises-file-handle-close-errors.js": {},
     "parallel/test-fs-promises-file-handle-close.js": {},
-    "parallel/test-fs-promises-file-handle-dispose.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-promises-file-handle-dispose.js": {},
     "parallel/test-fs-promises-file-handle-op-errors.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
