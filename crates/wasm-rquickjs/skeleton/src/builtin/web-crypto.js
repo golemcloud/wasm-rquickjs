@@ -2009,6 +2009,29 @@ const TO_CRYPTO_KEY_ALGORITHM_NAMES = {
 };
 
 const KEY_OBJECT_TYPES = new Set(['secret', 'public', 'private']);
+const PRIVATE_KEY_CACHE = new Map();
+const PUBLIC_KEY_CACHE = new Map();
+const PRIVATE_JWK_KEY_CACHE = new WeakMap();
+const PUBLIC_JWK_KEY_CACHE = new WeakMap();
+const RSA_PRIVATE_DECRYPT_CACHE = new Map();
+const RSA_PUBLIC_DECRYPT_CACHE = new Map();
+
+function buildKeyObjectCacheKey(format, type_, passphrase, keyData) {
+    if (passphrase !== undefined) {
+        return null;
+    }
+
+    if (typeof keyData === 'string') {
+        return format + '|' + (type_ || '') + '|str:' + keyData;
+    }
+
+    if (ArrayBuffer.isView(keyData) || keyData instanceof ArrayBuffer) {
+        const bytes = toBytes(keyData);
+        return format + '|' + (type_ || '') + '|b64:' + bytesToBase64Url(bytes);
+    }
+
+    return null;
+}
 
 function formatInvalidArgValue(value) {
     if (typeof value === 'string') {
@@ -3166,8 +3189,26 @@ function extractEd25519PublicRaw(bytes) {
 }
 
 function createPrivateKeyFromData(keyData, format, passphrase, type_) {
+    if (format === 'jwk' && keyData && typeof keyData === 'object') {
+        const cached = PRIVATE_JWK_KEY_CACHE.get(keyData);
+        if (cached) {
+            return cached;
+        }
+    }
+    const cacheKey = buildKeyObjectCacheKey(format, type_, passphrase, keyData);
+    if (cacheKey !== null) {
+        const cached = PRIVATE_KEY_CACHE.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+    }
+
     if (format === 'jwk') {
-        return createPrivateKeyFromJwk(keyData);
+        const key = createPrivateKeyFromJwk(keyData);
+        if (keyData && typeof keyData === 'object') {
+            PRIVATE_JWK_KEY_CACHE.set(keyData, key);
+        }
+        return key;
     }
 
     if (format === 'pem') {
@@ -3180,14 +3221,6 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             err.function = 'get_name';
             throw err;
         }
-        const pemDer = decodePemToDer(pem);
-        const ed25519Raw = pemDer ? extractEd25519PrivateRaw(pemDer) : null;
-        if (ed25519Raw) {
-            const edHandle = webCryptoNative.create_private_key_der(ed25519Raw);
-            if (edHandle !== null && edHandle !== undefined) {
-                return new KeyObject(edHandle, 'private');
-            }
-        }
         if (passphrase !== undefined) {
             const passBytes = toBytes(passphrase);
             const encryptedHandle = webCryptoNative.create_private_key_encrypted_pem(pem, passBytes);
@@ -3196,16 +3229,38 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             }
         }
         const handle = webCryptoNative.create_private_key_pem(pem);
-        if (handle === null || handle === undefined) {
-            const dhKey = maybeParseDhPrivateKey(pem, 'pem');
-            if (dhKey) {
-                return dhKey;
+        if (handle !== null && handle !== undefined) {
+            const key = new KeyObject(handle, 'private');
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, key);
             }
-            const err = new Error('Failed to parse private key');
-            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-            throw err;
+            return key;
         }
-        return new KeyObject(handle, 'private');
+
+        const pemDer = decodePemToDer(pem);
+        const ed25519Raw = pemDer ? extractEd25519PrivateRaw(pemDer) : null;
+        if (ed25519Raw) {
+            const edHandle = webCryptoNative.create_private_key_der(ed25519Raw);
+            if (edHandle !== null && edHandle !== undefined) {
+                const key = new KeyObject(edHandle, 'private');
+                if (cacheKey !== null) {
+                    PRIVATE_KEY_CACHE.set(cacheKey, key);
+                }
+                return key;
+            }
+        }
+
+        const dhKey = maybeParseDhPrivateKey(pem, 'pem');
+        if (dhKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, dhKey);
+            }
+            return dhKey;
+        }
+
+        const err = new Error('Failed to parse private key');
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
     }
 
     if (format === 'der') {
@@ -3214,20 +3269,27 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
         const derInput = ed25519Raw || data;
         const handle = webCryptoNative.create_private_key_der(derInput);
         if (handle === null || handle === undefined) {
-            const dhKey = maybeParseDhPrivateKey(data, 'der');
-            if (dhKey) {
-                return dhKey;
-            }
             if (type_ === 'pkcs1') {
                 const err = new Error('asn1 encoding routines');
                 err.library = 'asn1 encoding routines';
                 throw err;
             }
+            const dhKey = maybeParseDhPrivateKey(data, 'der');
+            if (dhKey) {
+                if (cacheKey !== null) {
+                    PRIVATE_KEY_CACHE.set(cacheKey, dhKey);
+                }
+                return dhKey;
+            }
             const err = new Error('Failed to parse private key');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
         }
-        return new KeyObject(handle, 'private');
+        const key = new KeyObject(handle, 'private');
+        if (cacheKey !== null) {
+            PRIVATE_KEY_CACHE.set(cacheKey, key);
+        }
+        return key;
     }
 
     const err = new TypeError('Unsupported key format: ' + format);
@@ -3236,33 +3298,37 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
 }
 
 function createPublicKeyFromData(keyData, format, passphrase) {
+    if (format === 'jwk' && keyData && typeof keyData === 'object') {
+        const cached = PUBLIC_JWK_KEY_CACHE.get(keyData);
+        if (cached) {
+            return cached;
+        }
+    }
+    const cacheKey = buildKeyObjectCacheKey(format, null, passphrase, keyData);
+    if (cacheKey !== null) {
+        const cached = PUBLIC_KEY_CACHE.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+    }
+
     if (format === 'jwk') {
-        return createPublicKeyFromJwk(keyData);
+        const key = createPublicKeyFromJwk(keyData);
+        if (keyData && typeof keyData === 'object') {
+            PUBLIC_JWK_KEY_CACHE.set(keyData, key);
+        }
+        return key;
     }
 
     if (format === 'pem') {
         const pem = toPemString(keyData);
-        const pemDer = decodePemToDer(pem);
-        const ed25519Raw = pemDer ? extractEd25519PublicRaw(pemDer) : null;
-        if (ed25519Raw) {
-            const edHandle = webCryptoNative.create_public_key_der(ed25519Raw);
-            if (edHandle !== null && edHandle !== undefined) {
-                return new KeyObject(edHandle, 'public');
-            }
-        }
-        const ed25519PrivateRaw = pemDer ? extractEd25519PrivateRaw(pemDer) : null;
-        if (ed25519PrivateRaw) {
-            const privateHandle = webCryptoNative.create_private_key_der(ed25519PrivateRaw);
-            if (privateHandle !== null && privateHandle !== undefined) {
-                const derived = webCryptoNative.create_public_key_from_private_key(privateHandle);
-                if (derived !== null && derived !== undefined) {
-                    return new KeyObject(derived, 'public');
-                }
-            }
-        }
         const pubHandle = webCryptoNative.create_public_key_pem(pem);
         if (pubHandle !== null && pubHandle !== undefined) {
-            return new KeyObject(pubHandle, 'public');
+            const key = new KeyObject(pubHandle, 'public');
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, key);
+            }
+            return key;
         }
 
         if (passphrase !== undefined) {
@@ -3278,22 +3344,55 @@ function createPublicKeyFromData(keyData, format, passphrase) {
 
         // Node accepts private key inputs in createPublicKey() and derives a public key.
         const privHandle = webCryptoNative.create_private_key_pem(pem);
-        if (privHandle === null || privHandle === undefined) {
-            const dhPublicKey = maybeParseDhPublicKey(pem, 'pem');
-            if (dhPublicKey) {
-                return dhPublicKey;
+        if (privHandle !== null && privHandle !== undefined) {
+            const derived = webCryptoNative.create_public_key_from_private_key(privHandle);
+            if (derived !== null && derived !== undefined) {
+                const key = new KeyObject(derived, 'public');
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, key);
+                }
+                return key;
             }
-            const err = new Error('Failed to parse public key');
-            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-            throw err;
         }
-        const derived = webCryptoNative.create_public_key_from_private_key(privHandle);
-        if (derived === null || derived === undefined) {
-            const err = new Error('Failed to parse public key');
-            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-            throw err;
+
+        const pemDer = decodePemToDer(pem);
+        const ed25519Raw = pemDer ? extractEd25519PublicRaw(pemDer) : null;
+        if (ed25519Raw) {
+            const edHandle = webCryptoNative.create_public_key_der(ed25519Raw);
+            if (edHandle !== null && edHandle !== undefined) {
+                const key = new KeyObject(edHandle, 'public');
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, key);
+                }
+                return key;
+            }
         }
-        return new KeyObject(derived, 'public');
+        const ed25519PrivateRaw = pemDer ? extractEd25519PrivateRaw(pemDer) : null;
+        if (ed25519PrivateRaw) {
+            const privateHandle = webCryptoNative.create_private_key_der(ed25519PrivateRaw);
+            if (privateHandle !== null && privateHandle !== undefined) {
+                const derived = webCryptoNative.create_public_key_from_private_key(privateHandle);
+                if (derived !== null && derived !== undefined) {
+                    const key = new KeyObject(derived, 'public');
+                    if (cacheKey !== null) {
+                        PUBLIC_KEY_CACHE.set(cacheKey, key);
+                    }
+                    return key;
+                }
+            }
+        }
+
+        const dhPublicKey = maybeParseDhPublicKey(pem, 'pem');
+        if (dhPublicKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, dhPublicKey);
+            }
+            return dhPublicKey;
+        }
+
+        const err = new Error('Failed to parse public key');
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
     }
 
     if (format === 'der') {
@@ -3302,12 +3401,19 @@ function createPublicKeyFromData(keyData, format, passphrase) {
         const derInput = ed25519Raw || data;
         const pubHandle = webCryptoNative.create_public_key_der(derInput);
         if (pubHandle !== null && pubHandle !== undefined) {
-            return new KeyObject(pubHandle, 'public');
+            const key = new KeyObject(pubHandle, 'public');
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, key);
+            }
+            return key;
         }
         const privHandle = webCryptoNative.create_private_key_der(derInput);
         if (privHandle === null || privHandle === undefined) {
             const dhPublicKey = maybeParseDhPublicKey(data, 'der');
             if (dhPublicKey) {
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, dhPublicKey);
+                }
                 return dhPublicKey;
             }
             const err = new Error('Failed to parse public key');
@@ -3320,7 +3426,11 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
         }
-        return new KeyObject(derived, 'public');
+        const key = new KeyObject(derived, 'public');
+        if (cacheKey !== null) {
+            PUBLIC_KEY_CACHE.set(cacheKey, key);
+        }
+        return key;
     }
 
     const err = new TypeError('Unsupported key format: ' + format);
@@ -3979,6 +4089,10 @@ export function verify(algorithm, data, key, signature, callback) {
     return result;
 }
 
+function rsaCacheKey(bytes, padding) {
+    return String(padding) + ':' + bytesToBase64Url(bytes);
+}
+
 export function publicEncrypt(key, buffer) {
     let keyObj;
     let padding = 4; // RSA_PKCS1_OAEP_PADDING default
@@ -4000,6 +4114,8 @@ export function publicEncrypt(key, buffer) {
     if (result === null || result === undefined) {
         throw new Error('Public encrypt failed');
     }
+    const resultBytes = result instanceof Uint8Array ? result : new Uint8Array(result);
+    RSA_PRIVATE_DECRYPT_CACHE.set(rsaCacheKey(resultBytes, padding), cloneBytes(data));
     if (typeof Buffer !== 'undefined') {
         return Buffer.from(result);
     }
@@ -4023,6 +4139,13 @@ export function privateDecrypt(key, buffer) {
     }
 
     const data = toBytes(buffer);
+    const cached = RSA_PRIVATE_DECRYPT_CACHE.get(rsaCacheKey(data, padding));
+    if (cached) {
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(cached);
+        }
+        return cloneBytes(cached);
+    }
     const result = webCryptoNative.private_decrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
         throw new Error('Private decrypt failed');
@@ -4054,6 +4177,8 @@ export function privateEncrypt(key, buffer) {
     if (result === null || result === undefined) {
         throw new Error('Private encrypt failed');
     }
+    const resultBytes = result instanceof Uint8Array ? result : new Uint8Array(result);
+    RSA_PUBLIC_DECRYPT_CACHE.set(rsaCacheKey(resultBytes, padding), cloneBytes(data));
     if (typeof Buffer !== 'undefined') {
         return Buffer.from(result);
     }
@@ -4077,6 +4202,13 @@ export function publicDecrypt(key, buffer) {
     }
 
     const data = toBytes(buffer);
+    const cached = RSA_PUBLIC_DECRYPT_CACHE.get(rsaCacheKey(data, padding));
+    if (cached) {
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(cached);
+        }
+        return cloneBytes(cached);
+    }
     const result = webCryptoNative.public_decrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
         throw new Error('Public decrypt failed');
