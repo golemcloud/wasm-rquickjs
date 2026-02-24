@@ -213,12 +213,31 @@ Respond with either:
 - 'PARTIAL: <explanation>' if you made progress but couldn't fully fix it`;
 }
 
+export interface AmpResult {
+  output: string;
+  isError: boolean;
+}
+
+const CREDIT_EXHAUSTION_PATTERNS = [
+  /credit/i,
+  /rate.?limit/i,
+  /quota/i,
+  /exceeded/i,
+  /overloaded/i,
+  /too many requests/i,
+  /429/,
+];
+
+export function isCreditsExhausted(output: string): boolean {
+  return CREDIT_EXHAUSTION_PATTERNS.some((p) => p.test(output));
+}
+
 export async function runAmp(
   prompt: string,
   category: string,
   targetTest: string,
   iteration: number,
-): Promise<string> {
+): Promise<AmpResult> {
   const ampLog = path.join(LOG_DIR, `amp-${iteration}-${Date.now()}.txt`);
   console.log(`  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration})${c.reset}`);
   console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);
@@ -317,7 +336,7 @@ export async function runAmp(
   const output = logParts.join("");
   fs.writeFileSync(ampLog, output);
 
-  return result;
+  return { output: result, isError };
 }
 
 export function classifyAmpResult(output: string): "FIXED" | "CANNOT_FIX" | "PARTIAL" | "UNCLEAR" {

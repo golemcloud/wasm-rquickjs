@@ -15,7 +15,7 @@ import {
   runSingleTest,
   testPathToFilter,
 } from "../tests.js";
-import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason } from "../amp.js";
+import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted } from "../amp.js";
 import { commitProgress } from "../git.js";
 
 /**
@@ -55,6 +55,21 @@ function extractFailingTests(output: string): string[] {
   }
 
   return results;
+}
+
+const CREDIT_WAIT_MINUTES = 10;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForCredits(): Promise<void> {
+  console.log(`  ⏳ Credits appear exhausted. Waiting ${CREDIT_WAIT_MINUTES} minutes for recharge...`);
+  for (let remaining = CREDIT_WAIT_MINUTES; remaining > 0; remaining--) {
+    console.log(`     ${remaining} minute${remaining !== 1 ? "s" : ""} remaining...`);
+    await sleep(60_000);
+  }
+  console.log("  ▶ Resuming...");
 }
 
 export async function fixCommand(category: string): Promise<void> {
@@ -164,12 +179,19 @@ export async function fixCommand(category: string): Promise<void> {
 
     // Build prompt and run amp
     const prompt = buildAmpPrompt(category, target.path, target.reason, failureOutput);
-    const ampOutput = await runAmp(prompt, category, target.path, iteration);
+    const ampResult = await runAmp(prompt, category, target.path, iteration);
 
     console.log();
     console.log("  Amp agent finished. Analyzing result...");
     console.log();
 
+    // Detect credit exhaustion and wait for recharge
+    if (ampResult.isError && isCreditsExhausted(ampResult.output)) {
+      await waitForCredits();
+      continue; // Retry the same test
+    }
+
+    const ampOutput = ampResult.output;
     const result = classifyAmpResult(ampOutput);
 
     // Check if amp actually changed any files
