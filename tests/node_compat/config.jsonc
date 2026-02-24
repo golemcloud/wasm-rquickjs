@@ -704,7 +704,7 @@
         "block_01_check_that_passing_a_positive_integer_as_buffersize_works": {},
         "block_02_check_read_throw_exceptions_on_invalid_callback": {},
         "block_03_check_if_directory_already_closed_the_callback_should_pass_a": {},
-        "block_04_check_if_directory_already_closed_throw_an_promise_exception": { "skip": true, "reason": "inherited: requires ERR_DIR_CLOSED, ERR_DIR_CONCURRENT_OPERATION, ERR_INVALID_ARG_TYPE error codes" }
+        "block_04_check_if_directory_already_closed_throw_an_promise_exception": {}
       }
     },
     "parallel/test-fs-operations-with-surrogate-pairs.js": {
