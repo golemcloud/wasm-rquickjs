@@ -339,6 +339,233 @@ fn scrypt_derive_impl(
     Some(result)
 }
 
+const AES_WRAP_DEFAULT_IV: [u8; 8] = [0xA6; 8];
+const AES_WRAP_PAD_DEFAULT_IV_PREFIX: [u8; 4] = [0xA6, 0x59, 0x59, 0xA6];
+
+fn aes_encrypt_block(key: &[u8], block: &mut [u8; 16]) -> Option<()> {
+    use aes::cipher::BlockEncrypt;
+    use aes::cipher::KeyInit;
+
+    match key.len() {
+        16 => {
+            let cipher = aes::Aes128::new_from_slice(key).ok()?;
+            let mut ga = aes::Block::default();
+            ga.copy_from_slice(block);
+            cipher.encrypt_block(&mut ga);
+            block.copy_from_slice(&ga);
+            Some(())
+        }
+        24 => {
+            let cipher = aes::Aes192::new_from_slice(key).ok()?;
+            let mut ga = aes::Block::default();
+            ga.copy_from_slice(block);
+            cipher.encrypt_block(&mut ga);
+            block.copy_from_slice(&ga);
+            Some(())
+        }
+        32 => {
+            let cipher = aes::Aes256::new_from_slice(key).ok()?;
+            let mut ga = aes::Block::default();
+            ga.copy_from_slice(block);
+            cipher.encrypt_block(&mut ga);
+            block.copy_from_slice(&ga);
+            Some(())
+        }
+        _ => None,
+    }
+}
+
+fn aes_decrypt_block(key: &[u8], block: &mut [u8; 16]) -> Option<()> {
+    use aes::cipher::BlockDecrypt;
+    use aes::cipher::KeyInit;
+
+    match key.len() {
+        16 => {
+            let cipher = aes::Aes128::new_from_slice(key).ok()?;
+            let mut ga = aes::Block::default();
+            ga.copy_from_slice(block);
+            cipher.decrypt_block(&mut ga);
+            block.copy_from_slice(&ga);
+            Some(())
+        }
+        24 => {
+            let cipher = aes::Aes192::new_from_slice(key).ok()?;
+            let mut ga = aes::Block::default();
+            ga.copy_from_slice(block);
+            cipher.decrypt_block(&mut ga);
+            block.copy_from_slice(&ga);
+            Some(())
+        }
+        32 => {
+            let cipher = aes::Aes256::new_from_slice(key).ok()?;
+            let mut ga = aes::Block::default();
+            ga.copy_from_slice(block);
+            cipher.decrypt_block(&mut ga);
+            block.copy_from_slice(&ga);
+            Some(())
+        }
+        _ => None,
+    }
+}
+
+fn aes_wrap_nopad_encrypt(key: &[u8], iv: [u8; 8], plaintext: &[u8]) -> Option<Vec<u8>> {
+    if plaintext.len() < 16 || plaintext.len() % 8 != 0 {
+        return None;
+    }
+
+    let n = plaintext.len() / 8;
+    let mut a = iv;
+    let mut r: Vec<[u8; 8]> = plaintext
+        .chunks_exact(8)
+        .map(|chunk| {
+            let mut block = [0u8; 8];
+            block.copy_from_slice(chunk);
+            block
+        })
+        .collect();
+
+    for j in 0..6 {
+        for (i, ri) in r.iter_mut().enumerate() {
+            let mut b = [0u8; 16];
+            b[..8].copy_from_slice(&a);
+            b[8..].copy_from_slice(ri);
+            aes_encrypt_block(key, &mut b)?;
+
+            let t = ((n * j) + (i + 1)) as u64;
+            let t_bytes = t.to_be_bytes();
+            for k in 0..8 {
+                a[k] = b[k] ^ t_bytes[k];
+            }
+            ri.copy_from_slice(&b[8..]);
+        }
+    }
+
+    let mut out = Vec::with_capacity((n + 1) * 8);
+    out.extend_from_slice(&a);
+    for block in r {
+        out.extend_from_slice(&block);
+    }
+    Some(out)
+}
+
+fn aes_wrap_nopad_unwrap_raw(key: &[u8], ciphertext: &[u8]) -> Option<([u8; 8], Vec<u8>)> {
+    if ciphertext.len() < 16 || ciphertext.len() % 8 != 0 {
+        return None;
+    }
+
+    let n = (ciphertext.len() / 8).checked_sub(1)?;
+    if n == 0 {
+        return None;
+    }
+
+    let mut a = [0u8; 8];
+    a.copy_from_slice(&ciphertext[..8]);
+    let mut r: Vec<[u8; 8]> = ciphertext[8..]
+        .chunks_exact(8)
+        .map(|chunk| {
+            let mut block = [0u8; 8];
+            block.copy_from_slice(chunk);
+            block
+        })
+        .collect();
+
+    for j in (0..6).rev() {
+        for i in (0..n).rev() {
+            let t = ((n * j) + (i + 1)) as u64;
+            let t_bytes = t.to_be_bytes();
+            let mut b = [0u8; 16];
+            for k in 0..8 {
+                b[k] = a[k] ^ t_bytes[k];
+            }
+            b[8..].copy_from_slice(&r[i]);
+            aes_decrypt_block(key, &mut b)?;
+            a.copy_from_slice(&b[..8]);
+            r[i].copy_from_slice(&b[8..]);
+        }
+    }
+
+    let mut plaintext = Vec::with_capacity(n * 8);
+    for block in r {
+        plaintext.extend_from_slice(&block);
+    }
+
+    Some((a, plaintext))
+}
+
+fn aes_wrap_nopad_decrypt(key: &[u8], iv: [u8; 8], ciphertext: &[u8]) -> Option<Vec<u8>> {
+    if ciphertext.len() < 24 || ciphertext.len() % 8 != 0 {
+        return None;
+    }
+
+    let (a, plaintext) = aes_wrap_nopad_unwrap_raw(key, ciphertext)?;
+    if a != iv {
+        return None;
+    }
+
+    Some(plaintext)
+}
+
+fn aes_wrap_pad_encrypt(key: &[u8], iv_prefix: [u8; 4], plaintext: &[u8]) -> Option<Vec<u8>> {
+    if plaintext.is_empty() {
+        return None;
+    }
+
+    let mli = u32::try_from(plaintext.len()).ok()?;
+    let mut aiv = [0u8; 8];
+    aiv[..4].copy_from_slice(&iv_prefix);
+    aiv[4..].copy_from_slice(&mli.to_be_bytes());
+
+    if plaintext.len() <= 8 {
+        let mut block = [0u8; 16];
+        block[..8].copy_from_slice(&aiv);
+        block[8..8 + plaintext.len()].copy_from_slice(plaintext);
+        aes_encrypt_block(key, &mut block)?;
+        return Some(block.to_vec());
+    }
+
+    let n = plaintext.len().div_ceil(8);
+    let mut padded = Vec::with_capacity(n * 8);
+    padded.extend_from_slice(plaintext);
+    padded.resize(n * 8, 0);
+    aes_wrap_nopad_encrypt(key, aiv, &padded)
+}
+
+fn aes_wrap_pad_decrypt(key: &[u8], iv_prefix: [u8; 4], ciphertext: &[u8]) -> Option<Vec<u8>> {
+    if ciphertext.len() < 16 || ciphertext.len() % 8 != 0 {
+        return None;
+    }
+
+    let (aiv, padded_plaintext) = if ciphertext.len() == 16 {
+        let mut block = [0u8; 16];
+        block.copy_from_slice(ciphertext);
+        aes_decrypt_block(key, &mut block)?;
+        let mut aiv = [0u8; 8];
+        aiv.copy_from_slice(&block[..8]);
+        (aiv, block[8..].to_vec())
+    } else {
+        aes_wrap_nopad_unwrap_raw(key, ciphertext)?
+    };
+
+    if aiv[..4] != iv_prefix {
+        return None;
+    }
+
+    let mli = u32::from_be_bytes(aiv[4..8].try_into().ok()?) as usize;
+    let n = padded_plaintext.len() / 8;
+
+    if mli == 0 || mli > n * 8 || mli <= (n.saturating_sub(1) * 8) {
+        return None;
+    }
+
+    if padded_plaintext[mli..].iter().any(|&b| b != 0) {
+        return None;
+    }
+
+    let mut plaintext = padded_plaintext;
+    plaintext.truncate(mli);
+    Some(plaintext)
+}
+
 enum CipherContext {
     // AEAD encrypt
     Aes128GcmEnc {
@@ -411,6 +638,24 @@ enum CipherContext {
     },
     Aes256CtrCtx {
         stream: ctr::Ctr128BE<aes::Aes256>,
+    },
+    // AES Key Wrap (RFC 3394)
+    AesKwEnc {
+        key: Vec<u8>,
+        iv: [u8; 8],
+    },
+    AesKwDec {
+        key: Vec<u8>,
+        iv: [u8; 8],
+    },
+    // AES Key Wrap with Padding (RFC 5649)
+    AesKwpEnc {
+        key: Vec<u8>,
+        iv_prefix: [u8; 4],
+    },
+    AesKwpDec {
+        key: Vec<u8>,
+        iv_prefix: [u8; 4],
     },
 }
 
@@ -551,6 +796,67 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
             let stream = ctr::Ctr128BE::<aes::Aes256>::new_from_slices(key, iv).ok()?;
             CipherContext::Aes256CtrCtx { stream }
         }
+        "aes-128-wrap" | "aes-192-wrap" | "aes-256-wrap" | "id-aes128-wrap" | "id-aes192-wrap"
+        | "id-aes256-wrap" => {
+            let expected_key_len = match algorithm {
+                "aes-128-wrap" | "id-aes128-wrap" => 16,
+                "aes-192-wrap" | "id-aes192-wrap" => 24,
+                "aes-256-wrap" | "id-aes256-wrap" => 32,
+                _ => return None,
+            };
+            if key.len() != expected_key_len {
+                return None;
+            }
+            let mut wrap_iv = AES_WRAP_DEFAULT_IV;
+            if iv.is_empty() {
+                // Default IV in RFC 3394 / OpenSSL for AES-KW.
+            } else if iv.len() == 8 {
+                wrap_iv.copy_from_slice(iv);
+            } else {
+                return None;
+            }
+            if decrypt {
+                CipherContext::AesKwDec {
+                    key: key.to_vec(),
+                    iv: wrap_iv,
+                }
+            } else {
+                CipherContext::AesKwEnc {
+                    key: key.to_vec(),
+                    iv: wrap_iv,
+                }
+            }
+        }
+        "id-aes128-wrap-pad" | "id-aes192-wrap-pad" | "id-aes256-wrap-pad" => {
+            let expected_key_len = match algorithm {
+                "id-aes128-wrap-pad" => 16,
+                "id-aes192-wrap-pad" => 24,
+                "id-aes256-wrap-pad" => 32,
+                _ => return None,
+            };
+            if key.len() != expected_key_len {
+                return None;
+            }
+            let mut iv_prefix = AES_WRAP_PAD_DEFAULT_IV_PREFIX;
+            if iv.is_empty() {
+                // Default RFC 5649 AIV prefix.
+            } else if iv.len() == 4 {
+                iv_prefix.copy_from_slice(iv);
+            } else {
+                return None;
+            }
+            if decrypt {
+                CipherContext::AesKwpDec {
+                    key: key.to_vec(),
+                    iv_prefix,
+                }
+            } else {
+                CipherContext::AesKwpEnc {
+                    key: key.to_vec(),
+                    iv_prefix,
+                }
+            }
+        }
         _ => return None,
     };
     let id = next_id();
@@ -667,6 +973,10 @@ fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
             stream.apply_keystream(&mut output);
             Some(output)
         }
+        CipherContext::AesKwEnc { key, iv } => aes_wrap_nopad_encrypt(key, *iv, data),
+        CipherContext::AesKwDec { key, iv } => aes_wrap_nopad_decrypt(key, *iv, data),
+        CipherContext::AesKwpEnc { key, iv_prefix } => aes_wrap_pad_encrypt(key, *iv_prefix, data),
+        CipherContext::AesKwpDec { key, iv_prefix } => aes_wrap_pad_decrypt(key, *iv_prefix, data),
     }
 }
 
@@ -911,7 +1221,12 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             Some(output)
         }
         // CTR final: nothing to do
-        CipherContext::Aes128CtrCtx { .. } | CipherContext::Aes256CtrCtx { .. } => Some(Vec::new()),
+        CipherContext::Aes128CtrCtx { .. }
+        | CipherContext::Aes256CtrCtx { .. }
+        | CipherContext::AesKwEnc { .. }
+        | CipherContext::AesKwDec { .. }
+        | CipherContext::AesKwpEnc { .. }
+        | CipherContext::AesKwpDec { .. } => Some(Vec::new()),
     }
 }
 
@@ -984,10 +1299,19 @@ const SUPPORTED_CIPHERS: &[&str] = &[
     "aes-128-cbc",
     "aes-128-ctr",
     "aes-128-gcm",
+    "aes-128-wrap",
+    "aes-192-wrap",
     "aes-256-cbc",
     "aes-256-ctr",
     "aes-256-gcm",
+    "aes-256-wrap",
     "chacha20-poly1305",
+    "id-aes128-wrap",
+    "id-aes192-wrap",
+    "id-aes256-wrap",
+    "id-aes128-wrap-pad",
+    "id-aes192-wrap-pad",
+    "id-aes256-wrap-pad",
 ];
 
 // ===== Asymmetric key types =====

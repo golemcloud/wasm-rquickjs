@@ -855,10 +855,7 @@
     },
 
     // === node:crypto tests ===
-    "parallel/test-crypto-aes-wrap.js": {
-      "skip": true,
-      "reason": "requires aes-wrap cipher modes which are not implemented"
-    },
+    "parallel/test-crypto-aes-wrap.js": {},
     "parallel/test-crypto-async-sign-verify.js": {
       "skip": true,
       "reason": "requires one-shot crypto.sign/verify callback form, KeyObject.export({format,type}), RSA-PSS padding, DSA/ECDSA dsaEncoding options"
