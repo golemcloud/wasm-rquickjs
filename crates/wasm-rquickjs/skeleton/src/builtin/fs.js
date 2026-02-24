@@ -822,6 +822,7 @@ export function ftruncateSync(fd, len) {
 }
 
 export function fsyncSync(fd) {
+    validateFd(fd);
     const error = native.fs_fsync(fd);
     if (error) {
         throw createSystemError(error);
@@ -829,6 +830,7 @@ export function fsyncSync(fd) {
 }
 
 export function fdatasyncSync(fd) {
+    validateFd(fd);
     const error = native.fs_fdatasync(fd);
     if (error) {
         throw createSystemError(error);
