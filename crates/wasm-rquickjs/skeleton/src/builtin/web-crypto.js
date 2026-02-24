@@ -10,6 +10,7 @@ import {
     ERR_UNKNOWN_ENCODING,
 } from '__wasm_rquickjs_builtin/internal/errors'
 import { normalizeEncoding } from '__wasm_rquickjs_builtin/internal/util'
+import { inspect } from '__wasm_rquickjs_builtin/internal/util/inspect'
 import { kMaxLength } from 'buffer'
 
 const HASH_ALIASES = {
@@ -4942,6 +4943,12 @@ function isJwkEncodingOption(encodingOption) {
     return encodingOption && typeof encodingOption === 'object' && encodingOption.format === 'jwk';
 }
 
+function createInvalidKeygenPropertyError(propertyName, value) {
+    const err = new TypeError(`The property 'options.${propertyName}' is invalid. Received ${inspect(value)}`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    return err;
+}
+
 export function generateKeyPairSync(type_, options) {
     options = options || {};
     if (type_ === 'dsa' &&
@@ -4969,6 +4976,11 @@ export function generateKeyPairSync(type_, options) {
             const err = new Error('namedCurve is required for EC key generation');
             err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
             throw err;
+        }
+
+        const { paramEncoding } = options;
+        if (paramEncoding != null && paramEncoding !== 'named' && paramEncoding !== 'explicit') {
+            throw createInvalidKeygenPropertyError('paramEncoding', paramEncoding);
         }
     } else if (type_ === 'ed25519') {
         algorithm = 'ed25519';

@@ -1912,11 +1912,10 @@
       "skip": false
     },
     "parallel/test-crypto-keygen.js": {
-      "skip": true,
-      "reason": "requires RSA/DSA/DH key generation for validation tests",
+      "skip": false,
       "split": true,
       "subtests": {
-        "block_00_test_invalid_parameter_encoding": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
+        "block_00_test_invalid_parameter_encoding": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
