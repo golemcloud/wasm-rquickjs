@@ -179,10 +179,7 @@
     "parallel/test-fs-buffertype-writesync.js": {},
     "parallel/test-fs-chmod.js": {},
     "parallel/test-fs-chmod-mask.js": {},
-    "parallel/test-fs-chown-type-check.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-chown-type-check.js": {},
     "parallel/test-fs-close.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
