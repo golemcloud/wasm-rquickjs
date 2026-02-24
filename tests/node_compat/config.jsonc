@@ -1892,10 +1892,7 @@
     "parallel/test-crypto-keygen-duplicate-deprecated-option.js": {},
     "parallel/test-crypto-keygen-eddsa.js": {},
     "parallel/test-crypto-keygen-empty-passphrase-no-error.js": {},
-    "parallel/test-crypto-keygen-empty-passphrase-no-prompt.js": {
-      "skip": true,
-      "reason": "requires RSA key generation with passphrase which is not implemented"
-    },
+    "parallel/test-crypto-keygen-empty-passphrase-no-prompt.js": {},
     "parallel/test-crypto-keygen-invalid-parameter-encoding-dsa.js": {
       "skip": true,
       "reason": "requires DSA key generation for parameter validation"

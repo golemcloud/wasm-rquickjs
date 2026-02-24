@@ -2881,10 +2881,11 @@ fn evp_bytes_to_key(
     (key, iv)
 }
 
-fn encrypt_sec1_pem_traditional(
+fn encrypt_traditional_pem(
     der: &[u8],
     cipher_name: &str,
     passphrase: &[u8],
+    key_label: &str,
 ) -> Option<String> {
     use cipher::BlockEncryptMut;
     use cipher::KeyIvInit;
@@ -2939,14 +2940,14 @@ fn encrypt_sec1_pem_traditional(
     let b64 = base64ct::Base64::encode_string(&output);
 
     let mut pem = format!(
-        "-----BEGIN EC PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: {},{}\n\n",
-        cipher_upper, iv_hex
+        "-----BEGIN {}-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: {},{}\n\n",
+        key_label, cipher_upper, iv_hex
     );
     for chunk in b64.as_bytes().chunks(64) {
         pem.push_str(std::str::from_utf8(chunk).unwrap_or(""));
         pem.push('\n');
     }
-    pem.push_str("-----END EC PRIVATE KEY-----\n");
+    pem.push_str(&format!("-----END {}-----\n", key_label));
 
     Some(pem)
 }
@@ -3075,9 +3076,16 @@ fn key_export_encrypted_impl(
         ("pem", "pkcs8") => key
             .export_pkcs8_encrypted_pem(passphrase)
             .map(|s| s.into_bytes()),
+        ("pem", "pkcs1") => {
+            let der = key.export_pkcs1_private_der()?;
+            let encrypted_pem =
+                encrypt_traditional_pem(&der, cipher_name, passphrase, "RSA PRIVATE KEY")?;
+            Some(encrypted_pem.into_bytes())
+        }
         ("pem", "sec1") => {
             let der = key.export_sec1_private_der()?;
-            let encrypted_pem = encrypt_sec1_pem_traditional(&der, cipher_name, passphrase)?;
+            let encrypted_pem =
+                encrypt_traditional_pem(&der, cipher_name, passphrase, "EC PRIVATE KEY")?;
             Some(encrypted_pem.into_bytes())
         }
         _ => None,
