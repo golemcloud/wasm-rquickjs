@@ -514,6 +514,7 @@ const CIPHER_ALIASES = {
     'aes-256-cbc': 'aes-256-cbc',
     'aes-128-ctr': 'aes-128-ctr',
     'aes-256-ctr': 'aes-256-ctr',
+    'aes-128-ccm': 'aes-128-ccm',
     'aes-128-gcm': 'aes-128-gcm',
     'aes-256-gcm': 'aes-256-gcm',
     'aes-128-wrap': 'aes-128-wrap',

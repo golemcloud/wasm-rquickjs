@@ -566,8 +566,17 @@ fn aes_wrap_pad_decrypt(key: &[u8], iv_prefix: [u8; 4], ciphertext: &[u8]) -> Op
     Some(plaintext)
 }
 
+type Aes128Ccm = ccm::Ccm<aes::Aes128, ccm::consts::U16, ccm::consts::U8>;
+
 enum CipherContext {
     // AEAD encrypt
+    Aes128CcmEnc {
+        cipher: Aes128Ccm,
+        nonce: [u8; 8],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        tag: Option<Vec<u8>>,
+    },
     Aes128GcmEnc {
         cipher: aes_gcm::Aes128Gcm,
         nonce: [u8; 12],
@@ -590,6 +599,13 @@ enum CipherContext {
         tag: Option<Vec<u8>>,
     },
     // AEAD decrypt
+    Aes128CcmDec {
+        cipher: Aes128Ccm,
+        nonce: [u8; 8],
+        aad: Vec<u8>,
+        buf: Vec<u8>,
+        expected_tag: Option<Vec<u8>>,
+    },
     Aes128GcmDec {
         cipher: aes_gcm::Aes128Gcm,
         nonce: [u8; 12],
@@ -667,6 +683,31 @@ fn cipher_init_impl(algorithm: &str, key: &[u8], iv: &[u8], decrypt: bool) -> Op
     use cipher::KeyIvInit;
 
     let ctx = match algorithm {
+        "aes-128-ccm" => {
+            if key.len() != 16 || iv.len() != 8 {
+                return None;
+            }
+            let cipher = Aes128Ccm::new_from_slice(key).ok()?;
+            let mut nonce = [0u8; 8];
+            nonce.copy_from_slice(iv);
+            if decrypt {
+                CipherContext::Aes128CcmDec {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    expected_tag: None,
+                }
+            } else {
+                CipherContext::Aes128CcmEnc {
+                    cipher,
+                    nonce,
+                    aad: Vec::new(),
+                    buf: Vec::new(),
+                    tag: None,
+                }
+            }
+        }
         "aes-128-gcm" => {
             if key.len() != 16 || iv.len() != 12 {
                 return None;
@@ -873,9 +914,11 @@ fn cipher_update_impl(id: u32, data: &[u8]) -> Option<Vec<u8>> {
     let ctx = contexts.get_mut(&id)?;
     match ctx {
         // AEAD modes buffer everything until final
-        CipherContext::Aes128GcmEnc { buf, .. }
+        CipherContext::Aes128CcmEnc { buf, .. }
+        | CipherContext::Aes128GcmEnc { buf, .. }
         | CipherContext::Aes256GcmEnc { buf, .. }
         | CipherContext::ChaCha20Poly1305Enc { buf, .. }
+        | CipherContext::Aes128CcmDec { buf, .. }
         | CipherContext::Aes128GcmDec { buf, .. }
         | CipherContext::Aes256GcmDec { buf, .. }
         | CipherContext::ChaCha20Poly1305Dec { buf, .. } => {
@@ -989,6 +1032,27 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
     let ctx = contexts.remove(&id)?;
     match ctx {
         // AEAD encrypt: encrypt-in-place, return ciphertext (tag stored separately)
+        CipherContext::Aes128CcmEnc {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            ..
+        } => {
+            let nonce_ccm = ccm::Nonce::<ccm::consts::U8>::from_slice(&nonce);
+            let tag = cipher
+                .encrypt_in_place_detached(nonce_ccm, &aad, &mut buf)
+                .ok()?;
+            let done_ctx = CipherContext::Aes128CcmEnc {
+                cipher,
+                nonce,
+                aad: Vec::new(),
+                buf: Vec::new(),
+                tag: Some(tag.to_vec()),
+            };
+            contexts.insert(id, done_ctx);
+            Some(buf)
+        }
         CipherContext::Aes128GcmEnc {
             cipher,
             nonce,
@@ -1054,6 +1118,24 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
             Some(buf)
         }
         // AEAD decrypt: decrypt-in-place with tag verification
+        CipherContext::Aes128CcmDec {
+            cipher,
+            nonce,
+            aad,
+            mut buf,
+            expected_tag,
+        } => {
+            let tag_bytes = expected_tag?;
+            if tag_bytes.len() != 16 {
+                return None;
+            }
+            let nonce_ccm = ccm::Nonce::<ccm::consts::U8>::from_slice(&nonce);
+            let tag = ccm::aead::Tag::<Aes128Ccm>::from_slice(&tag_bytes);
+            cipher
+                .decrypt_in_place_detached(nonce_ccm, &aad, &mut buf, tag)
+                .ok()?;
+            Some(buf)
+        }
         CipherContext::Aes128GcmDec {
             cipher,
             nonce,
@@ -1234,9 +1316,11 @@ fn cipher_set_aad_impl(id: u32, aad_data: &[u8]) -> bool {
     let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
     if let Some(ctx) = contexts.get_mut(&id) {
         match ctx {
-            CipherContext::Aes128GcmEnc { aad, .. }
+            CipherContext::Aes128CcmEnc { aad, .. }
+            | CipherContext::Aes128GcmEnc { aad, .. }
             | CipherContext::Aes256GcmEnc { aad, .. }
             | CipherContext::ChaCha20Poly1305Enc { aad, .. }
+            | CipherContext::Aes128CcmDec { aad, .. }
             | CipherContext::Aes128GcmDec { aad, .. }
             | CipherContext::Aes256GcmDec { aad, .. }
             | CipherContext::ChaCha20Poly1305Dec { aad, .. } => {
@@ -1253,6 +1337,7 @@ fn cipher_set_aad_impl(id: u32, aad_data: &[u8]) -> bool {
 fn cipher_get_auth_tag_impl(id: u32) -> Option<Vec<u8>> {
     let contexts = CIPHER_CONTEXTS.lock().unwrap();
     match contexts.get(&id)? {
+        CipherContext::Aes128CcmEnc { tag, .. } => tag.clone(),
         CipherContext::Aes128GcmEnc { tag, .. } => tag.clone(),
         CipherContext::Aes256GcmEnc { tag, .. } => tag.clone(),
         CipherContext::ChaCha20Poly1305Enc { tag, .. } => tag.clone(),
@@ -1264,7 +1349,8 @@ fn cipher_set_auth_tag_impl(id: u32, tag_data: &[u8]) -> bool {
     let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
     if let Some(ctx) = contexts.get_mut(&id) {
         match ctx {
-            CipherContext::Aes128GcmDec { expected_tag, .. }
+            CipherContext::Aes128CcmDec { expected_tag, .. }
+            | CipherContext::Aes128GcmDec { expected_tag, .. }
             | CipherContext::Aes256GcmDec { expected_tag, .. }
             | CipherContext::ChaCha20Poly1305Dec { expected_tag, .. } => {
                 *expected_tag = Some(tag_data.to_vec());
