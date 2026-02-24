@@ -85,6 +85,7 @@ const S_IXOTH = 0o001;
 const COPYFILE_EXCL = 1;
 const COPYFILE_FICLONE = 2;
 const COPYFILE_FICLONE_FORCE = 4;
+const MAX_COPYFILE_MODE = COPYFILE_EXCL | COPYFILE_FICLONE | COPYFILE_FICLONE_FORCE;
 const HAS_LCHMOD = false;
 
 export const constants = {
@@ -97,6 +98,9 @@ export const constants = {
     S_IRWXG, S_IRGRP, S_IWGRP, S_IXGRP,
     S_IRWXO, S_IROTH, S_IWOTH, S_IXOTH,
     COPYFILE_EXCL, COPYFILE_FICLONE, COPYFILE_FICLONE_FORCE,
+    UV_FS_COPYFILE_EXCL: COPYFILE_EXCL,
+    UV_FS_COPYFILE_FICLONE: COPYFILE_FICLONE,
+    UV_FS_COPYFILE_FICLONE_FORCE: COPYFILE_FICLONE_FORCE,
     UV_FS_SYMLINK_DIR: 1,
     UV_FS_SYMLINK_JUNCTION: 2,
 };
@@ -258,6 +262,56 @@ function validateUid(id, name) {
         throw err;
     }
     validateInteger(id, name, -1, 4294967295);
+}
+
+function validateCopyFileMode(mode) {
+    if (mode === undefined || mode === null) {
+        return 0;
+    }
+    if (typeof mode !== 'number') {
+        const err = new TypeError(`The "mode" argument must be of type number. Received ${describeType(mode)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    validateInteger(mode, 'mode', 0, MAX_COPYFILE_MODE);
+    return mode;
+}
+
+function getCopyFileErrorDescription(errorObj) {
+    if (!errorObj || typeof errorObj.message !== 'string') {
+        return 'unknown error';
+    }
+    const parsedMessage = /^\s*[A-Z0-9_]+:\s*([^,]+),/.exec(errorObj.message);
+    if (parsedMessage && parsedMessage[1]) {
+        return parsedMessage[1];
+    }
+    return errorObj.message;
+}
+
+function createCopyFileError(code, errno, description, src, dest) {
+    const err = new Error(`${code}: ${description}, copyfile '${src}' -> '${dest}'`);
+    err.code = code;
+    if (errno !== undefined) {
+        err.errno = errno;
+    }
+    err.syscall = 'copyfile';
+    err.path = src;
+    err.dest = dest;
+    return err;
+}
+
+function createCopyFileErrorFromNative(errorObj, src, dest) {
+    if (!errorObj || !errorObj.code) {
+        return createSystemError(errorObj);
+    }
+
+    return createCopyFileError(
+        errorObj.code,
+        errorObj.errno,
+        getCopyFileErrorDescription(errorObj),
+        src,
+        dest,
+    );
 }
 
 function validatePath(path, propName) {
@@ -933,9 +987,17 @@ export function truncateSync(path, len) {
 export function copyFileSync(src, dest, mode) {
     validatePath(src, 'src');
     validatePath(dest, 'dest');
-    const error = native.fs_copy_file(src, dest);
+    const copyMode = validateCopyFileMode(mode);
+    const srcPath = pathToString(src);
+    const destPath = pathToString(dest);
+
+    if ((copyMode & COPYFILE_EXCL) !== 0 && existsSync(destPath)) {
+        throw createCopyFileError('EEXIST', -17, 'file already exists', srcPath, destPath);
+    }
+
+    const error = native.fs_copy_file(srcPath, destPath);
     if (error) {
-        throw createSystemError(error);
+        throw createCopyFileErrorFromNative(error, srcPath, destPath);
     }
 }
 
@@ -1659,16 +1721,18 @@ export function truncate(path, lenOrCallback, callback) {
 export function copyFile(src, dest, modeOrCallback, callback) {
     validatePath(src, 'src');
     validatePath(dest, 'dest');
+    let mode = 0;
     let cb;
     if (typeof modeOrCallback === 'function') {
         cb = modeOrCallback;
     } else {
+        mode = validateCopyFileMode(modeOrCallback);
         cb = callback;
     }
     validateCallback(cb);
     queueMicrotask(() => {
         try {
-            copyFileSync(src, dest);
+            copyFileSync(src, dest, mode);
             cb(null);
         } catch (err) {
             cb(err);

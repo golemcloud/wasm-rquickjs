@@ -1,4 +1,5 @@
 import * as utilBinding from "__wasm_rquickjs_builtin/internal/binding/util";
+import { constants as osConstants } from "node:os";
 
 // Node's V8-backed implementation can keep very small typed-array payloads inline
 // and only materialize an ArrayBuffer on first `.buffer` access.
@@ -100,6 +101,16 @@ const cryptoTestBinding = Object.freeze({
     },
 });
 
+const uvErrnoBinding = {};
+const osErrno = osConstants && osConstants.errno ? osConstants.errno : {};
+for (const [name, value] of Object.entries(osErrno)) {
+    if (typeof value === "number") {
+        uvErrnoBinding[`UV_${name}`] = -Math.abs(value);
+    }
+}
+
+const uvTestBinding = Object.freeze(uvErrnoBinding);
+
 export function internalBinding(name) {
     if (name === "util") {
         return utilTestBinding;
@@ -111,6 +122,10 @@ export function internalBinding(name) {
 
     if (name === "crypto") {
         return cryptoTestBinding;
+    }
+
+    if (name === "uv") {
+        return uvTestBinding;
     }
 
     throw new Error(`No such binding: ${name}`);
