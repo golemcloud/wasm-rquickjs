@@ -4968,10 +4968,29 @@ function validateUint32KeygenOption(value, optionName) {
     }
 }
 
+function validateInt32KeygenOption(value, optionName, min = -2147483648, max = 2147483647) {
+    if (typeof value !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE(optionName, 'number', value);
+    }
+    if (!Number.isInteger(value)) {
+        throw new ERR_OUT_OF_RANGE(optionName, 'an integer', value);
+    }
+    if (value < min || value > max) {
+        throw new ERR_OUT_OF_RANGE(optionName, `>= ${min} && <= ${max}`, value);
+    }
+}
+
 function validateRsaKeyPairOptions(options) {
     validateUint32KeygenOption(options.modulusLength, 'options.modulusLength');
     if (options.publicExponent != null) {
         validateUint32KeygenOption(options.publicExponent, 'options.publicExponent');
+    }
+}
+
+function validateDsaKeyPairOptions(options) {
+    validateUint32KeygenOption(options.modulusLength, 'options.modulusLength');
+    if (options.divisorLength != null) {
+        validateInt32KeygenOption(options.divisorLength, 'options.divisorLength', 0);
     }
 }
 
@@ -5099,6 +5118,9 @@ export function generateKeyPairSync(type_, options) {
         err.code = 'ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE';
         throw err;
     }
+    if (type_ === 'dsa') {
+        validateDsaKeyPairOptions(options);
+    }
     if (type_ === 'dh') {
         return generateDhKeyPair(options);
     }
@@ -5202,6 +5224,8 @@ export function generateKeyPair(type_, options, callback) {
     options = normalizeGenerateKeyPairOptions(type_, options);
     if (type_ === 'rsa' || type_ === 'rsa-pss') {
         validateRsaKeyPairOptions(options);
+    } else if (type_ === 'dsa') {
+        validateDsaKeyPairOptions(options);
     }
 
     try {
