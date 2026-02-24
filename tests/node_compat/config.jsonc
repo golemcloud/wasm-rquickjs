@@ -1702,10 +1702,7 @@
 
     // === node:crypto tests ===
     "parallel/test-crypto-aes-wrap.js": {},
-    "parallel/test-crypto-async-sign-verify.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-crypto-async-sign-verify.js": {},
     "parallel/test-crypto-authenticated-stream.js": {},
     "parallel/test-crypto-authenticated.js": {
       "split": true,

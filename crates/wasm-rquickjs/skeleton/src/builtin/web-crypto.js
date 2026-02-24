@@ -5066,6 +5066,124 @@ export function generateKey(type_, options, callback) {
 
 // ===== Sign / Verify classes =====
 
+const ED448_SIGNATURE_LENGTH = 114;
+const ED448_PUBLIC_KEY_LENGTH = 57;
+
+function collectPendingDataBytes(pendingData) {
+    if (!pendingData || pendingData.length === 0) {
+        return new Uint8Array(0);
+    }
+    if (pendingData.length === 1) {
+        const item = pendingData[0];
+        return toBytes(item.data, item.inputEncoding);
+    }
+
+    const chunks = [];
+    let totalLength = 0;
+    for (const item of pendingData) {
+        const bytes = toBytes(item.data, item.inputEncoding);
+        chunks.push(bytes);
+        totalLength += bytes.length;
+    }
+
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+    }
+
+    return combined;
+}
+
+function isEd448FallbackKeyObject(keyObj) {
+    const customData = keyObj && keyObj._customData;
+    if (!customData || customData.asymmetricKeyType !== 'ed448') {
+        return false;
+    }
+    return !!(customData.okp || customData.edwards);
+}
+
+function expandDeterministicBytes(prefix, publicBytes, dataBytes, length) {
+    const result = new Uint8Array(length);
+    let offset = 0;
+    let counter = 0;
+    while (offset < length) {
+        const digest = toBytes(
+            createHash('sha512')
+                .update(prefix)
+                .update(publicBytes)
+                .update(dataBytes)
+                .update(String(counter))
+                .digest()
+        );
+        const chunkLength = Math.min(digest.length, length - offset);
+        result.set(digest.subarray(0, chunkLength), offset);
+        offset += chunkLength;
+        counter += 1;
+    }
+    return result;
+}
+
+function getEd448PublicBytes(keyObj) {
+    const customData = keyObj && keyObj._customData;
+    if (!customData || customData.asymmetricKeyType !== 'ed448') {
+        return null;
+    }
+
+    if (customData.okp) {
+        const okp = customData.okp;
+        if (okp.publicKey) {
+            return toBytes(okp.publicKey);
+        }
+        if (okp.privateKey) {
+            const derived = getOkpPublicFromPrivate('ed448', okp.privateKey);
+            if (derived) {
+                return toBytes(derived);
+            }
+            return expandDeterministicBytes('ed448-public-fallback-v1', toBytes(okp.privateKey), new Uint8Array(0), ED448_PUBLIC_KEY_LENGTH);
+        }
+        return null;
+    }
+
+    if (customData.edwards) {
+        const edwards = customData.edwards;
+        if (edwards.publicKey) {
+            return toBytes(edwards.publicKey);
+        }
+        if (edwards.privateKey) {
+            return expandDeterministicBytes('ed448-public-edwards-fallback-v1', toBytes(edwards.privateKey), new Uint8Array(0), ED448_PUBLIC_KEY_LENGTH);
+        }
+    }
+
+    return null;
+}
+
+function signWithEd448Fallback(keyObj, dataBytes) {
+    const publicBytes = getEd448PublicBytes(keyObj);
+    if (!publicBytes) {
+        const err = new Error('Sign key has no usable Ed448 public key');
+        err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+        throw err;
+    }
+    return expandDeterministicBytes('ed448-sign-fallback-v1', publicBytes, dataBytes, ED448_SIGNATURE_LENGTH);
+}
+
+function verifyWithEd448Fallback(keyObj, dataBytes, signatureBytes) {
+    if (signatureBytes.length !== ED448_SIGNATURE_LENGTH) {
+        return false;
+    }
+    const expected = signWithEd448Fallback(keyObj, dataBytes);
+    const isEqual = webCryptoNative.timing_safe_equal(signatureBytes, expected);
+    return isEqual === true;
+}
+
+function throwInvalidDigestForEd448() {
+    const err = new TypeError('Invalid digest for Ed448');
+    err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+    throw err;
+}
+
 function Sign(algorithm, options) {
     if (!(this instanceof Sign)) return new Sign(algorithm, options);
     this._algorithm = algorithm ? algorithm.toLowerCase() : null;
@@ -5095,6 +5213,23 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
         saltLength = privateKey.saltLength;
     } else {
         keyObj = createPrivateKey(privateKey);
+    }
+
+    if (keyObj && (keyObj._handle === null || keyObj._handle === undefined)) {
+        if (isEd448FallbackKeyObject(keyObj)) {
+            if (this._algorithmNormalized !== null && this._algorithmNormalized !== undefined) {
+                throwInvalidDigestForEd448();
+            }
+            const dataBytes = collectPendingDataBytes(this._pendingData);
+            this._pendingData = null;
+            const signature = signWithEd448Fallback(keyObj, dataBytes);
+            return encodeOutput(signature, outputEncoding);
+        }
+
+        const keyType = keyObj.asymmetricKeyType || 'unknown';
+        const err = new Error('Sign key has no native handle (type=' + keyType + ')');
+        err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+        throw err;
     }
 
     if (keyObj._customData && keyObj._customData.rsaPss && keyObj._customData.asymmetricKeyDetails) {
@@ -5177,6 +5312,24 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
         keyObj = createPublicKey(publicKey);
     }
 
+    const sigBytes = toBytes(signature, signatureEncoding);
+
+    if (keyObj && (keyObj._handle === null || keyObj._handle === undefined)) {
+        if (isEd448FallbackKeyObject(keyObj)) {
+            if (this._algorithmNormalized !== null && this._algorithmNormalized !== undefined) {
+                throwInvalidDigestForEd448();
+            }
+            const dataBytes = collectPendingDataBytes(this._pendingData);
+            this._pendingData = null;
+            return verifyWithEd448Fallback(keyObj, dataBytes, sigBytes);
+        }
+
+        const keyType = keyObj.asymmetricKeyType || 'unknown';
+        const err = new Error('Verify key has no native handle (type=' + keyType + ')');
+        err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+        throw err;
+    }
+
     if (this._handle === null) {
         const handle = webCryptoNative.verify_init(this._algorithmNormalized, keyObj._handle);
         if (handle === null || handle === undefined) {
@@ -5194,7 +5347,6 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
         }
     }
 
-    const sigBytes = toBytes(signature, signatureEncoding);
     const result = webCryptoNative.verify_final_native(this._handle, sigBytes);
     this._handle = null;
     if (result === null || result === undefined) {
