@@ -182,10 +182,7 @@
     "parallel/test-fs-chown-type-check.js": {},
     "parallel/test-fs-close.js": {},
     "parallel/test-fs-close-errors.js": {},
-    "parallel/test-fs-constants.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-constants.js": {},
     "parallel/test-fs-copyfile.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
