@@ -858,10 +858,7 @@
     "parallel/test-crypto-aes-wrap.js": {},
     "parallel/test-crypto-async-sign-verify.js": {},
     "parallel/test-crypto-authenticated-stream.js": {},
-    "parallel/test-crypto-authenticated.js": {
-      "skip": true,
-      "reason": "amp fix attempt failed verification"
-    },
+    "parallel/test-crypto-authenticated.js": {},
     "parallel/test-crypto-certificate.js": {
       "skip": true,
       "reason": "requires crypto.Certificate and SPKAC support"

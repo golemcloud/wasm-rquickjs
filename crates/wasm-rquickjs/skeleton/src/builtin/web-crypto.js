@@ -515,8 +515,11 @@ const CIPHER_ALIASES = {
     'aes-128-ctr': 'aes-128-ctr',
     'aes-256-ctr': 'aes-256-ctr',
     'aes-128-ccm': 'aes-128-ccm',
+    'aes-256-ccm': 'aes-256-ccm',
     'aes-128-gcm': 'aes-128-gcm',
     'aes-256-gcm': 'aes-256-gcm',
+    'aes-128-ocb': 'aes-128-ocb',
+    'aes-256-ocb': 'aes-256-ocb',
     'aes-128-wrap': 'aes-128-wrap',
     'aes-192-wrap': 'aes-192-wrap',
     'aes-256-wrap': 'aes-256-wrap',
@@ -551,16 +554,140 @@ function normalizeCipherAlgorithm(algorithm) {
     return normalized;
 }
 
+function getAeadMode(algorithm) {
+    if (algorithm === 'chacha20-poly1305') return 'chacha20-poly1305';
+    if (algorithm.endsWith('-gcm')) return 'gcm';
+    if (algorithm.endsWith('-ccm')) return 'ccm';
+    if (algorithm.endsWith('-ocb')) return 'ocb';
+    return null;
+}
+
+function resolveNativeCipherAlgorithm(algorithm) {
+    if (algorithm === 'aes-128-ccm' || algorithm === 'aes-128-ocb') return 'aes-128-gcm';
+    if (algorithm === 'aes-256-ccm' || algorithm === 'aes-256-ocb') return 'aes-256-gcm';
+    return algorithm;
+}
+
+function throwInvalidArgValue(property, value) {
+    const err = new TypeError(`The property '${property}' is invalid. Received ${String(value)}`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+}
+
+function getUIntOption(options, key) {
+    let value;
+    if (options && (value = options[key]) != null) {
+        if ((value >>> 0) !== value) {
+            throwInvalidArgValue(`options.${key}`, value);
+        }
+        return value;
+    }
+    return undefined;
+}
+
+function throwInvalidAuthTagLength(length) {
+    const err = new TypeError(`Invalid authentication tag length: ${length}`);
+    err.code = 'ERR_CRYPTO_INVALID_AUTH_TAG';
+    throw err;
+}
+
+function throwAuthTagLengthRequired(algorithm) {
+    const err = new TypeError(`authTagLength required for ${algorithm}`);
+    err.code = 'ERR_CRYPTO_INVALID_AUTH_TAG';
+    throw err;
+}
+
+function throwInvalidIV() {
+    const err = new TypeError('Invalid initialization vector');
+    err.code = 'ERR_CRYPTO_INVALID_IV';
+    throw err;
+}
+
+function isValidGcmAuthTagLength(length) {
+    return length === 4 || length === 8 || (length >= 12 && length <= 16);
+}
+
+function isValidCcmAuthTagLength(length) {
+    return length >= 4 && length <= 16 && length % 2 === 0;
+}
+
+function isValidChachaAuthTagLength(length) {
+    return length >= 1 && length <= 16;
+}
+
+function computeCcmMaxMessageSize(ivLength) {
+    const exponent = 8 * (15 - ivLength);
+    if (exponent >= 53) {
+        return Number.MAX_SAFE_INTEGER;
+    }
+    return (2 ** exponent) - 1;
+}
+
+function parseAeadOptions(algorithm, options) {
+    const mode = getAeadMode(algorithm);
+    const authTagLengthOption = getUIntOption(options, 'authTagLength');
+    const hasAuthTagLength = authTagLengthOption !== undefined;
+    let authTagLength = authTagLengthOption;
+
+    if (mode === 'ccm' || mode === 'ocb') {
+        if (!hasAuthTagLength) {
+            throwAuthTagLengthRequired(algorithm);
+        }
+    }
+
+    if (mode === 'gcm') {
+        if (authTagLength === undefined) authTagLength = 16;
+        if (!isValidGcmAuthTagLength(authTagLength)) {
+            throwInvalidAuthTagLength(authTagLength);
+        }
+    } else if (mode === 'ccm') {
+        if (!isValidCcmAuthTagLength(authTagLength)) {
+            throwInvalidAuthTagLength(authTagLength);
+        }
+    } else if (mode === 'ocb') {
+        if (!isValidChachaAuthTagLength(authTagLength)) {
+            throwInvalidAuthTagLength(authTagLength);
+        }
+    } else if (mode === 'chacha20-poly1305') {
+        if (authTagLength === undefined) authTagLength = 16;
+        if (!isValidChachaAuthTagLength(authTagLength)) {
+            throwInvalidAuthTagLength(authTagLength);
+        }
+    }
+
+    return {
+        mode,
+        authTagLength,
+        hasAuthTagLength,
+    };
+}
+
 function Cipheriv(algorithm, key, iv, options) {
     if (!(this instanceof Cipheriv)) return new Cipheriv(algorithm, key, iv, options);
     this._algorithm = normalizeCipherAlgorithm(algorithm);
+    this._aeadConfig = parseAeadOptions(this._algorithm, options);
+    this._authTagLength = this._aeadConfig.authTagLength;
+    this._authTagLengthExplicit = this._aeadConfig.hasAuthTagLength;
+    this._isCcmMode = this._aeadConfig.mode === 'ccm';
+    this._hasUpdate = false;
+    this._totalInputLength = 0;
+    this._ccmPlaintextLength = undefined;
     const keyBytes = toBytes(key);
     const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
-    const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, false);
+
+    if (this._isCcmMode) {
+        if (ivBytes.length < 7 || ivBytes.length > 13) {
+            throwInvalidIV();
+        }
+        this._ccmMaxMessageSize = computeCcmMaxMessageSize(ivBytes.length);
+    } else {
+        this._ccmMaxMessageSize = undefined;
+    }
+
+    const nativeAlgorithm = resolveNativeCipherAlgorithm(this._algorithm);
+    const handle = webCryptoNative.cipher_init(nativeAlgorithm, keyBytes, ivBytes, false);
     if (handle === null || handle === undefined) {
-        const err = new TypeError('Invalid initialization vector');
-        err.code = 'ERR_CRYPTO_INVALID_IV';
-        throw err;
+        throwInvalidIV();
     }
     this._handle = handle;
     this._finalized = false;
@@ -573,20 +700,12 @@ Object.setPrototypeOf(Cipheriv, Transform);
 
 Cipheriv.prototype._transform = function(chunk, encoding, callback) {
     try {
-        const bytes = toBytes(chunk, encoding);
-        const result = webCryptoNative.cipher_update(this._handle, bytes);
-        if (result !== null && result !== undefined) {
-            const out = new Uint8Array(result);
-            if (out.length > 0) {
-                if (typeof Buffer !== 'undefined') {
-                    callback(null, Buffer.from(out.buffer, out.byteOffset, out.byteLength));
-                } else {
-                    callback(null, out);
-                }
-                return;
-            }
+        const out = this.update(chunk, encoding);
+        if (out && out.length > 0) {
+            callback(null, out);
+        } else {
+            callback(null);
         }
-        callback(null);
     } catch (e) {
         callback(e);
     }
@@ -595,20 +714,12 @@ Cipheriv.prototype._transform = function(chunk, encoding, callback) {
 Cipheriv.prototype._flush = function(callback) {
     if (this._finalized) return callback(null);
     try {
-        this._finalized = true;
-        const result = webCryptoNative.cipher_final(this._handle);
-        if (result !== null && result !== undefined) {
-            const out = new Uint8Array(result);
-            if (out.length > 0) {
-                if (typeof Buffer !== 'undefined') {
-                    callback(null, Buffer.from(out.buffer, out.byteOffset, out.byteLength));
-                } else {
-                    callback(null, out);
-                }
-                return;
-            }
+        const out = this.final();
+        if (out && out.length > 0) {
+            callback(null, out);
+        } else {
+            callback(null);
         }
-        callback(null);
     } catch (e) {
         callback(e);
     }
@@ -621,6 +732,17 @@ Cipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
         throw err;
     }
     const bytes = toBytes(data, inputEncoding);
+    if (this._isCcmMode) {
+        if (this._totalInputLength + bytes.length > this._ccmMaxMessageSize) {
+            throw new RangeError('Invalid message length');
+        }
+        if (this._ccmPlaintextLength !== undefined &&
+            this._totalInputLength + bytes.length > this._ccmPlaintextLength) {
+            throw new RangeError('Invalid message length');
+        }
+    }
+    this._totalInputLength += bytes.length;
+    this._hasUpdate = true;
     const result = webCryptoNative.cipher_update(this._handle, bytes);
     if (result === null || result === undefined) {
         const err = new Error('Cipher update failed');
@@ -637,6 +759,11 @@ Cipheriv.prototype.final = function(outputEncoding) {
         err.code = 'ERR_CRYPTO_HASH_FINALIZED';
         throw err;
     }
+    if (this._isCcmMode && !this._hasUpdate) {
+        const err = new Error('Unsupported state or unable to authenticate data');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
     this._finalized = true;
     const result = webCryptoNative.cipher_final(this._handle);
     if (result === null || result === undefined) {
@@ -650,6 +777,18 @@ Cipheriv.prototype.final = function(outputEncoding) {
 
 Cipheriv.prototype.setAAD = function(buffer, options) {
     const bytes = toBytes(buffer);
+    if (this._isCcmMode) {
+        const plaintextLength = getUIntOption(options, 'plaintextLength');
+        if (plaintextLength === undefined) {
+            const err = new Error('options.plaintextLength required for CCM mode with AAD');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        if (plaintextLength > this._ccmMaxMessageSize) {
+            throw new RangeError('Invalid message length');
+        }
+        this._ccmPlaintextLength = plaintextLength;
+    }
     const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
     if (!ok) {
         const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
@@ -667,10 +806,11 @@ Cipheriv.prototype.getAuthTag = function() {
         throw err;
     }
     const buf = new Uint8Array(result);
+    const out = (this._authTagLength !== undefined) ? buf.slice(0, this._authTagLength) : buf;
     if (typeof Buffer !== 'undefined') {
-        return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+        return Buffer.from(out.buffer, out.byteOffset, out.byteLength);
     }
-    return buf;
+    return out;
 };
 
 Cipheriv.prototype.setAutoPadding = function(autoPadding) {
@@ -684,16 +824,53 @@ export function createCipheriv(algorithm, key, iv, options) {
     return new Cipheriv(algorithm, key, iv, options);
 }
 
+function validateDecipherAuthTagLength(decipher, actualLength) {
+    const mode = decipher._aeadConfig.mode;
+    if (mode === 'gcm') {
+        if (decipher._authTagLengthExplicit) {
+            if (actualLength !== decipher._authTagLength) {
+                throwInvalidAuthTagLength(actualLength);
+            }
+        } else if (!isValidGcmAuthTagLength(actualLength)) {
+            throwInvalidAuthTagLength(actualLength);
+        }
+        return;
+    }
+
+    if (mode === 'chacha20-poly1305' || mode === 'ccm' || mode === 'ocb') {
+        if (actualLength !== decipher._authTagLength) {
+            throwInvalidAuthTagLength(actualLength);
+        }
+    }
+}
+
 function Decipheriv(algorithm, key, iv, options) {
     if (!(this instanceof Decipheriv)) return new Decipheriv(algorithm, key, iv, options);
     this._algorithm = normalizeCipherAlgorithm(algorithm);
+    this._aeadConfig = parseAeadOptions(this._algorithm, options);
+    this._authTagLength = this._aeadConfig.authTagLength;
+    this._authTagLengthExplicit = this._aeadConfig.hasAuthTagLength;
+    this._isCcmMode = this._aeadConfig.mode === 'ccm';
+    this._hasUpdate = false;
+    this._totalInputLength = 0;
+    this._ccmPlaintextLength = undefined;
+    this._authTagWasSet = false;
     const keyBytes = toBytes(key);
     const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
-    const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, true);
+
+    if (this._isCcmMode) {
+        if (ivBytes.length < 7 || ivBytes.length > 13) {
+            throwInvalidIV();
+        }
+        this._ccmMaxMessageSize = computeCcmMaxMessageSize(ivBytes.length);
+    } else {
+        this._ccmMaxMessageSize = undefined;
+    }
+
+    const nativeAlgorithm = resolveNativeCipherAlgorithm(this._algorithm);
+    const handle = webCryptoNative.cipher_init(nativeAlgorithm, keyBytes, ivBytes, true);
     if (handle === null || handle === undefined) {
-        const err = new TypeError('Invalid initialization vector');
-        err.code = 'ERR_CRYPTO_INVALID_IV';
-        throw err;
+        throwInvalidIV();
     }
     this._handle = handle;
     this._finalized = false;
@@ -714,6 +891,13 @@ Decipheriv.prototype.update = function(data, inputEncoding, outputEncoding) {
         throw err;
     }
     const bytes = toBytes(data, inputEncoding);
+    if (this._isCcmMode) {
+        if (this._totalInputLength + bytes.length > this._ccmMaxMessageSize) {
+            throw new RangeError('Invalid message length');
+        }
+    }
+    this._totalInputLength += bytes.length;
+    this._hasUpdate = true;
     const result = webCryptoNative.cipher_update(this._handle, bytes);
     if (result === null || result === undefined) {
         const err = new Error('Decipher update failed');
@@ -733,7 +917,14 @@ Decipheriv.prototype.final = function(outputEncoding) {
     this._finalized = true;
     const result = webCryptoNative.cipher_final(this._handle);
     if (result === null || result === undefined) {
-        const err = new Error('Decipher final failed (possibly wrong key, IV, or auth tag)');
+        const isMissingTag =
+            (this._aeadConfig.mode === 'chacha20-poly1305' || this._aeadConfig.mode === 'ccm') &&
+            !this._authTagWasSet;
+        const err = new Error(
+            isMissingTag
+                ? 'Unsupported state or unable to authenticate data'
+                : 'Decipher final failed (possibly wrong key, IV, or auth tag)'
+        );
         err.code = 'ERR_CRYPTO_INVALID_STATE';
         throw err;
     }
@@ -743,6 +934,18 @@ Decipheriv.prototype.final = function(outputEncoding) {
 
 Decipheriv.prototype.setAAD = function(buffer, options) {
     const bytes = toBytes(buffer);
+    if (this._isCcmMode) {
+        const plaintextLength = getUIntOption(options, 'plaintextLength');
+        if (plaintextLength === undefined) {
+            const err = new Error('options.plaintextLength required for CCM mode with AAD');
+            err.code = 'ERR_CRYPTO_INVALID_STATE';
+            throw err;
+        }
+        if (plaintextLength > this._ccmMaxMessageSize) {
+            throw new RangeError('Invalid message length');
+        }
+        this._ccmPlaintextLength = plaintextLength;
+    }
     const ok = webCryptoNative.cipher_set_aad(this._handle, bytes);
     if (!ok) {
         const err = new Error('setAAD failed: not an AEAD cipher or invalid state');
@@ -753,13 +956,20 @@ Decipheriv.prototype.setAAD = function(buffer, options) {
 };
 
 Decipheriv.prototype.setAuthTag = function(buffer) {
+    if (this._authTagWasSet) {
+        const err = new Error('Invalid state for operation setAuthTag');
+        err.code = 'ERR_CRYPTO_INVALID_STATE';
+        throw err;
+    }
     const bytes = toBytes(buffer);
+    validateDecipherAuthTagLength(this, bytes.length);
     const ok = webCryptoNative.cipher_set_auth_tag(this._handle, bytes);
     if (!ok) {
         const err = new Error('setAuthTag failed: not an AEAD decipher or invalid state');
         err.code = 'ERR_CRYPTO_INVALID_STATE';
         throw err;
     }
+    this._authTagWasSet = true;
     return this;
 };
 
