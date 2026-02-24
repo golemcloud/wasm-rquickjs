@@ -860,7 +860,7 @@
     "parallel/test-crypto-authenticated-stream.js": {},
     "parallel/test-crypto-authenticated.js": {
       "skip": true,
-      "reason": "requires fixtures/aead-vectors.js test vectors"
+      "reason": "amp fix attempt failed verification"
     },
     "parallel/test-crypto-certificate.js": {
       "skip": true,

@@ -558,7 +558,7 @@ function Cipheriv(algorithm, key, iv, options) {
     const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
     const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, false);
     if (handle === null || handle === undefined) {
-        const err = new Error('Invalid key length or IV length for cipher: ' + algorithm);
+        const err = new TypeError('Invalid initialization vector');
         err.code = 'ERR_CRYPTO_INVALID_IV';
         throw err;
     }
@@ -662,7 +662,7 @@ Cipheriv.prototype.setAAD = function(buffer, options) {
 Cipheriv.prototype.getAuthTag = function() {
     const result = webCryptoNative.cipher_get_auth_tag(this._handle);
     if (result === null || result === undefined) {
-        const err = new Error('getAuthTag failed: not an AEAD cipher or final not called');
+        const err = new Error('Invalid state for operation getAuthTag');
         err.code = 'ERR_CRYPTO_INVALID_STATE';
         throw err;
     }
@@ -691,7 +691,7 @@ function Decipheriv(algorithm, key, iv, options) {
     const ivBytes = (iv === null || iv === undefined) ? new Uint8Array(0) : toBytes(iv);
     const handle = webCryptoNative.cipher_init(this._algorithm, keyBytes, ivBytes, true);
     if (handle === null || handle === undefined) {
-        const err = new Error('Invalid key length or IV length for decipher: ' + algorithm);
+        const err = new TypeError('Invalid initialization vector');
         err.code = 'ERR_CRYPTO_INVALID_IV';
         throw err;
     }
