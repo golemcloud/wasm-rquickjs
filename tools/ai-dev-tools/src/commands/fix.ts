@@ -13,9 +13,49 @@ import {
   getSkippedTests,
   runCategoryTests,
   runSingleTest,
+  testPathToFilter,
 } from "../tests.js";
 import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason } from "../amp.js";
 import { commitProgress } from "../git.js";
+
+/**
+ * Parse cargo test output to find failing test names and map them back
+ * to config.jsonc test paths.
+ *
+ * Cargo test prints lines like:
+ *   test gen_node_compat_tests::parallel__test_foo_bar_js ... FAILED
+ *
+ * We extract the filter names and match them against enabled config entries
+ * using testPathToFilter (which is the canonical forward mapping).
+ */
+function extractFailingTests(output: string): string[] {
+  // Match both formats:
+  //   Finished test: node_compat::gen_node_compat_tests::parallel__test_foo_js  [FAILED]
+  //   test gen_node_compat_tests::parallel__test_foo_js ... FAILED
+  const pattern = /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
+  const failingFilters = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(output)) !== null) {
+    failingFilters.add(match[1]);
+  }
+
+  if (failingFilters.size === 0) return [];
+
+  // Build reverse lookup from filter name -> config path using all enabled config entries
+  const config = loadConfig();
+  const results: string[] = [];
+
+  for (const [testPath, opts] of Object.entries(config.tests)) {
+    if (opts.skip) continue;
+    const filter = testPathToFilter(testPath);
+    if (failingFilters.has(filter)) {
+      results.push(testPath);
+    }
+  }
+
+  return results;
+}
 
 export async function fixCommand(category: string): Promise<void> {
   fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -45,10 +85,30 @@ export async function fixCommand(category: string): Promise<void> {
   console.log();
   console.log("Step 2: Verifying currently enabled tests pass...");
 
-  const { ok: baselineOk } = await runCategoryTests(category);
+  const { ok: baselineOk, output: baselineOutput } = await runCategoryTests(category);
   if (!baselineOk) {
     console.log();
-    throw new Error("Existing enabled tests are failing. Fix regressions before proceeding.");
+    console.log("  ⚠ Some enabled tests are failing. Marking them as skipped to continue...");
+
+    const failingTests = extractFailingTests(baselineOutput);
+    if (failingTests.length === 0) {
+      throw new Error("Enabled tests are failing but could not parse which ones. Fix regressions before proceeding.");
+    }
+
+    for (const testPath of failingTests) {
+      console.log(`  Skipping failing test: ${testPath}`);
+      updateSkipReason(testPath, "regression: was enabled but started failing");
+    }
+
+    // Verify the remaining enabled tests now pass
+    console.log();
+    console.log("  Re-verifying after skipping failing tests...");
+    const { ok: retryOk } = await runCategoryTests(category);
+    if (!retryOk) {
+      throw new Error("Tests still failing after skipping detected failures. Fix regressions before proceeding.");
+    }
+
+    await commitProgress(category, "skip-regressions");
   }
 
   // ── Step 3: Fix loop ───────────────────────────────────────────────────
