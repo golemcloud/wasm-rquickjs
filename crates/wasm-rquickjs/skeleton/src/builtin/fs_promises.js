@@ -160,6 +160,16 @@ function validateFlush(flush) {
     }
 }
 
+function validateAppendFileData(data) {
+    if (typeof data === 'string' || ArrayBuffer.isView(data)) {
+        return;
+    }
+
+    const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ' + describeType(data));
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
 // --- FileHandle class ---
 
 let _protoSetup = false;
@@ -189,6 +199,7 @@ export class FileHandle {
 
     async appendFile(data, options) {
         if (this._closed) throw makeEBADF('write');
+        validateAppendFileData(data);
         if (typeof data === 'string') {
             const pos = null;
             const result = native.fs_write_string(this._fd, data, pos);
@@ -664,6 +675,7 @@ export async function appendFile(path, data, options) {
 
     const flush = options && typeof options === 'object' ? options.flush : undefined;
     validateFlush(flush);
+    validateAppendFileData(data);
 
     let error;
     if (typeof data === 'string') {
