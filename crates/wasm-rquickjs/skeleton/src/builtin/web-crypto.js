@@ -5000,7 +5000,10 @@ export function generateKeyPairSync(type_, options) {
                 asymmetricKeyDetails: { namedCurve },
                 ecUnsupported: { namedCurve },
             });
-            return { publicKey: stubPublic, privateKey: stubPrivate };
+            return {
+                publicKey: maybeApplyGeneratedKeyEncoding(stubPublic, options.publicKeyEncoding),
+                privateKey: maybeApplyGeneratedKeyEncoding(stubPrivate, options.privateKeyEncoding),
+            };
         }
         const err = new Error('Key generation failed');
         err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
