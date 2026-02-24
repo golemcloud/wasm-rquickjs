@@ -197,10 +197,7 @@
     "parallel/test-fs-fsync.js": {},
     "parallel/test-fs-lchmod.js": {},
     "parallel/test-fs-lchown.js": {},
-    "parallel/test-fs-link.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-link.js": {},
     "parallel/test-fs-long-path.js": {
       "skip": true,
       "reason": "platform-specific long path handling"
