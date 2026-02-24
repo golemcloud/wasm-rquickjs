@@ -209,10 +209,7 @@
       "skip": true,
       "reason": "assert.throws callback is 'not a function' — ERR_INVALID_ARG_TYPE constructor not available"
     },
-    "parallel/test-fs-mkdtemp-prefix-check.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-mkdtemp-prefix-check.js": {},
     "parallel/test-fs-non-number-arguments-throw.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
