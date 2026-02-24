@@ -1,5 +1,6 @@
 import * as utilBinding from "__wasm_rquickjs_builtin/internal/binding/util";
 import { constants as osConstants } from "node:os";
+import * as fsModule from "node:fs";
 
 // Node's V8-backed implementation can keep very small typed-array payloads inline
 // and only materialize an ArrayBuffer on first `.buffer` access.
@@ -111,6 +112,23 @@ for (const [name, value] of Object.entries(osErrno)) {
 
 const uvTestBinding = Object.freeze(uvErrnoBinding);
 
+const fsTestBinding = {
+    openFileHandle(path, flags, mode, _req, ctx) {
+        try {
+            const fd = fsModule.openSync(path, flags, mode);
+            return { fd };
+        } catch (err) {
+            if (ctx && typeof ctx === "object") {
+                ctx.errno = typeof err?.errno === "number" ? err.errno : -1;
+                ctx.error = err;
+                ctx.syscall = err?.syscall;
+                ctx.path = err?.path;
+            }
+            return { fd: -1 };
+        }
+    },
+};
+
 export function internalBinding(name) {
     if (name === "util") {
         return utilTestBinding;
@@ -126,6 +144,10 @@ export function internalBinding(name) {
 
     if (name === "uv") {
         return uvTestBinding;
+    }
+
+    if (name === "fs") {
+        return fsTestBinding;
     }
 
     throw new Error(`No such binding: ${name}`);

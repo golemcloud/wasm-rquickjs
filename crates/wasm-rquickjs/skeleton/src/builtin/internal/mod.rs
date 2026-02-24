@@ -3,6 +3,7 @@ use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
     resolver
         .with_module("__wasm_rquickjs_builtin/internal/errors")
+        .with_module("__wasm_rquickjs_builtin/internal/fs/utils")
         .with_module("__wasm_rquickjs_builtin/internal/normalize_encoding")
         .with_module("__wasm_rquickjs_builtin/internal/util")
         .with_module("__wasm_rquickjs_builtin/internal/validators")
@@ -35,6 +36,10 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/errors",
             include_str!("errors.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/fs/utils",
+            include_str!("fs/utils.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/normalize_encoding",
