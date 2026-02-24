@@ -181,10 +181,7 @@
       "skip": true,
       "reason": "symlink returns EIO in WASI filesystem"
     },
-    "parallel/test-fs-chmod-mask.js": {
-      "skip": true,
-      "reason": "WASI does not preserve file mode bits"
-    },
+    "parallel/test-fs-chmod-mask.js": {},
     "parallel/test-fs-chown-type-check.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"

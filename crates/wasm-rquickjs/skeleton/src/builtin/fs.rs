@@ -36,6 +36,111 @@ impl FdTable {
 
 static FD_TABLE: LazyLock<Mutex<FdTable>> = LazyLock::new(|| Mutex::new(FdTable::new()));
 
+#[cfg(not(unix))]
+const MODE_PERMISSION_MASK: u32 = 0o7777;
+
+#[cfg(not(unix))]
+static PATH_MODE_OVERRIDES: LazyLock<Mutex<HashMap<String, u32>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(not(unix))]
+static FD_MODE_OVERRIDES: LazyLock<Mutex<HashMap<i32, u32>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(not(unix))]
+static FD_PATHS: LazyLock<Mutex<HashMap<i32, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(not(unix))]
+fn normalize_mode_override(mode: u32) -> u32 {
+    mode & MODE_PERMISSION_MASK
+}
+
+#[cfg(not(unix))]
+fn apply_mode_override_to_mode(base_mode: u32, mode_override: u32) -> u32 {
+    (base_mode & !MODE_PERMISSION_MASK) | normalize_mode_override(mode_override)
+}
+
+#[cfg(not(unix))]
+fn apply_mode_override_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>, mode_override: u32) {
+    if let Ok(base_mode) = stat_obj.get::<_, f64>("mode") {
+        let adjusted_mode = apply_mode_override_to_mode(base_mode as u32, mode_override);
+        stat_obj.set("mode", adjusted_mode as f64).unwrap();
+    }
+}
+
+#[cfg(not(unix))]
+fn set_mode_override_for_path(path: &str, mode: u32) {
+    PATH_MODE_OVERRIDES
+        .lock()
+        .unwrap()
+        .insert(path.to_string(), normalize_mode_override(mode));
+}
+
+#[cfg(not(unix))]
+fn get_mode_override_for_path(path: &str) -> Option<u32> {
+    PATH_MODE_OVERRIDES.lock().unwrap().get(path).copied()
+}
+
+#[cfg(not(unix))]
+fn remove_mode_override_for_path(path: &str) {
+    PATH_MODE_OVERRIDES.lock().unwrap().remove(path);
+}
+
+#[cfg(not(unix))]
+fn move_mode_override_for_path(old_path: &str, new_path: &str) {
+    let mode_override = PATH_MODE_OVERRIDES.lock().unwrap().remove(old_path);
+    if let Some(mode_override) = mode_override {
+        PATH_MODE_OVERRIDES
+            .lock()
+            .unwrap()
+            .insert(new_path.to_string(), mode_override);
+    }
+}
+
+#[cfg(not(unix))]
+fn set_mode_override_for_fd(fd: i32, mode: u32) {
+    FD_MODE_OVERRIDES
+        .lock()
+        .unwrap()
+        .insert(fd, normalize_mode_override(mode));
+}
+
+#[cfg(not(unix))]
+fn get_mode_override_for_fd(fd: i32) -> Option<u32> {
+    FD_MODE_OVERRIDES.lock().unwrap().get(&fd).copied()
+}
+
+#[cfg(not(unix))]
+fn remove_mode_override_for_fd(fd: i32) {
+    FD_MODE_OVERRIDES.lock().unwrap().remove(&fd);
+}
+
+#[cfg(not(unix))]
+fn remember_fd_path(fd: i32, path: &str) {
+    FD_PATHS.lock().unwrap().insert(fd, path.to_string());
+}
+
+#[cfg(not(unix))]
+fn get_fd_path(fd: i32) -> Option<String> {
+    FD_PATHS.lock().unwrap().get(&fd).cloned()
+}
+
+#[cfg(not(unix))]
+fn forget_fd_path(fd: i32) {
+    FD_PATHS.lock().unwrap().remove(&fd);
+}
+
+#[cfg(not(unix))]
+fn rename_fd_path(old_path: &str, new_path: &str) {
+    let mut fd_paths = FD_PATHS.lock().unwrap();
+    for path in fd_paths.values_mut() {
+        if path == old_path {
+            *path = new_path.to_string();
+        }
+    }
+}
+
 fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
     match err.kind() {
         std::io::ErrorKind::NotFound => ("ENOENT", -2, "no such file or directory"),
@@ -289,7 +394,11 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn unlink(path: String) -> Option<String> {
         match std::fs::remove_file(Path::new(&path)) {
-            Ok(_) => None,
+            Ok(_) => {
+                #[cfg(not(unix))]
+                super::remove_mode_override_for_path(&path);
+                None
+            }
             Err(err) => Some(format!("Failed to unlink {path:?}: {err}")),
         }
     }
@@ -297,7 +406,14 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn rename(old_path: String, new_path: String) -> Option<String> {
         match std::fs::rename(Path::new(&old_path), Path::new(&new_path)) {
-            Ok(_) => None,
+            Ok(_) => {
+                #[cfg(not(unix))]
+                {
+                    super::move_mode_override_for_path(&old_path, &new_path);
+                    super::rename_fd_path(&old_path, &new_path);
+                }
+                None
+            }
             Err(err) => Some(format!(
                 "Failed to rename {old_path:?} to {new_path:?}: {err}"
             )),
@@ -354,6 +470,13 @@ pub mod native_module {
                     let _ = file.seek(SeekFrom::End(0));
                 }
                 let fd = super::FD_TABLE.lock().unwrap().insert(file);
+                #[cfg(not(unix))]
+                {
+                    super::remember_fd_path(fd, &path);
+                    if let Some(mode_override) = super::get_mode_override_for_path(&path) {
+                        super::set_mode_override_for_fd(fd, mode_override);
+                    }
+                }
                 result.set("fd", fd).unwrap();
             }
             Err(err) => {
@@ -372,6 +495,11 @@ pub mod native_module {
     pub fn fs_close(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
         let removed = super::FD_TABLE.lock().unwrap().remove(fd);
         if removed.is_some() {
+            #[cfg(not(unix))]
+            {
+                super::forget_fd_path(fd);
+                super::remove_mode_override_for_fd(fd);
+            }
             None
         } else {
             Some(super::make_badf_error(&ctx, "close"))
@@ -590,8 +718,13 @@ pub mod native_module {
         let result = Object::new(ctx.clone()).unwrap();
         match std::fs::metadata(&path) {
             Ok(meta) => {
+                let stat_obj = super::metadata_to_obj(&ctx, &meta);
+                #[cfg(not(unix))]
+                if let Some(mode_override) = super::get_mode_override_for_path(&path) {
+                    super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
+                }
                 result
-                    .set("stat", super::metadata_to_obj(&ctx, &meta))
+                    .set("stat", stat_obj)
                     .unwrap();
             }
             Err(err) => {
@@ -611,8 +744,13 @@ pub mod native_module {
         let result = Object::new(ctx.clone()).unwrap();
         match std::fs::symlink_metadata(&path) {
             Ok(meta) => {
+                let stat_obj = super::metadata_to_obj(&ctx, &meta);
+                #[cfg(not(unix))]
+                if let Some(mode_override) = super::get_mode_override_for_path(&path) {
+                    super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
+                }
                 result
-                    .set("stat", super::metadata_to_obj(&ctx, &meta))
+                    .set("stat", stat_obj)
                     .unwrap();
             }
             Err(err) => {
@@ -642,8 +780,19 @@ pub mod native_module {
         match table.get_mut(fd) {
             Some(file) => match file.metadata() {
                 Ok(meta) => {
+                    let stat_obj = super::metadata_to_obj(&ctx, &meta);
+                    #[cfg(not(unix))]
+                    {
+                        let mode_override = super::get_mode_override_for_fd(fd).or_else(|| {
+                            super::get_fd_path(fd)
+                                .and_then(|path| super::get_mode_override_for_path(&path))
+                        });
+                        if let Some(mode_override) = mode_override {
+                            super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
+                        }
+                    }
                     result
-                        .set("stat", super::metadata_to_obj(&ctx, &meta))
+                        .set("stat", stat_obj)
                         .unwrap();
                 }
                 Err(err) => {
@@ -824,7 +973,10 @@ pub mod native_module {
         {
             // chmod is not supported on WASI/Windows; verify path exists
             match std::fs::metadata(&path) {
-                Ok(_) => None,
+                Ok(_) => {
+                    super::set_mode_override_for_path(&path, _mode);
+                    None
+                }
                 Err(err) => Some(super::make_fs_error(&ctx, &err, "chmod", Some(&path))),
             }
         }
@@ -847,7 +999,11 @@ pub mod native_module {
                 }
                 #[cfg(not(unix))]
                 {
-                    // fchmod is not supported on WASI/Windows; no-op
+                    // fchmod is not supported on WASI/Windows; emulate it in stat/fstat.
+                    super::set_mode_override_for_fd(fd, _mode);
+                    if let Some(path) = super::get_fd_path(fd) {
+                        super::set_mode_override_for_path(&path, _mode);
+                    }
                     None
                 }
             }
@@ -926,7 +1082,11 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_rmdir(ctx: Ctx<'_>, path: String) -> Option<Object<'_>> {
         match std::fs::remove_dir(&path) {
-            Ok(_) => None,
+            Ok(_) => {
+                #[cfg(not(unix))]
+                super::remove_mode_override_for_path(&path);
+                None
+            }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "rmdir", Some(&path))),
         }
     }
@@ -943,12 +1103,20 @@ pub mod native_module {
                         std::fs::remove_dir(&path)
                     };
                     match result {
-                        Ok(_) => None,
+                        Ok(_) => {
+                            #[cfg(not(unix))]
+                            super::remove_mode_override_for_path(&path);
+                            None
+                        }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
                     }
                 } else {
                     match std::fs::remove_file(&path) {
-                        Ok(_) => None,
+                        Ok(_) => {
+                            #[cfg(not(unix))]
+                            super::remove_mode_override_for_path(&path);
+                            None
+                        }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
                     }
                 }

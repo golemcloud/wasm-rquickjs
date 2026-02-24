@@ -85,6 +85,7 @@ const S_IXOTH = 0o001;
 const COPYFILE_EXCL = 1;
 const COPYFILE_FICLONE = 2;
 const COPYFILE_FICLONE_FORCE = 4;
+const HAS_LCHMOD = false;
 
 export const constants = {
     F_OK, R_OK, W_OK, X_OK,
@@ -2898,7 +2899,7 @@ const _default = {
     readlinkSync,
     chmodSync,
     fchmodSync,
-    lchmodSync,
+    lchmodSync: HAS_LCHMOD ? lchmodSync : undefined,
     chownSync,
     fchownSync,
     lchownSync,
@@ -2940,7 +2941,7 @@ const _default = {
     readlink,
     chmod,
     fchmod,
-    lchmod,
+    lchmod: HAS_LCHMOD ? lchmod : undefined,
     chown,
     fchown,
     lchown,
