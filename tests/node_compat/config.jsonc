@@ -1165,10 +1165,7 @@
     "parallel/test-crypto-hmac.js": {},
     "parallel/test-crypto-key-objects-messageport.js": {},
     "parallel/test-crypto-key-objects-to-crypto-key.js": {},
-    "parallel/test-crypto-key-objects.js": {
-      "skip": true,
-      "reason": "requires full KeyObject API (symmetricKeySize, equals, asymmetricKeyType, asymmetricKeySize)"
-    },
+    "parallel/test-crypto-key-objects.js": {},
     "parallel/test-crypto-keygen-async-dsa-key-object.js": {},
     "parallel/test-crypto-keygen-async-dsa.js": {},
     "parallel/test-crypto-keygen-async-elliptic-curve-jwk-ec.js": {},

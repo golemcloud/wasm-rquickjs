@@ -26,22 +26,13 @@ function readSync(arg, encoding) {
 }
 
 const keyAliases = {
-  // wasm-rquickjs currently supports Ed25519 but not Ed448.
-  'ed448_private.pem': 'ed25519_private.pem',
-  'ed448_public.pem': 'ed25519_public.pem',
   // DSA parsing/signing is not implemented yet; use EC fixtures for sign/verify flow tests.
   'dsa_private.pem': 'ec_secp256k1_private.pem',
   'dsa_public.pem': 'ec_secp256k1_public.pem',
 };
 
 function readKey(name, encoding) {
-  let mappedName = keyAliases[name] || name;
-  if ((name === 'ed448_private.pem' || name === 'ed448_public.pem')) {
-    const stack = (new Error().stack || '');
-    if (stack.includes('test-crypto-key-objects.js')) {
-      mappedName = name;
-    }
-  }
+  const mappedName = keyAliases[name] || name;
   return readSync(path.join('keys', mappedName), encoding);
 }
 

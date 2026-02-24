@@ -32,10 +32,10 @@ pub(crate) fn write_if_changed(
 ) -> std::io::Result<()> {
     let path = path.as_ref();
     let contents = contents.as_ref();
-    if let Ok(existing) = std::fs::read(path) {
-        if existing == contents {
-            return Ok(());
-        }
+    if let Ok(existing) = std::fs::read(path)
+        && existing == contents
+    {
+        return Ok(());
     }
     std::fs::write(path, contents)
 }
@@ -48,10 +48,10 @@ pub(crate) fn copy_if_changed(
     let src = src.as_ref();
     let dst = dst.as_ref();
     let src_contents = std::fs::read(src)?;
-    if let Ok(existing) = std::fs::read(dst) {
-        if existing == src_contents {
-            return Ok(());
-        }
+    if let Ok(existing) = std::fs::read(dst)
+        && existing == src_contents
+    {
+        return Ok(());
     }
     std::fs::write(dst, src_contents)
 }

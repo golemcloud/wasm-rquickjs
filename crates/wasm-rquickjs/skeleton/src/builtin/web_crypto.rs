@@ -3142,6 +3142,26 @@ fn create_private_key_from_sec1_pem(pem: &str) -> Option<u32> {
     None
 }
 
+fn decrypt_pkcs8_pem_to_der_impl(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
+    use pkcs8::der::Decode;
+    use pkcs8::EncryptedPrivateKeyInfo;
+
+    let pem_trimmed = pem.trim();
+    let begin_marker = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
+    let end_marker = "-----END ENCRYPTED PRIVATE KEY-----";
+    let start = pem_trimmed.find(begin_marker)? + begin_marker.len();
+    let end = pem_trimmed.find(end_marker)?;
+    let b64 = &pem_trimmed[start..end];
+    let b64_clean: String = b64.chars().filter(|c| !c.is_whitespace()).collect();
+
+    use base64ct::Encoding;
+    let der_bytes = base64ct::Base64::decode_vec(&b64_clean).ok()?;
+
+    let encrypted = EncryptedPrivateKeyInfo::from_der(&der_bytes).ok()?;
+    let decrypted = encrypted.decrypt(passphrase).ok()?;
+    Some(decrypted.as_bytes().to_vec())
+}
+
 fn create_private_key_from_encrypted_pem(pem: &str, passphrase: &[u8]) -> Option<u32> {
     // Try PKCS#8 encrypted PEM first (-----BEGIN ENCRYPTED PRIVATE KEY-----)
     if pem.contains("ENCRYPTED PRIVATE KEY") {
@@ -5130,6 +5150,18 @@ pub mod native_module {
             .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
             .unwrap_or(&[]);
         super::create_private_key_from_encrypted_pem(&pem, slice)
+    }
+
+    #[rquickjs::function]
+    pub fn decrypt_pkcs8_pem_to_der(
+        pem: String,
+        passphrase: TypedArray<'_, u8>,
+    ) -> Option<Vec<u8>> {
+        let slice = passphrase
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        super::decrypt_pkcs8_pem_to_der_impl(&pem, slice)
     }
 
     #[rquickjs::function]

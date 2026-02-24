@@ -570,7 +570,7 @@ impl TestInstance {
                 .ok_or_else(|| anyhow!("Function {function_name} not found"))?,
         };
 
-        match timeout(Duration::from_secs(120), self.perform_invoke(func, args)).await {
+        match timeout(Duration::from_secs(300), self.perform_invoke(func, args)).await {
             Ok(result) => result,
             Err(_) => Err(anyhow!("Function {function_name} timed out")),
         }

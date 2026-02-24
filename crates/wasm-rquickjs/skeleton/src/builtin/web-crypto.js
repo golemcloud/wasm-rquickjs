@@ -1555,7 +1555,7 @@ export function getCipherInfo(nameOrNid, options) {
 }
 
 export function getCurves() {
-    return ['prime256v1', 'secp384r1', 'secp256k1'];
+    return ['prime256v1', 'secp384r1', 'secp256k1', 'secp521r1', 'secp224r1'];
 }
 
 // ===== DiffieHellman =====
@@ -2090,6 +2090,22 @@ class KeyObject {
         if (this._customData && this._customData.asymmetricKeyDetails) {
             return this._customData.asymmetricKeyDetails;
         }
+
+        const keyType = this.asymmetricKeyType;
+        if (keyType === 'ec') {
+            try {
+                const jwkJson = webCryptoNative.key_export_jwk(this._handle);
+                if (jwkJson) {
+                    const jwk = JSON.parse(jwkJson);
+                    if (jwk && jwk.crv) {
+                        const crvMap = { 'P-256': 'prime256v1', 'P-384': 'secp384r1', 'P-521': 'secp521r1', 'secp256k1': 'secp256k1' };
+                        return { namedCurve: crvMap[jwk.crv] || jwk.crv };
+                    }
+                }
+            } catch (_ignored) {}
+            return undefined;
+        }
+
         const details = webCryptoNative.key_asymmetric_details(this._handle);
         if (details === null || details === undefined) return undefined;
         return {
@@ -2116,6 +2132,15 @@ class KeyObject {
             throw err;
         }
         if (this._type === 'secret') {
+            if (options && typeof options === 'object' && options.format === 'jwk') {
+                const raw = webCryptoNative.key_export(this._handle, 'der', undefined);
+                if (raw === null || raw === undefined) {
+                    throw new Error('Failed to export secret key');
+                }
+                const bytes = new Uint8Array(raw);
+                const k = bytesToBase64Url(bytes);
+                return { kty: 'oct', k };
+            }
             const raw = webCryptoNative.key_export(this._handle, 'der', undefined);
             if (raw === null || raw === undefined) {
                 throw new Error('Failed to export secret key');
@@ -2135,6 +2160,12 @@ class KeyObject {
 
         if (format === 'jwk' && (options.passphrase !== undefined || options.cipher !== undefined)) {
             throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('jwk', 'does not support encryption');
+        }
+
+        if (options.passphrase !== undefined && options.cipher === undefined) {
+            const err = new TypeError("The property 'options.cipher' is invalid. Received undefined");
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
         }
 
         // JWK export
@@ -2947,6 +2978,20 @@ const EC_CURVE_TO_OID = {
     'P-521': '1.3.132.0.35',
 };
 
+const EC_OID_TO_CURVE = {
+    '1.2.840.10045.3.1.7': 'P-256',
+    '1.3.132.0.34': 'P-384',
+    '1.3.132.0.10': 'secp256k1',
+    '1.3.132.0.35': 'P-521',
+};
+
+const JWK_CURVE_TO_NAMED = {
+    'P-256': 'prime256v1',
+    'P-384': 'secp384r1',
+    'P-521': 'secp521r1',
+    'secp256k1': 'secp256k1',
+};
+
 function buildRsaPublicSpkiDer(jwk) {
     const n = base64UrlToBytes(requireJwkField(jwk, 'n'));
     const e = base64UrlToBytes(requireJwkField(jwk, 'e'));
@@ -3056,10 +3101,20 @@ function createPrivateKeyFromJwk(jwk) {
     if (jwk.kty === 'EC') {
         const der = buildEcPrivatePkcs8Der(jwk);
         const handle = webCryptoNative.create_private_key_der(der);
-        if (handle === null || handle === undefined) {
-            throw new ERR_CRYPTO_INVALID_JWK();
+        if (handle !== null && handle !== undefined) {
+            return new KeyObject(handle, 'private');
         }
-        return new KeyObject(handle, 'private');
+        const crv = requireJwkField(jwk, 'crv');
+        const x = base64UrlToBytes(requireJwkField(jwk, 'x'));
+        const y = base64UrlToBytes(requireJwkField(jwk, 'y'));
+        const d = base64UrlToBytes(requireJwkField(jwk, 'd'));
+        const point = new Uint8Array(1 + x.length + y.length);
+        point[0] = 0x04;
+        point.set(x, 1);
+        point.set(y, 1 + x.length);
+        const ecKey = createEcJwkKeyObject('private', crv, d, point);
+        if (ecKey) return ecKey;
+        throw new ERR_CRYPTO_INVALID_JWK();
     }
 
     if (jwk.kty === 'OKP') {
@@ -3108,10 +3163,19 @@ function createPublicKeyFromJwk(jwk) {
     if (jwk.kty === 'EC') {
         const der = buildEcPublicSpkiDer(jwk);
         const handle = webCryptoNative.create_public_key_der(der);
-        if (handle === null || handle === undefined) {
-            throw new ERR_CRYPTO_INVALID_JWK();
+        if (handle !== null && handle !== undefined) {
+            return new KeyObject(handle, 'public');
         }
-        return new KeyObject(handle, 'public');
+        const crv = requireJwkField(jwk, 'crv');
+        const x = base64UrlToBytes(requireJwkField(jwk, 'x'));
+        const y = base64UrlToBytes(requireJwkField(jwk, 'y'));
+        const point = new Uint8Array(1 + x.length + y.length);
+        point[0] = 0x04;
+        point.set(x, 1);
+        point.set(y, 1 + x.length);
+        const ecKey = createEcJwkKeyObject('public', crv, null, point);
+        if (ecKey) return ecKey;
+        throw new ERR_CRYPTO_INVALID_JWK();
     }
 
     if (jwk.kty === 'OKP') {
@@ -3610,9 +3674,383 @@ function exportEd25519NativeKeyObject(keyObject, format, type_) {
     return null;
 }
 
+function parseEcPrivateKeyFromDer(der) {
+    const root = readAsn1Element(der, 0);
+    if (root.tag !== 0x30 || root.nextOffset !== der.length) return null;
+    const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+    if (top.length < 3) return null;
+    const algSeq = top[1];
+    if (algSeq.tag !== 0x30) return null;
+    const algChildren = readAsn1Children(der, algSeq.valueStart, algSeq.valueEnd);
+    if (algChildren.length < 2) return null;
+    const algOid = decodeAsn1Oid(der, algChildren[0]);
+    if (algOid !== '1.2.840.10045.2.1') return null;
+    const curveOid = decodeAsn1Oid(der, algChildren[1]);
+    const crv = EC_OID_TO_CURVE[curveOid];
+    if (!crv) return null;
+    const privOctet = top[2];
+    if (privOctet.tag !== 0x04) return null;
+    const ecPriv = der.slice(privOctet.valueStart, privOctet.valueEnd);
+    const ecRoot = readAsn1Element(ecPriv, 0);
+    if (ecRoot.tag !== 0x30) return null;
+    const ecChildren = readAsn1Children(ecPriv, ecRoot.valueStart, ecRoot.valueEnd);
+    if (ecChildren.length < 2) return null;
+    const dOctet = ecChildren[1];
+    if (dOctet.tag !== 0x04) return null;
+    const d = ecPriv.slice(dOctet.valueStart, dOctet.valueEnd);
+    let point = null;
+    for (const child of ecChildren) {
+        if (child.tag === 0xA1) {
+            const inner = readAsn1Element(ecPriv, child.valueStart);
+            if (inner.tag === 0x03) {
+                const bitData = ecPriv.slice(inner.valueStart, inner.valueEnd);
+                if (bitData.length > 1 && bitData[0] === 0) {
+                    point = bitData.slice(1);
+                }
+            }
+        }
+    }
+    return { crv, d, point };
+}
+
+function parseEcPublicKeyFromDer(der) {
+    const root = readAsn1Element(der, 0);
+    if (root.tag !== 0x30 || root.nextOffset !== der.length) return null;
+    const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+    if (top.length < 2) return null;
+    const algSeq = top[0];
+    if (algSeq.tag !== 0x30) return null;
+    const algChildren = readAsn1Children(der, algSeq.valueStart, algSeq.valueEnd);
+    if (algChildren.length < 2) return null;
+    const algOid = decodeAsn1Oid(der, algChildren[0]);
+    if (algOid !== '1.2.840.10045.2.1') return null;
+    const curveOid = decodeAsn1Oid(der, algChildren[1]);
+    const crv = EC_OID_TO_CURVE[curveOid];
+    if (!crv) return null;
+    const bitString = top[1];
+    if (bitString.tag !== 0x03) return null;
+    const bitData = der.slice(bitString.valueStart, bitString.valueEnd);
+    if (bitData.length < 2 || bitData[0] !== 0) return null;
+    return { crv, point: bitData.slice(1) };
+}
+
+function ecPointToXY(point, crv) {
+    if (!point || point[0] !== 0x04) return null;
+    const fieldLen = (point.length - 1) / 2;
+    return {
+        x: point.slice(1, 1 + fieldLen),
+        y: point.slice(1 + fieldLen),
+    };
+}
+
+function createEcJwkKeyObject(type_, crv, d, point) {
+    const xy = ecPointToXY(point, crv);
+    if (!xy) return null;
+    const namedCurve = JWK_CURVE_TO_NAMED[crv] || crv;
+    const jwkData = { crv, x: bytesToBase64Url(xy.x), y: bytesToBase64Url(xy.y) };
+    if (type_ === 'private' && d) {
+        jwkData.d = bytesToBase64Url(d);
+    }
+    return new KeyObject(null, type_, {
+        asymmetricKeyType: 'ec',
+        asymmetricKeyDetails: { namedCurve },
+        ec: { namedCurve, jwk: jwkData },
+    });
+}
+
+function maybeParseEcPrivateKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) return null;
+        const parsed = parseEcPrivateKeyFromDer(der);
+        if (!parsed) return null;
+        return createEcJwkKeyObject('private', parsed.crv, parsed.d, parsed.point);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function maybeParseEcPublicKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) return null;
+        const parsed = parseEcPublicKeyFromDer(der);
+        if (!parsed) return null;
+        return createEcJwkKeyObject('public', parsed.crv, null, parsed.point);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function exportEcCustomKeyObject(keyObject, options) {
+    if (options === undefined || options === null || typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+    const ecData = keyObject._customData.ec;
+    const jwkData = ecData.jwk;
+    if (!jwkData) return undefined;
+    const format = options.format || (options.type ? 'pem' : 'der');
+    if (format === 'jwk') {
+        const jwk = { kty: 'EC', crv: jwkData.crv, x: jwkData.x, y: jwkData.y };
+        if (keyObject.type === 'private' && jwkData.d) {
+            jwk.d = jwkData.d;
+        }
+        return jwk;
+    }
+    if (keyObject.type === 'private') {
+        const jwk = { kty: 'EC', crv: jwkData.crv, x: jwkData.x, y: jwkData.y, d: jwkData.d };
+        const der = buildEcPrivatePkcs8Der(jwk);
+        if (format === 'pem') return encodeDerAsPem('PRIVATE KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    } else {
+        const jwk = { kty: 'EC', crv: jwkData.crv, x: jwkData.x, y: jwkData.y };
+        const der = buildEcPublicSpkiDer(jwk);
+        if (format === 'pem') return encodeDerAsPem('PUBLIC KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    }
+    return undefined;
+}
+
+const DSA_OID = '1.2.840.10040.4.1';
+const RSA_PSS_OID = '1.2.840.113549.1.1.10';
+const RSA_OID = '1.2.840.113549.1.1.1';
+
+function detectAlgorithmOid(der) {
+    try {
+        const root = readAsn1Element(der, 0);
+        if (root.tag !== 0x30) return null;
+        const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+        if (top.length < 2) return null;
+        const algSeq = top[0].tag === 0x02 ? top[1] : top[0];
+        if (algSeq.tag !== 0x30) return null;
+        const algChildren = readAsn1Children(der, algSeq.valueStart, algSeq.valueEnd);
+        if (algChildren.length < 1) return null;
+        return decodeAsn1Oid(der, algChildren[0]);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function createDsaKeyObject(type_, rawDer, rawPem) {
+    return new KeyObject(null, type_, {
+        asymmetricKeyType: 'dsa',
+        dsa: { der: rawDer, pem: rawPem },
+    });
+}
+
+function maybeParseDsaPublicKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) return null;
+        const oid = detectAlgorithmOid(der);
+        if (oid !== DSA_OID) return null;
+        const pem = format === 'pem' ? toPemString(keyData) : encodeDerAsPem('PUBLIC KEY', der);
+        return createDsaKeyObject('public', der, pem);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function maybeParseDsaPrivateKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) return null;
+        const oid = detectAlgorithmOid(der);
+        if (oid !== DSA_OID) return null;
+        const pem = format === 'pem' ? toPemString(keyData) : encodeDerAsPem('PRIVATE KEY', der);
+        return createDsaKeyObject('private', der, pem);
+    } catch (_err) {
+        return null;
+    }
+}
+
+function exportDsaCustomKeyObject(keyObject, options) {
+    if (options === undefined || options === null || typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+    const format = options.format || (options.type ? 'pem' : 'der');
+    if (format === 'jwk') {
+        const err = new Error('Unsupported JWK key type: dsa');
+        err.code = 'ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE';
+        throw err;
+    }
+    const dsa = keyObject._customData.dsa;
+    if (format === 'pem') return dsa.pem;
+    if (format === 'der') return toBinaryOutput(dsa.der);
+    return undefined;
+}
+
+const PSS_HASH_OIDS = {
+    '1.3.14.3.2.26': 'sha1',
+    '2.16.840.1.101.3.4.2.1': 'sha256',
+    '2.16.840.1.101.3.4.2.2': 'sha384',
+    '2.16.840.1.101.3.4.2.3': 'sha512',
+    '2.16.840.1.101.3.4.2.4': 'sha224',
+};
+const MGF1_OID = '1.2.840.113549.1.1.8';
+
+function parseRsaPssParams(der, paramsElement) {
+    const result = { hashAlgorithm: 'sha1', mgf1HashAlgorithm: 'sha1', saltLength: 20 };
+    if (!paramsElement || paramsElement.tag !== 0x30) return result;
+    const children = readAsn1Children(der, paramsElement.valueStart, paramsElement.valueEnd);
+    for (const child of children) {
+        if (child.tag === 0xA0) {
+            const inner = readAsn1Children(der, child.valueStart, child.valueEnd);
+            if (inner.length > 0 && inner[0].tag === 0x30) {
+                const algChildren = readAsn1Children(der, inner[0].valueStart, inner[0].valueEnd);
+                if (algChildren.length > 0) {
+                    const oid = decodeAsn1Oid(der, algChildren[0]);
+                    if (PSS_HASH_OIDS[oid]) result.hashAlgorithm = PSS_HASH_OIDS[oid];
+                }
+            }
+        } else if (child.tag === 0xA1) {
+            const inner = readAsn1Children(der, child.valueStart, child.valueEnd);
+            if (inner.length > 0 && inner[0].tag === 0x30) {
+                const mgfChildren = readAsn1Children(der, inner[0].valueStart, inner[0].valueEnd);
+                if (mgfChildren.length >= 2) {
+                    const mgfAlg = readAsn1Children(der, mgfChildren[1].valueStart, mgfChildren[1].valueEnd);
+                    if (mgfAlg.length > 0) {
+                        const oid = decodeAsn1Oid(der, mgfAlg[0]);
+                        if (PSS_HASH_OIDS[oid]) result.mgf1HashAlgorithm = PSS_HASH_OIDS[oid];
+                    }
+                }
+            }
+        } else if (child.tag === 0xA2) {
+            const inner = readAsn1Children(der, child.valueStart, child.valueEnd);
+            if (inner.length > 0 && inner[0].tag === 0x02) {
+                const bytes = der.slice(inner[0].valueStart, inner[0].valueEnd);
+                let val = 0;
+                for (let i = 0; i < bytes.length; i++) val = val * 256 + bytes[i];
+                result.saltLength = val;
+            }
+        }
+    }
+    return result;
+}
+
+function maybeParseRsaPssPublicKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) return null;
+        const root = readAsn1Element(der, 0);
+        if (root.tag !== 0x30) return null;
+        const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+        if (top.length < 2) return null;
+        const algSeq = top[0];
+        if (algSeq.tag !== 0x30) return null;
+        const algChildren = readAsn1Children(der, algSeq.valueStart, algSeq.valueEnd);
+        if (algChildren.length < 1) return null;
+        const oid = decodeAsn1Oid(der, algChildren[0]);
+        if (oid !== RSA_PSS_OID) return null;
+        const pssParams = algChildren.length > 1 ? parseRsaPssParams(der, algChildren[1]) : {};
+        const bitString = top[1];
+        if (bitString.tag !== 0x03) return null;
+        const bitData = der.slice(bitString.valueStart, bitString.valueEnd);
+        if (bitData.length < 2 || bitData[0] !== 0) return null;
+        const rsaKeyDer = bitData.slice(1);
+        const handle = webCryptoNative.create_public_key_der(rsaKeyDer);
+        if (handle === null || handle === undefined) return null;
+        const details = webCryptoNative.key_asymmetric_details(handle);
+        const keyDetails = details ? { modulusLength: Number(details[0]), publicExponent: BigInt(details[1]) } : {};
+        if (pssParams.hashAlgorithm) {
+            keyDetails.hashAlgorithm = pssParams.hashAlgorithm;
+            keyDetails.mgf1HashAlgorithm = pssParams.mgf1HashAlgorithm || pssParams.hashAlgorithm;
+            keyDetails.saltLength = pssParams.saltLength !== undefined ? pssParams.saltLength : 20;
+        }
+        const pem = format === 'pem' ? toPemString(keyData) : encodeDerAsPem('PUBLIC KEY', der);
+        return new KeyObject(handle, 'public', {
+            asymmetricKeyType: 'rsa-pss',
+            asymmetricKeyDetails: keyDetails,
+            rsaPss: { der: der, pem: pem },
+        });
+    } catch (_err) {
+        return null;
+    }
+}
+
+function maybeParseRsaPssPrivateKey(keyData, format) {
+    try {
+        const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
+        if (!der) return null;
+        const root = readAsn1Element(der, 0);
+        if (root.tag !== 0x30) return null;
+        const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+        if (top.length < 3) return null;
+        const algSeq = top[1];
+        if (algSeq.tag !== 0x30) return null;
+        const algChildren = readAsn1Children(der, algSeq.valueStart, algSeq.valueEnd);
+        if (algChildren.length < 1) return null;
+        const oid = decodeAsn1Oid(der, algChildren[0]);
+        if (oid !== RSA_PSS_OID) return null;
+        const pssParams = algChildren.length > 1 ? parseRsaPssParams(der, algChildren[1]) : {};
+        const privOctet = top[2];
+        if (privOctet.tag !== 0x04) return null;
+        const rsaKeyDer = der.slice(privOctet.valueStart, privOctet.valueEnd);
+        const handle = webCryptoNative.create_private_key_der(rsaKeyDer);
+        if (handle === null || handle === undefined) return null;
+        const details = webCryptoNative.key_asymmetric_details(handle);
+        const keyDetails = details ? { modulusLength: Number(details[0]), publicExponent: BigInt(details[1]) } : {};
+        if (pssParams.hashAlgorithm) {
+            keyDetails.hashAlgorithm = pssParams.hashAlgorithm;
+            keyDetails.mgf1HashAlgorithm = pssParams.mgf1HashAlgorithm || pssParams.hashAlgorithm;
+            keyDetails.saltLength = pssParams.saltLength !== undefined ? pssParams.saltLength : 20;
+        }
+        const pem = format === 'pem' ? toPemString(keyData) : encodeDerAsPem('PRIVATE KEY', der);
+        return new KeyObject(handle, 'private', {
+            asymmetricKeyType: 'rsa-pss',
+            asymmetricKeyDetails: keyDetails,
+            rsaPss: { der: der, pem: pem },
+        });
+    } catch (_err) {
+        return null;
+    }
+}
+
+function exportRsaPssCustomKeyObject(keyObject, options) {
+    if (options === undefined || options === null || typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+    const format = options.format || (options.type ? 'pem' : 'der');
+    if (format === 'jwk') {
+        const err = new Error('Unsupported JWK key type: rsa-pss');
+        err.code = 'ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE';
+        throw err;
+    }
+    const type_ = options.type || null;
+    if (type_ === 'pkcs1') {
+        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('pkcs1', 'does not support RSA-PSS');
+    }
+    const rsaPss = keyObject._customData.rsaPss;
+    if (format === 'pem') return rsaPss.pem;
+    if (format === 'der') return toBinaryOutput(rsaPss.der);
+    return undefined;
+}
+
+function isPemEncrypted(pem) {
+    return pem.includes('ENCRYPTED PRIVATE KEY') || pem.includes('Proc-Type: 4,ENCRYPTED');
+}
+
 function tryExportCustomKeyObject(keyObject, options) {
     if (keyObject._customData && keyObject._customData.okp) {
         return exportOkpCustomKeyObject(keyObject, options);
+    }
+    if (keyObject._customData && keyObject._customData.ec && keyObject._customData.ec.jwk) {
+        return exportEcCustomKeyObject(keyObject, options);
+    }
+    if (keyObject._customData && keyObject._customData.dsa) {
+        return exportDsaCustomKeyObject(keyObject, options);
+    }
+    if (keyObject._customData && keyObject._customData.rsaPss) {
+        return exportRsaPssCustomKeyObject(keyObject, options);
+    }
+    if (keyObject._customData && keyObject._customData.ecUnsupported) {
+        if (options && typeof options === 'object' && options.format === 'jwk') {
+            const curve = keyObject._customData.ecUnsupported.namedCurve;
+            const err = new Error('Unsupported JWK EC curve: ' + curve + '.');
+            err.code = 'ERR_CRYPTO_JWK_UNSUPPORTED_CURVE';
+            throw err;
+        }
+        return undefined;
     }
     return undefined;
 }
@@ -3650,6 +4088,34 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             err.function = 'get_name';
             throw err;
         }
+
+        if (isPemEncrypted(pem)) {
+            if (passphrase === undefined) {
+                const err = new TypeError('Passphrase required for encrypted key');
+                err.code = 'ERR_MISSING_PASSPHRASE';
+                throw err;
+            }
+            const passBytes = toBytes(passphrase);
+            if (passBytes.length > 1024) {
+                const err = new Error('error:0480006C:PEM routines::bad password read');
+                err.code = 'ERR_OSSL_PEM_BAD_PASSWORD_READ';
+                err.name = 'Error';
+                throw err;
+            }
+            const encryptedHandle = webCryptoNative.create_private_key_encrypted_pem(pem, passBytes);
+            if (encryptedHandle !== null && encryptedHandle !== undefined) {
+                return new KeyObject(encryptedHandle, 'private');
+            }
+            const decryptedDer = webCryptoNative.decrypt_pkcs8_pem_to_der(pem, passBytes);
+            if (decryptedDer !== null && decryptedDer !== undefined) {
+                const derBytes = new Uint8Array(decryptedDer);
+                const dsaKey = maybeParseDsaPrivateKey(derBytes, 'der');
+                if (dsaKey) return dsaKey;
+            }
+            const badErr = new Error('error:1C800064:Provider routines::bad decrypt');
+            throw badErr;
+        }
+
         if (passphrase !== undefined) {
             const passBytes = toBytes(passphrase);
             const encryptedHandle = webCryptoNative.create_private_key_encrypted_pem(pem, passBytes);
@@ -3657,6 +4123,15 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 return new KeyObject(encryptedHandle, 'private');
             }
         }
+
+        const okpKey = maybeParseOkpPrivateKey(pem, 'pem');
+        if (okpKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, okpKey);
+            }
+            return okpKey;
+        }
+
         const handle = webCryptoNative.create_private_key_pem(pem);
         if (handle !== null && handle !== undefined) {
             const key = new KeyObject(handle, 'private');
@@ -3664,6 +4139,14 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 PRIVATE_KEY_CACHE.set(cacheKey, key);
             }
             return key;
+        }
+
+        const rsaPssKey = maybeParseRsaPssPrivateKey(pem, 'pem');
+        if (rsaPssKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, rsaPssKey);
+            }
+            return rsaPssKey;
         }
 
         const pemDer = decodePemToDer(pem);
@@ -3679,12 +4162,12 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             }
         }
 
-        const okpKey = maybeParseOkpPrivateKey(pem, 'pem');
-        if (okpKey) {
+        const ecKey = maybeParseEcPrivateKey(pem, 'pem');
+        if (ecKey) {
             if (cacheKey !== null) {
-                PRIVATE_KEY_CACHE.set(cacheKey, okpKey);
+                PRIVATE_KEY_CACHE.set(cacheKey, ecKey);
             }
-            return okpKey;
+            return ecKey;
         }
 
         const dhKey = maybeParseDhPrivateKey(pem, 'pem');
@@ -3695,6 +4178,14 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             return dhKey;
         }
 
+        const dsaKey = maybeParseDsaPrivateKey(pem, 'pem');
+        if (dsaKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, dsaKey);
+            }
+            return dsaKey;
+        }
+
         const err = new Error('Failed to parse private key');
         err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
         throw err;
@@ -3702,6 +4193,15 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
 
     if (format === 'der') {
         const data = toBytes(keyData);
+
+        const okpKey = maybeParseOkpPrivateKey(data, 'der');
+        if (okpKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, okpKey);
+            }
+            return okpKey;
+        }
+
         const ed25519Raw = extractEd25519PrivateRaw(data);
         const derInput = ed25519Raw || data;
         const handle = webCryptoNative.create_private_key_der(derInput);
@@ -3711,12 +4211,12 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 err.library = 'asn1 encoding routines';
                 throw err;
             }
-            const okpKey = maybeParseOkpPrivateKey(data, 'der');
-            if (okpKey) {
+            const ecKey = maybeParseEcPrivateKey(data, 'der');
+            if (ecKey) {
                 if (cacheKey !== null) {
-                    PRIVATE_KEY_CACHE.set(cacheKey, okpKey);
+                    PRIVATE_KEY_CACHE.set(cacheKey, ecKey);
                 }
-                return okpKey;
+                return ecKey;
             }
             const dhKey = maybeParseDhPrivateKey(data, 'der');
             if (dhKey) {
@@ -3766,6 +4266,28 @@ function createPublicKeyFromData(keyData, format, passphrase) {
 
     if (format === 'pem') {
         const pem = toPemString(keyData);
+
+        const okpPublicKey = maybeParseOkpPublicKey(pem, 'pem');
+        if (okpPublicKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, okpPublicKey);
+            }
+            return okpPublicKey;
+        }
+
+        const okpPrivateKey = maybeParseOkpPrivateKey(pem, 'pem');
+        if (okpPrivateKey && okpPrivateKey._customData && okpPrivateKey._customData.okp) {
+            const privateData = okpPrivateKey._customData.okp;
+            const publicBytes = privateData.publicKey || getOkpPublicFromPrivate(okpPrivateKey._customData.asymmetricKeyType, privateData.privateKey);
+            if (publicBytes) {
+                const key = createOkpPublicKeyObject(okpPrivateKey._customData.asymmetricKeyType, publicBytes);
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, key);
+                }
+                return key;
+            }
+        }
+
         const pubHandle = webCryptoNative.create_public_key_pem(pem);
         if (pubHandle !== null && pubHandle !== undefined) {
             const key = new KeyObject(pubHandle, 'public');
@@ -3773,6 +4295,14 @@ function createPublicKeyFromData(keyData, format, passphrase) {
                 PUBLIC_KEY_CACHE.set(cacheKey, key);
             }
             return key;
+        }
+
+        const rsaPssPubKey = maybeParseRsaPssPublicKey(pem, 'pem');
+        if (rsaPssPubKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, rsaPssPubKey);
+            }
+            return rsaPssPubKey;
         }
 
         if (passphrase !== undefined) {
@@ -3792,6 +4322,23 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             const derived = webCryptoNative.create_public_key_from_private_key(privHandle);
             if (derived !== null && derived !== undefined) {
                 const key = new KeyObject(derived, 'public');
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, key);
+                }
+                return key;
+            }
+        }
+
+        const rsaPssPrivKey = maybeParseRsaPssPrivateKey(pem, 'pem');
+        if (rsaPssPrivKey) {
+            const derivedHandle = webCryptoNative.create_public_key_from_private_key(rsaPssPrivKey._handle);
+            if (derivedHandle !== null && derivedHandle !== undefined) {
+                const rsaPssData = rsaPssPrivKey._customData;
+                const key = new KeyObject(derivedHandle, 'public', {
+                    asymmetricKeyType: 'rsa-pss',
+                    asymmetricKeyDetails: rsaPssData.asymmetricKeyDetails,
+                    rsaPss: rsaPssData.rsaPss,
+                });
                 if (cacheKey !== null) {
                     PUBLIC_KEY_CACHE.set(cacheKey, key);
                 }
@@ -3826,7 +4373,52 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
         }
 
-        const okpPublicKey = maybeParseOkpPublicKey(pem, 'pem');
+        const ecPublicKey = maybeParseEcPublicKey(pem, 'pem');
+        if (ecPublicKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, ecPublicKey);
+            }
+            return ecPublicKey;
+        }
+
+        const ecPrivateKey = maybeParseEcPrivateKey(pem, 'pem');
+        if (ecPrivateKey && ecPrivateKey._customData && ecPrivateKey._customData.ec && ecPrivateKey._customData.ec.jwk) {
+            const pubJwk = ecPrivateKey._customData.ec.jwk;
+            const ecPubKey = createEcJwkKeyObject('public', pubJwk.crv, null,
+                concatBytes(new Uint8Array([0x04]), concatBytes(base64UrlToBytes(pubJwk.x), base64UrlToBytes(pubJwk.y))));
+            if (ecPubKey) {
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, ecPubKey);
+                }
+                return ecPubKey;
+            }
+        }
+
+        const dhPublicKey = maybeParseDhPublicKey(pem, 'pem');
+        if (dhPublicKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, dhPublicKey);
+            }
+            return dhPublicKey;
+        }
+
+        const dsaPublicKey = maybeParseDsaPublicKey(pem, 'pem');
+        if (dsaPublicKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, dsaPublicKey);
+            }
+            return dsaPublicKey;
+        }
+
+        const err = new Error('Failed to parse public key');
+        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+        throw err;
+    }
+
+    if (format === 'der') {
+        const data = toBytes(keyData);
+
+        const okpPublicKey = maybeParseOkpPublicKey(data, 'der');
         if (okpPublicKey) {
             if (cacheKey !== null) {
                 PUBLIC_KEY_CACHE.set(cacheKey, okpPublicKey);
@@ -3834,7 +4426,7 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             return okpPublicKey;
         }
 
-        const okpPrivateKey = maybeParseOkpPrivateKey(pem, 'pem');
+        const okpPrivateKey = maybeParseOkpPrivateKey(data, 'der');
         if (okpPrivateKey && okpPrivateKey._customData && okpPrivateKey._customData.okp) {
             const privateData = okpPrivateKey._customData.okp;
             const publicBytes = privateData.publicKey || getOkpPublicFromPrivate(okpPrivateKey._customData.asymmetricKeyType, privateData.privateKey);
@@ -3847,21 +4439,6 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
         }
 
-        const dhPublicKey = maybeParseDhPublicKey(pem, 'pem');
-        if (dhPublicKey) {
-            if (cacheKey !== null) {
-                PUBLIC_KEY_CACHE.set(cacheKey, dhPublicKey);
-            }
-            return dhPublicKey;
-        }
-
-        const err = new Error('Failed to parse public key');
-        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-        throw err;
-    }
-
-    if (format === 'der') {
-        const data = toBytes(keyData);
         const ed25519Raw = extractEd25519PublicRaw(data);
         const derInput = ed25519Raw || data;
         const pubHandle = webCryptoNative.create_public_key_der(derInput);
@@ -3872,26 +4449,14 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
             return key;
         }
-        const okpPublicKey = maybeParseOkpPublicKey(data, 'der');
-        if (okpPublicKey) {
-            if (cacheKey !== null) {
-                PUBLIC_KEY_CACHE.set(cacheKey, okpPublicKey);
-            }
-            return okpPublicKey;
-        }
         const privHandle = webCryptoNative.create_private_key_der(derInput);
         if (privHandle === null || privHandle === undefined) {
-            const okpPrivateKey = maybeParseOkpPrivateKey(data, 'der');
-            if (okpPrivateKey && okpPrivateKey._customData && okpPrivateKey._customData.okp) {
-                const privateData = okpPrivateKey._customData.okp;
-                const publicBytes = privateData.publicKey || getOkpPublicFromPrivate(okpPrivateKey._customData.asymmetricKeyType, privateData.privateKey);
-                if (publicBytes) {
-                    const key = createOkpPublicKeyObject(okpPrivateKey._customData.asymmetricKeyType, publicBytes);
-                    if (cacheKey !== null) {
-                        PUBLIC_KEY_CACHE.set(cacheKey, key);
-                    }
-                    return key;
+            const ecPubKey2 = maybeParseEcPublicKey(data, 'der');
+            if (ecPubKey2) {
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, ecPubKey2);
                 }
+                return ecPubKey2;
             }
             const dhPublicKey = maybeParseDhPublicKey(data, 'der');
             if (dhPublicKey) {
@@ -3930,7 +4495,7 @@ export function createPrivateKey(key) {
         if (key instanceof KeyObject) {
             throw new ERR_INVALID_ARG_TYPE('key', ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView', 'object'], key);
         }
-        if (key.key !== undefined) {
+        if (key.key !== undefined || key.format === 'jwk') {
             const innerKey = key.key;
             if (innerKey instanceof KeyObject) {
                 throw new ERR_INVALID_ARG_TYPE('key.key', ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView'], innerKey);
@@ -3972,6 +4537,29 @@ export function createPublicKey(key) {
                     }
                     return createOkpPublicKeyObject(key._customData.asymmetricKeyType, publicBytes);
                 }
+                if (key._customData && key._customData.ec && key._customData.ec.jwk) {
+                    const pubJwk = key._customData.ec.jwk;
+                    const x = base64UrlToBytes(pubJwk.x);
+                    const y = base64UrlToBytes(pubJwk.y);
+                    const point = new Uint8Array(1 + x.length + y.length);
+                    point[0] = 0x04;
+                    point.set(x, 1);
+                    point.set(y, 1 + x.length);
+                    return createEcJwkKeyObject('public', pubJwk.crv, null, point);
+                }
+                if (key._customData && key._customData.rsaPss) {
+                    const pubHandle = webCryptoNative.create_public_key_from_private_key(key._handle);
+                    if (pubHandle === null || pubHandle === undefined) {
+                        throw new Error('Failed to derive public key from private key');
+                    }
+                    const pubPem = maybeParseRsaPssPublicKey(key._customData.rsaPss.pem, 'pem');
+                    if (pubPem) return pubPem;
+                    return new KeyObject(pubHandle, 'public', {
+                        asymmetricKeyType: 'rsa-pss',
+                        asymmetricKeyDetails: key._customData.asymmetricKeyDetails,
+                        rsaPss: { der: key._customData.rsaPss.der, pem: key._customData.rsaPss.pem },
+                    });
+                }
                 const pubHandle = webCryptoNative.create_public_key_from_private_key(key._handle);
                 if (pubHandle === null || pubHandle === undefined) {
                     throw new Error('Failed to derive public key from private key');
@@ -3980,7 +4568,7 @@ export function createPublicKey(key) {
             }
             throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.type, 'private');
         }
-        if (key.key !== undefined) {
+        if (key.key !== undefined || key.format === 'jwk') {
             if (key.key instanceof KeyObject && key.key.type === 'private') {
                 if (key.key._customData && key.key._customData.dh) {
                     const dh = key.key._customData.dh;
@@ -3996,6 +4584,16 @@ export function createPublicKey(key) {
                         throw new Error('Failed to derive public key from private key');
                     }
                     return createOkpPublicKeyObject(key.key._customData.asymmetricKeyType, publicBytes);
+                }
+                if (key.key._customData && key.key._customData.ec && key.key._customData.ec.jwk) {
+                    const pubJwk = key.key._customData.ec.jwk;
+                    const x = base64UrlToBytes(pubJwk.x);
+                    const y = base64UrlToBytes(pubJwk.y);
+                    const point = new Uint8Array(1 + x.length + y.length);
+                    point[0] = 0x04;
+                    point.set(x, 1);
+                    point.set(y, 1 + x.length);
+                    return createEcJwkKeyObject('public', pubJwk.crv, null, point);
                 }
                 const pubHandle = webCryptoNative.create_public_key_from_private_key(key.key._handle);
                 if (pubHandle === null || pubHandle === undefined) {
@@ -4381,6 +4979,19 @@ export function generateKeyPairSync(type_, options) {
         if (type_ === 'ec' && namedCurve === 'P-521') {
             return generateEcFallbackKeyPair(namedCurve, options);
         }
+        if (type_ === 'ec' && namedCurve) {
+            const stubPublic = new KeyObject(null, 'public', {
+                asymmetricKeyType: 'ec',
+                asymmetricKeyDetails: { namedCurve },
+                ecUnsupported: { namedCurve },
+            });
+            const stubPrivate = new KeyObject(null, 'private', {
+                asymmetricKeyType: 'ec',
+                asymmetricKeyDetails: { namedCurve },
+                ecUnsupported: { namedCurve },
+            });
+            return { publicKey: stubPublic, privateKey: stubPrivate };
+        }
         const err = new Error('Key generation failed');
         err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
         throw err;
@@ -4476,12 +5087,24 @@ Sign.prototype.update = function(data, inputEncoding) {
 
 Sign.prototype.sign = function(privateKey, outputEncoding) {
     let keyObj;
+    let saltLength;
     if (privateKey instanceof KeyObject) {
         keyObj = privateKey;
     } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
         keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey);
+        saltLength = privateKey.saltLength;
     } else {
         keyObj = createPrivateKey(privateKey);
+    }
+
+    if (keyObj._customData && keyObj._customData.rsaPss && keyObj._customData.asymmetricKeyDetails) {
+        const pssDetails = keyObj._customData.asymmetricKeyDetails;
+        if (pssDetails.saltLength !== undefined && saltLength !== undefined && saltLength < pssDetails.saltLength) {
+            throw new Error('pss saltlen too small');
+        }
+        if (pssDetails.hashAlgorithm && this._algorithmNormalized && this._algorithmNormalized !== pssDetails.hashAlgorithm) {
+            throw new Error('digest not allowed');
+        }
     }
 
     if (this._handle === null) {
