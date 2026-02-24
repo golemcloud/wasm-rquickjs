@@ -170,10 +170,7 @@
     },
 
     // === node:fs tests ===
-    "parallel/test-fs-access.js": {
-      "skip": true,
-      "reason": "requires fixtures module and ERR_INVALID_ARG_TYPE validation"
-    },
+    "parallel/test-fs-access.js": {},
     "parallel/test-fs-append-file.js": {
       "skip": true,
       "reason": "requires fixtures module and process.umask()"
