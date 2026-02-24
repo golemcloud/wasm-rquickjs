@@ -1,7 +1,8 @@
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
 import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
-import { ERR_UNKNOWN_ENCODING } from '__wasm_rquickjs_builtin/internal/errors'
+import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING } from '__wasm_rquickjs_builtin/internal/errors'
 import { normalizeEncoding } from '__wasm_rquickjs_builtin/internal/util'
+import { kMaxLength } from 'buffer'
 
 const HASH_ALIASES = {
     'md5': 'md5',
@@ -43,6 +44,142 @@ const HASH_OUTPUT_LENGTHS = {
     'sha3-512': 64,
     'ripemd160': 20,
 };
+
+const HKDF_MAX_INFO_LENGTH = 1024;
+
+const HKDF_OUTPUT_LENGTHS = {
+    'md5': 16,
+    'sha1': 20,
+    'sha224': 28,
+    'sha256': 32,
+    'sha384': 48,
+    'sha512': 64,
+    'sha3-256': 32,
+    'sha3-384': 48,
+    'sha3-512': 64,
+    'ripemd160': 20,
+    'whirlpool': 64,
+};
+
+function isAnyArrayBuffer(data) {
+    if (data instanceof ArrayBuffer) {
+        return true;
+    }
+
+    return typeof SharedArrayBuffer === 'function' && data instanceof SharedArrayBuffer;
+}
+
+function toHkdfByteSource(data, name) {
+    if (typeof data === 'string') {
+        return toBytes(data);
+    }
+
+    if (ArrayBuffer.isView(data)) {
+        return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    }
+
+    if (isAnyArrayBuffer(data)) {
+        return new Uint8Array(data);
+    }
+
+    throw new ERR_INVALID_ARG_TYPE(name, ['string', 'ArrayBuffer', 'TypedArray', 'DataView', 'Buffer'], data);
+}
+
+function toHkdfIkm(ikm) {
+    if (ikm instanceof KeyObject) {
+        if (ikm.type !== 'secret') {
+            throw new ERR_INVALID_ARG_TYPE(
+                'ikm',
+                ['string', 'SecretKeyObject', 'ArrayBuffer', 'TypedArray', 'DataView', 'Buffer'],
+                ikm
+            );
+        }
+        return toBytes(ikm.export());
+    }
+
+    if (typeof ikm === 'string' || ArrayBuffer.isView(ikm) || isAnyArrayBuffer(ikm)) {
+        return toHkdfByteSource(ikm, 'ikm');
+    }
+
+    throw new ERR_INVALID_ARG_TYPE(
+        'ikm',
+        ['string', 'SecretKeyObject', 'ArrayBuffer', 'TypedArray', 'DataView', 'Buffer'],
+        ikm
+    );
+}
+
+function validateHkdfLength(length) {
+    if (typeof length !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('length', 'number', length);
+    }
+
+    if (!Number.isInteger(length)) {
+        throw new ERR_OUT_OF_RANGE('length', 'an integer', length);
+    }
+
+    if (length < 0 || length > kMaxLength) {
+        throw new ERR_OUT_OF_RANGE('length', `>= 0 && <= ${kMaxLength}`, length);
+    }
+}
+
+function validateHkdfArguments(digest, ikm, salt, info, keylen) {
+    if (typeof digest !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('digest', 'string', digest);
+    }
+
+    const ikmBytes = toHkdfIkm(ikm);
+    const saltBytes = toHkdfByteSource(salt, 'salt');
+    const infoBytes = toHkdfByteSource(info, 'info');
+
+    validateHkdfLength(keylen);
+
+    if (infoBytes.byteLength > HKDF_MAX_INFO_LENGTH) {
+        throw new ERR_OUT_OF_RANGE('info', 'must not contain more than 1024 bytes', infoBytes.byteLength);
+    }
+
+    return {
+        digest,
+        ikmBytes,
+        saltBytes,
+        infoBytes,
+        keylen,
+    };
+}
+
+function normalizeHkdfDigest(digest) {
+    const normalized = HASH_ALIASES[digest.toLowerCase()] || digest.toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(HKDF_OUTPUT_LENGTHS, normalized)) {
+        const err = new TypeError('Invalid digest: ' + digest);
+        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+        throw err;
+    }
+
+    return normalized;
+}
+
+function validateHkdfOutputLength(algorithm, keylen) {
+    const maxLength = HKDF_OUTPUT_LENGTHS[algorithm] * 255;
+    if (keylen > maxLength) {
+        const err = new RangeError('Invalid key length');
+        err.code = 'ERR_CRYPTO_INVALID_KEYLEN';
+        throw err;
+    }
+}
+
+function deriveHkdf({ digest, ikmBytes, saltBytes, infoBytes, keylen }) {
+    const algorithm = normalizeHkdfDigest(digest);
+    validateHkdfOutputLength(algorithm, keylen);
+
+    const result = webCryptoNative.hkdf_derive(algorithm, ikmBytes, saltBytes, infoBytes, keylen);
+    if (result === null || result === undefined) {
+        const err = new TypeError('Invalid digest: ' + digest);
+        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+        throw err;
+    }
+
+    const buf = new Uint8Array(result);
+    return buf.buffer;
+}
 
 function getHashOutputLength(algorithm, options) {
     let outputLength;
@@ -565,27 +702,19 @@ export function scrypt(password, salt, keylen, options, callback) {
 }
 
 export function hkdfSync(digest, ikm, salt, info, keylen) {
-    const algo = normalizeHashAlgorithm(digest);
-    const ikmBytes = toBytes(ikm);
-    const saltBytes = toBytes(salt);
-    const infoBytes = toBytes(info);
-    const result = webCryptoNative.hkdf_derive(algo, ikmBytes, saltBytes, infoBytes, keylen);
-    if (result === null || result === undefined) {
-        const err = new Error('Invalid digest: ' + digest);
-        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
-        throw err;
-    }
-    const buf = new Uint8Array(result);
-    return buf.buffer;
+    const args = validateHkdfArguments(digest, ikm, salt, info, keylen);
+    return deriveHkdf(args);
 }
 
 export function hkdf(digest, ikm, salt, info, keylen, callback) {
-    try {
-        const result = hkdfSync(digest, ikm, salt, info, keylen);
-        queueMicrotask(() => callback(null, result));
-    } catch (err) {
-        queueMicrotask(() => callback(err));
+    const args = validateHkdfArguments(digest, ikm, salt, info, keylen);
+
+    if (typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
     }
+
+    const result = deriveHkdf(args);
+    queueMicrotask(() => callback(null, result));
 }
 
 const MAX_SPKAC_SIZE = 0x7FFFFFFF;

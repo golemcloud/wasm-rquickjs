@@ -13,6 +13,7 @@ use ripemd::Ripemd160;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
+use whirlpool::Whirlpool;
 
 use ecdsa::signature::Signer;
 use ecdsa::signature::Verifier;
@@ -346,6 +347,7 @@ fn hkdf_derive_impl(
         "sha3-384" => do_hkdf!(Sha3_384),
         "sha3-512" => do_hkdf!(Sha3_512),
         "ripemd160" => do_hkdf!(Ripemd160),
+        "whirlpool" => do_hkdf!(Whirlpool),
         _ => return None,
     }
     Some(result)
