@@ -24,6 +24,7 @@ function getPromises() {
 let _Readable = null;
 let _Writable = null;
 let _EventEmitter = null;
+let _PathModule = null;
 function getStreamClasses() {
     if (!_Readable) {
         const stream = require('node:stream');
@@ -37,6 +38,12 @@ function getEventEmitter() {
         _EventEmitter = events.EventEmitter || events.default;
     }
     return _EventEmitter;
+}
+function getPathModule() {
+    if (!_PathModule) {
+        _PathModule = require('node:path');
+    }
+    return _PathModule;
 }
 
 // --- Constants ---
@@ -171,7 +178,7 @@ function getOptions(options, defaultOptions) {
 function describeType(value) {
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
-    if (typeof value === 'function' && value.name) return 'function ' + value.name;
+    if (typeof value === 'function') return 'function ' + (value.name || '');
     if (typeof value === 'object') {
         if (value.constructor && value.constructor.name) {
             return 'an instance of ' + value.constructor.name;
@@ -274,14 +281,52 @@ function parseMkdirOptions(options) {
     if (typeof options === 'number' || typeof options === 'string') {
         mode = options;
     } else if (options && typeof options === 'object') {
-        recursive = options.recursive === true;
-        mode = options.mode;
+        if (options.recursive !== undefined) {
+            recursive = options.recursive;
+            if (typeof recursive !== 'boolean') {
+                const err = new TypeError(
+                    'The "options.recursive" property must be of type boolean. Received ' +
+                    describeType(recursive)
+                );
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+        }
+        if (options.mode !== undefined) {
+            mode = options.mode;
+        }
     }
 
     return {
         recursive,
         mode: validateMode(mode, 'mode', 0o777) & MKDIR_MODE_MASK,
     };
+}
+
+function pathExists(pathString) {
+    const statResult = native.fs_stat(pathString);
+    return !statResult.error;
+}
+
+function getFirstCreatedPath(pathString, recursive) {
+    if (!recursive || pathExists(pathString)) {
+        return undefined;
+    }
+
+    const pathModule = getPathModule();
+    let firstCreatedPath = pathString;
+    while (true) {
+        const parentPath = pathModule.dirname(firstCreatedPath);
+        if (parentPath === firstCreatedPath) {
+            break;
+        }
+        if (pathExists(parentPath)) {
+            break;
+        }
+        firstCreatedPath = parentPath;
+    }
+
+    return pathModule.toNamespacedPath(firstCreatedPath);
 }
 
 function validateUid(id, name) {
@@ -1169,12 +1214,14 @@ export function renameSync(oldPath, newPath) {
 export function mkdirSync(path, options) {
     validatePath(path);
     const { recursive, mode } = parseMkdirOptions(options);
+    const pathString = pathToString(path);
+    const firstCreatedPath = getFirstCreatedPath(pathString, recursive);
 
-    const error = native.fs_mkdir(pathToString(path), recursive, mode);
+    const error = native.fs_mkdir(pathString, recursive, mode);
     if (error) {
         throw createSystemError(error);
     }
-    if (recursive) return path;
+    if (recursive) return firstCreatedPath;
     return undefined;
 }
 
@@ -2009,12 +2056,16 @@ export function mkdir(path, optionsOrCallback, callback) {
     }
 
     validateCallback(cb);
+    const { recursive, mode } = parseMkdirOptions(options);
+    const pathString = pathToString(path);
+    const firstCreatedPath = getFirstCreatedPath(pathString, recursive);
+
     queueMicrotask(() => {
-        try {
-            const result = mkdirSync(path, options);
-            cb(null, result);
-        } catch (err) {
-            cb(err);
+        const error = native.fs_mkdir(pathString, recursive, mode);
+        if (error) {
+            cb(createSystemError(error));
+        } else {
+            cb(null, recursive ? firstCreatedPath : undefined);
         }
     });
 }

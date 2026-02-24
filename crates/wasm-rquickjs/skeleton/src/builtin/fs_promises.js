@@ -26,12 +26,20 @@ function getStats() {
 }
 
 let _EventEmitter = null;
+let _PathModule = null;
 function getEventEmitter() {
     if (!_EventEmitter) {
         const events = globalThis.require ? globalThis.require('node:events') : null;
         _EventEmitter = events ? (events.EventEmitter || events.default) : null;
     }
     return _EventEmitter;
+}
+
+function getPathModule() {
+    if (!_PathModule) {
+        _PathModule = globalThis.require ? globalThis.require('node:path') : null;
+    }
+    return _PathModule;
 }
 
 function wrapStat(statObj, options) {
@@ -173,14 +181,66 @@ function parseMkdirOptions(options) {
     if (typeof options === 'number' || typeof options === 'string') {
         mode = options;
     } else if (options && typeof options === 'object') {
-        recursive = options.recursive === true;
-        mode = options.mode;
+        if (options.recursive !== undefined) {
+            recursive = options.recursive;
+            if (typeof recursive !== 'boolean') {
+                const err = new TypeError(
+                    'The "options.recursive" property must be of type boolean. Received ' +
+                    describeType(recursive)
+                );
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+        }
+        if (options.mode !== undefined) {
+            mode = options.mode;
+        }
     }
 
     return {
         recursive,
         mode: validateMode(mode, 'mode', 0o777) & MKDIR_MODE_MASK,
     };
+}
+
+function pathToString(path) {
+    if (typeof path === 'string') return path;
+    if (getBuffer() && path instanceof getBuffer()) return path.toString();
+    if (path instanceof URL) {
+        if (path.protocol !== 'file:') return path.toString();
+        return path.pathname;
+    }
+    return String(path);
+}
+
+function pathExists(pathString) {
+    const statResult = native.fs_stat(pathString);
+    return !statResult.error;
+}
+
+function getFirstCreatedPath(pathString, recursive) {
+    if (!recursive || pathExists(pathString)) {
+        return undefined;
+    }
+
+    const pathModule = getPathModule();
+    if (!pathModule) {
+        return pathString;
+    }
+
+    let firstCreatedPath = pathString;
+    while (true) {
+        const parentPath = pathModule.dirname(firstCreatedPath);
+        if (parentPath === firstCreatedPath) {
+            break;
+        }
+        if (pathExists(parentPath)) {
+            break;
+        }
+        firstCreatedPath = parentPath;
+    }
+
+    return pathModule.toNamespacedPath(firstCreatedPath);
 }
 
 function validateFlush(flush) {
@@ -742,9 +802,11 @@ export async function rename(oldPath, newPath) {
 
 export async function mkdir(path, options) {
     const { recursive, mode } = parseMkdirOptions(options);
-    const error = native.fs_mkdir(path, recursive, mode);
+    const pathString = pathToString(path);
+    const firstCreatedPath = getFirstCreatedPath(pathString, recursive);
+    const error = native.fs_mkdir(pathString, recursive, mode);
     if (error) throw createSystemError(error);
-    if (recursive) return path;
+    if (recursive) return firstCreatedPath;
     return undefined;
 }
 

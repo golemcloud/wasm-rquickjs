@@ -201,10 +201,7 @@
     "parallel/test-fs-long-path.js": {},
     "parallel/test-fs-make-callback.js": {},
     "parallel/test-fs-makeStatsCallback.js": {},
-    "parallel/test-fs-mkdir.js": {
-      "skip": true,
-      "reason": "requires worker_threads which is not available in WASM"
-    },
+    "parallel/test-fs-mkdir.js": {},
     "parallel/test-fs-mkdir-mode-mask.js": {},
     "parallel/test-fs-mkdir-recursive-eaccess.js": {},
     "parallel/test-fs-mkdir-rmdir.js": {},
