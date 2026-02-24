@@ -1,4 +1,5 @@
 import * as native from '__wasm_rquickjs_builtin/fs_native';
+import { aggregateTwoErrors } from '__wasm_rquickjs_builtin/internal/errors';
 
 const MKDIR_MODE_MASK = 0o7777;
 
@@ -131,6 +132,39 @@ function createSystemError(errObj) {
     if (errObj.path !== undefined) err.path = errObj.path;
     if (errObj.dest !== undefined) err.dest = errObj.dest;
     return err;
+}
+
+async function handleFdClose(fileOpPromise, closeFunc) {
+    try {
+        const result = await fileOpPromise;
+        await closeFunc();
+        return result;
+    } catch (opError) {
+        try {
+            await closeFunc();
+        } catch (closeError) {
+            throw aggregateTwoErrors(closeError, opError);
+        }
+        throw opError;
+    }
+}
+
+async function readFileHandle(fileHandle, options) {
+    // Node's internal fs/promises wrappers read through the public `fd` getter.
+    // This allows tests to instrument FileHandle behavior via prototype overrides.
+    fileHandle.fd;
+    return fileHandle.readFile(options);
+}
+
+async function writeFileHandle(fileHandle, data, options) {
+    fileHandle.fd;
+    return fileHandle.writeFile(data, options);
+}
+
+async function truncateFileHandle(fileHandle, len) {
+    const fd = fileHandle.fd;
+    const error = native.fs_ftruncate(fd, len);
+    if (error) throw createSystemError(error);
 }
 
 function validateInteger(value, name, min, max) {
@@ -695,21 +729,15 @@ export async function open(path, flags, mode) {
 }
 
 export async function readFile(path, options) {
-    const encoding = typeof options === 'string' ? options : (options && options.encoding);
-
     if (path instanceof FileHandle) {
         return path.readFile(options);
     }
 
-    if (encoding && encoding !== '') {
-        const [contents, error] = native.read_file_with_encoding(path, encoding);
-        if (error !== undefined) throw new Error(error);
-        return contents;
-    } else {
-        const [contents, error] = native.read_file(path);
-        if (error !== undefined) throw new Error(error);
-        return getBuffer().from(contents);
-    }
+    const flag = typeof options === 'object' && options && options.flag !== undefined
+        ? options.flag
+        : 'r';
+    const fileHandle = await open(path, flag);
+    return handleFdClose(readFileHandle(fileHandle, options), () => fileHandle.close());
 }
 
 export async function writeFile(path, data, options) {
@@ -726,13 +754,6 @@ export async function writeFile(path, data, options) {
         throw e;
     }
 
-    let encoding;
-    if (typeof options === 'string') {
-        encoding = options;
-    } else if (options && options.encoding) {
-        encoding = options.encoding;
-    }
-
     // Validate data type early - reject null, undefined, numbers, booleans, symbols, etc.
     if (data == null || typeof data === 'number' || typeof data === 'boolean' || typeof data === 'bigint' || typeof data === 'symbol' ||
         (typeof data !== 'string' && !ArrayBuffer.isView(data) && !(data instanceof ArrayBuffer) &&
@@ -742,51 +763,15 @@ export async function writeFile(path, data, options) {
         throw err;
     }
 
-    // Handle streams, iterables, and async iterables
-    if (typeof data !== 'string' && !ArrayBuffer.isView(data) && !(data instanceof ArrayBuffer) &&
-        (typeof data[Symbol.asyncIterator] === 'function' || typeof data[Symbol.iterator] === 'function')) {
-        const fileHandle = await open(path, 'w');
-        try {
-            await fileHandle.writeFile(data, options);
-        } finally {
-            await fileHandle.close();
-        }
-        return;
-    }
+    const flag = typeof options === 'object' && options && options.flag !== undefined
+        ? options.flag
+        : 'w';
+    const mode = typeof options === 'object' && options && options.mode !== undefined
+        ? options.mode
+        : undefined;
 
-    // Yield to allow pending abort signals (e.g. from process.nextTick) to fire
-    if (signal) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-        if (signal.aborted) {
-            const e = new DOMException('The operation was aborted', 'AbortError');
-            e.name = 'AbortError';
-            throw e;
-        }
-    }
-
-    let error;
-    if (encoding && encoding !== '') {
-        error = native.write_file_with_encoding(path, encoding, data);
-    } else if (typeof data === 'string') {
-        error = native.write_file_with_encoding(path, 'utf8', data);
-    } else {
-        const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-        error = native.write_file(path, dataArray);
-    }
-
-    if (error !== undefined) throw new Error(error);
-
-    if (flush === true) {
-        const fs = globalThis.require ? globalThis.require('node:fs') : null;
-        if (fs) {
-            const fd = fs.openSync(path, 'r');
-            try {
-                fs.fsyncSync(fd);
-            } finally {
-                fs.closeSync(fd);
-            }
-        }
-    }
+    const fileHandle = await open(path, flag, mode);
+    return handleFdClose(writeFileHandle(fileHandle, data, options), () => fileHandle.close());
 }
 
 export async function appendFile(path, data, options) {
@@ -962,8 +947,8 @@ export async function realpath(path, options) {
 
 export async function truncate(path, len) {
     len = len !== undefined ? len : 0;
-    const error = native.fs_truncate(path, len);
-    if (error) throw createSystemError(error);
+    const fileHandle = await open(path, 'r+');
+    return handleFdClose(truncateFileHandle(fileHandle, len), () => fileHandle.close());
 }
 
 export async function copyFile(src, dest, mode) {

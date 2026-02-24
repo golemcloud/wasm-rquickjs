@@ -80,6 +80,7 @@ const builtinModules = {
     'node:fs': cjsExport(fsModule),
     'fs/promises': cjsExport(fsPromises),
     'node:fs/promises': cjsExport(fsPromises),
+    'internal/fs/promises': cjsExport(fsPromises),
     'util': cjsExport(util),
     'node:util': cjsExport(util),
     'buffer': cjsExport(buffer),
