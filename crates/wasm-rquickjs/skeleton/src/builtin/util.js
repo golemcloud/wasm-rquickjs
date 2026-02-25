@@ -1964,14 +1964,15 @@ function _validateGetCallSitesOptions(frameCount, options) {
         throw new ERR_INVALID_ARG_TYPE('options.sourceMap', 'boolean', options.sourceMap);
     }
 
-    if (!Number.isInteger(frameCount)) {
-        throw new ERR_INVALID_ARG_TYPE('frameCount', 'integer', frameCount);
+    if (typeof frameCount !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('frameCount', 'number', frameCount);
     }
-    if (frameCount < 1 || frameCount > 200) {
+
+    if (Number.isNaN(frameCount) || frameCount < 1 || frameCount > 200) {
         throw new ERR_OUT_OF_RANGE('frameCount', '>= 1 && <= 200', frameCount);
     }
 
-    return frameCount;
+    return Math.trunc(frameCount);
 }
 
 function _resolveCallSiteScriptName(scriptName) {
