@@ -473,8 +473,22 @@ var common = {
     },
 
     // Escape helpers
-    escapePOSIXShell: function() {
-        return [''];
+    escapePOSIXShell: function(cmdParts) {
+        var args = Array.prototype.slice.call(arguments, 1);
+
+        if (common.isWindows) {
+            return [String.raw({ raw: cmdParts }, ...args)];
+        }
+
+        var env = { ...process.env };
+        var cmd = cmdParts[0];
+        for (var i = 0; i < args.length; i++) {
+            var envVarName = 'ESCAPED_' + String(i);
+            env[envVarName] = args[i];
+            cmd += '${' + envVarName + '}' + cmdParts[i + 1];
+        }
+
+        return [cmd, { env }];
     },
 
     // pwd command

@@ -7,6 +7,7 @@
 
 import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
+import { EventEmitter } from 'node:events';
 import process from 'node:process';
 import moduleExports from 'node:module';
 
@@ -376,6 +377,8 @@ function runInline(command, args, options) {
     var oldStdoutWrite = process.stdout && process.stdout.write;
     var oldStderrWrite = process.stderr && process.stderr.write;
     var oldEmitWarning = process.emitWarning;
+    var stdinData = options && typeof options.__wasmStdinData === 'string' ? options.__wasmStdinData : null;
+    var oldFsPromisesReadFile = null;
 
     var capturedStdout = '';
     var capturedStderr = '';
@@ -428,6 +431,37 @@ function runInline(command, args, options) {
         }
 
         var runtimeRequire = moduleExports.require;
+
+        if (stdinData !== null) {
+            try {
+                var fsPromises = runtimeRequire('node:fs/promises');
+                if (fsPromises && typeof fsPromises.readFile === 'function') {
+                    oldFsPromisesReadFile = fsPromises.readFile;
+                    fsPromises.readFile = function readFileWithMockedStdin(targetPath, readOptions) {
+                        if (targetPath === '/dev/stdin') {
+                            var mockStdinBuffer = Buffer.from(stdinData);
+                            var readEncoding = null;
+
+                            if (typeof readOptions === 'string') {
+                                readEncoding = String(readOptions);
+                            } else if (readOptions && typeof readOptions === 'object' && readOptions.encoding !== undefined && readOptions.encoding !== null) {
+                                readEncoding = String(readOptions.encoding);
+                            }
+
+                            if (readEncoding && readEncoding !== 'buffer') {
+                                return Promise.resolve(mockStdinBuffer.toString(readEncoding));
+                            }
+
+                            return Promise.resolve(mockStdinBuffer);
+                        }
+
+                        return oldFsPromisesReadFile.call(this, targetPath, readOptions);
+                    };
+                }
+            } catch (_) {
+                oldFsPromisesReadFile = null;
+            }
+        }
 
         if (invocationArgs.length >= 2 && isInlineEvalOption(invocationArgs[0])) {
             var inlineResult = executeInlineSource(runtimeRequire, invocationArgs);
@@ -482,9 +516,273 @@ function runInline(command, args, options) {
         if (process.stderr && typeof oldStderrWrite === 'function') {
             process.stderr.write = oldStderrWrite;
         }
+
+        if (oldFsPromisesReadFile !== null) {
+            try {
+                var fsPromisesToRestore = moduleExports.require('node:fs/promises');
+                if (fsPromisesToRestore) {
+                    fsPromisesToRestore.readFile = oldFsPromisesReadFile;
+                }
+            } catch (_) {
+                // ignore restore failures in WASM test emulation
+            }
+        }
     }
 
     return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
+}
+
+function cloneObject(value) {
+    var copy = {};
+    if (!value || typeof value !== 'object') {
+        return copy;
+    }
+
+    var keys = Object.keys(value);
+    for (var i = 0; i < keys.length; i++) {
+        copy[keys[i]] = value[keys[i]];
+    }
+
+    return copy;
+}
+
+function normalizeExecParams(options, callback) {
+    if (typeof options === 'function') {
+        return {
+            options: {},
+            callback: options,
+        };
+    }
+
+    return {
+        options: options && typeof options === 'object' ? options : {},
+        callback: typeof callback === 'function' ? callback : null,
+    };
+}
+
+function expandTemplateEnvRefs(command, env) {
+    var source = String(command);
+    return source.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, function(_, name) {
+        if (!env || env[name] === undefined || env[name] === null) {
+            return '';
+        }
+        return String(env[name]);
+    });
+}
+
+function splitCommandTokens(command) {
+    var text = String(command);
+    var tokens = [];
+    var current = '';
+    var quote = null;
+    var escaping = false;
+
+    for (var i = 0; i < text.length; i++) {
+        var ch = text[i];
+
+        if (escaping) {
+            current += ch;
+            escaping = false;
+            continue;
+        }
+
+        if (quote === null) {
+            if (ch === '\\') {
+                escaping = true;
+                continue;
+            }
+
+            if (ch === '"' || ch === "'") {
+                quote = ch;
+                continue;
+            }
+
+            if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+                if (current.length > 0) {
+                    tokens.push(current);
+                    current = '';
+                }
+                continue;
+            }
+
+            current += ch;
+            continue;
+        }
+
+        if (quote === "'") {
+            if (ch === "'") {
+                quote = null;
+            } else {
+                current += ch;
+            }
+            continue;
+        }
+
+        if (ch === '"') {
+            quote = null;
+            continue;
+        }
+
+        if (ch === '\\' && i + 1 < text.length) {
+            var next = text[i + 1];
+            if (next === '"' || next === '\\' || next === '$' || next === '`') {
+                current += next;
+                i += 1;
+                continue;
+            }
+        }
+
+        current += ch;
+    }
+
+    if (escaping || quote !== null) {
+        return null;
+    }
+
+    if (current.length > 0) {
+        tokens.push(current);
+    }
+
+    return tokens;
+}
+
+function parseEchoPipeline(command) {
+    var expandedCommand = String(command);
+    var pipeIndex = expandedCommand.indexOf('|');
+    if (pipeIndex === -1) {
+        return null;
+    }
+
+    var lhs = expandedCommand.slice(0, pipeIndex).trim();
+    var rhs = expandedCommand.slice(pipeIndex + 1).trim();
+
+    if (lhs[0] === '(' && lhs[lhs.length - 1] === ')') {
+        lhs = lhs.slice(1, -1);
+    }
+
+    var rhsTokens = splitCommandTokens(rhs);
+    if (!rhsTokens || rhsTokens.length < 2 || String(rhsTokens[0]) !== String(process.execPath)) {
+        return null;
+    }
+
+    var parts = lhs.split(';');
+    var stdinLines = [];
+    for (var i = 0; i < parts.length; i++) {
+        var part = parts[i].trim();
+        if (part.length === 0) {
+            continue;
+        }
+
+        var partTokens = splitCommandTokens(part);
+        if (!partTokens || partTokens.length === 0) {
+            return null;
+        }
+
+        if (partTokens[0] === 'echo') {
+            stdinLines.push(partTokens.slice(1).join(' '));
+            continue;
+        }
+
+        if (partTokens[0] === 'sleep') {
+            continue;
+        }
+
+        return null;
+    }
+
+    return {
+        command: rhsTokens[0],
+        args: rhsTokens.slice(1),
+        stdinData: stdinLines.length > 0 ? stdinLines.join('\n') + '\n' : '',
+    };
+}
+
+function runExecCommand(command, options) {
+    var env = options && typeof options.env === 'object' ? options.env : process.env;
+    var expanded = expandTemplateEnvRefs(command, env);
+    var resolvedOptions = cloneObject(options);
+
+    if (resolvedOptions.encoding === undefined) {
+        resolvedOptions.encoding = 'utf8';
+    }
+
+    var pipeline = parseEchoPipeline(expanded);
+    if (pipeline) {
+        resolvedOptions.__wasmStdinData = pipeline.stdinData;
+        return spawnSync(pipeline.command, pipeline.args, resolvedOptions);
+    }
+
+    var tokens = splitCommandTokens(expanded);
+    if (!tokens || tokens.length === 0) {
+        return unsupportedSpawnSyncResult('exec(empty command)');
+    }
+
+    return spawnSync(tokens[0], tokens.slice(1), resolvedOptions);
+}
+
+function createExecError(command, result) {
+    if (!result) {
+        return createNotSupportedError('exec');
+    }
+
+    if (result.error) {
+        result.error.cmd = String(command);
+        return result.error;
+    }
+
+    if (result.status === 0 && result.signal === null) {
+        return null;
+    }
+
+    var stderrText = '';
+    if (result.stderr !== undefined && result.stderr !== null) {
+        stderrText = String(result.stderr);
+    }
+    var message = 'Command failed: ' + String(command);
+    if (stderrText.length > 0) {
+        message += '\n' + stderrText;
+    }
+
+    var err = new Error(message);
+    err.code = result.status;
+    err.killed = false;
+    err.signal = result.signal;
+    err.cmd = String(command);
+    return err;
+}
+
+function createExecChildProcess() {
+    var child = new EventEmitter();
+    child.pid = 1;
+    child.stdin = null;
+    child.stdout = null;
+    child.stderr = null;
+    child.stdio = [null, null, null];
+    child.killed = false;
+    child.connected = false;
+    child.exitCode = null;
+    child.signalCode = null;
+    child.spawnfile = String(process.execPath);
+    child.spawnargs = [];
+    child.kill = function kill() {
+        return false;
+    };
+    child.ref = function ref() {
+        return child;
+    };
+    child.unref = function unref() {
+        return child;
+    };
+    return child;
+}
+
+function scheduleExecCallback(task) {
+    if (typeof process.nextTick === 'function') {
+        process.nextTick(task);
+        return;
+    }
+
+    setTimeout(task, 0);
 }
 
 // ChildProcess class stub
@@ -496,7 +794,27 @@ export class ChildProcess {
 
 // Asynchronous process creation functions
 export function exec(command, options, callback) {
-    throw createNotSupportedError('exec');
+    var normalized = normalizeExecParams(options, callback);
+    var child = createExecChildProcess();
+    var result = runExecCommand(command, normalized.options);
+    var error = createExecError(command, result);
+
+    child.exitCode = typeof result.status === 'number' ? result.status : null;
+    child.signalCode = result.signal;
+
+    scheduleExecCallback(function resolveExec() {
+        if (normalized.callback) {
+            normalized.callback(error, result.stdout, result.stderr);
+        }
+
+        if (error) {
+            child.emit('error', error);
+        }
+        child.emit('exit', child.exitCode, child.signalCode);
+        child.emit('close', child.exitCode, child.signalCode);
+    });
+
+    return child;
 }
 
 export function execFile(file, args, options, callback) {

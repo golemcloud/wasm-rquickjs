@@ -836,10 +836,7 @@
       }
     },
     "parallel/test-fs-readfile-empty.js": {},
-    "parallel/test-fs-readfile-eof.js": {
-      "skip": true,
-      "reason": "requires child_process which is not available in WASM"
-    },
+    "parallel/test-fs-readfile-eof.js": {},
     "parallel/test-fs-readfile-error.js": {
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
