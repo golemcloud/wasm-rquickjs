@@ -767,10 +767,7 @@
     "parallel/test-fs-read-optional-params.js": {},
     "parallel/test-fs-read-promises-optional-params.js": {},
     "parallel/test-fs-read-stream-autoClose.js": {},
-    "parallel/test-fs-read-stream-concurrent-reads.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-read-stream-concurrent-reads.js": {},
     "parallel/test-fs-read-stream-double-close.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing",
