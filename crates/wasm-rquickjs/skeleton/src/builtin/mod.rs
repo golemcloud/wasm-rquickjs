@@ -31,6 +31,7 @@ mod http2;
 mod https;
 mod ieee754;
 mod internal;
+mod internal_binding_util;
 mod module;
 mod net;
 mod socket_helpers;
@@ -241,6 +242,10 @@ pub fn module_loader() -> (
         .with_module(
             "__wasm_rquickjs_builtin/process_native",
             process::js_native_module,
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/binding/util_native",
+            internal_binding_util::js_native_module,
         )
         .with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
         .with_module(

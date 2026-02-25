@@ -337,7 +337,7 @@
     "parallel/test-util-inspect-namespace.js": {},
     "parallel/test-util-inspect-proxy.js": {
       "skip": true,
-      "reason": "requires --expose-internals and internalBinding('util')"
+      "reason": "amp fix attempt failed verification"
     },
     "parallel/test-util-inspect.js": {
       "skip": true,

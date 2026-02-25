@@ -9,6 +9,7 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/util")
         .with_module("__wasm_rquickjs_builtin/internal/validators")
         .with_module("__wasm_rquickjs_builtin/internal/streams/add-abort-signal")
+        .with_module("__wasm_rquickjs_builtin/internal/binding/util_native")
         .with_module("__wasm_rquickjs_builtin/internal/binding/util")
         .with_module("__wasm_rquickjs_builtin/internal/test/binding")
         .with_module("__wasm_rquickjs_builtin/internal/streams/buffer_list")

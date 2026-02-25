@@ -25,6 +25,10 @@
 // - https://github.com/nodejs/node/blob/master/src/util.cc
 // - https://github.com/nodejs/node/blob/master/src/util.h
 
+import {
+    get_proxy_details as getProxyDetailsNative,
+} from "__wasm_rquickjs_builtin/internal/binding/util_native";
+
 /**
  * 
  * @param {string} msg 
@@ -42,6 +46,10 @@ export function notImplemented(msg) {
  */
 export function guessHandleType(_fd) {
     notImplemented("util.guessHandleType");
+}
+
+export function getProxyDetails(value, fullProxy = true) {
+    return getProxyDetailsNative(value, fullProxy);
 }
 
 export const ALL_PROPERTIES = 0;

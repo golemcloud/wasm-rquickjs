@@ -27,6 +27,7 @@ import * as codes from "__wasm_rquickjs_builtin/internal/errors";
 import {
     ALL_PROPERTIES,
     getConstructorName as internalGetConstructorName,
+    getProxyDetails,
     getOwnNonIndexProperties,
     ONLY_ENUMERABLE,
 } from "__wasm_rquickjs_builtin/internal/binding/util";
@@ -416,6 +417,27 @@ function stylizeNoColor(str) {
     return str;
 }
 
+function formatProxy(ctx, proxy, recurseTimes) {
+    if (recurseTimes > ctx.depth && ctx.depth !== null) {
+        return ctx.stylize("Proxy [Array]", "special");
+    }
+    recurseTimes += 1;
+    ctx.indentationLvl += 2;
+    const res = [
+        formatValue(ctx, proxy[0], recurseTimes),
+        formatValue(ctx, proxy[1], recurseTimes),
+    ];
+    ctx.indentationLvl -= 2;
+    return reduceToSingleString(
+        ctx,
+        res,
+        "",
+        ["Proxy [", "]"],
+        kArrayExtrasType,
+        recurseTimes,
+    );
+}
+
 // Note: using `formatValue` directly requires the indentation level to be
 // corrected by setting `ctx.indentationLvL += diff` and then to decrease the
 // value afterwards again.
@@ -437,32 +459,20 @@ function formatValue(
         return ctx.stylize("null", "null");
     }
 
-    // Detect revoked proxies early: any property access on a revoked proxy
-    // throws TypeError. We catch this and return a safe representation,
-    // matching Node.js behavior.
-    try {
-        Object.getPrototypeOf(value);
-    } catch (err) {
-        if (err instanceof TypeError && typeof err.message === "string" &&
-            /revoked/i.test(err.message) && /proxy/i.test(err.message)) {
-            return ctx.stylize("<Revoked Proxy>", "special");
-        }
-        throw err;
-    }
-
     // Memorize the context for custom inspection on proxies.
     const context = value;
     // Always check for proxies to prevent side effects and to prevent triggering
     // any proxy handlers.
-    // TODO(wafuwafu13): Set Proxy
-    const proxy = undefined;
-    // const proxy = getProxyDetails(value, !!ctx.showProxy);
-    // if (proxy !== undefined) {
-    //   if (ctx.showProxy) {
-    //     return formatProxy(ctx, proxy, recurseTimes);
-    //   }
-    //   value = proxy;
-    // }
+    const proxy = getProxyDetails(value, !!ctx.showProxy);
+    if (proxy !== undefined) {
+        if (proxy === null || proxy[0] === null) {
+            return ctx.stylize("<Revoked Proxy>", "special");
+        }
+        if (ctx.showProxy) {
+            return formatProxy(ctx, proxy, recurseTimes);
+        }
+        value = proxy;
+    }
 
     // Provide a hook for user-specified inspect functions.
     // Check that value is an object with an inspect function on it.
@@ -2101,11 +2111,9 @@ const isZeroWidthCodePoint = (code) => {
 };
 
 function hasBuiltInToString(value) {
-    // TODO(wafuwafu13): Implement
-    // // Prevent triggering proxy traps.
-    // const getFullProxy = false;
-    // const proxyTarget = getProxyDetails(value, getFullProxy);
-    const proxyTarget = undefined;
+    // Prevent triggering proxy traps.
+    const getFullProxy = false;
+    const proxyTarget = getProxyDetails(value, getFullProxy);
     if (proxyTarget !== undefined) {
         if (proxyTarget === null) {
             return true;
