@@ -306,10 +306,7 @@
         "block_04_block_04": {}
       }
     },
-    "parallel/test-util-getcallsite.js": {
-      "skip": true,
-      "reason": "requires util.getCallSite which is not implemented"
-    },
+    "parallel/test-util-getcallsite.js": {},
     "parallel/test-util-getcallsites.js": {
       "skip": true,
       "reason": "requires child_process.spawnSync, common/fixtures, and util.getCallSites",

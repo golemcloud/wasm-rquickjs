@@ -27,7 +27,7 @@ import {
     stripVTControlCharacters
 } from '__wasm_rquickjs_builtin/internal/util/inspect';
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native';
-import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from '__wasm_rquickjs_builtin/internal/errors';
 
 import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
 
@@ -1943,6 +1943,114 @@ export var types = {
     isKeyObject: function isKeyObject() { return false; }
 };
 
+var getCallSiteRenameWarning = "The `util.getCallSite` API has been renamed to `util.getCallSites()`.";
+var getCallSiteRenameWarned = false;
+var callSiteWithFunctionPattern = /^\s*at\s+(.+?)\s+\((.+):(\d+):(\d+)\)\s*$/;
+var callSiteWithoutFunctionPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
+
+function _validateGetCallSitesOptions(frameCount, options) {
+    if (options === undefined) {
+        if (typeof frameCount === 'object' && frameCount !== null) {
+            options = frameCount;
+            frameCount = 10;
+        } else {
+            options = {};
+        }
+    } else if (typeof options !== 'object' || options === null) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+    }
+
+    if (options.sourceMap !== undefined && typeof options.sourceMap !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.sourceMap', 'boolean', options.sourceMap);
+    }
+
+    if (!Number.isInteger(frameCount)) {
+        throw new ERR_INVALID_ARG_TYPE('frameCount', 'integer', frameCount);
+    }
+    if (frameCount < 1 || frameCount > 200) {
+        throw new ERR_OUT_OF_RANGE('frameCount', '>= 1 && <= 200', frameCount);
+    }
+
+    return frameCount;
+}
+
+function _toCallSiteObject(functionName, scriptName, lineNumber, columnNumber) {
+    var callSite = Object.create(null);
+    callSite.functionName = functionName;
+    callSite.scriptId = '';
+    callSite.scriptName = scriptName;
+    callSite.lineNumber = lineNumber;
+    callSite.columnNumber = columnNumber;
+    callSite.column = columnNumber;
+    return callSite;
+}
+
+function _parseCallSite(line) {
+    var withFunction = line.match(callSiteWithFunctionPattern);
+    if (withFunction !== null) {
+        return _toCallSiteObject(
+            withFunction[1],
+            withFunction[2],
+            parseInt(withFunction[3], 10),
+            parseInt(withFunction[4], 10),
+        );
+    }
+
+    var withoutFunction = line.match(callSiteWithoutFunctionPattern);
+    if (withoutFunction !== null) {
+        return _toCallSiteObject(
+            '',
+            withoutFunction[1],
+            parseInt(withoutFunction[2], 10),
+            parseInt(withoutFunction[3], 10),
+        );
+    }
+
+    return null;
+}
+
+export function getCallSites(frameCount = 10, options) {
+    frameCount = _validateGetCallSitesOptions(frameCount, options);
+
+    var err = new Error();
+    if (typeof Error.captureStackTrace === 'function') {
+        Error.captureStackTrace(err, getCallSites);
+    }
+
+    var stack = err && err.stack ? String(err.stack) : '';
+    var lines = stack.split('\n');
+    var callSites = [];
+
+    for (var i = 0; i < lines.length; i++) {
+        if (callSites.length >= frameCount) {
+            break;
+        }
+
+        var line = lines[i];
+        if (line.indexOf('getCallSites') !== -1 || line.indexOf('getCallSite') !== -1) {
+            continue;
+        }
+
+        var parsedCallSite = _parseCallSite(line);
+        if (parsedCallSite !== null) {
+            callSites.push(parsedCallSite);
+        }
+    }
+
+    return callSites;
+}
+
+export function getCallSite(frameCount, options) {
+    if (!getCallSiteRenameWarned) {
+        getCallSiteRenameWarned = true;
+        if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+            process.emitWarning(getCallSiteRenameWarning, 'ExperimentalWarning');
+        }
+    }
+
+    return getCallSites(frameCount, options);
+}
+
 // --- util.parseArgs() ---
 
 function _makeError(code, message) {
@@ -2304,6 +2412,8 @@ export default {
      callbackify,
      inherits,
      isDeepStrictEqual,
+     getCallSite,
+     getCallSites,
      parseArgs,
      types,
      TextEncoder,
