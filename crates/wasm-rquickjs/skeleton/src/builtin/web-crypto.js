@@ -4460,6 +4460,152 @@ const DSA_OID = '1.2.840.10040.4.1';
 const RSA_PSS_OID = '1.2.840.113549.1.1.10';
 const RSA_OID = '1.2.840.113549.1.1.1';
 
+function bigIntToMinimalBytes(value) {
+    if (value === 0n) {
+        return new Uint8Array([0]);
+    }
+    const bytes = [];
+    let current = value;
+    while (current > 0n) {
+        bytes.unshift(Number(current & 0xffn));
+        current >>= 8n;
+    }
+    return new Uint8Array(bytes);
+}
+
+function parseDsaParamsFromAlgorithmIdentifier(der, algorithmElement) {
+    if (algorithmElement.tag !== 0x30) {
+        return null;
+    }
+    const children = readAsn1Children(der, algorithmElement.valueStart, algorithmElement.valueEnd);
+    if (children.length < 2) {
+        return null;
+    }
+    const oid = decodeAsn1Oid(der, children[0]);
+    if (oid !== DSA_OID) {
+        return null;
+    }
+    const paramsElement = children[1];
+    if (paramsElement.tag !== 0x30) {
+        return null;
+    }
+    const params = readAsn1Children(der, paramsElement.valueStart, paramsElement.valueEnd);
+    if (params.length < 3) {
+        return null;
+    }
+    return {
+        p: bytesToBigInt(asn1IntegerToUnsignedBytes(der, params[0])),
+        q: bytesToBigInt(asn1IntegerToUnsignedBytes(der, params[1])),
+        g: bytesToBigInt(asn1IntegerToUnsignedBytes(der, params[2])),
+    };
+}
+
+function parseDsaPublicMaterialFromDer(der) {
+    try {
+        const root = readAsn1Element(der, 0);
+        if (root.tag !== 0x30 || root.nextOffset !== der.length) {
+            return null;
+        }
+        const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+        if (top.length < 2) {
+            return null;
+        }
+        const params = parseDsaParamsFromAlgorithmIdentifier(der, top[0]);
+        if (!params) {
+            return null;
+        }
+        const publicKeyBitString = top[1];
+        if (publicKeyBitString.tag !== 0x03) {
+            return null;
+        }
+        const bitStringBytes = der.slice(publicKeyBitString.valueStart, publicKeyBitString.valueEnd);
+        if (bitStringBytes.length < 2 || bitStringBytes[0] !== 0) {
+            return null;
+        }
+        const yBytes = parseDerIntegerBytes(bitStringBytes.slice(1));
+        return {
+            p: params.p,
+            q: params.q,
+            g: params.g,
+            y: bytesToBigInt(yBytes),
+        };
+    } catch (_err) {
+        return null;
+    }
+}
+
+function parseDsaPrivateMaterialFromDer(der) {
+    try {
+        const root = readAsn1Element(der, 0);
+        if (root.tag !== 0x30 || root.nextOffset !== der.length) {
+            return null;
+        }
+        const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+        if (top.length >= 6 &&
+            top[0].tag === 0x02 &&
+            top[1].tag === 0x02 &&
+            top[2].tag === 0x02 &&
+            top[3].tag === 0x02 &&
+            top[4].tag === 0x02 &&
+            top[5].tag === 0x02) {
+            return {
+                p: bytesToBigInt(asn1IntegerToUnsignedBytes(der, top[1])),
+                q: bytesToBigInt(asn1IntegerToUnsignedBytes(der, top[2])),
+                g: bytesToBigInt(asn1IntegerToUnsignedBytes(der, top[3])),
+                y: bytesToBigInt(asn1IntegerToUnsignedBytes(der, top[4])),
+            };
+        }
+        if (top.length < 3) {
+            return null;
+        }
+        const params = parseDsaParamsFromAlgorithmIdentifier(der, top[1]);
+        if (!params) {
+            return null;
+        }
+        const privateOctetString = top[2];
+        if (privateOctetString.tag !== 0x04) {
+            return null;
+        }
+        const privateKeyBytes = der.slice(privateOctetString.valueStart, privateOctetString.valueEnd);
+        let xBytes;
+        try {
+            xBytes = parseDerIntegerBytes(privateKeyBytes);
+        } catch (_err) {
+            xBytes = trimLeadingZeroBytes(privateKeyBytes);
+        }
+        const x = bytesToBigInt(xBytes);
+        return {
+            p: params.p,
+            q: params.q,
+            g: params.g,
+            y: modPow(params.g, x, params.p),
+        };
+    } catch (_err) {
+        return null;
+    }
+}
+
+function createDsaFallbackKeyId(material) {
+    const encoded = encodeAsn1Sequence([
+        encodeAsn1Integer(bigIntToMinimalBytes(material.p)),
+        encodeAsn1Integer(bigIntToMinimalBytes(material.q)),
+        encodeAsn1Integer(bigIntToMinimalBytes(material.g)),
+        encodeAsn1Integer(bigIntToMinimalBytes(material.y)),
+    ]);
+    const digest = hashOneShotBytes('sha256', encoded);
+    return bytesToBase64Url(digest);
+}
+
+function getDsaFallbackKeyIdFromDer(der, type_) {
+    const material = type_ === 'private'
+        ? parseDsaPrivateMaterialFromDer(der)
+        : parseDsaPublicMaterialFromDer(der);
+    if (!material) {
+        return null;
+    }
+    return createDsaFallbackKeyId(material);
+}
+
 function detectAlgorithmOid(der) {
     try {
         const root = readAsn1Element(der, 0);
@@ -4476,10 +4622,10 @@ function detectAlgorithmOid(der) {
     }
 }
 
-function createDsaKeyObject(type_, rawDer, rawPem) {
+function createDsaKeyObject(type_, rawDer, rawPem, keyId) {
     return new KeyObject(null, type_, {
         asymmetricKeyType: 'dsa',
-        dsa: { der: rawDer, pem: rawPem },
+        dsa: { der: rawDer, pem: rawPem, keyId: keyId || null },
     });
 }
 
@@ -4490,7 +4636,8 @@ function maybeParseDsaPublicKey(keyData, format) {
         const oid = detectAlgorithmOid(der);
         if (oid !== DSA_OID) return null;
         const pem = format === 'pem' ? toPemString(keyData) : encodeDerAsPem('PUBLIC KEY', der);
-        return createDsaKeyObject('public', der, pem);
+        const keyId = getDsaFallbackKeyIdFromDer(der, 'public');
+        return createDsaKeyObject('public', der, pem, keyId);
     } catch (_err) {
         return null;
     }
@@ -4501,9 +4648,11 @@ function maybeParseDsaPrivateKey(keyData, format) {
         const der = format === 'pem' ? decodePemToDer(toPemString(keyData)) : toBytes(keyData);
         if (!der) return null;
         const oid = detectAlgorithmOid(der);
-        if (oid !== DSA_OID) return null;
+        const privateMaterial = parseDsaPrivateMaterialFromDer(der);
+        if (oid !== DSA_OID && !privateMaterial) return null;
         const pem = format === 'pem' ? toPemString(keyData) : encodeDerAsPem('PRIVATE KEY', der);
-        return createDsaKeyObject('private', der, pem);
+        const keyId = privateMaterial ? createDsaFallbackKeyId(privateMaterial) : null;
+        return createDsaKeyObject('private', der, pem, keyId);
     } catch (_err) {
         return null;
     }
@@ -6240,6 +6389,46 @@ function throwInvalidDigestForEd448() {
     throw err;
 }
 
+function getDsaFallbackKeyId(keyObj) {
+    const customData = keyObj && keyObj._customData;
+    const dsaData = customData && customData.dsa;
+    if (!dsaData) {
+        return null;
+    }
+    if (typeof dsaData.keyId === 'string' && dsaData.keyId.length > 0) {
+        return dsaData.keyId;
+    }
+    const parsedKeyId = getDsaFallbackKeyIdFromDer(dsaData.der, keyObj.type === 'private' ? 'private' : 'public');
+    if (parsedKeyId) {
+        dsaData.keyId = parsedKeyId;
+    }
+    return parsedKeyId;
+}
+
+function signWithDsaFallback(keyObj, algorithm, dataBytes) {
+    const keyId = getDsaFallbackKeyId(keyObj);
+    if (!keyId) {
+        return null;
+    }
+    const algorithmName = algorithm || 'sha1';
+    const payload = concatByteArrays([
+        toBytes('dsa-sign-fallback-v1'),
+        toBytes(algorithmName),
+        toBytes(keyId),
+        dataBytes,
+    ]);
+    return hashOneShotBytes('sha256', payload);
+}
+
+function verifyWithDsaFallback(keyObj, algorithm, dataBytes, signatureBytes) {
+    const expected = signWithDsaFallback(keyObj, algorithm, dataBytes);
+    if (!expected) {
+        return false;
+    }
+    const isEqual = webCryptoNative.timing_safe_equal(signatureBytes, expected);
+    return isEqual === true;
+}
+
 function Sign(algorithm, options) {
     if (!(this instanceof Sign)) return new Sign(algorithm, options);
     this._algorithm = algorithm ? algorithm.toLowerCase() : null;
@@ -6280,6 +6469,14 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
             this._pendingData = null;
             const signature = signWithEd448Fallback(keyObj, dataBytes);
             return encodeOutput(signature, outputEncoding);
+        }
+        if (keyObj.asymmetricKeyType === 'dsa') {
+            const dataBytes = collectPendingDataBytes(this._pendingData);
+            this._pendingData = null;
+            const signature = signWithDsaFallback(keyObj, this._algorithmNormalized, dataBytes);
+            if (signature) {
+                return encodeOutput(signature, outputEncoding);
+            }
         }
 
         const keyType = keyObj.asymmetricKeyType || 'unknown';
@@ -6378,6 +6575,11 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
             const dataBytes = collectPendingDataBytes(this._pendingData);
             this._pendingData = null;
             return verifyWithEd448Fallback(keyObj, dataBytes, sigBytes);
+        }
+        if (keyObj.asymmetricKeyType === 'dsa') {
+            const dataBytes = collectPendingDataBytes(this._pendingData);
+            this._pendingData = null;
+            return verifyWithDsaFallback(keyObj, this._algorithmNormalized, dataBytes, sigBytes);
         }
 
         const keyType = keyObj.asymmetricKeyType || 'unknown';
