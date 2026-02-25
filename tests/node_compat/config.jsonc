@@ -269,10 +269,7 @@
     },
     "parallel/test-url-parse-invalid-input.js": {},
     "parallel/test-url-parse-query.js": {},
-    "parallel/test-url-relative.js": {
-      "skip": true,
-      "reason": "requires full legacy url.resolveObject with complex edge cases"
-    },
+    "parallel/test-url-relative.js": {},
 
     // === node:util tests ===
     "parallel/test-util-callbackify.js": {

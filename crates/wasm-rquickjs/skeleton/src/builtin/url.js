@@ -631,37 +631,41 @@ export function format(urlObject, options) {
 function formatLegacy(urlObject) {
     let result = '';
     const protocol = urlObject.protocol || '';
+    let pathname = urlObject.pathname || '';
+    let host = '';
+
+    if (urlObject.host) {
+        host = urlObject.host;
+    } else if (urlObject.hostname) {
+        host = urlObject.hostname.indexOf(':') !== -1
+            ? '[' + urlObject.hostname + ']'
+            : urlObject.hostname;
+        if (urlObject.port) {
+            host += ':' + urlObject.port;
+        }
+    }
+
+    if (urlObject.auth) {
+        host = urlObject.auth + '@' + host;
+    }
 
     if (protocol) {
         result += protocol;
     }
 
-    if (urlObject.slashes || (!protocol || isSlashedProtocol(protocol))) {
-        if (urlObject.host || urlObject.hostname) {
+    if (urlObject.slashes || isSlashedProtocol(protocol)) {
+        if (urlObject.slashes || host) {
+            if (pathname && pathname.charAt(0) !== '/') {
+                pathname = '/' + pathname;
+            }
+            result += '//';
+        } else if (protocol.toLowerCase().startsWith('file')) {
             result += '//';
         }
     }
 
-    if (urlObject.auth) {
-        result += urlObject.auth + '@';
-    }
-
-    if (urlObject.host) {
-        result += urlObject.host;
-    } else {
-        if (urlObject.hostname) {
-            result += urlObject.hostname.indexOf(':') !== -1
-                ? '[' + urlObject.hostname + ']'
-                : urlObject.hostname;
-        }
-        if (urlObject.port) {
-            result += ':' + urlObject.port;
-        }
-    }
-
-    if (urlObject.pathname) {
-        result += urlObject.pathname;
-    }
+    result += host;
+    result += pathname;
 
     if (urlObject.search) {
         result += urlObject.search;
@@ -679,16 +683,23 @@ function formatLegacy(urlObject) {
 const SLASHED_PROTOCOLS = {
     'http:': true, 'https:': true, 'ftp:': true, 'gopher:': true, 'file:': true,
     'http': true, 'https': true, 'ftp': true, 'gopher': true, 'file': true,
+    'ws:': true, 'wss:': true,
+    'ws': true, 'wss': true,
+};
+
+const HOSTLESS_PROTOCOLS = {
+    'javascript:': true,
+    'javascript': true,
 };
 
 function isSlashedProtocol(protocol) {
-    return SLASHED_PROTOCOLS[protocol.toLowerCase()] === true;
+    return typeof protocol === 'string' && SLASHED_PROTOCOLS[protocol.toLowerCase()] === true;
 }
 
 export function Url() {
     this.protocol = null;
     this.slashes = null;
-    this.auth = undefined;
+    this.auth = null;
     this.host = null;
     this.port = null;
     this.hostname = null;
@@ -699,6 +710,266 @@ export function Url() {
     this.path = null;
     this.href = null;
 }
+
+Url.prototype.parse = function parseUrl(urlString, parseQueryString, slashesDenoteHost) {
+    const parsed = parse(urlString, parseQueryString, slashesDenoteHost);
+    Object.assign(this, parsed);
+    return this;
+};
+
+Url.prototype.format = function formatUrl() {
+    return formatLegacy(this);
+};
+
+Url.prototype.resolve = function resolveUrl(relative) {
+    return this.resolveObject(relative).format();
+};
+
+Url.prototype.resolveObject = function resolveUrlObject(relative) {
+    const rel = typeof relative === 'string' ? parse(relative, false, true) : relative;
+
+    const result = new Url();
+    Object.assign(result, this);
+
+    // Hash is always overridden, even for empty relatives.
+    result.hash = rel.hash;
+
+    if (rel.href === '') {
+        result.href = result.format();
+        return result;
+    }
+
+    if (rel.slashes && !rel.protocol) {
+        Object.keys(rel).forEach((key) => {
+            if (key !== 'protocol') {
+                result[key] = rel[key];
+            }
+        });
+
+        if (isSlashedProtocol(result.protocol) && result.hostname && !result.pathname) {
+            result.path = result.pathname = '/';
+        }
+
+        result.href = result.format();
+        return result;
+    }
+
+    if (rel.protocol && rel.protocol !== result.protocol) {
+        if (!isSlashedProtocol(rel.protocol)) {
+            Object.assign(result, rel);
+            result.href = result.format();
+            return result;
+        }
+
+        result.protocol = rel.protocol;
+        if (!rel.host && !/^file:?$/.test(rel.protocol) && !HOSTLESS_PROTOCOLS[rel.protocol]) {
+            const relPath = (rel.pathname || '').split('/');
+            while (relPath.length && !(rel.host = relPath.shift()));
+
+            rel.host = rel.host || '';
+            rel.hostname = rel.hostname || '';
+
+            if (relPath[0] !== '') {
+                relPath.unshift('');
+            }
+            if (relPath.length < 2) {
+                relPath.unshift('');
+            }
+
+            result.pathname = relPath.join('/');
+        } else {
+            result.pathname = rel.pathname;
+        }
+
+        result.search = rel.search;
+        result.query = rel.query;
+        result.host = rel.host || '';
+        result.auth = rel.auth;
+        result.hostname = rel.hostname || rel.host;
+        result.port = rel.port;
+
+        if (result.pathname || result.search) {
+            result.path = (result.pathname || '') + (result.search || '');
+        }
+
+        result.slashes = result.slashes || rel.slashes;
+        result.href = result.format();
+        return result;
+    }
+
+    const isSourceAbs = result.pathname && result.pathname.charAt(0) === '/';
+    const isRelAbs = rel.host || (rel.pathname && rel.pathname.charAt(0) === '/');
+    let mustEndAbs = isRelAbs || isSourceAbs || (result.host && rel.pathname);
+    const removeAllDots = mustEndAbs;
+    let srcPath = (result.pathname && result.pathname.split('/')) || [];
+    const relPath = (rel.pathname && rel.pathname.split('/')) || [];
+    const noLeadingSlashes = result.protocol && !isSlashedProtocol(result.protocol);
+
+    if (noLeadingSlashes) {
+        result.hostname = '';
+        result.port = null;
+
+        if (result.host) {
+            if (srcPath[0] === '') {
+                srcPath[0] = result.host;
+            } else {
+                srcPath.unshift(result.host);
+            }
+        }
+
+        result.host = '';
+
+        if (rel.protocol) {
+            rel.hostname = null;
+            rel.port = null;
+            result.auth = null;
+
+            if (rel.host) {
+                if (relPath[0] === '') {
+                    relPath[0] = rel.host;
+                } else {
+                    relPath.unshift(rel.host);
+                }
+            }
+
+            rel.host = null;
+        }
+
+        mustEndAbs = mustEndAbs && (relPath[0] === '' || srcPath[0] === '');
+    }
+
+    if (isRelAbs) {
+        if (rel.host || rel.host === '') {
+            if (result.host !== rel.host) {
+                result.auth = null;
+            }
+            result.host = rel.host;
+            result.port = rel.port;
+        }
+
+        if (rel.hostname || rel.hostname === '') {
+            if (result.hostname !== rel.hostname) {
+                result.auth = null;
+            }
+            result.hostname = rel.hostname;
+        }
+
+        result.search = rel.search;
+        result.query = rel.query;
+        srcPath = relPath;
+    } else if (relPath.length) {
+        srcPath = srcPath || [];
+        srcPath.pop();
+        srcPath = srcPath.concat(relPath);
+        result.search = rel.search;
+        result.query = rel.query;
+    } else if (rel.search !== null && rel.search !== undefined) {
+        if (noLeadingSlashes) {
+            result.hostname = result.host = srcPath.shift();
+
+            const authInHost =
+                result.host && result.host.indexOf('@') > 0 ? result.host.split('@') : false;
+            if (authInHost) {
+                result.auth = authInHost.shift();
+                result.host = result.hostname = authInHost.shift();
+            }
+        }
+
+        result.search = rel.search;
+        result.query = rel.query;
+
+        if (result.pathname !== null || result.search !== null) {
+            result.path = (result.pathname ? result.pathname : '') +
+                (result.search ? result.search : '');
+        }
+
+        result.href = result.format();
+        return result;
+    }
+
+    if (!srcPath.length) {
+        result.pathname = null;
+        if (result.search) {
+            result.path = '/' + result.search;
+        } else {
+            result.path = null;
+        }
+
+        result.href = result.format();
+        return result;
+    }
+
+    let last = srcPath[srcPath.length - 1];
+    const hasTrailingSlash = (
+        ((result.host || rel.host || srcPath.length > 1) &&
+            (last === '.' || last === '..')) ||
+        last === ''
+    );
+
+    let up = 0;
+    for (let i = srcPath.length - 1; i >= 0; i--) {
+        last = srcPath[i];
+        if (last === '.') {
+            srcPath.splice(i, 1);
+        } else if (last === '..') {
+            srcPath.splice(i, 1);
+            up++;
+        } else if (up) {
+            srcPath.splice(i, 1);
+            up--;
+        }
+    }
+
+    if (!mustEndAbs && !removeAllDots) {
+        while (up--) {
+            srcPath.unshift('..');
+        }
+    }
+
+    if (mustEndAbs && srcPath[0] !== '' && (!srcPath[0] || srcPath[0].charAt(0) !== '/')) {
+        srcPath.unshift('');
+    }
+
+    if (hasTrailingSlash && srcPath.join('/').slice(-1) !== '/') {
+        srcPath.push('');
+    }
+
+    const isAbsolute = srcPath[0] === '' || (srcPath[0] && srcPath[0].charAt(0) === '/');
+
+    if (noLeadingSlashes) {
+        result.hostname = result.host = isAbsolute ? '' : srcPath.length ? srcPath.shift() : '';
+
+        const authInHost = result.host && result.host.indexOf('@') > 0 ?
+            result.host.split('@') : false;
+        if (authInHost) {
+            result.auth = authInHost.shift();
+            result.host = result.hostname = authInHost.shift();
+        }
+    }
+
+    mustEndAbs = mustEndAbs || (result.host && srcPath.length);
+
+    if (mustEndAbs && !isAbsolute) {
+        srcPath.unshift('');
+    }
+
+    if (!srcPath.length) {
+        result.pathname = null;
+        result.path = null;
+    } else {
+        result.pathname = srcPath.join('/');
+    }
+
+    if (result.pathname !== null || result.search !== null) {
+        result.path = (result.pathname ? result.pathname : '') +
+            (result.search ? result.search : '');
+    }
+
+    result.auth = rel.auth || result.auth;
+    result.slashes = result.slashes || rel.slashes;
+    result.href = result.format();
+    return result;
+};
 
 function legacyParse(urlString, parseState) {
     const u = new Url();
@@ -739,7 +1010,7 @@ function legacyParse(urlString, parseState) {
         if (pathStart === -1) pathStart = authHostPath.length;
 
         const authHost = authHostPath.slice(0, pathStart);
-        rest = authHostPath.slice(pathStart) || '/';
+        rest = authHostPath.slice(pathStart);
 
         const atIdx = authHost.lastIndexOf('@');
         if (atIdx !== -1) {
@@ -749,22 +1020,36 @@ function legacyParse(urlString, parseState) {
         } else {
             shouldWarnInvalidHost = parseHostPort(u, authHost, urlString) || shouldWarnInvalidHost;
         }
-    } else if (u.protocol && isSlashedProtocol(u.protocol)) {
-        u.slashes = true;
-        u.hostname = '';
-        u.host = '';
-        u.pathname = rest || '/';
-        u.path = u.pathname + (u.search || '');
-        return u;
+    } else if (u.protocol && !isSlashedProtocol(u.protocol) && !HOSTLESS_PROTOCOLS[u.protocol]) {
+        let pathStart = rest.indexOf('/');
+        if (pathStart === -1) {
+            pathStart = rest.length;
+        }
+
+        const authHost = rest.slice(0, pathStart);
+        rest = rest.slice(pathStart);
+
+        const atIdx = authHost.lastIndexOf('@');
+        if (atIdx !== -1) {
+            u.auth = decodeURIComponent(authHost.slice(0, atIdx));
+            const hostPart = authHost.slice(atIdx + 1);
+            shouldWarnInvalidHost = parseHostPort(u, hostPart, urlString) || shouldWarnInvalidHost;
+        } else {
+            shouldWarnInvalidHost = parseHostPort(u, authHost, urlString) || shouldWarnInvalidHost;
+        }
     }
 
     if (rest) {
         u.pathname = rest;
-    } else if (u.slashes) {
+    } else if (u.slashes && u.protocol && isSlashedProtocol(u.protocol) && u.host !== '') {
         u.pathname = '/';
     }
 
-    u.path = (u.pathname || '') + (u.search || '');
+    if (u.pathname !== null || u.search !== null) {
+        u.path = (u.pathname || '') + (u.search || '');
+    } else {
+        u.path = null;
+    }
     u.href = formatLegacy(u);
 
     if (parseState && shouldWarnInvalidHost) {
@@ -822,6 +1107,10 @@ function parseHostPort(u, hostStr, input) {
 }
 
 export function parse(urlString, parseQueryString, slashesDenoteHost) {
+    if (urlString instanceof Url) {
+        return urlString;
+    }
+
     if (typeof urlString !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('url', 'string', urlString);
     }
@@ -861,7 +1150,11 @@ export function parse(urlString, parseQueryString, slashesDenoteHost) {
         }
 
         u.pathname = rest || null;
-        u.path = (u.pathname || '') + (u.search || '');
+        if (u.pathname !== null || u.search !== null) {
+            u.path = (u.pathname || '') + (u.search || '');
+        } else {
+            u.path = null;
+        }
         u.href = formatLegacy(u);
     }
 
@@ -880,76 +1173,15 @@ export function parse(urlString, parseQueryString, slashesDenoteHost) {
 }
 
 export function resolve(from, to) {
-    return resolveObject(from, to).href;
+    return parse(from, false, true).resolve(to);
 }
 
 export function resolveObject(source, relative) {
     if (!source) {
-        return legacyParse(relative || '');
+        return relative;
     }
 
-    const src = typeof source === 'string' ? legacyParse(source) : source;
-
-    if (!relative) {
-        const result = new Url();
-        Object.assign(result, src);
-        return result;
-    }
-
-    const rel = typeof relative === 'string' ? legacyParse(relative) : relative;
-
-    if (rel.protocol && rel.protocol !== src.protocol) {
-        return rel;
-    }
-
-    if (src.href && rel.href) {
-        try {
-            const base = new URL(src.href);
-            const resolved = new URL(rel.href, base);
-            return legacyParse(resolved.href);
-        } catch {
-            // Fall through to manual resolution
-        }
-    }
-
-    const result = new Url();
-    result.protocol = src.protocol;
-    result.slashes = src.slashes;
-    result.auth = rel.auth !== undefined ? rel.auth : src.auth;
-
-    if (rel.hostname || rel.host) {
-        result.hostname = rel.hostname || src.hostname;
-        result.host = rel.host || src.host;
-        result.port = rel.port || src.port;
-        result.pathname = rel.pathname || '/';
-    } else {
-        result.hostname = src.hostname;
-        result.host = src.host;
-        result.port = src.port;
-
-        if (rel.pathname) {
-            if (rel.pathname.startsWith('/')) {
-                result.pathname = rel.pathname;
-            } else {
-                let srcPath = src.pathname || '/';
-                const lastSlash = srcPath.lastIndexOf('/');
-                if (lastSlash !== -1) {
-                    srcPath = srcPath.slice(0, lastSlash + 1);
-                }
-                result.pathname = srcPath + rel.pathname;
-            }
-        } else {
-            result.pathname = src.pathname;
-        }
-    }
-
-    result.search = rel.search !== null ? rel.search : src.search;
-    result.query = rel.query !== null ? rel.query : src.query;
-    result.hash = rel.hash;
-    result.path = (result.pathname || '') + (result.search || '');
-    result.href = formatLegacy(result);
-
-    return result;
+    return parse(source, false, true).resolveObject(relative);
 }
 
 export function domainToASCII(domain) {
