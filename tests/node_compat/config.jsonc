@@ -1933,10 +1933,7 @@
     "parallel/test-crypto-oneshot-hash.js": {},
     "parallel/test-crypto-op-during-process-exit.js": {},
     "parallel/test-crypto-padding-aes256.js": {},
-    "parallel/test-crypto-padding.js": {
-      "skip": true,
-      "reason": "requires OpenSSL-specific error messages for encryption failures"
-    },
+    "parallel/test-crypto-padding.js": {},
     "parallel/test-crypto-pbkdf2.js": {
       "skip": true,
       "reason": "requires extensive argument validation with specific error messages, SharedArrayBuffer, and iteration range checks"
