@@ -297,11 +297,9 @@
     },
     "parallel/test-util-emit-experimental-warning.js": {},
     "parallel/test-util-format.js": {
-      "skip": true,
-      "reason": "requires internalBinding('util').getConstructorName to recover class names from null-prototype objects",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires internalBinding('util').getConstructorName to recover class names from null-prototype objects" },
+        "block_00_block_00": {},
         "block_01_string_format_specifier_including_tostring_properties_on_the": { "skip": true, "reason": "inherited: requires internalBinding('util').getConstructorName to recover class names from null-prototype objects" },
         "block_02_symbol_toprimitive_handling_for_string_format_specifier": { "skip": true, "reason": "inherited: requires internalBinding('util').getConstructorName to recover class names from null-prototype objects" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires internalBinding('util').getConstructorName to recover class names from null-prototype objects" },

@@ -1259,16 +1259,17 @@ function formatError(
 ) {
     const name = err.name != null ? String(err.name) : "Error";
     let len = name.length;
-    // QuickJS: err.stack contains only stack frames (without error name/message prefix)
-    // unlike V8 where err.stack starts with "ErrorName: message\n    at ...".
-    // Use err.toString() as the base and only include stack if it's V8-style.
+    // QuickJS stacks often start directly with frame lines ("    at ...") without
+    // the "ErrorName: message" prefix present in V8 stacks.
     let rawStack = err.stack ? String(err.stack) : "";
     let stack;
-    if (rawStack && (rawStack.startsWith(name) || rawStack.startsWith(err.toString()))) {
-        // V8-style stack: starts with error name
+    const hasQuickJsFrames = /^\s*at\s/m.test(rawStack);
+    if (
+        rawStack &&
+        (rawStack.startsWith(name) || rawStack.startsWith(err.toString()) || hasQuickJsFrames)
+    ) {
         stack = rawStack;
     } else {
-        // QuickJS-style stack: only contains frame lines; use toString() as base
         stack = err.toString();
     }
 
@@ -1318,15 +1319,10 @@ function formatError(
     if (pos !== -1) {
         pos += err.message.length;
     }
-    // Wrap the error in brackets.
-    // In QuickJS/WASM environment, always strip stack traces and use bracket format
-    // because QuickJS stack traces use a different format than V8 and are not
-    // meaningful in the same way for Node.js compatibility.
-    const stackStart = stack.indexOf("\n    at", pos);
-    if (stackStart !== -1) {
-        // Strip the stack trace portion, keep only the error name + message
-        stack = `[${stack.slice(0, stackStart)}]`;
-    } else {
+    const v8StackStart = stack.indexOf("\n    at", pos);
+    const quickJsStackStart = (v8StackStart === -1 && stack.startsWith("    at")) ? 0 : -1;
+    if (v8StackStart === -1 && quickJsStackStart === -1) {
+        // No stack frames available: use bracketed error summary.
         stack = `[${stack}]`;
     }
     // The message and the stack have to be indented as well!
@@ -1337,7 +1333,14 @@ function formatError(
     return stack;
 }
 
-let hexSlice;
+function hexSlice(view, start, end) {
+    let out = "";
+    for (let i = start; i < end; i++) {
+        const hex = view[i].toString(16);
+        out += hex.length === 1 ? `0${hex}` : hex;
+    }
+    return out;
+}
 
 function formatArrayBuffer(ctx, value) {
     let buffer;
@@ -1346,9 +1349,6 @@ function formatArrayBuffer(ctx, value) {
     } catch {
         return [ctx.stylize("(detached)", "special")];
     }
-    // TODO(wafuwafu13): Implement
-    // if (hexSlice === undefined)
-    //   hexSlice = uncurryThis(require('buffer').Buffer.prototype.hexSlice);
     let str = hexSlice(buffer, 0, Math.min(ctx.maxArrayLength, buffer.length))
         .replace(/(.{2})/g, "$1 ").trim();
 
