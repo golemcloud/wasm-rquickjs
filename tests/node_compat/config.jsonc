@@ -1950,10 +1950,7 @@
         "block_09_block_09": {}
       }
     },
-    "parallel/test-crypto-private-decrypt-gh32240.js": {
-      "skip": true,
-      "reason": "requires RSA privateDecrypt which is not implemented"
-    },
+    "parallel/test-crypto-private-decrypt-gh32240.js": {},
     "parallel/test-crypto-psychic-signatures.js": {
       "skip": true,
       "reason": "requires ECDSA with raw signature verification internals"
