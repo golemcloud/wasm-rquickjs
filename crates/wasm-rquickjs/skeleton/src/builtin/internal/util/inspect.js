@@ -2079,25 +2079,47 @@ function hasBuiltInToString(value) {
     // const proxyTarget = getProxyDetails(value, getFullProxy);
     const proxyTarget = undefined;
     if (proxyTarget !== undefined) {
+        if (proxyTarget === null) {
+            return true;
+        }
         value = proxyTarget;
     }
 
-    // Count objects that have no `toString` function as built-in.
-    if (typeof value.toString !== "function") {
-        return true;
-    }
+    let hasOwnToString = (object, key) =>
+        Object.prototype.hasOwnProperty.call(object, key);
+    let hasOwnToPrimitive = hasOwnToString;
 
-    // The object has a own `toString` property. Thus it's not not a built-in one.
-    if (Object.prototype.hasOwnProperty.call(value, "toString")) {
+    // Objects with an own @@toPrimitive are not treated as built-ins.
+    if (typeof value.toString !== "function") {
+        if (typeof value[Symbol.toPrimitive] !== "function") {
+            return true;
+        }
+        if (Object.prototype.hasOwnProperty.call(value, Symbol.toPrimitive)) {
+            return false;
+        }
+        hasOwnToString = () => false;
+    } else if (Object.prototype.hasOwnProperty.call(value, "toString")) {
+        return false;
+    } else if (typeof value[Symbol.toPrimitive] !== "function") {
+        hasOwnToPrimitive = () => false;
+    } else if (Object.prototype.hasOwnProperty.call(value, Symbol.toPrimitive)) {
         return false;
     }
 
-    // Find the object that has the `toString` property as own property in the
-    // prototype chain.
+    // Find the object that has `toString` or `Symbol.toPrimitive` as own
+    // property in the prototype chain.
     let pointer = value;
     do {
         pointer = Object.getPrototypeOf(pointer);
-    } while (!Object.prototype.hasOwnProperty.call(pointer, "toString"));
+    } while (
+        pointer !== null &&
+        !hasOwnToString(pointer, "toString") &&
+        !hasOwnToPrimitive(pointer, Symbol.toPrimitive)
+    );
+
+    if (pointer === null) {
+        return true;
+    }
 
     // Check closer if the object is a built-in.
     const descriptor = Object.getOwnPropertyDescriptor(pointer, "constructor");
