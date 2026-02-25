@@ -739,7 +739,7 @@
     "parallel/test-fs-promises-readfile-empty.js": {},
     "parallel/test-fs-promises-readfile-with-fd.js": {},
     "parallel/test-fs-promises-readfile.js": {},
-    "parallel/test-fs-promises-watch.js": { "skip": true, "reason": "fs.promises.watch is not supported in WASI" },
+    "parallel/test-fs-promises-watch.js": {},
     "parallel/test-fs-promises-write-optional-params.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"

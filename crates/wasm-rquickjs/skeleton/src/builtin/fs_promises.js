@@ -1,6 +1,7 @@
 import * as native from '__wasm_rquickjs_builtin/fs_native';
 import {
     aggregateTwoErrors,
+    AbortError,
     ERR_FS_FILE_TOO_LARGE,
 } from '__wasm_rquickjs_builtin/internal/errors';
 
@@ -1075,8 +1076,56 @@ export async function cp(src, dest, options) {
     }
 }
 
-export async function watch(filename, options) {
-    throw new Error('watch is not supported in WASI');
+export async function* watch(filename, options = {}) {
+    validatePath(filename, 'filename');
+
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        const err = new TypeError(`The "options" argument must be of type Object. Received ${describeType(options)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    const persistent = options.persistent ?? true;
+    if (typeof persistent !== 'boolean') {
+        const err = new TypeError(`The "options.persistent" argument must be of type boolean. Received ${describeType(persistent)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    const recursive = options.recursive ?? false;
+    if (typeof recursive !== 'boolean') {
+        const err = new TypeError(`The "options.recursive" argument must be of type boolean. Received ${describeType(recursive)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    const signal = options.signal;
+    validateAbortSignal(signal, 'options.signal');
+
+    const encoding = options.encoding ?? 'utf8';
+    if (encoding && !getBuffer().isEncoding(encoding)) {
+        const err = new TypeError(`The argument 'encoding' is invalid encoding. Received ${String(encoding)}`);
+        err.code = 'ERR_INVALID_ARG_VALUE';
+        throw err;
+    }
+
+    if (signal?.aborted) {
+        throw new AbortError(signal.reason);
+    }
+
+    // WASI does not provide native file watching support, so we only keep
+    // the async iterator alive until it is explicitly aborted.
+    if (!signal) {
+        throw new Error('watch is not supported in WASI');
+    }
+
+    yield await new Promise((resolve, reject) => {
+        const onAbort = () => {
+            signal.removeEventListener('abort', onAbort);
+            reject(new AbortError(signal.reason));
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+    });
 }
 
 export async function statfs(path, options) {
