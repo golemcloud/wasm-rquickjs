@@ -811,7 +811,7 @@
         "block_05_block_05": {},
         "block_06_block_06": {},
         "block_07_block_07": {},
-        "block_08_block_08": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
+        "block_08_block_08": {},
         "block_09_block_09": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" }
       }
     },
