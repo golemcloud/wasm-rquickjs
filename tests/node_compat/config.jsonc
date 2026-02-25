@@ -2021,10 +2021,7 @@
         "block_03_test_signing_and_verifying": {},
         "block_04_block_04": {},
         "block_05_block_05": {},
-        "block_06_special_tests_for_rsa_pkcs1_pss_padding": {
-          "skip": true,
-          "reason": "amp fix attempt failed verification"
-        },
+        "block_06_special_tests_for_rsa_pkcs1_pss_padding": {},
         "block_07_https_www_emc_com_emc_plus_rsa_labs_standards_initiatives_pk": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_08_test_exceptions_for_invalid_padding_and_saltlength_values": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_09_test_throws_exception_when_key_options_is_null": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
