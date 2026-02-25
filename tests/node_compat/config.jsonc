@@ -791,7 +791,7 @@
         "block_05_block_05": {},
         "block_06_block_06": {},
         "block_07_pause_and_then_resume_immediately": {},
-        "block_08_block_08": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
+        "block_08_block_08": {},
         "block_09_just_to_make_sure_autoclose_won_t_close_the_stream_because_o": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
         "block_10_make_sure_stream_is_destroyed_when_file_does_not_exist": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
       }
