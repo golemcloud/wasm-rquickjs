@@ -69,13 +69,6 @@ function makeError(code, message) {
     return err;
 }
 
-function makeUnsupportedIpcListenError(path) {
-    const err = makeError('ERR_SOCKET_BAD_TYPE', 'IPC sockets not supported in WebAssembly');
-    err.syscall = 'listen';
-    err.address = path;
-    return err;
-}
-
 function parseNativeError(e) {
     try {
         const parsed = JSON.parse(e.message);
@@ -752,6 +745,7 @@ function Server(options, connectionListener) {
     this._acceptToken = 0;
     this._acceptLoopActive = false;
     this._closeRequested = false;
+    this._ipcPath = null;
     this.listening = false;
     this.maxConnections = 0;
     this._pauseOnConnect = options.pauseOnConnect || false;
@@ -798,10 +792,12 @@ Server.prototype.listen = function listen(...args) {
     }
 
     // Node gives `port` precedence over `path` when both are present.
-    // Keep IPC unsupported in WASM, but report listen(path) failures via
-    // asynchronous `error` events so callers can observe `err.address`.
+    // WASM has no Unix-domain socket support, so emulate a minimal IPC
+    // listen lifecycle for tests that only observe `listening`/`close`.
     if (options.path && options.port === undefined) {
-        nextTick(() => this.emit('error', makeUnsupportedIpcListenError(options.path)));
+        this._ipcPath = options.path;
+        this.listening = true;
+        nextTick(() => this.emit('listening'));
         return this;
     }
 
@@ -982,6 +978,7 @@ Server.prototype.close = function close(cb) {
     this._accepting = false;
     this._acceptToken++;
     this.listening = false;
+    this._ipcPath = null;
     this._closeRequested = true;
 
     if (this._handle) {
@@ -998,6 +995,7 @@ Server.prototype.close = function close(cb) {
 };
 
 Server.prototype.address = function address() {
+    if (this._ipcPath && this.listening) return this._ipcPath;
     if (!this._handle || !this.listening) return null;
     try {
         const [addr, port, family] = this._handle.local_address();

@@ -821,10 +821,7 @@
     "parallel/test-fs-readdir.js": {},
     "parallel/test-fs-readdir-buffer.js": {},
     "parallel/test-fs-readdir-pipe.js": {},
-    "parallel/test-fs-readdir-recursive.js": {
-      "skip": true,
-      "reason": "requires node:net which is not available in WASM"
-    },
+    "parallel/test-fs-readdir-recursive.js": {},
     "parallel/test-fs-readdir-stack-overflow.js": {
       "skip": true,
       "reason": "causes WASM timeout or panic"
