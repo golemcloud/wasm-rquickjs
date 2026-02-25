@@ -373,7 +373,10 @@ pub const REEXPORT_JS: &str = r#"export * from 'node:url'; export { default } fr
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_url_native from '__wasm_rquickjs_builtin/url_native';
         import * as __wasm_rquickjs_url from '__wasm_rquickjs_builtin/url';
-        import { ERR_INVALID_ARG_TYPE as __url_ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
+        import {
+            ERR_INVALID_ARG_TYPE as __url_ERR_INVALID_ARG_TYPE,
+            ERR_MISSING_ARGS as __url_ERR_MISSING_ARGS
+        } from '__wasm_rquickjs_builtin/internal/errors';
         globalThis.URL = __wasm_rquickjs_url_native.URL;
         globalThis.URLSearchParams = __wasm_rquickjs_url.URLSearchParams;
         Object.defineProperty(globalThis.URL.prototype, "searchParams", {
@@ -390,5 +393,14 @@ pub const WIRE_JS: &str = r#"
                 throw new __url_ERR_INVALID_ARG_TYPE('object', 'Blob', obj);
             }
             return __origCreateObjectURL.call(this, obj);
+        };
+
+        // Match Node.js behavior: throw ERR_MISSING_ARGS when no URL was passed.
+        const __origRevokeObjectURL = globalThis.URL.revokeObjectURL;
+        globalThis.URL.revokeObjectURL = function revokeObjectURL(url) {
+            if (arguments.length === 0) {
+                throw new __url_ERR_MISSING_ARGS('url');
+            }
+            return __origRevokeObjectURL.call(this, url);
         };
     "#;
