@@ -878,10 +878,7 @@
       "reason": "requires child_process which is not available in WASM"
     },
     "parallel/test-fs-readlink-type-check.js": {},
-    "parallel/test-fs-readSync-optional-params.js": {
-      "skip": true,
-      "reason": "requires strict options parameter validation for Infinity/BigInt/Symbol in readSync"
-    },
+    "parallel/test-fs-readSync-optional-params.js": {},
     "parallel/test-fs-readv-promises.js": {},
     "parallel/test-fs-readv-promisify.js": {},
     "parallel/test-fs-readv-sync.js": {

@@ -1021,6 +1021,7 @@ export function closeSync(fd) {
 
 export function readSync(fd, buffer, offsetOrOptions, length, position) {
     validateFd(fd);
+    const argCount = arguments.length;
 
     // When second arg is an options object (not a buffer), extract buffer from it
     if (buffer != null && typeof buffer === 'object' && !ArrayBuffer.isView(buffer) && !Array.isArray(buffer) && offsetOrOptions === undefined) {
@@ -1032,14 +1033,20 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
         offsetOrOptions = opts;
     }
     let offset = 0;
-    if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions === 'object' && !ArrayBuffer.isView(offsetOrOptions) && !Array.isArray(offsetOrOptions)) {
-        offset = offsetOrOptions.offset ?? 0;
-        length = offsetOrOptions.length !== undefined ? offsetOrOptions.length : buffer.byteLength - offset;
-        position = offsetOrOptions.position !== undefined ? offsetOrOptions.position : null;
-    } else if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions !== 'number') {
-        const err = new TypeError(`The "options" argument must be of type object. Received ${describeType(offsetOrOptions)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+    if (argCount <= 3) {
+        if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions === 'object' && !ArrayBuffer.isView(offsetOrOptions) && !Array.isArray(offsetOrOptions)) {
+            offset = offsetOrOptions.offset ?? 0;
+            length = offsetOrOptions.length !== undefined ? offsetOrOptions.length : buffer.byteLength - offset;
+            position = offsetOrOptions.position !== undefined ? offsetOrOptions.position : null;
+        } else if (offsetOrOptions !== undefined && offsetOrOptions !== null) {
+            const err = new TypeError(`The "options" argument must be of type object. Received ${describeType(offsetOrOptions)}`);
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        } else {
+            offset = 0;
+            length = buffer.byteLength;
+            position = null;
+        }
     } else {
         offset = offsetOrOptions ?? 0;
         length = length !== undefined ? length : buffer.byteLength - offset;
