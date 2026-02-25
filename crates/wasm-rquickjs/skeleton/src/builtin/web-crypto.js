@@ -2244,6 +2244,8 @@ function DiffieHellman(sizeOrKey, keyEncoding, generator, genEncoding) {
         }
         this._handle = webCryptoNative.dh_create_from_prime(primeBytes, genBytes);
     }
+
+    noteSecureHeapUsage(256);
 }
 
 DiffieHellman.prototype.generateKeys = function(encoding) {
@@ -2574,6 +2576,122 @@ export const constants = {
     POINT_CONVERSION_UNCOMPRESSED: 4,
     POINT_CONVERSION_HYBRID: 6,
 };
+
+let secureHeapState = {
+    signature: '',
+    total: 0,
+    min: 0,
+    used: 0,
+};
+
+function readExecArgvFlagValue(execArgv, flagName) {
+    const prefixed = flagName + '=';
+    for (let i = 0; i < execArgv.length; i += 1) {
+        const arg = String(execArgv[i]);
+        if (arg === flagName) {
+            if (i + 1 >= execArgv.length) {
+                return '';
+            }
+            i += 1;
+            return String(execArgv[i]);
+        }
+        if (arg.startsWith(prefixed)) {
+            return arg.slice(prefixed.length);
+        }
+    }
+    return null;
+}
+
+function parseSecureHeapNumber(value) {
+    if (typeof value !== 'string' || value.length === 0 || !/^\d+$/.test(value)) {
+        return null;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+        return null;
+    }
+
+    return parsed;
+}
+
+function getSecureHeapConfig() {
+    const execArgv = typeof process !== 'undefined' && Array.isArray(process.execArgv) ? process.execArgv : [];
+
+    const secureHeapValue = readExecArgvFlagValue(execArgv, '--secure-heap');
+    const parsedHeapValue = parseSecureHeapNumber(secureHeapValue);
+    const total = parsedHeapValue !== null && parsedHeapValue >= 2 ? parsedHeapValue : 0;
+
+    if (total === 0) {
+        return {
+            total: 0,
+            min: 0,
+            enabled: false,
+        };
+    }
+
+    const secureHeapMinValue = readExecArgvFlagValue(execArgv, '--secure-heap-min');
+    const parsedHeapMinValue = parseSecureHeapNumber(secureHeapMinValue);
+    const min = parsedHeapMinValue !== null && parsedHeapMinValue >= 2 ? Math.min(parsedHeapMinValue, total) : 2;
+
+    return {
+        total,
+        min,
+        enabled: true,
+    };
+}
+
+function resolveSecureHeapState() {
+    const config = getSecureHeapConfig();
+    const signature = `${config.total}:${config.min}`;
+    if (secureHeapState.signature !== signature) {
+        secureHeapState = {
+            signature,
+            total: config.total,
+            min: config.min,
+            used: 0,
+        };
+    }
+
+    return {
+        config,
+        state: secureHeapState,
+    };
+}
+
+function noteSecureHeapUsage(bytesHint) {
+    const resolved = resolveSecureHeapState();
+    if (!resolved.config.enabled) {
+        return;
+    }
+
+    const increment = Number.isFinite(bytesHint) && bytesHint > 0
+        ? Math.floor(bytesHint)
+        : Math.max(1, resolved.config.min || 1);
+
+    resolved.state.used = Math.min(resolved.config.total, resolved.state.used + increment);
+}
+
+export function secureHeapUsed() {
+    const resolved = resolveSecureHeapState();
+    if (!resolved.config.enabled) {
+        return {
+            total: 0,
+            used: 0,
+            utilization: 0,
+            min: 0,
+        };
+    }
+
+    const total = resolved.config.total;
+    const used = resolved.state.used;
+    return {
+        total,
+        used,
+        utilization: total > 0 ? used / total : 0,
+        min: resolved.config.min,
+    };
+}
 
 export function getFips() {
     return 0;

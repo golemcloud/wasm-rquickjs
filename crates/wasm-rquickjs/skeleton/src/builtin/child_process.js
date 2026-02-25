@@ -175,6 +175,71 @@ function hasFipsStartupFlag(execArgv) {
     return false;
 }
 
+function readExecArgValue(execArgv, flag) {
+    var prefixed = flag + '=';
+    for (var i = 0; i < execArgv.length; i++) {
+        var arg = String(execArgv[i]);
+        if (arg === flag) {
+            if (i + 1 >= execArgv.length) {
+                return '';
+            }
+            i += 1;
+            return String(execArgv[i]);
+        }
+        if (arg.indexOf(prefixed) === 0) {
+            return arg.slice(prefixed.length);
+        }
+    }
+    return null;
+}
+
+function parsePositiveIntegerFlagValue(value) {
+    if (typeof value !== 'string' || value.length === 0 || !/^\d+$/.test(value)) {
+        return null;
+    }
+
+    var parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+        return null;
+    }
+
+    return parsed;
+}
+
+function isPowerOfTwo(value) {
+    if (!Number.isInteger(value) || value < 2) {
+        return false;
+    }
+
+    while ((value % 2) === 0) {
+        value /= 2;
+    }
+
+    return value === 1;
+}
+
+function validateSecureHeapFlags(execArgv) {
+    var errors = [];
+
+    var secureHeapValue = readExecArgValue(execArgv, '--secure-heap');
+    if (secureHeapValue !== null) {
+        var parsedHeapValue = parsePositiveIntegerFlagValue(secureHeapValue);
+        if (parsedHeapValue === null || (parsedHeapValue >= 2 && !isPowerOfTwo(parsedHeapValue))) {
+            errors.push('--secure-heap must be a power of 2');
+        }
+    }
+
+    var secureHeapMinValue = readExecArgValue(execArgv, '--secure-heap-min');
+    if (secureHeapMinValue !== null) {
+        var parsedHeapMinValue = parsePositiveIntegerFlagValue(secureHeapMinValue);
+        if (parsedHeapMinValue === null || parsedHeapMinValue < 2 || !isPowerOfTwo(parsedHeapMinValue)) {
+            errors.push('--secure-heap-min must be a power of 2');
+        }
+    }
+
+    return errors;
+}
+
 function parseJsStringLiteral(literal) {
     if (!literal || literal.length < 2) {
         return null;
@@ -397,6 +462,13 @@ function runInline(command, args, options) {
             throw new Error(FIPS_STARTUP_ERROR);
         }
 
+        var secureHeapErrors = validateSecureHeapFlags(execArgv);
+        if (secureHeapErrors.length > 0) {
+            status = 9;
+            capturedStderr += secureHeapErrors.join('\n') + '\n';
+            return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
+        }
+
         if (options && options.env) {
             replaceEnv(process.env, options.env);
         }
@@ -476,11 +548,11 @@ function runInline(command, args, options) {
                 });
             }
         } else {
-            var scriptPath = childArgs[0];
+            var scriptPath = invocationArgs[0];
             if (!path.isAbsolute(scriptPath)) {
                 scriptPath = path.resolve(childCwd, scriptPath);
             }
-            var scriptArgs = childArgs.slice(1);
+            var scriptArgs = invocationArgs.slice(1);
 
             process.argv = [String(command), scriptPath].concat(scriptArgs);
 
@@ -792,6 +864,70 @@ export class ChildProcess {
     }
 }
 
+function createForkReadable() {
+    var readable = new EventEmitter();
+    readable._encoding = null;
+    readable.setEncoding = function setEncoding(encoding) {
+        readable._encoding = String(encoding);
+    };
+    readable._emitData = function emitData(chunk) {
+        if (chunk === undefined || chunk === null) {
+            return;
+        }
+
+        var data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        if (data.length === 0) {
+            return;
+        }
+
+        if (readable._encoding && readable._encoding !== 'buffer') {
+            readable.emit('data', data.toString(readable._encoding));
+            return;
+        }
+
+        readable.emit('data', data);
+    };
+
+    return readable;
+}
+
+function normalizeForkArgs(args, options) {
+    var normalizedArgs = [];
+    var normalizedOptions = {};
+
+    if (Array.isArray(args)) {
+        normalizedArgs = args.map(function(value) {
+            return String(value);
+        });
+        if (options && typeof options === 'object') {
+            normalizedOptions = options;
+        }
+    } else if (args && typeof args === 'object') {
+        normalizedOptions = args;
+    } else if (args !== undefined) {
+        throw createNotSupportedError('fork(modulePath, args)');
+    }
+
+    return {
+        args: normalizedArgs,
+        options: normalizedOptions,
+    };
+}
+
+function getForkExecArgv(options) {
+    if (options && Array.isArray(options.execArgv)) {
+        return options.execArgv.map(function(value) {
+            return String(value);
+        });
+    }
+
+    if (Array.isArray(process.execArgv)) {
+        return process.execArgv.slice();
+    }
+
+    return [];
+}
+
 // Asynchronous process creation functions
 export function exec(command, options, callback) {
     var normalized = normalizeExecParams(options, callback);
@@ -822,7 +958,63 @@ export function execFile(file, args, options, callback) {
 }
 
 export function fork(modulePath, args, options) {
-    throw createNotSupportedError('fork');
+    var normalized = normalizeForkArgs(args, options);
+    var child = new EventEmitter();
+    child.pid = 1;
+    child.connected = false;
+    child.killed = false;
+    child.exitCode = null;
+    child.signalCode = null;
+    child.stdout = createForkReadable();
+    child.stderr = createForkReadable();
+    child.kill = function kill() {
+        child.killed = true;
+        return false;
+    };
+    child.disconnect = function disconnect() {
+        child.connected = false;
+    };
+    child.send = function send() {
+        throw createNotSupportedError('child.send');
+    };
+
+    setTimeout(function runForkInWasm() {
+        var modulePathStr = String(modulePath);
+        var childCommand = process.execPath;
+        if (normalized.options && typeof normalized.options.execPath === 'string') {
+            childCommand = normalized.options.execPath;
+        }
+
+        var spawnArgs = getForkExecArgv(normalized.options);
+        spawnArgs.push(modulePathStr);
+        for (var i = 0; i < normalized.args.length; i++) {
+            spawnArgs.push(normalized.args[i]);
+        }
+
+        var spawnOptions = {
+            encoding: 'buffer',
+        };
+        if (normalized.options && typeof normalized.options.cwd === 'string') {
+            spawnOptions.cwd = normalized.options.cwd;
+        }
+        if (normalized.options && normalized.options.env) {
+            spawnOptions.env = normalized.options.env;
+        }
+
+        var result = spawnSync(childCommand, spawnArgs, spawnOptions);
+        var exitCode = typeof result.status === 'number' ? result.status : 1;
+        child.exitCode = exitCode;
+        child.signalCode = result.signal || null;
+
+        child.stdout._emitData(result.stdout);
+        child.stderr._emitData(result.stderr);
+        child.stdout.emit('end');
+        child.stderr.emit('end');
+        child.emit('exit', exitCode, child.signalCode);
+        child.emit('close', exitCode, child.signalCode);
+    }, 0);
+
+    return child;
 }
 
 export function spawn(command, args, options) {

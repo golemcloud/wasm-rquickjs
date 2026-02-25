@@ -484,6 +484,7 @@ Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createSe
 - `getCurves`
 - `getFips`
 - `setFips`
+- `secureHeapUsed` (reports secure-heap usage when `--secure-heap` / `--secure-heap-min` are set)
 - `randomBytes`
 - `pseudoRandomBytes` (alias of `randomBytes`)
 - `prng` (alias of `randomBytes`)

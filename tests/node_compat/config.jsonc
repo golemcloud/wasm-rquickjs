@@ -2013,7 +2013,7 @@
     },
     "parallel/test-crypto-secure-heap.js": {
       "skip": true,
-      "reason": "requires --secure-heap flag and OpenSSL secure heap support"
+      "reason": "amp fix attempt failed verification"
     },
     "parallel/test-crypto-sign-verify.js": {
       "skip": true,
