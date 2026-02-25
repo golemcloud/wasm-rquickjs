@@ -5445,6 +5445,9 @@ export function createPrivateKey(key) {
             const normalizedPassphrase = normalizeAsymmetricPassphraseForEncoding(key.passphrase, key.encoding);
             return createPrivateKeyFromData(normalizedKeyData, format, normalizedPassphrase, key.type);
         }
+        if (!ArrayBuffer.isView(key) && !isAnyArrayBuffer(key)) {
+            throw new ERR_INVALID_ARG_TYPE('key', ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView', 'object'], key);
+        }
         return createPrivateKeyFromData(key, 'pem');
     }
     const err = new TypeError('Invalid key argument');
@@ -5545,6 +5548,9 @@ export function createPublicKey(key) {
             const normalizedKeyData = normalizeAsymmetricKeyDataForEncoding(key.key, format, key.encoding);
             const normalizedPassphrase = normalizeAsymmetricPassphraseForEncoding(key.passphrase, key.encoding);
             return createPublicKeyFromData(normalizedKeyData, format, normalizedPassphrase);
+        }
+        if (!ArrayBuffer.isView(key) && !isAnyArrayBuffer(key)) {
+            throw new ERR_INVALID_ARG_TYPE('key', ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView', 'object'], key);
         }
         return createPublicKeyFromData(key, 'pem');
     }
@@ -6597,6 +6603,17 @@ function Sign(algorithm, options) {
     this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
 }
 
+function getSignVerifyIntOption(optionName, options) {
+    const value = options[optionName];
+    if (value !== undefined) {
+        if (value === (value >> 0)) {
+            return value;
+        }
+        throw new ERR_INVALID_ARG_VALUE(`options.${optionName}`, value);
+    }
+    return undefined;
+}
+
 Sign.prototype.update = function(data, inputEncoding) {
     if (this._handle !== null) {
         const bytes = toBytes(data, inputEncoding);
@@ -6614,8 +6631,9 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
     if (privateKey instanceof KeyObject) {
         keyObj = privateKey;
     } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
+        getSignVerifyIntOption('padding', privateKey);
+        saltLength = getSignVerifyIntOption('saltLength', privateKey);
         keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey);
-        saltLength = privateKey.saltLength;
     } else {
         keyObj = createPrivateKey(privateKey);
     }
@@ -6712,6 +6730,8 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     if (publicKey instanceof KeyObject) {
         keyObj = publicKey;
     } else if (typeof publicKey === 'object' && publicKey !== null && publicKey.key !== undefined) {
+        getSignVerifyIntOption('padding', publicKey);
+        getSignVerifyIntOption('saltLength', publicKey);
         if (publicKey.key instanceof KeyObject) {
             keyObj = publicKey.key;
         } else if (publicKey.passphrase !== undefined) {
@@ -6781,8 +6801,9 @@ export function createVerify(algorithm) {
 
 export function sign(algorithm, data, key, callback) {
     const algo = algorithm ? algorithm.toLowerCase() : null;
+    const normalizedData = toBytes(data);
     const s = new Sign(algo);
-    s.update(data);
+    s.update(normalizedData);
     const result = s.sign(key);
     if (callback) {
         queueMicrotask(() => callback(null, result));
@@ -6793,8 +6814,16 @@ export function sign(algorithm, data, key, callback) {
 
 export function verify(algorithm, data, key, signature, callback) {
     const algo = algorithm ? algorithm.toLowerCase() : null;
+    const normalizedData = toBytes(data);
     const v = new Verify(algo);
-    v.update(data);
+    v.update(normalizedData);
+
+    // Match Node.js one-shot verify() validation order: signature type is
+    // validated before key parsing.
+    if (!ArrayBuffer.isView(signature)) {
+        throw new ERR_INVALID_ARG_TYPE('signature', ['Buffer', 'TypedArray', 'DataView'], signature);
+    }
+
     const result = v.verify(key, signature);
     if (callback) {
         queueMicrotask(() => callback(null, result));
