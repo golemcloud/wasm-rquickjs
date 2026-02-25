@@ -1598,6 +1598,26 @@ function createDataNotMultipleOfBlockLengthError() {
     );
 }
 
+function createPrivateKeyParseError() {
+    const err = new Error('Failed to parse private key');
+    err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
+    // Node decorates key-parse errors with OpenSSL metadata; assigning this
+    // property must also respect user-defined prototype setters.
+    err.library = 'PEM routines';
+    return err;
+}
+
+function createRsaIllegalOrUnsupportedPaddingModeError() {
+    const err = new Error('error:06099079:digital envelope routines:EVP_PKEY_CTX_ctrl:illegal or unsupported padding mode');
+    err.code = 'ERR_OSSL_RSA_ILLEGAL_OR_UNSUPPORTED_PADDING_MODE';
+    // Populate legacy stack details to match Node's OpenSSL 1.x surface.
+    err.opensslErrorStack = [
+        'error:06089093:digital envelope routines:EVP_PKEY_CTX_ctrl:command not supported',
+    ];
+    err.reason = 'illegal or unsupported padding mode';
+    return err;
+}
+
 function validateCipherKeyLength(algorithm, keyBytes) {
     const info = getCipherValidationInfo(algorithm);
     if (info && info.keyLength !== undefined && keyBytes.length !== info.keyLength) {
@@ -5103,9 +5123,7 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             return dsaKey;
         }
 
-        const err = new Error('Failed to parse private key');
-        err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-        throw err;
+        throw createPrivateKeyParseError();
     }
 
     if (format === 'der') {
@@ -5142,9 +5160,7 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 }
                 return dhKey;
             }
-            const err = new Error('Failed to parse private key');
-            err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
-            throw err;
+            throw createPrivateKeyParseError();
         }
         const key = new KeyObject(handle, 'private');
         if (cacheKey !== null) {
@@ -6601,7 +6617,11 @@ function Sign(algorithm, options) {
     this._keySet = false;
     this._handle = null;
     this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
+    Transform.call(this, options);
 }
+
+Object.setPrototypeOf(Sign.prototype, Transform.prototype);
+Object.setPrototypeOf(Sign, Transform);
 
 function getSignVerifyIntOption(optionName, options) {
     const value = options[optionName];
@@ -6625,17 +6645,24 @@ Sign.prototype.update = function(data, inputEncoding) {
     return this;
 };
 
+Sign.prototype._transform = Hash.prototype._transform;
+
 Sign.prototype.sign = function(privateKey, outputEncoding) {
     let keyObj;
+    let padding;
     let saltLength;
     if (privateKey instanceof KeyObject) {
         keyObj = privateKey;
     } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
-        getSignVerifyIntOption('padding', privateKey);
+        padding = getSignVerifyIntOption('padding', privateKey);
         saltLength = getSignVerifyIntOption('saltLength', privateKey);
         keyObj = privateKey.key instanceof KeyObject ? privateKey.key : createPrivateKey(privateKey);
     } else {
         keyObj = createPrivateKey(privateKey);
+    }
+
+    if (padding === constants.RSA_PKCS1_OAEP_PADDING) {
+        throw createRsaIllegalOrUnsupportedPaddingModeError();
     }
 
     if (keyObj && (keyObj._handle === null || keyObj._handle === undefined)) {
@@ -6712,7 +6739,11 @@ function Verify(algorithm, options) {
     this._algorithm = algorithm ? algorithm.toLowerCase() : null;
     this._handle = null;
     this._algorithmNormalized = this._algorithm ? normalizeHashForSign(this._algorithm) : null;
+    Transform.call(this, options);
 }
+
+Object.setPrototypeOf(Verify.prototype, Transform.prototype);
+Object.setPrototypeOf(Verify, Transform);
 
 Verify.prototype.update = function(data, inputEncoding) {
     if (this._handle !== null) {
@@ -6724,6 +6755,8 @@ Verify.prototype.update = function(data, inputEncoding) {
     }
     return this;
 };
+
+Verify.prototype._transform = Hash.prototype._transform;
 
 Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     let keyObj;
