@@ -760,10 +760,7 @@
       }
     },
     "parallel/test-fs-read-empty-buffer.js": {},
-    "parallel/test-fs-read-file-assert-encoding.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-read-file-assert-encoding.js": {},
     "parallel/test-fs-read-file-sync-hostname.js": {
       "skip": true,
       "reason": "requires /proc/sys/kernel/hostname (Linux-specific)"
