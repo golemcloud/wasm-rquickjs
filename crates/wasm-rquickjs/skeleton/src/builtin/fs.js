@@ -267,6 +267,17 @@ function validateBuffer(buffer, name) {
     }
 }
 
+function formatEmptyBufferValue(buffer) {
+    const ctorName = buffer && buffer.constructor && buffer.constructor.name ? buffer.constructor.name : 'Uint8Array';
+    return `${ctorName}(0) []`;
+}
+
+function throwEmptyReadBufferError(buffer) {
+    const err = new TypeError(`The argument 'buffer' is empty and cannot be written. Received ${formatEmptyBufferValue(buffer)}`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+}
+
 function validateCallback(cb) {
     if (typeof cb !== 'function') {
         throw new ERR_INVALID_ARG_TYPE('callback', 'function', cb);
@@ -984,6 +995,14 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
 
     validateBuffer(buffer, 'buffer');
 
+    if (length === 0) {
+        return 0;
+    }
+
+    if (buffer.byteLength === 0) {
+        throwEmptyReadBufferError(buffer);
+    }
+
     const result = native.fs_read(fd, length, position);
     if (result.error) {
         throw createSystemError(result.error);
@@ -1688,6 +1707,19 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
         rangeErr.code = 'ERR_OUT_OF_RANGE';
         throw rangeErr;
     }
+
+    if (length === 0) {
+        validateCallback(cb);
+        queueMicrotask(() => {
+            cb(null, 0, buffer);
+        });
+        return;
+    }
+
+    if (buffer.byteLength === 0) {
+        throwEmptyReadBufferError(buffer);
+    }
+
     validateCallback(cb);
     queueMicrotask(() => {
         try {

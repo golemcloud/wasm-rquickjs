@@ -79,6 +79,17 @@ function describeType(value) {
     return 'type ' + typeof value + ' (' + String(value) + ')';
 }
 
+function formatEmptyBufferValue(buffer) {
+    const ctorName = buffer && buffer.constructor && buffer.constructor.name ? buffer.constructor.name : 'Uint8Array';
+    return `${ctorName}(0) []`;
+}
+
+function throwEmptyReadBufferError(buffer) {
+    const err = new TypeError(`The argument 'buffer' is empty and cannot be written. Received ${formatEmptyBufferValue(buffer)}`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+}
+
 function flagsToNumber(flags) {
     if (typeof flags === 'number') {
         validateInteger(flags, 'flags', -2147483648, 2147483647);
@@ -481,6 +492,14 @@ export class FileHandle {
                 length = length !== undefined && length !== null ? length : buffer.byteLength - offset;
                 position = position !== undefined ? position : null;
             }
+        }
+
+        if (length === 0) {
+            return { bytesRead: 0, buffer };
+        }
+
+        if (buffer.byteLength === 0) {
+            throwEmptyReadBufferError(buffer);
         }
 
         const result = native.fs_read(this._fd, length, position);
