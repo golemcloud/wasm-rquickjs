@@ -737,10 +737,7 @@
     "parallel/test-fs-promises-file-handle-write.js": {},
     "parallel/test-fs-promises-file-handle-writeFile.js": {},
     "parallel/test-fs-promises-readfile-empty.js": {},
-    "parallel/test-fs-promises-readfile-with-fd.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-promises-readfile-with-fd.js": {},
     "parallel/test-fs-promises-readfile.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
