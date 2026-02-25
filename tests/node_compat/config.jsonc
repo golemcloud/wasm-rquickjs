@@ -761,10 +761,7 @@
     },
     "parallel/test-fs-read-empty-buffer.js": {},
     "parallel/test-fs-read-file-assert-encoding.js": {},
-    "parallel/test-fs-read-file-sync-hostname.js": {
-      "skip": true,
-      "reason": "requires /proc/sys/kernel/hostname (Linux-specific)"
-    },
+    "parallel/test-fs-read-file-sync-hostname.js": {},
     "parallel/test-fs-read-file-sync.js": {
       "skip": true,
       "reason": "requires fixtures module"
