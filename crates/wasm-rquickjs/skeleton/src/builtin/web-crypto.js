@@ -284,7 +284,7 @@ function toBytes(data, inputEncoding) {
         return data;
     } else if (ArrayBuffer.isView(data)) {
         return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-    } else if (data instanceof ArrayBuffer) {
+    } else if (isAnyArrayBuffer(data)) {
         return new Uint8Array(data);
     } else {
         const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView.');
@@ -712,16 +712,72 @@ export function timingSafeEqual(a, b) {
     return result;
 }
 
-export function pbkdf2Sync(password, salt, iterations, keylen, digest) {
-    const algo = normalizeHashAlgorithm(digest);
-    const passwordBytes = toBytes(password);
-    const saltBytes = toBytes(salt);
-    const result = webCryptoNative.pbkdf2_derive(algo, passwordBytes, saltBytes, iterations, keylen);
-    if (result === null || result === undefined) {
-        const err = new Error('Invalid digest: ' + digest);
-        err.code = 'ERR_CRYPTO_INVALID_DIGEST';
-        throw err;
+const PBKDF2_MAX_INT32 = 0x7FFFFFFF;
+
+function toPbkdf2ByteSource(data, argumentName) {
+    if (typeof data === 'string' || ArrayBuffer.isView(data) || isAnyArrayBuffer(data)) {
+        return toBytes(data);
     }
+
+    throw new ERR_INVALID_ARG_TYPE(
+        argumentName,
+        ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView'],
+        data
+    );
+}
+
+function validatePbkdf2Int32(value, argumentName, min) {
+    if (typeof value !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE(argumentName, 'number', value);
+    }
+
+    if (!Number.isInteger(value)) {
+        throw new ERR_OUT_OF_RANGE(argumentName, 'an integer', value);
+    }
+
+    if (value < min || value > PBKDF2_MAX_INT32) {
+        throw new ERR_OUT_OF_RANGE(argumentName, `>= ${min} && <= ${PBKDF2_MAX_INT32}`, value);
+    }
+}
+
+function normalizePbkdf2Digest(digest) {
+    if (typeof digest !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('digest', 'string', digest);
+    }
+
+    const normalized = HASH_ALIASES[digest.toLowerCase()];
+    if (!normalized) {
+        throw new ERR_CRYPTO_INVALID_DIGEST(digest);
+    }
+
+    return normalized;
+}
+
+function getPbkdf2Params(password, salt, iterations, keylen, digest) {
+    const algorithm = normalizePbkdf2Digest(digest);
+    const passwordBytes = toPbkdf2ByteSource(password, 'password');
+    const saltBytes = toPbkdf2ByteSource(salt, 'salt');
+
+    validatePbkdf2Int32(iterations, 'iterations', 1);
+    validatePbkdf2Int32(keylen, 'keylen', 0);
+
+    return {
+        algorithm,
+        passwordBytes,
+        saltBytes,
+        iterations,
+        keylen,
+        digest,
+    };
+}
+
+function derivePbkdf2(params) {
+    const { algorithm, passwordBytes, saltBytes, iterations, keylen, digest } = params;
+    const result = webCryptoNative.pbkdf2_derive(algorithm, passwordBytes, saltBytes, iterations, keylen);
+    if (result === null || result === undefined) {
+        throw new ERR_CRYPTO_INVALID_DIGEST(digest);
+    }
+
     const buf = new Uint8Array(result);
     if (typeof Buffer !== 'undefined') {
         return Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -729,13 +785,25 @@ export function pbkdf2Sync(password, salt, iterations, keylen, digest) {
     return buf;
 }
 
+export function pbkdf2Sync(password, salt, iterations, keylen, digest) {
+    const params = getPbkdf2Params(password, salt, iterations, keylen, digest);
+    return derivePbkdf2(params);
+}
+
 export function pbkdf2(password, salt, iterations, keylen, digest, callback) {
-    try {
-        const result = pbkdf2Sync(password, salt, iterations, keylen, digest);
-        queueMicrotask(() => callback(null, result));
-    } catch (err) {
-        queueMicrotask(() => callback(err));
+    if (typeof digest === 'function') {
+        callback = digest;
+        digest = undefined;
     }
+
+    const params = getPbkdf2Params(password, salt, iterations, keylen, digest);
+
+    if (typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
+    }
+
+    const result = derivePbkdf2(params);
+    queueMicrotask(() => callback(null, result));
 }
 
 export function scryptSync(password, salt, keylen, options) {
