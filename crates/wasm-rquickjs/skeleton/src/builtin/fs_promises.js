@@ -282,6 +282,18 @@ function validatePath(path, propName) {
     throw err;
 }
 
+function validateMkdtempPrefix(prefix) {
+    if (prefix instanceof Uint8Array) {
+        if (prefix.includes(0)) {
+            const err = new TypeError(`The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received ${describeType(prefix)}`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        return;
+    }
+    validatePath(prefix, 'prefix');
+}
+
 function pathToString(path) {
     if (typeof path === 'string') return path;
     if (getBuffer() && path instanceof getBuffer()) return path.toString();
@@ -1050,8 +1062,13 @@ export async function lutimes(path, atime, mtime) {
 }
 
 export async function mkdtemp(prefix, options) {
-    const result = native.fs_mkdtemp(prefix);
+    validateMkdtempPrefix(prefix);
+    const opts = typeof options === 'string' ? { encoding: options } : (options || {});
+    const result = native.fs_mkdtemp(pathToString(prefix));
     if (result.error) throw createSystemError(result.error);
+    if (opts.encoding === 'buffer') {
+        return getBuffer().from(result.result);
+    }
     return result.result;
 }
 

@@ -3,7 +3,36 @@ use std::os::unix::fs::MetadataExt;
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+fn unix_timestamp_to_system_time(secs: f64) -> std::io::Result<SystemTime> {
+    if !secs.is_finite() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "timestamp must be a finite number",
+        ));
+    }
+
+    let duration = Duration::from_secs_f64(secs.abs());
+    if secs >= 0.0 {
+        UNIX_EPOCH.checked_add(duration).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "timestamp out of range")
+        })
+    } else {
+        UNIX_EPOCH.checked_sub(duration).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "timestamp out of range")
+        })
+    }
+}
+
+fn set_file_times(file: &std::fs::File, atime_secs: f64, mtime_secs: f64) -> std::io::Result<()> {
+    let atime = unix_timestamp_to_system_time(atime_secs)?;
+    let mtime = unix_timestamp_to_system_time(mtime_secs)?;
+    let times = std::fs::FileTimes::new()
+        .set_accessed(atime)
+        .set_modified(mtime);
+    file.set_times(times)
+}
 
 struct FdTable {
     files: HashMap<i32, std::fs::File>,
@@ -49,6 +78,10 @@ static FD_MODE_OVERRIDES: LazyLock<Mutex<HashMap<i32, u32>>> =
 
 #[cfg(not(unix))]
 static FD_PATHS: LazyLock<Mutex<HashMap<i32, String>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+#[cfg(not(unix))]
+static EMULATED_SYMLINKS: LazyLock<Mutex<HashMap<String, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(not(unix))]
@@ -139,6 +172,42 @@ fn rename_fd_path(old_path: &str, new_path: &str) {
             *path = new_path.to_string();
         }
     }
+}
+
+#[cfg(not(unix))]
+fn set_emulated_symlink(path: &str, target: &str) {
+    EMULATED_SYMLINKS
+        .lock()
+        .unwrap()
+        .insert(path.to_string(), target.to_string());
+}
+
+#[cfg(not(unix))]
+fn get_emulated_symlink_target(path: &str) -> Option<String> {
+    EMULATED_SYMLINKS.lock().unwrap().get(path).cloned()
+}
+
+#[cfg(not(unix))]
+fn remove_emulated_symlink(path: &str) {
+    EMULATED_SYMLINKS.lock().unwrap().remove(path);
+}
+
+#[cfg(not(unix))]
+fn move_emulated_symlink(old_path: &str, new_path: &str) {
+    let target = EMULATED_SYMLINKS.lock().unwrap().remove(old_path);
+    if let Some(target) = target {
+        EMULATED_SYMLINKS
+            .lock()
+            .unwrap()
+            .insert(new_path.to_string(), target);
+    }
+}
+
+#[cfg(not(unix))]
+fn apply_emulated_symlink_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>) {
+    stat_obj.set("isFile", false).unwrap();
+    stat_obj.set("isDirectory", false).unwrap();
+    stat_obj.set("isSymlink", true).unwrap();
 }
 
 fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
@@ -476,7 +545,10 @@ pub mod native_module {
         match std::fs::remove_file(Path::new(&path)) {
             Ok(_) => {
                 #[cfg(not(unix))]
-                super::remove_mode_override_for_path(&path);
+                {
+                    super::remove_mode_override_for_path(&path);
+                    super::remove_emulated_symlink(&path);
+                }
                 None
             }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "unlink", Some(&path))),
@@ -491,6 +563,7 @@ pub mod native_module {
                 {
                     super::move_mode_override_for_path(&old_path, &new_path);
                     super::rename_fd_path(&old_path, &new_path);
+                    super::move_emulated_symlink(&old_path, &new_path);
                 }
                 None
             }
@@ -830,8 +903,13 @@ pub mod native_module {
             Ok(meta) => {
                 let stat_obj = super::metadata_to_obj(&ctx, &meta);
                 #[cfg(not(unix))]
-                if let Some(mode_override) = super::get_mode_override_for_path(&path) {
-                    super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
+                {
+                    if let Some(mode_override) = super::get_mode_override_for_path(&path) {
+                        super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
+                    }
+                    if super::get_emulated_symlink_target(&path).is_some() {
+                        super::apply_emulated_symlink_to_stat_obj(&stat_obj);
+                    }
                 }
                 result
                     .set("stat", stat_obj)
@@ -952,6 +1030,26 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
+
+        #[cfg(not(unix))]
+        if let Some(target) = super::get_emulated_symlink_target(&path) {
+            match normalize_existing_path_for_realpath(Path::new(&target)) {
+                Ok(normalized) => {
+                    result.set("result", normalized).unwrap();
+                    return result;
+                }
+                Err(err) => {
+                    result
+                        .set(
+                            "error",
+                            super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
+                        )
+                        .unwrap();
+                    return result;
+                }
+            }
+        }
+
         let path_obj = Path::new(&path);
         let metadata = match std::fs::symlink_metadata(path_obj) {
             Ok(metadata) => metadata,
@@ -1077,20 +1175,36 @@ pub mod native_module {
         }
         #[cfg(not(unix))]
         {
-            let err = std::io::Error::new(std::io::ErrorKind::Unsupported, "symlink not supported");
-            Some(super::make_fs_error_with_dest(
-                &ctx,
-                &err,
-                "symlink",
-                Some(&target),
-                Some(&path),
-            ))
+            match std::fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&path)
+            {
+                Ok(_) => {
+                    super::set_emulated_symlink(&path, &target);
+                    None
+                }
+                Err(err) => Some(super::make_fs_error_with_dest(
+                    &ctx,
+                    &err,
+                    "symlink",
+                    Some(&target),
+                    Some(&path),
+                )),
+            }
         }
     }
 
     #[rquickjs::function]
     pub fn fs_readlink(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
+
+        #[cfg(not(unix))]
+        if let Some(target) = super::get_emulated_symlink_target(&path) {
+            result.set("result", target).unwrap();
+            return result;
+        }
+
         match std::fs::read_link(&path) {
             Ok(target) => {
                 result
@@ -1192,12 +1306,14 @@ pub mod native_module {
     pub fn fs_utimes(
         ctx: Ctx<'_>,
         path: String,
-        _atime_secs: f64,
-        _mtime_secs: f64,
+        atime_secs: f64,
+        mtime_secs: f64,
     ) -> Option<Object<'_>> {
-        // utimes is not well-supported on WASI; verify path exists, no-op otherwise
-        match std::fs::metadata(&path) {
-            Ok(_) => None,
+        match std::fs::OpenOptions::new().read(true).open(&path) {
+            Ok(file) => match super::set_file_times(&file, atime_secs, mtime_secs) {
+                Ok(_) => None,
+                Err(err) => Some(super::make_fs_error(&ctx, &err, "utime", Some(&path))),
+            },
             Err(err) => Some(super::make_fs_error(&ctx, &err, "utime", Some(&path))),
         }
     }
@@ -1206,12 +1322,15 @@ pub mod native_module {
     pub fn fs_futimes(
         ctx: Ctx<'_>,
         fd: i32,
-        _atime_secs: f64,
-        _mtime_secs: f64,
+        atime_secs: f64,
+        mtime_secs: f64,
     ) -> Option<Object<'_>> {
         let mut table = super::FD_TABLE.lock().unwrap();
         match table.get_mut(fd) {
-            Some(_) => None,
+            Some(file) => match super::set_file_times(file, atime_secs, mtime_secs) {
+                Ok(_) => None,
+                Err(err) => Some(super::make_fs_error(&ctx, &err, "futime", None)),
+            },
             None => Some(super::make_badf_error(&ctx, "futime")),
         }
     }
