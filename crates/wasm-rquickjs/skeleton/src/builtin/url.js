@@ -1,5 +1,6 @@
 import { URL } from '__wasm_rquickjs_builtin/url_native';
 import * as querystring from 'node:querystring';
+import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
 
 // Based on https://github.com/jerrybendy/url-search-params-polyfill
 /**!
@@ -352,6 +353,52 @@ function makeNodeError(code, Type, message) {
     return err;
 }
 
+function makeInvalidUrlError(input) {
+    const err = makeNodeError('ERR_INVALID_URL', TypeError, 'Invalid URL');
+    err.input = input;
+    return err;
+}
+
+const FORBIDDEN_HOST_CHARS = /[\0\t\n\r #%/<>?@\\^|]/;
+const FORBIDDEN_HOST_CHARS_IPV6 = /[\0\t\n\r #%/<>?@\\^|]/;
+const WARN_INVALID_HOSTNAME_KEY = '__wasm_rquickjs_url_warned_invalid_hostname';
+
+if (globalThis[WARN_INVALID_HOSTNAME_KEY] === undefined) {
+    globalThis[WARN_INVALID_HOSTNAME_KEY] = false;
+}
+
+function validateHostName(hostname, ipv6Host, input) {
+    if (!hostname) {
+        return;
+    }
+    const forbiddenCharsRe = ipv6Host ? FORBIDDEN_HOST_CHARS_IPV6 : FORBIDDEN_HOST_CHARS;
+    if (forbiddenCharsRe.test(hostname)) {
+        throw makeInvalidUrlError(input);
+    }
+}
+
+function emitInvalidUrlDeprecation(input) {
+    if (globalThis[WARN_INVALID_HOSTNAME_KEY]) {
+        return;
+    }
+    globalThis[WARN_INVALID_HOSTNAME_KEY] = true;
+
+    const warningMessage = `The URL ${input} is invalid. Future versions of Node.js will throw an error.`;
+
+    if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+        process.emitWarning(warningMessage, {
+            type: 'DeprecationWarning',
+            code: 'DEP0170',
+        });
+    }
+
+    if (typeof process !== 'undefined' &&
+        process.stderr &&
+        typeof process.stderr.write === 'function') {
+        process.stderr.write(`[DEP0170] DeprecationWarning: ${warningMessage}\n`);
+    }
+}
+
 const ENCODE_CHARS_RE = /[\x00-\x1F\x20"#%?<>{}|\\^`~\[\]\x7F]/g;
 
 function percentEncode(char) {
@@ -653,8 +700,9 @@ export function Url() {
     this.href = null;
 }
 
-function legacyParse(urlString) {
+function legacyParse(urlString, parseState) {
     const u = new Url();
+    let shouldWarnInvalidHost = false;
 
     if (typeof urlString !== 'string') {
         return u;
@@ -697,9 +745,9 @@ function legacyParse(urlString) {
         if (atIdx !== -1) {
             u.auth = decodeURIComponent(authHost.slice(0, atIdx));
             const hostPart = authHost.slice(atIdx + 1);
-            parseHostPort(u, hostPart);
+            shouldWarnInvalidHost = parseHostPort(u, hostPart, urlString) || shouldWarnInvalidHost;
         } else {
-            parseHostPort(u, authHost);
+            shouldWarnInvalidHost = parseHostPort(u, authHost, urlString) || shouldWarnInvalidHost;
         }
     } else if (u.protocol && isSlashedProtocol(u.protocol)) {
         u.slashes = true;
@@ -719,19 +767,26 @@ function legacyParse(urlString) {
     u.path = (u.pathname || '') + (u.search || '');
     u.href = formatLegacy(u);
 
+    if (parseState && shouldWarnInvalidHost) {
+        parseState.shouldWarnInvalidHost = true;
+    }
+
     return u;
 }
 
-function parseHostPort(u, hostStr) {
+function parseHostPort(u, hostStr, input) {
     if (!hostStr) {
         u.host = '';
         u.hostname = '';
-        return;
+        return false;
     }
 
+    let isIpv6Host = false;
+    let shouldWarnInvalidHost = false;
     if (hostStr.startsWith('[')) {
         const bracketEnd = hostStr.indexOf(']');
         if (bracketEnd !== -1) {
+            isIpv6Host = true;
             u.hostname = hostStr.slice(1, bracketEnd);
             const remaining = hostStr.slice(bracketEnd + 1);
             if (remaining.startsWith(':')) {
@@ -749,28 +804,31 @@ function parseHostPort(u, hostStr) {
                 u.port = maybPort;
             } else {
                 u.hostname = hostStr;
+                shouldWarnInvalidHost = true;
             }
         } else {
             u.hostname = hostStr;
         }
     }
 
+    validateHostName(u.hostname, isIpv6Host, input);
+
     u.host = u.hostname;
     if (u.port) {
         u.host += ':' + u.port;
     }
+
+    return shouldWarnInvalidHost;
 }
 
 export function parse(urlString, parseQueryString, slashesDenoteHost) {
     if (typeof urlString !== 'string') {
-        throw makeNodeError(
-            'ERR_INVALID_ARG_TYPE',
-            TypeError,
-            'The "url" argument must be of type string. Received type ' + typeof urlString
-        );
+        throw new ERR_INVALID_ARG_TYPE('url', 'string', urlString);
     }
 
-    const u = legacyParse(urlString);
+    const parseState = { shouldWarnInvalidHost: false };
+    const u = legacyParse(urlString, parseState);
+    let shouldWarnInvalidHost = parseState.shouldWarnInvalidHost;
 
     if (slashesDenoteHost && !u.protocol) {
         let rest = urlString.trim();
@@ -794,10 +852,10 @@ export function parse(urlString, parseQueryString, slashesDenoteHost) {
             rest = rest.slice(2);
             const pathStart = rest.indexOf('/');
             if (pathStart === -1) {
-                parseHostPort(u, rest);
+                shouldWarnInvalidHost = parseHostPort(u, rest, urlString) || shouldWarnInvalidHost;
                 rest = '';
             } else {
-                parseHostPort(u, rest.slice(0, pathStart));
+                shouldWarnInvalidHost = parseHostPort(u, rest.slice(0, pathStart), urlString) || shouldWarnInvalidHost;
                 rest = rest.slice(pathStart);
             }
         }
@@ -805,6 +863,10 @@ export function parse(urlString, parseQueryString, slashesDenoteHost) {
         u.pathname = rest || null;
         u.path = (u.pathname || '') + (u.search || '');
         u.href = formatLegacy(u);
+    }
+
+    if (shouldWarnInvalidHost) {
+        emitInvalidUrlDeprecation(urlString);
     }
 
     if (parseQueryString) {
@@ -912,4 +974,3 @@ export default {
     domainToASCII,
     domainToUnicode,
 };
-

@@ -267,10 +267,7 @@
         "test_01_parse_result_should_equal_new_url_url": {}
       }
     },
-    "parallel/test-url-parse-invalid-input.js": {
-      "skip": true,
-      "reason": "requires ERR_INVALID_URL error code and process.execPath/spawnPromisified"
-    },
+    "parallel/test-url-parse-invalid-input.js": {},
     "parallel/test-url-parse-query.js": {},
     "parallel/test-url-relative.js": {
       "skip": true,

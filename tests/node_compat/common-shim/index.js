@@ -127,6 +127,8 @@ function runInlineEval(command, args, options) {
     var oldEnv = copyEnv(process.env);
     var oldStdoutWrite = process.stdout && process.stdout.write;
     var oldStderrWrite = process.stderr && process.stderr.write;
+    var hadWarnedInvalidHostnameState = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_url_warned_invalid_hostname');
+    var oldWarnedInvalidHostnameState = globalThis.__wasm_rquickjs_url_warned_invalid_hostname;
 
     var stdout = '';
     var stderr = '';
@@ -158,6 +160,9 @@ function runInlineEval(command, args, options) {
                 return true;
             };
         }
+
+        // Each emulated child process needs its own warning state.
+        globalThis.__wasm_rquickjs_url_warned_invalid_hostname = false;
 
         var evalSource = parsed.evalCode;
         if (parsed.inputType === 'module') {
@@ -199,6 +204,12 @@ function runInlineEval(command, args, options) {
         }
         if (process.stderr && typeof oldStderrWrite === 'function') {
             process.stderr.write = oldStderrWrite;
+        }
+
+        if (hadWarnedInvalidHostnameState) {
+            globalThis.__wasm_rquickjs_url_warned_invalid_hostname = oldWarnedInvalidHostnameState;
+        } else {
+            delete globalThis.__wasm_rquickjs_url_warned_invalid_hostname;
         }
     }
 
@@ -259,6 +270,12 @@ function ensureExecPathFileExists() {
 }
 
 ensureExecPathFileExists();
+
+try {
+    if (typeof globalThis.url === 'undefined') {
+        globalThis.url = require('node:url');
+    }
+} catch (_) {}
 
 if (typeof globalThis.CryptoKey !== 'function') {
     if (globalThis.crypto && typeof globalThis.crypto.CryptoKey === 'function') {
