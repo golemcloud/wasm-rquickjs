@@ -2011,10 +2011,7 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-crypto-secure-heap.js": {
-      "skip": true,
-      "reason": "amp fix attempt failed verification"
-    },
+    "parallel/test-crypto-secure-heap.js": {},
     "parallel/test-crypto-sign-verify.js": {
       "skip": true,
       "reason": "requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option",
