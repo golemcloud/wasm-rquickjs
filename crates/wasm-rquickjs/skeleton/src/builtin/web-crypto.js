@@ -655,11 +655,51 @@ function toRandomFillTarget(buffer) {
     throw new ERR_INVALID_ARG_TYPE('buf', ['ArrayBuffer', 'SharedArrayBuffer', 'Buffer', 'TypedArray', 'DataView'], buffer);
 }
 
-export function randomFillSync(buffer, offset, size) {
-    const target = toRandomFillTarget(buffer);
+function assertRandomFillOffset(offset, elementSize, byteLength) {
+    if (typeof offset !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('offset', 'number', offset);
+    }
 
-    if (offset === undefined) offset = 0;
-    if (size === undefined) size = target.byteLength - offset;
+    const byteOffset = offset * elementSize;
+    const maxLength = Math.min(byteLength, RANDOM_BYTES_MAX_LENGTH);
+    if (Number.isNaN(byteOffset) || byteOffset > maxLength || byteOffset < 0) {
+        throw new ERR_OUT_OF_RANGE('offset', `>= 0 && <= ${maxLength}`, byteOffset);
+    }
+
+    return byteOffset >>> 0;
+}
+
+function assertRandomFillSize(size, elementSize, offset, byteLength) {
+    if (typeof size !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('size', 'number', size);
+    }
+
+    const byteSize = size * elementSize;
+    if (Number.isNaN(byteSize) || byteSize > RANDOM_BYTES_MAX_LENGTH || byteSize < 0) {
+        throw new ERR_OUT_OF_RANGE('size', `>= 0 && <= ${RANDOM_BYTES_MAX_LENGTH}`, byteSize);
+    }
+
+    if (byteSize + offset > byteLength) {
+        throw new ERR_OUT_OF_RANGE('size + offset', `<= ${byteLength}`, byteSize + offset);
+    }
+
+    return byteSize >>> 0;
+}
+
+export function randomFillSync(buffer, offset = 0, size) {
+    const target = toRandomFillTarget(buffer);
+    const elementSize = buffer?.BYTES_PER_ELEMENT || 1;
+
+    offset = assertRandomFillOffset(offset, elementSize, target.byteLength);
+    if (size === undefined) {
+        size = target.byteLength - offset;
+    } else {
+        size = assertRandomFillSize(size, elementSize, offset, target.byteLength);
+    }
+
+    if (size === 0) {
+        return buffer;
+    }
 
     const bytes = webCryptoNative.random_bytes(size);
 
@@ -671,22 +711,38 @@ export function randomFillSync(buffer, offset, size) {
 }
 
 export function randomFill(buffer, offset, size, callback) {
+    const target = toRandomFillTarget(buffer);
+
     if (typeof offset === 'function') {
         callback = offset;
         offset = 0;
-        const target = toRandomFillTarget(buffer);
-        size = target.byteLength;
+        // Match Node's behavior: this uses element count for typed arrays.
+        size = buffer.length;
     } else if (typeof size === 'function') {
         callback = size;
-        const target = toRandomFillTarget(buffer);
-        size = target.byteLength - offset;
-    }
-
-    if (typeof callback !== 'function') {
+        size = buffer.length - offset;
+    } else if (typeof callback !== 'function') {
         throw new ERR_INVALID_ARG_TYPE('callback', 'function', callback);
     }
 
-    randomFillSync(buffer, offset, size);
+    const elementSize = buffer?.BYTES_PER_ELEMENT || 1;
+    offset = assertRandomFillOffset(offset, elementSize, target.byteLength);
+    if (size === undefined) {
+        size = target.byteLength - offset;
+    } else {
+        size = assertRandomFillSize(size, elementSize, offset, target.byteLength);
+    }
+
+    if (size === 0) {
+        callback(null, buffer);
+        return;
+    }
+
+    const bytes = webCryptoNative.random_bytes(size);
+    for (let i = 0; i < size; i++) {
+        target[offset + i] = bytes[i];
+    }
+
     queueMicrotask(() => callback(null, buffer));
 }
 
