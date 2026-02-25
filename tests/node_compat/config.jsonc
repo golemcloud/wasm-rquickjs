@@ -769,11 +769,9 @@
     "parallel/test-fs-read-stream-autoClose.js": {},
     "parallel/test-fs-read-stream-concurrent-reads.js": {},
     "parallel/test-fs-read-stream-double-close.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
       }
     },
