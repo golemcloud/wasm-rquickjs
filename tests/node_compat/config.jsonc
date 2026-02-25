@@ -805,7 +805,7 @@
       "subtests": {
         "block_00_block_00": {},
         "block_01_block_01": {},
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
+        "block_02_block_02": {},
         "block_03_block_03": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
         "block_04_block_04": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
         "block_05_block_05": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
