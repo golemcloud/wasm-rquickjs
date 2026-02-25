@@ -1924,7 +1924,7 @@
         "block_06_test_ec_parameters": {},
         "block_07_block_07": {},
         "block_08_test_invalid_key_encoding_types": {},
-        "block_09_block_09": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" },
+        "block_09_block_09": {},
         "block_10_block_10": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" }
       }
     },

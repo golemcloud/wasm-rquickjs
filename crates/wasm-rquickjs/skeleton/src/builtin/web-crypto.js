@@ -5083,12 +5083,24 @@ function validateRsaPssKeyPairOptions(options) {
         if (typeof hashAlgorithm !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('options.hashAlgorithm', 'string', hashAlgorithm);
         }
+        const normalizedHashAlgorithm = HASH_ALIASES[hashAlgorithm.toLowerCase()];
+        if (!normalizedHashAlgorithm) {
+            throw new ERR_CRYPTO_INVALID_DIGEST(hashAlgorithm);
+        }
+        options.hashAlgorithm = normalizedHashAlgorithm;
     }
 
     if (mgf1HashAlgorithm !== undefined) {
         if (typeof mgf1HashAlgorithm !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('options.mgf1HashAlgorithm', 'string', mgf1HashAlgorithm);
         }
+        const normalizedMgf1HashAlgorithm = HASH_ALIASES[mgf1HashAlgorithm.toLowerCase()];
+        if (!normalizedMgf1HashAlgorithm) {
+            const err = new TypeError('Invalid MGF1 digest: ' + mgf1HashAlgorithm);
+            err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+            throw err;
+        }
+        options.mgf1HashAlgorithm = normalizedMgf1HashAlgorithm;
     }
 
     if (saltLength !== undefined) {
