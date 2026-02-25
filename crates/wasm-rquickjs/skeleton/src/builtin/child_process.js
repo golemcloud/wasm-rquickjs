@@ -394,7 +394,7 @@ function executeInlineSource(runtimeRequire, inlineArgs) {
             filename: bufferProbe.callSiteFilename,
         });
     } else {
-        var evaluator = new Function('Buffer', 'process', 'vm', source);
+        var evaluator = new Function('Buffer', 'process', 'vm', source + '\n//# sourceURL=[eval]\n');
         result = evaluator(Buffer, process, vmModule);
     }
 
@@ -536,7 +536,24 @@ function runInline(command, args, options) {
         }
 
         if (invocationArgs.length >= 2 && isInlineEvalOption(invocationArgs[0])) {
-            var inlineResult = executeInlineSource(runtimeRequire, invocationArgs);
+            var savedModuleContext = globalThis.__wasm_rquickjs_current_module;
+            var hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
+            var oldEvalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
+            globalThis.__wasm_rquickjs_current_module = undefined;
+            globalThis.__wasm_rquickjs_current_eval_script_name = '[eval]';
+
+            var inlineResult;
+            try {
+                inlineResult = executeInlineSource(runtimeRequire, invocationArgs);
+            } finally {
+                globalThis.__wasm_rquickjs_current_module = savedModuleContext;
+                if (hadEvalScriptName) {
+                    globalThis.__wasm_rquickjs_current_eval_script_name = oldEvalScriptName;
+                } else {
+                    delete globalThis.__wasm_rquickjs_current_eval_script_name;
+                }
+            }
+
             inlineBufferProbe = inlineResult.bufferProbe;
             process.argv = [String(command)].concat(inlineResult.evalArgv);
 

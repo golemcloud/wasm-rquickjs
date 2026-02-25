@@ -1982,6 +1982,11 @@ function _resolveCallSiteScriptName(scriptName) {
         return scriptName;
     }
 
+    var evalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
+    if (typeof evalScriptName === 'string' && evalScriptName.length > 0) {
+        return evalScriptName;
+    }
+
     var moduleContext = globalThis.__wasm_rquickjs_current_module;
     if (moduleContext && typeof moduleContext.filename === 'string' && moduleContext.filename.length > 0) {
         return moduleContext.filename;

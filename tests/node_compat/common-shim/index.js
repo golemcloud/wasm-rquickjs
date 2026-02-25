@@ -129,6 +129,8 @@ function runInlineEval(command, args, options) {
     var oldStderrWrite = process.stderr && process.stderr.write;
     var hadWarnedInvalidHostnameState = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_url_warned_invalid_hostname');
     var oldWarnedInvalidHostnameState = globalThis.__wasm_rquickjs_url_warned_invalid_hostname;
+    var hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
+    var oldEvalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
 
     var stdout = '';
     var stderr = '';
@@ -176,11 +178,17 @@ function runInlineEval(command, args, options) {
         // Clear module context to prevent source inspection from reading the wrong source
         var savedModuleContext = globalThis.__wasm_rquickjs_current_module;
         globalThis.__wasm_rquickjs_current_module = undefined;
+        globalThis.__wasm_rquickjs_current_eval_script_name = '[eval]';
         var result;
         try {
             result = evalFn(require, moduleObject, moduleObject.exports);
         } finally {
             globalThis.__wasm_rquickjs_current_module = savedModuleContext;
+            if (hadEvalScriptName) {
+                globalThis.__wasm_rquickjs_current_eval_script_name = oldEvalScriptName;
+            } else {
+                delete globalThis.__wasm_rquickjs_current_eval_script_name;
+            }
         }
 
         if (parsed.printResult && result !== undefined) {
