@@ -329,6 +329,14 @@ function validateFlush(flush) {
     }
 }
 
+function validateAbortSignal(signal, name = 'options.signal') {
+    if (signal !== undefined && (signal === null || typeof signal !== 'object' || !('aborted' in signal))) {
+        const err = new TypeError(`The "${name}" argument must be an instance of AbortSignal. Received ${describeType(signal)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+}
+
 function validateAppendFileData(data) {
     if (typeof data === 'string' || ArrayBuffer.isView(data)) {
         return;
@@ -477,6 +485,7 @@ export class FileHandle {
         if (this._closed) throw makeEBADF('read');
         const encoding = typeof options === 'string' ? options : (options && options.encoding);
         const signal = typeof options === 'object' && options ? options.signal : undefined;
+        validateAbortSignal(signal, 'options.signal');
         if (signal && signal.aborted) {
             const e = new DOMException('The operation was aborted', 'AbortError');
             e.name = 'AbortError';
@@ -674,6 +683,7 @@ export class FileHandle {
         if (this._closed) throw makeEBADF('write');
         const encoding = typeof options === 'string' ? options : (options && options.encoding) || 'utf8';
         const signal = typeof options === 'object' && options ? options.signal : undefined;
+        validateAbortSignal(signal, 'options.signal');
         const flush = typeof options === 'object' && options ? options.flush : undefined;
         if (flush !== undefined && flush !== null) validateFlush(flush);
         if (signal && signal.aborted) {
@@ -756,6 +766,9 @@ export async function readFile(path, options) {
         return path.readFile(options);
     }
 
+    const signal = typeof options === 'object' && options ? options.signal : undefined;
+    validateAbortSignal(signal, 'options.signal');
+
     const flag = typeof options === 'object' && options && options.flag !== undefined
         ? options.flag
         : 'r';
@@ -771,6 +784,7 @@ export async function writeFile(path, data, options) {
     const flush = options && typeof options === 'object' ? options.flush : undefined;
     validateFlush(flush);
     const signal = typeof options === 'object' && options ? options.signal : undefined;
+    validateAbortSignal(signal, 'options.signal');
     if (signal && signal.aborted) {
         const e = new DOMException('The operation was aborted', 'AbortError');
         e.name = 'AbortError';

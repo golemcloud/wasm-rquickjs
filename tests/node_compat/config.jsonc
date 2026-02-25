@@ -738,10 +738,7 @@
     "parallel/test-fs-promises-file-handle-writeFile.js": {},
     "parallel/test-fs-promises-readfile-empty.js": {},
     "parallel/test-fs-promises-readfile-with-fd.js": {},
-    "parallel/test-fs-promises-readfile.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules not available in WASM"
-    },
+    "parallel/test-fs-promises-readfile.js": {},
     "parallel/test-fs-promises-watch.js": { "skip": true, "reason": "fs.promises.watch is not supported in WASI" },
     "parallel/test-fs-promises-write-optional-params.js": {
       "skip": true,
