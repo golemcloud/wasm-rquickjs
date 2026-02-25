@@ -5,6 +5,7 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/errors")
         .with_module("__wasm_rquickjs_builtin/internal/fs/utils")
         .with_module("__wasm_rquickjs_builtin/internal/normalize_encoding")
+        .with_module("__wasm_rquickjs_builtin/internal/url")
         .with_module("__wasm_rquickjs_builtin/internal/util")
         .with_module("__wasm_rquickjs_builtin/internal/validators")
         .with_module("__wasm_rquickjs_builtin/internal/streams/add-abort-signal")
@@ -44,6 +45,10 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/normalize_encoding",
             include_str!("normalize_encoding.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/url",
+            include_str!("url.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/util",

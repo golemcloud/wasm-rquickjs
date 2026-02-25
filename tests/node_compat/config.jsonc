@@ -9340,7 +9340,7 @@
     "parallel/test-unhandled-exception-rethrow-error.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-unhandled-exception-with-worker-inuse.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-unicode-node-options.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-url-is-url-internal.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-url-is-url-internal.js": {},
     "parallel/test-url-revokeobjecturl.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-uv-binding-constant.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-uv-errmap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },

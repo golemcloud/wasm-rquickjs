@@ -394,6 +394,9 @@ Implemented by https://github.com/ungap/structured-clone
 - `toNamespacedPath`
 - `posix`
 
+### `internal/url`
+- `isURL`
+
 ### `node:process`
 - `argv`
 - `argv0`
