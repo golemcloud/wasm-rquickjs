@@ -1973,7 +1973,7 @@
         "block_14_block_14": {},
         "block_15_block_15": {},
         "block_16_block_16": {},
-        "block_17_block_17": { "skip": true, "reason": "inherited: requires crypto.pseudoRandomBytes, buffer.kMaxLength, and specific error message formats" },
+        "block_17_block_17": {},
         "block_18_block_18": { "skip": true, "reason": "inherited: requires crypto.pseudoRandomBytes, buffer.kMaxLength, and specific error message formats" },
         "block_19_block_19": { "skip": true, "reason": "inherited: requires crypto.pseudoRandomBytes, buffer.kMaxLength, and specific error message formats" },
         "block_20_block_20": { "skip": true, "reason": "inherited: requires crypto.pseudoRandomBytes, buffer.kMaxLength, and specific error message formats" },
