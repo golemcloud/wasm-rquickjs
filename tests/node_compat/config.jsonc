@@ -1936,11 +1936,9 @@
     "parallel/test-crypto-padding.js": {},
     "parallel/test-crypto-pbkdf2.js": {},
     "parallel/test-crypto-prime.js": {
-      "skip": true,
-      "reason": "requires crypto.generatePrime and worker_threads",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires crypto.generatePrime and worker_threads" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: requires crypto.generatePrime and worker_threads" },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires crypto.generatePrime and worker_threads" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires crypto.generatePrime and worker_threads" },

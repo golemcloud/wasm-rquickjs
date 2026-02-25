@@ -496,6 +496,10 @@ Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createSe
 - `scryptSync`
 - `hkdf`
 - `hkdfSync`
+- `generatePrime`
+- `generatePrimeSync`
+- `checkPrime`
+- `checkPrimeSync`
 
 ### `node:dgram`
 
