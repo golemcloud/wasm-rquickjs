@@ -28,6 +28,6 @@ cd "${REPO_ROOT}"
 rm -rf tmp/node-compat-runner tmp/rt-target
 
 echo "==> Running node_compat_report test (this takes ~10 minutes)..."
-cargo test --test node_compat_report -- --nocapture
+cargo test --release --test node_compat_report -- --nocapture
 
 echo "==> Report written to tests/node_compat/report.md"
