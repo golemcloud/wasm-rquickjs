@@ -787,7 +787,7 @@
         "block_01_block_01": {},
         "block_02_block_02": {},
         "block_03_block_03": {},
-        "block_04_https_github_com_joyent_node_issues_2320": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
+        "block_04_https_github_com_joyent_node_issues_2320": {},
         "block_05_block_05": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
         "block_06_block_06": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
         "block_07_pause_and_then_resume_immediately": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
