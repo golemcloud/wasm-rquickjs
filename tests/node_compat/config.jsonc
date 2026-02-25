@@ -318,7 +318,7 @@
         "block_05_block_05": {},
         "block_06_scriptid_is_a_string": {},
         "block_07_guarantee_eval_will_appear_on_stacktraces_when_using_e": {},
-        "block_08_guarantee_the_stacktrace_0_is_the_filename": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
+        "block_08_guarantee_the_stacktrace_0_is_the_filename": {},
         "block_09_error_stacktracelimit_should_not_influence_callsite_size": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
         "block_10_block_10": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
         "block_11_block_11": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
