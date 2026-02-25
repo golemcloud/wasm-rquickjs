@@ -2016,7 +2016,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
+        "block_01_block_01": {},
         "block_02_test_handling_of_exceptional_conditions": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_03_test_signing_and_verifying": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_04_block_04": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
