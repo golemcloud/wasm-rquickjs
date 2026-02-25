@@ -380,6 +380,27 @@ const _METHODS_TO_BIND = [
     'table', 'time', 'timeLog', 'timeEnd',
 ];
 
+function makeMethodNonConstructible(fn, name) {
+    if (typeof fn !== 'function') {
+        return fn;
+    }
+
+    const wrapped = new Proxy(fn, {
+        construct() {
+            throw new TypeError(`${name} is not a constructor`);
+        },
+    });
+
+    // QuickJS may infer empty names for assigned function expressions.
+    // Set the exact method name so tests observe Node-compatible names.
+    Object.defineProperty(wrapped, 'name', {
+        value: name,
+        configurable: true,
+    });
+
+    return wrapped;
+}
+
 export function Console(stdout, stderr, ignoreErrors) {
     if (!new.target) {
         return new Console(stdout, stderr, ignoreErrors);
@@ -466,7 +487,7 @@ export function Console(stdout, stderr, ignoreErrors) {
     for (let i = 0; i < _METHODS_TO_BIND.length; i++) {
         const name = _METHODS_TO_BIND[i];
         const fn = typeof proto[name] === 'function' ? proto[name] : Console.prototype[name];
-        this[name] = fn.bind(this);
+        this[name] = makeMethodNonConstructible(fn.bind(this), name);
     }
 }
 

@@ -99,12 +99,32 @@ pub const REEXPORT_JS: &str =
 // JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_console from '__wasm_rquickjs_builtin/console';
+
+        const __wrap_console_method = (fn, name) => {
+            if (name === 'Console' || typeof fn !== 'function') {
+                return fn;
+            }
+
+            const wrapped = new Proxy(fn, {
+                construct() {
+                    throw new TypeError(`${name} is not a constructor`);
+                }
+            });
+
+            Object.defineProperty(wrapped, 'name', {
+                value: name,
+                configurable: true
+            });
+
+            return wrapped;
+        };
+
         const __console_obj = {};
         const __console_keys = Object.keys(__wasm_rquickjs_console);
         for (let i = 0; i < __console_keys.length; i++) {
             const k = __console_keys[i];
             if (k !== 'default') {
-                __console_obj[k] = __wasm_rquickjs_console[k];
+                __console_obj[k] = __wrap_console_method(__wasm_rquickjs_console[k], k);
             }
         }
         Object.defineProperty(__console_obj, '_stdout', {
