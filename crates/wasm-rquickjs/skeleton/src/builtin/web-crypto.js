@@ -523,22 +523,40 @@ export function createHmac(algorithm, key, options) {
     return new Hmac(algorithm, key, options);
 }
 
+function normalizeHashOutputEncoding(options) {
+    let outputEncoding = 'hex';
+    if (typeof options === 'string') {
+        outputEncoding = options;
+    } else if (options !== undefined) {
+        throw new ERR_INVALID_ARG_TYPE('outputEncoding', 'string', options);
+    }
+
+    if (outputEncoding !== 'hex') {
+        if (typeof outputEncoding !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('outputEncoding', 'string', outputEncoding);
+        }
+
+        const normalized = normalizeEncoding(outputEncoding);
+        if (normalized === undefined) {
+            if (outputEncoding.toLowerCase() === 'buffer') {
+                return 'buffer';
+            }
+            throw new ERR_INVALID_ARG_VALUE('outputEncoding', outputEncoding);
+        }
+
+        outputEncoding = normalized;
+    }
+
+    return outputEncoding;
+}
+
 export function hash(algorithm, data, outputEncoding) {
     const algo = normalizeHashAlgorithm(algorithm);
     const bytes = toBytes(data);
     const hashBytes = webCryptoNative.hash_one_shot(algo, bytes);
     const result = new Uint8Array(hashBytes);
 
-    let encoding;
-    if (typeof outputEncoding === 'string') {
-        encoding = outputEncoding;
-    } else if (outputEncoding && typeof outputEncoding === 'object') {
-        encoding = outputEncoding.outputEncoding || 'hex';
-    } else {
-        encoding = 'hex';
-    }
-
-    return encodeOutput(result, encoding);
+    return encodeOutput(result, normalizeHashOutputEncoding(outputEncoding));
 }
 
 export function getRandomValues(typedArray) {

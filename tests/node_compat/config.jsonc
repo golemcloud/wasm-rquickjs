@@ -1930,10 +1930,7 @@
     },
     "parallel/test-crypto-lazy-transform-writable.js": {},
     "parallel/test-crypto-no-algorithm.js": {},
-    "parallel/test-crypto-oneshot-hash.js": {
-      "skip": true,
-      "reason": "requires fixtures module for test data and specific ERR_INVALID_ARG_VALUE error handling"
-    },
+    "parallel/test-crypto-oneshot-hash.js": {},
     "parallel/test-crypto-op-during-process-exit.js": {},
     "parallel/test-crypto-padding-aes256.js": {},
     "parallel/test-crypto-padding.js": {
