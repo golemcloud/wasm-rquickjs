@@ -1977,7 +1977,7 @@
         "block_18_block_18": {},
         "block_19_block_19": {},
         "block_20_block_20": {},
-        "block_21_block_21": { "skip": true, "reason": "inherited: requires crypto.pseudoRandomBytes, buffer.kMaxLength, and specific error message formats" }
+        "block_21_block_21": {}
       }
     },
     "parallel/test-crypto-randomfillsync-regression.js": {},
