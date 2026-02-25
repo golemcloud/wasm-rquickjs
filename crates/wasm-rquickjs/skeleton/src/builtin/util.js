@@ -1950,13 +1950,15 @@ var callSiteWithoutFunctionPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
 
 function _validateGetCallSitesOptions(frameCount, options) {
     if (options === undefined) {
-        if (typeof frameCount === 'object' && frameCount !== null) {
+        if (typeof frameCount === 'object') {
             options = frameCount;
             frameCount = 10;
         } else {
             options = {};
         }
-    } else if (typeof options !== 'object' || options === null) {
+    }
+
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) {
         throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
     }
 
