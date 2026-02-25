@@ -1929,10 +1929,7 @@
       }
     },
     "parallel/test-crypto-lazy-transform-writable.js": {},
-    "parallel/test-crypto-no-algorithm.js": {
-      "skip": true,
-      "reason": "requires specific createHash(null) error handling"
-    },
+    "parallel/test-crypto-no-algorithm.js": {},
     "parallel/test-crypto-oneshot-hash.js": {
       "skip": true,
       "reason": "requires fixtures module for test data and specific ERR_INVALID_ARG_VALUE error handling"
