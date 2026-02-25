@@ -27,6 +27,7 @@ import {
     stripVTControlCharacters
 } from '__wasm_rquickjs_builtin/internal/util/inspect';
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native';
+import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
 
 import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
 
@@ -1069,16 +1070,22 @@ function callbackifyOnRejected(reason, cb) {
     // occurred", we error-wrap so the callback consumer can distinguish between
     // "the promise rejected with null" or "the promise fulfilled with undefined".
     if (!reason) {
-        var newReason = new Error('Promise was rejected with a falsy value');
+        var newReason = new Error('Promise was rejected with falsy value');
+        newReason.code = 'ERR_FALSY_VALUE_REJECTION';
         newReason.reason = reason;
         reason = newReason;
+
+        // Hide callbackify internals from stack traces to match Node behavior.
+        if (typeof Error.captureStackTrace === 'function') {
+            Error.captureStackTrace(reason, callbackifyOnRejected);
+        }
     }
     return cb(reason);
 }
 
 export function callbackify(original) {
     if (typeof original !== 'function') {
-        throw new TypeError('The "original" argument must be of type Function');
+        throw new ERR_INVALID_ARG_TYPE('original', 'function', original);
     }
 
     // We DO NOT return the promise as it gives the user a false sense that
@@ -1092,22 +1099,35 @@ export function callbackify(original) {
 
         var maybeCb = args.pop();
         if (typeof maybeCb !== 'function') {
-            throw new TypeError('The last argument must be of type Function');
+            throw new ERR_INVALID_ARG_TYPE('last argument', 'function', maybeCb);
         }
-        var self = this;
         var cb = function() {
-            return maybeCb.apply(self, arguments);
+            return maybeCb.apply(this, arguments);
         };
         // In true node style we process the callback on `nextTick` with all the
         // implications (stack, `uncaughtException`, `async_hooks`)
         original.apply(this, args)
-            .then(function(ret) { setImmediate(cb.bind(null, null, ret)) },
-                function(rej) { setImmediate(callbackifyOnRejected.bind(null, rej, cb)) });
+            .then(function(ret) {
+                process.nextTick(cb.bind(this, null, ret));
+            }.bind(this), function(rej) {
+                process.nextTick(callbackifyOnRejected.bind(null, rej, cb.bind(this)));
+            }.bind(this));
     }
 
-    Object.setPrototypeOf(callbackified, Object.getPrototypeOf(original));
-    Object.defineProperties(callbackified,
-        getOwnPropertyDescriptors(original));
+    var descriptors = getOwnPropertyDescriptors(original);
+    // It is possible to manipulate a function's `length` or `name` property.
+    // Guard those updates to match Node.js behavior.
+    if (descriptors.length && typeof descriptors.length.value === 'number') {
+        descriptors.length.value++;
+    }
+    if (descriptors.name && typeof descriptors.name.value === 'string') {
+        descriptors.name.value += 'Callbackified';
+    }
+    var propertiesValues = Object.values(descriptors);
+    for (var i = 0; i < propertiesValues.length; i++) {
+        Object.setPrototypeOf(propertiesValues[i], null);
+    }
+    Object.defineProperties(callbackified, descriptors);
     return callbackified;
 }
 
