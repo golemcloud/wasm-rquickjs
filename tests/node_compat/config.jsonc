@@ -1951,10 +1951,7 @@
       }
     },
     "parallel/test-crypto-private-decrypt-gh32240.js": {},
-    "parallel/test-crypto-psychic-signatures.js": {
-      "skip": true,
-      "reason": "requires ECDSA with raw signature verification internals"
-    },
+    "parallel/test-crypto-psychic-signatures.js": {},
     "parallel/test-crypto-publicDecrypt-fails-first-time.js": {
       "skip": true,
       "reason": "requires RSA publicDecrypt/privateDecrypt"

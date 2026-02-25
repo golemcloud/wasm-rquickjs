@@ -6546,6 +6546,20 @@ class SubtleCrypto {
 
         const name = algoName.toUpperCase();
 
+        if (format === 'spki') {
+            if (name === 'ECDSA') {
+                const keyObject = createPublicKey({
+                    key: keyData,
+                    format: 'der',
+                    type: 'spki',
+                });
+                return keyObject.toCryptoKey({
+                    name: 'ECDSA',
+                    namedCurve: algorithm && algorithm.namedCurve,
+                }, extractable, keyUsages);
+            }
+        }
+
         if (format === 'raw') {
             if (name === 'HMAC') {
                 const hashAlgo = algorithm.hash;
