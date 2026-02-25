@@ -1974,11 +1974,24 @@ function _validateGetCallSitesOptions(frameCount, options) {
     return frameCount;
 }
 
+function _resolveCallSiteScriptName(scriptName) {
+    if (scriptName !== '<input>') {
+        return scriptName;
+    }
+
+    var moduleContext = globalThis.__wasm_rquickjs_current_module;
+    if (moduleContext && typeof moduleContext.filename === 'string' && moduleContext.filename.length > 0) {
+        return moduleContext.filename;
+    }
+
+    return scriptName;
+}
+
 function _toCallSiteObject(functionName, scriptName, lineNumber, columnNumber) {
     var callSite = Object.create(null);
     callSite.functionName = functionName;
     callSite.scriptId = '';
-    callSite.scriptName = scriptName;
+    callSite.scriptName = _resolveCallSiteScriptName(scriptName);
     callSite.lineNumber = lineNumber;
     callSite.columnNumber = columnNumber;
     callSite.column = columnNumber;
@@ -2009,6 +2022,18 @@ function _parseCallSite(line) {
     return null;
 }
 
+function _isInternalUtilCallSite(scriptName) {
+    if (typeof scriptName !== 'string' || scriptName.length === 0) {
+        return false;
+    }
+
+    return scriptName === 'node:util' ||
+        scriptName === 'util' ||
+        scriptName.indexOf('__wasm_rquickjs_builtin/util.js') !== -1 ||
+        scriptName.indexOf('/builtin/util.js') !== -1 ||
+        scriptName.indexOf('\\builtin\\util.js') !== -1;
+}
+
 export function getCallSites(frameCount = 10, options) {
     frameCount = _validateGetCallSitesOptions(frameCount, options);
 
@@ -2027,14 +2052,18 @@ export function getCallSites(frameCount = 10, options) {
         }
 
         var line = lines[i];
-        if (line.indexOf('getCallSites') !== -1 || line.indexOf('getCallSite') !== -1) {
+        var parsedCallSite = _parseCallSite(line);
+        if (parsedCallSite === null) {
             continue;
         }
 
-        var parsedCallSite = _parseCallSite(line);
-        if (parsedCallSite !== null) {
-            callSites.push(parsedCallSite);
+        if (line.indexOf('getCallSites') !== -1 ||
+            line.indexOf('getCallSite') !== -1 ||
+            _isInternalUtilCallSite(parsedCallSite.scriptName)) {
+            continue;
         }
+
+        callSites.push(parsedCallSite);
     }
 
     return callSites;
