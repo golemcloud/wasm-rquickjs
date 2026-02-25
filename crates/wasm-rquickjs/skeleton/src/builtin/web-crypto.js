@@ -6700,6 +6700,45 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
         }
     }
 
+    if (padding === constants.RSA_PKCS1_PSS_PADDING && isRsaKeyObject(keyObj)) {
+        const hashAlgorithm = this._algorithmNormalized || 'sha256';
+        const hashLength = getRsaPssHashLength(hashAlgorithm);
+        const modulusSize = getRsaModulusSizeBytes(keyObj);
+        const modulusBits = getRsaModulusBits(keyObj);
+        if (hashLength === null || modulusSize === null) {
+            const err = new Error('Sign failed');
+            err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+            throw err;
+        }
+
+        const maxSaltLength = modulusSize - hashLength - 2;
+        const effectiveSaltLength = resolveRsaPssSignSaltLength(saltLength, hashLength, maxSaltLength);
+        if (effectiveSaltLength > maxSaltLength) {
+            throw createRsaDataTooLargeForKeySizeError();
+        }
+        if (effectiveSaltLength < 0) {
+            throw new ERR_INVALID_ARG_VALUE('options.saltLength', saltLength);
+        }
+
+        const dataBytes = collectPendingDataBytes(this._pendingData);
+        this._pendingData = null;
+        const digest = hashOneShotBytes(hashAlgorithm, dataBytes);
+        const encoded = rsaPssEncodeDigest(digest, hashAlgorithm, modulusSize, modulusBits, effectiveSaltLength);
+        if (!encoded) {
+            throw createRsaDataTooLargeForKeySizeError();
+        }
+
+        const result = webCryptoNative.private_encrypt(keyObj._handle, encoded, constants.RSA_NO_PADDING);
+        if (result === null || result === undefined) {
+            const err = new Error('Sign failed');
+            err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+            throw err;
+        }
+
+        const signature = result instanceof Uint8Array ? result : new Uint8Array(result);
+        return encodeOutput(signature, outputEncoding);
+    }
+
     if (this._handle === null) {
         const handle = webCryptoNative.sign_init(this._algorithmNormalized, keyObj._handle);
         if (handle === null || handle === undefined) {
@@ -6760,11 +6799,13 @@ Verify.prototype._transform = Hash.prototype._transform;
 
 Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     let keyObj;
+    let padding;
+    let saltLength;
     if (publicKey instanceof KeyObject) {
         keyObj = publicKey;
     } else if (typeof publicKey === 'object' && publicKey !== null && publicKey.key !== undefined) {
-        getSignVerifyIntOption('padding', publicKey);
-        getSignVerifyIntOption('saltLength', publicKey);
+        padding = getSignVerifyIntOption('padding', publicKey);
+        saltLength = getSignVerifyIntOption('saltLength', publicKey);
         if (publicKey.key instanceof KeyObject) {
             keyObj = publicKey.key;
         } else if (publicKey.passphrase !== undefined) {
@@ -6799,6 +6840,32 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
         const err = new Error('Verify key has no native handle (type=' + keyType + ')');
         err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
         throw err;
+    }
+
+    if (padding === constants.RSA_PKCS1_PSS_PADDING && isRsaKeyObject(keyObj)) {
+        const hashAlgorithm = this._algorithmNormalized || 'sha256';
+        const hashLength = getRsaPssHashLength(hashAlgorithm);
+        const modulusSize = getRsaModulusSizeBytes(keyObj);
+        const modulusBits = getRsaModulusBits(keyObj);
+        if (hashLength === null || modulusSize === null) {
+            return false;
+        }
+
+        const maxSaltLength = modulusSize - hashLength - 2;
+        const effectiveSaltLength = resolveRsaPssVerifySaltLength(saltLength, hashLength, maxSaltLength);
+        if (effectiveSaltLength !== null && (effectiveSaltLength < 0 || effectiveSaltLength > maxSaltLength)) {
+            return false;
+        }
+
+        const dataBytes = collectPendingDataBytes(this._pendingData);
+        this._pendingData = null;
+        const digest = hashOneShotBytes(hashAlgorithm, dataBytes);
+        const encodedMessage = webCryptoNative.public_encrypt(keyObj._handle, sigBytes, constants.RSA_NO_PADDING);
+        if (encodedMessage === null || encodedMessage === undefined) {
+            return false;
+        }
+
+        return rsaPssVerifyDigest(digest, encodedMessage, hashAlgorithm, modulusBits, effectiveSaltLength);
     }
 
     if (this._handle === null) {
@@ -6904,6 +6971,149 @@ function getRsaModulusSizeBytes(keyObject) {
         return null;
     }
     return Math.ceil(details.modulusLength / 8);
+}
+
+function getRsaModulusBits(keyObject) {
+    const details = keyObject && keyObject.asymmetricKeyDetails;
+    if (!details || typeof details.modulusLength !== 'number') {
+        return null;
+    }
+    return details.modulusLength;
+}
+
+function isRsaKeyObject(keyObject) {
+    const keyType = keyObject && keyObject.asymmetricKeyType;
+    return keyType === 'rsa' || keyType === 'rsa-pss';
+}
+
+function getRsaPssUnusedBits(modulusBits, emLength) {
+    if (typeof modulusBits === 'number' && Number.isInteger(modulusBits) && modulusBits > 0) {
+        const emBits = modulusBits - 1;
+        const unusedBits = (emLength * 8) - emBits;
+        if (unusedBits >= 0 && unusedBits <= 7) {
+            return unusedBits;
+        }
+    }
+    return 1;
+}
+
+function getRsaPssHashLength(hashAlgorithm) {
+    const hashLength = HASH_OUTPUT_LENGTHS[hashAlgorithm];
+    return typeof hashLength === 'number' ? hashLength : null;
+}
+
+function resolveRsaPssSignSaltLength(saltLength, hashLength, maxSaltLength) {
+    if (saltLength === undefined || saltLength === constants.RSA_PSS_SALTLEN_MAX_SIGN || saltLength === constants.RSA_PSS_SALTLEN_AUTO || saltLength === -3) {
+        return maxSaltLength;
+    }
+    if (saltLength === constants.RSA_PSS_SALTLEN_DIGEST) {
+        return hashLength;
+    }
+    if (saltLength === -4) {
+        return Math.min(hashLength, maxSaltLength);
+    }
+    return saltLength;
+}
+
+function resolveRsaPssVerifySaltLength(saltLength, hashLength, maxSaltLength) {
+    if (saltLength === undefined || saltLength === constants.RSA_PSS_SALTLEN_AUTO || saltLength === -4) {
+        return null;
+    }
+    if (saltLength === constants.RSA_PSS_SALTLEN_DIGEST) {
+        return hashLength;
+    }
+    if (saltLength === -3) {
+        return maxSaltLength;
+    }
+    return saltLength;
+}
+
+function rsaPssEncodeDigest(digest, hashAlgorithm, modulusSize, modulusBits, saltLength) {
+    const hashLength = getRsaPssHashLength(hashAlgorithm);
+    if (hashLength === null || digest.length !== hashLength) {
+        return null;
+    }
+
+    if (saltLength < 0 || saltLength > modulusSize - hashLength - 2) {
+        return null;
+    }
+
+    const salt = toBytes(randomBytes(saltLength));
+    const mPrime = new Uint8Array(8 + hashLength + saltLength);
+    mPrime.set(digest, 8);
+    mPrime.set(salt, 8 + hashLength);
+
+    const h = hashOneShotBytes(hashAlgorithm, mPrime);
+    const psLength = modulusSize - saltLength - hashLength - 2;
+    const db = new Uint8Array(psLength + 1 + saltLength);
+    db[psLength] = 0x01;
+    db.set(salt, psLength + 1);
+
+    const dbMask = mgf1(h, db.length, hashAlgorithm, hashLength);
+    const maskedDb = xorBytes(db, dbMask);
+    const unusedBits = getRsaPssUnusedBits(modulusBits, modulusSize);
+    const leftMask = 0xff >>> unusedBits;
+    maskedDb[0] &= leftMask;
+
+    const encoded = new Uint8Array(modulusSize);
+    encoded.set(maskedDb, 0);
+    encoded.set(h, maskedDb.length);
+    encoded[modulusSize - 1] = 0xbc;
+    return encoded;
+}
+
+function rsaPssVerifyDigest(digest, encodedMessage, hashAlgorithm, modulusBits, expectedSaltLength) {
+    const hashLength = getRsaPssHashLength(hashAlgorithm);
+    if (hashLength === null || digest.length !== hashLength) {
+        return false;
+    }
+
+    const em = normalizeBytes(encodedMessage);
+    if (em.length < hashLength + 2 || em[em.length - 1] !== 0xbc) {
+        return false;
+    }
+
+    const maskedDb = em.slice(0, em.length - hashLength - 1);
+    const h = em.slice(em.length - hashLength - 1, em.length - 1);
+    const unusedBits = getRsaPssUnusedBits(modulusBits, em.length);
+    const leftMask = 0xff >>> unusedBits;
+    const disallowedMask = (~leftMask) & 0xff;
+    if ((maskedDb[0] & disallowedMask) !== 0) {
+        return false;
+    }
+
+    const dbMask = mgf1(h, maskedDb.length, hashAlgorithm, hashLength);
+    const db = xorBytes(maskedDb, dbMask);
+    db[0] &= leftMask;
+
+    let separatorIndex = -1;
+    for (let i = 0; i < db.length; i++) {
+        const byte = db[i];
+        if (byte === 0x01) {
+            separatorIndex = i;
+            break;
+        }
+        if (byte !== 0x00) {
+            return false;
+        }
+    }
+
+    if (separatorIndex === -1) {
+        return false;
+    }
+
+    const salt = db.slice(separatorIndex + 1);
+    if (expectedSaltLength !== null) {
+        if (expectedSaltLength < 0 || salt.length !== expectedSaltLength) {
+            return false;
+        }
+    }
+
+    const mPrime = new Uint8Array(8 + hashLength + salt.length);
+    mPrime.set(digest, 8);
+    mPrime.set(salt, 8 + hashLength);
+    const hPrime = hashOneShotBytes(hashAlgorithm, mPrime);
+    return bytesEqual(h, hPrime);
 }
 
 function createRsaOaepDecodingError() {
