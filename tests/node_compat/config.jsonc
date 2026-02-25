@@ -333,10 +333,7 @@
         "block_01_regression_test_for_https_github_com_nodejs_node_issues_3705": {}
       }
     },
-    "parallel/test-util-inspect-long-running.js": {
-      "skip": true,
-      "reason": "deep recursion in inspect causes WASM stack overflow (handleMaxCallStackSize not fully implemented)"
-    },
+    "parallel/test-util-inspect-long-running.js": {},
     "parallel/test-util-inspect-namespace.js": {
       "skip": true,
       "reason": "requires experimental vm.SourceTextModule"

@@ -36,6 +36,9 @@ const kArrayType = 1;
 const kArrayExtrasType = 2;
 
 const kMinLineLength = 16;
+// QuickJS-on-WASM can hit a hard runtime stack limit before surfacing a
+// catchable JS RangeError. Guard unlimited-depth inspection proactively.
+const kMaxInspectRecursionDepth = 64;
 
 // Constants to map the iterator state.
 const kWeak = 0;
@@ -542,6 +545,15 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
     ) {
         tag = "";
     }
+
+    if (
+        (ctx.depth === null || ctx.depth === Infinity) &&
+        recurseTimes >= kMaxInspectRecursionDepth
+    ) {
+        const constructorName = getCtxStyle(value, constructor, tag).slice(0, -1);
+        return formatInspectionInterrupted(ctx, constructorName);
+    }
+
     let base = "";
     let formatter = getEmptyFormatArray;
     let braces;
@@ -793,6 +805,9 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             output.push(...protoProps);
         }
     } catch (err) {
+        if (!isStackOverflowError(err)) {
+            throw err;
+        }
         const constructorName = getCtxStyle(value, constructor, tag).slice(0, -1);
         return handleMaxCallStackSize(ctx, err, constructorName, indentationLvl);
     }
@@ -1505,23 +1520,36 @@ function formatProperty(
 }
 
 function handleMaxCallStackSize(
-    _ctx,
-    _err,
-    _constructorName,
-    _indentationLvl,
+    ctx,
+    err,
+    constructorName,
+    indentationLvl,
 ) {
-    // TODO(wafuwafu13): Implement
-    // if (types.isStackOverflowError(err)) {
-    //   ctx.seen.pop();
-    //   ctx.indentationLvl = indentationLvl;
-    //   return ctx.stylize(
-    //     `[${constructorName}: Inspection interrupted ` +
-    //       'prematurely. Maximum call stack size exceeded.]',
-    //     'special'
-    //   );
-    // }
-    // /* c8 ignore next */
-    // assert.fail(err.stack);
+    if (isStackOverflowError(err)) {
+        ctx.seen.pop();
+        ctx.indentationLvl = indentationLvl;
+        return formatInspectionInterrupted(ctx, constructorName);
+    }
+
+    throw err;
+}
+
+function formatInspectionInterrupted(ctx, constructorName) {
+    return ctx.stylize(
+        `[${constructorName}: Inspection interrupted ` +
+            "prematurely. Maximum call stack size exceeded.]",
+        "special",
+    );
+}
+
+function isStackOverflowError(err) {
+    if (!(err instanceof RangeError)) {
+        return false;
+    }
+
+    const message = typeof err.message === "string" ? err.message : "";
+    return /(?:maximum call stack size exceeded|stack overflow|too much recursion)/i
+        .test(message);
 }
 
 // deno-lint-ignore no-control-regex
