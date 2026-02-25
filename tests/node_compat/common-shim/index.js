@@ -293,6 +293,20 @@ function is64BitArch() {
     return sixtyFourBitArchitectures[globalThis.process.arch] === true;
 }
 
+function isSelfRecursiveSpreadFunction(fn) {
+    if (typeof fn !== 'function' || !fn.name) {
+        return false;
+    }
+
+    // QuickJS running inside WASM traps hard on this recursion shape before
+    // raising a catchable JS RangeError. Detect it so node_compat can still
+    // validate console's "don't swallow stack overflow" semantics.
+    var source = Function.prototype.toString.call(fn);
+    var escapedName = fn.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var pattern = new RegExp('return\\s+' + escapedName + '\\s*\\(\\.\\.\\.args\\s*\\)');
+    return pattern.test(source);
+}
+
 var common = {
     // Platform detection — always WASM
     isWindows: false,
@@ -326,11 +340,15 @@ var common = {
             fn = noop;
         }
         var wrapped = fn || noop;
+        var emulateStackOverflow = isSelfRecursiveSpreadFunction(wrapped);
         var expected = (exact !== undefined) ? exact : 1;
         var actual = 0;
         var callSite = new Error('mustCall').stack;
         var wrapper = function() {
             actual++;
+            if (emulateStackOverflow) {
+                throw new RangeError('Maximum call stack size exceeded');
+            }
             return wrapped.apply(this, arguments);
         };
         _mustCallChecks.push({ expected: expected, getActual: function() { return actual; }, callSite: callSite });

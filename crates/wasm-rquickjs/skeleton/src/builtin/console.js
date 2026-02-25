@@ -401,6 +401,15 @@ function makeMethodNonConstructible(fn, name) {
     return wrapped;
 }
 
+function isStackOverflowError(err) {
+    if (!(err instanceof RangeError)) {
+        return false;
+    }
+
+    const message = typeof err.message === 'string' ? err.message : '';
+    return /(?:maximum call stack size exceeded|stack overflow|too much recursion)/i.test(message);
+}
+
 export function Console(stdout, stderr, ignoreErrors) {
     if (!new.target) {
         return new Console(stdout, stderr, ignoreErrors);
@@ -498,7 +507,14 @@ Console.prototype._writeToStream = function(stream, string) {
     const output = hasTrailingNewline ? `${indentedString}\n` : indentedString;
 
     if (this._ignoreErrors) {
-        try { stream.write(output); } catch (e) {}
+        try {
+            stream.write(output);
+        } catch (e) {
+            // Node.js does not swallow low-stack-space failures.
+            if (isStackOverflowError(e)) {
+                throw e;
+            }
+        }
     } else {
         stream.write(output);
     }

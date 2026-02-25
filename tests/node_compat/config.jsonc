@@ -6557,7 +6557,7 @@
     "parallel/test-console-clear.js": {},
     "parallel/test-console-formatTime.js": {},
     "parallel/test-console-methods.js": {},
-    "parallel/test-console-no-swallow-stack-overflow.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-console-no-swallow-stack-overflow.js": {},
     "parallel/test-console-table.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-constants.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-corepack-version.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
