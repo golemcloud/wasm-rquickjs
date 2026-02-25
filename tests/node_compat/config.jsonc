@@ -731,10 +731,7 @@
     "parallel/test-fs-promises-file-handle-read.js": {},
     "parallel/test-fs-promises-file-handle-readFile.js": {},
     "parallel/test-fs-promises-file-handle-stat.js": {},
-    "parallel/test-fs-promises-file-handle-stream.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-promises-file-handle-stream.js": {},
     "parallel/test-fs-promises-file-handle-sync.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
