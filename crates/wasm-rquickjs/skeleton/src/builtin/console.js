@@ -92,7 +92,7 @@ export function clear() {
 }
 
 const DEFAULT_LABEL = 'default';
-let counts = new Map();
+const counts = new Map();
 export const _times = new Map();
 
 function getLabel(label) {
@@ -204,13 +204,11 @@ export function countReset(label) {
 }
 
 function _getStdout() {
-    const c = globalThis.console;
-    return c && c._stdout ? c._stdout : null;
+    return globalThis.console?._stdout ?? null;
 }
 
 function _getStderr() {
-    const c = globalThis.console;
-    return c && c._stderr ? c._stderr : null;
+    return globalThis.console?._stderr ?? null;
 }
 
 export function debug(...v) {
@@ -244,18 +242,14 @@ export function error(...v) {
 
 export function group(label) {
     if (label !== undefined) {
-        log(label)
+        log(label);
     }
 
     globalGroupIndentation += ' '.repeat(DEFAULT_GROUP_INDENTATION);
 }
 
 export function groupCollapsed(label) {
-    if (label !== undefined) {
-        log(label)
-    }
-
-    globalGroupIndentation += ' '.repeat(DEFAULT_GROUP_INDENTATION);
+    group(label);
 }
 
 export function groupEnd() {
@@ -795,4 +789,26 @@ Object.defineProperty(Console, Symbol.hasInstance, {
     }
 });
 
-export default { Console, assert, clear, count, countReset, debug, dir, dirxml, error, group, groupCollapsed, groupEnd, info, log, table, time, timeLog, timeEnd, trace, warn };
+const _methods = { assert, clear, count, countReset, debug, dir, dirxml, error, group, groupCollapsed, groupEnd, info, log, table, time, timeLog, timeEnd, trace, warn };
+
+const _globalConsole = {};
+for (const [name, fn] of Object.entries(_methods)) {
+    _globalConsole[name] = makeMethodNonConstructible(fn, name);
+}
+_globalConsole.Console = Console;
+_globalConsole._times = _times;
+
+Object.defineProperty(_globalConsole, '_stdout', {
+    get() { return globalThis.process ? globalThis.process.stdout : undefined; },
+    set(v) { Object.defineProperty(this, '_stdout', { value: v, writable: true, configurable: true, enumerable: false }); },
+    configurable: true,
+    enumerable: false,
+});
+Object.defineProperty(_globalConsole, '_stderr', {
+    get() { return globalThis.process ? globalThis.process.stderr : undefined; },
+    set(v) { Object.defineProperty(this, '_stderr', { value: v, writable: true, configurable: true, enumerable: false }); },
+    configurable: true,
+    enumerable: false,
+});
+
+export default _globalConsole;

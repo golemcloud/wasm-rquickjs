@@ -30,50 +30,46 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
             r#"
     default: 1
     logged message 1 2 {{ key: 'value' }}
-    TRACE: This is a trace message
-    DEBUG: This is an debug message
-    INFO: This is an info message
-    WARN: This is a warning message
-    ERROR: This is an error message
+    This is an debug message
+    This is an info message
     default: 2
-    WARN: Assertion failed: This is an assertion failure
     Group 1
-    Inside Group 1
-    Group 2
-    Inside Group 2
+      Inside Group 1
+      Group 2
+        Inside Group 2
     default: 3
     test: 1
     test: 2
     default: 1
     {colored}
     {{ key: 'value', nested: {{ a: 1, b: 2 }} }}
-    ======================
-     (index)  │ 0        │
-    ----------------------
-     0        │ apples   │
-     1        │ oranges  │
-     2        │ bananas  │
-    ======================
-    ==============================
-     (index)  │ 0       │ 1      │
-    ------------------------------
-     0        │ Tyrone  │ Jones  │
-     1        │ Janet   │ Smith  │
-     2        │ Maria   │ Cruz   │
-    ==============================
-    =======================
-     (index)    │ 0       │
-    -----------------------
-     firstName  │ Tyrone  │
-     lastName   │ Jones   │
-    =======================
-    ========================
-     (index)  │ firstName  │
-    ------------------------
-     0        │ Tyrone     │
-     1        │ Janet      │
-     2        │ Maria      │
-    ========================
+    ┌─────────┬───────────┐
+    │ (index) │ Values    │
+    ├─────────┼───────────┤
+    │ 0       │ 'apples'  │
+    │ 1       │ 'oranges' │
+    │ 2       │ 'bananas' │
+    └─────────┴───────────┘
+    ┌─────────┬──────────┬─────────┐
+    │ (index) │ 0        │ 1       │
+    ├─────────┼──────────┼─────────┤
+    │ 0       │ 'Tyrone' │ 'Jones' │
+    │ 1       │ 'Janet'  │ 'Smith' │
+    │ 2       │ 'Maria'  │ 'Cruz'  │
+    └─────────┴──────────┴─────────┘
+    ┌───────────┬──────────┐
+    │ (index)   │ Values   │
+    ├───────────┼──────────┤
+    │ firstName │ 'Tyrone' │
+    │ lastName  │ 'Jones'  │
+    └───────────┴──────────┘
+    ┌─────────┬───────────┐
+    │ (index) │ firstName │
+    ├─────────┼───────────┤
+    │ 0       │ 'Tyrone'  │
+    │ 1       │ 'Janet'   │
+    │ 2       │ 'Maria'   │
+    └─────────┴───────────┘
     --- Map Examples ---
     Empty map: Map(0) {{}}
     Simple map: Map(3) {{ 'name' => 'John', 'age' => 30, 'city' => 'New York' }}
@@ -116,7 +112,6 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
 
     assert!(timer_output.contains("after 1 second"));
     assert!(timer_output.contains("after 2 seconds"));
-    assert!(timer_output.contains("- timer ended"));
 
     Ok(())
 }

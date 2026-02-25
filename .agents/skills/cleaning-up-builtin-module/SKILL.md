@@ -89,6 +89,7 @@ Read the full Rust and JS source files. Then consult the oracle for a thorough c
 - **Modern JS patterns**: Arrow functions where appropriate, destructuring, template literals
 - **Rust improvements**: Clippy suggestions, unnecessary `clone()`, better error handling patterns
 - **Native ↔ JS boundary shifts**: Opportunities to move logic between the Rust native bridge and the JS wrapper (see "Moving Logic Between Rust and JS" below)
+- **WIRE_JS minimization**: Check if logic in the module's `WIRE_JS` snippet can be moved into the JS wrapper module itself, leaving WIRE_JS as a minimal import-and-assign-to-globalThis (see "Minimizing WIRE_JS" below)
 
 **Important constraints to tell the oracle**:
 - The module's **observable behavior must not change** — all existing tests must continue to pass
@@ -210,6 +211,25 @@ Replace `match result { Ok(v) => v, Err(e) => return Err(e) }` with `result?`.
 
 ### JS: Remove unused imports/exports
 If an internal function or import is not used anywhere, remove it. But **never remove public exports** from the module's API surface.
+
+### Minimizing WIRE_JS
+
+`WIRE_JS` snippets run at module load time and wire things onto `globalThis`. They are **embedded as Rust string literals** in the `.rs` file, making them hard to read, edit, and review. The goal is to keep WIRE_JS as **small as possible** — ideally just an import and a `globalThis` assignment:
+
+```js
+import { default as __x } from '__wasm_rquickjs_builtin/mymodule';
+globalThis.myGlobal = __x;
+```
+
+**How to minimize**:
+1. **Move helper functions** out of WIRE_JS and into the module's `.js` file. WIRE_JS should not define functions — those belong in the importable module.
+2. **Move object construction** into the `.js` file's `default` export. If WIRE_JS builds an object by iterating over exports, wrapping methods, or adding properties, do that work inside the `.js` module and export the finished object as `default`.
+3. **Move lazy getters/setters** into the `.js` file. Getters that reference `globalThis.process` or other globals work fine in the `.js` module because they resolve at access time, not definition time.
+
+**Constraints**:
+- Changes to WIRE_JS affect global state at startup and can break **any** module — treat as **high-risk** and test broadly after any change (not just the module being cleaned up).
+- The resulting `globalThis` object must have the exact same property descriptors (enumerable, configurable, writable), method `.name` values, and prototype chain as before.
+- If WIRE_JS does something that genuinely requires running *after* the module is imported (e.g., reading from another global that's set by a different WIRE_JS), it cannot be moved into the `.js` file and must stay in WIRE_JS.
 
 ### Moving logic between Rust and JS
 
