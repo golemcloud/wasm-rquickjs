@@ -4906,6 +4906,12 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 const dsaKey = maybeParseDsaPrivateKey(derBytes, 'der');
                 if (dsaKey) return dsaKey;
             }
+            const decryptedTraditionalDer = webCryptoNative.decrypt_traditional_pem_to_der(pem, passBytes);
+            if (decryptedTraditionalDer !== null && decryptedTraditionalDer !== undefined) {
+                const derBytes = new Uint8Array(decryptedTraditionalDer);
+                const dsaKey = maybeParseDsaPrivateKey(derBytes, 'der');
+                if (dsaKey) return dsaKey;
+            }
             throw createBadDecryptError();
         }
 

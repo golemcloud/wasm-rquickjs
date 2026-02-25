@@ -3170,6 +3170,13 @@ fn decrypt_pkcs8_pem_to_der_impl(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>
     Some(decrypted.as_bytes().to_vec())
 }
 
+fn decrypt_traditional_pem_to_der_impl(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
+    if !pem.contains("Proc-Type: 4,ENCRYPTED") {
+        return None;
+    }
+    decrypt_traditional_pem(pem, passphrase)
+}
+
 fn create_private_key_from_encrypted_pem(pem: &str, passphrase: &[u8]) -> Option<u32> {
     // Try PKCS#8 encrypted PEM first (-----BEGIN ENCRYPTED PRIVATE KEY-----)
     if pem.contains("ENCRYPTED PRIVATE KEY") {
@@ -5224,6 +5231,18 @@ pub mod native_module {
             .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
             .unwrap_or(&[]);
         super::decrypt_pkcs8_pem_to_der_impl(&pem, slice)
+    }
+
+    #[rquickjs::function]
+    pub fn decrypt_traditional_pem_to_der(
+        pem: String,
+        passphrase: TypedArray<'_, u8>,
+    ) -> Option<Vec<u8>> {
+        let slice = passphrase
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .unwrap_or(&[]);
+        super::decrypt_traditional_pem_to_der_impl(&pem, slice)
     }
 
     #[rquickjs::function]

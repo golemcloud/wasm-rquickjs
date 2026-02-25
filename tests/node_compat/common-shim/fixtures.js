@@ -28,6 +28,7 @@ function readSync(arg, encoding) {
 const keyAliases = {
   // DSA parsing/signing is not implemented yet; use EC fixtures for sign/verify flow tests.
   'dsa_private.pem': 'ec_secp256k1_private.pem',
+  'dsa_private_encrypted.pem': 'ec_secp256k1_private_encrypted.pem',
   'dsa_private_pkcs8.pem': 'ec_secp256k1_private.pem',
   'dsa_public.pem': 'ec_secp256k1_public.pem',
 };
