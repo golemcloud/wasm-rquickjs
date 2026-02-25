@@ -819,26 +819,11 @@
       "skip": true,
       "reason": "assert.throws fails: fs.read with invalid buffer does not throw ERR_INVALID_ARG_TYPE, calls callback instead"
     },
-    "parallel/test-fs-read-zero-length.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-read.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-readdir.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-readdir-buffer.js": {
-      "skip": true,
-      "reason": "requires Buffer encoding for readdir"
-    },
-    "parallel/test-fs-readdir-pipe.js": {
-      "skip": true,
-      "reason": "requires /dev/null or /dev/stdin (not available in WASI)"
-    },
+    "parallel/test-fs-read-zero-length.js": {},
+    "parallel/test-fs-read.js": {},
+    "parallel/test-fs-readdir.js": {},
+    "parallel/test-fs-readdir-buffer.js": {},
+    "parallel/test-fs-readdir-pipe.js": {},
     "parallel/test-fs-readdir-recursive.js": {
       "skip": true,
       "reason": "requires node:net which is not available in WASM"
@@ -847,33 +832,22 @@
       "skip": true,
       "reason": "causes WASM timeout or panic"
     },
-    "parallel/test-fs-readdir-types-symlinks.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readdir-types-symlinks.js": {},
     "parallel/test-fs-readdir-types.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
     },
-    "parallel/test-fs-readdir-ucs2.js": {
-      "skip": true,
-      "reason": "requires UCS-2 filename support"
-    },
+    "parallel/test-fs-readdir-ucs2.js": {},
     "parallel/test-fs-readfile.js": {
-      "skip": true,
-      "reason": "requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation",
       "split": true,
       "subtests": {
         "block_00_readfile_and_readfilesync_should_fail_if_the_file_is_too_big": { "skip": true, "reason": "inherited: requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation" },
+        "block_01_block_01": {},
+        "block_02_block_02": {},
         "block_03_block_03": { "skip": true, "reason": "inherited: requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation" }
       }
     },
-    "parallel/test-fs-readfile-empty.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readfile-empty.js": {},
     "parallel/test-fs-readfile-eof.js": {
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
@@ -882,18 +856,13 @@
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
     },
-    "parallel/test-fs-readfile-fd.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readfile-fd.js": {},
     "parallel/test-fs-readfile-flags.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-fs-readfile-pipe-large.js": {
@@ -904,76 +873,45 @@
       "skip": true,
       "reason": "requires child_process.exec"
     },
-    "parallel/test-fs-readfile-unlink.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-readfile-zero-byte-liar.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-readfilesync-enoent.js": {
-      "skip": true,
-      "reason": "requires child_process.execSync"
-    },
+    "parallel/test-fs-readfile-unlink.js": {},
+    "parallel/test-fs-readfile-zero-byte-liar.js": {},
+    "parallel/test-fs-readfilesync-enoent.js": {},
     "parallel/test-fs-readfilesync-pipe-large.js": {
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
     },
-    "parallel/test-fs-readlink-type-check.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readlink-type-check.js": {},
     "parallel/test-fs-readSync-optional-params.js": {
       "skip": true,
       "reason": "requires strict options parameter validation for Infinity/BigInt/Symbol in readSync"
     },
-    "parallel/test-fs-readv-promises.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-readv-promisify.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readv-promises.js": {},
+    "parallel/test-fs-readv-promisify.js": {},
     "parallel/test-fs-readv-sync.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_fs_readvsync_with_array_of_buffers_with_all_parameters": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_fs_readvsync_with_array_of_buffers_without_position": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_fs_readvsync_with_array_of_buffers_with_all_parameters": {},
+        "block_01_fs_readvsync_with_array_of_buffers_without_position": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
     "parallel/test-fs-readv.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_fs_readv_with_array_of_buffers_with_all_parameters": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_fs_readv_with_array_of_buffers_without_position": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_fs_readv_with_array_of_buffers_with_all_parameters": {},
+        "block_01_fs_readv_with_array_of_buffers_without_position": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
-    "parallel/test-fs-ready-event-stream.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-ready-event-stream.js": {},
     "parallel/test-fs-realpath-buffer-encoding.js": {
       "skip": true,
       "reason": "realpath returns EIO on WASI-mounted paths"
     },
-    "parallel/test-fs-realpath-native.js": {
-      "skip": true,
-      "reason": "realpath returns EIO on WASI-mounted paths"
-    },
-    "parallel/test-fs-realpath-on-substed-drive.js": {
-      "skip": true,
-      "reason": "Windows-specific subst drive test"
-    },
+    "parallel/test-fs-realpath-native.js": {},
+    "parallel/test-fs-realpath-on-substed-drive.js": {},
     "parallel/test-fs-realpath-pipe.js": {
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
@@ -982,10 +920,7 @@
       "skip": true,
       "reason": "requires worker_threads which is not available in WASM"
     },
-    "parallel/test-fs-rename-type-check.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-rename-type-check.js": {},
     "parallel/test-fs-rm.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM",
@@ -998,68 +933,42 @@
       }
     },
     "parallel/test-fs-rmdir-recursive.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules not available in WASM",
       "split": true,
       "subtests": {
-        "block_00_test_the_asynchronous_version": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_01_test_the_synchronous_version": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
+        "block_00_test_the_asynchronous_version": {},
+        "block_01_test_the_synchronous_version": {},
         "block_02_test_input_validation": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_03_rimraf_see_35566": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
       }
     },
-    "parallel/test-fs-rmdir-recursive-sync-warns-not-found.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-rmdir-recursive-sync-warns-on-file.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-rmdir-recursive-sync-warns-not-found.js": {},
+    "parallel/test-fs-rmdir-recursive-sync-warns-on-file.js": {},
     "parallel/test-fs-rmdir-recursive-throws-not-found.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-fs-rmdir-recursive-throws-on-file.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
-    "parallel/test-fs-rmdir-recursive-warns-not-found.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-rmdir-recursive-warns-on-file.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-rmdir-type-check.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-sir-writes-alot.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-rmdir-recursive-warns-not-found.js": {},
+    "parallel/test-fs-rmdir-recursive-warns-on-file.js": {},
+    "parallel/test-fs-rmdir-type-check.js": {},
+    "parallel/test-fs-sir-writes-alot.js": {},
     "parallel/test-fs-stat.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-fs-stat-bigint.js": {
@@ -1087,47 +996,32 @@
         "block_01_synchronous_bigint": { "skip": true, "reason": "inherited: requires fs.statfs/statfsSync" }
       }
     },
-    "parallel/test-fs-stream-construct-compat-error-read.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-stream-construct-compat-error-write.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-stream-construct-compat-error-read.js": {},
+    "parallel/test-fs-stream-construct-compat-error-write.js": {},
     "parallel/test-fs-stream-construct-compat-graceful-fs.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-fs-stream-construct-compat-old-node.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-fs-stream-destroy-emit-error.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
-    "parallel/test-fs-stream-double-close.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-stream-double-close.js": {},
     "parallel/test-fs-stream-fs-options.js": {
       "skip": true,
       "reason": "requires validation of custom fs option methods",
@@ -1147,30 +1041,15 @@
         "block_01_block_01": { "skip": true, "reason": "inherited: requires validation of fd type and path type in stream constructors" }
       }
     },
-    "parallel/test-fs-symlink-buffer-path.js": {
-      "skip": true,
-      "reason": "requires Buffer path for symlink"
-    },
-    "parallel/test-fs-symlink-dir.js": {
-      "skip": true,
-      "reason": "requires common.canCreateSymLink()"
-    },
+    "parallel/test-fs-symlink-buffer-path.js": {},
+    "parallel/test-fs-symlink-dir.js": {},
     "parallel/test-fs-symlink-dir-junction-relative.js": {
       "skip": true,
       "reason": "symlink returns EIO in WASI filesystem"
     },
-    "parallel/test-fs-symlink-dir-junction.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-symlink-longpath.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-symlink.js": {
-      "skip": true,
-      "reason": "requires fixtures module and common.canCreateSymLink()"
-    },
+    "parallel/test-fs-symlink-dir-junction.js": {},
+    "parallel/test-fs-symlink-longpath.js": {},
+    "parallel/test-fs-symlink.js": {},
     "parallel/test-fs-sync-fd-leak.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM"
@@ -1201,26 +1080,15 @@
       }
     },
     "parallel/test-fs-truncate-clear-file-zero.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_synchronous_test": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_asynchronous_test": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_synchronous_test": {},
+        "block_01_asynchronous_test": {}
       }
     },
-    "parallel/test-fs-truncate-fd.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-truncate-sync.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-unlink-type-check.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-truncate-fd.js": {},
+    "parallel/test-fs-truncate-sync.js": {},
+    "parallel/test-fs-unlink-type-check.js": {},
     "parallel/test-fs-util-validateoffsetlength.js": {
       "skip": true,
       "reason": "requires Node.js internal modules not available in WASM",
@@ -1258,14 +1126,8 @@
         "block_01_futimes_only_error_cases": { "skip": true, "reason": "inherited: symlink returns EIO in WASI filesystem" }
       }
     },
-    "parallel/test-fs-utimes-y2K38.js": {
-      "skip": true,
-      "reason": "requires process.arch for 32-bit detection"
-    },
-    "parallel/test-fs-watch.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-utimes-y2K38.js": {},
+    "parallel/test-fs-watch.js": {},
     "parallel/test-fs-watch-abort-signal.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI",
@@ -1290,18 +1152,13 @@
       }
     },
     "parallel/test-fs-watch-enoent.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI",
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" }
+        "block_01_block_01": {}
       }
     },
-    "parallel/test-fs-watch-file-enoent-after-deletion.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-watch-file-enoent-after-deletion.js": {},
     "parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -1326,14 +1183,8 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-recursive-delete.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-watch-recursive-linux-parallel-remove.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-recursive-delete.js": {},
+    "parallel/test-fs-watch-recursive-linux-parallel-remove.js": {},
     "parallel/test-fs-watch-recursive-promise.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -1342,14 +1193,8 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-recursive-sync-write.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
-    "parallel/test-fs-watch-recursive-update-file.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-watch-recursive-sync-write.js": {},
+    "parallel/test-fs-watch-recursive-update-file.js": {},
     "parallel/test-fs-watch-recursive-validate.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -1358,10 +1203,7 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-ref-unref.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-watch-ref-unref.js": {},
     "parallel/test-fs-watch-stop-async.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
@@ -1374,10 +1216,7 @@
       "skip": true,
       "reason": "requires fs.watch/fs.watchFile which is not supported in WASI"
     },
-    "parallel/test-fs-watchfile-ref-unref.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-watchfile-ref-unref.js": {},
     "parallel/test-fs-watchfile.js": {
       "skip": true,
       "reason": "requires fs.watchFile which is not supported in WASI"
@@ -1399,42 +1238,29 @@
       }
     },
     "parallel/test-fs-write-buffer.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_fs_write_with_all_parameters_provided": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_fs_write_with_a_buffer_without_the_length_parameter": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_fs_write_with_a_buffer_without_the_offset_and_length_paramet": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_03_fs_write_with_the_offset_passed_as_undefined_followed_by_the": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_04_fs_write_with_offset_and_length_passed_as_undefined_followed": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_05_fs_write_with_a_uint8array_without_the_offset_and_length_par": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_06_fs_write_with_invalid_offset_type": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_07_fs_write_with_a_dataview_without_the_offset_and_length_param": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_fs_write_with_all_parameters_provided": {},
+        "block_01_fs_write_with_a_buffer_without_the_length_parameter": {},
+        "block_02_fs_write_with_a_buffer_without_the_offset_and_length_paramet": {},
+        "block_03_fs_write_with_the_offset_passed_as_undefined_followed_by_the": {},
+        "block_04_fs_write_with_offset_and_length_passed_as_undefined_followed": {},
+        "block_05_fs_write_with_a_uint8array_without_the_offset_and_length_par": {},
+        "block_06_fs_write_with_invalid_offset_type": {},
+        "block_07_fs_write_with_a_dataview_without_the_offset_and_length_param": {}
       }
     },
-    "parallel/test-fs-write-buffer-large.js": {
-      "skip": true,
-      "reason": "requires ERR_OUT_OF_RANGE validation and large buffer allocation"
-    },
-    "parallel/test-fs-write-file-buffer.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-buffer-large.js": {},
+    "parallel/test-fs-write-file-buffer.js": {},
     "parallel/test-fs-write-file-flush.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "test_00_synchronous_version": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "test_01_callback_version": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "test_02_promise_based_version": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "test_00_synchronous_version": {},
+        "test_01_callback_version": {},
+        "test_02_promise_based_version": {}
       }
     },
-    "parallel/test-fs-write-file-invalid-path.js": {
-      "skip": true,
-      "reason": "requires process.platform check"
-    },
+    "parallel/test-fs-write-file-invalid-path.js": {},
     "parallel/test-fs-write-file-sync.js": {
       "skip": true,
       "reason": "requires process.umask() and child_process",
@@ -1448,24 +1274,16 @@
         "block_05_test_writefilesync_with_an_invalid_input": { "skip": true, "reason": "inherited: requires process.umask() and child_process" }
       }
     },
-    "parallel/test-fs-write-file-typedarrays.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-file-typedarrays.js": {},
     "parallel/test-fs-write-file.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
-    "parallel/test-fs-write-negativeoffset.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-negativeoffset.js": {},
     "parallel/test-fs-write-no-fd.js": {
       "skip": true,
       "reason": "assert.throws fails: fs.write with undefined fd calls callback instead of throwing ERR_INVALID_ARG_TYPE"
@@ -1474,147 +1292,95 @@
       "skip": true,
       "reason": "requires ERR_OUT_OF_RANGE and ERR_INVALID_ARG_TYPE validation"
     },
-    "parallel/test-fs-write-reuse-callback.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-reuse-callback.js": {},
     "parallel/test-fs-write-sigxfsz.js": {
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
     },
-    "parallel/test-fs-write-stream-autoclose-option.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-write-stream-change-open.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-write-stream-close-without-callback.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-stream-autoclose-option.js": {},
+    "parallel/test-fs-write-stream-change-open.js": {},
+    "parallel/test-fs-write-stream-close-without-callback.js": {},
     "parallel/test-fs-write-stream-double-close.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
-    "parallel/test-fs-write-stream-encoding.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-stream-encoding.js": {},
     "parallel/test-fs-write-stream-end.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
-    "parallel/test-fs-write-stream-err.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-write-stream-file-handle-2.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
-    "parallel/test-fs-write-stream-file-handle.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-stream-err.js": {},
+    "parallel/test-fs-write-stream-file-handle-2.js": {},
+    "parallel/test-fs-write-stream-file-handle.js": {},
     "parallel/test-fs-write-stream-flush.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "test_00_validation": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "test_01_performs_flush": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "test_02_does_not_perform_flush": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "test_03_works_with_file_handles": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "test_00_validation": {},
+        "test_01_performs_flush": {},
+        "test_02_does_not_perform_flush": {},
+        "test_03_works_with_file_handles": {}
       }
     },
     "parallel/test-fs-write-stream-fs.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-fs-write-stream-patch-open.js": {
       "skip": true,
       "reason": "requires full WriteStream implementation and child_process"
     },
-    "parallel/test-fs-write-stream-throw-type-error.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-stream-throw-type-error.js": {},
     "parallel/test-fs-write-stream.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_throws_if_data_is_not_of_type_buffer": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_throws_if_data_is_not_of_type_buffer": {}
       }
     },
-    "parallel/test-fs-write-sync.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-sync.js": {},
     "parallel/test-fs-write-sync-optional-params.js": {
       "skip": true,
       "reason": "requires ERR_INVALID_ARG_TYPE and ERR_OUT_OF_RANGE validation"
     },
     "parallel/test-fs-writefile-with-fd.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_test_read_only_file_descriptor": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_03_test_with_an_abortsignal": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_test_read_only_file_descriptor": {},
+        "block_03_test_with_an_abortsignal": {}
       }
     },
-    "parallel/test-fs-writestream-open-write.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-writestream-open-write.js": {},
     "parallel/test-fs-writev.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_fs_writev_with_array_of_buffers_with_all_parameters": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_fs_writev_with_array_of_buffers_without_position": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_fs_writev_with_empty_array_of_buffers": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_fs_writev_with_array_of_buffers_with_all_parameters": {},
+        "block_01_fs_writev_with_array_of_buffers_without_position": {},
+        "block_02_fs_writev_with_empty_array_of_buffers": {},
+        "block_03_block_03": {}
       }
     },
-    "parallel/test-fs-writev-promises.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-writev-promises.js": {},
     "parallel/test-fs-writev-sync.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_fs_writevsync_with_array_of_buffers_with_all_parameters": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_01_fs_writevsync_with_array_of_buffers_without_position": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_02_fs_writevsync_with_empty_array_of_buffers": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_00_fs_writevsync_with_array_of_buffers_with_all_parameters": {},
+        "block_01_fs_writevsync_with_array_of_buffers_without_position": {},
+        "block_02_fs_writevsync_with_empty_array_of_buffers": {},
+        "block_03_block_03": {}
       }
     },
 
