@@ -26,6 +26,7 @@ import * as codes from "__wasm_rquickjs_builtin/internal/errors";
 
 import {
     ALL_PROPERTIES,
+    getConstructorName as internalGetConstructorName,
     getOwnNonIndexProperties,
     ONLY_ENUMERABLE,
 } from "__wasm_rquickjs_builtin/internal/binding/util";
@@ -965,9 +966,7 @@ function getConstructorName(
         return null;
     }
 
-    // TODO(wafuwafu13): Implement
-    // const res = internalGetConstructorName(tmp);
-    const res = undefined;
+    const res = internalGetConstructorName(tmp);
 
     if (recurseTimes > ctx.depth && ctx.depth !== null) {
         return `${res} <Complex prototype>`;
@@ -1077,11 +1076,10 @@ function formatArray(ctx, value, recurseTimes) {
     return output;
 }
 
-function getCtxStyle(_value, constructor, tag) {
+function getCtxStyle(value, constructor, tag) {
     let fallback = "";
     if (constructor === null) {
-        // TODO(wafuwafu13): Implement
-        // fallback = internalGetConstructorName(value);
+        fallback = internalGetConstructorName(value);
         if (fallback === tag) {
             fallback = "Object";
         }

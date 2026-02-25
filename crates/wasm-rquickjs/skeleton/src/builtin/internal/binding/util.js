@@ -52,6 +52,102 @@ export const ONLY_ENUM_WRITABLE = 6;
 export const SKIP_STRINGS = 8;
 export const SKIP_SYMBOLS = 16;
 
+const nullPrototypeConstructorNames = new WeakMap();
+const originalObjectSetPrototypeOf = Object.setPrototypeOf;
+const originalReflectSetPrototypeOf = Reflect.setPrototypeOf;
+
+function isObjectLike(value) {
+    return (
+        (typeof value === "object" && value !== null) ||
+        typeof value === "function"
+    );
+}
+
+function findConstructorName(value) {
+    if (!isObjectLike(value)) {
+        return "";
+    }
+
+    let proto = value;
+    while (proto !== null) {
+        const descriptor = Object.getOwnPropertyDescriptor(proto, "constructor");
+        if (
+            descriptor !== undefined &&
+            typeof descriptor.value === "function" &&
+            descriptor.value.name !== ""
+        ) {
+            try {
+                if (value instanceof descriptor.value) {
+                    return descriptor.value.name;
+                }
+            } catch {
+                // Ignore non-callable or cross-realm constructor checks.
+            }
+        }
+
+        proto = Object.getPrototypeOf(proto);
+    }
+
+    return "";
+}
+
+function trackNullPrototypeConstructor(target, proto) {
+    if (!isObjectLike(target)) {
+        return;
+    }
+
+    if (proto === null) {
+        const constructorName = findConstructorName(target);
+        if (constructorName !== "") {
+            nullPrototypeConstructorNames.set(target, constructorName);
+        } else {
+            nullPrototypeConstructorNames.delete(target);
+        }
+        return;
+    }
+
+    nullPrototypeConstructorNames.delete(target);
+}
+
+Object.setPrototypeOf = function setPrototypeOf(target, proto) {
+    trackNullPrototypeConstructor(target, proto);
+    try {
+        return originalObjectSetPrototypeOf(target, proto);
+    } catch (err) {
+        if (proto === null && isObjectLike(target)) {
+            nullPrototypeConstructorNames.delete(target);
+        }
+        throw err;
+    }
+};
+
+Reflect.setPrototypeOf = function setPrototypeOf(target, proto) {
+    trackNullPrototypeConstructor(target, proto);
+    let success = false;
+    try {
+        success = originalReflectSetPrototypeOf(target, proto);
+        return success;
+    } finally {
+        if (!success && proto === null && isObjectLike(target)) {
+            nullPrototypeConstructorNames.delete(target);
+        }
+    }
+};
+
+export function getConstructorName(value) {
+    if (!isObjectLike(value)) {
+        return "Object";
+    }
+
+    const trackedName = nullPrototypeConstructorNames.get(value);
+    if (trackedName !== undefined) {
+        return trackedName;
+    }
+
+    const constructorName = findConstructorName(value);
+    return constructorName !== "" ? constructorName : "Object";
+}
+
 /**
  * Efficiently determine whether the provided property key is numeric
  * (and thus could be an array indexer) or not.
