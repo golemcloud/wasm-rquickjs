@@ -335,10 +335,7 @@
     },
     "parallel/test-util-inspect-long-running.js": {},
     "parallel/test-util-inspect-namespace.js": {},
-    "parallel/test-util-inspect-proxy.js": {
-      "skip": true,
-      "reason": "amp fix attempt failed verification"
-    },
+    "parallel/test-util-inspect-proxy.js": {},
     "parallel/test-util-inspect.js": {
       "skip": true,
       "reason": "requires --expose-internals and internal/errors",
