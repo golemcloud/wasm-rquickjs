@@ -7,6 +7,7 @@ import {
     ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE,
     ERR_INCOMPATIBLE_OPTION_PAIR,
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
     ERR_MISSING_OPTION,
     ERR_OUT_OF_RANGE,
     ERR_UNKNOWN_ENCODING,
@@ -5101,6 +5102,36 @@ function validateRsaPssKeyPairOptions(options) {
             throw err;
         }
         options.mgf1HashAlgorithm = normalizedMgf1HashAlgorithm;
+    }
+
+    if (options.hash !== undefined) {
+        if (typeof options.hash !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('options.hash', 'string', options.hash);
+        }
+        const normalizedHash = HASH_ALIASES[options.hash.toLowerCase()];
+        if (!normalizedHash) {
+            throw new ERR_CRYPTO_INVALID_DIGEST(options.hash);
+        }
+        if (options.hashAlgorithm !== undefined && options.hashAlgorithm !== normalizedHash) {
+            throw new ERR_INVALID_ARG_VALUE('options.hash', options.hash, 'must match options.hashAlgorithm');
+        }
+        options.hashAlgorithm = normalizedHash;
+    }
+
+    if (options.mgf1Hash !== undefined) {
+        if (typeof options.mgf1Hash !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('options.mgf1Hash', 'string', options.mgf1Hash);
+        }
+        const normalizedMgf1Hash = HASH_ALIASES[options.mgf1Hash.toLowerCase()];
+        if (!normalizedMgf1Hash) {
+            const err = new TypeError('Invalid MGF1 digest: ' + options.mgf1Hash);
+            err.code = 'ERR_CRYPTO_INVALID_DIGEST';
+            throw err;
+        }
+        if (options.mgf1HashAlgorithm !== undefined && options.mgf1HashAlgorithm !== normalizedMgf1Hash) {
+            throw new ERR_INVALID_ARG_VALUE('options.mgf1Hash', options.mgf1Hash, 'must match options.mgf1HashAlgorithm');
+        }
+        options.mgf1HashAlgorithm = normalizedMgf1Hash;
     }
 
     if (saltLength !== undefined) {

@@ -1925,7 +1925,7 @@
         "block_07_block_07": {},
         "block_08_test_invalid_key_encoding_types": {},
         "block_09_block_09": {},
-        "block_10_block_10": { "skip": true, "reason": "inherited: requires RSA/DSA/DH key generation for validation tests" }
+        "block_10_block_10": {}
       }
     },
     "parallel/test-crypto-lazy-transform-writable.js": {},
