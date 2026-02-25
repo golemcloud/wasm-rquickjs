@@ -797,10 +797,7 @@
       }
     },
     "parallel/test-fs-read-stream-patch-open.js": {},
-    "parallel/test-fs-read-stream-pos.js": {
-      "skip": true,
-      "reason": "causes WASM timeout or panic"
-    },
+    "parallel/test-fs-read-stream-pos.js": {},
     "parallel/test-fs-read-stream-resume.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
