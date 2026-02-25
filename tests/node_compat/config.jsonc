@@ -777,10 +777,7 @@
     },
     "parallel/test-fs-read-stream-encoding.js": {},
     "parallel/test-fs-read-stream-err.js": {},
-    "parallel/test-fs-read-stream-fd-leak.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-read-stream-fd-leak.js": {},
     "parallel/test-fs-read-stream-fd.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
