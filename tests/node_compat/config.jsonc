@@ -781,11 +781,9 @@
     "parallel/test-fs-read-stream-fd.js": {},
     "parallel/test-fs-read-stream-file-handle.js": {},
     "parallel/test-fs-read-stream-inherit.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
         "block_02_block_02": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
         "block_03_block_03": { "skip": true, "reason": "inherited: regression: was enabled but started failing" },
