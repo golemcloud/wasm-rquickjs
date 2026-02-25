@@ -283,7 +283,7 @@
         "block_05_block_05": {},
         "block_06_block_06": {},
         "block_07_block_07": {},
-        "block_08_block_08": { "skip": true, "reason": "inherited: requires child_process.execFile and common/fixtures for uncaught-exception tests" }
+        "block_08_block_08": {}
       }
     },
     "parallel/test-util-deprecate-invalid-code.js": {},
