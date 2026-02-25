@@ -2018,10 +2018,7 @@
         "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_test_handling_of_exceptional_conditions": {},
-        "block_03_test_signing_and_verifying": {
-          "skip": true,
-          "reason": "amp fix attempt failed verification"
-        },
+        "block_03_test_signing_and_verifying": {},
         "block_04_block_04": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_05_block_05": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_06_special_tests_for_rsa_pkcs1_pss_padding": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
