@@ -779,10 +779,7 @@
     "parallel/test-fs-read-stream-err.js": {},
     "parallel/test-fs-read-stream-fd-leak.js": {},
     "parallel/test-fs-read-stream-fd.js": {},
-    "parallel/test-fs-read-stream-file-handle.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-read-stream-file-handle.js": {},
     "parallel/test-fs-read-stream-inherit.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing",
