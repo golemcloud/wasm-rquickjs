@@ -371,36 +371,8 @@ pub const REEXPORT_JS: &str = r#"export * from 'node:url'; export { default } fr
 
 // JS code wiring the URL module into the global context
 pub const WIRE_JS: &str = r#"
-        import * as __wasm_rquickjs_url_native from '__wasm_rquickjs_builtin/url_native';
-        import * as __wasm_rquickjs_url from '__wasm_rquickjs_builtin/url';
-        import {
-            ERR_INVALID_ARG_TYPE as __url_ERR_INVALID_ARG_TYPE,
-            ERR_MISSING_ARGS as __url_ERR_MISSING_ARGS
-        } from '__wasm_rquickjs_builtin/internal/errors';
-        globalThis.URL = __wasm_rquickjs_url_native.URL;
-        globalThis.URLSearchParams = __wasm_rquickjs_url.URLSearchParams;
-        Object.defineProperty(globalThis.URL.prototype, "searchParams", {
-            get() { return new globalThis.URLSearchParams(this.search); },
-            enumerable: true,
-            configurable: true
-        });
-
-        // Wrap createObjectURL to validate Blob argument with proper error code
-        const __origCreateObjectURL = globalThis.URL.createObjectURL;
-        globalThis.URL.createObjectURL = function createObjectURL(obj) {
-            if (!obj || typeof obj !== 'object' ||
-                (typeof obj.arrayBuffer !== 'function' && typeof obj.stream !== 'function')) {
-                throw new __url_ERR_INVALID_ARG_TYPE('object', 'Blob', obj);
-            }
-            return __origCreateObjectURL.call(this, obj);
-        };
-
-        // Match Node.js behavior: throw ERR_MISSING_ARGS when no URL was passed.
-        const __origRevokeObjectURL = globalThis.URL.revokeObjectURL;
-        globalThis.URL.revokeObjectURL = function revokeObjectURL(url) {
-            if (arguments.length === 0) {
-                throw new __url_ERR_MISSING_ARGS('url');
-            }
-            return __origRevokeObjectURL.call(this, url);
-        };
+        import { URL as __wasm_rquickjs_URL } from '__wasm_rquickjs_builtin/url_native';
+        import { URLSearchParams as __wasm_rquickjs_USP } from '__wasm_rquickjs_builtin/url';
+        globalThis.URL = __wasm_rquickjs_URL;
+        globalThis.URLSearchParams = __wasm_rquickjs_USP;
     "#;
