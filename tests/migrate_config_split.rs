@@ -69,9 +69,7 @@ fn find_value_span(content: &str, key: &str) -> Option<(usize, usize)> {
                 }
                 b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
                     pos += 2;
-                    while pos + 1 < bytes.len()
-                        && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/')
-                    {
+                    while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
                         pos += 1;
                     }
                     if pos + 1 < bytes.len() {
@@ -142,9 +140,7 @@ fn find_tests_object_close(content: &str) -> Option<usize> {
                 }
                 b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
                     pos += 2;
-                    while pos + 1 < bytes.len()
-                        && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/')
-                    {
+                    while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
                         pos += 1;
                     }
                     if pos + 1 < bytes.len() {
@@ -199,11 +195,7 @@ fn format_split_value(
                 comma
             ));
         } else {
-            lines.push(format!(
-                "        \"{}\": {{}}{}",
-                escape_json(name),
-                comma
-            ));
+            lines.push(format!("        \"{}\": {{}}{}", escape_json(name), comma));
         }
     }
 
@@ -283,7 +275,10 @@ fn migrate_config_split() {
 
     // Discover all .js files from suite directories
     let all_suite_files = discover_suite_files();
-    let new_files: Vec<String> = all_suite_files.difference(&existing_keys).cloned().collect();
+    let new_files: Vec<String> = all_suite_files
+        .difference(&existing_keys)
+        .cloned()
+        .collect();
 
     let mut modified_content = content.clone();
     let mut split_count = 0;
@@ -372,8 +367,7 @@ fn migrate_config_split() {
             };
 
             let discovery = discover_subtests(test_path, &source);
-            let subtests =
-                build_subtests(&discovery, true, "newly discovered, not yet evaluated");
+            let subtests = build_subtests(&discovery, true, "newly discovered, not yet evaluated");
 
             if subtests.len() >= 2 {
                 let value =

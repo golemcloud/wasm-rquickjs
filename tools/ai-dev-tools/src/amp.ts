@@ -280,49 +280,62 @@ export async function runAmp(
     logUpdate(`${statusHeader()}\n${c.dim}${"─".repeat(60)}${c.reset}\n${previewLines.join("\n")}`);
   }
 
-  for await (const message of execute({
-    prompt,
-    options: {
-      cwd: REPO_ROOT,
-      dangerouslyAllowAll: true,
-      mode: "deep",
-      archive: true,
-      labels: ["fix-node-compat", category, targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)],
-    },
-  })) {
-    if (message.type === "system") {
-      const rawText = `[system] session=${message.session_id}\n[system] tools=${message.tools.join(", ")}\n`;
-      logParts.push(rawText);
-      pushPreview(`${c.dim}● session: ${message.session_id}${c.reset}`);
-    } else if (message.type === "assistant") {
-      messageCount++;
-      for (const content of message.message.content) {
-        if (content.type === "text") {
-          logParts.push(content.text);
-          for (const line of content.text.split("\n")) {
-            const trimmed = line.trim();
-            if (trimmed.length > 0) {
-              pushPreview(`  ${trimmed}`);
+  try {
+    for await (const message of execute({
+      prompt,
+      options: {
+        cwd: REPO_ROOT,
+        dangerouslyAllowAll: true,
+        mode: "deep",
+        archive: true,
+        labels: ["fix-node-compat", category, targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)],
+      },
+    })) {
+      if (message.type === "system") {
+        const rawText = `[system] session=${message.session_id}\n[system] tools=${message.tools.join(", ")}\n`;
+        logParts.push(rawText);
+        pushPreview(`${c.dim}● session: ${message.session_id}${c.reset}`);
+      } else if (message.type === "assistant") {
+        messageCount++;
+        for (const content of message.message.content) {
+          if (content.type === "text") {
+            logParts.push(content.text);
+            for (const line of content.text.split("\n")) {
+              const trimmed = line.trim();
+              if (trimmed.length > 0) {
+                pushPreview(`  ${trimmed}`);
+              }
             }
+          } else if (content.type === "tool_use") {
+            toolCount++;
+            const rawText = `[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`;
+            logParts.push(rawText);
+            pushPreview(`  ${formatToolUse(content.name, content.input as Record<string, unknown>)}`);
           }
-        } else if (content.type === "tool_use") {
-          toolCount++;
-          const rawText = `[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`;
-          logParts.push(rawText);
-          pushPreview(`  ${formatToolUse(content.name, content.input as Record<string, unknown>)}`);
+        }
+      } else if (message.type === "result") {
+        if (message.is_error) {
+          logParts.push(`[error] ${message.error}\n`);
+          pushPreview(`  ${c.red}${c.bold}✗ Error: ${message.error}${c.reset}`);
+          result = message.error;
+          isError = true;
+        } else {
+          logParts.push(`[result] ${message.result}\n`);
+          pushPreview(`  ${c.green}${c.bold}✓ Result: ${message.result}${c.reset}`);
+          result = message.result;
         }
       }
-    } else if (message.type === "result") {
-      if (message.is_error) {
-        logParts.push(`[error] ${message.error}\n`);
-        pushPreview(`  ${c.red}${c.bold}✗ Error: ${message.error}${c.reset}`);
-        result = message.error;
-        isError = true;
-      } else {
-        logParts.push(`[result] ${message.result}\n`);
-        pushPreview(`  ${c.green}${c.bold}✓ Result: ${message.result}${c.reset}`);
-        result = message.result;
-      }
+    }
+  } catch (err) {
+    // The amp-sdk throws if the CLI process exits with a non-zero code, even
+    // after it has already delivered a valid result message. If we captured a
+    // result, treat the process exit as non-fatal.
+    if (result) {
+      logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
+    } else {
+      isError = true;
+      result = err instanceof Error ? err.message : String(err);
+      logParts.push(`[error] ${result}\n`);
     }
   }
 

@@ -1,7 +1,11 @@
 import * as native from '__wasm_rquickjs_builtin/fs_native';
-import { aggregateTwoErrors } from '__wasm_rquickjs_builtin/internal/errors';
+import {
+    aggregateTwoErrors,
+    ERR_FS_FILE_TOO_LARGE,
+} from '__wasm_rquickjs_builtin/internal/errors';
 
 const MKDIR_MODE_MASK = 0o7777;
+const kIoMaxLength = 2 ** 31 - 1;
 
 let _Buffer = null;
 function getBuffer() {
@@ -487,6 +491,14 @@ export class FileHandle {
                 throw e;
             }
         }
+
+        const statResult = native.fs_fstat(this._fd);
+        if (statResult.error) throw createSystemError(statResult.error);
+        const size = statResult.stat?.size;
+        if (typeof size === 'number' && size > kIoMaxLength) {
+            throw new ERR_FS_FILE_TOO_LARGE(size);
+        }
+
         // Read all data from file using current fd position (pass null to use OS offset)
         const chunks = [];
         let totalSize = 0;
