@@ -58,6 +58,7 @@ const HASH_OUTPUT_LENGTHS = {
 };
 
 const HKDF_MAX_INFO_LENGTH = 1024;
+const RANDOM_INT_MAX_RANGE = 0xFFFF_FFFF_FFFF;
 
 const HKDF_OUTPUT_LENGTHS = {
     'md5': 16,
@@ -747,40 +748,46 @@ export function randomFill(buffer, offset, size, callback) {
 }
 
 export function randomInt(low, high, callback) {
-    if (typeof high === 'function') {
+    const minNotSpecified = high === undefined || typeof high === 'function';
+    if (minNotSpecified) {
         callback = high;
         high = low;
         low = 0;
-    } else if (high === undefined) {
-        high = low;
-        low = 0;
     }
 
-    if (!Number.isInteger(low) || !Number.isInteger(high)) {
-        const err = new TypeError('Arguments must be integers');
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        if (callback) { queueMicrotask(() => callback(err)); return; }
-        throw err;
+    const isSync = callback === undefined;
+    if (!isSync && typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'function', callback);
+    }
+
+    if (!Number.isSafeInteger(low)) {
+        throw new ERR_INVALID_ARG_TYPE('min', 'a safe integer', low);
+    }
+
+    if (!Number.isSafeInteger(high)) {
+        throw new ERR_INVALID_ARG_TYPE('max', 'a safe integer', high);
     }
 
     if (low >= high) {
-        const err = new RangeError('The value of "max" is out of range.');
-        err.code = 'ERR_OUT_OF_RANGE';
-        if (callback) { queueMicrotask(() => callback(err)); return; }
-        throw err;
+        throw new ERR_OUT_OF_RANGE('max', `greater than the value of "min" (${low})`, high);
+    }
+
+    const range = high - low;
+    if (!(range <= RANDOM_INT_MAX_RANGE)) {
+        const rangeName = minNotSpecified ? 'max' : 'max - min';
+        throw new ERR_OUT_OF_RANGE(rangeName, `<= ${RANDOM_INT_MAX_RANGE}`, range);
     }
 
     const result = webCryptoNative.random_int_range(low, high);
     if (result === null || result === undefined) {
-        const err = new RangeError('The value of "max" is out of range.');
-        err.code = 'ERR_OUT_OF_RANGE';
-        if (callback) { queueMicrotask(() => callback(err)); return; }
-        throw err;
+        throw new ERR_OUT_OF_RANGE('max', `greater than the value of "min" (${low})`, high);
     }
-    if (callback) {
+
+    if (!isSync) {
         queueMicrotask(() => callback(null, result));
         return;
     }
+
     return result;
 }
 
