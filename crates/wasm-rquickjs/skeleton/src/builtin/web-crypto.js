@@ -5074,6 +5074,28 @@ function validateRsaKeyPairOptions(options) {
     }
 }
 
+function validateRsaPssKeyPairOptions(options) {
+    validateRsaKeyPairOptions(options);
+
+    const { hashAlgorithm, mgf1HashAlgorithm, saltLength } = options;
+
+    if (hashAlgorithm !== undefined) {
+        if (typeof hashAlgorithm !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('options.hashAlgorithm', 'string', hashAlgorithm);
+        }
+    }
+
+    if (mgf1HashAlgorithm !== undefined) {
+        if (typeof mgf1HashAlgorithm !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('options.mgf1HashAlgorithm', 'string', mgf1HashAlgorithm);
+        }
+    }
+
+    if (saltLength !== undefined) {
+        validateInt32KeygenOption(saltLength, 'options.saltLength', 0, 2147483647);
+    }
+}
+
 function validateDsaKeyPairOptions(options) {
     validateUint32KeygenOption(options.modulusLength, 'options.modulusLength');
     if (options.divisorLength != null) {
@@ -5182,6 +5204,10 @@ function validateGeneratedPrivateKeyEncoding(type_, privateKeyEncoding) {
     if (cipher != null && !isStringOrBufferLike(passphrase)) {
         throw createInvalidKeygenPropertyError('privateKeyEncoding.passphrase', passphrase);
     }
+    if (cipher != null && format === 'der' &&
+        (privateKeyEncoding.type === 'pkcs1' || privateKeyEncoding.type === 'sec1')) {
+        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS(privateKeyEncoding.type, 'does not support encryption');
+    }
     if (cipher != null) {
         privateKeyEncoding.cipher = normalizeCipherAlgorithm(cipher);
     }
@@ -5243,7 +5269,11 @@ export function generateKeyPairSync(type_, options) {
     } else if (type_ === 'ed25519') {
         algorithm = 'ed25519';
     } else if (type_ === 'rsa' || type_ === 'rsa-pss') {
-        validateRsaKeyPairOptions(options);
+        if (type_ === 'rsa-pss') {
+            validateRsaPssKeyPairOptions(options);
+        } else {
+            validateRsaKeyPairOptions(options);
+        }
         algorithm = 'rsa';
         modulusLength = options.modulusLength;
         if (options.publicExponent != null) {
@@ -5317,7 +5347,11 @@ export function generateKeyPair(type_, options, callback) {
 
     options = normalizeGenerateKeyPairOptions(type_, options);
     if (type_ === 'rsa' || type_ === 'rsa-pss') {
-        validateRsaKeyPairOptions(options);
+        if (type_ === 'rsa-pss') {
+            validateRsaPssKeyPairOptions(options);
+        } else {
+            validateRsaKeyPairOptions(options);
+        }
     } else if (type_ === 'dsa') {
         validateDsaKeyPairOptions(options);
     } else if (type_ === 'dh') {
