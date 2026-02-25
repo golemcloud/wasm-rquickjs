@@ -423,6 +423,23 @@ pub mod native_module {
     use rquickjs::{Array, Ctx, Object, TypedArray, Value};
     use std::path::{Component, Path, PathBuf};
 
+    const MAX_STACK_DEPTH_FOR_READDIR: isize = 384;
+    const STACK_DEPTH_SCAN_LIMIT: isize = 1024;
+
+    fn has_excessive_js_stack_depth(ctx: &Ctx<'_>) -> bool {
+        for depth in 0..STACK_DEPTH_SCAN_LIMIT {
+            if ctx.script_or_module_name(depth).is_none() {
+                return false;
+            }
+
+            if depth >= MAX_STACK_DEPTH_FOR_READDIR {
+                return true;
+            }
+        }
+
+        true
+    }
+
     // --- Existing functions (unchanged) ---
 
     fn normalize_existing_path_for_realpath(path: &Path) -> std::io::Result<String> {
@@ -975,6 +992,12 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_readdir(ctx: Ctx<'_>, path: String, with_file_types: bool) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
+
+        if has_excessive_js_stack_depth(&ctx) {
+            result.set("stackOverflow", true).unwrap();
+            return result;
+        }
+
         match std::fs::read_dir(&path) {
             Ok(entries) => {
                 let arr = Array::new(ctx.clone()).unwrap();

@@ -822,10 +822,7 @@
     "parallel/test-fs-readdir-buffer.js": {},
     "parallel/test-fs-readdir-pipe.js": {},
     "parallel/test-fs-readdir-recursive.js": {},
-    "parallel/test-fs-readdir-stack-overflow.js": {
-      "skip": true,
-      "reason": "causes WASM timeout or panic"
-    },
+    "parallel/test-fs-readdir-stack-overflow.js": {},
     "parallel/test-fs-readdir-types-symlinks.js": {},
     "parallel/test-fs-readdir-types.js": {
       "skip": true,

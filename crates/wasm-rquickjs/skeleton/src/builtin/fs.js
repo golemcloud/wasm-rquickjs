@@ -1174,6 +1174,9 @@ export function readdirSync(path, options) {
     const withFileTypes = opts.withFileTypes || false;
     const recursive = opts.recursive || false;
     const result = native.fs_readdir(pathToString(path), withFileTypes);
+    if (result.stackOverflow) {
+        throw new RangeError('Maximum call stack size exceeded');
+    }
     if (result.error) {
         if (result.error.code === 'EIO') {
             const st = native.fs_stat(path);
