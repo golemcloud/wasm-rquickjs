@@ -1999,7 +1999,24 @@ function checkIsPromise(obj) {
     return obj !== null && typeof obj === 'object' && typeof obj.then === 'function' && typeof obj.catch === 'function';
 }
 
-async function waitForActual(promiseFn) {
+function ensureAsyncAssertionFrame(error, assertionFn) {
+    if (!error || typeof error !== 'object' || typeof assertionFn !== 'function' || !assertionFn.name) {
+        return;
+    }
+
+    if (typeof error.stack !== 'string' || error.stack.length === 0) {
+        return;
+    }
+
+    var asyncFrame = 'at async Function.' + assertionFn.name;
+    if (error.stack.indexOf(asyncFrame) !== -1) {
+        return;
+    }
+
+    error.stack += '\n    ' + asyncFrame + ' (native)';
+}
+
+async function waitForActual(promiseFn, assertionFn) {
     var resultPromise;
     if (typeof promiseFn === 'function') {
         // If this throws synchronously, async function semantics make the returned
@@ -2017,6 +2034,7 @@ async function waitForActual(promiseFn) {
     try {
         await resultPromise;
     } catch (e) {
+        ensureAsyncAssertionFrame(e, assertionFn);
         return e;
     }
 
@@ -2133,12 +2151,12 @@ function doesNotThrow(fn) {
 
 async function rejects(promiseFn) {
     var args = Array.prototype.slice.call(arguments, 1);
-    expectsError.apply(null, [rejects, await waitForActual(promiseFn)].concat(args));
+    expectsError.apply(null, [rejects, await waitForActual(promiseFn, rejects)].concat(args));
 }
 
 async function doesNotReject(promiseFn) {
     var args = Array.prototype.slice.call(arguments, 1);
-    expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn)].concat(args));
+    expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn, doesNotReject)].concat(args));
 }
 
 function ifError(value) {

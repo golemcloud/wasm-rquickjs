@@ -745,12 +745,10 @@
     "parallel/test-fs-promises-writefile-with-fd.js": {},
     "parallel/test-fs-promises-writefile.js": {},
     "parallel/test-fs-promises.js": {
-      "skip": true,
-      "reason": "checks V8-specific stack trace format in assert.rejects",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: checks V8-specific stack trace format in assert.rejects" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: checks V8-specific stack trace format in assert.rejects" }
+        "block_00_block_00": {},
+        "block_01_block_01": { "skip": true, "reason": "utimes timestamp expectation mismatch (expected +60s)" }
       }
     },
     "parallel/test-fs-promisified.js": {
