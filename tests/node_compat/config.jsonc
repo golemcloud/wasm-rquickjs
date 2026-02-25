@@ -1952,10 +1952,7 @@
     },
     "parallel/test-crypto-private-decrypt-gh32240.js": {},
     "parallel/test-crypto-psychic-signatures.js": {},
-    "parallel/test-crypto-publicDecrypt-fails-first-time.js": {
-      "skip": true,
-      "reason": "requires RSA publicDecrypt/privateDecrypt"
-    },
+    "parallel/test-crypto-publicDecrypt-fails-first-time.js": {},
     "parallel/test-crypto-random.js": {
       "skip": true,
       "reason": "requires crypto.pseudoRandomBytes, buffer.kMaxLength, and specific error message formats",
