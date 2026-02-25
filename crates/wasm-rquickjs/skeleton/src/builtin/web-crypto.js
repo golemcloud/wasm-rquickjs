@@ -604,33 +604,69 @@ export function randomUUID(options) {
     return webCryptoNative.random_uuid_v4_string();
 }
 
-export function randomBytes(size, callback) {
-    if (typeof size !== 'number' || size < 0 || !Number.isFinite(size)) {
-        const err = new RangeError('The value of "size" is out of range. It must be a non-negative finite number.');
-        err.code = 'ERR_OUT_OF_RANGE';
-        if (callback) {
-            queueMicrotask(() => callback(err));
-            return;
-        }
-        throw err;
+const RANDOM_BYTES_MAX_LENGTH = Math.min(kMaxLength, 2 ** 31 - 1);
+
+function validateRandomBytesSize(size) {
+    if (typeof size !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('size', 'number', size);
     }
-    const bytes = webCryptoNative.random_bytes(size);
+
+    if (!Number.isFinite(size) || size < 0 || size > RANDOM_BYTES_MAX_LENGTH) {
+        throw new ERR_OUT_OF_RANGE('size', `>= 0 && <= ${RANDOM_BYTES_MAX_LENGTH}`, size);
+    }
+
+    return Math.floor(size);
+}
+
+export function randomBytes(size, callback) {
+    const normalizedSize = validateRandomBytesSize(size);
+
+    if (callback !== undefined && typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'function', callback);
+    }
+
+    const bytes = webCryptoNative.random_bytes(normalizedSize);
     const buf = typeof Buffer !== 'undefined' ? Buffer.from(bytes) : new Uint8Array(bytes);
-    if (callback) {
+
+    if (callback !== undefined) {
         queueMicrotask(() => callback(null, buf));
         return;
     }
+
     return buf;
 }
 
+export function pseudoRandomBytes(size, callback) {
+    return randomBytes(size, callback);
+}
+
+export const prng = pseudoRandomBytes;
+export const rng = pseudoRandomBytes;
+
+function toRandomFillTarget(buffer) {
+    if (ArrayBuffer.isView(buffer)) {
+        return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    }
+
+    if (isAnyArrayBuffer(buffer)) {
+        return new Uint8Array(buffer);
+    }
+
+    throw new ERR_INVALID_ARG_TYPE('buf', ['ArrayBuffer', 'SharedArrayBuffer', 'Buffer', 'TypedArray', 'DataView'], buffer);
+}
+
 export function randomFillSync(buffer, offset, size) {
+    const target = toRandomFillTarget(buffer);
+
     if (offset === undefined) offset = 0;
-    if (size === undefined) size = buffer.byteLength - offset;
+    if (size === undefined) size = target.byteLength - offset;
+
     const bytes = webCryptoNative.random_bytes(size);
-    const target = new Uint8Array(buffer.buffer || buffer, buffer.byteOffset || 0, buffer.byteLength || buffer.length);
+
     for (let i = 0; i < size; i++) {
         target[offset + i] = bytes[i];
     }
+
     return buffer;
 }
 
@@ -638,18 +674,20 @@ export function randomFill(buffer, offset, size, callback) {
     if (typeof offset === 'function') {
         callback = offset;
         offset = 0;
-        size = buffer.byteLength;
+        const target = toRandomFillTarget(buffer);
+        size = target.byteLength;
     } else if (typeof size === 'function') {
         callback = size;
-        size = buffer.byteLength - offset;
+        const target = toRandomFillTarget(buffer);
+        size = target.byteLength - offset;
     }
-    try {
-        randomFillSync(buffer, offset, size);
-        if (callback) queueMicrotask(() => callback(null, buffer));
-    } catch (err) {
-        if (callback) queueMicrotask(() => callback(err));
-        else throw err;
+
+    if (typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'function', callback);
     }
+
+    randomFillSync(buffer, offset, size);
+    queueMicrotask(() => callback(null, buffer));
 }
 
 export function randomInt(low, high, callback) {

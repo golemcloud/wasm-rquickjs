@@ -69,6 +69,28 @@ function cjsExport(ns) {
     return def;
 }
 
+const cryptoCjs = (() => {
+    const out = {};
+    const keys = Object.keys(crypto);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        out[key] = crypto[key];
+    }
+
+    ['pseudoRandomBytes', 'prng', 'rng'].forEach((name) => {
+        if (Object.prototype.hasOwnProperty.call(out, name)) {
+            Object.defineProperty(out, name, {
+                value: out[name],
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+        }
+    });
+
+    return out;
+})();
+
 const builtinModules = {
     'path': cjsExport(pathModule),
     'node:path': cjsExport(pathModule),
@@ -97,8 +119,8 @@ const builtinModules = {
     'node:stream/consumers': cjsExport(streamConsumers),
     'stream/web': cjsExport(streamWeb),
     'node:stream/web': cjsExport(streamWeb),
-    'crypto': cjsExport(crypto),
-    'node:crypto': cjsExport(crypto),
+    'crypto': cryptoCjs,
+    'node:crypto': cryptoCjs,
     'child_process': cjsExport(child_process),
     'node:child_process': cjsExport(child_process),
     'string_decoder': cjsExport(string_decoder),

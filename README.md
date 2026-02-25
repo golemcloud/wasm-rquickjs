@@ -485,6 +485,9 @@ Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createSe
 - `getFips`
 - `setFips`
 - `randomBytes`
+- `pseudoRandomBytes` (alias of `randomBytes`)
+- `prng` (alias of `randomBytes`)
+- `rng` (alias of `randomBytes`)
 - `randomFillSync`
 - `randomFill`
 - `randomInt`
