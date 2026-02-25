@@ -3156,6 +3156,20 @@ function toPemString(keyData) {
     return decoder.decode(bytes);
 }
 
+function normalizeAsymmetricKeyDataForEncoding(keyData, format, encoding) {
+    if (format === 'jwk' || encoding === undefined || typeof keyData !== 'string') {
+        return keyData;
+    }
+    return toBytes(keyData, encoding);
+}
+
+function normalizeAsymmetricPassphraseForEncoding(passphrase, encoding) {
+    if (encoding === undefined || typeof passphrase !== 'string') {
+        return passphrase;
+    }
+    return toBytes(passphrase, encoding);
+}
+
 const ED25519_PKCS8_PREFIX = new Uint8Array([
     0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
     0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
@@ -3440,6 +3454,36 @@ function parseDerIntegerBytes(der) {
         throw new Error('Invalid DER integer');
     }
     return asn1IntegerToUnsignedBytes(der, element);
+}
+
+function extractSubjectPublicKeyInfoFromCertificateDer(der) {
+    try {
+        const cert = readAsn1Element(der, 0);
+        if (cert.tag !== 0x30 || cert.nextOffset !== der.length) {
+            return null;
+        }
+        const certChildren = readAsn1Children(der, cert.valueStart, cert.valueEnd);
+        if (certChildren.length < 1 || certChildren[0].tag !== 0x30) {
+            return null;
+        }
+
+        const tbsCertificate = certChildren[0];
+        const tbsChildren = readAsn1Children(der, tbsCertificate.valueStart, tbsCertificate.valueEnd);
+        const hasVersion = tbsChildren.length > 0 && tbsChildren[0].tag === 0xa0;
+        const subjectPublicKeyInfoIndex = hasVersion ? 6 : 5;
+        if (tbsChildren.length <= subjectPublicKeyInfoIndex) {
+            return null;
+        }
+
+        const subjectPublicKeyInfo = tbsChildren[subjectPublicKeyInfoIndex];
+        if (subjectPublicKeyInfo.tag !== 0x30) {
+            return null;
+        }
+
+        return der.slice(subjectPublicKeyInfo.start, subjectPublicKeyInfo.nextOffset);
+    } catch {
+        return null;
+    }
 }
 
 function normalizeBytes(bytes) {
@@ -4695,8 +4739,7 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 const dsaKey = maybeParseDsaPrivateKey(derBytes, 'der');
                 if (dsaKey) return dsaKey;
             }
-            const badErr = new Error('error:1C800064:Provider routines::bad decrypt');
-            throw badErr;
+            throw createBadDecryptError();
         }
 
         if (passphrase !== undefined) {
@@ -4880,6 +4923,21 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             return key;
         }
 
+        if (pem.includes('BEGIN CERTIFICATE')) {
+            const certDer = decodePemToDer(pem);
+            const spkiDer = certDer ? extractSubjectPublicKeyInfoFromCertificateDer(certDer) : null;
+            if (spkiDer) {
+                const certHandle = webCryptoNative.create_public_key_der(spkiDer);
+                if (certHandle !== null && certHandle !== undefined) {
+                    const key = new KeyObject(certHandle, 'public');
+                    if (cacheKey !== null) {
+                        PUBLIC_KEY_CACHE.set(cacheKey, key);
+                    }
+                    return key;
+                }
+            }
+        }
+
         const rsaPssPubKey = maybeParseRsaPssPublicKey(pem, 'pem');
         if (rsaPssPubKey) {
             if (cacheKey !== null) {
@@ -4896,6 +4954,9 @@ function createPublicKeyFromData(keyData, format, passphrase) {
                 if (encryptedDerived !== null && encryptedDerived !== undefined) {
                     return new KeyObject(encryptedDerived, 'public');
                 }
+            }
+            if (isPemEncrypted(pem)) {
+                throw createBadDecryptError();
             }
         }
 
@@ -5089,7 +5150,9 @@ export function createPrivateKey(key) {
                 err.code = 'ERR_INVALID_ARG_VALUE';
                 throw err;
             }
-            return createPrivateKeyFromData(innerKey, format, key.passphrase, key.type);
+            const normalizedKeyData = normalizeAsymmetricKeyDataForEncoding(innerKey, format, key.encoding);
+            const normalizedPassphrase = normalizeAsymmetricPassphraseForEncoding(key.passphrase, key.encoding);
+            return createPrivateKeyFromData(normalizedKeyData, format, normalizedPassphrase, key.type);
         }
         return createPrivateKeyFromData(key, 'pem');
     }
@@ -5188,7 +5251,9 @@ export function createPublicKey(key) {
                 throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.key.type, 'private');
             }
             const format = key.format || 'pem';
-            return createPublicKeyFromData(key.key, format, key.passphrase);
+            const normalizedKeyData = normalizeAsymmetricKeyDataForEncoding(key.key, format, key.encoding);
+            const normalizedPassphrase = normalizeAsymmetricPassphraseForEncoding(key.passphrase, key.encoding);
+            return createPublicKeyFromData(normalizedKeyData, format, normalizedPassphrase);
         }
         return createPublicKeyFromData(key, 'pem');
     }
@@ -6362,23 +6427,183 @@ function rsaCacheKey(bytes, padding) {
     return String(padding) + ':' + bytesToBase64Url(bytes);
 }
 
+function hashOneShotBytes(algorithm, data) {
+    const digest = webCryptoNative.hash_one_shot(algorithm, data);
+    return digest instanceof Uint8Array ? digest : new Uint8Array(digest);
+}
+
+function mgf1(seed, length, hashAlgorithm, hashLength) {
+    const mask = new Uint8Array(length);
+    const blockInput = new Uint8Array(seed.length + 4);
+    blockInput.set(seed, 0);
+    const counterOffset = seed.length;
+    for (let offset = 0, counter = 0; offset < length; offset += hashLength, counter += 1) {
+        blockInput[counterOffset] = (counter >>> 24) & 0xff;
+        blockInput[counterOffset + 1] = (counter >>> 16) & 0xff;
+        blockInput[counterOffset + 2] = (counter >>> 8) & 0xff;
+        blockInput[counterOffset + 3] = counter & 0xff;
+        const block = hashOneShotBytes(hashAlgorithm, blockInput);
+        mask.set(block.subarray(0, Math.min(hashLength, length - offset)), offset);
+    }
+    return mask;
+}
+
+function xorBytes(left, right) {
+    const out = new Uint8Array(left.length);
+    for (let i = 0; i < left.length; i++) {
+        out[i] = left[i] ^ right[i];
+    }
+    return out;
+}
+
+function getRsaModulusSizeBytes(keyObject) {
+    const details = keyObject && keyObject.asymmetricKeyDetails;
+    if (!details || typeof details.modulusLength !== 'number') {
+        return null;
+    }
+    return Math.ceil(details.modulusLength / 8);
+}
+
+function createRsaOaepDecodingError() {
+    const err = new Error('error:02000079:rsa routines::oaep decoding error');
+    err.code = 'ERR_OSSL_RSA_OAEP_DECODING_ERROR';
+    err.library = 'rsa routines';
+    err.reason = 'oaep decoding error';
+    return err;
+}
+
+function createRsaDataTooLargeForKeySizeError() {
+    const err = new Error('error:0200006E:rsa routines::data too large for key size');
+    err.code = 'ERR_OSSL_RSA_DATA_TOO_LARGE_FOR_KEY_SIZE';
+    err.library = 'rsa routines';
+    err.reason = 'data too large for key size';
+    return err;
+}
+
+function normalizeRsaOaepHash(oaepHash) {
+    if (oaepHash === undefined) {
+        return 'sha1';
+    }
+    if (typeof oaepHash !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('key.oaepHash', 'string', oaepHash);
+    }
+    const normalized = HASH_ALIASES[oaepHash.toLowerCase()];
+    if (!normalized) {
+        const err = new Error('Invalid digest');
+        err.code = 'ERR_OSSL_EVP_INVALID_DIGEST';
+        throw err;
+    }
+    return normalized;
+}
+
+function rsaOaepEncode(message, modulusSize, hashAlgorithm, labelBytes) {
+    const label = labelBytes || new Uint8Array(0);
+    const lHash = hashOneShotBytes(hashAlgorithm, label);
+    const hashLength = lHash.length;
+    if (message.length > modulusSize - (2 * hashLength) - 2) {
+        return null;
+    }
+
+    const psLength = modulusSize - message.length - (2 * hashLength) - 2;
+    const db = new Uint8Array(modulusSize - hashLength - 1);
+    db.set(lHash, 0);
+    db[hashLength + psLength] = 0x01;
+    db.set(message, hashLength + psLength + 1);
+
+    const seed = randomBytes(hashLength);
+    const dbMask = mgf1(seed, db.length, hashAlgorithm, hashLength);
+    const maskedDb = xorBytes(db, dbMask);
+    const seedMask = mgf1(maskedDb, hashLength, hashAlgorithm, hashLength);
+    const maskedSeed = xorBytes(seed, seedMask);
+
+    const encoded = new Uint8Array(modulusSize);
+    encoded[0] = 0x00;
+    encoded.set(maskedSeed, 1);
+    encoded.set(maskedDb, 1 + hashLength);
+    return encoded;
+}
+
+function rsaOaepDecode(encoded, hashAlgorithm, labelBytes) {
+    const label = labelBytes || new Uint8Array(0);
+    const lHash = hashOneShotBytes(hashAlgorithm, label);
+    const hashLength = lHash.length;
+    if (encoded.length < (2 * hashLength) + 2 || encoded[0] !== 0x00) {
+        return null;
+    }
+
+    const maskedSeed = encoded.subarray(1, 1 + hashLength);
+    const maskedDb = encoded.subarray(1 + hashLength);
+    const seedMask = mgf1(maskedDb, hashLength, hashAlgorithm, hashLength);
+    const seed = xorBytes(maskedSeed, seedMask);
+    const dbMask = mgf1(seed, maskedDb.length, hashAlgorithm, hashLength);
+    const db = xorBytes(maskedDb, dbMask);
+
+    for (let i = 0; i < hashLength; i++) {
+        if (db[i] !== lHash[i]) {
+            return null;
+        }
+    }
+
+    let separatorIndex = -1;
+    for (let i = hashLength; i < db.length; i++) {
+        const byte = db[i];
+        if (byte === 0x01) {
+            separatorIndex = i;
+            break;
+        }
+        if (byte !== 0x00) {
+            return null;
+        }
+    }
+    if (separatorIndex === -1) {
+        return null;
+    }
+    return db.slice(separatorIndex + 1);
+}
+
 export function publicEncrypt(key, buffer) {
     let keyObj;
     let padding = 4; // RSA_PKCS1_OAEP_PADDING default
+    let encoding;
+    let oaepHash = 'sha1';
+    let oaepLabel;
     if (key instanceof KeyObject) {
         keyObj = key;
     } else if (typeof key === 'object' && key !== null) {
+        if (key.padding !== undefined) padding = key.padding;
+        if (key.encoding !== undefined) encoding = key.encoding;
+        oaepHash = normalizeRsaOaepHash(key.oaepHash);
+        if (key.oaepLabel !== undefined) oaepLabel = toBytes(key.oaepLabel, encoding);
+
         if (key.key !== undefined) {
             keyObj = key.key instanceof KeyObject ? key.key : createPublicKey(key);
         } else {
             keyObj = createPublicKey(key);
         }
-        if (key.padding !== undefined) padding = key.padding;
     } else {
         keyObj = createPublicKey(key);
     }
 
-    const data = toBytes(buffer);
+    const data = toBytes(buffer, encoding);
+    if (padding === constants.RSA_PKCS1_OAEP_PADDING) {
+        const modulusSize = getRsaModulusSizeBytes(keyObj);
+        if (!modulusSize) {
+            throw new Error('Public encrypt failed');
+        }
+        const encoded = rsaOaepEncode(data, modulusSize, oaepHash, oaepLabel);
+        if (!encoded) {
+            throw createRsaDataTooLargeForKeySizeError();
+        }
+        const result = webCryptoNative.public_encrypt(keyObj._handle, encoded, constants.RSA_NO_PADDING);
+        if (result === null || result === undefined) {
+            throw new Error('Public encrypt failed');
+        }
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(result);
+        }
+        return new Uint8Array(result);
+    }
+
     const result = webCryptoNative.public_encrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
         throw new Error('Public encrypt failed');
@@ -6394,20 +6619,52 @@ export function publicEncrypt(key, buffer) {
 export function privateDecrypt(key, buffer) {
     let keyObj;
     let padding = 4; // RSA_PKCS1_OAEP_PADDING default
+    let encoding;
+    let oaepHash = 'sha1';
+    let oaepLabel;
     if (key instanceof KeyObject) {
         keyObj = key;
     } else if (typeof key === 'object' && key !== null) {
+        if (key.padding !== undefined) padding = key.padding;
+        if (key.encoding !== undefined) encoding = key.encoding;
+        oaepHash = normalizeRsaOaepHash(key.oaepHash);
+        if (key.oaepLabel !== undefined) oaepLabel = toBytes(key.oaepLabel, encoding);
+
         if (key.key !== undefined) {
             keyObj = key.key instanceof KeyObject ? key.key : createPrivateKey(key);
         } else {
             keyObj = createPrivateKey(key);
         }
-        if (key.padding !== undefined) padding = key.padding;
     } else {
         keyObj = createPrivateKey(key);
     }
 
-    const data = toBytes(buffer);
+    // Node.js rejects RSA_PKCS1_PADDING private decrypt when implicit rejection
+    // support is unavailable (for us this matches !process.config.variables.node_shared_openssl).
+    if (padding === constants.RSA_PKCS1_PADDING &&
+        !(process && process.config && process.config.variables && process.config.variables.node_shared_openssl)) {
+        const err = new TypeError('RSA_PKCS1_PADDING is no longer supported for private decryption');
+        err.code = 'ERR_INVALID_ARG_VALUE';
+        throw err;
+    }
+
+    const data = toBytes(buffer, encoding);
+    if (padding === constants.RSA_PKCS1_OAEP_PADDING) {
+        const rawResult = webCryptoNative.private_decrypt(keyObj._handle, data, constants.RSA_NO_PADDING);
+        if (rawResult === null || rawResult === undefined) {
+            throw createRsaOaepDecodingError();
+        }
+        const raw = rawResult instanceof Uint8Array ? rawResult : new Uint8Array(rawResult);
+        const decoded = rsaOaepDecode(raw, oaepHash, oaepLabel);
+        if (decoded === null) {
+            throw createRsaOaepDecodingError();
+        }
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(decoded);
+        }
+        return decoded;
+    }
+
     const cached = RSA_PRIVATE_DECRYPT_CACHE.get(rsaCacheKey(data, padding));
     if (cached) {
         if (typeof Buffer !== 'undefined') {
@@ -6428,6 +6685,7 @@ export function privateDecrypt(key, buffer) {
 export function privateEncrypt(key, buffer) {
     let keyObj;
     let padding = 1; // RSA_PKCS1_PADDING default
+    let encoding;
     if (key instanceof KeyObject) {
         keyObj = key;
     } else if (typeof key === 'object' && key !== null) {
@@ -6437,11 +6695,12 @@ export function privateEncrypt(key, buffer) {
             keyObj = createPrivateKey(key);
         }
         if (key.padding !== undefined) padding = key.padding;
+        if (key.encoding !== undefined) encoding = key.encoding;
     } else {
         keyObj = createPrivateKey(key);
     }
 
-    const data = toBytes(buffer);
+    const data = toBytes(buffer, encoding);
     const result = webCryptoNative.private_encrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
         throw new Error('Private encrypt failed');
@@ -6457,6 +6716,7 @@ export function privateEncrypt(key, buffer) {
 export function publicDecrypt(key, buffer) {
     let keyObj;
     let padding = 1; // RSA_PKCS1_PADDING default
+    let encoding;
     if (key instanceof KeyObject) {
         keyObj = key;
     } else if (typeof key === 'object' && key !== null) {
@@ -6466,11 +6726,12 @@ export function publicDecrypt(key, buffer) {
             keyObj = createPublicKey(key);
         }
         if (key.padding !== undefined) padding = key.padding;
+        if (key.encoding !== undefined) encoding = key.encoding;
     } else {
         keyObj = createPublicKey(key);
     }
 
-    const data = toBytes(buffer);
+    const data = toBytes(buffer, encoding);
     const cached = RSA_PUBLIC_DECRYPT_CACHE.get(rsaCacheKey(data, padding));
     if (cached) {
         if (typeof Buffer !== 'undefined') {

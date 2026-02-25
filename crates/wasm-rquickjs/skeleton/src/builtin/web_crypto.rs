@@ -3977,6 +3977,8 @@ fn certificate_export_challenge_impl(spkac: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn rsa_public_encrypt(key: &RsaPublicKey, data: &[u8], padding: u32) -> Option<Vec<u8>> {
+    use rsa::traits::PublicKeyParts;
+
     let mut rng = rsa::rand_core::OsRng;
     match padding {
         // RSA_PKCS1_OAEP_PADDING (4) - default
@@ -3989,11 +3991,23 @@ fn rsa_public_encrypt(key: &RsaPublicKey, data: &[u8], padding: u32) -> Option<V
             let padding_scheme = rsa::Pkcs1v15Encrypt;
             key.encrypt(&mut rng, padding_scheme, data).ok()
         }
+        // RSA_NO_PADDING (3)
+        3 => {
+            let size = key.size();
+            if data.len() != size {
+                return None;
+            }
+            let plaintext = BigUint::from_bytes_be(data);
+            let encrypted = rsa::hazmat::rsa_encrypt(key, &plaintext).ok()?;
+            left_pad_biguint(encrypted, size)
+        }
         _ => None,
     }
 }
 
 fn rsa_private_decrypt(key: &RsaPrivateKey, data: &[u8], padding: u32) -> Option<Vec<u8>> {
+    use rsa::traits::PublicKeyParts;
+
     match padding {
         // RSA_PKCS1_OAEP_PADDING (4) - default
         4 => {
@@ -4004,6 +4018,21 @@ fn rsa_private_decrypt(key: &RsaPrivateKey, data: &[u8], padding: u32) -> Option
         1 => {
             let padding_scheme = rsa::Pkcs1v15Encrypt;
             key.decrypt(padding_scheme, data).ok()
+        }
+        // RSA_NO_PADDING (3)
+        3 => {
+            let size = key.size();
+            if data.len() != size {
+                return None;
+            }
+            let encrypted = BigUint::from_bytes_be(data);
+            let decrypted = rsa::hazmat::rsa_decrypt_and_check(
+                key,
+                Option::<&mut rsa::rand_core::OsRng>::None,
+                &encrypted,
+            )
+            .ok()?;
+            left_pad_biguint(decrypted, size)
         }
         _ => None,
     }
@@ -4068,6 +4097,21 @@ fn rsa_private_encrypt(key: &RsaPrivateKey, data: &[u8], padding: u32) -> Option
             .ok()?;
             left_pad_biguint(raw, size)
         }
+        // RSA_NO_PADDING
+        3 => {
+            let size = key.size();
+            if data.len() != size {
+                return None;
+            }
+            let encoded = BigUint::from_bytes_be(data);
+            let raw = rsa::hazmat::rsa_decrypt_and_check(
+                key,
+                Option::<&mut rsa::rand_core::OsRng>::None,
+                &encoded,
+            )
+            .ok()?;
+            left_pad_biguint(raw, size)
+        }
         _ => None,
     }
 }
@@ -4083,6 +4127,16 @@ fn rsa_public_decrypt(key: &RsaPublicKey, data: &[u8], padding: u32) -> Option<V
             let raw = rsa::hazmat::rsa_encrypt(key, &encrypted).ok()?;
             let padded = left_pad_biguint(raw, size)?;
             rsa_pkcs1_type1_unpad(&padded)
+        }
+        // RSA_NO_PADDING
+        3 => {
+            let size = key.size();
+            if data.len() != size {
+                return None;
+            }
+            let encrypted = BigUint::from_bytes_be(data);
+            let raw = rsa::hazmat::rsa_encrypt(key, &encrypted).ok()?;
+            left_pad_biguint(raw, size)
         }
         _ => None,
     }

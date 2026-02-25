@@ -1983,11 +1983,9 @@
     "parallel/test-crypto-randomfillsync-regression.js": {},
     "parallel/test-crypto-randomuuid.js": {},
     "parallel/test-crypto-rsa-dsa.js": {
-      "skip": true,
-      "reason": "requires publicEncrypt/privateDecrypt/privateEncrypt/publicDecrypt which are not implemented",
       "split": true,
       "subtests": {
-        "block_00_test_rsa_encryption_decryption": { "skip": true, "reason": "inherited: requires publicEncrypt/privateDecrypt/privateEncrypt/publicDecrypt which are not implemented" },
+        "block_00_test_rsa_encryption_decryption": {},
         "block_01_ensure_compatibility_when_using_non_sha1_hash_functions": { "skip": true, "reason": "inherited: requires publicEncrypt/privateDecrypt/privateEncrypt/publicDecrypt which are not implemented" },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires publicEncrypt/privateDecrypt/privateEncrypt/publicDecrypt which are not implemented" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires publicEncrypt/privateDecrypt/privateEncrypt/publicDecrypt which are not implemented" },
