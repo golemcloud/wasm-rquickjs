@@ -6555,7 +6555,7 @@
     "parallel/test-compile-cache-success.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-compile-cache-updated-file.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-compression-decompression-stream.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-console-clear.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-console-clear.js": {},
     "parallel/test-console-formatTime.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-console-methods.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-console-no-swallow-stack-overflow.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },

@@ -7,8 +7,25 @@ export function assert(condition, ...v) {
     }
 }
 
+const CLEAR_CONSOLE_CURSOR_HOME = '\u001b[1;1H';
+const CLEAR_CONSOLE_SCREEN_DOWN = '\u001b[0J';
+
+function clearStream(stream) {
+    if (!stream || typeof stream.write !== 'function' || !stream.isTTY) {
+        return;
+    }
+
+    const env = globalThis.process && globalThis.process.env;
+    if (env && env.TERM === 'dumb') {
+        return;
+    }
+
+    stream.write(CLEAR_CONSOLE_CURSOR_HOME);
+    stream.write(CLEAR_CONSOLE_SCREEN_DOWN);
+}
+
 export function clear() {
-    // not supported
+    clearStream(_getStdout());
 }
 
 const DEFAULT_LABEL = 'default';
@@ -436,7 +453,7 @@ Console.prototype.dir = function(object, options) {
 Console.prototype.dirxml = function(...args) { this.dir(...args); };
 Console.prototype.trace = function(...args) { trace(...args); };
 Console.prototype.assert = function(condition, ...v) { assert(condition, ...v); };
-Console.prototype.clear = function() { clear(); };
+Console.prototype.clear = function() { clearStream(this._stdout); };
 Console.prototype.count = function(label) {
     label = label === undefined ? DEFAULT_LABEL : String(label);
     if (!this._counts[label]) this._counts[label] = 0;
