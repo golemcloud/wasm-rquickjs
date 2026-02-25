@@ -5239,7 +5239,7 @@
         "block_00_basic_group_functionality": {},
         "block_01_group_indentation_is_tracked_per_console_instance": {},
         "block_02_make_sure_labels_work": {},
-        "block_03_check_that_console_groupcollapsed_is_an_alias_of_console_gro": { "skip": true, "reason": "inherited: console.group indentation not implemented" },
+        "block_03_check_that_console_groupcollapsed_is_an_alias_of_console_gro": {},
         "block_04_check_that_multiline_strings_and_object_output_are_indented_": { "skip": true, "reason": "inherited: console.group indentation not implemented" },
         "block_05_check_that_the_kgroupindent_symbol_property_is_not_enumerabl": { "skip": true, "reason": "inherited: console.group indentation not implemented" },
         "block_06_check_custom_groupindentation": { "skip": true, "reason": "inherited: console.group indentation not implemented" },
