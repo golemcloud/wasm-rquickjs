@@ -30,6 +30,21 @@ export function createDeferredPromise() {
 // Keep a list of deprecation codes that have been warned on so we only warn on
 // each one once.
 const codesWarned = new Set();
+const experimentalWarnings = new Set();
+
+export function emitExperimentalWarning(feature) {
+    validateString(feature, "feature");
+
+    if (experimentalWarnings.has(feature)) {
+        return;
+    }
+    experimentalWarnings.add(feature);
+
+    process.emitWarning(
+        `${feature} is an experimental feature and might change at any time`,
+        "ExperimentalWarning",
+    );
+}
 
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
@@ -199,6 +214,7 @@ export default {
     normalizeEncoding,
     once,
     deprecate,
+    emitExperimentalWarning,
     promisify,
     removeColors,
     isError,

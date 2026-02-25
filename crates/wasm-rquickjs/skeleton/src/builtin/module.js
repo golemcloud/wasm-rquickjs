@@ -47,6 +47,7 @@ import * as zlib from 'node:zlib';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
+import * as internalUtil from '__wasm_rquickjs_builtin/internal/util';
 import * as internalUtilDebuglog from '__wasm_rquickjs_builtin/internal/util/debuglog';
 import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstreams/util';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
@@ -203,6 +204,7 @@ const builtinModules = {
     'internal/fs/utils': cjsExport(internalFsUtils),
     'internal/url': cjsExport(internalUrl),
     'internal/errors': cjsExport(internalErrors),
+    'internal/util': cjsExport(internalUtil),
     'internal/util/debuglog': cjsExport(internalUtilDebuglog),
     'internal/webstreams/util': cjsExport(internalWebstreamsUtil),
     'internal/test/binding': cjsExport(internalTestBinding),
