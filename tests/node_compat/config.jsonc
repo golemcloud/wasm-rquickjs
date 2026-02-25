@@ -5233,11 +5233,10 @@
 
     // Tests using ../common/hijackstdio
     "parallel/test-console-group.js": {
-      "skip": true,
-      "reason": "console.group indentation not implemented",
+      "skip": false,
       "split": true,
       "subtests": {
-        "block_00_basic_group_functionality": { "skip": true, "reason": "inherited: console.group indentation not implemented" },
+        "block_00_basic_group_functionality": {},
         "block_01_group_indentation_is_tracked_per_console_instance": { "skip": true, "reason": "inherited: console.group indentation not implemented" },
         "block_02_make_sure_labels_work": { "skip": true, "reason": "inherited: console.group indentation not implemented" },
         "block_03_check_that_console_groupcollapsed_is_an_alias_of_console_gro": { "skip": true, "reason": "inherited: console.group indentation not implemented" },

@@ -1,6 +1,56 @@
 import * as consoleNative from '__wasm_rquickjs_builtin/console_native'
 import * as util from 'node:util'
 
+const DEFAULT_GROUP_INDENTATION = 2;
+const MAX_GROUP_INDENTATION = 1000;
+
+let globalGroupIndentation = '';
+
+function applyGroupIndent(message, groupIndentation) {
+    if (!groupIndentation) {
+        return message;
+    }
+
+    return `${groupIndentation}${String(message).replace(/\n/g, `\n${groupIndentation}`)}`;
+}
+
+function reduceGroupIndent(groupIndentation, groupIndentationWidth) {
+    if (groupIndentationWidth <= 0 || groupIndentation.length === 0) {
+        return groupIndentation;
+    }
+
+    return groupIndentation.slice(0, Math.max(0, groupIndentation.length - groupIndentationWidth));
+}
+
+function validateGroupIndentation(groupIndentation) {
+    if (typeof groupIndentation !== 'number') {
+        const err = new TypeError(`The "groupIndentation" argument must be of type number. Received ${util.inspect(groupIndentation)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    if (!Number.isInteger(groupIndentation)) {
+        const err = new RangeError(`The value of "groupIndentation" is out of range. It must be an integer. Received ${groupIndentation}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+
+    if (groupIndentation < 0 || groupIndentation > MAX_GROUP_INDENTATION) {
+        const err = new RangeError(`The value of "groupIndentation" is out of range. It must be >= 0 && <= ${MAX_GROUP_INDENTATION}. Received ${groupIndentation}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+}
+
+function writeToConfiguredStream(stream, message, nativeWriter, groupIndentation) {
+    const output = applyGroupIndent(message, groupIndentation);
+    if (stream) {
+        stream.write(output + '\n');
+    } else {
+        nativeWriter(output);
+    }
+}
+
 export function assert(condition, ...v) {
     if (!condition) {
         warn("Assertion failed:", ...v)
@@ -61,8 +111,7 @@ function _getStderr() {
 
 export function debug(...v) {
     const msg = util.format(...v);
-    const s = _getStdout();
-    if (s) { s.write(msg + '\n'); } else { consoleNative.debug(msg); }
+    writeToConfiguredStream(_getStdout(), msg, consoleNative.debug, globalGroupIndentation);
 }
 
 export function dir(object, options) {
@@ -74,8 +123,7 @@ export function dir(object, options) {
         msg = e instanceof TypeError && /revoked proxy/i.test(e.message)
             ? '<Revoked Proxy>' : `[Unable to inspect: ${e.message}]`;
     }
-    const s = _getStdout();
-    if (s) { s.write(msg + '\n'); } else { consoleNative.println(msg); }
+    writeToConfiguredStream(_getStdout(), msg, consoleNative.println, globalGroupIndentation);
 }
 
 export function dirxml(object) {
@@ -84,29 +132,32 @@ export function dirxml(object) {
 
 export function error(...v) {
     const msg = util.format(...v);
-    const s = _getStderr();
-    if (s) { s.write(msg + '\n'); } else { consoleNative.error(msg); }
+    writeToConfiguredStream(_getStderr(), msg, consoleNative.error, globalGroupIndentation);
 }
 
 export function group(label) {
     if (label !== undefined) {
         log(label)
     }
+
+    globalGroupIndentation += ' '.repeat(DEFAULT_GROUP_INDENTATION);
 }
 
 export function groupCollapsed(label) {
     if (label !== undefined) {
         log(label)
     }
+
+    globalGroupIndentation += ' '.repeat(DEFAULT_GROUP_INDENTATION);
 }
 
 export function groupEnd() {
+    globalGroupIndentation = reduceGroupIndent(globalGroupIndentation, DEFAULT_GROUP_INDENTATION);
 }
 
 export function info(...v) {
     const msg = util.format(...v);
-    const s = _getStdout();
-    if (s) { s.write(msg + '\n'); } else { consoleNative.info(msg); }
+    writeToConfiguredStream(_getStdout(), msg, consoleNative.info, globalGroupIndentation);
 }
 
 export function log(...v) {
@@ -116,8 +167,7 @@ export function log(...v) {
     } catch (e) {
         msg = `[Unable to format: ${e.message}]`;
     }
-    const s = _getStdout();
-    if (s) { s.write(msg + '\n'); } else { consoleNative.println(msg); }
+    writeToConfiguredStream(_getStdout(), msg, consoleNative.println, globalGroupIndentation);
 }
 
 export function table(data, keys) {
@@ -159,14 +209,12 @@ export function timeEnd(label) {
 
 export function trace(...v) {
     const msg = util.format(...v);
-    const s = _getStderr();
-    if (s) { s.write(msg + '\n'); } else { consoleNative.trace(msg); }
+    writeToConfiguredStream(_getStderr(), msg, consoleNative.trace, globalGroupIndentation);
 }
 
 export function warn(...v) {
     const msg = util.format(...v);
-    const s = _getStderr();
-    if (s) { s.write(msg + '\n'); } else { consoleNative.warn(msg); }
+    writeToConfiguredStream(_getStderr(), msg, consoleNative.warn, globalGroupIndentation);
 }
 
 // table rendering based on https://github.com/ronnyKJ/consoleTable
@@ -340,6 +388,7 @@ export function Console(stdout, stderr, ignoreErrors) {
     let colorMode = 'auto';
     let colorModeWasSet = false;
     let inspectOptions;
+    let groupIndentation = DEFAULT_GROUP_INDENTATION;
 
     if (stdout && typeof stdout === 'object' && !stdout.write) {
         const options = stdout;
@@ -350,8 +399,15 @@ export function Console(stdout, stderr, ignoreErrors) {
             colorModeWasSet = true;
         }
         inspectOptions = options.inspectOptions;
+        groupIndentation = options.groupIndentation;
         stdout = options.stdout;
     }
+
+    if (groupIndentation === undefined) {
+        groupIndentation = DEFAULT_GROUP_INDENTATION;
+    }
+
+    validateGroupIndentation(groupIndentation);
 
     if (!stdout || typeof stdout.write !== 'function') {
         const err = new TypeError(`The "stdout" argument must be an instance of Writable. Received ${util.inspect(stdout)}`);
@@ -401,6 +457,8 @@ export function Console(stdout, stderr, ignoreErrors) {
     this._inspectOptions = inspectOptions;
     this._counts = {};
     this._timers = {};
+    this._groupIndentation = groupIndentation;
+    this._groupIndent = '';
 
     // Bind methods from the most-derived prototype so subclass overrides win,
     // while still supporting detached usage (e.g. [1,2,3].forEach(c.log)).
@@ -413,10 +471,15 @@ export function Console(stdout, stderr, ignoreErrors) {
 }
 
 Console.prototype._writeToStream = function(stream, string) {
+    const hasTrailingNewline = string.endsWith('\n');
+    const baseString = hasTrailingNewline ? string.slice(0, -1) : string;
+    const indentedString = applyGroupIndent(baseString, this._groupIndent);
+    const output = hasTrailingNewline ? `${indentedString}\n` : indentedString;
+
     if (this._ignoreErrors) {
-        try { stream.write(string); } catch (e) {}
+        try { stream.write(output); } catch (e) {}
     } else {
-        stream.write(string);
+        stream.write(output);
     }
 };
 
@@ -468,9 +531,17 @@ Console.prototype.countReset = function(label) {
         this._writeToStream(this._stderr, `Count for '${label}' does not exist\n`);
     }
 };
-Console.prototype.group = function(...args) { if (args.length > 0) this.log(...args); };
-Console.prototype.groupCollapsed = function(...args) { if (args.length > 0) this.log(...args); };
-Console.prototype.groupEnd = function() {};
+Console.prototype.group = function(...args) {
+    if (args.length > 0) {
+        this.log(...args);
+    }
+
+    this._groupIndent += ' '.repeat(this._groupIndentation);
+};
+Console.prototype.groupCollapsed = function(...args) { this.group(...args); };
+Console.prototype.groupEnd = function() {
+    this._groupIndent = reduceGroupIndent(this._groupIndent, this._groupIndentation);
+};
 Console.prototype.table = function(...args) { table(...args); };
 Console.prototype.time = function(label) {
     label = label === undefined ? DEFAULT_LABEL : label;
