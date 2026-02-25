@@ -632,6 +632,56 @@ function normalizeExecParams(options, callback) {
     };
 }
 
+function normalizeExecFileParams(args, options, callback) {
+    var normalizedArgs = [];
+    var normalizedOptions = {};
+    var normalizedCallback = null;
+
+    if (Array.isArray(args)) {
+        normalizedArgs = args.map(function(value) {
+            return String(value);
+        });
+
+        if (typeof options === 'function') {
+            normalizedCallback = options;
+        } else {
+            if (options && typeof options === 'object') {
+                normalizedOptions = options;
+            }
+            if (typeof callback === 'function') {
+                normalizedCallback = callback;
+            }
+        }
+
+        return {
+            args: normalizedArgs,
+            options: normalizedOptions,
+            callback: normalizedCallback,
+        };
+    }
+
+    if (typeof args === 'function') {
+        normalizedCallback = args;
+    } else if (args && typeof args === 'object') {
+        normalizedOptions = args;
+        if (typeof options === 'function') {
+            normalizedCallback = options;
+        }
+    } else {
+        if (typeof options === 'function') {
+            normalizedCallback = options;
+        } else if (typeof callback === 'function') {
+            normalizedCallback = callback;
+        }
+    }
+
+    return {
+        args: normalizedArgs,
+        options: normalizedOptions,
+        callback: normalizedCallback,
+    };
+}
+
 function expandTemplateEnvRefs(command, env) {
     var source = String(command);
     return source.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, function(_, name) {
@@ -823,6 +873,47 @@ function createExecError(command, result) {
     return err;
 }
 
+function buildExecFileCommand(file, args) {
+    var cmd = String(file);
+    for (var i = 0; i < args.length; i++) {
+        cmd += ' ' + String(args[i]);
+    }
+    return cmd;
+}
+
+function createExecFileError(file, args, result) {
+    if (!result) {
+        return createNotSupportedError('execFile');
+    }
+
+    var command = buildExecFileCommand(file, args);
+    if (result.error) {
+        result.error.cmd = command;
+        return result.error;
+    }
+
+    if (result.status === 0 && result.signal === null) {
+        return null;
+    }
+
+    var stderrText = '';
+    if (result.stderr !== undefined && result.stderr !== null) {
+        stderrText = String(result.stderr);
+    }
+
+    var message = 'Command failed: ' + command;
+    if (stderrText.length > 0) {
+        message += '\n' + stderrText;
+    }
+
+    var err = new Error(message);
+    err.code = result.status;
+    err.killed = false;
+    err.signal = result.signal;
+    err.cmd = command;
+    return err;
+}
+
 function createExecChildProcess() {
     var child = new EventEmitter();
     child.pid = 1;
@@ -954,7 +1045,35 @@ export function exec(command, options, callback) {
 }
 
 export function execFile(file, args, options, callback) {
-    throw createNotSupportedError('execFile');
+    var normalized = normalizeExecFileParams(args, options, callback);
+    var child = createExecChildProcess();
+    var resolvedOptions = cloneObject(normalized.options);
+
+    if (resolvedOptions.encoding === undefined) {
+        resolvedOptions.encoding = 'utf8';
+    }
+
+    var result = spawnSync(String(file), normalized.args, resolvedOptions);
+    var error = createExecFileError(file, normalized.args, result);
+
+    child.spawnfile = String(file);
+    child.spawnargs = [String(file)].concat(normalized.args);
+    child.exitCode = typeof result.status === 'number' ? result.status : null;
+    child.signalCode = result.signal;
+
+    scheduleExecCallback(function resolveExecFile() {
+        if (normalized.callback) {
+            normalized.callback(error, result.stdout, result.stderr);
+        }
+
+        if (error) {
+            child.emit('error', error);
+        }
+        child.emit('exit', child.exitCode, child.signalCode);
+        child.emit('close', child.exitCode, child.signalCode);
+    });
+
+    return child;
 }
 
 export function fork(modulePath, args, options) {
