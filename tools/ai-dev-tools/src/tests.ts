@@ -119,6 +119,27 @@ export async function runCategoryTestsIncludeIgnored(
   );
 }
 
+/** Return the count of enabled (non-skipped) tests/subtests for a category. */
+export function getEnabledTestCount(category: string): number {
+  const data = loadConfig();
+  const tests = data.tests ?? {};
+  let count = 0;
+
+  for (const [testPath, opts] of Object.entries(tests)) {
+    if (!matchesCategory(testPath, category)) continue;
+
+    if (opts.split && opts.subtests) {
+      for (const [, subOpts] of Object.entries(opts.subtests)) {
+        if (!opts.skip && !subOpts.skip) count++;
+      }
+    } else if (!opts.skip) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
 function matchesCategory(testPath: string, category: string): boolean {
   return (
     testPath.startsWith(`parallel/test-${category}-`) ||

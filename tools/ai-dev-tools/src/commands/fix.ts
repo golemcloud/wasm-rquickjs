@@ -13,7 +13,9 @@ import {
 import {
   getVendoredTests,
   getSkippedTests,
+  getEnabledTestCount,
   runCategoryTests,
+  runCategoryTestsIncludeIgnored,
   runSingleTest,
   testPathToFilter,
 } from "../tests.js";
@@ -91,6 +93,70 @@ async function waitForCredits(): Promise<void> {
   console.log("  ▶ Resuming...");
 }
 
+/**
+ * Run all tests for a category (including ignored/skipped) and enable any
+ * skipped tests that already pass without any code changes.
+ * Returns the number of newly-enabled tests.
+ */
+async function batchCheckSkippedTests(category: string): Promise<number> {
+  const skipped = getSkippedTests(category);
+  if (skipped.length === 0) return 0;
+
+  console.log("  🔍 Batch-checking all skipped tests for newly-passing ones...");
+  const { output } = await runCategoryTestsIncludeIgnored(category);
+
+  // Extract the set of failing filter names from the output
+  const pattern = /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
+  const failingFilters = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(output)) !== null) {
+    failingFilters.add(match[1]);
+  }
+
+  // Find skipped tests whose filter is NOT in the failing set → they pass
+  const nowPassing: typeof skipped = [];
+  for (const st of skipped) {
+    const filter = testPathToFilter(st.path, st.subtestName);
+    if (!failingFilters.has(filter)) {
+      nowPassing.push(st);
+    }
+  }
+
+  if (nowPassing.length === 0) {
+    console.log("  ℹ No skipped tests are passing yet.");
+    return 0;
+  }
+
+  console.log(`  🎉 Found ${nowPassing.length} skipped test(s) that now pass!`);
+  for (const st of nowPassing) {
+    const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
+    console.log(`    ✅ ${label}`);
+    if (st.subtestName) {
+      enableSubtestInConfig(st.path, st.subtestName);
+    } else {
+      enableTestInConfig(st.path);
+    }
+  }
+
+  // Verify no regressions after enabling
+  console.log("  Verifying after batch-enable...");
+  const { ok } = await runCategoryTests(category);
+  if (!ok) {
+    console.log("  ⚠ Some newly-enabled tests caused regressions. Re-skipping all.");
+    for (const st of nowPassing) {
+      if (st.subtestName) {
+        skipSubtestInConfig(st.path, st.subtestName, st.reason);
+      } else {
+        updateSkipReason(st.path, st.reason);
+      }
+    }
+    return 0;
+  }
+
+  await commitProgress(category, "batch-enable-passing");
+  return nowPassing.length;
+}
+
 export async function fixCommand(category: string): Promise<void> {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
@@ -159,15 +225,25 @@ export async function fixCommand(category: string): Promise<void> {
   let iteration = 0;
   while (true) {
     iteration++;
+
+    // Before the first iteration and every 10th iteration, batch-check all skipped tests
+    if (iteration === 1 || iteration % 10 === 1) {
+      console.log();
+      console.log("── Batch check: looking for skipped tests that already pass ──");
+      await batchCheckSkippedTests(category);
+      console.log();
+    }
+
     const skipped = getSkippedTests(category);
+    const passing = getEnabledTestCount(category);
 
     if (skipped.length === 0) {
-      console.log(`🎉 All tests for '${category}' are passing! Nothing left to fix.`);
+      console.log(`🎉 All ${passing} tests for '${category}' are passing! Nothing left to fix.`);
       break;
     }
 
     console.log("───────────────────────────────────────────────────────────────");
-    console.log(`  Iteration ${iteration} — ${skipped.length} skipped tests remaining`);
+    console.log(`  Iteration ${iteration} — ${passing} passing, ${skipped.length} skipped`);
     console.log("───────────────────────────────────────────────────────────────");
     console.log();
     console.log("Skipped tests:");
