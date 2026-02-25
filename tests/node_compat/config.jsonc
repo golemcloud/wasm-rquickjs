@@ -837,10 +837,7 @@
     },
     "parallel/test-fs-readfile-empty.js": {},
     "parallel/test-fs-readfile-eof.js": {},
-    "parallel/test-fs-readfile-error.js": {
-      "skip": true,
-      "reason": "requires child_process which is not available in WASM"
-    },
+    "parallel/test-fs-readfile-error.js": {},
     "parallel/test-fs-readfile-fd.js": {},
     "parallel/test-fs-readfile-flags.js": {
       "split": true,
@@ -850,21 +847,12 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-fs-readfile-pipe-large.js": {
-      "skip": true,
-      "reason": "requires child_process which is not available in WASM"
-    },
-    "parallel/test-fs-readfile-pipe.js": {
-      "skip": true,
-      "reason": "requires child_process.exec"
-    },
+    "parallel/test-fs-readfile-pipe-large.js": {},
+    "parallel/test-fs-readfile-pipe.js": {},
     "parallel/test-fs-readfile-unlink.js": {},
     "parallel/test-fs-readfile-zero-byte-liar.js": {},
     "parallel/test-fs-readfilesync-enoent.js": {},
-    "parallel/test-fs-readfilesync-pipe-large.js": {
-      "skip": true,
-      "reason": "requires child_process which is not available in WASM"
-    },
+    "parallel/test-fs-readfilesync-pipe-large.js": {},
     "parallel/test-fs-readlink-type-check.js": {},
     "parallel/test-fs-readSync-optional-params.js": {},
     "parallel/test-fs-readv-promises.js": {},
