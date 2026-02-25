@@ -6236,30 +6236,58 @@ Object.defineProperty(generateKeyPair, kCustomPromisifyArgsSymbol, {
     configurable: true,
 });
 
-export function generateKeySync(type_, options) {
-    if (type_ === 'hmac') {
-        const length = (options && options.length) || 256;
-        if (typeof length !== 'number' || length <= 0 || length % 8 !== 0) {
-            const err = new RangeError('Invalid key length for hmac');
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
-        }
-        const keyBytes = randomBytes(length / 8);
-        return createSecretKey(keyBytes);
-    } else if (type_ === 'aes') {
-        const length = options && options.length;
-        if (length !== 128 && length !== 192 && length !== 256) {
-            const err = new RangeError('Invalid key length for aes: must be 128, 192, or 256');
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
-        }
-        const keyBytes = randomBytes(length / 8);
-        return createSecretKey(keyBytes);
-    } else {
-        const err = new Error('Unsupported key type: ' + type_);
-        err.code = 'ERR_INVALID_ARG_VALUE';
-        throw err;
+const MAX_SIGNED_32BIT_INTEGER = 0x7FFF_FFFF;
+
+function validateGenerateKeyOptions(type_, options) {
+    if (typeof type_ !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('type', 'string', type_);
     }
+
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+    }
+
+    if (type_ === 'hmac') {
+        const { length } = options;
+        if (typeof length !== 'number') {
+            throw new ERR_INVALID_ARG_TYPE('options.length', 'number', length);
+        }
+        if (!Number.isInteger(length)) {
+            throw new ERR_OUT_OF_RANGE('options.length', 'an integer', length);
+        }
+        if (length < 8 || length > MAX_SIGNED_32BIT_INTEGER) {
+            throw new ERR_OUT_OF_RANGE('options.length', `>= 8 && <= ${MAX_SIGNED_32BIT_INTEGER}`, length);
+        }
+
+        return {
+            type: 'hmac',
+            length: Math.floor(length / 8),
+        };
+    }
+
+    if (type_ === 'aes') {
+        const { length } = options;
+        if (length !== 128 && length !== 192 && length !== 256) {
+            throw new ERR_INVALID_ARG_VALUE('options.length', length, 'must be one of: 128, 192, 256');
+        }
+
+        return {
+            type: 'aes',
+            length: length / 8,
+        };
+    }
+
+    throw new ERR_INVALID_ARG_VALUE('type', type_, 'must be a supported key type');
+}
+
+function generateSecretKey(params) {
+    const keyBytes = randomBytes(params.length);
+    return createSecretKey(keyBytes);
+}
+
+export function generateKeySync(type_, options) {
+    const params = validateGenerateKeyOptions(type_, options);
+    return generateSecretKey(params);
 }
 
 export function generateKey(type_, options, callback) {
@@ -6267,12 +6295,20 @@ export function generateKey(type_, options, callback) {
         callback = options;
         options = undefined;
     }
-    try {
-        const key = generateKeySync(type_, options);
-        queueMicrotask(() => callback(null, key));
-    } catch (err) {
-        queueMicrotask(() => callback(err));
+
+    if (typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
     }
+
+    const params = validateGenerateKeyOptions(type_, options);
+
+    queueMicrotask(() => {
+        try {
+            callback(null, generateSecretKey(params));
+        } catch (err) {
+            callback(err);
+        }
+    });
 }
 
 // ===== Sign / Verify classes =====
