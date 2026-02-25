@@ -1,5 +1,9 @@
 import * as consoleNative from '__wasm_rquickjs_builtin/console_native'
 import * as util from 'node:util'
+import { Buffer } from 'node:buffer'
+import { validateArray } from '__wasm_rquickjs_builtin/internal/validators'
+import { isMap, isMapIterator, isSet, isSetIterator, isTypedArray } from '__wasm_rquickjs_builtin/internal/util/types'
+import { getStringWidth } from '__wasm_rquickjs_builtin/internal/util/inspect'
 
 const DEFAULT_GROUP_INDENTATION = 2;
 const MAX_GROUP_INDENTATION = 1000;
@@ -171,7 +175,7 @@ export function log(...v) {
 }
 
 export function table(data, keys) {
-    console.log(printTable(data, keys));
+    return renderTableForConsole(globalThis.console, data, keys);
 }
 
 let timers = {}
@@ -217,160 +221,224 @@ export function warn(...v) {
     writeToConfiguredStream(_getStderr(), msg, consoleNative.warn, globalGroupIndentation);
 }
 
-// table rendering based on https://github.com/ronnyKJ/consoleTable
+const tableChars = {
+    middleMiddle: '─',
+    rowMiddle: '┼',
+    topRight: '┐',
+    topLeft: '┌',
+    leftMiddle: '├',
+    topMiddle: '┬',
+    bottomRight: '┘',
+    bottomLeft: '└',
+    bottomMiddle: '┴',
+    rightMiddle: '┤',
+    left: '│ ',
+    right: ' │',
+    middle: ' │ ',
+};
 
-var SEPARATOR = '│';
-
-/**
- * Repeat provided string a given no. of times.
- * @param  {number} amount Number of times to repeat.
- * @param  {string} str    Character(s) to repeat
- * @return {string}        Repeated string.
- */
-function repeatString(amount, str) {
-    str = str || ' ';
-    return Array.apply(0, Array(amount)).join(str);
+function renderTableRow(row, columnWidths) {
+    let out = tableChars.left;
+    for (let i = 0; i < row.length; i++) {
+        const cell = row[i];
+        const len = getStringWidth(cell);
+        const needed = columnWidths[i] - len;
+        out += cell + ' '.repeat(Math.ceil(needed));
+        if (i !== row.length - 1) {
+            out += tableChars.middle;
+        }
+    }
+    out += tableChars.right;
+    return out;
 }
 
-/**
- * Formats certain type of values for more readability.
- * @param  {...}  value         Value to format.
- * @param  {Boolean} isHeaderValue Is this a value in the table header.
- * @return {string}                Formatted value.
- */
-function getFormattedString(value, isHeaderValue) {
-    if (isHeaderValue) {
-    } else if (typeof value === 'string') {
-        // Wrap strings in inverted commans.
-        return value;
-    } else if (typeof value === 'function') {
-        // Just show `function` for a function.
-        return 'function';
+function renderCliTable(head, columns) {
+    const rows = [];
+    const columnWidths = head.map((column) => getStringWidth(column));
+    const longestColumn = Math.max(...columns.map((column) => column.length));
+
+    for (let i = 0; i < head.length; i++) {
+        const column = columns[i];
+        for (let j = 0; j < longestColumn; j++) {
+            if (rows[j] === undefined) {
+                rows[j] = [];
+            }
+
+            const value = Object.prototype.hasOwnProperty.call(column, j) ? column[j] : '';
+            rows[j][i] = value;
+            columnWidths[i] = Math.max(columnWidths[i] || 0, getStringWidth(value));
+        }
     }
-    return value + '';
+
+    const divider = columnWidths.map((width) => tableChars.middleMiddle.repeat(width + 2));
+
+    let result = tableChars.topLeft +
+        divider.join(tableChars.topMiddle) +
+        tableChars.topRight + '\n' +
+        renderTableRow(head, columnWidths) + '\n' +
+        tableChars.leftMiddle +
+        divider.join(tableChars.rowMiddle) +
+        tableChars.rightMiddle + '\n';
+
+    for (const row of rows) {
+        result += `${renderTableRow(row, columnWidths)}\n`;
+    }
+
+    result += tableChars.bottomLeft +
+        divider.join(tableChars.bottomMiddle) +
+        tableChars.bottomRight;
+
+    return result;
 }
 
-/**
- * Colorize and format given value.
- * @param  {...}  value         Value to colorize.
- * @param  {Boolean} isHeaderValue Is this a value in the table header.
- * @return {string}                Colorized + formatted value.
- */
-function getColoredAndFormattedString(value, isHeaderValue) {
-    value = getFormattedString(value, isHeaderValue);
-    return value + '';
+const keyKey = 'Key';
+const valuesKey = 'Values';
+const indexKey = '(index)';
+const iterKey = '(iteration index)';
+
+function isArrayForTable(value) {
+    return Array.isArray(value) || isTypedArray(value) || Buffer.isBuffer(value);
 }
 
-function printRows(rows) {
-    if (!rows.length) return;
-    let row, rowString,
-        i, j,
-        padding,
-        tableWidth = 0,
-        numCols = rows[0].length;
+function inspectForTable(consoleContext, value) {
+    const depth = value !== null &&
+        typeof value === 'object' &&
+        !isArrayForTable(value) &&
+        Object.keys(value).length > 2 ? -1 : 0;
+    const options = {
+        depth,
+        maxArrayLength: 3,
+        breakLength: Infinity,
+    };
 
-    // For every column, calculate the maximum width in any row.
-    for (j = 0; j < numCols; j++) {
-        let maxLengthForColumn = 0;
-        for (i = 0; i < rows.length; i++) {
-            maxLengthForColumn = Math.max(getFormattedString(rows[i][j], !i || !j).length, maxLengthForColumn);
-        }
-        // Give some more padding to biggest string.
-        maxLengthForColumn += 4;
-        tableWidth += maxLengthForColumn;
-
-        // Give padding to rows for current column.
-        for (i = 0; i < rows.length; i++) {
-            padding = maxLengthForColumn - getFormattedString(rows[i][j], !i || !j).length;
-            // Distribute padding - 1 in starting, rest at the end.
-            rows[i][j] = ' ' + getColoredAndFormattedString(rows[i][j], !i || !j) + repeatString(padding - 1);
-        }
+    if (consoleContext && typeof consoleContext._getColors === 'function') {
+        options.colors = consoleContext._getColors();
     }
 
-    // HACK: Increase table width just by 1 to make it look good.
-    tableWidth += 1;
-
-    let output = [];
-    output.push(repeatString(tableWidth, '='))
-    for (i = 0; i < rows.length; i++) {
-        row = rows[i];
-        rowString = '';
-        for (j = 0; j < row.length; j++) {
-            rowString += row[j] + SEPARATOR;
-        }
-        output.push(rowString);
-        // Draw border after table header.
-        if (!i) {
-            output.push(repeatString(tableWidth, '-'))
-        }
+    if (consoleContext && consoleContext._inspectOptions && typeof consoleContext._inspectOptions === 'object') {
+        Object.assign(options, consoleContext._inspectOptions);
     }
-    output.push(repeatString(tableWidth, '='));
-    return output.join('\n');
+
+    return util.inspect(value, options);
 }
 
-function printTable(data, keys) {
-    let i, j, rows = [], row, entry,
-        objKeys,
-        tempData;
-
-    // Simply console.log if an `object` type wasn't passed.
-    if (typeof data !== 'object') {
-        console.log(data);
-        return;
+function writeTable(consoleContext, head, columns) {
+    const rendered = renderCliTable(head, columns);
+    if (consoleContext && typeof consoleContext.log === 'function') {
+        return consoleContext.log(rendered);
     }
 
-    // If an object was passed, create data from its properties instead.
-    if (!(data instanceof Array)) {
-        tempData = [];
-        // `objKeys` are now used to index every row.
-        objKeys = Object.keys(data);
-        for (const key in data) {
-            // Avoiding `hasOwnProperty` check because Chrome shows prototype properties
-            // as well.
-            tempData.push(data[key]);
+    return log(rendered);
+}
+
+function renderTableForConsole(consoleContext, tabularData, properties) {
+    if (properties !== undefined) {
+        validateArray(properties, 'properties');
+    }
+
+    if (tabularData === null || typeof tabularData !== 'object') {
+        if (consoleContext && typeof consoleContext.log === 'function') {
+            return consoleContext.log(tabularData);
         }
-        data = tempData;
+
+        return log(tabularData);
     }
-    // Wrapping data in nested arrays if it is unnested
-    tempData = [];
-    for (j = 0; j < data.length; j++) {
-        const entry = data[j];
-        if (!(entry instanceof Array) && !(entry instanceof Object)) {
-            // If entry is not an array or object, wrap it in an array.
-            tempData.push([entry]);
+
+    const inspectValue = (value) => inspectForTable(consoleContext, value);
+    const getIndexArray = (length) => Array.from({ length }, (_, i) => inspectValue(i));
+
+    if (isMapIterator(tabularData)) {
+        const valuesFromIterator = Array.from(tabularData);
+        const isKeyValue = valuesFromIterator.every((entry) => Array.isArray(entry) && entry.length === 2);
+
+        if (isKeyValue) {
+            const keys = [];
+            const values = [];
+
+            for (let i = 0; i < valuesFromIterator.length; i++) {
+                keys.push(inspectValue(valuesFromIterator[i][0]));
+                values.push(inspectValue(valuesFromIterator[i][1]));
+            }
+
+            return writeTable(consoleContext, [iterKey, keyKey, valuesKey], [
+                getIndexArray(valuesFromIterator.length),
+                keys,
+                values,
+            ]);
+        }
+
+        return writeTable(consoleContext, [iterKey, valuesKey], [
+            getIndexArray(valuesFromIterator.length),
+            valuesFromIterator.map((value) => inspectValue(value)),
+        ]);
+    }
+
+    if (isMap(tabularData)) {
+        const keys = [];
+        const values = [];
+        let length = 0;
+
+        for (const [key, value] of tabularData) {
+            keys.push(inspectValue(key));
+            values.push(inspectValue(value));
+            length++;
+        }
+
+        return writeTable(consoleContext, [iterKey, keyKey, valuesKey], [
+            getIndexArray(length),
+            keys,
+            values,
+        ]);
+    }
+
+    if (isSetIterator(tabularData) || isSet(tabularData)) {
+        const values = [];
+        let length = 0;
+
+        for (const value of tabularData) {
+            values.push(inspectValue(value));
+            length++;
+        }
+
+        return writeTable(consoleContext, [iterKey, valuesKey], [getIndexArray(length), values]);
+    }
+
+    const map = { __proto__: null };
+    let hasPrimitives = false;
+    const valuesKeyArray = [];
+    const indexKeyArray = Object.keys(tabularData);
+
+    for (let i = 0; i < indexKeyArray.length; i++) {
+        const item = tabularData[indexKeyArray[i]];
+        const primitive = item === null ||
+            (typeof item !== 'function' && typeof item !== 'object');
+
+        if (properties === undefined && primitive) {
+            hasPrimitives = true;
+            valuesKeyArray[i] = inspectValue(item);
         } else {
-            // Otherwise, just push the entry as it is.
-            tempData.push(entry);
-        }
-    }
-    data = tempData;
-
-    // Get the keys from first data entry if custom keys are not passed.
-    if (!keys) {
-        keys = Object.keys(data[0]);
-        keys.sort();
-    }
-
-    // Create header row.
-    rows.push([]);
-    row = rows[rows.length - 1];
-    row.push('(index)');
-    for (i = 0; i < keys.length; i++) {
-        row.push(keys[i]);
-    }
-
-    for (j = 0; j < data.length; j++) {
-        entry = data[j];
-        rows.push([]);
-        row = rows[rows.length - 1];
-        // Push entry for 1st column (index).
-        row.push(objKeys ? objKeys[j] : j);
-        for (i = 0; i < keys.length; i++) {
-            row.push(entry[keys[i]]);
+            const keys = properties || Object.keys(item);
+            for (const key of keys) {
+                map[key] ??= [];
+                if ((primitive && properties) || !Object.prototype.hasOwnProperty.call(item, key)) {
+                    map[key][i] = '';
+                } else {
+                    map[key][i] = inspectValue(item[key]);
+                }
+            }
         }
     }
 
-    return printRows(rows);
+    const keys = Object.keys(map);
+    const values = Object.values(map);
+    if (hasPrimitives) {
+        keys.push(valuesKey);
+        values.push(valuesKeyArray);
+    }
+
+    keys.unshift(indexKey);
+    values.unshift(indexKeyArray);
+    return writeTable(consoleContext, keys, values);
 }
 
 const _METHODS_TO_BIND = [
@@ -579,7 +647,9 @@ Console.prototype.groupCollapsed = function(...args) { this.group(...args); };
 Console.prototype.groupEnd = function() {
     this._groupIndent = reduceGroupIndent(this._groupIndent, this._groupIndentation);
 };
-Console.prototype.table = function(...args) { table(...args); };
+Console.prototype.table = function(tabularData, properties) {
+    return renderTableForConsole(this, tabularData, properties);
+};
 Console.prototype.time = function(label) {
     label = label === undefined ? DEFAULT_LABEL : label;
     this._timers[label] = consoleNative.timestamp();
