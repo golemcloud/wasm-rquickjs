@@ -313,7 +313,7 @@
         "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_guarantee_dot_left_numbers_are_ignored": {},
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
+        "block_03_block_03": {},
         "block_04_block_04": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
         "block_05_block_05": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
         "block_06_scriptid_is_a_string": { "skip": true, "reason": "inherited: requires child_process.spawnSync, common/fixtures, and util.getCallSites" },
