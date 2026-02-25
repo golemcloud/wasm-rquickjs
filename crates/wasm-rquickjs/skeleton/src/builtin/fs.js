@@ -250,6 +250,53 @@ function validateInteger(value, name, min, max) {
     }
 }
 
+function validateOffsetLengthRead(offset, length, bufferLength) {
+    if (offset < 0) {
+        const err = new RangeError(`The value of "offset" is out of range. It must be >= 0. Received ${offset}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    if (length < 0) {
+        const err = new RangeError(`The value of "length" is out of range. It must be >= 0. Received ${length}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    if (offset + length > bufferLength) {
+        const err = new RangeError(`The value of "length" is out of range. It must be <= ${bufferLength - offset}. Received ${length}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+}
+
+function validateReadPosition(position, length) {
+    if (position === null || position === undefined || position === -1 || position === -1n) {
+        return null;
+    }
+
+    if (typeof position === 'number') {
+        validateInteger(position, 'position', -1, Number.MAX_SAFE_INTEGER);
+        return position;
+    }
+
+    if (typeof position === 'bigint') {
+        const maxPosition = (2n ** 63n) - 1n - BigInt(length);
+        if (position < -1n || position > maxPosition) {
+            const err = new RangeError(`The value of "position" is out of range. It must be >= -1 && <= ${maxPosition}. Received ${position}n`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+        // Keep full precision for large values by forwarding BigInt to the native layer.
+        if (position > BigInt(Number.MAX_SAFE_INTEGER)) {
+            return position;
+        }
+        return Number(position);
+    }
+
+    const err = new TypeError(`The "position" argument must be of type bigint or integer. Received ${describeType(position)}`);
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
 function validateFd(fd) {
     if (typeof fd !== 'number') {
         const err = new TypeError(`The "fd" argument must be of type number. Received ${describeType(fd)}`);
@@ -973,6 +1020,8 @@ export function closeSync(fd) {
 }
 
 export function readSync(fd, buffer, offsetOrOptions, length, position) {
+    validateFd(fd);
+
     // When second arg is an options object (not a buffer), extract buffer from it
     if (buffer != null && typeof buffer === 'object' && !ArrayBuffer.isView(buffer) && !Array.isArray(buffer) && offsetOrOptions === undefined) {
         const opts = buffer;
@@ -984,7 +1033,7 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
     }
     let offset = 0;
     if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions === 'object' && !ArrayBuffer.isView(offsetOrOptions) && !Array.isArray(offsetOrOptions)) {
-        offset = offsetOrOptions.offset || 0;
+        offset = offsetOrOptions.offset ?? 0;
         length = offsetOrOptions.length !== undefined ? offsetOrOptions.length : buffer.byteLength - offset;
         position = offsetOrOptions.position !== undefined ? offsetOrOptions.position : null;
     } else if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions !== 'number') {
@@ -992,12 +1041,14 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     } else {
-        offset = offsetOrOptions || 0;
+        offset = offsetOrOptions ?? 0;
         length = length !== undefined ? length : buffer.byteLength - offset;
         position = position !== undefined ? position : null;
     }
 
     validateBuffer(buffer, 'buffer');
+    validateInteger(offset, 'offset', 0);
+    length |= 0;
 
     if (length === 0) {
         return 0;
@@ -1006,6 +1057,9 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
     if (buffer.byteLength === 0) {
         throwEmptyReadBufferError(buffer);
     }
+
+    validateOffsetLengthRead(offset, length, buffer.byteLength);
+    position = validateReadPosition(position, length);
 
     const result = native.fs_read(fd, length, position);
     if (result.error) {
@@ -1637,11 +1691,7 @@ export function close(fd, callback) {
 }
 
 export function read(fd, bufferOrOptions, offsetOrCallback, length, position, callback) {
-    if (typeof fd !== 'number' || fd !== fd) {
-        const err = new TypeError(`The "fd" argument must be of type number. Received ${describeType(fd)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
+    validateFd(fd);
     let buffer, offset, cb;
 
     if (typeof bufferOrOptions === 'function') {
@@ -1661,11 +1711,11 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
             if ('buffer' in bufferOrOptions && bufferOrOptions.buffer != null) {
                 buffer = bufferOrOptions.buffer;
             } else if ('buffer' in bufferOrOptions && bufferOrOptions.buffer == null) {
-                validateBuffer(bufferOrOptions, 'buffer');
+                validateBuffer(bufferOrOptions.buffer, 'buffer');
             } else {
                 buffer = getBuffer().alloc(16384);
             }
-            offset = bufferOrOptions.offset || 0;
+            offset = bufferOrOptions.offset ?? 0;
             length = bufferOrOptions.length !== undefined ? bufferOrOptions.length : buffer.byteLength - offset;
             position = bufferOrOptions.position !== undefined ? bufferOrOptions.position : null;
         } else {
@@ -1676,13 +1726,13 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
         }
     } else if (ArrayBuffer.isView(bufferOrOptions) && offsetOrCallback != null && typeof offsetOrCallback === 'object' && !ArrayBuffer.isView(offsetOrCallback) && !Array.isArray(offsetOrCallback)) {
         buffer = bufferOrOptions;
-        offset = offsetOrCallback.offset || 0;
+        offset = offsetOrCallback.offset ?? 0;
         const optLen = offsetOrCallback.length;
         position = offsetOrCallback.position !== undefined ? offsetOrCallback.position : null;
         // The next positional param after options is the callback
         if (typeof length === 'function') {
             cb = length;
-        } else if (typeof position === 'function') {
+        } else if (typeof position === 'function' && callback === undefined) {
             cb = position;
             position = null;
         } else {
@@ -1691,12 +1741,12 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
         length = optLen !== undefined ? optLen : buffer.byteLength - offset;
     } else {
         buffer = bufferOrOptions;
-        offset = offsetOrCallback || 0;
+        offset = offsetOrCallback ?? 0;
         if (typeof length === 'function') {
             cb = length;
             length = buffer.byteLength - offset;
             position = null;
-        } else if (typeof position === 'function') {
+        } else if (typeof position === 'function' && callback === undefined) {
             cb = position;
             position = null;
         } else {
@@ -1705,15 +1755,11 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
     }
 
     validateBuffer(buffer, 'buffer');
-    if (offset !== undefined && offset !== null) validateInteger(offset, 'offset', 0);
-    if (length !== undefined && length !== null && length < 0) {
-        const rangeErr = new RangeError(`The value of "length" is out of range. It must be >= 0. Received ${length}`);
-        rangeErr.code = 'ERR_OUT_OF_RANGE';
-        throw rangeErr;
-    }
+    validateCallback(cb);
+    validateInteger(offset, 'offset', 0);
+    length |= 0;
 
     if (length === 0) {
-        validateCallback(cb);
         queueMicrotask(() => {
             cb(null, 0, buffer);
         });
@@ -1724,7 +1770,9 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
         throwEmptyReadBufferError(buffer);
     }
 
-    validateCallback(cb);
+    validateOffsetLengthRead(offset, length, buffer.byteLength);
+    position = validateReadPosition(position, length);
+
     queueMicrotask(() => {
         try {
             const bytesRead = readSync(fd, buffer, offset, length, position);

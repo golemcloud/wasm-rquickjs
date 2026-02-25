@@ -815,10 +815,7 @@
         "block_09_block_09": {}
       }
     },
-    "parallel/test-fs-read-type.js": {
-      "skip": true,
-      "reason": "assert.throws fails: fs.read with invalid buffer does not throw ERR_INVALID_ARG_TYPE, calls callback instead"
-    },
+    "parallel/test-fs-read-type.js": {},
     "parallel/test-fs-read-zero-length.js": {},
     "parallel/test-fs-read.js": {},
     "parallel/test-fs-readdir.js": {},
