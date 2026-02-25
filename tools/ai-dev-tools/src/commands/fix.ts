@@ -140,7 +140,7 @@ async function batchCheckSkippedTests(category: string): Promise<number> {
 
   // Verify no regressions after enabling
   console.log("  Verifying after batch-enable...");
-  const { ok } = await runCategoryTests(category);
+  const { ok } = await runCategoryTests(category, { failFast: true });
   if (!ok) {
     console.log("  ⚠ Some newly-enabled tests caused regressions. Re-skipping all.");
     for (const st of nowPassing) {
@@ -208,7 +208,7 @@ export async function fixCommand(category: string): Promise<void> {
     // Verify the remaining enabled tests now pass
     console.log();
     console.log("  Re-verifying after skipping failing tests...");
-    const { ok: retryOk } = await runCategoryTests(category);
+    const { ok: retryOk } = await runCategoryTests(category, { failFast: true });
     if (!retryOk) {
       throw new Error("Tests still failing after skipping detected failures. Fix regressions before proceeding.");
     }
@@ -344,7 +344,7 @@ export async function fixCommand(category: string): Promise<void> {
       }
 
       console.log(`  Running ${category} tests (includes target)...`);
-      const { ok: categoryOk } = await runCategoryTests(category);
+      const { ok: categoryOk } = await runCategoryTests(category, { failFast: true });
       if (categoryOk) {
         console.log("  ✅ Test passes and no regressions!");
       } else {
@@ -358,7 +358,7 @@ export async function fixCommand(category: string): Promise<void> {
       }
     } else if (result === "PARTIAL") {
       console.log("  ⚠ Partial progress made. Running regression check...");
-      const { ok: regrOk } = await runCategoryTests(category);
+      const { ok: regrOk } = await runCategoryTests(category, { failFast: true });
       if (regrOk) {
         console.log("  ✅ No regressions from partial changes.");
       } else {
@@ -367,7 +367,7 @@ export async function fixCommand(category: string): Promise<void> {
     } else {
       // UNCLEAR
       console.log("  ❓ Unclear result from amp. Running regression check...");
-      const { ok: regrOk } = await runCategoryTests(category);
+      const { ok: regrOk } = await runCategoryTests(category, { failFast: true });
       if (regrOk) {
         console.log("  ✅ No regressions.");
         const { ok: ok2 } = await runSingleTest(target.path, target.subtestName);

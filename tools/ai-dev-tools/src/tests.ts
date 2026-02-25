@@ -3,7 +3,7 @@ import path from "node:path";
 import { globSync } from "node:fs";
 import { REPO_ROOT, SUITE_DIR, LOG_DIR } from "./paths.js";
 import { loadConfig } from "./config.js";
-import { run } from "./runner.js";
+import { run, type RunOptions } from "./runner.js";
 
 export interface SkippedTest {
   path: string;
@@ -74,12 +74,13 @@ export function testPathToFilter(testPath: string, subtestName?: string): string
 }
 
 /** Run all enabled (non-ignored) tests for a category. */
-export async function runCategoryTests(category: string): Promise<{ ok: boolean; output: string }> {
+export async function runCategoryTests(category: string, options?: RunOptions): Promise<{ ok: boolean; output: string }> {
   const logfile = path.join(LOG_DIR, `run-${Date.now()}.txt`);
   console.log(`  Running ${category} tests...`);
   const { ok, output } = await run(
     ["cargo", "test", "--test", "node_compat", `parallel__test_${category}`, "--", "--nocapture"],
     logfile,
+    options,
   );
   if (ok) {
     console.log("  ✅ All enabled tests passed");

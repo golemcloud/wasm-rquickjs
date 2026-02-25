@@ -4,11 +4,19 @@ import logUpdate from "log-update";
 import { REPO_ROOT } from "./paths.js";
 
 const MAX_PREVIEW_LINES = 20;
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+const FAIL_LINE_RE = /^(?:Finished test:\s+)?\S+\s+(?:\.\.\.\s+FAILED|\[FAILED\])\s*$/;
+
+export interface RunOptions {
+  /** Kill the process on first test failure detected in output. */
+  failFast?: boolean;
+}
 
 /** Run a command, stream output to stdout (collapsing on success), tee to logfile, return { ok, output }. */
 export function run(
   cmd: string[],
   logfile: string,
+  options?: RunOptions,
 ): Promise<{ ok: boolean; output: string }> {
   console.log(`  Log: ${logfile}`);
 
@@ -16,22 +24,51 @@ export function run(
     const child = spawn(cmd[0], cmd.slice(1), {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     });
 
     const chunks: string[] = [];
     const previewLines: string[] = [];
+    let pending = "";
+    let killed = false;
+
+    function killTree() {
+      if (killed) return;
+      killed = true;
+      try {
+        process.kill(-child.pid!, "SIGINT");
+      } catch {}
+      setTimeout(() => {
+        try {
+          process.kill(-child.pid!, "SIGKILL");
+        } catch {}
+      }, 1500);
+    }
 
     function onData(data: Buffer) {
       const text = data.toString();
       chunks.push(text);
-      for (const line of text.split("\n")) {
+
+      pending += text;
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+
+      for (const line of lines) {
         if (line.length > 0) {
           previewLines.push(line);
           if (previewLines.length > MAX_PREVIEW_LINES) {
             previewLines.shift();
           }
         }
+
+        if (options?.failFast && !killed) {
+          const clean = line.replace(ANSI_RE, "");
+          if (FAIL_LINE_RE.test(clean)) {
+            killTree();
+          }
+        }
       }
+
       logUpdate(previewLines.join("\n"));
     }
 
