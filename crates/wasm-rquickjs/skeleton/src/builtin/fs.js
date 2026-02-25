@@ -98,6 +98,14 @@ const S_IXOTH = 0o001;
 const COPYFILE_EXCL = 1;
 const COPYFILE_FICLONE = 2;
 const COPYFILE_FICLONE_FORCE = 4;
+const UV_DIRENT_UNKNOWN = 0;
+const UV_DIRENT_FILE = 1;
+const UV_DIRENT_DIR = 2;
+const UV_DIRENT_LINK = 3;
+const UV_DIRENT_FIFO = 4;
+const UV_DIRENT_SOCKET = 5;
+const UV_DIRENT_CHAR = 6;
+const UV_DIRENT_BLOCK = 7;
 const MAX_COPYFILE_MODE = COPYFILE_EXCL | COPYFILE_FICLONE | COPYFILE_FICLONE_FORCE;
 const MKDIR_MODE_MASK = 0o7777;
 const HAS_LCHMOD = false;
@@ -119,6 +127,14 @@ export const constants = {
     UV_FS_COPYFILE_FICLONE_FORCE: COPYFILE_FICLONE_FORCE,
     UV_FS_SYMLINK_DIR: 1,
     UV_FS_SYMLINK_JUNCTION: 2,
+    UV_DIRENT_UNKNOWN,
+    UV_DIRENT_FILE,
+    UV_DIRENT_DIR,
+    UV_DIRENT_LINK,
+    UV_DIRENT_FIFO,
+    UV_DIRENT_SOCKET,
+    UV_DIRENT_CHAR,
+    UV_DIRENT_BLOCK,
 };
 
 // --- Helpers ---
@@ -568,6 +584,116 @@ function pathToString(path) {
     return String(path);
 }
 
+function compareDirectoryEntryNames(left, right) {
+    const leftName = typeof left === 'string' ? left : left.name;
+    const rightName = typeof right === 'string' ? right : right.name;
+    if (leftName < rightName) return -1;
+    if (leftName > rightName) return 1;
+    return 0;
+}
+
+function mapNativeDirentTypeToUv(fileType) {
+    if (typeof fileType === 'number') {
+        return fileType;
+    }
+    switch (fileType) {
+        case 'file': return UV_DIRENT_FILE;
+        case 'directory': return UV_DIRENT_DIR;
+        case 'symlink': return UV_DIRENT_LINK;
+        case 'fifo': return UV_DIRENT_FIFO;
+        case 'socket': return UV_DIRENT_SOCKET;
+        case 'char': return UV_DIRENT_CHAR;
+        case 'block': return UV_DIRENT_BLOCK;
+        default: return UV_DIRENT_UNKNOWN;
+    }
+}
+
+function convertStatToDirentType(stat) {
+    if (!stat) return UV_DIRENT_UNKNOWN;
+    if (stat.isFile) return UV_DIRENT_FILE;
+    if (stat.isDirectory) return UV_DIRENT_DIR;
+    if (stat.isSymlink) return UV_DIRENT_LINK;
+    return UV_DIRENT_UNKNOWN;
+}
+
+function resolveUnknownDirentType(parentPath, name) {
+    const fullPath = pathToString(parentPath) + '/' + name;
+    const lstatResult = native.fs_lstat(fullPath);
+    if (lstatResult.error) {
+        return UV_DIRENT_UNKNOWN;
+    }
+    return convertStatToDirentType(lstatResult.stat);
+}
+
+function normalizeDirentType(fileType, parentPath, name) {
+    const uvType = mapNativeDirentTypeToUv(fileType);
+    if (uvType !== UV_DIRENT_UNKNOWN) {
+        return uvType;
+    }
+    return resolveUnknownDirentType(parentPath, name);
+}
+
+function createScandirErrorForNonDirectory(path) {
+    const st = native.fs_stat(pathToString(path));
+    if (!st.error && st.stat.isFile) {
+        const err = new Error(`ENOTDIR: not a directory, scandir '${path}'`);
+        err.code = 'ENOTDIR';
+        err.errno = -20;
+        err.syscall = 'scandir';
+        err.path = path;
+        return err;
+    }
+    return null;
+}
+
+function readDirViaNativeBinding(path, withFileTypes) {
+    const result = native.fs_readdir(pathToString(path), withFileTypes);
+    if (result.stackOverflow) {
+        throw new RangeError('Maximum call stack size exceeded');
+    }
+    if (result.error) {
+        if (result.error.code === 'EIO') {
+            const enotdir = createScandirErrorForNonDirectory(path);
+            if (enotdir) {
+                throw enotdir;
+            }
+        }
+        throw createSystemError(result.error);
+    }
+
+    if (!withFileTypes) {
+        return [...result.entries].sort(compareDirectoryEntryNames);
+    }
+
+    const sortedEntries = [...result.entries].sort(compareDirectoryEntryNames);
+    const names = [];
+    const types = [];
+    for (const entry of sortedEntries) {
+        names.push(entry.name);
+        types.push(mapNativeDirentTypeToUv(entry.fileType));
+    }
+    return [names, types];
+}
+
+const internalFsBinding = globalThis.__wasm_rquickjs_internal_fs_binding || {};
+internalFsBinding.readdir = function readdir(path, encoding, withFileTypes, req) {
+    const runReaddir = () => readDirViaNativeBinding(path, !!withFileTypes);
+
+    if (req && typeof req === 'object') {
+        queueMicrotask(() => {
+            try {
+                req.oncomplete(null, runReaddir());
+            } catch (err) {
+                req.oncomplete(err);
+            }
+        });
+        return;
+    }
+
+    return runReaddir();
+};
+globalThis.__wasm_rquickjs_internal_fs_binding = internalFsBinding;
+
 // --- Stats class ---
 
 export function Stats(devOrObj, mode, nlink, uid, gid, rdev, blksize, ino, size, blocks, atimeMs, mtimeMs, ctimeMs, birthtimeMs) {
@@ -657,16 +783,16 @@ export class Dirent {
         this.name = name;
         this.parentPath = parentPath;
         this.path = parentPath;
-        this._fileType = fileType;
+        this._fileType = normalizeDirentType(fileType, parentPath, name);
     }
 
-    isFile() { return this._fileType === 'file'; }
-    isDirectory() { return this._fileType === 'directory'; }
-    isSymbolicLink() { return this._fileType === 'symlink'; }
-    isBlockDevice() { return false; }
-    isCharacterDevice() { return false; }
-    isFIFO() { return false; }
-    isSocket() { return false; }
+    isFile() { return this._fileType === UV_DIRENT_FILE; }
+    isDirectory() { return this._fileType === UV_DIRENT_DIR; }
+    isSymbolicLink() { return this._fileType === UV_DIRENT_LINK; }
+    isBlockDevice() { return this._fileType === UV_DIRENT_BLOCK; }
+    isCharacterDevice() { return this._fileType === UV_DIRENT_CHAR; }
+    isFIFO() { return this._fileType === UV_DIRENT_FIFO; }
+    isSocket() { return this._fileType === UV_DIRENT_SOCKET; }
 }
 
 // --- Dir class ---
@@ -1173,26 +1299,11 @@ export function readdirSync(path, options) {
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const withFileTypes = opts.withFileTypes || false;
     const recursive = opts.recursive || false;
-    const result = native.fs_readdir(pathToString(path), withFileTypes);
-    if (result.stackOverflow) {
-        throw new RangeError('Maximum call stack size exceeded');
-    }
-    if (result.error) {
-        if (result.error.code === 'EIO') {
-            const st = native.fs_stat(path);
-            if (!st.error && st.stat.isFile) {
-                const err = new Error(`ENOTDIR: not a directory, scandir '${path}'`);
-                err.code = 'ENOTDIR';
-                err.errno = -20;
-                err.syscall = 'scandir';
-                err.path = path;
-                throw err;
-            }
-        }
-        throw createSystemError(result.error);
-    }
+    const result = internalFsBinding.readdir(pathToString(path), opts.encoding, withFileTypes);
     if (withFileTypes) {
-        const dirents = result.entries.map(e => new Dirent(e.name, e.fileType, path));
+        const names = result[0];
+        const types = result[1];
+        const dirents = names.map((name, index) => new Dirent(name, types[index], path));
         if (recursive) {
             const all = [];
             for (const dirent of dirents) {
@@ -1209,7 +1320,7 @@ export function readdirSync(path, options) {
         }
         return dirents;
     }
-    const entries = result.entries;
+    const entries = result;
     if (recursive) {
         const all = [];
         for (const entry of entries) {
@@ -1507,11 +1618,7 @@ export function mkdtempSync(prefix, options) {
 export function opendirSync(path, options) {
     validatePath(path);
     validateOpendirOptions(options);
-    const result = native.fs_readdir(path, true);
-    if (result.error) {
-        throw createSystemError(result.error);
-    }
-    const entries = result.entries.map(e => new Dirent(e.name, e.fileType, path));
+    const entries = readdirSync(path, { withFileTypes: true });
     return new Dir(path, entries);
 }
 

@@ -938,17 +938,32 @@ export async function readdir(path, options) {
     const result = native.fs_readdir(path, withFileTypes);
     if (result.error) throw createSystemError(result.error);
     if (withFileTypes) {
+        const sortedEntries = [...result.entries].sort((left, right) => {
+            if (left.name < right.name) return -1;
+            if (left.name > right.name) return 1;
+            return 0;
+        });
         const fs = globalThis.require ? globalThis.require('node:fs') : null;
         const DirentClass = fs ? fs.Dirent : null;
         const makeDirent = DirentClass
             ? (e, p) => new DirentClass(e.name, e.fileType, p)
-            : (e, p) => ({ name: e.name, _fileType: e.fileType, parentPath: p, path: p,
-                isFile() { return this._fileType === 'file'; },
-                isDirectory() { return this._fileType === 'directory'; },
-                isSymbolicLink() { return this._fileType === 'symlink'; },
-                isBlockDevice() { return false; }, isCharacterDevice() { return false; },
-                isFIFO() { return false; }, isSocket() { return false; } });
-        const dirents = result.entries.map(e => makeDirent(e, path));
+            : (e, p) => {
+                const kind = e.fileType;
+                return {
+                    name: e.name,
+                    _fileType: kind,
+                    parentPath: p,
+                    path: p,
+                    isFile() { return this._fileType === 'file' || this._fileType === 1; },
+                    isDirectory() { return this._fileType === 'directory' || this._fileType === 2; },
+                    isSymbolicLink() { return this._fileType === 'symlink' || this._fileType === 3; },
+                    isBlockDevice() { return this._fileType === 7; },
+                    isCharacterDevice() { return this._fileType === 6; },
+                    isFIFO() { return this._fileType === 4; },
+                    isSocket() { return this._fileType === 5; },
+                };
+            };
+        const dirents = sortedEntries.map(e => makeDirent(e, path));
         if (recursive) {
             const all = [];
             for (const dirent of dirents) {
@@ -965,7 +980,11 @@ export async function readdir(path, options) {
         }
         return dirents;
     }
-    const entries = result.entries;
+    const entries = [...result.entries].sort((left, right) => {
+        if (left < right) return -1;
+        if (left > right) return 1;
+        return 0;
+    });
     if (recursive) {
         const all = [];
         for (const entry of entries) {

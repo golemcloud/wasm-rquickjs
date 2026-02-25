@@ -112,8 +112,53 @@ for (const [name, value] of Object.entries(osErrno)) {
 
 const uvTestBinding = Object.freeze(uvErrnoBinding);
 
-const fsTestBinding = {
-    openFileHandle(path, flags, mode, _req, ctx) {
+const fsTestBinding = globalThis.__wasm_rquickjs_internal_fs_binding || {};
+
+if (typeof fsTestBinding.readdir !== "function") {
+    fsTestBinding.readdir = function readdir(path, encoding, withFileTypes, req) {
+        const opts = {
+            withFileTypes: !!withFileTypes,
+            encoding: encoding || "utf8",
+        };
+
+        const run = () => {
+            if (!opts.withFileTypes) {
+                return fsModule.readdirSync(path, opts);
+            }
+
+            const dirents = fsModule.readdirSync(path, opts);
+            const names = dirents.map((dirent) => dirent.name);
+            const types = dirents.map((dirent) => {
+                if (dirent.isFile()) return fsModule.constants.UV_DIRENT_FILE;
+                if (dirent.isDirectory()) return fsModule.constants.UV_DIRENT_DIR;
+                if (dirent.isSymbolicLink()) return fsModule.constants.UV_DIRENT_LINK;
+                if (dirent.isFIFO()) return fsModule.constants.UV_DIRENT_FIFO;
+                if (dirent.isSocket()) return fsModule.constants.UV_DIRENT_SOCKET;
+                if (dirent.isCharacterDevice()) return fsModule.constants.UV_DIRENT_CHAR;
+                if (dirent.isBlockDevice()) return fsModule.constants.UV_DIRENT_BLOCK;
+                return fsModule.constants.UV_DIRENT_UNKNOWN;
+            });
+
+            return [names, types];
+        };
+
+        if (req && typeof req === "object") {
+            queueMicrotask(() => {
+                try {
+                    req.oncomplete(null, run());
+                } catch (err) {
+                    req.oncomplete(err);
+                }
+            });
+            return;
+        }
+
+        return run();
+    };
+}
+
+if (typeof fsTestBinding.openFileHandle !== "function") {
+    fsTestBinding.openFileHandle = function openFileHandle(path, flags, mode, _req, ctx) {
         try {
             const fd = fsModule.openSync(path, flags, mode);
             return { fd };
@@ -126,8 +171,10 @@ const fsTestBinding = {
             }
             return { fd: -1 };
         }
-    },
-};
+    };
+}
+
+globalThis.__wasm_rquickjs_internal_fs_binding = fsTestBinding;
 
 export function internalBinding(name) {
     if (name === "util") {
