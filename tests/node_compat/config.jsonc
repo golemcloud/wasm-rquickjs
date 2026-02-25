@@ -765,10 +765,7 @@
     "parallel/test-fs-read-file-sync.js": {},
     "parallel/test-fs-read-offset-null.js": {},
     "parallel/test-fs-read-optional-params.js": {},
-    "parallel/test-fs-read-promises-optional-params.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-read-promises-optional-params.js": {},
     "parallel/test-fs-read-stream-autoClose.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
