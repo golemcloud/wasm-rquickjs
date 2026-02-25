@@ -772,7 +772,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "skip": true, "reason": "inherited: regression: was enabled but started failing" }
+        "block_01_block_01": {}
       }
     },
     "parallel/test-fs-read-stream-encoding.js": {
