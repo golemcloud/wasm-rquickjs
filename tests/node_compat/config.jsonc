@@ -334,10 +334,7 @@
       }
     },
     "parallel/test-util-inspect-long-running.js": {},
-    "parallel/test-util-inspect-namespace.js": {
-      "skip": true,
-      "reason": "requires experimental vm.SourceTextModule"
-    },
+    "parallel/test-util-inspect-namespace.js": {},
     "parallel/test-util-inspect-proxy.js": {
       "skip": true,
       "reason": "requires --expose-internals and internalBinding('util')"

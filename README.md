@@ -406,6 +406,17 @@ Implemented by https://github.com/ungap/structured-clone
 - `cwd`
 - `hrtime` / `hrtime.bigint`
 
+### `node:vm`
+- `runInNewContext`
+- `runInContext`
+- `runInThisContext`
+- `createContext`
+- `isContext`
+- `compileFunction`
+- `Script`
+- `createScript`
+- `SourceTextModule` (experimental, limited `export const`/`export let`/`export var` support)
+
 ### `node:stream`
 - `_uint8ArrayToBuffer`
 - `addAbortSignal`
