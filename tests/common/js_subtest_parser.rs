@@ -253,13 +253,17 @@ pub fn discover_subtests(path: &str, source: &str) -> SubtestDiscovery {
     }
 }
 
-/// Rewrite source to isolate a single block by emptying all other blocks.
+/// Rewrite source to keep all blocks up to and including `target_index`,
+/// while emptying later blocks.
+///
+/// This preserves setup side-effects from earlier blocks when a test file is
+/// authored as sequential scenarios that build on previous state.
 /// Processes in reverse order to preserve byte offsets.
 pub fn rewrite_for_block(source: &str, blocks: &[BlockInfo], target_index: usize) -> String {
     let bytes = source.as_bytes();
     let mut result = bytes.to_vec();
     for block in blocks.iter().rev() {
-        if block.index != target_index {
+        if block.index > target_index {
             let start = block.span.0 as usize;
             let end = block.span.1 as usize;
             // Validate span points at actual braces

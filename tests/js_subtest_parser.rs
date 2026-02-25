@@ -71,7 +71,7 @@ fn test_sanitize_name() {
 
 #[test]
 fn test_rewrite_for_block() {
-    let source = "// preamble\n{ assert(1); }\n{ assert(2); }";
+    let source = "// preamble\n{ assert(1); }\n{ assert(2); }\n{ assert(3); }";
     let blocks = vec![
         BlockInfo {
             index: 0,
@@ -83,10 +83,16 @@ fn test_rewrite_for_block() {
             span: (27, 41),
             name: "block_01".to_string(),
         },
+        BlockInfo {
+            index: 2,
+            span: (42, 56),
+            name: "block_02".to_string(),
+        },
     ];
-    let result = rewrite_for_block(source, &blocks, 0);
+    let result = rewrite_for_block(source, &blocks, 1);
     assert!(result.contains("assert(1)"));
-    assert!(!result.contains("assert(2)"));
+    assert!(result.contains("assert(2)"));
+    assert!(!result.contains("assert(3)"));
 }
 
 #[test]
