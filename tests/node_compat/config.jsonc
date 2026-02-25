@@ -5381,7 +5381,7 @@
     "parallel/test-readline-interface-recursive-writes.js": { "skip": true, "reason": "repl is not supported in WASM" },
 
     // Tests using ../common/hijackstdio (additional)
-    "parallel/test-console.js": { "skip": true, "reason": "process.stdout.writable is undefined" },
+    "parallel/test-console.js": {},
 
     // Tests using ../common/udp
     "parallel/test-dgram-reuseport.js": { "skip": true, "reason": "requires reusePort socket option not supported in WASI" },

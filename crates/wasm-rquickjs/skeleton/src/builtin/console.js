@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer'
 import { validateArray } from '__wasm_rquickjs_builtin/internal/validators'
 import { isMap, isMapIterator, isSet, isSetIterator, isTypedArray } from '__wasm_rquickjs_builtin/internal/util/types'
 import { getStringWidth } from '__wasm_rquickjs_builtin/internal/util/inspect'
+import { formatTime } from '__wasm_rquickjs_builtin/internal/util/debuglog'
 
 const DEFAULT_GROUP_INDENTATION = 2;
 const MAX_GROUP_INDENTATION = 1000;
@@ -56,9 +57,17 @@ function writeToConfiguredStream(stream, message, nativeWriter, groupIndentation
 }
 
 export function assert(condition, ...v) {
-    if (!condition) {
-        warn("Assertion failed:", ...v)
+    if (condition) {
+        return;
     }
+
+    if (v.length > 0 && typeof v[0] === 'string') {
+        v[0] = `Assertion failed: ${v[0]}`;
+    } else {
+        v.unshift('Assertion failed');
+    }
+
+    warn(...v);
 }
 
 const CLEAR_CONSOLE_CURSOR_HOME = '\u001b[1;1H';
@@ -83,24 +92,115 @@ export function clear() {
 }
 
 const DEFAULT_LABEL = 'default';
-let counts = {};
+let counts = new Map();
+export const _times = new Map();
+
+function getLabel(label) {
+    return `${label === undefined ? DEFAULT_LABEL : label}`;
+}
+
+function getElapsedMilliseconds(startTime) {
+    const processObject = globalThis.process;
+    if (processObject && typeof processObject.hrtime === 'function' && Array.isArray(startTime)) {
+        const duration = processObject.hrtime(startTime);
+        return duration[0] * 1000 + duration[1] / 1e6;
+    }
+
+    if (typeof startTime === 'number') {
+        return consoleNative.timestamp() - startTime;
+    }
+
+    return 0;
+}
+
+function enqueueWarning(message) {
+    const processObject = globalThis.process;
+    if (!processObject || typeof processObject.nextTick !== 'function') {
+        warn(message);
+        return;
+    }
+
+    processObject.nextTick(() => {
+        const stderr = processObject.stderr;
+        if (stderr && typeof stderr.write === 'function') {
+            stderr.write(`${message}\n`);
+            return;
+        }
+
+        warn(message);
+    });
+}
+
+function startTimer(times, label, implementation) {
+    const timerLabel = getLabel(label);
+    if (times.has(timerLabel)) {
+        enqueueWarning(`Label '${timerLabel}' already exists for ${implementation}`);
+        return null;
+    }
+
+    const processObject = globalThis.process;
+    const startTime = processObject && typeof processObject.hrtime === 'function'
+        ? processObject.hrtime()
+        : consoleNative.timestamp();
+    times.set(timerLabel, startTime);
+    return timerLabel;
+}
+
+function printTimer(output, timerLabel, elapsedMilliseconds, args) {
+    const formattedTime = formatTime(elapsedMilliseconds);
+    if (args === undefined || args.length === 0) {
+        output('%s: %s', timerLabel, formattedTime);
+        return;
+    }
+
+    output('%s: %s', timerLabel, formattedTime, ...args);
+}
+
+function logTimer(times, label, implementation, output, args) {
+    const timerLabel = getLabel(label);
+    const startTime = times.get(timerLabel);
+    if (startTime === undefined) {
+        enqueueWarning(`No such label '${timerLabel}' for ${implementation}`);
+        return false;
+    }
+
+    printTimer(output, timerLabel, getElapsedMilliseconds(startTime), args);
+    return true;
+}
+
+function formatTraceStack(error) {
+    const header = `${error.name}: ${error.message}`;
+    if (typeof error.stack !== 'string' || error.stack.length === 0) {
+        return header;
+    }
+
+    if (error.stack.startsWith(header)) {
+        return error.stack;
+    }
+
+    if (/^\s*at\s/.test(error.stack)) {
+        return `${header}\n${error.stack}`;
+    }
+
+    return error.stack;
+}
 
 export function count(label) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    if (!counts[label]) {
-        counts[label] = 0;
-    }
-    counts[label]++;
-    log(`${label}: ${counts[label]}`);
+    const countLabel = getLabel(label);
+    const current = counts.get(countLabel) || 0;
+    const next = current + 1;
+    counts.set(countLabel, next);
+    log(`${countLabel}: ${next}`);
 }
 
 export function countReset(label) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    if (counts[label]) {
-        counts[label] = 0;
-    } else {
-        console.warn(`Count for '${label}' does not exist`);
+    const countLabel = getLabel(label);
+    if (counts.has(countLabel)) {
+        counts.delete(countLabel);
+        return;
     }
+
+    enqueueWarning(`Count for '${countLabel}' does not exist`);
 }
 
 function _getStdout() {
@@ -121,7 +221,10 @@ export function debug(...v) {
 export function dir(object, options) {
     let msg;
     try {
-        const result = util.inspect(object, options);
+        const result = util.inspect(object, {
+            customInspect: false,
+            ...options,
+        });
         msg = result !== undefined ? result : 'undefined';
     } catch (e) {
         msg = e instanceof TypeError && /revoked proxy/i.test(e.message)
@@ -130,8 +233,8 @@ export function dir(object, options) {
     writeToConfiguredStream(_getStdout(), msg, consoleNative.println, globalGroupIndentation);
 }
 
-export function dirxml(object) {
-    dir(object);
+export function dirxml(...v) {
+    log(...v);
 }
 
 export function error(...v) {
@@ -178,42 +281,33 @@ export function table(data, keys) {
     return renderTableForConsole(globalThis.console, data, keys);
 }
 
-let timers = {}
-
 export function time(label) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    const start = consoleNative.timestamp();
-    timers[label] = start;
+    startTimer(_times, label, 'console.time()');
 }
 
 export function timeLog(label, ...v) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    const start = timers[label];
-    if (start === undefined) {
-        warn(`No such timer label: ${label}`);
-        return;
-    }
-    const now = consoleNative.timestamp();
-    const diff = now - start;
-    log(`${label}: ${diff}ms`, ...v);
+    logTimer(_times, label, 'console.timeLog()', log, v);
 }
 
 export function timeEnd(label) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    const start = timers[label];
-    if (start === undefined) {
-        warn(`No such timer label: ${label}`);
+    const timerLabel = getLabel(label);
+    if (!logTimer(_times, timerLabel, 'console.timeEnd()', log)) {
         return;
     }
-    const now = consoleNative.timestamp();
-    const diff = now - start;
-    log(`${label}: ${diff}ms - timer ended`);
-    delete timers[label];
+
+    _times.delete(timerLabel);
 }
 
 export function trace(...v) {
-    const msg = util.format(...v);
-    writeToConfiguredStream(_getStderr(), msg, consoleNative.trace, globalGroupIndentation);
+    const err = new Error(util.format(...v));
+    err.name = 'Trace';
+
+    if (typeof Error.captureStackTrace === 'function') {
+        Error.captureStackTrace(err, trace);
+    }
+
+    const stack = formatTraceStack(err);
+    writeToConfiguredStream(_getStderr(), stack, consoleNative.trace, globalGroupIndentation);
 }
 
 export function warn(...v) {
@@ -553,8 +647,8 @@ export function Console(stdout, stderr, ignoreErrors) {
     this._ignoreErrors = ignoreErrors !== false;
     this._colorMode = colorMode;
     this._inspectOptions = inspectOptions;
-    this._counts = {};
-    this._timers = {};
+    this._counts = new Map();
+    this._times = new Map();
     this._groupIndentation = groupIndentation;
     this._groupIndent = '';
 
@@ -614,27 +708,54 @@ Console.prototype.warn = function(...args) {
 };
 Console.prototype.error = function(...args) { this.warn(...args); };
 Console.prototype.dir = function(object, options) {
-    const opts = { ...this._inspectOptions, ...options };
+    const opts = {
+        customInspect: false,
+        ...this._inspectOptions,
+        ...options,
+    };
     const result = util.inspect(object, opts);
     this._writeToStream(this._stdout, (result !== undefined ? result : 'undefined') + '\n');
 };
-Console.prototype.dirxml = function(...args) { this.dir(...args); };
-Console.prototype.trace = function(...args) { trace(...args); };
-Console.prototype.assert = function(condition, ...v) { assert(condition, ...v); };
+Console.prototype.dirxml = function(...args) { this.log(...args); };
+Console.prototype.trace = function(...args) {
+    const err = new Error(util.format(...args));
+    err.name = 'Trace';
+
+    if (typeof Error.captureStackTrace === 'function') {
+        Error.captureStackTrace(err, Console.prototype.trace);
+    }
+
+    this.error(formatTraceStack(err));
+};
+Console.prototype.assert = function(condition, ...v) {
+    if (condition) {
+        return;
+    }
+
+    if (v.length > 0 && typeof v[0] === 'string') {
+        v[0] = `Assertion failed: ${v[0]}`;
+    } else {
+        v.unshift('Assertion failed');
+    }
+
+    this.warn(...v);
+};
 Console.prototype.clear = function() { clearStream(this._stdout); };
 Console.prototype.count = function(label) {
-    label = label === undefined ? DEFAULT_LABEL : String(label);
-    if (!this._counts[label]) this._counts[label] = 0;
-    this._counts[label]++;
-    this._writeToStream(this._stdout, `${label}: ${this._counts[label]}\n`);
+    const countLabel = getLabel(label);
+    const current = this._counts.get(countLabel) || 0;
+    const next = current + 1;
+    this._counts.set(countLabel, next);
+    this.log(`${countLabel}: ${next}`);
 };
 Console.prototype.countReset = function(label) {
-    label = label === undefined ? DEFAULT_LABEL : String(label);
-    if (this._counts[label]) {
-        this._counts[label] = 0;
-    } else {
-        this._writeToStream(this._stderr, `Count for '${label}' does not exist\n`);
+    const countLabel = getLabel(label);
+    if (this._counts.has(countLabel)) {
+        this._counts.delete(countLabel);
+        return;
     }
+
+    enqueueWarning(`Count for '${countLabel}' does not exist`);
 };
 Console.prototype.group = function(...args) {
     if (args.length > 0) {
@@ -651,29 +772,20 @@ Console.prototype.table = function(tabularData, properties) {
     return renderTableForConsole(this, tabularData, properties);
 };
 Console.prototype.time = function(label) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    this._timers[label] = consoleNative.timestamp();
+    startTimer(this._times, label, 'console.time()');
 };
 Console.prototype.timeLog = function(label, ...v) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    const start = this._timers[label];
-    if (start === undefined) {
-        this._writeToStream(this._stderr, `No such timer label: ${label}\n`);
+    if (!logTimer(this._times, label, 'console.timeLog()', this.log.bind(this), v)) {
         return;
     }
-    const diff = consoleNative.timestamp() - start;
-    this._writeToStream(this._stdout, `${label}: ${diff}ms` + (v.length ? ' ' + util.format(...v) : '') + '\n');
 };
 Console.prototype.timeEnd = function(label) {
-    label = label === undefined ? DEFAULT_LABEL : label;
-    const start = this._timers[label];
-    if (start === undefined) {
-        this._writeToStream(this._stderr, `No such timer label: ${label}\n`);
+    const timerLabel = getLabel(label);
+    if (!logTimer(this._times, timerLabel, 'console.timeEnd()', this.log.bind(this))) {
         return;
     }
-    const diff = consoleNative.timestamp() - start;
-    this._writeToStream(this._stdout, `${label}: ${diff}ms - timer ended\n`);
-    delete this._timers[label];
+
+    this._times.delete(timerLabel);
 };
 
 Object.defineProperty(Console, Symbol.hasInstance, {

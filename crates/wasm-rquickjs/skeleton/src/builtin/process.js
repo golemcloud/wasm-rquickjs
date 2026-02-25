@@ -250,8 +250,27 @@ process.dlopen = function dlopen(module, filename) {
 
 process.stdin = { isTTY: false, fd: 0, read() { return null; }, on() { return this; }, resume() { return this; }, pause() { return this; } };
 
-process.stdout = { isTTY: false, write(s) { write_stdout(String(s)); return true; }, fd: 1 };
-process.stderr = { isTTY: false, write(s) { write_stderr(String(s)); return true; }, fd: 2 };
+function createWritableStdio(fd, writer) {
+    return {
+        isTTY: false,
+        fd,
+        writable: true,
+        write(chunk, encoding, callback) {
+            var cb = callback;
+            if (typeof encoding === 'function') {
+                cb = encoding;
+            }
+            writer(String(chunk));
+            if (typeof cb === 'function') {
+                cb();
+            }
+            return true;
+        }
+    };
+}
+
+process.stdout = createWritableStdio(1, write_stdout);
+process.stderr = createWritableStdio(2, write_stderr);
 
 process.cwd = function cwd() {
     return "/";
