@@ -27,7 +27,11 @@ import {
     stripVTControlCharacters
 } from '__wasm_rquickjs_builtin/internal/util/inspect';
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native';
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from '__wasm_rquickjs_builtin/internal/errors';
+import {
+    ERR_INVALID_ARG_TYPE,
+    ERR_OUT_OF_RANGE,
+    isErrorStackTraceLimitWritable
+} from '__wasm_rquickjs_builtin/internal/errors';
 
 import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
 
@@ -2042,15 +2046,49 @@ function _isInternalUtilCallSite(scriptName) {
         scriptName.indexOf('\\builtin\\util.js') !== -1;
 }
 
+function _captureGetCallSitesStack(skipFn, frameCount) {
+    var err = new Error();
+    if (typeof Error.captureStackTrace !== 'function') {
+        return err && err.stack ? String(err.stack) : '';
+    }
+
+    var shouldRestoreStackTraceLimit = false;
+    var originalStackTraceLimit;
+
+    try {
+        if (typeof isErrorStackTraceLimitWritable === 'function' && isErrorStackTraceLimitWritable()) {
+            var requiredStackTraceLimit = Math.max(10, frameCount + 8);
+            originalStackTraceLimit = Error.stackTraceLimit;
+            if (typeof originalStackTraceLimit !== 'number' ||
+                !Number.isFinite(originalStackTraceLimit) ||
+                originalStackTraceLimit < requiredStackTraceLimit) {
+                Error.stackTraceLimit = requiredStackTraceLimit;
+                shouldRestoreStackTraceLimit = true;
+            }
+        }
+    } catch (_) {
+        // Ignore stackTraceLimit descriptor quirks and proceed with best effort.
+    }
+
+    try {
+        Error.captureStackTrace(err, skipFn);
+    } finally {
+        if (shouldRestoreStackTraceLimit) {
+            try {
+                Error.stackTraceLimit = originalStackTraceLimit;
+            } catch (_) {
+                // Keep getCallSites resilient even if stackTraceLimit cannot be restored.
+            }
+        }
+    }
+
+    return err && err.stack ? String(err.stack) : '';
+}
+
 export function getCallSites(frameCount = 10, options) {
     frameCount = _validateGetCallSitesOptions(frameCount, options);
 
-    var err = new Error();
-    if (typeof Error.captureStackTrace === 'function') {
-        Error.captureStackTrace(err, getCallSites);
-    }
-
-    var stack = err && err.stack ? String(err.stack) : '';
+    var stack = _captureGetCallSitesStack(getCallSites, frameCount);
     var lines = stack.split('\n');
     var callSites = [];
 
