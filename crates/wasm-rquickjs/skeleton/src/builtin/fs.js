@@ -790,6 +790,10 @@ function normalizeEncoding(enc) {
     return enc;
 }
 
+function decodeFileResult(bytes, encoding) {
+    return getBuffer().from(bytes).toString(encoding);
+}
+
 // --- Sync functions ---
 
 export function readFileSync(path, options) {
@@ -817,7 +821,7 @@ export function readFileSync(path, options) {
             offset += chunk.length;
         }
         if (encoding) {
-            return new TextDecoder(encoding).decode(result);
+            return decodeFileResult(result, encoding);
         }
         return getBuffer().from(result);
     }
@@ -842,7 +846,7 @@ export function readFileSync(path, options) {
             offset += chunk.length;
         }
         if (encoding) {
-            return new TextDecoder(encoding).decode(result);
+            return decodeFileResult(result, encoding);
         }
         return getBuffer().from(result);
     } finally {

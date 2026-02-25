@@ -762,10 +762,7 @@
     "parallel/test-fs-read-empty-buffer.js": {},
     "parallel/test-fs-read-file-assert-encoding.js": {},
     "parallel/test-fs-read-file-sync-hostname.js": {},
-    "parallel/test-fs-read-file-sync.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-read-file-sync.js": {},
     "parallel/test-fs-read-offset-null.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"
