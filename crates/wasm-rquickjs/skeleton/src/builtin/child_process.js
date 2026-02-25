@@ -442,6 +442,10 @@ function runInline(command, args, options) {
     var oldStdoutWrite = process.stdout && process.stdout.write;
     var oldStderrWrite = process.stderr && process.stderr.write;
     var oldEmitWarning = process.emitWarning;
+    var hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
+    var oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
+    var hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
+    var oldCjsLineOffsets = globalThis.__wasm_rquickjs_cjs_line_offsets;
     var stdinData = options && typeof options.__wasmStdinData === 'string' ? options.__wasmStdinData : null;
     var oldFsPromisesReadFile = null;
 
@@ -457,6 +461,8 @@ function runInline(command, args, options) {
         process.cwd = function cwd() {
             return childCwd;
         };
+        globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
+        globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
 
         if (hasFipsStartupFlag(execArgv)) {
             throw new Error(FIPS_STARTUP_ERROR);
@@ -615,6 +621,18 @@ function runInline(command, args, options) {
             } catch (_) {
                 // ignore restore failures in WASM test emulation
             }
+        }
+
+        if (hadSimpleSourceMaps) {
+            globalThis.__wasm_rquickjs_simple_source_maps = oldSimpleSourceMaps;
+        } else {
+            delete globalThis.__wasm_rquickjs_simple_source_maps;
+        }
+
+        if (hadCjsLineOffsets) {
+            globalThis.__wasm_rquickjs_cjs_line_offsets = oldCjsLineOffsets;
+        } else {
+            delete globalThis.__wasm_rquickjs_cjs_line_offsets;
         }
     }
 

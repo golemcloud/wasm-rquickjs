@@ -285,13 +285,127 @@ function stripV8OptimizationIntrinsics(source) {
         .replace(/eval\(\s*(['"])%OptimizeFunctionOnNextCall\([^'"\\\r\n]*\)\1\s*\)\s*;?/g, 'undefined;');
 }
 
+function hasExecArgvFlag(flag) {
+    var processObject = globalThis.process;
+    if (!processObject || !Array.isArray(processObject.execArgv)) {
+        return false;
+    }
+
+    var prefixed = flag + '=';
+    for (var i = 0; i < processObject.execArgv.length; i++) {
+        var arg = String(processObject.execArgv[i]);
+        if (arg === flag || arg.indexOf(prefixed) === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function isExperimentalTransformTypesEnabled() {
+    return hasExecArgvFlag('--experimental-transform-types');
+}
+
+function isSourceMapsEnabled() {
+    if (hasExecArgvFlag('--no-enable-source-maps')) {
+        return false;
+    }
+
+    return hasExecArgvFlag('--enable-source-maps') || isExperimentalTransformTypesEnabled();
+}
+
+function getSimpleSourceMapRegistry() {
+    var registry = globalThis.__wasm_rquickjs_simple_source_maps;
+    if (!registry || typeof registry !== 'object') {
+        registry = Object.create(null);
+        globalThis.__wasm_rquickjs_simple_source_maps = registry;
+    }
+    return registry;
+}
+
+function getCjsLineOffsetRegistry() {
+    var registry = globalThis.__wasm_rquickjs_cjs_line_offsets;
+    if (!registry || typeof registry !== 'object') {
+        registry = Object.create(null);
+        globalThis.__wasm_rquickjs_cjs_line_offsets = registry;
+    }
+    return registry;
+}
+
+function countMatches(text, charCode) {
+    var count = 0;
+    for (var i = 0; i < text.length; i++) {
+        if (text.charCodeAt(i) === charCode) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+function transpileTypeScriptModule(filename, source) {
+    if (!isExperimentalTransformTypesEnabled() || !filename.endsWith('.ts')) {
+        return source;
+    }
+
+    var lines = String(source).split('\n');
+    var transformedLines = [];
+    var generatedLineToOriginalLine = Object.create(null);
+    var insideInterface = false;
+    var interfaceDepth = 0;
+
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+
+        if (insideInterface) {
+            interfaceDepth += countMatches(line, 123) - countMatches(line, 125);
+            if (interfaceDepth <= 0) {
+                insideInterface = false;
+                interfaceDepth = 0;
+            }
+            continue;
+        }
+
+        var trimmed = line.trim();
+        if (/^interface\s+[A-Za-z_$][A-Za-z0-9_$]*\b/.test(trimmed)) {
+            interfaceDepth = countMatches(line, 123) - countMatches(line, 125);
+            if (interfaceDepth > 0) {
+                insideInterface = true;
+            }
+            continue;
+        }
+
+        if (trimmed.length === 0) {
+            continue;
+        }
+
+        transformedLines.push(line);
+        generatedLineToOriginalLine[transformedLines.length] = i + 1;
+    }
+
+    var transformed = transformedLines.join('\n');
+    var sourceMapRegistry = getSimpleSourceMapRegistry();
+    if (isSourceMapsEnabled()) {
+        sourceMapRegistry[filename] = {
+            generatedLineToOriginalLine,
+        };
+    } else {
+        delete sourceMapRegistry[filename];
+    }
+
+    return transformed;
+}
+
 function compileCjs(filename, source) {
     // Strip shebang
     if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
         source = '//' + source;
     }
 
+    source = transpileTypeScriptModule(filename, source);
     source = stripV8OptimizationIntrinsics(source);
+
+    var cjsLineOffsets = getCjsLineOffsetRegistry();
+    cjsLineOffsets[filename] = 2;
 
     return new Function('exports', 'require', 'module', '__filename', '__dirname',
         source + '\n//# sourceURL=' + filename + '\n');

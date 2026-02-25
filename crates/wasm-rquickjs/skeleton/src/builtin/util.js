@@ -2046,6 +2046,100 @@ function _isInternalUtilCallSite(scriptName) {
         scriptName.indexOf('\\builtin\\util.js') !== -1;
 }
 
+function _hasExecArgvFlag(flag) {
+    if (typeof process === 'undefined' || !Array.isArray(process.execArgv)) {
+        return false;
+    }
+
+    var prefixed = flag + '=';
+    for (var i = 0; i < process.execArgv.length; i++) {
+        var arg = String(process.execArgv[i]);
+        if (arg === flag || arg.indexOf(prefixed) === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function _isSourceMapsEnabledFromExecArgv() {
+    if (_hasExecArgvFlag('--no-enable-source-maps')) {
+        return false;
+    }
+
+    return _hasExecArgvFlag('--enable-source-maps') ||
+        _hasExecArgvFlag('--experimental-transform-types');
+}
+
+function _getSimpleSourceMapRegistry() {
+    var registry = globalThis.__wasm_rquickjs_simple_source_maps;
+    if (!registry || typeof registry !== 'object') {
+        return null;
+    }
+
+    return registry;
+}
+
+function _getCjsLineOffsetRegistry() {
+    var registry = globalThis.__wasm_rquickjs_cjs_line_offsets;
+    if (!registry || typeof registry !== 'object') {
+        return null;
+    }
+
+    return registry;
+}
+
+function _normalizeCallSiteLineNumber(callSite) {
+    var registry = _getCjsLineOffsetRegistry();
+    if (!registry) {
+        return callSite;
+    }
+
+    var lineOffset = registry[callSite.scriptName];
+    if (typeof lineOffset !== 'number' || !Number.isFinite(lineOffset) || lineOffset <= 0) {
+        return callSite;
+    }
+
+    if (callSite.lineNumber <= lineOffset) {
+        return callSite;
+    }
+
+    var normalizedCallSite = Object.create(null);
+    normalizedCallSite.functionName = callSite.functionName;
+    normalizedCallSite.scriptId = callSite.scriptId;
+    normalizedCallSite.scriptName = callSite.scriptName;
+    normalizedCallSite.lineNumber = callSite.lineNumber - lineOffset;
+    normalizedCallSite.columnNumber = callSite.columnNumber;
+    normalizedCallSite.column = callSite.column;
+    return normalizedCallSite;
+}
+
+function _mapCallSiteWithSimpleSourceMap(callSite) {
+    var registry = _getSimpleSourceMapRegistry();
+    if (!registry) {
+        return callSite;
+    }
+
+    var sourceMap = registry[callSite.scriptName];
+    if (!sourceMap || !sourceMap.generatedLineToOriginalLine) {
+        return callSite;
+    }
+
+    var mappedLine = sourceMap.generatedLineToOriginalLine[callSite.lineNumber];
+    if (typeof mappedLine !== 'number' || !Number.isFinite(mappedLine)) {
+        return callSite;
+    }
+
+    var mappedCallSite = Object.create(null);
+    mappedCallSite.functionName = callSite.functionName;
+    mappedCallSite.scriptId = callSite.scriptId;
+    mappedCallSite.scriptName = callSite.scriptName;
+    mappedCallSite.lineNumber = mappedLine;
+    mappedCallSite.columnNumber = callSite.columnNumber;
+    mappedCallSite.column = callSite.column;
+    return mappedCallSite;
+}
+
 function _captureGetCallSitesStack(skipFn, frameCount) {
     var err = new Error();
     if (typeof Error.captureStackTrace !== 'function') {
@@ -2086,7 +2180,18 @@ function _captureGetCallSitesStack(skipFn, frameCount) {
 }
 
 export function getCallSites(frameCount = 10, options) {
+    var normalizedOptions = options;
+    if (normalizedOptions === undefined) {
+        if (typeof frameCount === 'object') {
+            normalizedOptions = frameCount;
+        } else {
+            normalizedOptions = {};
+        }
+    }
+
     frameCount = _validateGetCallSitesOptions(frameCount, options);
+    var shouldMapSourceLocations = normalizedOptions.sourceMap === true ||
+        (_isSourceMapsEnabledFromExecArgv() && normalizedOptions.sourceMap !== false);
 
     var stack = _captureGetCallSitesStack(getCallSites, frameCount);
     var lines = stack.split('\n');
@@ -2107,6 +2212,12 @@ export function getCallSites(frameCount = 10, options) {
             line.indexOf('getCallSite') !== -1 ||
             _isInternalUtilCallSite(parsedCallSite.scriptName)) {
             continue;
+        }
+
+        parsedCallSite = _normalizeCallSiteLineNumber(parsedCallSite);
+
+        if (shouldMapSourceLocations) {
+            parsedCallSite = _mapCallSiteWithSimpleSourceMap(parsedCallSite);
         }
 
         callSites.push(parsedCallSite);
