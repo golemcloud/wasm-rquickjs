@@ -5260,7 +5260,10 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-status-reason-invalid-chars.js": { "skip": true, "reason": "requires ERR_INVALID_CHAR validation on status reason phrase which is not yet implemented" },
+    "parallel/test-http-status-reason-invalid-chars.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-timeout.js": { "skip": true, "reason": "requires server-side timeout enforcement (headersTimeout, requestTimeout) which is not yet implemented" },
     "parallel/test-http-upgrade-client.js": { "skip": true, "reason": "requires HTTP Upgrade/101 handling and raw socket takeover which is not implemented" },
     "parallel/test-http-write-head-after-set-header.js": { "skip": true, "reason": "deadlocks: two concurrent http.request calls to same-component server cause event loop deadlock with wasi:http pollables" },

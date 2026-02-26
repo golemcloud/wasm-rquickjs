@@ -168,6 +168,16 @@ function _validateStatusCode(statusCode) {
     return statusCode;
 }
 
+function _validateStatusMessage(statusMessage) {
+    const message = String(statusMessage);
+    if (INVALID_HEADER_CHAR_REGEX.test(message)) {
+        const err = new TypeError('Invalid character in statusMessage');
+        err.code = 'ERR_INVALID_CHAR';
+        throw err;
+    }
+    return message;
+}
+
 // ===== ServerResponse =====
 
 function ServerResponse(req) {
@@ -278,9 +288,11 @@ ServerResponse.prototype.writeHead = function writeHead(statusCode, statusMessag
 
     this.statusCode = statusCode;
     if (statusMessage !== undefined) {
-        this.statusMessage = statusMessage;
+        this.statusMessage = _validateStatusMessage(statusMessage);
     } else if (this.statusMessage === undefined) {
         this.statusMessage = STATUS_CODES[statusCode] || 'unknown';
+    } else {
+        this.statusMessage = _validateStatusMessage(this.statusMessage);
     }
 
     if (headers) {
@@ -332,7 +344,9 @@ ServerResponse.prototype._sendHeaders = function _sendHeaders() {
     this._headersSentWire = true;
     this.headersSent = true;
 
-    const statusMessage = this.statusMessage || STATUS_CODES[this.statusCode] || 'Unknown';
+    const statusMessage = _validateStatusMessage(
+        this.statusMessage || STATUS_CODES[this.statusCode] || 'Unknown',
+    );
     const httpVersion = this.req.httpVersion || '1.1';
     let head = 'HTTP/' + httpVersion + ' ' + this.statusCode + ' ' + statusMessage + '\r\n';
 
