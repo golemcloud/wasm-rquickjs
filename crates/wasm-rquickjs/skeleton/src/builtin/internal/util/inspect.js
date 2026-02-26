@@ -297,6 +297,16 @@ export function inspect(value, opts) {
 const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
 const cachedErrorName = new WeakMap();
 const manuallyOverriddenErrorStack = new WeakSet();
+const nativeErrorConstructorNames = new Set([
+    "Error",
+    "EvalError",
+    "RangeError",
+    "ReferenceError",
+    "SyntaxError",
+    "TypeError",
+    "URIError",
+    "AggregateError",
+]);
 inspect.custom = customInspectSymbol;
 
 Object.defineProperty(inspect, "defaultOptions", {
@@ -1521,7 +1531,10 @@ function formatError(
         if (constructor !== null) {
             const hasOwnName = Object.prototype.hasOwnProperty.call(err, "name");
             const normalizedName = typeof name === "string" ? name : String(name);
-            if ((constructor !== "Error" && !hasOwnName) || normalizedName !== constructor) {
+            if (
+                normalizedName !== constructor ||
+                (!hasOwnName && !nativeErrorConstructorNames.has(constructor))
+            ) {
                 stack = `${Error.prototype.toString.call(err)}\n${stack}`;
             }
         } else {

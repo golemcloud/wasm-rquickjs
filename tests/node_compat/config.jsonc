@@ -363,7 +363,7 @@
         "block_18_test_for_array_constructor_in_different_context": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_19_test_for_other_constructors_in_different_context": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_20_test_for_property_descriptors": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_21_exceptions_should_print_the_error_message_not": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_21_exceptions_should_print_the_error_message_not": {},
         "block_22_block_22": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_23_block_23": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_24_prevent_enumerable_error_properties_from_being_printed": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
