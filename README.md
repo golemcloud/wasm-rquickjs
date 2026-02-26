@@ -355,6 +355,7 @@ Implemented by https://github.com/ungap/structured-clone
 - `_extend`
 - `promisify`
 - `callbackify`
+- `styleText`
 - `getCallSite`
 - `getCallSites`
 - `toUSVString`

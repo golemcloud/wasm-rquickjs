@@ -2241,6 +2241,179 @@ export function getCallSite(frameCount, options) {
     return getCallSites(frameCount, options);
 }
 
+var _styleTextFormats = Object.keys(inspect.colors);
+
+function _throwStyleTextInvalidArgValue(name, value, reason) {
+    var inspected;
+    try {
+        inspected = JSON.stringify(value);
+    } catch (_) {
+        inspected = String(value);
+    }
+
+    var message = "The argument '" + name + "' " + reason;
+    if (inspected !== undefined) {
+        message += '. Received ' + inspected;
+    }
+
+    var err = new TypeError(message);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+}
+
+function _isStyleTextFormatValue(format) {
+    return format === 'none' || _styleTextFormats.indexOf(format) !== -1;
+}
+
+function _normalizeStyleTextFormats(format) {
+    if (typeof format === 'string') {
+        if (!_isStyleTextFormatValue(format)) {
+            _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format');
+        }
+        return [format];
+    }
+
+    if (Array.isArray(format)) {
+        for (var i = 0; i < format.length; i++) {
+            if (typeof format[i] !== 'string' || !_isStyleTextFormatValue(format[i])) {
+                _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format or array of string formats');
+            }
+        }
+        return format;
+    }
+
+    _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format or array of string formats');
+}
+
+function _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose) {
+    if (text.indexOf(closeSequence) === -1) {
+        return text;
+    }
+
+    var replacement = keepClose ? closeSequence + openSequence : openSequence;
+    return text.split(closeSequence).join(replacement);
+}
+
+function _applyStyleTextFormat(format, text) {
+    if (format === 'none') {
+        return text;
+    }
+
+    var style = inspect.colors[format];
+    if (!Array.isArray(style) || style.length < 2) {
+        _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format');
+    }
+
+    var open = style[0];
+    var close = style[1];
+    var openSequence = '\u001b[' + open + 'm';
+    var closeSequence = '\u001b[' + close + 'm';
+
+    var keepClose = open === 1 || open === 2;
+    var processedText = _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose);
+
+    return openSequence + processedText + closeSequence;
+}
+
+function _parseStyleTextForceColor(value) {
+    var normalized = String(value).toLowerCase();
+    if (normalized === '' || normalized === 'true' || normalized === '1') {
+        return 4;
+    }
+    if (normalized === '2') {
+        return 8;
+    }
+    if (normalized === '3') {
+        return 24;
+    }
+    return 1;
+}
+
+function _shouldStyleTextColorize(stream) {
+    if (typeof process === 'undefined' || process.env === undefined || process.env === null) {
+        return !!(stream && stream.isTTY);
+    }
+
+    var env = process.env;
+
+    if (env.FORCE_COLOR !== undefined) {
+        return _parseStyleTextForceColor(env.FORCE_COLOR) > 2;
+    }
+
+    if (env.NODE_DISABLE_COLORS !== undefined || env.NO_COLOR !== undefined || env.TERM === 'dumb') {
+        return false;
+    }
+
+    if (!stream || !stream.isTTY) {
+        return false;
+    }
+
+    if (typeof stream.getColorDepth === 'function') {
+        try {
+            return stream.getColorDepth() > 2;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function _isStyleTextStream(stream) {
+    if (!stream || (typeof stream !== 'object' && typeof stream !== 'function')) {
+        return false;
+    }
+
+    return typeof stream.write === 'function' ||
+        typeof stream.read === 'function' ||
+        typeof stream.pipe === 'function' ||
+        typeof stream.on === 'function';
+}
+
+export function styleText(format, text, options) {
+    if (typeof text !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('text', 'string', text);
+    }
+
+    var formats = _normalizeStyleTextFormats(format);
+    var stream = typeof process !== 'undefined' ? process.stdout : undefined;
+    var validateStream = true;
+
+    if (options !== undefined) {
+        if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+            throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+        }
+
+        if (options.stream !== undefined) {
+            stream = options.stream;
+        }
+
+        if (options.validateStream !== undefined) {
+            if (typeof options.validateStream !== 'boolean') {
+                throw new ERR_INVALID_ARG_TYPE('options.validateStream', 'boolean', options.validateStream);
+            }
+            validateStream = options.validateStream;
+        }
+    }
+
+    if (validateStream) {
+        if (!_isStyleTextStream(stream)) {
+            throw new ERR_INVALID_ARG_TYPE('options.stream', ['ReadableStream', 'WritableStream', 'Stream'], stream);
+        }
+
+        if (!_shouldStyleTextColorize(stream)) {
+            return text;
+        }
+    }
+
+    var styledText = text;
+    for (var i = formats.length - 1; i >= 0; i--) {
+        styledText = _applyStyleTextFormat(formats[i], styledText);
+    }
+
+    return styledText;
+}
+
 // --- util.parseArgs() ---
 
 function _makeError(code, message) {
@@ -2577,6 +2750,7 @@ export default {
      deprecate,
      debuglog,
      inspect,
+     styleText,
      isArray,
      isBoolean,
      isNull,

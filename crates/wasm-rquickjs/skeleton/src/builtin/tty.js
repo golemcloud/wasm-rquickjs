@@ -3,6 +3,36 @@
 
 import net from 'node:net';
 
+function parseForceColor(value) {
+    var normalized = String(value).toLowerCase();
+    if (normalized === '' || normalized === 'true' || normalized === '1') {
+        return 4;
+    }
+    if (normalized === '2') {
+        return 8;
+    }
+    if (normalized === '3') {
+        return 24;
+    }
+    return 1;
+}
+
+function getEnvColorDepth(stream, env) {
+    var currentEnv = env || (typeof process !== 'undefined' ? process.env : undefined) || {};
+
+    if (currentEnv.FORCE_COLOR !== undefined) {
+        return parseForceColor(currentEnv.FORCE_COLOR);
+    }
+
+    if (currentEnv.NODE_DISABLE_COLORS !== undefined ||
+        currentEnv.NO_COLOR !== undefined ||
+        currentEnv.TERM === 'dumb') {
+        return 1;
+    }
+
+    return stream && stream.isTTY ? 4 : 1;
+}
+
 export function isatty(fd) {
     return false;
 }
@@ -30,12 +60,12 @@ export function WriteStream(fd) {
 Object.setPrototypeOf(WriteStream.prototype, net.Socket.prototype);
 Object.setPrototypeOf(WriteStream, net.Socket);
 
-WriteStream.prototype.getColorDepth = function getColorDepth() {
-    return 1;
+WriteStream.prototype.getColorDepth = function getColorDepth(env) {
+    return getEnvColorDepth(this, env);
 };
 
-WriteStream.prototype.hasColors = function hasColors(count) {
-    return false;
+WriteStream.prototype.hasColors = function hasColors(count, env) {
+    return this.getColorDepth(env) > 2;
 };
 
 WriteStream.prototype.getWindowSize = function getWindowSize() {

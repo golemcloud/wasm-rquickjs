@@ -508,10 +508,7 @@
       "reason": "requires internal/util sleep function"
     },
     "parallel/test-util-stripvtcontrolcharacters.js": {},
-    "parallel/test-util-styletext.js": {
-      "skip": true,
-      "reason": "requires util.styleText and node:tty WriteStream"
-    },
+    "parallel/test-util-styletext.js": {},
     "parallel/test-util-text-decoder.js": {},
     "parallel/test-util-types-exists.js": {},
     "parallel/test-util-types.js": {

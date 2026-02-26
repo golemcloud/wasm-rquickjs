@@ -502,6 +502,15 @@ var common = {
     runWithInvalidFD: function(func) {
         return func(1 << 30);
     },
+    getTTYfd: function() {
+        if (process && process.stdout && typeof process.stdout.fd === 'number') {
+            return process.stdout.fd;
+        }
+        if (process && process.stderr && typeof process.stderr.fd === 'number') {
+            return process.stderr.fd;
+        }
+        return -1;
+    },
 
     // Process-related stubs
     spawnPromisified: function(command, args, options) {
