@@ -125,7 +125,17 @@ export function isGeneratorObject(value) {
 }
 
 export function isMap(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Map]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        // `Object.prototype.toString` alone is too permissive for QuickJS and
+        // matches objects inheriting from `Map.prototype`.
+        Map.prototype.has.call(value, undefined);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function isMapIterator(value) {
@@ -177,7 +187,16 @@ export function isRegExp(value) {
 }
 
 export function isSet(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Set]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        // Mirror `isMap` semantics for Set objects as well.
+        Set.prototype.has.call(value, undefined);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function isSetIterator(value) {

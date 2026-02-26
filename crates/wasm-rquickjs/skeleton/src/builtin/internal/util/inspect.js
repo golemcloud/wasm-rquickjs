@@ -1220,7 +1220,7 @@ function formatPrimitive(fn, value, ctx) {
         return fn("undefined", "undefined");
     }
     // es6 symbol primitive
-    return fn(value.toString(), "symbol");
+    return fn(Symbol.prototype.toString.call(value), "symbol");
 }
 
 // Return a new empty array to push in the results of the default formatter.
@@ -1928,7 +1928,11 @@ function formatProperty(
                 }
                 ctx.indentationLvl -= 2;
             } catch (err) {
-                const message = `<Inspection threw (${err.message})>`;
+                let errMessage = err?.message;
+                if (err?.name === "TypeError" && errMessage === "not a symbol") {
+                    errMessage = "Symbol.prototype.toString requires that 'this' be a Symbol";
+                }
+                const message = `<Inspection threw (${errMessage})>`;
                 str = `${s(`[${label}:`, sp)} ${message}${s("]", sp)}`;
             }
         } else {
