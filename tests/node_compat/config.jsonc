@@ -5264,7 +5264,7 @@
     "parallel/test-http-should-keep-alive.js": { "skip": true, "reason": "requires req.shouldKeepAlive property on ClientRequest which is not implemented" },
     "parallel/test-http-status-code.js": {
       "skip": true,
-      "reason": "regression: was enabled but started failing"
+      "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-status-reason-invalid-chars.js": { "skip": true, "reason": "requires ERR_INVALID_CHAR validation on status reason phrase which is not yet implemented" },
     "parallel/test-http-timeout.js": { "skip": true, "reason": "requires server-side timeout enforcement (headersTimeout, requestTimeout) which is not yet implemented" },
