@@ -4061,7 +4061,7 @@
     "parallel/test-http-agent-close.js": {},
     "parallel/test-http-agent-false.js": {},
     "parallel/test-http-client-read-in-error.js": {},
-    "parallel/test-http-server-keep-alive-timeout.js": { "skip": true, "reason": "http.Server#setTimeout()/server 'timeout' event semantics are not implemented (server timeout not applied to sockets); timing-sensitive test cannot pass reliably" },
+    "parallel/test-http-server-keep-alive-timeout.js": {},
     "parallel/test-http-set-timeout-server.js": {},
     "parallel/test-http2-compat-client-upload-reject.js": {},
     "parallel/test-https-set-timeout-server.js": {},
