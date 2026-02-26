@@ -54,7 +54,14 @@ export function isAsyncFunction(value) {
 }
 
 export function isBooleanObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Boolean]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof Boolean.prototype.valueOf.call(value) === "boolean";
+    } catch {
+        return false;
+    }
 }
 
 export function isBoxedPrimitive(value) {
@@ -105,11 +112,25 @@ export function isNativeError(value) {
 }
 
 export function isNumberObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Number]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof Number.prototype.valueOf.call(value) === "number";
+    } catch {
+        return false;
+    }
 }
 
 export function isBigIntObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object BigInt]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof BigInt.prototype.valueOf.call(value) === "bigint";
+    } catch {
+        return false;
+    }
 }
 
 export function isPromise(value) {
@@ -138,11 +159,25 @@ export function isSharedArrayBuffer(value) {
 }
 
 export function isStringObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object String]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof String.prototype.valueOf.call(value) === "string";
+    } catch {
+        return false;
+    }
 }
 
 export function isSymbolObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Symbol]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof Symbol.prototype.valueOf.call(value) === "symbol";
+    } catch {
+        return false;
+    }
 }
 
 export function isWeakMap(value) {

@@ -217,6 +217,8 @@ export function inspect(value, opts) {
     return formatValue(ctx, value, 0);
 }
 const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
+const cachedErrorName = new WeakMap();
+const manuallyOverriddenErrorStack = new WeakSet();
 inspect.custom = customInspectSymbol;
 
 Object.defineProperty(inspect, "defaultOptions", {
@@ -724,7 +726,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             if (keys.length === 0 && protoProps === undefined) {
                 return ctx.stylize(base, "date");
             }
-        } else if (value instanceof Error) {
+        } else if (isInspectableError(value)) {
             // Ensure 'cause' property is included in keys (it's non-enumerable)
             if (Object.prototype.hasOwnProperty.call(value, 'cause') && keys.indexOf('cause') === -1) {
                 keys.push('cause');
@@ -766,9 +768,37 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             braces[0] = `${getPrefix(constructor, tag, "Module")}{`;
             // Special handle keys for namespace objects.
             (formatter) = formatNamespaceObject.bind(null, keys);
-        } else if (types.isBoxedPrimitive(value)) {
+        } else {
+            const nullProtoConstructor = constructor === null
+                ? internalGetConstructorName(value)
+                : null;
+            const hasNullProtoBoxedCtor =
+                nullProtoConstructor === "Boolean" ||
+                nullProtoConstructor === "Number" ||
+                nullProtoConstructor === "String" ||
+                nullProtoConstructor === "Symbol" ||
+                nullProtoConstructor === "BigInt";
+
+            if (!(types.isBoxedPrimitive(value) || hasNullProtoBoxedCtor)) {
+                if (keys.length === 0 && protoProps === undefined) {
+                    // TODO(wafuwafu13): Implement
+                    // if (types.isExternal(value)) {
+                    //   const address = getExternalValue(value).toString(16);
+                    //   return ctx.stylize(`[External: ${address}]`, 'special');
+                    // }
+                    return `${getCtxStyle(value, constructor, tag)}{}`;
+                }
+                braces[0] = `${getCtxStyle(value, constructor, tag)}{`;
+            } else {
             try {
-                base = getBoxedBase(value, ctx, keys, constructor, tag);
+                    base = getBoxedBase(
+                        value,
+                        ctx,
+                        keys,
+                        constructor,
+                        tag,
+                        hasNullProtoBoxedCtor ? nullProtoConstructor : undefined,
+                    );
                 if (keys.length === 0 && protoProps === undefined) {
                     return base;
                 }
@@ -778,16 +808,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
                 }
                 braces[0] = `${getCtxStyle(value, constructor, tag)}{`;
             }
-        } else {
-            if (keys.length === 0 && protoProps === undefined) {
-                // TODO(wafuwafu13): Implement
-                // if (types.isExternal(value)) {
-                //   const address = getExternalValue(value).toString(16);
-                //   return ctx.stylize(`[External: ${address}]`, 'special');
-                // }
-                return `${getCtxStyle(value, constructor, tag)}{}`;
             }
-            braces[0] = `${getCtxStyle(value, constructor, tag)}{`;
         }
     }
 
@@ -1067,6 +1088,34 @@ function isInstanceof(object, proto) {
     }
 }
 
+function isInspectableError(value) {
+    if (value instanceof Error || types.isNativeError(value)) {
+        return true;
+    }
+
+    if (typeof Error.isError === "function") {
+        try {
+            if (Error.isError(value)) {
+                return true;
+            }
+        } catch {
+            // Ignore host errors and fall through to shape checks.
+        }
+    }
+
+    if (value === null || (typeof value !== "object" && typeof value !== "function")) {
+        return false;
+    }
+
+    try {
+        return Object.prototype.hasOwnProperty.call(value, "stack") &&
+            (Object.prototype.hasOwnProperty.call(value, "message") ||
+                Object.prototype.hasOwnProperty.call(value, "name"));
+    } catch {
+        return false;
+    }
+}
+
 function getPrefix(constructor, tag, fallback, size = "") {
     if (constructor === null) {
         if (tag !== "" && fallback !== tag) {
@@ -1247,6 +1296,7 @@ function formatIterator(braces, ctx, value, recurseTimes) {
 
 function getFunctionBase(value, constructor, tag) {
     const stringified = Function.prototype.toString.call(value);
+    const normalizedSource = stringified.trimStart();
     if (stringified.slice(0, 5) === "class" && stringified.endsWith("}")) {
         const slice = stringified.slice(5, -1);
         const bracketIndex = slice.indexOf("{");
@@ -1260,10 +1310,18 @@ function getFunctionBase(value, constructor, tag) {
         }
     }
     let type = "Function";
-    if (types.isGeneratorFunction(value)) {
+    if (
+        normalizedSource.startsWith("async function*") ||
+        normalizedSource.startsWith("async function *")
+    ) {
+        type = "AsyncGeneratorFunction";
+    } else if (
+        normalizedSource.startsWith("function*") ||
+        normalizedSource.startsWith("function *") ||
+        types.isGeneratorFunction(value)
+    ) {
         type = `Generator${type}`;
-    }
-    if (types.isAsyncFunction(value)) {
+    } else if (types.isAsyncFunction(value) || normalizedSource.startsWith("async ")) {
         type = `Async${type}`;
     }
     let base = `[${type}`;
@@ -1292,29 +1350,63 @@ function formatError(
     ctx,
     keys,
 ) {
-    const name = err.name != null ? String(err.name) : "Error";
-    let len = name.length;
-    // QuickJS stacks often start directly with frame lines ("    at ...") without
-    // the "ErrorName: message" prefix present in V8 stacks.
-    let rawStack = err.stack ? String(err.stack) : "";
+    const name = err.name != null ? err.name : "Error";
     let stack;
-    const hasQuickJsFrames = /^\s*at\s/m.test(rawStack);
-    if (
-        rawStack &&
-        (rawStack.startsWith(name) || rawStack.startsWith(err.toString()) || hasQuickJsFrames)
-    ) {
-        stack = rawStack;
+    const ownStackDescriptor = Object.getOwnPropertyDescriptor(err, "stack");
+    const stackValue = ownStackDescriptor && Object.prototype.hasOwnProperty.call(ownStackDescriptor, "value")
+        ? ownStackDescriptor.value
+        : err.stack;
+
+    if (stackValue) {
+        if (typeof stackValue === "string") {
+            stack = stackValue;
+        } else {
+            const stackCtx = {
+                ...ctx,
+                compact: false,
+                indentationLvl: 0,
+                seen: [],
+            };
+            stack = formatValue(stackCtx, stackValue, 0);
+        }
     } else {
-        stack = err.toString();
+        stack = Error.prototype.toString.call(err);
+    }
+
+    let collapsedManualStack = false;
+    if (constructor === null && typeof stack === "string") {
+        if (!stack.includes("\n    at")) {
+            manuallyOverriddenErrorStack.add(err);
+        }
+
+        if (tag === "" && manuallyOverriddenErrorStack.has(err)) {
+            if (stack.includes("\n    at")) {
+                stack = stack.split("\n", 1)[0];
+                collapsedManualStack = true;
+            } else if (stack.startsWith("    at")) {
+                const previousName = cachedErrorName.get(err) || "Error";
+                const messageSuffix = err.message ? `: ${err.message}` : "";
+                stack = `${previousName}${messageSuffix}`;
+                collapsedManualStack = true;
+            }
+        }
+    }
+
+    // QuickJS stack traces may start directly with frame lines.
+    if (!collapsedManualStack && typeof stack === "string" && stack.startsWith("    at")) {
+        stack = `${Error.prototype.toString.call(err)}\n${stack}`;
     }
 
     // Do not "duplicate" error properties that are already included in the output
     // otherwise.
     if (!ctx.showHidden && keys.length !== 0) {
-        for (const name of ["name", "message", "stack"]) {
-            const index = keys.indexOf(name);
+        for (const keyName of ["name", "message", "stack"]) {
+            const index = keys.indexOf(keyName);
             // Only hide the property in case it's part of the original stack
-            if (index !== -1 && stack.includes(err[name])) {
+            if (
+                index !== -1 &&
+                (typeof err[keyName] !== "string" || stack.includes(err[keyName]))
+            ) {
                 keys.splice(index, 1);
             }
         }
@@ -1322,50 +1414,85 @@ function formatError(
 
     // A stack trace may contain arbitrary data. Only manipulate the output
     // for "regular errors" (errors that "look normal") for now.
+    let improvedStack = stack;
+    let nameAsString = typeof name === "string" ? name : String(name);
+    if (constructor !== null && typeof nameAsString === "string" && nameAsString !== "") {
+        cachedErrorName.set(err, nameAsString);
+    }
+    let len = nameAsString.length;
+    if (typeof name !== "string") {
+        const prefix = getPrefix(constructor, tag, "Error").slice(0, -1);
+        improvedStack = improvedStack.replace(
+            nameAsString,
+            `${nameAsString} [${prefix}]`,
+        );
+    }
+
     if (
         constructor === null ||
-        (name.endsWith("Error") &&
-            stack.startsWith(name) &&
-            (stack.length === len || stack[len] === ":" || stack[len] === "\n"))
+        (nameAsString.endsWith("Error") &&
+            improvedStack.startsWith(nameAsString) &&
+            (improvedStack.length === len || improvedStack[len] === ":" || improvedStack[len] === "\n"))
     ) {
         let fallback = "Error";
         if (constructor === null) {
-            const start = stack.match(/^([A-Z][a-z_ A-Z0-9[\]()-]+)(?::|\n {4}at)/) ||
-                stack.match(/^([a-z_A-Z0-9-]*Error)$/);
+            const start = improvedStack.match(/^([A-Z][a-z_ A-Z0-9[\]()-]+)(?::|\n {4}at)/) ||
+                improvedStack.match(/^([a-z_A-Z0-9-]*Error)$/);
             fallback = (start && start[1]) || "";
             len = fallback.length;
             fallback = fallback || "Error";
+            const previousName = cachedErrorName.get(err);
+
+            if (nameAsString === "Error" && /^Error(?::|\n)/.test(improvedStack)) {
+                if (typeof previousName === "string" && previousName !== "Error") {
+                    nameAsString = previousName;
+                    if (fallback === "Error") {
+                        fallback = previousName;
+                    }
+                }
+            }
+
+            if (fallback === "Error" && nameAsString === "Error" && previousName === undefined) {
+                const frameNameMatch = improvedStack.match(/\n\s*at\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
+                const frameName = frameNameMatch && frameNameMatch[1];
+                if (frameName && frameName !== "Error") {
+                    fallback = frameName;
+                    nameAsString = frameName;
+                }
+            } else if (nameAsString === "Error" && fallback !== "Error") {
+                nameAsString = fallback;
+            }
         }
         const prefix = getPrefix(constructor, tag, fallback).slice(0, -1);
-        if (name !== prefix) {
-            if (prefix.includes(name)) {
+        if (nameAsString !== prefix) {
+            if (prefix.includes(nameAsString)) {
                 if (len === 0) {
-                    stack = `${prefix}: ${stack}`;
+                    improvedStack = `${prefix}: ${improvedStack}`;
                 } else {
-                    stack = `${prefix}${stack.slice(len)}`;
+                    improvedStack = `${prefix}${improvedStack.slice(len)}`;
                 }
             } else {
-                stack = `${prefix} [${name}]${stack.slice(len)}`;
+                improvedStack = `${prefix} [${nameAsString}]${improvedStack.slice(len)}`;
             }
         }
     }
+
     // Ignore the error message if it's contained in the stack.
-    let pos = (err.message && stack.indexOf(err.message)) || -1;
+    let pos = (err.message && improvedStack.indexOf(err.message)) || -1;
     if (pos !== -1) {
         pos += err.message.length;
     }
-    const v8StackStart = stack.indexOf("\n    at", pos);
-    const quickJsStackStart = (v8StackStart === -1 && stack.startsWith("    at")) ? 0 : -1;
-    if (v8StackStart === -1 && quickJsStackStart === -1) {
+    const stackStart = improvedStack.indexOf("\n    at", pos);
+    if (stackStart === -1) {
         // No stack frames available: use bracketed error summary.
-        stack = `[${stack}]`;
+        improvedStack = `[${improvedStack}]`;
     }
     // The message and the stack have to be indented as well!
     if (ctx.indentationLvl !== 0) {
         const indentation = " ".repeat(ctx.indentationLvl);
-        stack = stack.replace(/\n/g, `\n${indentation}`);
+        improvedStack = improvedStack.replace(/\n/g, `\n${indentation}`);
     }
-    return stack;
+    return improvedStack;
 }
 
 function hexSlice(view, start, end) {
@@ -1722,6 +1849,7 @@ function getBoxedBase(
     keys,
     constructor,
     tag,
+    typeHint,
 ) {
     let type;
     if (types.isNumberObject(value)) {
@@ -1736,9 +1864,25 @@ function getBoxedBase(
         type = "Boolean";
     } else if (types.isBigIntObject(value)) {
         type = "BigInt";
+    } else if (typeHint) {
+        type = typeHint;
     } else {
         type = "Symbol";
     }
+
+    let primitive;
+    if (type === "Number") {
+        primitive = Number.prototype.valueOf.call(value);
+    } else if (type === "String") {
+        primitive = String.prototype.valueOf.call(value);
+    } else if (type === "Boolean") {
+        primitive = Boolean.prototype.valueOf.call(value);
+    } else if (type === "BigInt") {
+        primitive = BigInt.prototype.valueOf.call(value);
+    } else {
+        primitive = Symbol.prototype.valueOf.call(value);
+    }
+
     let base = `[${type}`;
     if (type !== constructor) {
         if (constructor === null) {
@@ -1748,7 +1892,7 @@ function getBoxedBase(
         }
     }
 
-    base += `: ${formatPrimitive(stylizeNoColor, value.valueOf(), ctx)}]`;
+    base += `: ${formatPrimitive(stylizeNoColor, primitive, ctx)}]`;
     if (tag !== "" && tag !== constructor) {
         base += ` [${tag}]`;
     }
@@ -1759,8 +1903,7 @@ function getBoxedBase(
 }
 
 function getClassBase(value, constructor, tag) {
-    // deno-lint-ignore no-prototype-builtins
-    const hasName = value.hasOwnProperty("name");
+    const hasName = Object.prototype.hasOwnProperty.call(value, "name");
     const name = (hasName && value.name) || "(anonymous)";
     let base = `class ${name}`;
     if (constructor !== "Function" && constructor !== null) {
@@ -1770,7 +1913,10 @@ function getClassBase(value, constructor, tag) {
         base += ` [${tag}]`;
     }
     if (constructor !== null) {
-        const superName = Object.getPrototypeOf(value).name;
+        const superProto = Object.getPrototypeOf(value);
+        const superName = superProto && typeof superProto === "function"
+            ? superProto.name
+            : undefined;
         if (superName) {
             base += ` extends ${superName}`;
         }

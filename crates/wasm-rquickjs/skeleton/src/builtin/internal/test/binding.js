@@ -2,6 +2,8 @@ import * as utilBinding from "__wasm_rquickjs_builtin/internal/binding/util";
 import { constants as osConstants } from "node:os";
 import * as fsModule from "node:fs";
 
+const inspectCustomSymbol = Symbol.for("nodejs.util.inspect.custom");
+
 // Node's V8-backed implementation can keep very small typed-array payloads inline
 // and only materialize an ArrayBuffer on first `.buffer` access.
 //
@@ -102,6 +104,28 @@ const cryptoTestBinding = Object.freeze({
     },
 });
 
+let nextExternalAddress = 1;
+
+function createExternalLikeValue() {
+    const address = (nextExternalAddress++).toString(16);
+    return Object.freeze({
+        [inspectCustomSymbol]() {
+            return `[External: ${address}]`;
+        },
+    });
+}
+
+class JSStream {
+    constructor() {
+        Object.defineProperty(this, "_externalStream", {
+            value: createExternalLikeValue(),
+            enumerable: true,
+        });
+    }
+}
+
+const jsStreamTestBinding = Object.freeze({ JSStream });
+
 const uvErrnoBinding = {};
 const osErrno = osConstants && osConstants.errno ? osConstants.errno : {};
 for (const [name, value] of Object.entries(osErrno)) {
@@ -187,6 +211,10 @@ export function internalBinding(name) {
 
     if (name === "crypto") {
         return cryptoTestBinding;
+    }
+
+    if (name === "js_stream") {
+        return jsStreamTestBinding;
     }
 
     if (name === "uv") {
