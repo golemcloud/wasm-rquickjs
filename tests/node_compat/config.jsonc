@@ -479,24 +479,24 @@
           "skip": true,
           "reason": "[manual] amp fix attempt failed verification"
         },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_07_block_07": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_08_block_08": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_09_block_09": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_10_block_10": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_11_block_11": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_12_block_12": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_13_block_13": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_14_block_14": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_15_block_15": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_16_block_16": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_17_block_17": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
-        "block_18_block_18": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" }
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_block_06": {},
+        "block_07_block_07": {},
+        "block_08_block_08": {},
+        "block_09_block_09": {},
+        "block_10_block_10": {},
+        "block_11_block_11": {},
+        "block_12_block_12": {},
+        "block_13_block_13": {},
+        "block_14_block_14": {},
+        "block_15_block_15": {},
+        "block_16_block_16": {},
+        "block_17_block_17": {},
+        "block_18_block_18": {}
       }
     },
     "parallel/test-util-sigint-watchdog.js": {
@@ -515,8 +515,8 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "skip": true, "reason": "requires vm.runInNewContext typed array realm fidelity" },
-        "block_02_block_02": { "skip": true, "reason": "requires vm.SourceTextModule namespace and constructor semantics" }
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-util.js": {
