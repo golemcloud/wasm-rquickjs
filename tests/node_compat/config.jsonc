@@ -389,7 +389,10 @@
           "reason": "[manual] amp made no code changes"
         },
         "block_40_test_circular_set": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_41_test_map": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_41_test_map": {
+          "skip": true,
+          "reason": "[manual] amp made no code changes"
+        },
         "block_42_test_circular_map": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_43_test_multiple_circular_references": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_44_test_promise": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
