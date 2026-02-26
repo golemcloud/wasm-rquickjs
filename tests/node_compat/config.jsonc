@@ -489,10 +489,7 @@
         "block_98_block_98": {}
       }
     },
-    "parallel/test-util-internal.js": {
-      "skip": true,
-      "reason": "requires --expose-internals and internalBinding('util')"
-    },
+    "parallel/test-util-internal.js": {},
     "parallel/test-util-isDeepStrictEqual.js": {
       "split": true,
       "subtests": {

@@ -30,9 +30,62 @@ import {
     get_proxy_details as getProxyDetailsNative,
 } from "__wasm_rquickjs_builtin/internal/binding/util_native";
 
+const privateSymbolRegistryKey = "__wasm_rquickjs_internal_private_symbols";
+
+function installPrivateSymbolAccessor(privateSymbol, store) {
+    if (Object.prototype.hasOwnProperty.call(Object.prototype, privateSymbol)) {
+        return;
+    }
+
+    Object.defineProperty(Object.prototype, privateSymbol, {
+        configurable: true,
+        enumerable: false,
+        get() {
+            if (this === Object.prototype) {
+                return undefined;
+            }
+            return store.get(Object(this));
+        },
+        set(value) {
+            if (this === Object.prototype) {
+                return;
+            }
+            store.set(Object(this), value);
+        },
+    });
+}
+
+function createPrivateSymbol(description) {
+    const privateSymbol = Symbol(description);
+    const store = new WeakMap();
+    installPrivateSymbolAccessor(privateSymbol, store);
+    return privateSymbol;
+}
+
+export const privateSymbols = (() => {
+    const existing = globalThis[privateSymbolRegistryKey];
+    if (existing && typeof existing === "object") {
+        return existing;
+    }
+
+    const symbols = Object.freeze({
+        arrow_message_private_symbol: createPrivateSymbol("node:arrowMessage"),
+        decorated_private_symbol: createPrivateSymbol("node:decorated"),
+    });
+
+    Object.defineProperty(globalThis, privateSymbolRegistryKey, {
+        value: symbols,
+        writable: false,
+        configurable: true,
+        enumerable: false,
+    });
+
+    return symbols;
+})();
+
 /**
- * 
- * @param {string} msg 
+ *
+ * @param {string} msg
  * @return {never}
  */
 export function notImplemented(msg) {

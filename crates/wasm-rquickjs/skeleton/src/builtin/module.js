@@ -412,6 +412,68 @@ function transpileTypeScriptModule(filename, source) {
     return transformed;
 }
 
+function getArrowMessagePrivateSymbol() {
+    var privateSymbols = globalThis.__wasm_rquickjs_internal_private_symbols;
+    if (!privateSymbols || typeof privateSymbols !== 'object') {
+        return undefined;
+    }
+
+    var arrowMessageSymbol = privateSymbols.arrow_message_private_symbol;
+    return typeof arrowMessageSymbol === 'symbol' ? arrowMessageSymbol : undefined;
+}
+
+function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
+    if (!err || err.name !== 'SyntaxError') {
+        return;
+    }
+
+    var arrowMessageSymbol = getArrowMessagePrivateSymbol();
+    if (arrowMessageSymbol === undefined || err[arrowMessageSymbol] !== undefined) {
+        return;
+    }
+
+    var line = 1;
+    var column = 1;
+
+    if (typeof err.lineNumber === 'number' && Number.isFinite(err.lineNumber) && err.lineNumber > 0) {
+        line = Math.floor(err.lineNumber);
+    }
+    if (typeof err.columnNumber === 'number' && Number.isFinite(err.columnNumber) && err.columnNumber > 0) {
+        column = Math.floor(err.columnNumber);
+    }
+
+    if (typeof err.stack === 'string') {
+        var stackMatch = err.stack.match(new RegExp(escapeRegExp(filename) + ':(\\d+)(?::(\\d+))?'));
+        if (stackMatch) {
+            line = parseInt(stackMatch[1], 10);
+            if (stackMatch[2] !== undefined) {
+                column = parseInt(stackMatch[2], 10);
+            }
+        }
+    }
+
+    var sourceLines = String(source).split('\n');
+    var sourceLine = '';
+    if (line >= 1 && line <= sourceLines.length) {
+        sourceLine = sourceLines[line - 1].replace(/\r$/, '');
+    }
+
+    if (!Number.isFinite(column) || column < 1) {
+        column = 1;
+    }
+
+    var arrowMessage = filename + ':' + line;
+    if (sourceLine.length > 0) {
+        arrowMessage += '\n' + sourceLine + '\n' + ' '.repeat(column - 1) + '^';
+    }
+
+    err[arrowMessageSymbol] = arrowMessage;
+}
+
 function compileCjs(filename, source) {
     // Strip shebang
     if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
@@ -463,7 +525,14 @@ function loadModule(resolvedFilename, source, parentModule) {
     } else {
         var dirname = pathModule.dirname(resolvedFilename);
         var childRequire = makeRequire(dirname, mod);
-        var compiledFn = compileCjs(resolvedFilename, source);
+        var compiledFn;
+        try {
+            compiledFn = compileCjs(resolvedFilename, source);
+        } catch (err) {
+            delete moduleCache[resolvedFilename];
+            maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+            throw err;
+        }
         var previousModuleContext = globalThis.__wasm_rquickjs_current_module;
         globalThis.__wasm_rquickjs_current_module = {
             filename: resolvedFilename,
@@ -471,6 +540,9 @@ function loadModule(resolvedFilename, source, parentModule) {
         };
         try {
             compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
+        } catch (err) {
+            maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+            throw err;
         } finally {
             globalThis.__wasm_rquickjs_current_module = previousModuleContext;
         }
