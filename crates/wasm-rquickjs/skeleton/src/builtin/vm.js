@@ -168,6 +168,10 @@ function createModuleNamespace(module) {
     });
 }
 
+function createIndirectEvalSource(code) {
+    return '(0, eval)(' + JSON.stringify(code) + ')';
+}
+
 export function runInNewContext(code, sandbox, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
@@ -183,7 +187,7 @@ export function runInNewContext(code, sandbox, options) {
         }
     }
 
-    return evalInNewContext(code, keys, values);
+    return evalInNewContext(createIndirectEvalSource(code), keys, values);
 }
 
 export function createContext(sandbox) {
@@ -211,7 +215,7 @@ export function runInContext(code, context, options) {
     var keys = Object.keys(context).filter(function(k) { return k !== contextSymbol.toString(); });
     var values = keys.map(function(k) { return context[k]; });
 
-    return evalInNewContext(code, keys, values);
+    return evalInNewContext(createIndirectEvalSource(code), keys, values);
 }
 
 export function runInThisContext(code, options) {

@@ -375,7 +375,10 @@
         "block_30_util_inspect_should_display_the_escaped_value_of_a_key": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_31_escape_unpaired_surrogate_pairs": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_32_test_util_inspect_styles_and_util_inspect_colors": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_33_new_api_accepts_an_options_object": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_33_new_api_accepts_an_options_object": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "block_34_block_34": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_35_block_35": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_36_block_36": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },

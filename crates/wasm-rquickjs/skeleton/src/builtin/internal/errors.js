@@ -1,5 +1,36 @@
 import { inspect } from "__wasm_rquickjs_builtin/internal/util/inspect";
 
+// Normalize `Error.prototype.stack` so deleting an instance stack works like
+// Node (i.e. `delete err.stack` makes subsequent `err.stack` reads undefined).
+try {
+    Object.defineProperty(Error.prototype, "stack", {
+        configurable: true,
+        enumerable: false,
+        get() {
+            const own = Object.getOwnPropertyDescriptor(this, "stack");
+            if (own) {
+                if (Object.prototype.hasOwnProperty.call(own, "value")) {
+                    return own.value;
+                }
+                if (typeof own.get === "function") {
+                    return own.get.call(this);
+                }
+            }
+            return undefined;
+        },
+        set(value) {
+            Object.defineProperty(this, "stack", {
+                value,
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+        },
+    });
+} catch {
+    // Keep best-effort compatibility if the runtime forbids reconfiguration.
+}
+
 // Node.js includes the error code in toString() so that regex tests like
 // /ERR_INVALID_ARG_TYPE/ can match against String(error).
 // We keep message and name clean (for exact-match tests) but add toString().

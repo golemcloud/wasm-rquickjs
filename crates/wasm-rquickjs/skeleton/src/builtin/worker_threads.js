@@ -67,6 +67,26 @@ function ensureTransferListItemsAreTransferable(transferList) {
     }
 }
 
+function cloneMessagePayload(value, transferList) {
+    if (transferList.length === 0) {
+        return value;
+    }
+
+    if (typeof structuredClone === 'function') {
+        return structuredClone(value, { transfer: transferList });
+    }
+
+    if (typeof ArrayBuffer === 'function' && typeof ArrayBuffer.prototype.transfer === 'function') {
+        for (const transferItem of transferList) {
+            if (transferItem instanceof ArrayBuffer) {
+                ArrayBuffer.prototype.transfer.call(transferItem);
+            }
+        }
+    }
+
+    return value;
+}
+
 function bytesToHex(bytes) {
     const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     let result = '';
@@ -276,10 +296,11 @@ export class MessagePort {
 
         const transferList = normalizeTransferList(transferListOrOptions);
         ensureTransferListItemsAreTransferable(transferList);
+        const payload = cloneMessagePayload(value, transferList);
 
         const target = this._target;
         if (target && typeof target._enqueueDelivery === 'function') {
-            target._enqueueDelivery(value, false);
+            target._enqueueDelivery(payload, false);
         }
     }
 

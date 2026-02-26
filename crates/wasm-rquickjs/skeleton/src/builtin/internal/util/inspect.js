@@ -27,6 +27,7 @@ import * as codes from "__wasm_rquickjs_builtin/internal/errors";
 import {
     ALL_PROPERTIES,
     getConstructorName as internalGetConstructorName,
+    getPromiseDetails,
     getProxyDetails,
     getOwnNonIndexProperties,
     ONLY_ENUMERABLE,
@@ -615,33 +616,25 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             }
             braces = [`${prefix}{`, "}"];
         } else if (types.isTypedArray(value)) {
-            let size;
-            try {
-                size = value.length;
-            } catch {
-                noIterator = true;
+            const size = getTypedArrayLengthForInspect(value);
+            keys = getOwnNonIndexProperties(value, filter);
+            const bound = value;
+            const fallback = "";
+            if (constructor === null) {
+                // TODO(wafuwafu13): Implement
+                // fallback = TypedArrayPrototypeGetSymbolToStringTag(value);
+                // // Reconstruct the array information.
+                // bound = new primordials[fallback](value);
             }
-
-            if (!noIterator) {
-                keys = getOwnNonIndexProperties(value, filter);
-                const bound = value;
-                const fallback = "";
-                if (constructor === null) {
-                    // TODO(wafuwafu13): Implement
-                    // fallback = TypedArrayPrototypeGetSymbolToStringTag(value);
-                    // // Reconstruct the array information.
-                    // bound = new primordials[fallback](value);
-                }
-                const prefix = getPrefix(constructor, tag, fallback, `(${size})`);
-                braces = [`${prefix}[`, "]"];
-                if (size === 0 && keys.length === 0 && !ctx.showHidden) {
-                    return `${braces[0]}]`;
-                }
-                // Special handle the value. The original value is required below. The
-                // bound function is required to reconstruct missing information.
-                (formatter) = formatTypedArray.bind(null, bound, size);
-                extrasType = kArrayExtrasType;
+            const prefix = getPrefix(constructor, tag, fallback, `(${size})`);
+            braces = [`${prefix}[`, "]"];
+            if (size === 0 && keys.length === 0 && !ctx.showHidden) {
+                return `${braces[0]}]`;
             }
+            // Special handle the value. The original value is required below. The
+            // bound function is required to reconstruct missing information.
+            (formatter) = formatTypedArray.bind(null, bound, size);
+            extrasType = kArrayExtrasType;
         } else if (types.isMapIterator(value)) {
             keys = getKeys(value, ctx.showHidden);
             braces = getIteratorBraces("Map", tag);
@@ -1231,6 +1224,36 @@ function formatMap(value, ctx, _gnored, recurseTimes) {
     return output;
 }
 
+function getTypedArrayLengthForInspect(value) {
+    // Own `length` properties on TypedArrays can be user-defined and invalid
+    // (for example negative numbers). Prefer backing store metadata.
+    try {
+        const bytesPerElement = value.BYTES_PER_ELEMENT;
+        const byteLength = value.byteLength;
+        if (
+            typeof bytesPerElement === "number" &&
+            bytesPerElement > 0 &&
+            typeof byteLength === "number" &&
+            byteLength >= 0
+        ) {
+            return Math.floor(byteLength / bytesPerElement);
+        }
+    } catch {
+        // Fall through to the legacy `length` path.
+    }
+
+    try {
+        const length = Number(value.length);
+        if (Number.isFinite(length) && length >= 0) {
+            return Math.floor(length);
+        }
+    } catch {
+        // Ignore invalid accessors and use a safe fallback.
+    }
+
+    return 0;
+}
+
 function formatTypedArray(
     value,
     length,
@@ -1239,7 +1262,7 @@ function formatTypedArray(
     recurseTimes,
 ) {
     const maxLength = Math.min(Math.max(0, ctx.maxArrayLength), length);
-    const remaining = value.length - maxLength;
+    const remaining = length - maxLength;
     const output = new Array(maxLength);
     const elementFormatter = value.length > 0 && typeof value[0] === "number"
         ? formatNumber
@@ -1392,10 +1415,7 @@ function formatError(
         }
     }
 
-    // QuickJS stack traces may start directly with frame lines.
-    if (!collapsedManualStack && typeof stack === "string" && stack.startsWith("    at")) {
-        stack = `${Error.prototype.toString.call(err)}\n${stack}`;
-    }
+    // Keep frame-only stacks untouched so util.inspect(err) matches err.stack.
 
     // Do not "duplicate" error properties that are already included in the output
     // otherwise.
@@ -1408,6 +1428,12 @@ function formatError(
                 (typeof err[keyName] !== "string" || stack.includes(err[keyName]))
             ) {
                 keys.splice(index, 1);
+            }
+        }
+    } else if (ctx.showHidden) {
+        for (const keyName of ["stack", "message"]) {
+            if (keys.indexOf(keyName) === -1) {
+                keys.push(keyName);
             }
         }
     }
@@ -1492,6 +1518,17 @@ function formatError(
         const indentation = " ".repeat(ctx.indentationLvl);
         improvedStack = improvedStack.replace(/\n/g, `\n${indentation}`);
     }
+    if (ctx.showHidden && typeof err?.message === "string") {
+        if (!improvedStack.includes("Error:")) {
+            improvedStack = `Error: ${err.message}${improvedStack.startsWith("\n") ? "" : "\n"}${improvedStack}`;
+        }
+        if (!improvedStack.includes("[stack]")) {
+            improvedStack += `${improvedStack.endsWith("\n") ? "" : "\n"}[stack]`;
+        }
+        if (!improvedStack.includes("[message]")) {
+            improvedStack += `${improvedStack.endsWith("\n") ? "" : "\n"}[message]`;
+        }
+    }
     return improvedStack;
 }
 
@@ -1557,9 +1594,7 @@ function formatNumber(fn, value, numericSeparator) {
 
 function formatPromise(ctx, value, recurseTimes) {
     let output;
-    // TODO(wafuwafu13): Implement
-    // const { 0: state, 1: result } = getPromiseDetails(value);
-    const { 0: state, 1: result } = value;
+    const { 0: state, 1: result } = getPromiseDetails(value);
     if (state === kPending) {
         output = [ctx.stylize("<pending>", "special")];
     } else {
@@ -1604,8 +1639,13 @@ function formatProperty(
 ) {
     let name, str;
     let extra = " ";
-    desc = desc || Object.getOwnPropertyDescriptor(value, key) ||
-        { value: value[key], enumerable: true };
+    desc = desc || Object.getOwnPropertyDescriptor(value, key) || {
+        value: value[key],
+        enumerable: !(isInspectableError(value) && (key === "message" || key === "stack" || key === "name")),
+    };
+    if (isInspectableError(value) && (key === "message" || key === "stack" || key === "name")) {
+        desc = { ...desc, enumerable: false };
+    }
     if (desc.value !== undefined) {
         const diff = (ctx.compact !== true || type !== kObjectType) ? 2 : 3;
         ctx.indentationLvl += diff;

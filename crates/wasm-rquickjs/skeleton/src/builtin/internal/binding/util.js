@@ -26,6 +26,7 @@
 // - https://github.com/nodejs/node/blob/master/src/util.h
 
 import {
+    get_promise_details as getPromiseDetailsNative,
     get_proxy_details as getProxyDetailsNative,
 } from "__wasm_rquickjs_builtin/internal/binding/util_native";
 
@@ -50,6 +51,10 @@ export function guessHandleType(_fd) {
 
 export function getProxyDetails(value, fullProxy = true) {
     return getProxyDetailsNative(value, fullProxy);
+}
+
+export function getPromiseDetails(value) {
+    return getPromiseDetailsNative(value);
 }
 
 export const ALL_PROPERTIES = 0;
@@ -169,6 +174,7 @@ export function getConstructorName(value) {
  * @type {Record<string, boolean>}
  */
 const isNumericLookup = {};
+const kMaxArrayIndex = 2 ** 32 - 2;
 
 /**
  * 
@@ -178,7 +184,7 @@ const isNumericLookup = {};
 export function isArrayIndex(value) {
     switch (typeof value) {
         case "number":
-            return value >= 0 && (value | 0) === value;
+            return Number.isInteger(value) && value >= 0 && value <= kMaxArrayIndex;
         case "string": {
             const result = isNumericLookup[value];
             if (result !== void 0) {
@@ -199,7 +205,12 @@ export function isArrayIndex(value) {
                     return isNumericLookup[value] = false;
                 }
             }
-            return isNumericLookup[value] = true;
+
+            const numericValue = Number(value);
+            return isNumericLookup[value] = Number.isInteger(numericValue) &&
+                numericValue >= 0 &&
+                numericValue <= kMaxArrayIndex &&
+                `${numericValue}` === value;
         }
         default:
             return false;
@@ -257,4 +268,21 @@ export function getOwnNonIndexProperties(
         result.push(key);
     }
     return result;
+}
+
+export function previewEntries(iterable, isMap) {
+    const entries = [];
+    for (const value of iterable) {
+        if (Array.isArray(value) && value.length >= 2) {
+            entries.push(value[0], value[1]);
+        } else {
+            entries.push(value);
+        }
+    }
+
+    if (isMap === true) {
+        return [entries, entries.length % 2 === 0];
+    }
+
+    return entries;
 }

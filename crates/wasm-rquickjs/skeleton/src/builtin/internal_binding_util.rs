@@ -1,6 +1,6 @@
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use rquickjs::{Array, Ctx, Value, qjs};
+    use rquickjs::{Array, Ctx, FromJs, Promise, Value, promise::PromiseState, qjs};
 
     #[rquickjs::function]
     pub fn get_proxy_details<'js>(
@@ -30,6 +30,35 @@ pub mod native_module {
         result.set(0, target)?;
         result.set(1, handler)?;
         Ok(result.into_value())
+    }
+
+    #[rquickjs::function]
+    pub fn get_promise_details<'js>(
+        ctx: Ctx<'js>,
+        value: Value<'js>,
+    ) -> rquickjs::Result<Value<'js>> {
+        let promise = Promise::from_js(&ctx, value)?;
+
+        let (state, result) = match promise.state() {
+            PromiseState::Pending => (0, Value::new_undefined(ctx.clone())),
+            PromiseState::Resolved => {
+                let resolved = match promise.result::<Value<'js>>() {
+                    Some(Ok(value)) => value,
+                    _ => Value::new_undefined(ctx.clone()),
+                };
+                (1, resolved)
+            }
+            PromiseState::Rejected => {
+                let _ = promise.result::<Value<'js>>();
+                let rejected = ctx.catch();
+                (2, rejected)
+            }
+        };
+
+        let details = Array::new(ctx.clone())?;
+        details.set(0, state)?;
+        details.set(1, result)?;
+        Ok(details.into_value())
     }
 
     fn get_proxy_target_or_null<'js>(ctx: &Ctx<'js>, proxy: &Value<'js>) -> Value<'js> {
