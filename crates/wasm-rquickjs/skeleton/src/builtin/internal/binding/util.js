@@ -65,6 +65,8 @@ export const ONLY_ENUM_WRITABLE = 6;
 export const SKIP_STRINGS = 8;
 export const SKIP_SYMBOLS = 16;
 
+const previewEntriesCache = new WeakMap();
+
 const nullPrototypeConstructorNames = new WeakMap();
 const originalObjectSetPrototypeOf = Object.setPrototypeOf;
 const originalReflectSetPrototypeOf = Reflect.setPrototypeOf;
@@ -271,17 +273,33 @@ export function getOwnNonIndexProperties(
 }
 
 export function previewEntries(iterable, isMap) {
+    if (iterable !== null && (typeof iterable === "object" || typeof iterable === "function")) {
+        const cached = previewEntriesCache.get(iterable);
+        if (cached !== undefined) {
+            if (isMap === true) {
+                return [cached.entries.slice(), cached.isKeyValue];
+            }
+            return cached.entries.slice();
+        }
+    }
+
     const entries = [];
+    let isKeyValue = true;
     for (const value of iterable) {
         if (Array.isArray(value) && value.length >= 2) {
             entries.push(value[0], value[1]);
         } else {
+            isKeyValue = false;
             entries.push(value);
         }
     }
 
+    if (iterable !== null && (typeof iterable === "object" || typeof iterable === "function")) {
+        previewEntriesCache.set(iterable, { entries: entries.slice(), isKeyValue });
+    }
+
     if (isMap === true) {
-        return [entries, entries.length % 2 === 0];
+        return [entries, isKeyValue];
     }
 
     return entries;

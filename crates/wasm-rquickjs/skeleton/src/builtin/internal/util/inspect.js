@@ -31,6 +31,7 @@ import {
     getProxyDetails,
     getOwnNonIndexProperties,
     ONLY_ENUMERABLE,
+    previewEntries,
 } from "__wasm_rquickjs_builtin/internal/binding/util";
 
 const kObjectType = 0;
@@ -49,6 +50,82 @@ const kMapEntries = 2;
 
 const kPending = 0;
 const kRejected = 2;
+
+const setSizeGetter = Object.getOwnPropertyDescriptor(Set.prototype, "size")?.get;
+const mapSizeGetter = Object.getOwnPropertyDescriptor(Map.prototype, "size")?.get;
+const typedArrayTagGetter = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(Uint8Array.prototype),
+    Symbol.toStringTag,
+)?.get;
+
+function isNullProtoSet(value) {
+    if (!setSizeGetter) {
+        return false;
+    }
+    try {
+        setSizeGetter.call(value);
+        Set.prototype.values.call(value);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function isNullProtoMap(value) {
+    if (!mapSizeGetter) {
+        return false;
+    }
+    try {
+        mapSizeGetter.call(value);
+        Map.prototype.entries.call(value);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function isNullProtoPromise(value) {
+    try {
+        getPromiseDetails(value);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function getTypedArrayName(value) {
+    if (!typedArrayTagGetter) {
+        return "";
+    }
+    try {
+        const name = typedArrayTagGetter.call(value);
+        return typeof name === "string" ? name : "";
+    } catch {
+        return "";
+    }
+}
+
+function isTypedArrayLike(value) {
+    return getTypedArrayName(value) !== "";
+}
+
+function isWeakSetLike(value) {
+    try {
+        WeakSet.prototype.has.call(value, {});
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function isWeakMapLike(value) {
+    try {
+        WeakMap.prototype.has.call(value, {});
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 // Escaped control characters (plus the single quote and the backslash). Use
 // empty strings to fill up unused entries.
@@ -537,6 +614,9 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
     }
 
     const constructor = getConstructorName(value, ctx, recurseTimes, protoProps);
+    const nullProtoConstructor = constructor === null
+        ? internalGetConstructorName(value)
+        : null;
     // Reset the variable to check for this later on.
     if (protoProps !== undefined && protoProps.length === 0) {
         protoProps = undefined;
@@ -593,38 +673,63 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             }
             extrasType = kArrayExtrasType;
             formatter = formatArray;
-        } else if (types.isSet(value)) {
-            const size = value.size;
+        } else if (
+            types.isSet(value) ||
+            (constructor === null && nullProtoConstructor === "Set" && isNullProtoSet(value))
+        ) {
+            const size = constructor !== null
+                ? value.size
+                : (setSizeGetter ? setSizeGetter.call(value) : 0);
             const prefix = getPrefix(constructor, tag, "Set", `(${size})`);
             keys = getKeys(value, ctx.showHidden);
-            formatter = constructor !== null
-                ? formatSet.bind(null, value)
-                : formatSet.bind(null, value.values());
+            const iterable = constructor !== null
+                ? value
+                : Set.prototype.values.call(value);
+            formatter = formatSet.bind(null, iterable);
             if (size === 0 && keys.length === 0 && protoProps === undefined) {
                 return `${prefix}{}`;
             }
             braces = [`${prefix}{`, "}"];
-        } else if (types.isMap(value)) {
-            const size = value.size;
+        } else if (
+            types.isMap(value) ||
+            (constructor === null && nullProtoConstructor === "Map" && isNullProtoMap(value))
+        ) {
+            const size = constructor !== null
+                ? value.size
+                : (mapSizeGetter ? mapSizeGetter.call(value) : 0);
             const prefix = getPrefix(constructor, tag, "Map", `(${size})`);
             keys = getKeys(value, ctx.showHidden);
-            formatter = constructor !== null
-                ? formatMap.bind(null, value)
-                : formatMap.bind(null, value.entries());
+            const iterable = constructor !== null
+                ? value
+                : Map.prototype.entries.call(value);
+            formatter = formatMap.bind(null, iterable);
             if (size === 0 && keys.length === 0 && protoProps === undefined) {
                 return `${prefix}{}`;
             }
             braces = [`${prefix}{`, "}"];
-        } else if (types.isTypedArray(value)) {
-            const size = getTypedArrayLengthForInspect(value);
+        } else if (types.isTypedArray(value) || (constructor === null && isTypedArrayLike(value))) {
+            let size = getTypedArrayLengthForInspect(value);
             keys = getOwnNonIndexProperties(value, filter);
-            const bound = value;
-            const fallback = "";
+            let bound = value;
+            const fallback = constructor === null
+                ? (getTypedArrayName(value) || nullProtoConstructor || "")
+                : "";
             if (constructor === null) {
-                // TODO(wafuwafu13): Implement
-                // fallback = TypedArrayPrototypeGetSymbolToStringTag(value);
-                // // Reconstruct the array information.
-                // bound = new primordials[fallback](value);
+                const ctor = globalThis[fallback];
+                if (size === 0 && typeof ctor === "function" && typeof ctor.prototype?.values === "function") {
+                    try {
+                        const values = [];
+                        for (const entry of ctor.prototype.values.call(value)) {
+                            values.push(entry);
+                        }
+                        bound = new ctor(values);
+                        size = values.length;
+                    } catch {
+                        // Leave the fallback empty representation when we cannot
+                        // safely recover typed-array internals from a null-proto
+                        // instance in this runtime.
+                    }
+                }
             }
             const prefix = getPrefix(constructor, tag, fallback, `(${size})`);
             braces = [`${prefix}[`, "]"];
@@ -677,11 +782,11 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             if (keys.length === 0 && protoProps === undefined) {
                 return ctx.stylize(base, "special");
             }
-        } else if (types.isRegExp(value)) {
+        } else if (types.isRegExp(value) || (constructor === null && nullProtoConstructor === "RegExp")) {
             // Make RegExps say that they are RegExps
             try {
-                base = RegExp(constructor !== null ? value : new RegExp(value))
-                    .toString();
+                const target = constructor !== null ? value : new RegExp(value);
+                base = RegExp.prototype.toString.call(target);
             } catch {
                 if (keys.length === 0 && protoProps === undefined) {
                     return `${getCtxStyle(value, constructor, tag)}{}`;
@@ -699,7 +804,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             ) {
                 return ctx.stylize(base, "regexp");
             }
-        } else if (types.isDate(value)) {
+        } else if (types.isDate(value) || (constructor === null && nullProtoConstructor === "Date")) {
             // Make dates with properties first say the date
             try {
                 base = Number.isNaN(Date.prototype.getTime.call(value))
@@ -728,13 +833,17 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             if (keys.length === 0 && protoProps === undefined) {
                 return base;
             }
-        } else if (types.isAnyArrayBuffer(value)) {
+        } else if (
+            types.isAnyArrayBuffer(value) ||
+            (constructor === null &&
+                (nullProtoConstructor === "ArrayBuffer" || nullProtoConstructor === "SharedArrayBuffer"))
+        ) {
             // Fast path for ArrayBuffer and SharedArrayBuffer.
             // Can't do the same for DataView because it has a non-primitive
             // .buffer property that we need to recurse for.
-            const arrayType = types.isArrayBuffer(value)
-                ? "ArrayBuffer"
-                : "SharedArrayBuffer";
+            const arrayType = (constructor === null && nullProtoConstructor)
+                ? nullProtoConstructor
+                : (types.isArrayBuffer(value) ? "ArrayBuffer" : "SharedArrayBuffer");
             const prefix = getPrefix(constructor, tag, arrayType);
             if (typedArray === undefined) {
                 (formatter) = formatArrayBuffer;
@@ -744,17 +853,26 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             }
             braces[0] = `${prefix}{`;
             Array.prototype.unshift.call(keys, "byteLength");
-        } else if (types.isDataView(value)) {
+        } else if (types.isDataView(value) || (constructor === null && nullProtoConstructor === "DataView")) {
             braces[0] = `${getPrefix(constructor, tag, "DataView")}{`;
             // .buffer goes last, it's not a primitive like the others.
             Array.prototype.unshift.call(keys, "byteLength", "byteOffset", "buffer");
-        } else if (types.isPromise(value)) {
+        } else if (
+            types.isPromise(value) ||
+            (constructor === null && (nullProtoConstructor === "Promise" || isNullProtoPromise(value)))
+        ) {
             braces[0] = `${getPrefix(constructor, tag, "Promise")}{`;
             (formatter) = formatPromise;
-        } else if (types.isWeakSet(value)) {
+        } else if (
+            types.isWeakSet(value) ||
+            (constructor === null && (nullProtoConstructor === "WeakSet" || isWeakSetLike(value)))
+        ) {
             braces[0] = `${getPrefix(constructor, tag, "WeakSet")}{`;
             (formatter) = ctx.showHidden ? formatWeakSet : formatWeakCollection;
-        } else if (types.isWeakMap(value)) {
+        } else if (
+            types.isWeakMap(value) ||
+            (constructor === null && (nullProtoConstructor === "WeakMap" || isWeakMapLike(value)))
+        ) {
             braces[0] = `${getPrefix(constructor, tag, "WeakMap")}{`;
             (formatter) = ctx.showHidden ? formatWeakMap : formatWeakCollection;
         } else if (types.isModuleNamespaceObject(value)) {
@@ -762,9 +880,6 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             // Special handle keys for namespace objects.
             (formatter) = formatNamespaceObject.bind(null, keys);
         } else {
-            const nullProtoConstructor = constructor === null
-                ? internalGetConstructorName(value)
-                : null;
             const hasNullProtoBoxedCtor =
                 nullProtoConstructor === "Boolean" ||
                 nullProtoConstructor === "Number" ||
@@ -931,7 +1046,7 @@ function addPrototypeProperties(
             if (
                 key === "constructor" ||
                 // deno-lint-ignore no-prototype-builtins
-                main.hasOwnProperty(key) ||
+                Object.prototype.hasOwnProperty.call(main, key) ||
                 (depth !== 0 && keySet.has(key))
             ) {
                 continue;
@@ -1132,7 +1247,7 @@ function formatArray(ctx, value, recurseTimes) {
     for (let i = 0; i < len; i++) {
         // Special handle sparse arrays.
         // deno-lint-ignore no-prototype-builtins
-        if (!value.hasOwnProperty(i)) {
+        if (!Object.prototype.hasOwnProperty.call(value, i)) {
             return formatSpecialArray(ctx, value, recurseTimes, len, output, i);
         }
         output.push(formatProperty(ctx, value, recurseTimes, i, kArrayType));
@@ -1305,9 +1420,7 @@ function getIteratorBraces(type, tag) {
 }
 
 function formatIterator(braces, ctx, value, recurseTimes) {
-    // TODO(wafuwafu13): Implement
-    // const { 0: entries, 1: isKeyValue } = previewEntries(value, true);
-    const { 0: entries, 1: isKeyValue } = value || [];
+    const { 0: entries, 1: isKeyValue } = previewEntries(value, true) || [];
     if (!Array.isArray(entries)) {
         // QuickJS currently does not provide non-destructive iterator previews,
         // so avoid crashing when inspect() is called for diagnostics.
@@ -1399,6 +1512,23 @@ function formatError(
         }
     } else {
         stack = Error.prototype.toString.call(err);
+    }
+
+    // QuickJS may drop the summary line and return only stack frames for some
+    // tampered error-name cases. Reconstruct the header from toString() so
+    // improveStack() can normalize the first line like Node does.
+    if (typeof stack === "string" && stack.startsWith("    at")) {
+        if (constructor !== null) {
+            const hasOwnName = Object.prototype.hasOwnProperty.call(err, "name");
+            const normalizedName = typeof name === "string" ? name : String(name);
+            if ((constructor !== "Error" && !hasOwnName) || normalizedName !== constructor) {
+                stack = `${Error.prototype.toString.call(err)}\n${stack}`;
+            }
+        } else {
+            const previousName = cachedErrorName.get(err) || "Error";
+            const messageSuffix = err.message ? `: ${err.message}` : "";
+            stack = `${previousName}${messageSuffix}\n${stack}`;
+        }
     }
 
     let collapsedManualStack = false;

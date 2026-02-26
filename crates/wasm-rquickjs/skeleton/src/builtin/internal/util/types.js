@@ -236,7 +236,7 @@ export function isInt32Array(value) {
 export function isTypedArray(value) {
     /** Used to match `toStringTag` values of typed arrays. */
     const reTypedTag =
-        /^\[object (?:Float(?:32|64)|(?:Int|Uint)(?:8|16|32)|Uint8Clamped)Array\]$/;
+        /^\[object (?:Float(?:32|64)|(?:Int|Uint)(?:8|16|32)|Uint8Clamped|Big(?:Uint|Int)64)Array\]$/;
     return _isObjectLike(value) && reTypedTag.test(_toString.call(value));
 }
 
