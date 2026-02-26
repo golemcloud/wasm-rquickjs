@@ -419,7 +419,7 @@
         "block_62_setting_custom_inspect_property_to_a_non_function_should_do_": {},
         "block_63_block_63": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_64_block_64": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_65_check_compact_indentation": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_65_check_compact_indentation": {},
         "block_66_block_66": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_67_block_67": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_68_block_68": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
