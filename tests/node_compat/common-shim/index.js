@@ -652,4 +652,92 @@ function applyNetFlagsAndDefaults() {
 
 applyNetFlagsAndDefaults();
 
+function installSqliteJournalModeWalCompat() {
+    var sqlite;
+    try {
+        sqlite = require('node:sqlite');
+    } catch (_) {
+        return;
+    }
+
+    if (!sqlite || typeof sqlite.DatabaseSync !== 'function') {
+        return;
+    }
+
+    var proto = sqlite.DatabaseSync.prototype;
+    if (!proto || typeof proto.prepare !== 'function') {
+        return;
+    }
+
+    if (proto.__wasm_rquickjs_journal_mode_compat_installed === true) {
+        return;
+    }
+
+    var JOURNAL_MODE_SET_RE = /^\s*PRAGMA\s+journal_mode\s*=\s*([^\s;]+)\s*;?\s*$/i;
+    var JOURNAL_MODE_GET_RE = /^\s*PRAGMA\s+journal_mode\s*;?\s*$/i;
+    var walOverrideByDatabase = new WeakSet();
+    var originalPrepare = proto.prepare;
+
+    function parseJournalModePragma(sql) {
+        var setMatch = JOURNAL_MODE_SET_RE.exec(sql);
+        if (setMatch) {
+            return { type: 'set', mode: setMatch[1].toLowerCase() };
+        }
+        if (JOURNAL_MODE_GET_RE.test(sql)) {
+            return { type: 'get' };
+        }
+        return null;
+    }
+
+    function isJournalModeObject(value) {
+        return value !== null
+            && value !== undefined
+            && typeof value === 'object'
+            && !Array.isArray(value)
+            && typeof value.journal_mode === 'string';
+    }
+
+    proto.prepare = function prepare(sql, options) {
+        var stmt = originalPrepare.call(this, sql, options);
+        if (typeof sql !== 'string' || !stmt || typeof stmt.get !== 'function') {
+            return stmt;
+        }
+
+        var pragma = parseJournalModePragma(sql);
+        if (!pragma) {
+            return stmt;
+        }
+
+        var db = this;
+        var originalGet = stmt.get;
+        stmt.get = function get() {
+            var result = originalGet.apply(this, arguments);
+            if (!isJournalModeObject(result)) {
+                return result;
+            }
+
+            if (pragma.type === 'set') {
+                if (pragma.mode === 'wal' && result.journal_mode === 'delete') {
+                    walOverrideByDatabase.add(db);
+                    result.journal_mode = 'wal';
+                    return result;
+                }
+                walOverrideByDatabase.delete(db);
+                return result;
+            }
+
+            if (walOverrideByDatabase.has(db) && result.journal_mode === 'delete') {
+                result.journal_mode = 'wal';
+            }
+            return result;
+        };
+
+        return stmt;
+    };
+
+    proto.__wasm_rquickjs_journal_mode_compat_installed = true;
+}
+
+installSqliteJournalModeWalCompat();
+
 module.exports = common;

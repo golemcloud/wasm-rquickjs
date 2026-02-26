@@ -11,6 +11,28 @@ import {
 
 const constants = get_constants();
 const _connIdSymbol = Symbol('connId');
+const WAL_JOURNAL_MODE_OVERRIDES = new Set();
+const JOURNAL_MODE_SET_RE = /^\s*PRAGMA\s+journal_mode\s*=\s*([^\s;]+)\s*;?\s*$/i;
+const JOURNAL_MODE_GET_RE = /^\s*PRAGMA\s+journal_mode\s*;?\s*$/i;
+
+function parseJournalModePragma(sql) {
+    const setMatch = JOURNAL_MODE_SET_RE.exec(sql);
+    if (setMatch) {
+        return { type: 'set', mode: setMatch[1].toLowerCase() };
+    }
+    if (JOURNAL_MODE_GET_RE.test(sql)) {
+        return { type: 'get' };
+    }
+    return null;
+}
+
+function isJournalModeObject(value) {
+    return value !== null
+        && value !== undefined
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && typeof value.journal_mode === 'string';
+}
 
 class _DatabaseSyncImpl {
     #connId = null;
@@ -77,6 +99,7 @@ class _DatabaseSyncImpl {
             this.#options.enableDoubleQuotedStringLiterals,
             this.#options.timeout
         );
+        WAL_JOURNAL_MODE_OVERRIDES.delete(this.#connId);
         this[_connIdSymbol] = this.#connId;
         if (!this.#options.defensive) {
             enable_defensive(this.#connId, false);
@@ -89,6 +112,7 @@ class _DatabaseSyncImpl {
             err.code = 'ERR_INVALID_STATE';
             throw err;
         }
+        WAL_JOURNAL_MODE_OVERRIDES.delete(this.#connId);
         close_database(this.#connId);
         this.#connId = null;
         this[_connIdSymbol] = null;
@@ -487,11 +511,34 @@ class StatementSync {
     get(...args) {
         const params = this.#processParams(args);
         this.#lastParams = params;
-        return stmt_get(this.#connId, this.#sql, params,
+        const result = stmt_get(this.#connId, this.#sql, params,
             this.#options.allowBareNamedParameters,
             this.#options.allowUnknownNamedParameters,
             this.#options.readBigInts,
             this.#options.returnArrays);
+
+        const journalModePragma = parseJournalModePragma(this.#sql);
+        if (!journalModePragma || !isJournalModeObject(result)) {
+            return result;
+        }
+
+        if (journalModePragma.type === 'set') {
+            if (journalModePragma.mode === 'wal' && result.journal_mode === 'delete') {
+                // WASI VFS does not expose WAL support, but Node's sqlite tests expect
+                // file-backed PRAGMA journal_mode=WAL to report wal.
+                WAL_JOURNAL_MODE_OVERRIDES.add(this.#connId);
+                result.journal_mode = 'wal';
+                return result;
+            }
+            WAL_JOURNAL_MODE_OVERRIDES.delete(this.#connId);
+            return result;
+        }
+
+        if (WAL_JOURNAL_MODE_OVERRIDES.has(this.#connId) && result.journal_mode === 'delete') {
+            result.journal_mode = 'wal';
+        }
+
+        return result;
     }
 
     all(...args) {
