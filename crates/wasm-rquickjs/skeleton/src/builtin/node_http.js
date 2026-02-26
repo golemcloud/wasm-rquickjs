@@ -222,13 +222,8 @@ function isLoopbackHostname(hostname) {
         normalized === '[::1]';
 }
 
-function consumeCapturedStatusMessage(hostname, port, statusCode) {
+function consumeCapturedResponseMetadata(hostname, port, statusCode) {
     if (!isLoopbackHostname(hostname)) {
-        return undefined;
-    }
-
-    const takeStatusMessage = globalThis.__wasm_rquickjs_take_http_status_message;
-    if (typeof takeStatusMessage !== 'function') {
         return undefined;
     }
 
@@ -237,7 +232,71 @@ function consumeCapturedStatusMessage(hostname, port, statusCode) {
         return undefined;
     }
 
-    return takeStatusMessage(normalizedPort, statusCode);
+    const takeResponseMetadata = globalThis.__wasm_rquickjs_take_http_response_metadata;
+    if (typeof takeResponseMetadata === 'function') {
+        const metadata = takeResponseMetadata(normalizedPort, statusCode);
+        if (metadata && typeof metadata === 'object') {
+            return metadata;
+        }
+    }
+
+    const takeStatusMessage = globalThis.__wasm_rquickjs_take_http_status_message;
+    if (typeof takeStatusMessage !== 'function') {
+        return undefined;
+    }
+
+    const statusMessage = takeStatusMessage(normalizedPort, statusCode);
+    if (statusMessage === undefined) {
+        return undefined;
+    }
+
+    return { statusMessage };
+}
+
+function normalizeHttpVersion(httpVersion) {
+    if (typeof httpVersion === 'string' && /^\d+\.\d+$/.test(httpVersion)) {
+        return httpVersion;
+    }
+    return '1.1';
+}
+
+function applyHttpVersion(message, httpVersion) {
+    const normalized = normalizeHttpVersion(httpVersion);
+    const parts = normalized.split('.');
+    message.httpVersion = normalized;
+    message.httpVersionMajor = Number(parts[0]) || 1;
+    message.httpVersionMinor = Number(parts[1]) || 1;
+}
+
+function connectionHeaderTokens(value) {
+    if (Array.isArray(value)) {
+        const tokens = [];
+        for (const entry of value) {
+            tokens.push(...connectionHeaderTokens(entry));
+        }
+        return tokens;
+    }
+    if (value === undefined || value === null) {
+        return [];
+    }
+    return String(value)
+        .split(',')
+        .map(token => token.trim().toLowerCase())
+        .filter(token => token.length > 0);
+}
+
+function hasConnectionToken(value, token) {
+    return connectionHeaderTokens(value).includes(token);
+}
+
+function shouldKeepAliveFromResponse(httpVersion, connectionHeader) {
+    if (hasConnectionToken(connectionHeader, 'close')) {
+        return false;
+    }
+    if (hasConnectionToken(connectionHeader, 'keep-alive')) {
+        return true;
+    }
+    return normalizeHttpVersion(httpVersion) !== '1.0';
 }
 
 function isCookieHeader(name) {
@@ -337,7 +396,7 @@ const MULTI_VALUE_HEADERS = new Set([
 ]);
 
 export class IncomingMessage extends EventEmitter {
-    constructor(nativeRes, statusMessageOverride) {
+    constructor(nativeRes, statusMessageOverride, httpVersionOverride) {
         super();
         this._nativeRes = nativeRes;
         this.statusCode = nativeRes.status;
@@ -348,9 +407,7 @@ export class IncomingMessage extends EventEmitter {
         } else {
             this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
         }
-        this.httpVersion = '1.1';
-        this.httpVersionMajor = 1;
-        this.httpVersionMinor = 1;
+        applyHttpVersion(this, httpVersionOverride);
         this.complete = false;
         this.method = undefined;
         this.url = undefined;
@@ -421,7 +478,32 @@ export class IncomingMessage extends EventEmitter {
         return this;
     }
 
+    _hasNoBody() {
+        if ((this.statusCode >= 100 && this.statusCode < 200) ||
+            this.statusCode === 204 ||
+            this.statusCode === 304) {
+            return true;
+        }
+
+        const contentLength = this.headers['content-length'];
+        if (contentLength === undefined) {
+            return false;
+        }
+
+        const parsed = Number(contentLength);
+        return Number.isFinite(parsed) && parsed <= 0;
+    }
+
     async _startReading() {
+        if (this._hasNoBody()) {
+            if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
+                this._nativeRes.discardBody();
+            }
+            this.complete = true;
+            this.emit('end');
+            return;
+        }
+
         try {
             while (true) {
                 const [chunk, done] = await this._nativeRes.readBodyChunk();
@@ -504,6 +586,11 @@ export class ClientRequest extends EventEmitter {
             }
         }
 
+        this.shouldKeepAlive = true;
+        this._defaultKeepAlive = true;
+        this._last = false;
+        this._refreshShouldKeepAlive();
+
         this._nativeReq = new NodeHttpClientRequest(this.method, url, {});
         for (const key of Object.keys(this._headers)) {
             const entry = this._headers[key];
@@ -581,6 +668,27 @@ export class ClientRequest extends EventEmitter {
         this._header = rendered;
     }
 
+    _computeShouldKeepAliveFromAgent() {
+        if (!this.agent) {
+            return false;
+        }
+        return !!this.agent.keepAlive || Number.isFinite(this.agent.maxSockets);
+    }
+
+    _refreshShouldKeepAlive() {
+        this.shouldKeepAlive = this._computeShouldKeepAliveFromAgent();
+        this._last = !this.shouldKeepAlive;
+
+        const connectionHeader = this.getHeader('connection');
+        if (hasConnectionToken(connectionHeader, 'close')) {
+            this.shouldKeepAlive = false;
+            this._last = true;
+        } else if (hasConnectionToken(connectionHeader, 'keep-alive')) {
+            this.shouldKeepAlive = true;
+            this._last = false;
+        }
+    }
+
     setHeader(name, value) {
         const lower = name.toLowerCase();
         this._headers[lower] = { name, value };
@@ -590,6 +698,7 @@ export class ClientRequest extends EventEmitter {
             this._nativeReq.setHeader(name, headerValueForNative(name, value));
         }
         this._rawHeaderPairs = null;
+        this._refreshShouldKeepAlive();
         this._refreshHeaderString();
     }
 
@@ -603,6 +712,7 @@ export class ClientRequest extends EventEmitter {
         delete this._headers[lower];
         this._nativeReq.removeHeader(name);
         this._rawHeaderPairs = null;
+        this._refreshShouldKeepAlive();
         this._refreshHeaderString();
     }
 
@@ -720,12 +830,30 @@ export class ClientRequest extends EventEmitter {
 
             const nativeRes = this._nativeReq.getResponse();
             if (nativeRes) {
-                const statusMessageOverride = consumeCapturedStatusMessage(
+                const responseMetadata = consumeCapturedResponseMetadata(
                     this.hostname,
                     this.port,
                     nativeRes.status
                 );
-                const res = new IncomingMessage(nativeRes, statusMessageOverride);
+                const res = new IncomingMessage(
+                    nativeRes,
+                    responseMetadata && responseMetadata.statusMessage,
+                    responseMetadata && responseMetadata.httpVersion
+                );
+
+                const responseConnectionHeader = res.headers.connection !== undefined
+                    ? res.headers.connection
+                    : (responseMetadata && responseMetadata.connectionHeader);
+
+                const responseShouldKeepAlive = shouldKeepAliveFromResponse(
+                    res.httpVersion,
+                    responseConnectionHeader
+                );
+                if (this.shouldKeepAlive && !responseShouldKeepAlive) {
+                    this.shouldKeepAlive = false;
+                    this._last = true;
+                }
+
                 if (onClientResponseFinish.hasSubscribers) {
                     onClientResponseFinish.publish({ request: this, response: res });
                 }

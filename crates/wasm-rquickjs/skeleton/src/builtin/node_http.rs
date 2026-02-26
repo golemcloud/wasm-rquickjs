@@ -258,6 +258,25 @@ impl NodeHttpIncomingResponse {
         self.headers.clone()
     }
 
+    pub fn discard_body(&mut self) {
+        let state = std::mem::replace(&mut self.body_state, ResponseBodyState::Consumed);
+        match state {
+            ResponseBodyState::Native(response) => {
+                drop(response);
+            }
+            ResponseBodyState::Stream {
+                stream,
+                body,
+                response,
+            } => {
+                drop(stream);
+                drop(body);
+                drop(response);
+            }
+            ResponseBodyState::Consumed => {}
+        }
+    }
+
     pub async fn read_body_chunk<'js>(
         &mut self,
         ctx: Ctx<'js>,

@@ -88,6 +88,7 @@ function nextTick(fn, ...args) {
 
 const HTTP_STATUS_MESSAGE_QUEUE_KEY = '__wasm_rquickjs_http_status_message_queue';
 const HTTP_STATUS_MESSAGE_TAKE_KEY = '__wasm_rquickjs_take_http_status_message';
+const HTTP_RESPONSE_METADATA_TAKE_KEY = '__wasm_rquickjs_take_http_response_metadata';
 
 function getHttpStatusMessageQueue() {
     if (!(globalThis[HTTP_STATUS_MESSAGE_QUEUE_KEY] instanceof Map)) {
@@ -96,29 +97,29 @@ function getHttpStatusMessageQueue() {
     return globalThis[HTTP_STATUS_MESSAGE_QUEUE_KEY];
 }
 
-function enqueueCapturedHttpStatusMessage(port, statusCode, statusMessage) {
+function enqueueCapturedHttpStatusMessage(port, statusCode, statusMessage, httpVersion, connectionHeader) {
     if (!Number.isFinite(port) || port <= 0) {
         return;
     }
 
     const queue = getHttpStatusMessageQueue();
     const entries = queue.get(port) || [];
-    entries.push({ statusCode, statusMessage });
+    entries.push({ statusCode, statusMessage, httpVersion, connectionHeader });
     if (entries.length > 256) {
         entries.splice(0, entries.length - 256);
     }
     queue.set(port, entries);
 }
 
-function takeCapturedHttpStatusMessage(port, expectedStatusCode) {
+function takeCapturedHttpMetadataEntry(port, expectedStatusCode) {
     if (!Number.isFinite(port) || port <= 0) {
-        return undefined;
+        return null;
     }
 
     const queue = getHttpStatusMessageQueue();
     const entries = queue.get(port);
     if (!entries || entries.length === 0) {
-        return undefined;
+        return null;
     }
 
     let index = 0;
@@ -134,11 +135,34 @@ function takeCapturedHttpStatusMessage(port, expectedStatusCode) {
         queue.delete(port);
     }
 
+    return captured || null;
+}
+
+function takeCapturedHttpStatusMessage(port, expectedStatusCode) {
+    const captured = takeCapturedHttpMetadataEntry(port, expectedStatusCode);
     return captured ? captured.statusMessage : undefined;
+}
+
+function takeCapturedHttpResponseMetadata(port, expectedStatusCode) {
+    const captured = takeCapturedHttpMetadataEntry(port, expectedStatusCode);
+    if (!captured) {
+        return undefined;
+    }
+
+    return {
+        statusCode: captured.statusCode,
+        statusMessage: captured.statusMessage,
+        httpVersion: captured.httpVersion,
+        connectionHeader: captured.connectionHeader,
+    };
 }
 
 if (typeof globalThis[HTTP_STATUS_MESSAGE_TAKE_KEY] !== 'function') {
     globalThis[HTTP_STATUS_MESSAGE_TAKE_KEY] = takeCapturedHttpStatusMessage;
+}
+
+if (typeof globalThis[HTTP_RESPONSE_METADATA_TAKE_KEY] !== 'function') {
+    globalThis[HTTP_RESPONSE_METADATA_TAKE_KEY] = takeCapturedHttpResponseMetadata;
 }
 
 function maybeCaptureHttpStatusLine(socket, chunk) {
@@ -166,14 +190,41 @@ function maybeCaptureHttpStatusLine(socket, chunk) {
 
     socket._httpStatusLineProbe = '';
     const statusLine = combined.slice(0, lineEnd);
-    const match = /^HTTP\/\d\.\d\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
+    const match = /^HTTP\/(\d\.\d)\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
     if (!match) {
         return;
     }
 
-    const statusCode = Number(match[1]);
-    const statusMessage = match[2] || '';
-    enqueueCapturedHttpStatusMessage(socket.localPort, statusCode, statusMessage);
+    const headerSection = combined.slice(lineEnd + 2);
+    const headersEnd = headerSection.indexOf('\r\n\r\n');
+    const headerBlock = headersEnd >= 0 ? headerSection.slice(0, headersEnd) : headerSection;
+    let connectionHeader;
+    if (headerBlock.length > 0) {
+        const lines = headerBlock.split('\r\n');
+        for (const line of lines) {
+            const separator = line.indexOf(':');
+            if (separator <= 0) {
+                continue;
+            }
+            const name = line.slice(0, separator).trim().toLowerCase();
+            if (name !== 'connection') {
+                continue;
+            }
+            connectionHeader = line.slice(separator + 1).trim();
+            break;
+        }
+    }
+
+    const httpVersion = match[1];
+    const statusCode = Number(match[2]);
+    const statusMessage = match[3] || '';
+    enqueueCapturedHttpStatusMessage(
+        socket.localPort,
+        statusCode,
+        statusMessage,
+        httpVersion,
+        connectionHeader
+    );
 }
 
 function isIPAddress(addr) {
