@@ -481,7 +481,7 @@
           "reason": "[manual] amp fix attempt failed verification"
         },
         "block_92_regression_test_for_https_github_com_nodejs_node_issues_4124": {},
-        "block_93_block_93": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_93_block_93": {},
         "block_94_block_94": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_95_block_95": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_96_block_96": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
