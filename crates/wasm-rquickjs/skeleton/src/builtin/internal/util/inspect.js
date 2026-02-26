@@ -1133,7 +1133,7 @@ function getConstructorName(
                     protoProps,
                 );
             }
-            return descriptor.value.name;
+            return String(descriptor.value.name);
         }
 
         obj = Object.getPrototypeOf(obj);

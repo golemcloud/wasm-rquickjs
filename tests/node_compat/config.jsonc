@@ -415,7 +415,7 @@
         "block_58_block_58": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_59_block_59": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_60_block_60": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_61_util_inspect_defaultoptions_tests": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_61_util_inspect_defaultoptions_tests": {},
         "block_62_setting_custom_inspect_property_to_a_non_function_should_do_": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_63_block_63": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_64_block_64": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
