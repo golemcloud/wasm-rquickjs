@@ -223,30 +223,13 @@ fn create_error_object<'js>(
     Ok(error_obj)
 }
 
-fn throw_type_error<'js>(
+fn throw_coded_error<'js>(
     ctx: &rquickjs::Ctx<'js>,
+    error_type: &str,
     message: &str,
     code: &str,
 ) -> rquickjs::Error {
-    match create_error_object(ctx, "TypeError", message, code) {
-        Ok(obj) => ctx.throw(obj.into_value()),
-        Err(_) => rquickjs::Exception::throw_message(ctx, message),
-    }
-}
-
-fn throw_range_error<'js>(
-    ctx: &rquickjs::Ctx<'js>,
-    message: &str,
-    code: &str,
-) -> rquickjs::Error {
-    match create_error_object(ctx, "RangeError", message, code) {
-        Ok(obj) => ctx.throw(obj.into_value()),
-        Err(_) => rquickjs::Exception::throw_message(ctx, message),
-    }
-}
-
-fn throw_state_error<'js>(ctx: &rquickjs::Ctx<'js>, message: &str) -> rquickjs::Error {
-    match create_error_object(ctx, "Error", message, "ERR_INVALID_STATE") {
+    match create_error_object(ctx, error_type, message, code) {
         Ok(obj) => ctx.throw(obj.into_value()),
         Err(_) => rquickjs::Exception::throw_message(ctx, message),
     }
@@ -294,8 +277,9 @@ fn js_value_to_sqlite<'js>(
             Ok(big) if big >= i64::MIN as i128 && big <= i64::MAX as i128 => {
                 Ok(rusqlite::types::Value::Integer(big as i64))
             }
-            _ => Err(throw_range_error(
+            _ => Err(throw_coded_error(
                 ctx,
+                "RangeError",
                 &format!(
                     "BigInt value is too large to bind to a SQLite parameter: parameter {}",
                     param_pos
@@ -334,8 +318,9 @@ fn js_value_to_sqlite<'js>(
         }
     }
     // Unsupported type (undefined, function, symbol, regex, Promise, Map, Set, etc.)
-    Err(throw_type_error(
+    Err(throw_coded_error(
         ctx,
+        "TypeError",
         &format!(
             "Provided value cannot be bound to SQLite parameter {}",
             param_pos
@@ -358,8 +343,9 @@ fn sqlite_value_to_js<'js>(
                 let bigint = rquickjs::BigInt::from_i64(ctx.clone(), *i)?;
                 Ok(rquickjs::Value::from_big_int(bigint))
             } else if *i > MAX_SAFE_INTEGER || *i < MIN_SAFE_INTEGER {
-                Err(throw_range_error(
+                Err(throw_coded_error(
                     ctx,
+                    "RangeError",
                     &format!(
                         "The value of column {} is too large to be represented as a JavaScript number: {}",
                         col_index, i
@@ -403,8 +389,9 @@ fn sqlite_owned_value_to_js<'js>(
                 let bigint = rquickjs::BigInt::from_i64(ctx.clone(), *i)?;
                 Ok(rquickjs::Value::from_big_int(bigint))
             } else if *i > MAX_SAFE_INTEGER || *i < MIN_SAFE_INTEGER {
-                Err(throw_range_error(
+                Err(throw_coded_error(
                     ctx,
+                    "RangeError",
                     &format!(
                         "The value of column {} is too large to be represented as a JavaScript number: {}",
                         col_index, i
@@ -430,13 +417,7 @@ fn sqlite_owned_value_to_js<'js>(
 }
 
 fn value_ref_to_owned(val: &rusqlite::types::ValueRef) -> rusqlite::types::Value {
-    match val {
-        ValueRef::Null => rusqlite::types::Value::Null,
-        ValueRef::Integer(i) => rusqlite::types::Value::Integer(*i),
-        ValueRef::Real(f) => rusqlite::types::Value::Real(*f),
-        ValueRef::Text(s) => rusqlite::types::Value::Text(String::from_utf8_lossy(s).to_string()),
-        ValueRef::Blob(b) => rusqlite::types::Value::Blob(b.to_vec()),
-    }
+    rusqlite::types::Value::from(val.clone())
 }
 
 fn create_null_proto_object<'js>(
@@ -606,12 +587,14 @@ fn validate_named_params<'js>(
                 .collect();
 
             if matching_names.len() > 1 {
-                return Err(throw_state_error(
+                return Err(throw_coded_error(
                     ctx,
+                    "Error",
                     &format!(
                         "Cannot create bare named parameter '{}' because of conflicting names '{}' and '{}'.",
                         key, matching_names[0], matching_names[1]
                     ),
+                    "ERR_INVALID_STATE",
                 ));
             }
 
@@ -622,9 +605,11 @@ fn validate_named_params<'js>(
 
         // No match found
         if !allow_unknown_named {
-            return Err(throw_state_error(
+            return Err(throw_coded_error(
                 ctx,
+                "Error",
                 &format!("Unknown named parameter '{}'", key),
+                "ERR_INVALID_STATE",
             ));
         }
     }
@@ -747,18 +732,18 @@ fn stmt_run_impl<'js>(
         .get(&conn_id)
         .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-    validate_named_params(&ctx, &stmt, &params, allow_bare_named, allow_unknown_named)?;
-    bind_params(&ctx, &mut stmt, &params, allow_bare_named)?;
+    {
+        let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
+        validate_named_params(&ctx, &stmt, &params, allow_bare_named, allow_unknown_named)?;
+        bind_params(&ctx, &mut stmt, &params, allow_bare_named)?;
 
-    if stmt.column_count() > 0 {
-        let mut rows = stmt.raw_query();
-        while rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))?.is_some() {}
-        drop(rows);
-    } else {
-        stmt.raw_execute().map_err(|e| map_sqlite_or_udf_error(&ctx, e))?;
+        if stmt.column_count() > 0 {
+            let mut rows = stmt.raw_query();
+            while rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))?.is_some() {}
+        } else {
+            stmt.raw_execute().map_err(|e| map_sqlite_or_udf_error(&ctx, e))?;
+        }
     }
-    drop(stmt);
 
     let changes = conn.changes();
     let last_rowid = conn.last_insert_rowid();
@@ -899,37 +884,36 @@ fn stmt_iterate_init_impl<'js>(
     allow_unknown_named: bool,
 ) -> rquickjs::Result<u32> {
     let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-    validate_named_params(&ctx, &stmt, &params, allow_bare_named, allow_unknown_named)?;
-    bind_params(&ctx, &mut stmt, &params, allow_bare_named)?;
+    let state = {
+        let table = lock_conn_table(&ctx)?;
+        let conn = table
+            .connections
+            .get(&conn_id)
+            .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
 
-    let col_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
-    let mut rows = stmt.raw_query();
-    let mut all_values = Vec::new();
+        let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
+        validate_named_params(&ctx, &stmt, &params, allow_bare_named, allow_unknown_named)?;
+        bind_params(&ctx, &mut stmt, &params, allow_bare_named)?;
 
-    while let Some(row) = rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))? {
-        let mut row_vals = Vec::with_capacity(col_names.len());
-        for i in 0..col_names.len() {
-            let val = row.get_ref(i).map_err(|e| sqlite_error(&ctx, &e))?;
-            row_vals.push(value_ref_to_owned(&val));
+        let col_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
+        let mut rows = stmt.raw_query();
+        let mut all_values = Vec::new();
+
+        while let Some(row) = rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))? {
+            let mut row_vals = Vec::with_capacity(col_names.len());
+            for i in 0..col_names.len() {
+                let val = row.get_ref(i).map_err(|e| sqlite_error(&ctx, &e))?;
+                row_vals.push(value_ref_to_owned(&val));
+            }
+            all_values.push(row_vals);
         }
-        all_values.push(row_vals);
-    }
 
-    drop(rows);
-    drop(stmt);
-    drop(table);
-
-    let state = IteratorState {
-        col_names,
-        values: all_values,
-        position: 0,
+        IteratorState {
+            col_names,
+            values: all_values,
+            position: 0,
+        }
     };
 
     let mut iter_table = ITER_TABLE
@@ -1993,15 +1977,6 @@ pub mod native_module {
             read_big_ints,
             return_arrays,
         )
-    }
-
-    #[rquickjs::function]
-    pub fn stmt_source_sql<'js>(
-        _ctx: Ctx<'js>,
-        _conn_id: u32,
-        sql: String,
-    ) -> rquickjs::Result<String> {
-        Ok(sql)
     }
 
     #[rquickjs::function]

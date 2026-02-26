@@ -361,10 +361,7 @@ fn migrate_config_split() {
     let mut split_updates: Vec<(String, String)> = Vec::new();
 
     for (test_path, opts) in tests_obj.iter() {
-        let is_split = opts
-            .get("split")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let is_split = opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false);
 
         let suite_file = format!("tests/node_compat/suite/{}", test_path);
         let source = match fs::read_to_string(&suite_file) {

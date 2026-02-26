@@ -15,6 +15,24 @@ const WAL_JOURNAL_MODE_OVERRIDES = new Set();
 const JOURNAL_MODE_SET_RE = /^\s*PRAGMA\s+journal_mode\s*=\s*([^\s;]+)\s*;?\s*$/i;
 const JOURNAL_MODE_GET_RE = /^\s*PRAGMA\s+journal_mode\s*;?\s*$/i;
 
+function opt(value, defaultValue) {
+    return value !== undefined ? value : defaultValue;
+}
+
+function assertBoolean(value, name) {
+    if (typeof value !== 'boolean') {
+        const err = new TypeError(`The "${name}" argument must be a boolean`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+}
+
+function throwDbNotOpen(code) {
+    const err = new Error('database is not open');
+    err.code = code;
+    throw err;
+}
+
 function parseJournalModePragma(sql) {
     const setMatch = JOURNAL_MODE_SET_RE.exec(sql);
     if (setMatch) {
@@ -54,25 +72,23 @@ class _DatabaseSyncImpl {
 
         this.#path = path;
         this.#options = {
-            open: options.open !== undefined ? options.open : true,
-            readOnly: options.readOnly !== undefined ? options.readOnly : false,
-            enableForeignKeyConstraints: options.enableForeignKeyConstraints !== undefined ? options.enableForeignKeyConstraints : true,
-            enableDoubleQuotedStringLiterals: options.enableDoubleQuotedStringLiterals !== undefined ? options.enableDoubleQuotedStringLiterals : false,
-            allowExtension: options.allowExtension !== undefined ? options.allowExtension : false,
-            timeout: options.timeout !== undefined ? options.timeout : 0,
-            readBigInts: options.readBigInts !== undefined ? options.readBigInts : false,
-            returnArrays: options.returnArrays !== undefined ? options.returnArrays : false,
-            allowBareNamedParameters: options.allowBareNamedParameters !== undefined ? options.allowBareNamedParameters : true,
-            allowUnknownNamedParameters: options.allowUnknownNamedParameters !== undefined ? options.allowUnknownNamedParameters : false,
-            defensive: options.defensive !== undefined ? options.defensive : true,
+            open: opt(options.open, true),
+            readOnly: opt(options.readOnly, false),
+            enableForeignKeyConstraints: opt(options.enableForeignKeyConstraints, true),
+            enableDoubleQuotedStringLiterals: opt(options.enableDoubleQuotedStringLiterals, false),
+            allowExtension: opt(options.allowExtension, false),
+            timeout: opt(options.timeout, 0),
+            readBigInts: opt(options.readBigInts, false),
+            returnArrays: opt(options.returnArrays, false),
+            allowBareNamedParameters: opt(options.allowBareNamedParameters, true),
+            allowUnknownNamedParameters: opt(options.allowUnknownNamedParameters, false),
+            defensive: opt(options.defensive, true),
         };
 
         // Validate boolean options
         for (const key of ['open', 'readOnly', 'enableForeignKeyConstraints', 'enableDoubleQuotedStringLiterals', 'allowExtension', 'readBigInts', 'returnArrays', 'allowBareNamedParameters', 'allowUnknownNamedParameters', 'defensive']) {
-            if (this.#options[key] !== undefined && typeof this.#options[key] !== 'boolean') {
-                const err = new TypeError(`The "options.${key}" argument must be a boolean`);
-                err.code = 'ERR_INVALID_ARG_TYPE';
-                throw err;
+            if (this.#options[key] !== undefined) {
+                assertBoolean(this.#options[key], `options.${key}`);
             }
         }
         if (this.#options.timeout !== undefined && typeof this.#options.timeout !== 'number') {
@@ -88,9 +104,7 @@ class _DatabaseSyncImpl {
 
     open() {
         if (this.#connId !== null) {
-            const err = new Error('database is already open');
-            err.code = 'ERR_INVALID_STATE';
-            throw err;
+            throw Object.assign(new Error('database is already open'), { code: 'ERR_INVALID_STATE' });
         }
         this.#connId = open_database(
             this.#path,
@@ -107,11 +121,7 @@ class _DatabaseSyncImpl {
     }
 
     close() {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_INVALID_STATE';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
         WAL_JOURNAL_MODE_OVERRIDES.delete(this.#connId);
         close_database(this.#connId);
         this.#connId = null;
@@ -125,11 +135,7 @@ class _DatabaseSyncImpl {
     }
 
     exec(sql) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_INVALID_STATE';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
         if (typeof sql !== 'string') {
             const err = new TypeError('The "sql" argument must be a string');
             err.code = 'ERR_INVALID_ARG_TYPE';
@@ -139,32 +145,23 @@ class _DatabaseSyncImpl {
     }
 
     prepare(sql, options = {}) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_INVALID_STATE';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
         if (typeof sql !== 'string') {
             const err = new TypeError('The "sql" argument must be a string');
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
-        // Merge statement-level options with database-level defaults
         const stmtOptions = {
-            readBigInts: options.readBigInts !== undefined ? options.readBigInts : this.#options.readBigInts,
-            returnArrays: options.returnArrays !== undefined ? options.returnArrays : this.#options.returnArrays,
-            allowBareNamedParameters: options.allowBareNamedParameters !== undefined ? options.allowBareNamedParameters : this.#options.allowBareNamedParameters,
-            allowUnknownNamedParameters: options.allowUnknownNamedParameters !== undefined ? options.allowUnknownNamedParameters : this.#options.allowUnknownNamedParameters,
+            readBigInts: opt(options.readBigInts, this.#options.readBigInts),
+            returnArrays: opt(options.returnArrays, this.#options.returnArrays),
+            allowBareNamedParameters: opt(options.allowBareNamedParameters, this.#options.allowBareNamedParameters),
+            allowUnknownNamedParameters: opt(options.allowUnknownNamedParameters, this.#options.allowUnknownNamedParameters),
         };
         return new StatementSync(_stmtSecret, this.#connId, sql, stmtOptions);
     }
 
     function(name, optionsOrFn, maybeFn) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_INVALID_STATE';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
 
         if (typeof name !== 'string') {
             const err = new TypeError('The "name" argument must be a string');
@@ -192,26 +189,10 @@ class _DatabaseSyncImpl {
             throw err;
         }
 
-        if (options.deterministic !== undefined && typeof options.deterministic !== 'boolean') {
-            const err = new TypeError('The "options.deterministic" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
-        if (options.directOnly !== undefined && typeof options.directOnly !== 'boolean') {
-            const err = new TypeError('The "options.directOnly" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
-        if (options.useBigIntArguments !== undefined && typeof options.useBigIntArguments !== 'boolean') {
-            const err = new TypeError('The "options.useBigIntArguments" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
-        if (options.varargs !== undefined && typeof options.varargs !== 'boolean') {
-            const err = new TypeError('The "options.varargs" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
+        if (options.deterministic !== undefined) assertBoolean(options.deterministic, 'options.deterministic');
+        if (options.directOnly !== undefined) assertBoolean(options.directOnly, 'options.directOnly');
+        if (options.useBigIntArguments !== undefined) assertBoolean(options.useBigIntArguments, 'options.useBigIntArguments');
+        if (options.varargs !== undefined) assertBoolean(options.varargs, 'options.varargs');
 
         const numArgs = options.varargs ? 0 : fn.length;
 
@@ -228,11 +209,7 @@ class _DatabaseSyncImpl {
     }
 
     aggregate(name, options) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_SQLITE_ERROR');
 
         if (typeof name !== 'string') {
             const err = new TypeError('The "name" argument must be a string');
@@ -276,11 +253,7 @@ class _DatabaseSyncImpl {
     }
 
     createSession(options) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_SQLITE_ERROR');
         if (options !== undefined) {
             if (typeof options !== 'object' || options === null) {
                 const err = new TypeError('The "options" argument must be an object.');
@@ -305,11 +278,7 @@ class _DatabaseSyncImpl {
     }
 
     applyChangeset(changeset, options) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_SQLITE_ERROR');
         if (!(changeset instanceof Uint8Array)) {
             const err = new TypeError('The "changeset" argument must be a Uint8Array.');
             err.code = 'ERR_INVALID_ARG_TYPE';
@@ -338,43 +307,23 @@ class _DatabaseSyncImpl {
     }
 
     createTagStore(maxSize = 1000) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_SQLITE_ERROR');
         return new SQLTagStore(this, maxSize);
     }
 
     enableDefensive(active) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
-        if (typeof active !== 'boolean') {
-            const err = new TypeError('The "active" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_SQLITE_ERROR');
+        assertBoolean(active, 'active');
         enable_defensive(this.#connId, active);
     }
 
     location(dbName) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_SQLITE_ERROR');
         return location(this.#connId);
     }
 
     setAuthorizer(callback) {
-        if (this.#connId === null) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
+        if (this.#connId === null) throwDbNotOpen('ERR_SQLITE_ERROR');
         if (callback !== null && callback !== undefined && typeof callback !== 'function') {
             const err = new TypeError('The "callback" argument must be a function or null');
             err.code = 'ERR_INVALID_ARG_TYPE';
@@ -428,15 +377,9 @@ class Session {
 
     #checkOpen() {
         if (this.#closed) {
-            const err = new Error('session is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
+            throw Object.assign(new Error('session is not open'), { code: 'ERR_SQLITE_ERROR' });
         }
-        if (!is_open(this.#connId)) {
-            const err = new Error('database is not open');
-            err.code = 'ERR_SQLITE_ERROR';
-            throw err;
-        }
+        if (!is_open(this.#connId)) throwDbNotOpen('ERR_SQLITE_ERROR');
     }
 
     changeset() {
@@ -597,35 +540,19 @@ class StatementSync {
     }
 
     setReadBigInts(enabled) {
-        if (typeof enabled !== 'boolean') {
-            const err = new TypeError('The "readBigInts" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
+        assertBoolean(enabled, 'readBigInts');
         this.#options.readBigInts = enabled;
     }
     setReturnArrays(enabled) {
-        if (typeof enabled !== 'boolean') {
-            const err = new TypeError('The "returnArrays" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
+        assertBoolean(enabled, 'returnArrays');
         this.#options.returnArrays = enabled;
     }
     setAllowBareNamedParameters(enabled) {
-        if (typeof enabled !== 'boolean') {
-            const err = new TypeError('The "allowBareNamedParameters" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
+        assertBoolean(enabled, 'allowBareNamedParameters');
         this.#options.allowBareNamedParameters = enabled;
     }
     setAllowUnknownNamedParameters(enabled) {
-        if (typeof enabled !== 'boolean') {
-            const err = new TypeError('The "allowUnknownNamedParameters" argument must be a boolean');
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
+        assertBoolean(enabled, 'allowUnknownNamedParameters');
         this.#options.allowUnknownNamedParameters = enabled;
     }
 }
@@ -714,11 +641,7 @@ async function backup(sourceDb, path, options = {}) {
         throw new TypeError('sourceDb must be a DatabaseSync instance');
     }
     const connId = sourceDb[_connIdSymbol];
-    if (connId === null || connId === undefined) {
-        const err = new Error('database is not open');
-        err.code = 'ERR_SQLITE_ERROR';
-        throw err;
-    }
+    if (connId === null || connId === undefined) throwDbNotOpen('ERR_SQLITE_ERROR');
     if (typeof path !== 'string') {
         throw new TypeError('path must be a string');
     }
