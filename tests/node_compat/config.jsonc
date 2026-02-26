@@ -441,7 +441,10 @@
           "skip": true,
           "reason": "[manual] amp made no code changes"
         },
-        "block_78_block_78": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_78_block_78": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "block_79_block_79": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_80_inspect_prototype_properties": {},
         "block_81_regression_test_for_https_github_com_nodejs_node_issues_3573": {},

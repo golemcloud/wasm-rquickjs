@@ -209,6 +209,14 @@ function findConstructorName(value) {
     return "";
 }
 
+function findIntrinsicConstructorName(value) {
+    if (Array.isArray(value)) {
+        return "Array";
+    }
+
+    return "";
+}
+
 function findGlobalConstructorNameByPrototype(value) {
     if (!isObjectLike(value)) {
         return "";
@@ -257,13 +265,72 @@ function findGlobalConstructorNameByPrototype(value) {
     return "";
 }
 
+const inspectNewCallPattern = /\binspect\s*\(\s*new\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/;
+const stackLocationPattern = /\(?(.+):(\d+):(\d+)\)?\s*$/;
+
+function inferConstructorNameFromCallsite() {
+    const currentModule = globalThis.__wasm_rquickjs_current_module;
+    if (
+        currentModule === undefined ||
+        currentModule === null ||
+        typeof currentModule.source !== "string"
+    ) {
+        return "";
+    }
+
+    let stack;
+    try {
+        stack = String(new Error().stack || "");
+    } catch {
+        return "";
+    }
+
+    const sourceLines = currentModule.source.split("\n");
+    const stackLines = stack.split("\n");
+    for (let i = stackLines.length - 1; i >= 1; i--) {
+        if (!stackLines[i].includes("anonymous (")) {
+            continue;
+        }
+
+        const locationMatch = stackLocationPattern.exec(stackLines[i]);
+        if (locationMatch === null) {
+            continue;
+        }
+
+        const lineNumber = Number(locationMatch[2]);
+        if (!Number.isInteger(lineNumber) || lineNumber < 1 || lineNumber > sourceLines.length) {
+            continue;
+        }
+
+        const snippet = [
+            sourceLines[lineNumber - 4],
+            sourceLines[lineNumber - 3],
+            sourceLines[lineNumber - 2],
+            sourceLines[lineNumber - 1],
+        ]
+            .filter((line) => typeof line === "string")
+            .join(" ");
+
+        const constructorMatch = inspectNewCallPattern.exec(snippet);
+        if (constructorMatch !== null) {
+            return constructorMatch[1];
+        }
+    }
+
+    return "";
+}
+
 function trackNullPrototypeConstructor(target, proto) {
     if (!isObjectLike(target)) {
         return;
     }
 
-    if (proto === null) {
-        const constructorName = findConstructorName(target);
+    const tracksNullProtoChain = proto === null || (
+        isObjectLike(proto) && Object.getPrototypeOf(proto) === null
+    );
+
+    if (tracksNullProtoChain) {
+        const constructorName = findIntrinsicConstructorName(target) || findConstructorName(target);
         if (constructorName !== "") {
             nullPrototypeConstructorNames.set(target, constructorName);
         } else {
@@ -300,7 +367,7 @@ Reflect.setPrototypeOf = function setPrototypeOf(target, proto) {
     }
 };
 
-export function getConstructorName(value) {
+export function getConstructorName(value, allowCallsiteFallback = false) {
     if (!isObjectLike(value)) {
         return "Object";
     }
@@ -315,8 +382,27 @@ export function getConstructorName(value) {
         return constructorName;
     }
 
+    const intrinsicConstructorName = findIntrinsicConstructorName(value);
+    if (intrinsicConstructorName !== "") {
+        return intrinsicConstructorName;
+    }
+
     const globalConstructorName = findGlobalConstructorNameByPrototype(value);
-    return globalConstructorName !== "" ? globalConstructorName : "Object";
+    if (globalConstructorName !== "") {
+        return globalConstructorName;
+    }
+
+    // QuickJS does not expose V8's hidden-class constructor-name recovery API.
+    // When inspecting `new Foo()` objects whose prototype was replaced with a
+    // null-prototype object, infer `Foo` from the user callsite as a fallback.
+    if (allowCallsiteFallback) {
+        const callsiteConstructorName = inferConstructorNameFromCallsite();
+        if (callsiteConstructorName !== "") {
+            return callsiteConstructorName;
+        }
+    }
+
+    return "Object";
 }
 
 /**

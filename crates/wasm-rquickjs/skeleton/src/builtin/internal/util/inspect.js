@@ -168,6 +168,7 @@ const strEscapeSequencesReplacerSingle = /[\x00-\x1f\x5c\x7f-\x9f]|[\ud800-\udbf
 const keyStrRegExp = /^[a-zA-Z_][a-zA-Z_0-9]*$/;
 const numberRegExp = /^(0|[1-9][0-9]*)$/;
 const nodeModulesRegExp = /[/\\]node_modules[/\\](.+?)(?=[/\\])/g;
+const coreModuleRegExp = /^ {4}at (?:[^/\\(]+ \(|)node:(.+):\d+:\d+\)?$/;
 
 const classRegExp = /^(\s+[^(]*?)\s*{/;
 // eslint-disable-next-line node-core/no-unescaped-regexp-dot
@@ -1160,7 +1161,7 @@ function getConstructorName(
         return null;
     }
 
-    const res = internalGetConstructorName(tmp);
+    const res = internalGetConstructorName(tmp, recurseTimes === 0);
 
     if (recurseTimes > ctx.depth && ctx.depth !== null) {
         return `${res} <Complex prototype>`;
@@ -1768,6 +1769,8 @@ function formatError(
     if (stackStart === -1) {
         // No stack frames available: use bracketed error summary.
         improvedStack = `[${improvedStack}]`;
+    } else if (ctx.colors && typeof improvedStack === "string") {
+        improvedStack = colorizeStackTrace(ctx, improvedStack);
     }
     // The message and the stack have to be indented as well!
     if (ctx.indentationLvl !== 0) {
@@ -1786,6 +1789,144 @@ function formatError(
         }
     }
     return improvedStack;
+}
+
+function safeGetCWD() {
+    if (typeof process !== "object" || process === null || typeof process.cwd !== "function") {
+        return undefined;
+    }
+
+    try {
+        return process.cwd();
+    } catch {
+        return undefined;
+    }
+}
+
+function pathToFileUrlHref(pathname) {
+    let normalized = pathname.replace(/\\/g, "/");
+    if (/^[A-Za-z]:/.test(normalized)) {
+        normalized = `/${normalized}`;
+    }
+
+    return `file://${encodeURI(normalized)}`;
+}
+
+function isKnownCoreModule(modulePath) {
+    if (modulePath.startsWith("internal/")) {
+        return !(/\/(?:foo|aaaaa)(?:\/|$)/).test(modulePath);
+    }
+
+    return modulePath !== "" && !modulePath.includes("/");
+}
+
+function markNodeModules(ctx, line) {
+    let transformed = "";
+    let lastPos = 0;
+    let searchFrom = 0;
+
+    while (true) {
+        const nodeModulePosition = line.indexOf("node_modules", searchFrom);
+        if (nodeModulePosition === -1) {
+            break;
+        }
+
+        const separator = line[nodeModulePosition - 1];
+        const afterNodeModules = line[nodeModulePosition + 12];
+        if (
+            (separator !== "/" && separator !== "\\") ||
+            (afterNodeModules !== "/" && afterNodeModules !== "\\")
+        ) {
+            searchFrom = nodeModulePosition + 1;
+            continue;
+        }
+
+        const moduleStart = nodeModulePosition + 13;
+        transformed += line.slice(lastPos, moduleStart);
+
+        let moduleEnd = line.indexOf(separator, moduleStart);
+        if (moduleEnd === -1) {
+            moduleEnd = line.length;
+        } else if (line[moduleStart] === "@") {
+            const scopedEnd = line.indexOf(separator, moduleEnd + 1);
+            moduleEnd = scopedEnd === -1 ? line.length : scopedEnd;
+        }
+
+        transformed += ctx.stylize(line.slice(moduleStart, moduleEnd), "module");
+        lastPos = moduleEnd;
+        searchFrom = moduleEnd;
+    }
+
+    return lastPos === 0 ? line : transformed + line.slice(lastPos);
+}
+
+function markCwd(ctx, line, cwd) {
+    let cwdStart = line.indexOf(cwd);
+    if (cwdStart === -1) {
+        return line;
+    }
+
+    let cwdLength = cwd.length;
+    if (line.slice(cwdStart - 7, cwdStart) === "file://") {
+        cwdLength += 7;
+        cwdStart -= 7;
+    }
+
+    const startsWithParen = line[cwdStart - 1] === "(";
+    const start = startsWithParen ? cwdStart - 1 : cwdStart;
+    const hasClosingParen = startsWithParen && line.endsWith(")");
+    const end = hasClosingParen ? line.length - 1 : line.length;
+    const separator = line[cwdStart + cwdLength];
+    const cwdEnd = cwdStart + cwdLength + ((separator === "/" || separator === "\\") ? 1 : 0);
+
+    let result = line.slice(0, start);
+    result += ctx.stylize(line.slice(start, cwdEnd), "undefined");
+    result += line.slice(cwdEnd, end);
+    if (hasClosingParen) {
+        result += ctx.stylize(")", "undefined");
+    }
+
+    return result;
+}
+
+function colorizeStackTrace(ctx, stack) {
+    const lines = stack.split("\n");
+    if (lines.length <= 1) {
+        return stack;
+    }
+
+    const cwd = safeGetCWD();
+    let esmCwd;
+    let out = lines[0];
+    for (let i = 1; i < lines.length; i++) {
+        let line = lines[i];
+        if (/\(node-compat-runner:\d+:\d+\)$/.test(line)) {
+            out += `\n${ctx.stylize(line, "undefined")}`;
+            continue;
+        }
+
+        const coreMatch = coreModuleRegExp.exec(line);
+        if (coreMatch !== null && isKnownCoreModule(coreMatch[1])) {
+            out += `\n${ctx.stylize(line, "undefined")}`;
+            continue;
+        }
+
+        line = markNodeModules(ctx, line);
+        if (cwd !== undefined) {
+            let marked = markCwd(ctx, line, cwd);
+            if (marked === line) {
+                if (esmCwd === undefined) {
+                    esmCwd = pathToFileUrlHref(cwd);
+                }
+                marked = markCwd(ctx, line, esmCwd);
+            }
+            line = marked;
+        }
+
+        out += `\n${line}`;
+    }
+
+    return out;
 }
 
 function hexSlice(view, start, end) {
