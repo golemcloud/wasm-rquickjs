@@ -123,9 +123,60 @@ export class Agent {
         this.freeSockets = {};
         this.requests = {};
         this.sockets = {};
+        this._activeRequestCount = {};
+        this._requestQueue = {};
     }
 
-    destroy() {}
+    destroy() {
+        this._activeRequestCount = {};
+        this._requestQueue = {};
+    }
+
+    _scheduleRequest(name, execute) {
+        if (!Number.isFinite(this.maxSockets)) {
+            return execute();
+        }
+
+        const key = name || 'default';
+        const currentActive = this._activeRequestCount[key] || 0;
+
+        return new Promise((resolve, reject) => {
+            const run = () => {
+                this._activeRequestCount[key] = (this._activeRequestCount[key] || 0) + 1;
+
+                Promise.resolve()
+                    .then(execute)
+                    .then(resolve, reject)
+                    .finally(() => {
+                        const remaining = (this._activeRequestCount[key] || 1) - 1;
+                        if (remaining > 0) {
+                            this._activeRequestCount[key] = remaining;
+                        } else {
+                            delete this._activeRequestCount[key];
+                        }
+
+                        const queue = this._requestQueue[key];
+                        if (queue && queue.length > 0) {
+                            const next = queue.shift();
+                            if (queue.length === 0) {
+                                delete this._requestQueue[key];
+                            }
+                            next();
+                        }
+                    });
+            };
+
+            if (currentActive < this.maxSockets) {
+                run();
+                return;
+            }
+
+            if (!this._requestQueue[key]) {
+                this._requestQueue[key] = [];
+            }
+            this._requestQueue[key].push(run);
+        });
+    }
 
     getName(options = {}) {
         let name = options.host || 'localhost';
@@ -161,6 +212,96 @@ function urlToOptions(url) {
         path: url.pathname + url.search,
         hash: url.hash,
     };
+}
+
+function isCookieHeader(name) {
+    return typeof name === 'string' && name.toLowerCase() === 'cookie';
+}
+
+function stringifyHeaderValue(value) {
+    return String(value);
+}
+
+function expandHeaderValuesForWire(name, value) {
+    if (!Array.isArray(value)) {
+        return [stringifyHeaderValue(value)];
+    }
+
+    const values = value.map(stringifyHeaderValue);
+    if (values.length < 2 || !isCookieHeader(name)) {
+        return values;
+    }
+
+    return [values.join('; ')];
+}
+
+function headerValueForNative(name, value) {
+    const values = expandHeaderValuesForWire(name, value);
+    if (values.length === 0) {
+        return '';
+    }
+    if (values.length === 1) {
+        return values[0];
+    }
+    return values.join(', ');
+}
+
+function shouldSkipNativeHeader(name, value) {
+    if (typeof name !== 'string') {
+        return false;
+    }
+    const lower = name.toLowerCase();
+    if (lower === 'host') {
+        // wasi:http controls authority separately from headers and rejects manual Host overrides.
+        return true;
+    }
+    if (lower !== 'accept') {
+        return false;
+    }
+    const values = expandHeaderValuesForWire(name, value);
+    return values.length === 1 && values[0] === '*/*';
+}
+
+function normalizeRawHeaderPairs(headers) {
+    const pairs = [];
+    if (!Array.isArray(headers)) {
+        return pairs;
+    }
+
+    if (headers.length === 0) {
+        return pairs;
+    }
+
+    if (Array.isArray(headers[0])) {
+        for (const entry of headers) {
+            if (!Array.isArray(entry) || entry.length < 2) {
+                continue;
+            }
+            pairs.push([String(entry[0]), entry[1]]);
+        }
+        return pairs;
+    }
+
+    for (let i = 0; i < headers.length - 1; i += 2) {
+        pairs.push([String(headers[i]), headers[i + 1]]);
+    }
+
+    return pairs;
+}
+
+function mergeCookieHeaderValues(existingValue, nextValue) {
+    const merged = [];
+    const existingValues = Array.isArray(existingValue) ? existingValue : [existingValue];
+    for (const value of existingValues) {
+        merged.push(stringifyHeaderValue(value));
+    }
+
+    const nextValues = Array.isArray(nextValue) ? nextValue : [nextValue];
+    for (const value of nextValues) {
+        merged.push(stringifyHeaderValue(value));
+    }
+
+    return merged;
 }
 
 // ===== IncomingMessage =====
@@ -308,18 +449,35 @@ export class ClientRequest extends EventEmitter {
 
         const url = this.protocol + '//' + this.host + this.path;
 
+        this.agent = options.agent === undefined ? globalAgent : options.agent;
+        this._agentName = null;
+        if (this.agent && this.agent !== false && typeof this.agent.getName === 'function') {
+            this._agentName = this.agent.getName(options);
+        }
+
         this._headers = {};
-        const inputHeaders = options.headers || {};
-        for (const name of Object.keys(inputHeaders)) {
-            this._headers[name.toLowerCase()] = { name, value: String(inputHeaders[name]) };
+        this._rawHeaderPairs = null;
+
+        const inputHeaders = options.headers;
+        if (Array.isArray(inputHeaders)) {
+            this._rawHeaderPairs = normalizeRawHeaderPairs(inputHeaders);
+            for (const [name, value] of this._rawHeaderPairs) {
+                this._mergeHeader(name, value);
+            }
+        } else if (inputHeaders && typeof inputHeaders === 'object') {
+            for (const name of Object.keys(inputHeaders)) {
+                this._headers[name.toLowerCase()] = { name, value: inputHeaders[name] };
+            }
         }
 
-        const flatHeaders = {};
+        this._nativeReq = new NodeHttpClientRequest(this.method, url, {});
         for (const key of Object.keys(this._headers)) {
-            flatHeaders[this._headers[key].name] = this._headers[key].value;
+            const entry = this._headers[key];
+            if (shouldSkipNativeHeader(entry.name, entry.value)) {
+                continue;
+            }
+            this._nativeReq.setHeader(entry.name, headerValueForNative(entry.name, entry.value));
         }
-
-        this._nativeReq = new NodeHttpClientRequest(this.method, url, flatHeaders);
 
         this.headersSent = false;
         this.destroyed = false;
@@ -327,6 +485,11 @@ export class ClientRequest extends EventEmitter {
         this._writableFinished = false;
         this.socket = null;
         this._timeout = null;
+        this._header = null;
+
+        if (this._rawHeaderPairs !== null) {
+            this._refreshHeaderString();
+        }
 
         if (typeof callback === 'function') {
             this.once('response', callback);
@@ -345,10 +508,55 @@ export class ClientRequest extends EventEmitter {
         return this._writableFinished;
     }
 
+    _mergeHeader(name, value) {
+        const lower = String(name).toLowerCase();
+        const existing = this._headers[lower];
+
+        if (isCookieHeader(name) && existing) {
+            this._headers[lower] = {
+                name: existing.name,
+                value: mergeCookieHeaderValues(existing.value, value),
+            };
+            return;
+        }
+
+        this._headers[lower] = { name: String(name), value };
+    }
+
+    _refreshHeaderString() {
+        let rendered = `${this.method} ${this.path} HTTP/1.1\r\n`;
+
+        if (Array.isArray(this._rawHeaderPairs)) {
+            for (const [name, rawValue] of this._rawHeaderPairs) {
+                const wireValues = expandHeaderValuesForWire(name, rawValue);
+                for (const value of wireValues) {
+                    rendered += `${name}: ${value}\r\n`;
+                }
+            }
+        } else {
+            for (const key of Object.keys(this._headers)) {
+                const entry = this._headers[key];
+                const wireValues = expandHeaderValuesForWire(entry.name, entry.value);
+                for (const value of wireValues) {
+                    rendered += `${entry.name}: ${value}\r\n`;
+                }
+            }
+        }
+
+        rendered += '\r\n';
+        this._header = rendered;
+    }
+
     setHeader(name, value) {
         const lower = name.toLowerCase();
-        this._headers[lower] = { name, value: String(value) };
-        this._nativeReq.setHeader(name, String(value));
+        this._headers[lower] = { name, value };
+        if (shouldSkipNativeHeader(name, value)) {
+            this._nativeReq.removeHeader(name);
+        } else {
+            this._nativeReq.setHeader(name, headerValueForNative(name, value));
+        }
+        this._rawHeaderPairs = null;
+        this._refreshHeaderString();
     }
 
     getHeader(name) {
@@ -360,6 +568,8 @@ export class ClientRequest extends EventEmitter {
         const lower = name.toLowerCase();
         delete this._headers[lower];
         this._nativeReq.removeHeader(name);
+        this._rawHeaderPairs = null;
+        this._refreshHeaderString();
     }
 
     hasHeader(name) {
@@ -382,7 +592,9 @@ export class ClientRequest extends EventEmitter {
         return Object.keys(this._headers).map(k => this._headers[k].name);
     }
 
-    flushHeaders() {}
+    flushHeaders() {
+        this._refreshHeaderString();
+    }
 
     setTimeout(ms, callback) {
         this._timeout = ms;
@@ -446,8 +658,15 @@ export class ClientRequest extends EventEmitter {
         }
 
         this._endCallback = callback;
-        this._endPromise = this._doSend();
+        this._endPromise = this._sendThroughAgent();
         return this;
+    }
+
+    _sendThroughAgent() {
+        if (this.agent && this.agent !== false && typeof this.agent._scheduleRequest === 'function') {
+            return this.agent._scheduleRequest(this._agentName, () => this._doSend());
+        }
+        return this._doSend();
     }
 
     async _doSend() {
@@ -455,6 +674,8 @@ export class ClientRequest extends EventEmitter {
             if (onClientRequestStart.hasSubscribers) {
                 onClientRequestStart.publish({ request: this });
             }
+
+            this._refreshHeaderString();
 
             await this._nativeReq.end(undefined);
 

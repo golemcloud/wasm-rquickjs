@@ -6958,7 +6958,10 @@
     "parallel/test-heap-prof-sigint.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-heapsnapshot-near-heap-limit-by-api-in-worker.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-heapsnapshot-near-heap-limit-worker.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-http.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-http.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-icu-data-dir.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",

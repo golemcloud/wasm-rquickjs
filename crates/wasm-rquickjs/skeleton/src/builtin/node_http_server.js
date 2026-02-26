@@ -626,6 +626,7 @@ function createConnectionParser(server, socket) {
 
                 const cl = req.headers['content-length'];
                 const te = req.headers['transfer-encoding'];
+                let requestHasNoBody = false;
 
                 if (te && te.toLowerCase().indexOf('chunked') !== -1) {
                     state.state = BODY_CHUNKED;
@@ -644,11 +645,17 @@ function createConnectionParser(server, socket) {
                 } else {
                     // No body
                     req.complete = true;
-                    req.push(null);
+                    requestHasNoBody = true;
                     state.state = AWAITING_RESPONSE;
                 }
 
                 server.emit('request', req, res);
+                if (requestHasNoBody) {
+                    // Emit EOF after request handlers had a chance to attach `end` listeners.
+                    Promise.resolve().then(function () {
+                        req.push(null);
+                    });
+                }
                 progress = true;
                 continue;
             }
