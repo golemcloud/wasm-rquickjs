@@ -51,6 +51,7 @@ const COMMA_JOIN_HEADERS = new Set([
 
 const COOKIE_HEADER = 'cookie';
 const SET_COOKIE_HEADER = 'set-cookie';
+const INVALID_HEADER_CHAR_REGEX = /[^\t\x20-\x7e\x80-\xff]/;
 
 function parseHeaders(rawPairs) {
     const headers = {};
@@ -214,6 +215,11 @@ ServerResponse.prototype.setHeader = function setHeader(name, value) {
     if (value === undefined) {
         const err = new TypeError(`Invalid value "${value}" for header "${name}"`);
         err.code = 'ERR_HTTP_INVALID_HEADER_VALUE';
+        throw err;
+    }
+    if (INVALID_HEADER_CHAR_REGEX.test(value)) {
+        const err = new TypeError(`Invalid character in header content ["${name}"]`);
+        err.code = 'ERR_INVALID_CHAR';
         throw err;
     }
     const lower = name.toLowerCase();
