@@ -3,6 +3,7 @@ import { constants as osConstants } from "node:os";
 import * as fsModule from "node:fs";
 
 const inspectCustomSymbol = Symbol.for("nodejs.util.inspect.custom");
+const externalValueMarkerSymbol = Symbol.for("wasm-rquickjs.util.types.external");
 
 // Node's V8-backed implementation can keep very small typed-array payloads inline
 // and only materialize an ArrayBuffer on first `.buffer` access.
@@ -108,11 +109,21 @@ let nextExternalAddress = 1;
 
 function createExternalLikeValue() {
     const address = (nextExternalAddress++).toString(16);
-    return Object.freeze({
-        [inspectCustomSymbol]() {
+    const value = Object.create(null);
+
+    Object.defineProperty(value, externalValueMarkerSymbol, {
+        value: true,
+        enumerable: false,
+    });
+
+    Object.defineProperty(value, inspectCustomSymbol, {
+        value() {
             return `[External: ${address}]`;
         },
+        enumerable: false,
     });
+
+    return Object.freeze(value);
 }
 
 class JSStream {

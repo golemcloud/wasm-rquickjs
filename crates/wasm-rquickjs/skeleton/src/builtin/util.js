@@ -32,6 +32,8 @@ import {
     ERR_OUT_OF_RANGE,
     isErrorStackTraceLimitWritable
 } from '__wasm_rquickjs_builtin/internal/errors';
+import * as internalUtilTypes from '__wasm_rquickjs_builtin/internal/util/types';
+import { getProxyDetails as getProxyDetailsNative } from '__wasm_rquickjs_builtin/internal/binding/util';
 
 import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
 
@@ -1854,131 +1856,97 @@ export function isDeepStrictEqual(val1, val2) {
 }
 
 var _toString = Object.prototype.toString.call.bind(Object.prototype.toString);
+var _externalValueMarkerSymbol = Symbol.for('wasm-rquickjs.util.types.external');
+
+function _getTypedArrayTag(v) {
+    if (_TypedArrayToStringTagGetter === null || !v || typeof v !== 'object') {
+        return null;
+    }
+
+    try {
+        const tag = _TypedArrayToStringTagGetter.call(v);
+        return typeof tag === 'string' ? tag : null;
+    } catch {
+        return null;
+    }
+}
+
+function _isExternalLike(v) {
+    return !!v && typeof v === 'object' && v[_externalValueMarkerSymbol] === true;
+}
 
 export var types = {
-    isAnyArrayBuffer: function isAnyArrayBuffer(v) {
-        if (!v || typeof v !== 'object') return false;
-        var tag = _toString(v);
-        return tag === '[object ArrayBuffer]' || tag === '[object SharedArrayBuffer]';
-    },
-    isArrayBuffer: function isArrayBuffer(v) {
-        return v instanceof ArrayBuffer;
-    },
-    isArrayBufferView: function isArrayBufferView(v) {
-        return ArrayBuffer.isView(v);
-    },
-    isDataView: function isDataView(v) {
-        return v instanceof DataView;
-    },
-    isSharedArrayBuffer: function isSharedArrayBuffer(v) {
-        return typeof globalThis.SharedArrayBuffer !== 'undefined' && v instanceof SharedArrayBuffer;
-    },
+    isAnyArrayBuffer: internalUtilTypes.isAnyArrayBuffer,
+    isArrayBuffer: internalUtilTypes.isArrayBuffer,
+    isArrayBufferView: internalUtilTypes.isArrayBufferView,
+    isDataView: internalUtilTypes.isDataView,
+    isSharedArrayBuffer: internalUtilTypes.isSharedArrayBuffer,
     isTypedArray: function isTypedArray(v) {
-        return ArrayBuffer.isView(v) && !(v instanceof DataView);
+        return _getTypedArrayTag(v) !== null;
     },
     isUint8Array: function isUint8Array(v) {
-        return v instanceof Uint8Array;
+        return _getTypedArrayTag(v) === 'Uint8Array';
     },
     isUint8ClampedArray: function isUint8ClampedArray(v) {
-        return v instanceof Uint8ClampedArray;
+        return _getTypedArrayTag(v) === 'Uint8ClampedArray';
     },
     isUint16Array: function isUint16Array(v) {
-        return v instanceof Uint16Array;
+        return _getTypedArrayTag(v) === 'Uint16Array';
     },
     isUint32Array: function isUint32Array(v) {
-        return v instanceof Uint32Array;
+        return _getTypedArrayTag(v) === 'Uint32Array';
     },
     isInt8Array: function isInt8Array(v) {
-        return v instanceof Int8Array;
+        return _getTypedArrayTag(v) === 'Int8Array';
     },
     isInt16Array: function isInt16Array(v) {
-        return v instanceof Int16Array;
+        return _getTypedArrayTag(v) === 'Int16Array';
     },
     isInt32Array: function isInt32Array(v) {
-        return v instanceof Int32Array;
+        return _getTypedArrayTag(v) === 'Int32Array';
     },
     isFloat32Array: function isFloat32Array(v) {
-        return v instanceof Float32Array;
+        return _getTypedArrayTag(v) === 'Float32Array';
     },
     isFloat64Array: function isFloat64Array(v) {
-        return v instanceof Float64Array;
+        return _getTypedArrayTag(v) === 'Float64Array';
     },
     isBigInt64Array: function isBigInt64Array(v) {
-        return typeof globalThis.BigInt64Array !== 'undefined' && v instanceof BigInt64Array;
+        return _getTypedArrayTag(v) === 'BigInt64Array';
     },
     isBigUint64Array: function isBigUint64Array(v) {
-        return typeof globalThis.BigUint64Array !== 'undefined' && v instanceof BigUint64Array;
+        return _getTypedArrayTag(v) === 'BigUint64Array';
     },
     isFloat16Array: function isFloat16Array(v) {
-        return typeof globalThis.Float16Array !== 'undefined' && v instanceof Float16Array;
+        return _getTypedArrayTag(v) === 'Float16Array';
     },
-    isDate: function isDate(v) {
-        return _toString(v) === '[object Date]';
+    isDate: internalUtilTypes.isDate,
+    isRegExp: internalUtilTypes.isRegExp,
+    isMap: internalUtilTypes.isMap,
+    isSet: internalUtilTypes.isSet,
+    isWeakMap: internalUtilTypes.isWeakMap,
+    isWeakSet: internalUtilTypes.isWeakSet,
+    isPromise: internalUtilTypes.isPromise,
+    isNativeError: internalUtilTypes.isNativeError,
+    isAsyncFunction: internalUtilTypes.isAsyncFunction,
+    isGeneratorFunction: internalUtilTypes.isGeneratorFunction,
+    isGeneratorObject: internalUtilTypes.isGeneratorObject,
+    isStringObject: internalUtilTypes.isStringObject,
+    isNumberObject: internalUtilTypes.isNumberObject,
+    isBooleanObject: internalUtilTypes.isBooleanObject,
+    isBigIntObject: internalUtilTypes.isBigIntObject,
+    isSymbolObject: internalUtilTypes.isSymbolObject,
+    isBoxedPrimitive: internalUtilTypes.isBoxedPrimitive,
+    isMapIterator: internalUtilTypes.isMapIterator,
+    isSetIterator: internalUtilTypes.isSetIterator,
+    isArgumentsObject: internalUtilTypes.isArgumentsObject,
+    isModuleNamespaceObject: internalUtilTypes.isModuleNamespaceObject,
+    isProxy: function isProxy(v) {
+        return getProxyDetailsNative(v, false) !== undefined;
     },
-    isRegExp: function isRegExp(v) {
-        return _toString(v) === '[object RegExp]';
+    isExternal: function isExternal(v) {
+        return _isExternalLike(v);
     },
-    isMap: function isMap(v) {
-        return _toString(v) === '[object Map]';
-    },
-    isSet: function isSet(v) {
-        return _toString(v) === '[object Set]';
-    },
-    isWeakMap: function isWeakMap(v) {
-        return _toString(v) === '[object WeakMap]';
-    },
-    isWeakSet: function isWeakSet(v) {
-        return _toString(v) === '[object WeakSet]';
-    },
-    isPromise: function isPromise(v) {
-        return _toString(v) === '[object Promise]';
-    },
-    isNativeError: function isNativeError(v) {
-        return isObject(v) && _toString(v) === '[object Error]';
-    },
-    isAsyncFunction: function isAsyncFunction(v) {
-        return _toString(v) === '[object AsyncFunction]';
-    },
-    isGeneratorFunction: function isGeneratorFunction(v) {
-        return _toString(v) === '[object GeneratorFunction]';
-    },
-    isGeneratorObject: function isGeneratorObject(v) {
-        return _toString(v) === '[object Generator]';
-    },
-    isStringObject: function isStringObject(v) {
-        return _toString(v) === '[object String]' && typeof v !== 'string';
-    },
-    isNumberObject: function isNumberObject(v) {
-        return _toString(v) === '[object Number]' && typeof v !== 'number';
-    },
-    isBooleanObject: function isBooleanObject(v) {
-        return _toString(v) === '[object Boolean]' && typeof v !== 'boolean';
-    },
-    isBigIntObject: function isBigIntObject(v) {
-        return _toString(v) === '[object BigInt]' && typeof v !== 'bigint';
-    },
-    isSymbolObject: function isSymbolObject(v) {
-        return _toString(v) === '[object Symbol]' && typeof v !== 'symbol';
-    },
-    isBoxedPrimitive: function isBoxedPrimitive(v) {
-        return types.isStringObject(v) || types.isNumberObject(v) ||
-            types.isBooleanObject(v) || types.isBigIntObject(v) ||
-            types.isSymbolObject(v);
-    },
-    isMapIterator: function isMapIterator(v) {
-        return _toString(v) === '[object Map Iterator]';
-    },
-    isSetIterator: function isSetIterator(v) {
-        return _toString(v) === '[object Set Iterator]';
-    },
-    isArgumentsObject: function isArgumentsObject(v) {
-        return _toString(v) === '[object Arguments]';
-    },
-    isModuleNamespaceObject: function isModuleNamespaceObject(v) {
-        return _toString(v) === '[object Module]';
-    },
-    isProxy: function isProxy() { return false; },
-    isExternal: function isExternal() { return false; },
     isCryptoKey: function isCryptoKey() { return false; },
     isKeyObject: function isKeyObject() { return false; }
 };

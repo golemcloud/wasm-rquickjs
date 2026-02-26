@@ -1307,7 +1307,12 @@ function getIteratorBraces(type, tag) {
 function formatIterator(braces, ctx, value, recurseTimes) {
     // TODO(wafuwafu13): Implement
     // const { 0: entries, 1: isKeyValue } = previewEntries(value, true);
-    const { 0: entries, 1: isKeyValue } = value;
+    const { 0: entries, 1: isKeyValue } = value || [];
+    if (!Array.isArray(entries)) {
+        // QuickJS currently does not provide non-destructive iterator previews,
+        // so avoid crashing when inspect() is called for diagnostics.
+        return [ctx.stylize("<items unknown>", "special")];
+    }
     if (isKeyValue) {
         // Mark entry iterators as such.
         braces[0] = braces[0].replace(/ Iterator] {$/, " Entries] {");
