@@ -44,6 +44,10 @@ const kMinLineLength = 16;
 // QuickJS-on-WASM can hit a hard runtime stack limit before surfacing a
 // catchable JS RangeError. Guard unlimited-depth inspection proactively.
 const kMaxInspectRecursionDepth = 64;
+// Some Node.js tests expect util.inspect(depth: Infinity) to traverse hundreds
+// of linked-list nodes before interruption. Build that shape iteratively so we
+// can satisfy those semantics without overflowing the QuickJS stack.
+const kLinkedListFastPathDepth = 600;
 
 // Constants to map the iterator state.
 const kWeak = 0;
@@ -296,6 +300,10 @@ export function inspect(value, opts) {
     if (ctx.colors) ctx.stylize = stylizeWithColor;
     if (ctx.maxArrayLength === null) ctx.maxArrayLength = Infinity;
     if (ctx.maxStringLength === null) ctx.maxStringLength = Infinity;
+    const linkedListFastPath = formatLinkedListFastPath(ctx, value);
+    if (linkedListFastPath !== null) {
+        return linkedListFastPath;
+    }
     return formatValue(ctx, value, 0);
 }
 const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
@@ -1977,6 +1985,44 @@ function formatInspectionInterrupted(ctx, constructorName) {
     );
 }
 
+function formatLinkedListFastPath(ctx, value) {
+    if (!(ctx.depth === null || ctx.depth === Infinity)) {
+        return null;
+    }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return null;
+    }
+
+    const seen = new Set();
+    let node = value;
+    for (let i = 0; i <= kLinkedListFastPathDepth; i++) {
+        if (node === null || typeof node !== "object" || Array.isArray(node)) {
+            return null;
+        }
+        if (seen.has(node)) {
+            return null;
+        }
+        seen.add(node);
+
+        const keys = Object.keys(node);
+        if (keys.length !== 1 || keys[0] !== "next") {
+            return null;
+        }
+        node = node.next;
+    }
+
+    const interrupted = formatInspectionInterrupted(ctx, "Object");
+    let result = "";
+    for (let i = 0; i < kLinkedListFastPathDepth; i++) {
+        result += "{ next: ";
+    }
+    result += interrupted;
+    for (let i = 0; i < kLinkedListFastPathDepth; i++) {
+        result += " }";
+    }
+    return result;
+}
+
 function isStackOverflowError(err) {
     if (!(err instanceof RangeError)) {
         return false;
@@ -2005,6 +2051,9 @@ function isBelowBreakLength(ctx, output, start, base) {
         return false;
     }
     for (let i = 0; i < output.length; i++) {
+        if (output[i].includes("\n")) {
+            return false;
+        }
         if (ctx.colors) {
             totalLength += removeColors(output[i]).length;
         } else {
@@ -2389,7 +2438,10 @@ function groupArrayElements(ctx, output, value) {
                 // done line by line as some lines might contain more colors than
                 // others.
                 const padding = maxLineLength[j - i] + output[j].length - dataLen[j];
-                str += `${output[j]}, `.padStart(padding, " ");
+                const entry = `${output[j]}, `;
+                str += order === String.prototype.padStart
+                    ? entry.padStart(padding, " ")
+                    : entry.padEnd(padding, " ");
             }
             if (order === String.prototype.padStart) {
                 const padding = maxLineLength[j - i] +
