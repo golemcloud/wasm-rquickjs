@@ -650,6 +650,16 @@ fn open_database_impl<'js>(
         rusqlite::Connection::open_with_flags(&path, flags).map_err(|e| sqlite_error(&ctx, &e))?
     };
 
+    // Node.js compiles sqlite with math functions enabled. libsqlite3-sys does not,
+    // so expose PI() explicitly for node:sqlite compatibility.
+    conn.create_scalar_function(
+        "pi",
+        0,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |_| Ok(std::f64::consts::PI),
+    )
+    .map_err(|e| sqlite_error(&ctx, &e))?;
+
     if enable_foreign_keys {
         conn.execute_batch("PRAGMA foreign_keys = ON")
             .map_err(|e| sqlite_error(&ctx, &e))?;

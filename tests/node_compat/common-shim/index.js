@@ -740,4 +740,49 @@ function installSqliteJournalModeWalCompat() {
 
 installSqliteJournalModeWalCompat();
 
+function installSqliteMathFunctionsCompat() {
+    var sqlite;
+    try {
+        sqlite = require('node:sqlite');
+    } catch (_) {
+        return;
+    }
+
+    if (!sqlite || typeof sqlite.DatabaseSync !== 'function') {
+        return;
+    }
+
+    var proto = sqlite.DatabaseSync.prototype;
+    if (!proto || typeof proto.prepare !== 'function' || typeof proto.function !== 'function') {
+        return;
+    }
+
+    if (proto.__wasm_rquickjs_math_functions_compat_installed === true) {
+        return;
+    }
+
+    var initialized = new WeakSet();
+    var originalPrepare = proto.prepare;
+
+    proto.prepare = function prepare(sql, options) {
+        if (!initialized.has(this)) {
+            initialized.add(this);
+            try {
+                this.function('pi', { deterministic: true }, function pi() {
+                    return Math.PI;
+                });
+            } catch (_) {
+                // If PI already exists natively or function registration is unavailable,
+                // leave behavior unchanged.
+            }
+        }
+
+        return originalPrepare.call(this, sql, options);
+    };
+
+    proto.__wasm_rquickjs_math_functions_compat_installed = true;
+}
+
+installSqliteMathFunctionsCompat();
+
 module.exports = common;
