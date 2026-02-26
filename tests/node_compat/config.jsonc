@@ -483,7 +483,7 @@
         "block_92_regression_test_for_https_github_com_nodejs_node_issues_4124": {},
         "block_93_block_93": {},
         "block_94_block_94": {},
-        "block_95_block_95": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_95_block_95": {},
         "block_96_block_96": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_97_block_97": {},
         "block_98_block_98": {}
