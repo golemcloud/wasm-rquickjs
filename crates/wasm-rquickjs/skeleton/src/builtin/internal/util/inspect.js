@@ -890,7 +890,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
                 (formatter) = formatArrayBuffer;
             } else if (keys.length === 0 && protoProps === undefined) {
                 return prefix +
-                    `{ byteLength: ${formatNumber(ctx.stylize, value.byteLength)} }`;
+                    `{ byteLength: ${formatNumber(ctx.stylize, value.byteLength, ctx.numericSeparator)} }`;
             }
             braces[0] = `${prefix}{`;
             Array.prototype.unshift.call(keys, "byteLength");
@@ -1209,10 +1209,10 @@ function formatPrimitive(fn, value, ctx) {
         return fn(strEscape(value), "string") + trailer;
     }
     if (typeof value === "number") {
-        return formatNumber(fn, value);
+        return formatNumber(fn, value, ctx.numericSeparator);
     }
     if (typeof value === "bigint") {
-        return formatBigInt(fn, value);
+        return formatBigInt(fn, value, ctx.numericSeparator);
     }
     if (typeof value === "boolean") {
         return fn(`${value}`, "boolean");
@@ -1442,7 +1442,7 @@ function formatTypedArray(
         ? formatNumber
         : formatBigInt;
     for (let i = 0; i < maxLength; ++i) {
-        output[i] = elementFormatter(ctx.stylize, value[i]);
+        output[i] = elementFormatter(ctx.stylize, value[i], ctx.numericSeparator);
     }
     if (remaining > 0) {
         output[maxLength] = `... ${remaining} more item${remaining > 1 ? "s" : ""}`;
