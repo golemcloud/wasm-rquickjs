@@ -395,7 +395,10 @@
         },
         "block_42_test_circular_map": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_43_test_multiple_circular_references": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_44_test_promise": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_44_test_promise": {
+          "skip": true,
+          "reason": "[manual] QuickJS appears to enforce `Error.stack` behavior for this specific path at engine level (not fully overridable from JS shims). I verified `delete err.stack` still returns a truthy `err.st..."
+        },
         "block_45_a_bonafide_native_promise": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_46_test_map_iterators": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_47_test_set_iterators": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
