@@ -149,6 +149,82 @@ const uvTestBinding = Object.freeze(uvErrnoBinding);
 
 const fsTestBinding = globalThis.__wasm_rquickjs_internal_fs_binding || {};
 
+const sigintWatchdogState = globalThis.__wasm_rquickjs_sigint_watchdog_state || {
+    startStopCount: 0,
+    hasPendingSigint: false,
+    killHookInstalled: false,
+};
+
+globalThis.__wasm_rquickjs_sigint_watchdog_state = sigintWatchdogState;
+
+function throwEsrchKillError() {
+    const err = new Error("kill ESRCH");
+    err.code = "ESRCH";
+    err.errno = "ESRCH";
+    err.syscall = "kill";
+    throw err;
+}
+
+function setPendingSigint() {
+    if (sigintWatchdogState.startStopCount > 0) {
+        sigintWatchdogState.hasPendingSigint = true;
+    }
+}
+
+function ensureSigintWatchdogKillHook() {
+    if (sigintWatchdogState.killHookInstalled) {
+        return;
+    }
+    sigintWatchdogState.killHookInstalled = true;
+
+    if (!globalThis.process || typeof globalThis.process._kill === "function") {
+        return;
+    }
+
+    globalThis.process._kill = function _kill(pid, signal) {
+        const normalizedPid = Number(pid);
+        const currentPid = Number(globalThis.process.pid);
+
+        if (normalizedPid !== currentPid && normalizedPid !== 0) {
+            throwEsrchKillError();
+        }
+
+        if (signal === 2) {
+            setPendingSigint();
+        }
+
+        return 0;
+    };
+}
+
+const contextifyTestBinding = Object.freeze({
+    startSigintWatchdog() {
+        ensureSigintWatchdogKillHook();
+
+        if (sigintWatchdogState.startStopCount === 0) {
+            sigintWatchdogState.hasPendingSigint = false;
+        }
+
+        sigintWatchdogState.startStopCount += 1;
+        return true;
+    },
+
+    stopSigintWatchdog() {
+        const hadPendingSignals = sigintWatchdogState.hasPendingSigint;
+
+        if (sigintWatchdogState.startStopCount > 0) {
+            sigintWatchdogState.startStopCount -= 1;
+        }
+
+        sigintWatchdogState.hasPendingSigint = false;
+        return hadPendingSignals;
+    },
+
+    watchdogHasPendingSigint() {
+        return sigintWatchdogState.hasPendingSigint;
+    },
+});
+
 if (typeof fsTestBinding.readdir !== "function") {
     fsTestBinding.readdir = function readdir(path, encoding, withFileTypes, req) {
         const opts = {
@@ -234,6 +310,10 @@ export function internalBinding(name) {
 
     if (name === "fs") {
         return fsTestBinding;
+    }
+
+    if (name === "contextify") {
+        return contextifyTestBinding;
     }
 
     throw new Error(`No such binding: ${name}`);
