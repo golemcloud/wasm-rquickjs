@@ -1006,12 +1006,12 @@ var kCustomPromisifyArgsSymbol = typeof Symbol !== 'undefined' ? Symbol.for('nod
 
 export const promisify = function promisify(original) {
     if (typeof original !== 'function')
-        throw new TypeError('The "original" argument must be of type Function');
+        throw new ERR_INVALID_ARG_TYPE('original', 'Function', original);
 
     if (kCustomPromisifiedSymbol && original[kCustomPromisifiedSymbol]) {
         var fn = original[kCustomPromisifiedSymbol];
         if (typeof fn !== 'function') {
-            throw new TypeError('The "util.promisify.custom" argument must be of type Function');
+            throw new ERR_INVALID_ARG_TYPE('util.promisify.custom', 'Function', fn);
         }
         Object.defineProperty(fn, kCustomPromisifiedSymbol, {
             value: fn, enumerable: false, writable: false, configurable: true

@@ -461,11 +461,12 @@
     },
     "parallel/test-util-primordial-monkeypatching.js": {},
     "parallel/test-util-promisify.js": {
-      "skip": true,
-      "reason": "requires --expose-internals (internal/util customPromisifyArgs)",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "block_01_block_01": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires --expose-internals (internal/util customPromisifyArgs)" },
