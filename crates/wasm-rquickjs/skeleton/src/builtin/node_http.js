@@ -214,6 +214,32 @@ function urlToOptions(url) {
     };
 }
 
+function isLoopbackHostname(hostname) {
+    const normalized = String(hostname || '').toLowerCase();
+    return normalized === 'localhost' ||
+        normalized === '127.0.0.1' ||
+        normalized === '::1' ||
+        normalized === '[::1]';
+}
+
+function consumeCapturedStatusMessage(hostname, port, statusCode) {
+    if (!isLoopbackHostname(hostname)) {
+        return undefined;
+    }
+
+    const takeStatusMessage = globalThis.__wasm_rquickjs_take_http_status_message;
+    if (typeof takeStatusMessage !== 'function') {
+        return undefined;
+    }
+
+    const normalizedPort = Number(port);
+    if (!Number.isFinite(normalizedPort) || normalizedPort <= 0) {
+        return undefined;
+    }
+
+    return takeStatusMessage(normalizedPort, statusCode);
+}
+
 function isCookieHeader(name) {
     return typeof name === 'string' && name.toLowerCase() === 'cookie';
 }
@@ -311,11 +337,17 @@ const MULTI_VALUE_HEADERS = new Set([
 ]);
 
 export class IncomingMessage extends EventEmitter {
-    constructor(nativeRes) {
+    constructor(nativeRes, statusMessageOverride) {
         super();
         this._nativeRes = nativeRes;
         this.statusCode = nativeRes.status;
-        this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
+        if (statusMessageOverride !== undefined) {
+            this.statusMessage = statusMessageOverride;
+        } else if (typeof nativeRes.statusMessage === 'string') {
+            this.statusMessage = nativeRes.statusMessage;
+        } else {
+            this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
+        }
         this.httpVersion = '1.1';
         this.httpVersionMajor = 1;
         this.httpVersionMinor = 1;
@@ -440,6 +472,8 @@ export class ClientRequest extends EventEmitter {
         const hostname = options.hostname || options.host || 'localhost';
         const port = options.port;
         this.path = options.path || '/';
+        this.hostname = hostname;
+        this.port = port === undefined ? (this.protocol === 'https:' ? 443 : 80) : Number(port);
 
         if (port) {
             this.host = hostname + ':' + port;
@@ -686,7 +720,12 @@ export class ClientRequest extends EventEmitter {
 
             const nativeRes = this._nativeReq.getResponse();
             if (nativeRes) {
-                const res = new IncomingMessage(nativeRes);
+                const statusMessageOverride = consumeCapturedStatusMessage(
+                    this.hostname,
+                    this.port,
+                    nativeRes.status
+                );
+                const res = new IncomingMessage(nativeRes, statusMessageOverride);
                 if (onClientResponseFinish.hasSubscribers) {
                     onClientResponseFinish.publish({ request: this, response: res });
                 }

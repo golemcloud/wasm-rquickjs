@@ -5246,7 +5246,10 @@
     "parallel/test-http-pipeline-requests-connection-leak.js": { "skip": true, "reason": "sends 10000 pipelined requests which exceeds WASM resource limits" },
     "parallel/test-http-response-multiheaders.js": { "skip": true, "reason": "deadlocks: two concurrent http.get requests to same-component server cause event loop deadlock with wasi:http pollables" },
     "parallel/test-http-response-splitting.js": { "skip": true, "reason": "requires ERR_INVALID_CHAR validation on response header values which is not yet implemented" },
-    "parallel/test-http-response-status-message.js": { "skip": true, "reason": "client IncomingMessage statusMessage is derived from STATUS_CODES lookup, not parsed from raw HTTP response via wasi:http" },
+    "parallel/test-http-response-status-message.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-response-statuscode.js": {},
     "parallel/test-http-set-cookies.js": { "skip": true, "reason": "deadlocks: two concurrent http.get requests to same-component server cause event loop deadlock with wasi:http pollables" },
     "parallel/test-http-should-keep-alive.js": { "skip": true, "reason": "requires req.shouldKeepAlive property on ClientRequest which is not implemented" },

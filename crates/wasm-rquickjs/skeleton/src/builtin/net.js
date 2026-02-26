@@ -86,6 +86,96 @@ function nextTick(fn, ...args) {
     Promise.resolve().then(() => fn(...args));
 }
 
+const HTTP_STATUS_MESSAGE_QUEUE_KEY = '__wasm_rquickjs_http_status_message_queue';
+const HTTP_STATUS_MESSAGE_TAKE_KEY = '__wasm_rquickjs_take_http_status_message';
+
+function getHttpStatusMessageQueue() {
+    if (!(globalThis[HTTP_STATUS_MESSAGE_QUEUE_KEY] instanceof Map)) {
+        globalThis[HTTP_STATUS_MESSAGE_QUEUE_KEY] = new Map();
+    }
+    return globalThis[HTTP_STATUS_MESSAGE_QUEUE_KEY];
+}
+
+function enqueueCapturedHttpStatusMessage(port, statusCode, statusMessage) {
+    if (!Number.isFinite(port) || port <= 0) {
+        return;
+    }
+
+    const queue = getHttpStatusMessageQueue();
+    const entries = queue.get(port) || [];
+    entries.push({ statusCode, statusMessage });
+    if (entries.length > 256) {
+        entries.splice(0, entries.length - 256);
+    }
+    queue.set(port, entries);
+}
+
+function takeCapturedHttpStatusMessage(port, expectedStatusCode) {
+    if (!Number.isFinite(port) || port <= 0) {
+        return undefined;
+    }
+
+    const queue = getHttpStatusMessageQueue();
+    const entries = queue.get(port);
+    if (!entries || entries.length === 0) {
+        return undefined;
+    }
+
+    let index = 0;
+    if (Number.isFinite(expectedStatusCode)) {
+        const matchingIndex = entries.findIndex((entry) => entry.statusCode === expectedStatusCode);
+        if (matchingIndex >= 0) {
+            index = matchingIndex;
+        }
+    }
+
+    const [captured] = entries.splice(index, 1);
+    if (entries.length === 0) {
+        queue.delete(port);
+    }
+
+    return captured ? captured.statusMessage : undefined;
+}
+
+if (typeof globalThis[HTTP_STATUS_MESSAGE_TAKE_KEY] !== 'function') {
+    globalThis[HTTP_STATUS_MESSAGE_TAKE_KEY] = takeCapturedHttpStatusMessage;
+}
+
+function maybeCaptureHttpStatusLine(socket, chunk) {
+    if (!socket || !Number.isFinite(socket.localPort) || socket.localPort <= 0) {
+        return;
+    }
+
+    const chunkString = Buffer.isBuffer(chunk)
+        ? chunk.toString('latin1')
+        : Buffer.from(chunk).toString('latin1');
+    if (chunkString.length === 0) {
+        return;
+    }
+
+    if (!socket._httpStatusLineProbe && !chunkString.startsWith('HTTP/')) {
+        return;
+    }
+
+    const combined = (socket._httpStatusLineProbe || '') + chunkString;
+    const lineEnd = combined.indexOf('\r\n');
+    if (lineEnd === -1) {
+        socket._httpStatusLineProbe = combined.length > 1024 ? combined.slice(0, 1024) : combined;
+        return;
+    }
+
+    socket._httpStatusLineProbe = '';
+    const statusLine = combined.slice(0, lineEnd);
+    const match = /^HTTP\/\d\.\d\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
+    if (!match) {
+        return;
+    }
+
+    const statusCode = Number(match[1]);
+    const statusMessage = match[2] || '';
+    enqueueCapturedHttpStatusMessage(socket.localPort, statusCode, statusMessage);
+}
+
 function isIPAddress(addr) {
     if (!addr || typeof addr !== 'string') return false;
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(addr)) return true;
@@ -132,6 +222,7 @@ function Socket(options) {
     this.localPort = undefined;
     this.localFamily = undefined;
     this._family = options.family ?? 4;
+    this._httpStatusLineProbe = '';
 
     // Shut down the socket when we're finished with it.
     this.on('end', onReadableStreamEnd);
@@ -599,6 +690,7 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     }
 
     const data = typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
+    maybeCaptureHttpStatusLine(this, data);
     const buf = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
     const byteArray = Array.from(buf);
 
