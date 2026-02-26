@@ -700,7 +700,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
     // Iterators and the rest are split to reduce checks.
     // We have to check all values in case the constructor is set to null.
     // Otherwise it would not possible to identify all types properly.
-    if (value[Symbol.iterator] || constructor === null) {
+    if (Symbol.iterator in value || constructor === null) {
         noIterator = false;
         if (Array.isArray(value)) {
             // Only set the constructor for non ordinary ("Array [...]") arrays.
@@ -808,7 +808,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
                 return `${braces[0]}}`;
             }
         } else if (typeof value === "function") {
-            base = getFunctionBase(value, constructor, tag);
+            base = getFunctionBase(ctx, value, constructor, tag);
             if (keys.length === 0 && protoProps === undefined) {
                 return ctx.stylize(base, "special");
             }
@@ -1046,6 +1046,35 @@ const builtInObjects = new Set(
     ),
 );
 
+// Special-case common built-in prototypes in case their `constructor`
+// property has been tampered with.
+const wellKnownPrototypes = new Map();
+if (typeof Array === "function") {
+    wellKnownPrototypes.set(Array.prototype, { name: "Array", constructor: Array });
+}
+if (typeof ArrayBuffer === "function") {
+    wellKnownPrototypes.set(ArrayBuffer.prototype, { name: "ArrayBuffer", constructor: ArrayBuffer });
+}
+if (typeof Function === "function") {
+    wellKnownPrototypes.set(Function.prototype, { name: "Function", constructor: Function });
+}
+if (typeof Map === "function") {
+    wellKnownPrototypes.set(Map.prototype, { name: "Map", constructor: Map });
+}
+if (typeof Object === "function") {
+    wellKnownPrototypes.set(Object.prototype, { name: "Object", constructor: Object });
+}
+if (typeof Set === "function") {
+    wellKnownPrototypes.set(Set.prototype, { name: "Set", constructor: Set });
+}
+if (typeof Uint8Array === "function") {
+    const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+    const typedArrayConstructor = Object.getPrototypeOf(Uint8Array);
+    if (typedArrayPrototype && typeof typedArrayConstructor === "function") {
+        wellKnownPrototypes.set(typedArrayPrototype, { name: "TypedArray", constructor: typedArrayConstructor });
+    }
+}
+
 function addPrototypeProperties(
     ctx,
     main,
@@ -1128,6 +1157,23 @@ function getConstructorName(
     let firstProto;
     const tmp = obj;
     while (obj || isUndetectableObject(obj)) {
+        const wellKnownPrototypeNameAndConstructor = wellKnownPrototypes.get(obj);
+        if (wellKnownPrototypeNameAndConstructor != null) {
+            const { name, constructor } = wellKnownPrototypeNameAndConstructor;
+            if (isInstanceof(tmp, constructor)) {
+                if (protoProps !== undefined && firstProto !== obj) {
+                    addPrototypeProperties(
+                        ctx,
+                        tmp,
+                        firstProto || tmp,
+                        recurseTimes,
+                        protoProps,
+                    );
+                }
+                return name;
+            }
+        }
+
         const descriptor = Object.getOwnPropertyDescriptor(obj, "constructor");
         if (
             descriptor !== undefined &&
@@ -1511,7 +1557,7 @@ function formatIterator(braces, expectKeyValue, ctx, value, recurseTimes) {
     return formatSetIterInner(ctx, recurseTimes, entries, kIterator);
 }
 
-function getFunctionBase(value, constructor, tag) {
+function getFunctionBase(ctx, value, constructor, tag) {
     const stringified = Function.prototype.toString.call(value);
     const normalizedSource = stringified.trimStart();
     if (stringified.slice(0, 5) === "class" && stringified.endsWith("}")) {
@@ -1548,7 +1594,7 @@ function getFunctionBase(value, constructor, tag) {
     if (value.name === "") {
         base += " (anonymous)";
     } else {
-        base += `: ${value.name}`;
+        base += `: ${typeof value.name === "string" ? value.name : formatValue(ctx, value.name)}`;
     }
     base += "]";
     if (constructor !== type && constructor !== null) {
