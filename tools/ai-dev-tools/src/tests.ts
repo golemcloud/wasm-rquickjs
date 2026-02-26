@@ -12,6 +12,9 @@ export interface SkippedTest {
   isSplit: boolean;
 }
 
+/** Prefix for skip reasons that require manual intervention — the fix loop won't pick these up. */
+export const MANUAL_SKIP_PREFIX = "[manual] ";
+
 /** Return sorted list of vendored test paths (relative to suite/) for a category. */
 export function getVendoredTests(category: string): string[] {
   const suiteRoot = path.join(REPO_ROOT, "tests", "node_compat", "suite");
@@ -40,21 +43,27 @@ export function getSkippedTests(category: string): SkippedTest[] {
       // Split entry: iterate subtests
       for (const [subtestName, subOpts] of Object.entries(opts.subtests)) {
         if (opts.skip || subOpts.skip) {
-          result.push({
-            path: testPath,
-            subtestName,
-            reason: subOpts.reason ?? opts.reason ?? "no reason given",
-            isSplit: true,
-          });
+          const reason = subOpts.reason ?? opts.reason ?? "no reason given";
+          if (!reason.startsWith(MANUAL_SKIP_PREFIX)) {
+            result.push({
+              path: testPath,
+              subtestName,
+              reason,
+              isSplit: true,
+            });
+          }
         }
       }
     } else if (opts.skip) {
-      // Non-split entry
-      result.push({
-        path: testPath,
-        reason: opts.reason ?? "no reason given",
-        isSplit: false,
-      });
+      const reason = opts.reason ?? "no reason given";
+      if (!reason.startsWith(MANUAL_SKIP_PREFIX)) {
+        // Non-split entry
+        result.push({
+          path: testPath,
+          reason,
+          isSplit: false,
+        });
+      }
     }
   }
 

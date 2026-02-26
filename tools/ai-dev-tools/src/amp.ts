@@ -357,6 +357,121 @@ export async function runAmp(
   return { output: result, isError };
 }
 
+export function buildPrioritizePrompt(
+  category: string,
+  skippedTests: { path: string; subtestName?: string; reason: string }[],
+): string {
+  const testList = skippedTests.map((t) => {
+    const label = t.subtestName ? `${t.path}#${t.subtestName}` : t.path;
+    return `- ${label} — ${t.reason}`;
+  }).join("\n");
+
+  return `\
+You are helping prioritize Node.js compatibility tests for the wasm-rquickjs project.
+
+Below is a list of ${skippedTests.length} currently-skipped tests for the '${category}' category.
+Each test has a path and a skip reason explaining why it is currently failing.
+
+## Skipped tests
+${testList}
+
+## Your task
+
+Pick the 10 tests from this list that you think would have the **most impact** on increasing overall test coverage if fixed. Consider:
+- Tests that likely require small or shared fixes (fixing one may fix many)
+- Tests covering core/fundamental APIs that other tests may depend on
+- Tests with reasons suggesting simple missing functionality vs. fundamental impossibility
+- Tests that cover commonly-used Node.js APIs
+
+Respond with EXACTLY a JSON array of the 10 test identifiers (path or path#subtestName) you recommend, ordered from highest to lowest priority. Example:
+
+\`\`\`json
+["parallel/test-foo.js", "parallel/test-bar.js#subtest1", "parallel/test-baz.js"]
+\`\`\`
+
+If there are fewer than 10 skipped tests, include all of them in priority order.
+Respond ONLY with the JSON array, no other text.`;
+}
+
+export async function runAmpPrioritize(
+  prompt: string,
+  category: string,
+): Promise<AmpResult> {
+  const ampLog = path.join(LOG_DIR, `amp-prioritize-${Date.now()}.txt`);
+  console.log(`  ${c.cyan}🤖 Launching amp agent for test prioritization${c.reset}`);
+  console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);
+
+  const logParts: string[] = [];
+  let result = "";
+  let isError = false;
+  const startTime = Date.now();
+
+  try {
+    for await (const message of execute({
+      prompt,
+      options: {
+        cwd: REPO_ROOT,
+        mode: "smart",
+        archive: true,
+        labels: ["fix-node-compat", category, "prioritize"],
+      },
+    })) {
+      if (message.type === "assistant") {
+        for (const content of message.message.content) {
+          if (content.type === "text") {
+            logParts.push(content.text);
+          } else if (content.type === "tool_use") {
+            logParts.push(`[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`);
+          }
+        }
+      } else if (message.type === "result") {
+        if (message.is_error) {
+          logParts.push(`[error] ${message.error}\n`);
+          result = message.error;
+          isError = true;
+        } else {
+          logParts.push(`[result] ${message.result}\n`);
+          result = message.result;
+        }
+      }
+    }
+  } catch (err) {
+    if (result) {
+      logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
+    } else {
+      isError = true;
+      result = err instanceof Error ? err.message : String(err);
+      logParts.push(`[error] ${result}\n`);
+    }
+  }
+
+  if (!isError) {
+    console.log(`  ${c.green}✓ Prioritization complete${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
+  } else {
+    console.log(`  ${c.red}✗ Prioritization failed${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
+  }
+
+  fs.writeFileSync(ampLog, logParts.join(""));
+
+  return { output: result, isError };
+}
+
+export function parsePrioritizeResult(output: string): string[] | null {
+  // Try to extract a JSON array from the output
+  const jsonMatch = output.match(/\[[\s\S]*?\]/);
+  if (!jsonMatch) return null;
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (Array.isArray(parsed) && parsed.every((s) => typeof s === "string")) {
+      return parsed;
+    }
+  } catch {
+    // Fall through
+  }
+  return null;
+}
+
 export function classifyAmpResult(output: string): "FIXED" | "CANNOT_FIX" | "PARTIAL" | "UNCLEAR" {
   const upper = output.toUpperCase();
   if (upper.includes("CANNOT_FIX")) return "CANNOT_FIX";

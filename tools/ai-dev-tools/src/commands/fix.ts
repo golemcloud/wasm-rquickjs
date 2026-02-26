@@ -18,8 +18,10 @@ import {
   runCategoryTestsIncludeIgnored,
   runSingleTest,
   testPathToFilter,
+  MANUAL_SKIP_PREFIX,
+  type SkippedTest,
 } from "../tests.js";
-import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted } from "../amp.js";
+import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted, buildPrioritizePrompt, runAmpPrioritize, parsePrioritizeResult } from "../amp.js";
 import { commitProgress } from "../git.js";
 
 interface FailingTest {
@@ -157,6 +159,64 @@ async function batchCheckSkippedTests(category: string): Promise<number> {
   return nowPassing.length;
 }
 
+/**
+ * Ask an amp agent to pick the 10 highest-impact tests from the skipped list.
+ * Returns a reordered copy of `skipped` with prioritized tests first,
+ * or the original order if the agent fails to respond.
+ */
+async function prioritizeSkippedTests(
+  category: string,
+  skipped: SkippedTest[],
+): Promise<SkippedTest[]> {
+  if (skipped.length <= 1) return skipped;
+
+  console.log("  🧠 Asking amp agent to prioritize next tests...");
+  const prompt = buildPrioritizePrompt(category, skipped);
+  const result = await runAmpPrioritize(prompt, category);
+
+  if (result.isError) {
+    console.log("  ⚠ Prioritization agent failed. Using default order.");
+    return skipped;
+  }
+
+  const prioritized = parsePrioritizeResult(result.output);
+  if (!prioritized || prioritized.length === 0) {
+    console.log("  ⚠ Could not parse prioritization result. Using default order.");
+    return skipped;
+  }
+
+  console.log("  📋 Prioritized order:");
+  for (const label of prioritized) {
+    console.log(`    1. ${label}`);
+  }
+
+  // Build a lookup from label -> SkippedTest
+  const byLabel = new Map<string, SkippedTest>();
+  for (const st of skipped) {
+    const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
+    byLabel.set(label, st);
+  }
+
+  // Reorder: prioritized tests first, then the rest in original order
+  const reordered: SkippedTest[] = [];
+  const used = new Set<string>();
+  for (const label of prioritized) {
+    const st = byLabel.get(label);
+    if (st && !used.has(label)) {
+      reordered.push(st);
+      used.add(label);
+    }
+  }
+  for (const st of skipped) {
+    const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
+    if (!used.has(label)) {
+      reordered.push(st);
+    }
+  }
+
+  return reordered;
+}
+
 export async function fixCommand(category: string): Promise<void> {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
@@ -223,23 +283,45 @@ export async function fixCommand(category: string): Promise<void> {
   console.log();
 
   let iteration = 0;
+  let priorityQueue: SkippedTest[] = [];
   while (true) {
     iteration++;
 
-    // Before the first iteration and every 10th iteration, batch-check all skipped tests
+    // Before the first iteration and every 10th iteration, batch-check and re-prioritize
     if (iteration === 1 || iteration % 10 === 1) {
       console.log();
       console.log("── Batch check: looking for skipped tests that already pass ──");
       await batchCheckSkippedTests(category);
       console.log();
+
+      // Re-prioritize the remaining skipped tests
+      const freshSkipped = getSkippedTests(category);
+      priorityQueue = await prioritizeSkippedTests(category, freshSkipped);
+      console.log();
     }
 
+    // Refresh the skipped list and intersect with priority queue to remove stale entries
     const skipped = getSkippedTests(category);
     const passing = getEnabledTestCount(category);
 
     if (skipped.length === 0) {
       console.log(`🎉 All ${passing} tests for '${category}' are passing! Nothing left to fix.`);
       break;
+    }
+
+    // Build a set of currently-skipped labels for quick lookup
+    const skippedLabels = new Set(
+      skipped.map((st) => (st.subtestName ? `${st.path}#${st.subtestName}` : st.path)),
+    );
+    // Remove stale entries from priority queue
+    priorityQueue = priorityQueue.filter((st) => {
+      const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
+      return skippedLabels.has(label);
+    });
+
+    // If priority queue is empty (all prioritized tests were handled), fall back to skipped order
+    if (priorityQueue.length === 0) {
+      priorityQueue = skipped;
     }
 
     console.log("───────────────────────────────────────────────────────────────");
@@ -254,7 +336,7 @@ export async function fixCommand(category: string): Promise<void> {
     }
     console.log();
 
-    const target = skipped[0];
+    const target = priorityQueue[0];
     const targetLabel = target.subtestName ? `${target.path}#${target.subtestName}` : target.path;
     console.log(`▶ Attempting to fix: ${targetLabel}`);
     console.log(`  Current skip reason: ${target.reason}`);
@@ -312,13 +394,19 @@ export async function fixCommand(category: string): Promise<void> {
     }
 
     if (!hasChanges && result !== "CANNOT_FIX") {
-      console.log("  ℹ Amp made no code changes. Skipping verification and moving on.");
+      console.log("  ℹ Amp made no code changes. Marking for manual review.");
+      if (target.subtestName) {
+        skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp made no code changes");
+      } else {
+        updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp made no code changes");
+      }
+      await commitProgress(category, target.path);
       console.log();
       continue;
     }
 
     if (result === "CANNOT_FIX") {
-      const reasonNew = extractCannotFixReason(ampOutput);
+      const reasonNew = MANUAL_SKIP_PREFIX + extractCannotFixReason(ampOutput);
       console.log(`  ⏭ Test cannot be fixed: ${reasonNew}`);
       if (target.subtestName) {
         skipSubtestInConfig(target.path, target.subtestName, reasonNew);
@@ -351,9 +439,9 @@ export async function fixCommand(category: string): Promise<void> {
         // Revert: re-skip the test since it or something else is failing
         console.log("  ❌ Tests failed after enabling. Reverting to skipped.");
         if (target.subtestName) {
-          skipSubtestInConfig(target.path, target.subtestName, "amp fix attempt failed verification");
+          skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
         } else {
-          updateSkipReason(target.path, "amp fix attempt failed verification");
+          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
         }
       }
     } else if (result === "PARTIAL") {
@@ -362,7 +450,13 @@ export async function fixCommand(category: string): Promise<void> {
       if (regrOk) {
         console.log("  ✅ No regressions from partial changes.");
       } else {
-        throw new Error("Regressions from partial changes! Stopping.");
+        console.log("  ❌ Regressions from partial changes. Reverting...");
+        execSync("git checkout HEAD -- .", { cwd: REPO_ROOT, stdio: "pipe" });
+        if (target.subtestName) {
+          skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp partial fix caused regressions");
+        } else {
+          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp partial fix caused regressions");
+        }
       }
     } else {
       // UNCLEAR
@@ -380,7 +474,13 @@ export async function fixCommand(category: string): Promise<void> {
           }
         }
       } else {
-        throw new Error("Regressions detected. Stopping.");
+        console.log("  ❌ Regressions detected. Reverting...");
+        execSync("git checkout HEAD -- .", { cwd: REPO_ROOT, stdio: "pipe" });
+        if (target.subtestName) {
+          skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix caused regressions");
+        } else {
+          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix caused regressions");
+        }
       }
     }
 
