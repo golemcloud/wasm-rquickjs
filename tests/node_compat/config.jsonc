@@ -384,7 +384,10 @@
         "block_36_block_36": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_37_without_it": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_38_test_boxed_primitives_with_own_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_39_test_set": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_39_test_set": {
+          "skip": true,
+          "reason": "[manual] amp made no code changes"
+        },
         "block_40_test_circular_set": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_41_test_map": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_42_test_circular_map": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
