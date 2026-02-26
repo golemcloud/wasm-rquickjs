@@ -37,208 +37,21 @@ import { getProxyDetails as getProxyDetailsNative } from '__wasm_rquickjs_builti
 
 import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
 
-var _ObjectKeys = Object.keys;
-var _ObjectGetOwnPropertyNames = Object.getOwnPropertyNames;
-var _ObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
-var _ObjectGetOwnPropertySymbols = Object.getOwnPropertySymbols;
-var _ObjectGetPrototypeOf = Object.getPrototypeOf;
-var _ObjectPrototypeToString = Object.prototype.toString;
-var _ObjectPrototypeHasOwnProperty = Object.prototype.hasOwnProperty;
-var _ObjectDefineProperty = Object.defineProperty;
-var _ObjectSetPrototypeOf = Object.setPrototypeOf;
-var _ObjectIs = Object.is;
-var _ArrayIsArray = Array.isArray;
-var _ArrayBufferIsView = ArrayBuffer.isView;
-var _JSONStringify = JSON.stringify;
-var _RegExpPrototypeToString = RegExp.prototype.toString;
-var _DatePrototypeToISOString = Date.prototype.toISOString;
-var _DatePrototypeGetTime = Date.prototype.getTime;
-var _ErrorPrototypeToString = Error.prototype.toString;
-var _NumberIsInteger = Number.isInteger;
-var _NumberPrototypeValueOf = Number.prototype.valueOf;
-var _StringPrototypeValueOf = String.prototype.valueOf;
-var _StringPrototypeToWellFormed = String.prototype.toWellFormed;
-var _BooleanPrototypeValueOf = Boolean.prototype.valueOf;
+const _ObjectPrototypeToString = Object.prototype.toString;
+const _ArrayIsArray = Array.isArray;
+const _DatePrototypeGetTime = Date.prototype.getTime;
 
-var _TypedArrayToStringTagGetter = (function() {
+const _TypedArrayToStringTagGetter = (function() {
     try {
-        var typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype);
-        var desc = Object.getOwnPropertyDescriptor(typedArrayProto, Symbol.toStringTag);
+        const typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype);
+        const desc = Object.getOwnPropertyDescriptor(typedArrayProto, Symbol.toStringTag);
         return desc && typeof desc.get === 'function' ? desc.get : null;
     } catch (_) {
         return null;
     }
 })();
 
-var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors ||
-    function getOwnPropertyDescriptors(obj) {
-        var keys = Object.keys(obj);
-        var descriptors = {};
-        for (var i = 0; i < keys.length; i++) {
-            descriptors[keys[i]] = Object.getOwnPropertyDescriptor(obj, keys[i]);
-        }
-        return descriptors;
-    };
-
-var formatRegExp = /%[sdjifoOc%]/g;
-
-var _circularErrorMessage;
-try {
-    var _circObj = {}; _circObj._c = _circObj; JSON.stringify(_circObj);
-} catch(_circErr) {
-    _circularErrorMessage = _circErr.message.split('\n', 1)[0];
-}
-
-function _addNumericSeparator(intStr) {
-    var result = '';
-    var i = intStr.length;
-    var start = intStr.charAt(0) === '-' ? 1 : 0;
-    for (; i >= start + 4; i -= 3) {
-        result = '_' + intStr.slice(i - 3, i) + result;
-    }
-    return (i === intStr.length) ? intStr : intStr.slice(0, i) + result;
-}
-
-function _addNumericSeparatorEnd(intStr) {
-    var result = '';
-    var i = 0;
-    for (; i < intStr.length - 3; i += 3) {
-        result += intStr.slice(i, i + 3) + '_';
-    }
-    return (i === 0) ? intStr : result + intStr.slice(i);
-}
-
-function _formatNumberWithSep(num, sep) {
-    if (Object.is(num, -0)) return '-0';
-    var str = String(num);
-    if (!sep) return str;
-    if (!Number.isFinite(num) || str.indexOf('e') !== -1) return str;
-    var integer = Math.trunc(num);
-    var intStr = String(integer);
-    if (integer === num) {
-        return _addNumericSeparator(intStr);
-    }
-    if (Number.isNaN(num)) return intStr;
-    return _addNumericSeparator(intStr) + '.' +
-        _addNumericSeparatorEnd(str.slice(intStr.length + 1));
-}
-
-function _formatBigIntWithSep(bigint, sep) {
-    var str = String(bigint);
-    if (!sep) return str + 'n';
-    return _addNumericSeparator(str) + 'n';
-}
-
-function _tryStringify(arg) {
-    try {
-        return JSON.stringify(arg);
-    } catch(err) {
-        if (err.name === 'TypeError' && _circularErrorMessage &&
-            err.message.split('\n', 1)[0] === _circularErrorMessage) {
-            return '[Circular]';
-        }
-        throw err;
-    }
-}
-
-function formatWithInspectOptions(inspectOptions, f) {
-    var tempArgs = [];
-    for (var a = 2; a < arguments.length; a++) {
-        tempArgs.push(arguments[a]);
-    }
-    var args = tempArgs;
-    var len = args.length;
-
-    if (!isString(f)) {
-        var objects = [];
-        objects.push(typeof f !== 'string' ? inspect(f, inspectOptions) : f);
-        for (var i = 0; i < len; i++) {
-            objects.push(typeof args[i] !== 'string' ? inspect(args[i], inspectOptions) : args[i]);
-        }
-        return objects.join(' ');
-    }
-
-    var numSep = (inspectOptions && inspectOptions.numericSeparator !== undefined)
-        ? inspectOptions.numericSeparator
-        : (inspect.defaultOptions && inspect.defaultOptions.numericSeparator) || false;
-    var i = 0;
-    var str = String(f).replace(formatRegExp, function(x) {
-        if (x === '%%') return '%';
-        if (i >= len) return x;
-        switch (x) {
-            case '%s': {
-                var val = args[i++];
-                if (typeof val === 'number') {
-                    return _formatNumberWithSep(val, numSep);
-                } else if (typeof val === 'bigint') {
-                    return _formatBigIntWithSep(val, numSep);
-                } else if (typeof val === 'object' && val !== null || typeof val === 'function') {
-                    var hasCustomToString = false;
-                    try {
-                        hasCustomToString = typeof val.toString === 'function' && val.toString !== Object.prototype.toString;
-                    } catch(e) {}
-                    if (hasCustomToString) {
-                        try {
-                            var result = String(val);
-                            if (result !== '[object Object]') {
-                                return result;
-                            }
-                        } catch(e) {}
-                    }
-                    return inspect(val, Object.assign({}, inspectOptions, { compact: 3, colors: false, depth: 0 }));
-                } else if (typeof val === 'symbol') {
-                    return val.toString();
-                }
-                return String(val);
-            }
-            case '%d': {
-                var val = args[i++];
-                if (typeof val === 'bigint') {
-                    return _formatBigIntWithSep(val, numSep);
-                } else if (typeof val === 'symbol') {
-                    return 'NaN';
-                }
-                return _formatNumberWithSep(Number(val), numSep);
-            }
-            case '%i': {
-                var val = args[i++];
-                if (typeof val === 'bigint') {
-                    return _formatBigIntWithSep(val, numSep);
-                } else if (typeof val === 'symbol') {
-                    return 'NaN';
-                }
-                return _formatNumberWithSep(parseInt(val), numSep);
-            }
-            case '%f': {
-                var val = args[i++];
-                if (typeof val === 'symbol') {
-                    return 'NaN';
-                }
-                if (typeof val === 'bigint') {
-                    return String(Number(val));
-                }
-                var num = parseFloat(val);
-                if (Object.is(num, -0)) return '-0';
-                return String(num);
-            }
-            case '%j':
-                return _tryStringify(args[i++]);
-            case '%o':
-                return inspect(args[i++], Object.assign({}, inspectOptions, { showHidden: true, showProxy: true, depth: 4 }));
-            case '%O':
-                return inspect(args[i++], Object.assign({}, inspectOptions, { depth: 4 }));
-            case '%c':
-                i++;
-                return '';
-            default:
-                return x;
-        }
-    });
-    for (var x = args[i]; i < len; x = args[++i]) {
-        str += ' ' + (typeof x !== 'string' ? inspect(x, inspectOptions) : x);
-    }
-    return str;
-}
+const getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
 
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
@@ -246,15 +59,15 @@ function formatWithInspectOptions(inspectOptions, f) {
 export const deprecate = _internalDeprecate;
 
 
-var debugs = {};
-var debugEnvRegex = /^$/;
+const debugs = {};
+const debugEnvRegex = /^$/;
 
 export const debuglog = function(set) {
     set = set.toUpperCase();
     if (!debugs[set]) {
         if (debugEnvRegex.test(set)) {
             debugs[set] = function() {
-                var msg = format.apply(null, arguments);
+                const msg = format.apply(null, arguments);
                 console.error('%s: %s', set, msg);
             };
         } else {
@@ -264,620 +77,6 @@ export const debuglog = function(set) {
     return debugs[set];
 };
 
-
-/**
- * Echos the value of a value. Trys to print the value out
- * in the best way possible given the different types.
- *
- * @param {Object} obj The object to print out.
- * @param {Object} opts Optional options object that alters the output.
- */
-/* legacy: obj, showHidden, depth, colors*/
-// inspect is now delegated to the internal implementation (see bottom of file)
-// This old implementation is kept as _legacyInspect for internal use by debuglog etc.
-function _legacyInspect(obj, opts) {
-    // default options
-    var ctx = {
-        seen: [],
-        stylize: stylizeNoColor,
-        circular: new Map(),
-        circularCounter: { value: 0 }
-    };
-    // legacy...
-    if (arguments.length >= 3) ctx.depth = arguments[2];
-    if (arguments.length >= 4) ctx.colors = arguments[3];
-    if (isBoolean(opts)) {
-        // legacy...
-        ctx.showHidden = opts;
-    } else if (opts) {
-        // got an "options" object
-        _extend(ctx, opts);
-    }
-    // set default options
-    if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
-    if (isUndefined(ctx.depth)) ctx.depth = 2;
-    if (isUndefined(ctx.colors)) ctx.colors = false;
-    if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
-    if (ctx.colors) ctx.stylize = stylizeWithColor;
-    ctx.compact = opts && opts.compact !== undefined ? opts.compact : 3;
-    ctx.sorted = opts && opts.sorted || false;
-    return formatValue(ctx, obj, ctx.depth);
-}
-
-// inspect.colors, inspect.styles, and inspect.defaultOptions are provided by the
-// internal inspect implementation imported at the top of this file.
-
-function stylizeWithColor(str, styleType) {
-    var style = inspect.styles[styleType];
-
-    if (style) {
-        return '\u001b[' + inspect.colors[style][0] + 'm' + str +
-            '\u001b[' + inspect.colors[style][1] + 'm';
-    } else {
-        return str;
-    }
-}
-
-
-function stylizeNoColor(str, styleType) {
-    return str;
-}
-
-
-function arrayToHash(array) {
-    var hash = {};
-
-    array.forEach(function(val, idx) {
-        hash[val] = true;
-    });
-
-    return hash;
-}
-
-
-function getCircularRef(ctx, value) {
-    if (!ctx.circular.has(value)) {
-        ctx.circularCounter.value++;
-        ctx.circular.set(value, ctx.circularCounter.value);
-    }
-    return ctx.circular.get(value);
-}
-
-function formatValue(ctx, value, recurseTimes) {
-    // Detect revoked proxies early: any property access on a revoked proxy
-    // throws TypeError. We catch this and return a safe representation.
-    if (value !== null && (typeof value === 'object' || typeof value === 'function')) {
-        try {
-            Object.getPrototypeOf(value);
-        } catch (err) {
-            if (err instanceof TypeError && typeof err.message === 'string' &&
-                /revoked/i.test(err.message) && /proxy/i.test(err.message)) {
-                return ctx.stylize('<Revoked Proxy>', 'special');
-            }
-            throw err;
-        }
-    }
-
-    // Provide a hook for user-specified inspect functions.
-    // Check that value is an object with an inspect function on it
-    // Skip custom inspect for TypedArrays/Buffers — use built-in formatting
-    var skipCustomInspect = value && _ArrayBufferIsView(value) && !(value instanceof DataView);
-    if (!skipCustomInspect &&
-        ctx.customInspect &&
-        value &&
-        isFunction(value.inspect) &&
-        // Filter out the util module, it's inspect function is special
-        value.inspect !== inspect &&
-        // Also filter out any prototype objects using the circular check.
-        !(value.constructor && value.constructor.prototype === value)) {
-        var ret = value.inspect(recurseTimes, ctx);
-        if (!isString(ret)) {
-            ret = formatValue(ctx, ret, recurseTimes);
-        }
-        return ret;
-    }
-
-    // Primitive types cannot have properties
-    var primitive = formatPrimitive(ctx, value);
-    if (primitive) {
-        return primitive;
-    }
-
-    // Look up the keys of the object.
-    var keys = _ObjectKeys(value);
-
-    // For TypedArrays, filter out numeric index keys (handled separately)
-    var isTypedArrKeys = _ArrayBufferIsView(value) && !(value instanceof DataView);
-    if (isTypedArrKeys) {
-        keys = keys.filter(function(key) { return !key.match(/^\d+$/); });
-    }
-
-    var visibleKeys = arrayToHash(keys);
-
-    if (ctx.sorted) {
-        keys.sort();
-    }
-
-    if (ctx.showHidden) {
-        keys = _ObjectGetOwnPropertyNames(value);
-        // Also include getter/setter properties from prototype chain
-        if (ctx.getters) {
-            var proto = Object.getPrototypeOf(value);
-            while (proto && proto !== Object.prototype) {
-                var protoNames = Object.getOwnPropertyNames(proto);
-                for (var pi = 0; pi < protoNames.length; pi++) {
-                    var pn = protoNames[pi];
-                    if (pn !== 'constructor' && keys.indexOf(pn) === -1) {
-                        var pd = Object.getOwnPropertyDescriptor(proto, pn);
-                        if (pd && (pd.get || pd.set)) {
-                            keys.push(pn);
-                        }
-                    }
-                }
-                proto = Object.getPrototypeOf(proto);
-            }
-        }
-    }
-
-    // IE doesn't make error fields non-enumerable
-    // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
-    if (isError(value)
-        && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
-        keys = keys.filter(function(key) {
-            return key !== 'message' && key !== 'description';
-        });
-        if (hasOwnProperty(value, 'cause') && keys.indexOf('cause') === -1) {
-            keys.push('cause');
-        }
-        visibleKeys = arrayToHash(keys);
-        if (keys.length === 0) {
-            return formatError(value);
-        }
-    }
-
-    // For errors, ensure 'cause' is included in keys if present and formatted with brackets
-    if (isError(value) && hasOwnProperty(value, 'cause')) {
-        if (keys.indexOf('cause') === -1) {
-            keys.push('cause');
-        }
-        delete visibleKeys['cause'];
-    }
-
-    // Some type of object without properties can be shortcutted.
-    // But Maps, Sets, WeakMaps, WeakSets need special handling since they don't have enumerable properties
-    if (keys.length === 0 && !isMap(value) && !isSet(value) && !isWeakMap(value) && !isWeakSet(value) && !isTypedArrKeys) {
-        if (isFunction(value)) {
-            var name = value.name ? ': ' + value.name : ' (anonymous)';
-            return ctx.stylize('[Function' + name + ']', 'special');
-        }
-        if (isRegExp(value)) {
-            return ctx.stylize(_RegExpPrototypeToString.call(value), 'regexp');
-        }
-        if (isDate(value)) {
-            return ctx.stylize(_DatePrototypeToISOString.call(value), 'date');
-        }
-        if (isError(value)) {
-            return formatError(value);
-        }
-    }
-    
-    // Handle empty Maps
-    if (isMap(value) && value.size === 0) {
-        return ctx.stylize('Map(0) {}', 'special');
-    }
-    
-    // Handle empty Sets
-    if (isSet(value) && value.size === 0) {
-        return ctx.stylize('Set(0) {}', 'special');
-    }
-    
-    // Handle WeakSets
-    if (isWeakSet(value)) {
-        return ctx.stylize('WeakSet { <items unknown> }', 'special');
-    }
-    
-    // Handle WeakMaps
-    if (isWeakMap(value)) {
-        return ctx.stylize('WeakMap { <items unknown> }', 'special');
-    }
-
-    var base = '', array = false, typedArray = false, braces = ['{', '}'];
-
-    // Detect TypedArray/Buffer before generic object handling
-    var isTypedArr = _ArrayBufferIsView(value) && !(value instanceof DataView);
-    var isBuf = typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(value);
-
-    // Make Array say that they are Array
-    if (isArray(value) && !isTypedArr) {
-        array = true;
-        braces = ['[', ']'];
-    }
-
-    // TypedArray / Buffer formatting
-    if (isTypedArr) {
-        typedArray = true;
-        var typedName = value.constructor ? value.constructor.name : 'TypedArray';
-        if (isBuf) {
-            braces = ['Buffer(' + value.length + ') [Uint8Array] [', ']'];
-        } else {
-            braces = [typedName + '(' + value.length + ') [', ']'];
-        }
-    }
-
-    // Make functions say that they are functions
-    if (isFunction(value)) {
-        var n = value.name ? ': ' + value.name : ' (anonymous)';
-        base = ' [Function' + n + ']';
-    }
-
-    // Make RegExps say that they are RegExps
-    if (isRegExp(value)) {
-        var regStr = _RegExpPrototypeToString.call(value);
-        var regCtor = value.constructor;
-        if (regCtor && regCtor.name && regCtor.name !== 'RegExp') {
-            base = ' ' + regCtor.name + ' ' + regStr;
-        } else {
-            base = ' ' + regStr;
-        }
-    }
-
-    // Make dates with properties first say the date
-    if (isDate(value)) {
-        var dateStr = _DatePrototypeToISOString.call(value);
-        var dateCtor = value.constructor;
-        if (dateCtor && dateCtor.name && dateCtor.name !== 'Date') {
-            base = ' ' + dateCtor.name + ' ' + dateStr;
-        } else {
-            base = ' ' + dateStr;
-        }
-    }
-
-    // Make maps with properties first say the map size
-    if (isMap(value)) {
-        base = 'Map(' + value.size + ')';
-        braces = [' { ', ' }'];
-    }
-
-    // Make sets with properties first say the set size
-    if (isSet(value)) {
-        base = 'Set(' + value.size + ')';
-        braces = [' { ', ' }'];
-    }
-
-    // Make error with message first say the error
-    if (isError(value)) {
-        braces = [formatError(value) + ' {', '}'];
-        base = '';
-    }
-
-    // Show constructor name for non-plain objects (like fake Date, custom classes)
-    if (base === '' && !array && !typedArray && !isError(value)) {
-        var proto = _ObjectGetPrototypeOf(value);
-        var ctor = value.constructor;
-        if (proto === null) {
-            var ctorName = ctor && ctor.name ? ctor.name : '';
-            var tag = value[Symbol.toStringTag];
-            if (!ctorName && tag) ctorName = tag;
-            if (ctorName) {
-                braces = ['[' + ctorName + ': null prototype] {', '}'];
-            } else {
-                braces = ['[Object: null prototype] {', '}'];
-            }
-        } else if (ctor && ctor.name && ctor.name !== 'Object') {
-            braces = [ctor.name + ' {', '}'];
-        }
-    }
-
-    if (keys.length === 0 && (!array || value.length == 0) && !isMap(value) && !isSet(value) && !typedArray) {
-        return braces[0] + base + braces[1];
-    }
-
-    if (typedArray && value.length === 0 && keys.length === 0) {
-        return braces[0] + braces[1];
-    }
-
-    if (recurseTimes < 0 || ctx.seen.length > 50) {
-        if (isRegExp(value)) {
-            return ctx.stylize(_RegExpPrototypeToString.call(value), 'regexp');
-        } else if (_ArrayIsArray(value)) {
-            return ctx.stylize('[Array]', 'special');
-        } else {
-            return ctx.stylize('[Object]', 'special');
-        }
-    }
-
-    ctx.seen.push(value);
-
-    var output;
-    if (typedArray) {
-        output = formatTypedArray(ctx, value, recurseTimes, visibleKeys, keys);
-    } else if (array) {
-        output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
-    } else if (isMap(value)) {
-        output = formatMap(ctx, value, recurseTimes);
-    } else if (isSet(value)) {
-        output = formatSet(ctx, value, recurseTimes);
-    } else {
-        output = keys.map(function(key) {
-            return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
-        });
-    }
-
-    ctx.seen.pop();
-
-    var result = reduceToSingleString(output, base, braces, ctx);
-    if (ctx.circular.has(value)) {
-        result = '<ref *' + ctx.circular.get(value) + '> ' + result;
-    }
-    return result;
-}
-
-
-function formatPrimitive(ctx, value) {
-    if (isUndefined(value))
-        return ctx.stylize('undefined', 'undefined');
-    if (isString(value)) {
-        var strEsc = function(s) {
-            return '\'' + _JSONStringify(s).replace(/^"|"$/g, '')
-                .replace(/'/g, "\\'")
-                .replace(/\\"/g, '"') + '\'';
-        };
-        if (ctx.compact !== true &&
-            value.length > 5 &&
-            value.indexOf('\n') !== -1 &&
-            value.length > (ctx.breakLength || 80) - 4) {
-            var parts = value.split(/(?<=\n)/);
-            var joined = parts.map(function(part) {
-                return ctx.stylize(strEsc(part), 'string');
-            }).join(' +\n    ');
-            return joined;
-        }
-        return ctx.stylize(strEsc(value), 'string');
-    }
-    if (isNumber(value)) {
-        if (Object.is(value, -0)) return ctx.stylize('-0', 'number');
-        return ctx.stylize('' + value, 'number');
-    }
-    if (isBoolean(value))
-        return ctx.stylize('' + value, 'boolean');
-    if (typeof value === 'bigint')
-        return ctx.stylize(value + 'n', 'number');
-    if (typeof value === 'symbol')
-        return ctx.stylize(value.toString(), 'symbol');
-    // For some reason typeof null is "object", so special case here.
-    if (isNull(value))
-        return ctx.stylize('null', 'null');
-}
-
-
-function formatError(value) {
-    return '[' + _ErrorPrototypeToString.call(value) + ']';
-}
-
-
-function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
-     var output = [];
-     for (var i = 0, l = value.length; i < l; ++i) {
-         if (hasOwnProperty(value, String(i))) {
-             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-                 String(i), true));
-         } else {
-             output.push('');
-         }
-     }
-     keys.forEach(function(key) {
-         if (!key.match(/^\d+$/)) {
-             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-                 key, true));
-         }
-     });
-     return output;
- }
-
-
- function formatTypedArray(ctx, value, recurseTimes, visibleKeys, keys) {
-     var output = [];
-     for (var i = 0; i < value.length; i++) {
-         output.push(ctx.stylize(String(value[i]), 'number'));
-     }
-     // Add non-index own properties
-     keys.forEach(function(key) {
-         if (!key.match(/^\d+$/)) {
-             output.push(formatProperty(ctx, value, recurseTimes, visibleKeys, key, true));
-         }
-     });
-     return output;
- }
-
- function formatMap(ctx, value, recurseTimes) {
-     var output = [];
-     var entries = value.entries();
-     var entry;
-     while (!(entry = entries.next()).done) {
-         var key = entry.value[0];
-         var val = entry.value[1];
-         var keyStr, valStr;
-         
-         if (ctx.seen.indexOf(key) < 0) {
-             if (isNull(recurseTimes)) {
-                 keyStr = formatValue(ctx, key, null);
-             } else {
-                 keyStr = formatValue(ctx, key, recurseTimes - 1);
-             }
-         } else {
-             keyStr = ctx.stylize('[Circular *' + getCircularRef(ctx, key) + ']', 'special');
-         }
-         
-         if (ctx.seen.indexOf(val) < 0) {
-             if (isNull(recurseTimes)) {
-                 valStr = formatValue(ctx, val, null);
-             } else {
-                 valStr = formatValue(ctx, val, recurseTimes - 1);
-             }
-         } else {
-             valStr = ctx.stylize('[Circular *' + getCircularRef(ctx, val) + ']', 'special');
-         }
-         
-         output.push(keyStr + ' => ' + valStr);
-     }
-     return output;
- }
-
-
- function formatSet(ctx, value, recurseTimes) {
-     var output = [];
-     var values = value.values();
-     var item;
-     while (!(item = values.next()).done) {
-         var val = item.value;
-         var valStr;
-         
-         if (ctx.seen.indexOf(val) < 0) {
-             if (isNull(recurseTimes)) {
-                 valStr = formatValue(ctx, val, null);
-             } else {
-                 valStr = formatValue(ctx, val, recurseTimes - 1);
-             }
-         } else {
-             valStr = ctx.stylize('[Circular *' + getCircularRef(ctx, val) + ']', 'special');
-         }
-         
-         output.push(valStr);
-     }
-     return output;
- }
-
-
-function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
-    var name, str, desc;
-    desc = _ObjectGetOwnPropertyDescriptor(value, key);
-    if (!desc) {
-        // Look up prototype chain for getter/setter descriptors
-        var p = Object.getPrototypeOf(value);
-        while (p && !desc) {
-            desc = _ObjectGetOwnPropertyDescriptor(p, key);
-            p = Object.getPrototypeOf(p);
-        }
-        if (!desc) {
-            desc = { value: value[key] };
-        }
-    }
-    if (desc.get) {
-        var label = desc.set ? 'Getter/Setter' : 'Getter';
-        if (ctx.getters === true || ctx.getters === 'get') {
-            try {
-                var getterVal = desc.get.call(value);
-                if (ctx.seen.indexOf(getterVal) >= 0) {
-                    str = ctx.stylize('[' + label + ']', 'special') + ' ' + ctx.stylize('[Circular *' + getCircularRef(ctx, getterVal) + ']', 'special');
-                } else {
-                    var valStr;
-                    if (isNull(recurseTimes)) {
-                        valStr = formatValue(ctx, getterVal, null);
-                    } else {
-                        valStr = formatValue(ctx, getterVal, recurseTimes - 1);
-                    }
-                    if (typeof getterVal === 'object' && getterVal !== null || typeof getterVal === 'function') {
-                        str = ctx.stylize('[' + label + ']', 'special') + ' ' + valStr;
-                    } else {
-                        str = ctx.stylize('[' + label + ': ' + valStr + ']', 'special');
-                    }
-                }
-            } catch(e) {
-                str = ctx.stylize('[' + label + ': <Inspection threw (' + e.message + ')>]', 'special');
-            }
-        } else {
-            str = ctx.stylize('[' + label + ']', 'special');
-        }
-    } else {
-        if (desc.set) {
-            str = ctx.stylize('[Setter]', 'special');
-        }
-    }
-    if (!hasOwnProperty(visibleKeys, key)) {
-        name = '[' + key + ']';
-    }
-    if (!str) {
-        if (ctx.seen.indexOf(desc.value) < 0) {
-            if (isNull(recurseTimes)) {
-                str = formatValue(ctx, desc.value, null);
-            } else {
-                str = formatValue(ctx, desc.value, recurseTimes - 1);
-            }
-            if (str.indexOf('\n') > -1) {
-                // Don't re-indent multi-line string concatenation format ('...' +\n    '...')
-                // as formatPrimitive already handles the indentation
-                var isMultiLineStringConcat = str.indexOf("' +\n") !== -1 || str.indexOf("\" +\n") !== -1;
-                if (!isMultiLineStringConcat) {
-                    if (array) {
-                        str = str.split('\n').map(function(line) {
-                            return '  ' + line;
-                        }).join('\n').slice(2);
-                    } else {
-                        str = str.split('\n').map(function(line, idx) {
-                            return idx === 0 ? line : '  ' + line;
-                        }).join('\n');
-                    }
-                }
-            }
-        } else {
-            str = ctx.stylize('[Circular *' + getCircularRef(ctx, desc.value) + ']', 'special');
-        }
-    }
-    if (isUndefined(name)) {
-        if (array && key.match(/^\d+$/)) {
-            return str;
-        }
-        name = _JSONStringify('' + key);
-        if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
-            name = name.slice(1, -1);
-            name = ctx.stylize(name, 'name');
-        } else {
-            name = name.replace(/'/g, "\\'")
-                .replace(/\\"/g, '"')
-                .replace(/(^"|"$)/g, "'");
-            name = ctx.stylize(name, 'string');
-        }
-    }
-
-    return name + ': ' + str;
-}
-
-
-function reduceToSingleString(output, base, braces, ctx) {
-     var numLinesEst = 0;
-     var length = output.reduce(function(prev, cur) {
-         numLinesEst++;
-         if (cur.indexOf('\n') >= 0) numLinesEst++;
-         return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
-     }, 0);
-
-     // Special handling for Maps and Sets where base starts with 'Map(' or 'Set('
-     var isMaporSet = base && (base.indexOf('Map(') === 0 || base.indexOf('Set(') === 0);
-     
-     if ((ctx && ctx.compact === false) || length > 60) {
-          if (isMaporSet) {
-              if (ctx && ctx.compact === false) {
-                  return base + ' {\n  ' +
-                      output.join(',\n  ') +
-                      '\n}';
-              }
-              return base + ' { ' +
-                  output.join(', ') +
-                  ' }';
-          }
-          var prefix = base ? base.replace(/^ /, '') + ' ' : '';
-          return prefix + braces[0] +
-              '\n  ' +
-              output.join(',\n  ') +
-              '\n' +
-              braces[1];
-      }
-
-     if (isMaporSet) {
-         return base + ' { ' + output.join(', ') + ' }';
-     }
-     return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
- }
 
 export function isArray(ar) {
     return _ArrayIsArray(ar);
@@ -948,38 +147,7 @@ export function isFunction(arg) {
 }
 
 export function toUSVString(input) {
-    var str = String(input);
-    if (typeof _StringPrototypeToWellFormed === 'function') {
-        return _StringPrototypeToWellFormed.call(str);
-    }
-
-    var result = '';
-    for (var i = 0; i < str.length; i++) {
-        var code = str.charCodeAt(i);
-
-        if (code >= 0xD800 && code <= 0xDBFF) {
-            if (i + 1 < str.length) {
-                var next = str.charCodeAt(i + 1);
-                if (next >= 0xDC00 && next <= 0xDFFF) {
-                    result += str.charAt(i) + str.charAt(i + 1);
-                    i++;
-                    continue;
-                }
-            }
-
-            result += '\uFFFD';
-            continue;
-        }
-
-        if (code >= 0xDC00 && code <= 0xDFFF) {
-            result += '\uFFFD';
-            continue;
-        }
-
-        result += str.charAt(i);
-    }
-
-    return result;
+    return String(input).toWellFormed();
 }
 
 export function isPrimitive(arg) {
@@ -1005,13 +173,13 @@ function pad(n) {
 }
 
 
-var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
     'Oct', 'Nov', 'Dec'];
 
 // 26 Feb 16:19:34
 function timestamp() {
-    var d = new Date();
-    var time = [pad(d.getHours()),
+    const d = new Date();
+    const time = [pad(d.getHours()),
         pad(d.getMinutes()),
         pad(d.getSeconds())].join(':');
     return [d.getDate(), months[d.getMonth()], time].join(' ');
@@ -1027,27 +195,23 @@ export const _extend = function(origin, add) {
     // Don't do anything if add isn't an object
     if (!add || !isObject(add)) return origin;
 
-    var keys = Object.keys(add);
-    var i = keys.length;
+    const keys = Object.keys(add);
+    let i = keys.length;
     while (i--) {
         origin[keys[i]] = add[keys[i]];
     }
     return origin;
 };
 
-function hasOwnProperty(obj, prop) {
-    return _ObjectPrototypeHasOwnProperty.call(obj, prop);
-}
-
-var kCustomPromisifiedSymbol = typeof Symbol !== 'undefined' ? Symbol.for('nodejs.util.promisify.custom') : undefined;
-var kCustomPromisifyArgsSymbol = typeof Symbol !== 'undefined' ? Symbol.for('nodejs.util.promisify.customArgs') : undefined;
+const kCustomPromisifiedSymbol = Symbol.for('nodejs.util.promisify.custom');
+const kCustomPromisifyArgsSymbol = Symbol.for('nodejs.util.promisify.customArgs');
 
 export const promisify = function promisify(original) {
     if (typeof original !== 'function')
         throw new ERR_INVALID_ARG_TYPE('original', 'Function', original);
 
-    if (kCustomPromisifiedSymbol && original[kCustomPromisifiedSymbol]) {
-        var fn = original[kCustomPromisifiedSymbol];
+    if (original[kCustomPromisifiedSymbol]) {
+        const fn = original[kCustomPromisifiedSymbol];
         if (typeof fn !== 'function') {
             throw new ERR_INVALID_ARG_TYPE('util.promisify.custom', 'Function', fn);
         }
@@ -1057,25 +221,25 @@ export const promisify = function promisify(original) {
         return fn;
     }
 
-    var argumentNames = kCustomPromisifyArgsSymbol ? original[kCustomPromisifyArgsSymbol] : undefined;
+    const argumentNames = original[kCustomPromisifyArgsSymbol];
 
     function fn() {
-        var promiseResolve, promiseReject;
-        var promise = new Promise(function (resolve, reject) {
+        let promiseResolve, promiseReject;
+        const promise = new Promise(function (resolve, reject) {
             promiseResolve = resolve;
             promiseReject = reject;
         });
 
-        var args = [];
-        for (var i = 0; i < arguments.length; i++) {
+        const args = [];
+        for (let i = 0; i < arguments.length; i++) {
             args.push(arguments[i]);
         }
         args.push(function (err) {
             if (err) {
                 promiseReject(err);
             } else if (argumentNames !== undefined && arguments.length > 2) {
-                var obj = {};
-                for (var j = 0; j < argumentNames.length; j++) {
+                const obj = {};
+                for (let j = 0; j < argumentNames.length; j++) {
                     obj[argumentNames[j]] = arguments[j + 1];
                 }
                 promiseResolve(obj);
@@ -1095,7 +259,7 @@ export const promisify = function promisify(original) {
 
     Object.setPrototypeOf(fn, Object.getPrototypeOf(original));
 
-    if (kCustomPromisifiedSymbol) Object.defineProperty(fn, kCustomPromisifiedSymbol, {
+    Object.defineProperty(fn, kCustomPromisifiedSymbol, {
         value: fn, enumerable: false, writable: false, configurable: true
     });
     return Object.defineProperties(
@@ -1112,7 +276,7 @@ function callbackifyOnRejected(reason, cb) {
     // occurred", we error-wrap so the callback consumer can distinguish between
     // "the promise rejected with null" or "the promise fulfilled with undefined".
     if (!reason) {
-        var newReason = new Error('Promise was rejected with falsy value');
+        const newReason = new Error('Promise was rejected with falsy value');
         newReason.code = 'ERR_FALSY_VALUE_REJECTION';
         newReason.reason = reason;
         reason = newReason;
@@ -1134,16 +298,16 @@ export function callbackify(original) {
     // the promise is actually somehow related to the callback's execution
     // and that the callback throwing will reject the promise.
     function callbackified() {
-        var args = [];
-        for (var i = 0; i < arguments.length; i++) {
+        const args = [];
+        for (let i = 0; i < arguments.length; i++) {
             args.push(arguments[i]);
         }
 
-        var maybeCb = args.pop();
+        const maybeCb = args.pop();
         if (typeof maybeCb !== 'function') {
             throw new ERR_INVALID_ARG_TYPE('last argument', 'function', maybeCb);
         }
-        var cb = function() {
+        const cb = function() {
             return maybeCb.apply(this, arguments);
         };
         // In true node style we process the callback on `nextTick` with all the
@@ -1156,7 +320,7 @@ export function callbackify(original) {
             }.bind(this));
     }
 
-    var descriptors = getOwnPropertyDescriptors(original);
+    const descriptors = getOwnPropertyDescriptors(original);
     // It is possible to manipulate a function's `length` or `name` property.
     // Guard those updates to match Node.js behavior.
     if (descriptors.length && typeof descriptors.length.value === 'number') {
@@ -1165,8 +329,8 @@ export function callbackify(original) {
     if (descriptors.name && typeof descriptors.name.value === 'string') {
         descriptors.name.value += 'Callbackified';
     }
-    var propertiesValues = Object.values(descriptors);
-    for (var i = 0; i < propertiesValues.length; i++) {
+    const propertiesValues = Object.values(descriptors);
+    for (let i = 0; i < propertiesValues.length; i++) {
         Object.setPrototypeOf(propertiesValues[i], null);
     }
     Object.defineProperties(callbackified, descriptors);
@@ -1175,17 +339,17 @@ export function callbackify(original) {
 
 export function inherits(ctor, superCtor) {
     if (ctor === undefined || ctor === null) {
-        var err = new TypeError('The "ctor" argument must be of type function. Received ' + ctor);
+        const err = new TypeError('The "ctor" argument must be of type function. Received ' + ctor);
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
     if (superCtor === undefined || superCtor === null) {
-        var err = new TypeError('The "superCtor" argument must be of type function. Received ' + superCtor);
+        const err = new TypeError('The "superCtor" argument must be of type function. Received ' + superCtor);
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
     if (superCtor.prototype === undefined) {
-        var err = new TypeError('The "superCtor.prototype" property must be of type object. Received undefined');
+        const err = new TypeError('The "superCtor.prototype" property must be of type object. Received undefined');
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
     }
@@ -1199,7 +363,7 @@ export function inherits(ctor, superCtor) {
 }
 
 // Deep strict equality comparison (Node.js util.isDeepStrictEqual semantics)
-var _hasOwn = Object.prototype.hasOwnProperty;
+const _hasOwn = Object.prototype.hasOwnProperty;
 function _hasOwnProp(obj, prop) {
     return _hasOwn.call(obj, prop);
 }
@@ -1219,7 +383,7 @@ function _getTypedArrayBrand(v) {
             // Fall back to Object.prototype.toString for engines without full support.
         }
     }
-    var fallbackTag = Object.prototype.toString.call(v);
+    const fallbackTag = Object.prototype.toString.call(v);
     return fallbackTag.slice(8, -1);
 }
 
@@ -1256,7 +420,7 @@ function _exportKeyForCompare(key, keyType) {
     try {
         return key.export('der');
     } catch (_) {
-        var formatType = keyType === 'public' ? 'spki' : 'pkcs8';
+        const formatType = keyType === 'public' ? 'spki' : 'pkcs8';
         try {
             return key.export('der', formatType, undefined);
         } catch (_) {
@@ -1295,15 +459,15 @@ function _isPromiseLikeTag(tag) {
 }
 
 function _isArrIdx(key, length) {
-    var num = Number(key);
+    const num = Number(key);
     return Number.isInteger(num) && num >= 0 && num < length;
 }
 
 function _getEnumSymbols(obj) {
-    var symbols = Object.getOwnPropertySymbols(obj);
-    var result = [];
-    for (var i = 0; i < symbols.length; i++) {
-        var desc = Object.getOwnPropertyDescriptor(obj, symbols[i]);
+    const symbols = Object.getOwnPropertySymbols(obj);
+    const result = [];
+    for (let i = 0; i < symbols.length; i++) {
+        const desc = Object.getOwnPropertyDescriptor(obj, symbols[i]);
         if (desc && desc.enumerable) {
             result.push(symbols[i]);
         }
@@ -1361,10 +525,10 @@ function _deepObjEquiv(a, b, strict, memo) {
     b = _normalizeProtoNullArtifact(b);
 
     // Compute tags once to avoid repeated Object.prototype.toString.call (expensive in WASM/QuickJS)
-    var aTag = Object.prototype.toString.call(a);
-    var bTag = Object.prototype.toString.call(b);
-    var aIsErrorLike = (a instanceof Error) || aTag === '[object Error]';
-    var bIsErrorLike = (b instanceof Error) || bTag === '[object Error]';
+    const aTag = Object.prototype.toString.call(a);
+    const bTag = Object.prototype.toString.call(b);
+    const aIsErrorLike = (a instanceof Error) || aTag === '[object Error]';
+    const bIsErrorLike = (b instanceof Error) || bTag === '[object Error]';
 
     if (_isWeakCollTag(aTag) || _isWeakCollTag(bTag)) return false;
     if (_isPromiseLikeTag(aTag) || _isPromiseLikeTag(bTag)) return false;
@@ -1385,13 +549,13 @@ function _deepObjEquiv(a, b, strict, memo) {
     if (a instanceof Set !== b instanceof Set) return false;
     if (Array.isArray(a) !== Array.isArray(b)) return false;
     if (aIsErrorLike !== bIsErrorLike) return false;
-    var _aIsArgs = 'length' in a && 'callee' in a && !Array.isArray(a) && !(a instanceof Function);
-    var _bIsArgs = 'length' in b && 'callee' in b && !Array.isArray(b) && !(b instanceof Function);
+    const _aIsArgs = 'length' in a && 'callee' in a && !Array.isArray(a) && !(a instanceof Function);
+    const _bIsArgs = 'length' in b && 'callee' in b && !Array.isArray(b) && !(b instanceof Function);
     if (_aIsArgs !== _bIsArgs) return false;
-    var aIsView = ArrayBuffer.isView(a) && !(a instanceof DataView);
-    var bIsView = ArrayBuffer.isView(b) && !(b instanceof DataView);
-    var aTypedBrand = '';
-    var bTypedBrand = '';
+    const aIsView = ArrayBuffer.isView(a) && !(a instanceof DataView);
+    const bIsView = ArrayBuffer.isView(b) && !(b instanceof DataView);
+    let aTypedBrand = '';
+    let bTypedBrand = '';
     if (aIsView || bIsView) {
         if (aIsView !== bIsView) return false;
         aTypedBrand = _getTypedArrayBrand(a);
@@ -1399,13 +563,13 @@ function _deepObjEquiv(a, b, strict, memo) {
         if (aTypedBrand !== bTypedBrand) return false;
     }
 
-    var aBoxed = _isBoxedTag(aTag);
-    var bBoxed = _isBoxedTag(bTag);
+    const aBoxed = _isBoxedTag(aTag);
+    const bBoxed = _isBoxedTag(bTag);
     if (aBoxed || bBoxed) {
         if (!aBoxed || !bBoxed) return false;
         if (aTag !== bTag) return false;
-        var aVal = _unboxWithTag(a, aTag);
-        var bVal = _unboxWithTag(b, bTag);
+        const aVal = _unboxWithTag(a, aTag);
+        const bVal = _unboxWithTag(b, bTag);
         if (aTag === '[object Number]') {
             if (!Object.is(aVal, bVal)) return false;
         } else {
@@ -1413,12 +577,12 @@ function _deepObjEquiv(a, b, strict, memo) {
         }
     }
 
-    var aIsDate = aTag === '[object Date]';
-    var bIsDate = bTag === '[object Date]';
+    const aIsDate = aTag === '[object Date]';
+    const bIsDate = bTag === '[object Date]';
     if (aIsDate || bIsDate) {
         if (!aIsDate || !bIsDate) return false;
-        var aDateTime;
-        var bDateTime;
+        let aDateTime;
+        let bDateTime;
         try {
             aDateTime = _DatePrototypeGetTime.call(a);
             bDateTime = _DatePrototypeGetTime.call(b);
@@ -1428,25 +592,25 @@ function _deepObjEquiv(a, b, strict, memo) {
         if (aDateTime !== bDateTime) return false;
         // In strict mode, also check constructor and own properties
         if (strict && a.constructor !== b.constructor) return false;
-        var dKeysA = Object.keys(a);
-        var dKeysB = Object.keys(b);
+        const dKeysA = Object.keys(a);
+        const dKeysB = Object.keys(b);
         if (dKeysA.length !== dKeysB.length) return false;
         dKeysA.sort();
         dKeysB.sort();
-        for (var i = 0; i < dKeysA.length; i++) {
+        for (let i = 0; i < dKeysA.length; i++) {
             if (dKeysA[i] !== dKeysB[i]) return false;
             if (!_innerDeep(a[dKeysA[i]], b[dKeysB[i]], strict, memo)) return false;
         }
         return true;
     }
 
-    var hasURLCtor = typeof URL === 'function';
-    var aIsURL = aTag === '[object URL]' || (hasURLCtor && a instanceof URL);
-    var bIsURL = bTag === '[object URL]' || (hasURLCtor && b instanceof URL);
+    const hasURLCtor = typeof URL === 'function';
+    const aIsURL = aTag === '[object URL]' || (hasURLCtor && a instanceof URL);
+    const bIsURL = bTag === '[object URL]' || (hasURLCtor && b instanceof URL);
     if (aIsURL || bIsURL) {
         if (!aIsURL || !bIsURL) return false;
-        var aHref;
-        var bHref;
+        let aHref;
+        let bHref;
         try {
             aHref = String(a);
             bHref = String(b);
@@ -1454,20 +618,20 @@ function _deepObjEquiv(a, b, strict, memo) {
             return false;
         }
         if (aHref !== bHref) return false;
-        var uKeysA = Object.keys(a);
-        var uKeysB = Object.keys(b);
+        const uKeysA = Object.keys(a);
+        const uKeysB = Object.keys(b);
         if (uKeysA.length !== uKeysB.length) return false;
         uKeysA.sort();
         uKeysB.sort();
-        for (var i = 0; i < uKeysA.length; i++) {
+        for (let i = 0; i < uKeysA.length; i++) {
             if (uKeysA[i] !== uKeysB[i]) return false;
             if (!_innerDeep(a[uKeysA[i]], b[uKeysB[i]], strict, memo)) return false;
         }
         if (strict) {
-            var uSymA = _getEnumSymbols(a);
-            var uSymB = _getEnumSymbols(b);
+            const uSymA = _getEnumSymbols(a);
+            const uSymB = _getEnumSymbols(b);
             if (uSymA.length !== uSymB.length) return false;
-            for (var i = 0; i < uSymA.length; i++) {
+            for (let i = 0; i < uSymA.length; i++) {
                 if (uSymB.indexOf(uSymA[i]) === -1) return false;
                 if (!_innerDeep(a[uSymA[i]], b[uSymA[i]], strict, memo)) return false;
             }
@@ -1475,16 +639,16 @@ function _deepObjEquiv(a, b, strict, memo) {
         return true;
     }
 
-    var aIsKeyObject = _isKeyObjectLike(a);
-    var bIsKeyObject = _isKeyObjectLike(b);
+    const aIsKeyObject = _isKeyObjectLike(a);
+    const bIsKeyObject = _isKeyObjectLike(b);
     if (aIsKeyObject || bIsKeyObject) {
         if (!aIsKeyObject || !bIsKeyObject) return false;
-        var aKeyType = typeof a.type === 'string' ? a.type : a._type;
-        var bKeyType = typeof b.type === 'string' ? b.type : b._type;
+        const aKeyType = typeof a.type === 'string' ? a.type : a._type;
+        const bKeyType = typeof b.type === 'string' ? b.type : b._type;
         if (aKeyType !== bKeyType) return false;
 
-        var aExport;
-        var bExport;
+        let aExport;
+        let bExport;
         try {
             if (typeof a._handle === 'number' && typeof b._handle === 'number') {
                 aExport = webCryptoNative.key_export(a._handle, 'der', undefined);
@@ -1497,31 +661,31 @@ function _deepObjEquiv(a, b, strict, memo) {
             return false;
         }
 
-        var aExportBytes = _toBytesForCompare(aExport);
-        var bExportBytes = _toBytesForCompare(bExport);
+        const aExportBytes = _toBytesForCompare(aExport);
+        const bExportBytes = _toBytesForCompare(bExport);
         if (aExportBytes && bExportBytes) {
             if (aExportBytes.length !== bExportBytes.length) return false;
-            for (var i = 0; i < aExportBytes.length; i++) {
+            for (let i = 0; i < aExportBytes.length; i++) {
                 if (aExportBytes[i] !== bExportBytes[i]) return false;
             }
         } else {
             if (!_innerDeep(aExport, bExport, strict, memo)) return false;
         }
 
-        var keyObjKeysA = Object.keys(a).filter(function(key) { return key !== '_handle'; });
-        var keyObjKeysB = Object.keys(b).filter(function(key) { return key !== '_handle'; });
+        const keyObjKeysA = Object.keys(a).filter(function(key) { return key !== '_handle'; });
+        const keyObjKeysB = Object.keys(b).filter(function(key) { return key !== '_handle'; });
         if (keyObjKeysA.length !== keyObjKeysB.length) return false;
         keyObjKeysA.sort();
         keyObjKeysB.sort();
-        for (var i = 0; i < keyObjKeysA.length; i++) {
+        for (let i = 0; i < keyObjKeysA.length; i++) {
             if (keyObjKeysA[i] !== keyObjKeysB[i]) return false;
             if (!_innerDeep(a[keyObjKeysA[i]], b[keyObjKeysB[i]], strict, memo)) return false;
         }
         if (strict) {
-            var keyObjSymA = _getEnumSymbols(a);
-            var keyObjSymB = _getEnumSymbols(b);
+            const keyObjSymA = _getEnumSymbols(a);
+            const keyObjSymB = _getEnumSymbols(b);
             if (keyObjSymA.length !== keyObjSymB.length) return false;
-            for (var i = 0; i < keyObjSymA.length; i++) {
+            for (let i = 0; i < keyObjSymA.length; i++) {
                 if (keyObjSymB.indexOf(keyObjSymA[i]) === -1) return false;
                 if (!_innerDeep(a[keyObjSymA[i]], b[keyObjSymA[i]], strict, memo)) return false;
             }
@@ -1530,12 +694,12 @@ function _deepObjEquiv(a, b, strict, memo) {
     }
 
     if (a instanceof RegExp && b instanceof RegExp) {
-        var aSource;
-        var bSource;
-        var aFlags;
-        var bFlags;
-        var aLastIndex;
-        var bLastIndex;
+        let aSource;
+        let bSource;
+        let aFlags;
+        let bFlags;
+        let aLastIndex;
+        let bLastIndex;
         try {
             aSource = a.source;
             bSource = b.source;
@@ -1548,12 +712,12 @@ function _deepObjEquiv(a, b, strict, memo) {
         }
         if (aSource !== bSource || aFlags !== bFlags || aLastIndex !== bLastIndex) return false;
         if (strict && a.constructor !== b.constructor) return false;
-        var rKeysA = Object.keys(a);
-        var rKeysB = Object.keys(b);
+        const rKeysA = Object.keys(a);
+        const rKeysB = Object.keys(b);
         if (rKeysA.length !== rKeysB.length) return false;
         rKeysA.sort();
         rKeysB.sort();
-        for (var i = 0; i < rKeysA.length; i++) {
+        for (let i = 0; i < rKeysA.length; i++) {
             if (rKeysA[i] !== rKeysB[i]) return false;
             if (!_innerDeep(a[rKeysA[i]], b[rKeysB[i]], strict, memo)) return false;
         }
@@ -1562,32 +726,32 @@ function _deepObjEquiv(a, b, strict, memo) {
 
     if (aIsErrorLike && bIsErrorLike) {
         if (a.message !== b.message || a.name !== b.name) return false;
-        var aHasCause = _hasOwnProp(a, 'cause') || 'cause' in a;
-        var bHasCause = _hasOwnProp(b, 'cause') || 'cause' in b;
+        const aHasCause = _hasOwnProp(a, 'cause') || 'cause' in a;
+        const bHasCause = _hasOwnProp(b, 'cause') || 'cause' in b;
         if (aHasCause !== bHasCause) return false;
         if (aHasCause && !_innerDeep(a.cause, b.cause, strict, memo)) return false;
-        var aHasErrors = _hasOwnProp(a, 'errors');
-        var bHasErrors = _hasOwnProp(b, 'errors');
+        const aHasErrors = _hasOwnProp(a, 'errors');
+        const bHasErrors = _hasOwnProp(b, 'errors');
         if (aHasErrors !== bHasErrors) return false;
         if (aHasErrors && !_innerDeep(a.errors, b.errors, strict, memo)) return false;
-        var eKeysA = Object.keys(a).filter(function(k) {
+        const eKeysA = Object.keys(a).filter(function(k) {
             return k !== 'cause' && k !== 'errors';
         });
-        var eKeysB = Object.keys(b).filter(function(k) {
+        const eKeysB = Object.keys(b).filter(function(k) {
             return k !== 'cause' && k !== 'errors';
         });
         if (eKeysA.length !== eKeysB.length) return false;
         eKeysA.sort();
         eKeysB.sort();
-        for (var i = 0; i < eKeysA.length; i++) {
+        for (let i = 0; i < eKeysA.length; i++) {
             if (eKeysA[i] !== eKeysB[i]) return false;
             if (!_innerDeep(a[eKeysA[i]], b[eKeysB[i]], strict, memo)) return false;
         }
         if (strict) {
-            var eSymA = _getEnumSymbols(a);
-            var eSymB = _getEnumSymbols(b);
+            const eSymA = _getEnumSymbols(a);
+            const eSymB = _getEnumSymbols(b);
             if (eSymA.length !== eSymB.length) return false;
-            for (var i = 0; i < eSymA.length; i++) {
+            for (let i = 0; i < eSymA.length; i++) {
                 if (eSymB.indexOf(eSymA[i]) === -1) return false;
                 if (!_innerDeep(a[eSymA[i]], b[eSymA[i]], strict, memo)) return false;
             }
@@ -1595,18 +759,18 @@ function _deepObjEquiv(a, b, strict, memo) {
         return true;
     }
 
-    var aIsAB = a instanceof ArrayBuffer;
-    var bIsAB = b instanceof ArrayBuffer;
-    var aIsSAB = typeof SharedArrayBuffer !== 'undefined' && a instanceof SharedArrayBuffer;
-    var bIsSAB = typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer;
+    const aIsAB = a instanceof ArrayBuffer;
+    const bIsAB = b instanceof ArrayBuffer;
+    const aIsSAB = a instanceof SharedArrayBuffer;
+    const bIsSAB = b instanceof SharedArrayBuffer;
 
     if (aIsAB || bIsAB || aIsSAB || bIsSAB) {
         if (aIsAB !== bIsAB) return false;
         if (aIsSAB !== bIsSAB) return false;
         if (a.byteLength !== b.byteLength) return false;
-        var vA = new Uint8Array(a);
-        var vB = new Uint8Array(b);
-        for (var i = 0; i < vA.length; i++) {
+        const vA = new Uint8Array(a);
+        const vB = new Uint8Array(b);
+        for (let i = 0; i < vA.length; i++) {
             if (vA[i] !== vB[i]) return false;
         }
         return true;
@@ -1623,30 +787,30 @@ function _deepObjEquiv(a, b, strict, memo) {
         }
         if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
             if (a.length !== b.length) return false;
-            for (var i = 0; i < a.length; i++) {
+            for (let i = 0; i < a.length; i++) {
                 if (a[i] != b[i]) return false;
             }
         } else {
-            var ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-            var ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-            for (var i = 0; i < ua.length; i++) {
+            const ua = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+            const ub = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+            for (let i = 0; i < ua.length; i++) {
                 if (ua[i] !== ub[i]) return false;
             }
         }
-        var aK = Object.keys(a).filter(function(k) { return !k.match(/^\d+$/); });
-        var bK = Object.keys(b).filter(function(k) { return !k.match(/^\d+$/); });
+        const aK = Object.keys(a).filter(function(k) { return !k.match(/^\d+$/); });
+        const bK = Object.keys(b).filter(function(k) { return !k.match(/^\d+$/); });
         if (aK.length !== bK.length) return false;
         aK.sort();
         bK.sort();
-        for (var i = 0; i < aK.length; i++) {
+        for (let i = 0; i < aK.length; i++) {
             if (aK[i] !== bK[i]) return false;
             if (!_innerDeep(a[aK[i]], b[bK[i]], strict, memo)) return false;
         }
         if (strict) {
-            var symA = _getEnumSymbols(a);
-            var symB = _getEnumSymbols(b);
+            const symA = _getEnumSymbols(a);
+            const symB = _getEnumSymbols(b);
             if (symA.length !== symB.length) return false;
-            for (var i = 0; i < symA.length; i++) {
+            for (let i = 0; i < symA.length; i++) {
                 if (symB.indexOf(symA[i]) === -1) return false;
                 if (!_innerDeep(a[symA[i]], b[symA[i]], strict, memo)) return false;
             }
@@ -1658,7 +822,7 @@ function _deepObjEquiv(a, b, strict, memo) {
         memo = { a: [], b: [] };
     }
     // Check for cycles: if we've seen this exact pair (a, b), assume equal
-    for (var mi = 0; mi < memo.a.length; mi++) {
+    for (let mi = 0; mi < memo.a.length; mi++) {
         if (memo.a[mi] === a && memo.b[mi] === b) {
             return true;
         }
@@ -1668,20 +832,20 @@ function _deepObjEquiv(a, b, strict, memo) {
 
     if (a instanceof Map && b instanceof Map) {
         if (a.size !== b.size) return false;
-        var aEntries = Array.from(a.entries());
-        var bEntries = Array.from(b.entries());
-        var unmatchedA = [];
-        var matchedB = new Array(bEntries.length);
-        for (var i = 0; i < aEntries.length; i++) {
-            var aKey = aEntries[i][0];
+        const aEntries = Array.from(a.entries());
+        const bEntries = Array.from(b.entries());
+        const unmatchedA = [];
+        const matchedB = new Array(bEntries.length);
+        for (let i = 0; i < aEntries.length; i++) {
+            const aKey = aEntries[i][0];
             if (typeof aKey === 'object' && aKey !== null) {
                 unmatchedA.push(i);
                 continue;
             }
             if (strict) {
                 // In strict mode, primitive keys must match via Object.is
-                var found = false;
-                for (var j = 0; j < bEntries.length; j++) {
+                let found = false;
+                for (let j = 0; j < bEntries.length; j++) {
                     if (matchedB[j]) continue;
                     if (Object.is(aKey, bEntries[j][0])) {
                         if (!_innerDeep(aEntries[i][1], bEntries[j][1], strict, memo)) return false;
@@ -1694,11 +858,11 @@ function _deepObjEquiv(a, b, strict, memo) {
             } else {
                 // In loose mode, try Object.is first; if value doesn't match or
                 // key not found, defer to the general matching pass
-                var found = false;
-                for (var j = 0; j < bEntries.length; j++) {
+                let found = false;
+                for (let j = 0; j < bEntries.length; j++) {
                     if (matchedB[j]) continue;
                     if (Object.is(aKey, bEntries[j][0])) {
-                        var valueMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                        const valueMemo = { a: memo.a.slice(), b: memo.b.slice() };
                         if (_innerDeep(aEntries[i][1], bEntries[j][1], strict, valueMemo)) {
                             memo.a = valueMemo.a;
                             memo.b = valueMemo.b;
@@ -1713,14 +877,14 @@ function _deepObjEquiv(a, b, strict, memo) {
                 }
             }
         }
-        for (var i = 0; i < unmatchedA.length; i++) {
-            var ai = unmatchedA[i];
-            var found = false;
-            for (var j = 0; j < bEntries.length; j++) {
+        for (let i = 0; i < unmatchedA.length; i++) {
+            const ai = unmatchedA[i];
+            let found = false;
+            for (let j = 0; j < bEntries.length; j++) {
                 if (matchedB[j]) continue;
-                var keyMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                const keyMemo = { a: memo.a.slice(), b: memo.b.slice() };
                 if (_innerDeep(aEntries[ai][0], bEntries[j][0], strict, keyMemo)) {
-                    var valueMemo = { a: keyMemo.a.slice(), b: keyMemo.b.slice() };
+                    const valueMemo = { a: keyMemo.a.slice(), b: keyMemo.b.slice() };
                     if (_innerDeep(aEntries[ai][1], bEntries[j][1], strict, valueMemo)) {
                         memo.a = valueMemo.a;
                         memo.b = valueMemo.b;
@@ -1733,13 +897,13 @@ function _deepObjEquiv(a, b, strict, memo) {
             if (!found) return false;
         }
         // Check own properties on the Map objects
-        var mKeysA = Object.keys(a);
-        var mKeysB = Object.keys(b);
+        const mKeysA = Object.keys(a);
+        const mKeysB = Object.keys(b);
         if (mKeysA.length !== mKeysB.length) return false;
         if (mKeysA.length > 0) {
             mKeysA.sort();
             mKeysB.sort();
-            for (var i = 0; i < mKeysA.length; i++) {
+            for (let i = 0; i < mKeysA.length; i++) {
                 if (mKeysA[i] !== mKeysB[i]) return false;
                 if (!_innerDeep(a[mKeysA[i]], b[mKeysB[i]], strict, memo)) return false;
             }
@@ -1749,17 +913,17 @@ function _deepObjEquiv(a, b, strict, memo) {
 
     if (a instanceof Set && b instanceof Set) {
         if (a.size !== b.size) return false;
-        var arrA = Array.from(a);
-        var arrB = Array.from(b);
-        var unmatchedA = [];
-        var usedB = new Array(arrB.length);
-        for (var i = 0; i < arrA.length; i++) {
-            var val = arrA[i];
+        const arrA = Array.from(a);
+        const arrB = Array.from(b);
+        const unmatchedA = [];
+        const usedB = new Array(arrB.length);
+        for (let i = 0; i < arrA.length; i++) {
+            const val = arrA[i];
             if (typeof val !== 'object' || val === null) {
                 if (b.has(val)) {
                     // Use Object.is for marking used elements to avoid cross-matching
                     // loosely-equal primitives (e.g., 0 matching false via ==)
-                    for (var j = 0; j < arrB.length; j++) {
+                    for (let j = 0; j < arrB.length; j++) {
                         if (!usedB[j] && Object.is(val, arrB[j])) {
                             usedB[j] = true;
                             break;
@@ -1775,9 +939,9 @@ function _deepObjEquiv(a, b, strict, memo) {
             }
             unmatchedA.push(i);
         }
-        for (var i = 0; i < unmatchedA.length; i++) {
-            var found = false;
-            for (var j = 0; j < arrB.length; j++) {
+        for (let i = 0; i < unmatchedA.length; i++) {
+            let found = false;
+            for (let j = 0; j < arrB.length; j++) {
                 if (usedB[j]) continue;
                 if (_innerDeep(arrA[unmatchedA[i]], arrB[j], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
                     usedB[j] = true;
@@ -1788,42 +952,42 @@ function _deepObjEquiv(a, b, strict, memo) {
             if (!found) return false;
         }
         // Check own properties on the Set objects
-        var sKeysA = Object.keys(a);
-        var sKeysB = Object.keys(b);
+        const sKeysA = Object.keys(a);
+        const sKeysB = Object.keys(b);
         if (sKeysA.length !== sKeysB.length) return false;
         sKeysA.sort();
         sKeysB.sort();
-        for (var i = 0; i < sKeysA.length; i++) {
+        for (let i = 0; i < sKeysA.length; i++) {
             if (sKeysA[i] !== sKeysB[i]) return false;
             if (!_innerDeep(a[sKeysA[i]], b[sKeysB[i]], strict, memo)) return false;
         }
         return true;
     }
 
-    var isArrayA = Array.isArray(a);
-    var isArrayB = Array.isArray(b);
+    const isArrayA = Array.isArray(a);
+    const isArrayB = Array.isArray(b);
     if (isArrayA !== isArrayB) return false;
 
     if (isArrayA && isArrayB) {
         if (a.length !== b.length) return false;
-        for (var i = 0; i < a.length; i++) {
-            var aHas = _hasOwnProp(a, i);
-            var bHas = _hasOwnProp(b, i);
+        for (let i = 0; i < a.length; i++) {
+            const aHas = _hasOwnProp(a, i);
+            const bHas = _hasOwnProp(b, i);
             if (strict && aHas !== bHas) return false;
             if (!_innerDeep(a[i], b[i], strict, memo)) return false;
         }
-        var keysA = Object.keys(a).filter(function(k) { return !_isArrIdx(k, a.length); });
-        var keysB = Object.keys(b).filter(function(k) { return !_isArrIdx(k, b.length); });
+        const keysA = Object.keys(a).filter(function(k) { return !_isArrIdx(k, a.length); });
+        const keysB = Object.keys(b).filter(function(k) { return !_isArrIdx(k, b.length); });
         if (keysA.length !== keysB.length) return false;
-        for (var i = 0; i < keysA.length; i++) {
+        for (let i = 0; i < keysA.length; i++) {
             if (!_hasOwnProp(b, keysA[i])) return false;
             if (!_innerDeep(a[keysA[i]], b[keysA[i]], strict, memo)) return false;
         }
         if (strict) {
-            var symA = _getEnumSymbols(a);
-            var symB = _getEnumSymbols(b);
+            const symA = _getEnumSymbols(a);
+            const symB = _getEnumSymbols(b);
             if (symA.length !== symB.length) return false;
-            for (var i = 0; i < symA.length; i++) {
+            for (let i = 0; i < symA.length; i++) {
                 if (symA[i] !== symB[i]) return false;
                 if (!_innerDeep(a[symA[i]], b[symA[i]], strict, memo)) return false;
             }
@@ -1831,22 +995,22 @@ function _deepObjEquiv(a, b, strict, memo) {
         return true;
     }
 
-    var ka = Object.keys(a);
-    var kb = Object.keys(b);
+    const ka = Object.keys(a);
+    const kb = Object.keys(b);
     if (ka.length !== kb.length) return false;
     ka.sort();
     kb.sort();
-    for (var i = 0; i < ka.length; i++) {
+    for (let i = 0; i < ka.length; i++) {
         if (ka[i] !== kb[i]) return false;
     }
-    for (var i = 0; i < ka.length; i++) {
+    for (let i = 0; i < ka.length; i++) {
         if (!_innerDeep(a[ka[i]], b[ka[i]], strict, memo)) return false;
     }
     if (strict) {
-        var symA = _getEnumSymbols(a);
-        var symB = _getEnumSymbols(b);
+        const symA = _getEnumSymbols(a);
+        const symB = _getEnumSymbols(b);
         if (symA.length !== symB.length) return false;
-        for (var i = 0; i < symA.length; i++) {
+        for (let i = 0; i < symA.length; i++) {
             if (symA[i] !== symB[i]) return false;
             if (!_innerDeep(a[symA[i]], b[symA[i]], strict, memo)) return false;
         }
@@ -1854,7 +1018,7 @@ function _deepObjEquiv(a, b, strict, memo) {
     return true;
 }
 
-var _deepCallCount = 0;
+let _deepCallCount = 0;
 function _innerDeep(a, b, strict, memo) {
     _deepCallCount++;
     if (_deepCallCount > 5000) {
@@ -1891,8 +1055,7 @@ export function isDeepStrictEqual(val1, val2) {
     return _innerDeep(val1, val2, true, undefined);
 }
 
-var _toString = Object.prototype.toString.call.bind(Object.prototype.toString);
-var _externalValueMarkerSymbol = Symbol.for('wasm-rquickjs.util.types.external');
+const _externalValueMarkerSymbol = Symbol.for('wasm-rquickjs.util.types.external');
 
 function _getTypedArrayTag(v) {
     if (_TypedArrayToStringTagGetter === null || !v || typeof v !== 'object') {
@@ -1911,7 +1074,7 @@ function _isExternalLike(v) {
     return !!v && typeof v === 'object' && v[_externalValueMarkerSymbol] === true;
 }
 
-export var types = {
+export const types = {
     isAnyArrayBuffer: internalUtilTypes.isAnyArrayBuffer,
     isArrayBuffer: internalUtilTypes.isArrayBuffer,
     isArrayBufferView: internalUtilTypes.isArrayBufferView,
@@ -1987,10 +1150,10 @@ export var types = {
     isKeyObject: function isKeyObject() { return false; }
 };
 
-var getCallSiteRenameWarning = "The `util.getCallSite` API has been renamed to `util.getCallSites()`.";
-var getCallSiteRenameWarned = false;
-var callSiteWithFunctionPattern = /^\s*at\s+(.+?)\s+\((.+):(\d+):(\d+)\)\s*$/;
-var callSiteWithoutFunctionPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
+const getCallSiteRenameWarning = "The `util.getCallSite` API has been renamed to `util.getCallSites()`.";
+let getCallSiteRenameWarned = false;
+const callSiteWithFunctionPattern = /^\s*at\s+(.+?)\s+\((.+):(\d+):(\d+)\)\s*$/;
+const callSiteWithoutFunctionPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
 
 function _validateGetCallSitesOptions(frameCount, options) {
     if (options === undefined) {
@@ -2026,12 +1189,12 @@ function _resolveCallSiteScriptName(scriptName) {
         return scriptName;
     }
 
-    var evalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
+    const evalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
     if (typeof evalScriptName === 'string' && evalScriptName.length > 0) {
         return evalScriptName;
     }
 
-    var moduleContext = globalThis.__wasm_rquickjs_current_module;
+    const moduleContext = globalThis.__wasm_rquickjs_current_module;
     if (moduleContext && typeof moduleContext.filename === 'string' && moduleContext.filename.length > 0) {
         return moduleContext.filename;
     }
@@ -2040,7 +1203,7 @@ function _resolveCallSiteScriptName(scriptName) {
 }
 
 function _toCallSiteObject(functionName, scriptName, lineNumber, columnNumber) {
-    var callSite = Object.create(null);
+    const callSite = Object.create(null);
     callSite.functionName = functionName;
     callSite.scriptId = '';
     callSite.scriptName = _resolveCallSiteScriptName(scriptName);
@@ -2051,7 +1214,7 @@ function _toCallSiteObject(functionName, scriptName, lineNumber, columnNumber) {
 }
 
 function _parseCallSite(line) {
-    var withFunction = line.match(callSiteWithFunctionPattern);
+    const withFunction = line.match(callSiteWithFunctionPattern);
     if (withFunction !== null) {
         return _toCallSiteObject(
             withFunction[1],
@@ -2061,7 +1224,7 @@ function _parseCallSite(line) {
         );
     }
 
-    var withoutFunction = line.match(callSiteWithoutFunctionPattern);
+    const withoutFunction = line.match(callSiteWithoutFunctionPattern);
     if (withoutFunction !== null) {
         return _toCallSiteObject(
             '',
@@ -2091,9 +1254,9 @@ function _hasExecArgvFlag(flag) {
         return false;
     }
 
-    var prefixed = flag + '=';
-    for (var i = 0; i < process.execArgv.length; i++) {
-        var arg = String(process.execArgv[i]);
+    const prefixed = flag + '=';
+    for (let i = 0; i < process.execArgv.length; i++) {
+        const arg = String(process.execArgv[i]);
         if (arg === flag || arg.indexOf(prefixed) === 0) {
             return true;
         }
@@ -2112,7 +1275,7 @@ function _isSourceMapsEnabledFromExecArgv() {
 }
 
 function _getSimpleSourceMapRegistry() {
-    var registry = globalThis.__wasm_rquickjs_simple_source_maps;
+    const registry = globalThis.__wasm_rquickjs_simple_source_maps;
     if (!registry || typeof registry !== 'object') {
         return null;
     }
@@ -2121,7 +1284,7 @@ function _getSimpleSourceMapRegistry() {
 }
 
 function _getCjsLineOffsetRegistry() {
-    var registry = globalThis.__wasm_rquickjs_cjs_line_offsets;
+    const registry = globalThis.__wasm_rquickjs_cjs_line_offsets;
     if (!registry || typeof registry !== 'object') {
         return null;
     }
@@ -2130,12 +1293,12 @@ function _getCjsLineOffsetRegistry() {
 }
 
 function _normalizeCallSiteLineNumber(callSite) {
-    var registry = _getCjsLineOffsetRegistry();
+    const registry = _getCjsLineOffsetRegistry();
     if (!registry) {
         return callSite;
     }
 
-    var lineOffset = registry[callSite.scriptName];
+    const lineOffset = registry[callSite.scriptName];
     if (typeof lineOffset !== 'number' || !Number.isFinite(lineOffset) || lineOffset <= 0) {
         return callSite;
     }
@@ -2144,7 +1307,7 @@ function _normalizeCallSiteLineNumber(callSite) {
         return callSite;
     }
 
-    var normalizedCallSite = Object.create(null);
+    const normalizedCallSite = Object.create(null);
     normalizedCallSite.functionName = callSite.functionName;
     normalizedCallSite.scriptId = callSite.scriptId;
     normalizedCallSite.scriptName = callSite.scriptName;
@@ -2155,22 +1318,22 @@ function _normalizeCallSiteLineNumber(callSite) {
 }
 
 function _mapCallSiteWithSimpleSourceMap(callSite) {
-    var registry = _getSimpleSourceMapRegistry();
+    const registry = _getSimpleSourceMapRegistry();
     if (!registry) {
         return callSite;
     }
 
-    var sourceMap = registry[callSite.scriptName];
+    const sourceMap = registry[callSite.scriptName];
     if (!sourceMap || !sourceMap.generatedLineToOriginalLine) {
         return callSite;
     }
 
-    var mappedLine = sourceMap.generatedLineToOriginalLine[callSite.lineNumber];
+    const mappedLine = sourceMap.generatedLineToOriginalLine[callSite.lineNumber];
     if (typeof mappedLine !== 'number' || !Number.isFinite(mappedLine)) {
         return callSite;
     }
 
-    var mappedCallSite = Object.create(null);
+    const mappedCallSite = Object.create(null);
     mappedCallSite.functionName = callSite.functionName;
     mappedCallSite.scriptId = callSite.scriptId;
     mappedCallSite.scriptName = callSite.scriptName;
@@ -2181,17 +1344,17 @@ function _mapCallSiteWithSimpleSourceMap(callSite) {
 }
 
 function _captureGetCallSitesStack(skipFn, frameCount) {
-    var err = new Error();
+    const err = new Error();
     if (typeof Error.captureStackTrace !== 'function') {
         return err && err.stack ? String(err.stack) : '';
     }
 
-    var shouldRestoreStackTraceLimit = false;
-    var originalStackTraceLimit;
+    let shouldRestoreStackTraceLimit = false;
+    let originalStackTraceLimit;
 
     try {
         if (typeof isErrorStackTraceLimitWritable === 'function' && isErrorStackTraceLimitWritable()) {
-            var requiredStackTraceLimit = Math.max(10, frameCount + 8);
+            const requiredStackTraceLimit = Math.max(10, frameCount + 8);
             originalStackTraceLimit = Error.stackTraceLimit;
             if (typeof originalStackTraceLimit !== 'number' ||
                 !Number.isFinite(originalStackTraceLimit) ||
@@ -2220,7 +1383,7 @@ function _captureGetCallSitesStack(skipFn, frameCount) {
 }
 
 export function getCallSites(frameCount = 10, options) {
-    var normalizedOptions = options;
+    let normalizedOptions = options;
     if (normalizedOptions === undefined) {
         if (typeof frameCount === 'object') {
             normalizedOptions = frameCount;
@@ -2230,20 +1393,20 @@ export function getCallSites(frameCount = 10, options) {
     }
 
     frameCount = _validateGetCallSitesOptions(frameCount, options);
-    var shouldMapSourceLocations = normalizedOptions.sourceMap === true ||
+    const shouldMapSourceLocations = normalizedOptions.sourceMap === true ||
         (_isSourceMapsEnabledFromExecArgv() && normalizedOptions.sourceMap !== false);
 
-    var stack = _captureGetCallSitesStack(getCallSites, frameCount);
-    var lines = stack.split('\n');
-    var callSites = [];
+    const stack = _captureGetCallSitesStack(getCallSites, frameCount);
+    const lines = stack.split('\n');
+    const callSites = [];
 
-    for (var i = 0; i < lines.length; i++) {
+    for (let i = 0; i < lines.length; i++) {
         if (callSites.length >= frameCount) {
             break;
         }
 
-        var line = lines[i];
-        var parsedCallSite = _parseCallSite(line);
+        const line = lines[i];
+        let parsedCallSite = _parseCallSite(line);
         if (parsedCallSite === null) {
             continue;
         }
@@ -2277,22 +1440,22 @@ export function getCallSite(frameCount, options) {
     return getCallSites(frameCount, options);
 }
 
-var _styleTextFormats = Object.keys(inspect.colors);
+const _styleTextFormats = Object.keys(inspect.colors);
 
 function _throwStyleTextInvalidArgValue(name, value, reason) {
-    var inspected;
+    let inspected;
     try {
         inspected = JSON.stringify(value);
     } catch (_) {
         inspected = String(value);
     }
 
-    var message = "The argument '" + name + "' " + reason;
+    let message = "The argument '" + name + "' " + reason;
     if (inspected !== undefined) {
         message += '. Received ' + inspected;
     }
 
-    var err = new TypeError(message);
+    const err = new TypeError(message);
     err.code = 'ERR_INVALID_ARG_VALUE';
     throw err;
 }
@@ -2310,7 +1473,7 @@ function _normalizeStyleTextFormats(format) {
     }
 
     if (Array.isArray(format)) {
-        for (var i = 0; i < format.length; i++) {
+        for (let i = 0; i < format.length; i++) {
             if (typeof format[i] !== 'string' || !_isStyleTextFormatValue(format[i])) {
                 _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format or array of string formats');
             }
@@ -2326,7 +1489,7 @@ function _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose
         return text;
     }
 
-    var replacement = keepClose ? closeSequence + openSequence : openSequence;
+    const replacement = keepClose ? closeSequence + openSequence : openSequence;
     return text.split(closeSequence).join(replacement);
 }
 
@@ -2335,24 +1498,24 @@ function _applyStyleTextFormat(format, text) {
         return text;
     }
 
-    var style = inspect.colors[format];
+    const style = inspect.colors[format];
     if (!Array.isArray(style) || style.length < 2) {
         _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format');
     }
 
-    var open = style[0];
-    var close = style[1];
-    var openSequence = '\u001b[' + open + 'm';
-    var closeSequence = '\u001b[' + close + 'm';
+    const open = style[0];
+    const close = style[1];
+    const openSequence = '\u001b[' + open + 'm';
+    const closeSequence = '\u001b[' + close + 'm';
 
-    var keepClose = open === 1 || open === 2;
-    var processedText = _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose);
+    const keepClose = open === 1 || open === 2;
+    const processedText = _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose);
 
     return openSequence + processedText + closeSequence;
 }
 
 function _parseStyleTextForceColor(value) {
-    var normalized = String(value).toLowerCase();
+    const normalized = String(value).toLowerCase();
     if (normalized === '' || normalized === 'true' || normalized === '1') {
         return 4;
     }
@@ -2370,7 +1533,7 @@ function _shouldStyleTextColorize(stream) {
         return !!(stream && stream.isTTY);
     }
 
-    var env = process.env;
+    const env = process.env;
 
     if (env.FORCE_COLOR !== undefined) {
         return _parseStyleTextForceColor(env.FORCE_COLOR) > 2;
@@ -2411,9 +1574,9 @@ export function styleText(format, text, options) {
         throw new ERR_INVALID_ARG_TYPE('text', 'string', text);
     }
 
-    var formats = _normalizeStyleTextFormats(format);
-    var stream = typeof process !== 'undefined' ? process.stdout : undefined;
-    var validateStream = true;
+    const formats = _normalizeStyleTextFormats(format);
+    let stream = typeof process !== 'undefined' ? process.stdout : undefined;
+    let validateStream = true;
 
     if (options !== undefined) {
         if (typeof options !== 'object' || options === null || Array.isArray(options)) {
@@ -2442,8 +1605,8 @@ export function styleText(format, text, options) {
         }
     }
 
-    var styledText = text;
-    for (var i = formats.length - 1; i >= 0; i--) {
+    let styledText = text;
+    for (let i = formats.length - 1; i >= 0; i--) {
         styledText = _applyStyleTextFormat(formats[i], styledText);
     }
 
@@ -2457,8 +1620,8 @@ function _parseEnvTrimSpaces(input) {
         return '';
     }
 
-    var start = 0;
-    var end = input.length;
+    let start = 0;
+    let end = input.length;
 
     while (start < end && input.charAt(start) === ' ') {
         start++;
@@ -2476,24 +1639,24 @@ export function parseEnv(content) {
         throw new ERR_INVALID_ARG_TYPE('content', 'string', content);
     }
 
-    var store = {};
-    var remaining = _parseEnvTrimSpaces(content.replace(/\r/g, ''));
+    const store = {};
+    let remaining = _parseEnvTrimSpaces(content.replace(/\r/g, ''));
 
     while (remaining.length > 0) {
         if (remaining.charAt(0) === '\n' || remaining.charAt(0) === '#') {
-            var commentNewline = remaining.indexOf('\n');
+            const commentNewline = remaining.indexOf('\n');
             if (commentNewline !== -1) {
                 remaining = remaining.slice(commentNewline + 1);
                 continue;
             }
         }
 
-        var equalIndex = remaining.indexOf('=');
+        const equalIndex = remaining.indexOf('=');
         if (equalIndex === -1) {
             break;
         }
 
-        var key = _parseEnvTrimSpaces(remaining.slice(0, equalIndex));
+        let key = _parseEnvTrimSpaces(remaining.slice(0, equalIndex));
         remaining = _parseEnvTrimSpaces(remaining.slice(equalIndex + 1));
 
         if (key.length === 0) {
@@ -2510,12 +1673,12 @@ export function parseEnv(content) {
         }
 
         if (remaining.charAt(0) === '"') {
-            var doubleQuoteCloseIndex = remaining.indexOf('"', 1);
+            const doubleQuoteCloseIndex = remaining.indexOf('"', 1);
             if (doubleQuoteCloseIndex !== -1) {
-                var doubleQuotedValue = remaining.slice(1, doubleQuoteCloseIndex);
+                const doubleQuotedValue = remaining.slice(1, doubleQuoteCloseIndex);
                 store[key] = doubleQuotedValue.replace(/\\n/g, '\n');
 
-                var doubleQuoteNewlineIndex = remaining.indexOf('\n', doubleQuoteCloseIndex + 1);
+                const doubleQuoteNewlineIndex = remaining.indexOf('\n', doubleQuoteCloseIndex + 1);
                 if (doubleQuoteNewlineIndex !== -1) {
                     remaining = remaining.slice(doubleQuoteNewlineIndex);
                 }
@@ -2524,11 +1687,11 @@ export function parseEnv(content) {
             }
         }
 
-        var firstChar = remaining.charAt(0);
+        const firstChar = remaining.charAt(0);
         if (firstChar === '\'' || firstChar === '"' || firstChar === '`') {
-            var quoteCloseIndex = remaining.indexOf(firstChar, 1);
+            const quoteCloseIndex = remaining.indexOf(firstChar, 1);
             if (quoteCloseIndex === -1) {
-                var unclosedQuoteNewlineIndex = remaining.indexOf('\n');
+                const unclosedQuoteNewlineIndex = remaining.indexOf('\n');
                 if (unclosedQuoteNewlineIndex !== -1) {
                     store[key] = remaining.slice(0, unclosedQuoteNewlineIndex);
                     remaining = remaining.slice(unclosedQuoteNewlineIndex);
@@ -2539,7 +1702,7 @@ export function parseEnv(content) {
             } else {
                 store[key] = remaining.slice(1, quoteCloseIndex);
 
-                var quotedNewlineIndex = remaining.indexOf('\n', quoteCloseIndex + 1);
+                const quotedNewlineIndex = remaining.indexOf('\n', quoteCloseIndex + 1);
                 if (quotedNewlineIndex !== -1) {
                     remaining = remaining.slice(quotedNewlineIndex);
                 } else {
@@ -2550,11 +1713,11 @@ export function parseEnv(content) {
             continue;
         }
 
-        var newlineIndex = remaining.indexOf('\n');
-        var value;
+        const newlineIndex = remaining.indexOf('\n');
+        let value;
         if (newlineIndex !== -1) {
             value = remaining.slice(0, newlineIndex);
-            var hashIndex = value.indexOf('#');
+            const hashIndex = value.indexOf('#');
             if (hashIndex !== -1) {
                 value = remaining.slice(0, hashIndex);
             }
@@ -2573,7 +1736,7 @@ export function parseEnv(content) {
 // --- util.parseArgs() ---
 
 function _makeError(code, message) {
-    var err = new TypeError(message);
+    const err = new TypeError(message);
     err.code = code;
     return err;
 }
@@ -2587,9 +1750,9 @@ function _findLongOption(optionName, options) {
 
 function _findShortOption(shortChar, options) {
     if (!options) return null;
-    var keys = Object.keys(options);
-    for (var i = 0; i < keys.length; i++) {
-        var opt = options[keys[i]];
+    const keys = Object.keys(options);
+    for (let i = 0; i < keys.length; i++) {
+        const opt = options[keys[i]];
         if (opt && opt.short === shortChar) {
             return keys[i];
         }
@@ -2604,7 +1767,7 @@ export function parseArgs(config) {
             'The "config" argument must be of type object');
     }
 
-    var args = config.args;
+    let args = config.args;
     if (args === undefined) {
         args = typeof process !== 'undefined' && process.argv ? process.argv.slice(2) : [];
     }
@@ -2613,24 +1776,24 @@ export function parseArgs(config) {
             'The "args" argument must be an instance of Array');
     }
 
-    var options = config.options || {};
-    var strict = config.strict !== undefined ? config.strict : true;
-    var allowPositionals = config.allowPositionals;
+    const options = config.options || {};
+    const strict = config.strict !== undefined ? config.strict : true;
+    let allowPositionals = config.allowPositionals;
     if (allowPositionals === undefined) {
         allowPositionals = !strict;
     }
-    var allowNegative = config.allowNegative || false;
-    var returnTokens = config.tokens || false;
+    const allowNegative = config.allowNegative || false;
+    const returnTokens = config.tokens || false;
 
     // Validate options config
-    var optionKeys = Object.keys(options);
-    for (var oi = 0; oi < optionKeys.length; oi++) {
-        var optName = optionKeys[oi];
+    const optionKeys = Object.keys(options);
+    for (let oi = 0; oi < optionKeys.length; oi++) {
+        const optName = optionKeys[oi];
         if (optName === '__proto__') {
             throw _makeError('ERR_INVALID_ARG_VALUE',
                 "The property 'options.__proto__' is invalid. __proto__ is not allowed");
         }
-        var desc = options[optName];
+        const desc = options[optName];
         if (desc.type !== 'string' && desc.type !== 'boolean') {
             throw _makeError('ERR_INVALID_ARG_VALUE',
                 "The property 'options." + optName + ".type' is invalid. " +
@@ -2645,14 +1808,14 @@ export function parseArgs(config) {
         }
     }
 
-    var values = Object.create(null);
-    var positionals = [];
-    var tokens = [];
+    const values = Object.create(null);
+    const positionals = [];
+    const tokens = [];
 
     // Apply defaults
-    for (var di = 0; di < optionKeys.length; di++) {
-        var defName = optionKeys[di];
-        var defDesc = options[defName];
+    for (let di = 0; di < optionKeys.length; di++) {
+        const defName = optionKeys[di];
+        const defDesc = options[defName];
         if (defDesc.default !== undefined) {
             values[defName] = defDesc.default;
         } else if (defDesc.multiple) {
@@ -2660,11 +1823,11 @@ export function parseArgs(config) {
         }
     }
 
-    var seenTerminator = false;
-    var index = 0;
+    let seenTerminator = false;
+    let index = 0;
 
     while (index < args.length) {
-        var arg = args[index];
+        const arg = args[index];
 
         if (seenTerminator) {
             if (strict && !allowPositionals) {
@@ -2691,8 +1854,8 @@ export function parseArgs(config) {
 
         // Long option
         if (arg.length > 2 && arg.charAt(0) === '-' && arg.charAt(1) === '-') {
-            var eqIdx = arg.indexOf('=');
-            var longName, inlineValue;
+            const eqIdx = arg.indexOf('=');
+            let longName, inlineValue;
             if (eqIdx !== -1) {
                 longName = arg.slice(2, eqIdx);
                 inlineValue = arg.slice(eqIdx + 1);
@@ -2702,11 +1865,11 @@ export function parseArgs(config) {
             }
 
             // Check for --no- negation
-            var isNegated = false;
-            var resolvedName = _findLongOption(longName, options);
+            let isNegated = false;
+            let resolvedName = _findLongOption(longName, options);
             if (resolvedName === null && allowNegative && longName.slice(0, 3) === 'no-') {
-                var positiveName = longName.slice(3);
-                var positiveResolved = _findLongOption(positiveName, options);
+                const positiveName = longName.slice(3);
+                const positiveResolved = _findLongOption(positiveName, options);
                 if (positiveResolved !== null && options[positiveResolved].type === 'boolean') {
                     isNegated = true;
                     resolvedName = positiveResolved;
@@ -2720,7 +1883,7 @@ export function parseArgs(config) {
                         "Unknown option '--" + longName + "'");
                 }
                 // In non-strict mode, treat unknown as boolean
-                var unknownVal = inlineValue !== undefined ? inlineValue : true;
+                let unknownVal = inlineValue !== undefined ? inlineValue : true;
                 if (typeof unknownVal === 'string' && unknownVal === '') unknownVal = '';
                 values[longName] = unknownVal;
                 if (returnTokens) {
@@ -2734,7 +1897,7 @@ export function parseArgs(config) {
                 continue;
             }
 
-            var optDesc = options[resolvedName];
+            const optDesc = options[resolvedName];
 
             if (isNegated) {
                 if (inlineValue !== undefined) {
@@ -2771,7 +1934,7 @@ export function parseArgs(config) {
                 }
             } else {
                 // string type
-                var strVal;
+                let strVal;
                 if (inlineValue !== undefined) {
                     strVal = inlineValue;
                 } else if (index + 1 < args.length) {
@@ -2799,11 +1962,11 @@ export function parseArgs(config) {
 
         // Short option(s)
         if (arg.length >= 2 && arg.charAt(0) === '-' && arg.charAt(1) !== '-') {
-            var shortGroup = arg.slice(1);
-            var si = 0;
+            const shortGroup = arg.slice(1);
+            let si = 0;
             while (si < shortGroup.length) {
-                var shortChar = shortGroup.charAt(si);
-                var shortResolved = _findShortOption(shortChar, options);
+                const shortChar = shortGroup.charAt(si);
+                const shortResolved = _findShortOption(shortChar, options);
 
                 if (shortResolved === null) {
                     if (strict) {
@@ -2822,7 +1985,7 @@ export function parseArgs(config) {
                     continue;
                 }
 
-                var shortDesc = options[shortResolved];
+                const shortDesc = options[shortResolved];
 
                 if (shortDesc.type === 'boolean') {
                     _storeOption(values, shortResolved, shortDesc, true);
@@ -2836,7 +1999,7 @@ export function parseArgs(config) {
                     si++;
                 } else {
                     // string type — rest of group is the value, or next arg
-                    var shortVal;
+                    let shortVal;
                     if (si + 1 < shortGroup.length) {
                         shortVal = shortGroup.slice(si + 1);
                     } else if (index + 1 < args.length) {
@@ -2876,7 +2039,7 @@ export function parseArgs(config) {
         index++;
     }
 
-    var result = { values: values, positionals: positionals };
+    const result = { values: values, positionals: positionals };
     if (returnTokens) {
         result.tokens = tokens;
     }
@@ -2895,8 +2058,8 @@ function _storeOption(values, name, desc, value) {
 }
 
 import { TextEncoder as _TextEncoder, TextDecoder as _TextDecoder } from '__wasm_rquickjs_builtin/encoding';
-export var TextEncoder = _TextEncoder;
-export var TextDecoder = _TextDecoder;
+export const TextEncoder = _TextEncoder;
+export const TextDecoder = _TextDecoder;
 
 export { inspect, format, formatWithOptions, stripVTControlCharacters };
 
