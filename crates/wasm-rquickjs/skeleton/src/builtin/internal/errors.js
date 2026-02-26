@@ -972,6 +972,13 @@ export class ERR_CRYPTO_UNKNOWN_CIPHER extends Error {
     }
 }
 
+export class ERR_IPC_CHANNEL_CLOSED extends Error {
+    constructor() {
+        super("Channel closed");
+        addCodeToMessage(this, "ERR_IPC_CHANNEL_CLOSED");
+    }
+}
+
 export const codes = Object.freeze({
     ERR_AMBIGUOUS_ARGUMENT,
     ERR_ASSERT_SNAPSHOT_NOT_SUPPORTED,
@@ -1006,6 +1013,7 @@ export const codes = Object.freeze({
     ERR_HTTP_HEADERS_SENT,
     ERR_HTTP_INVALID_HEADER_VALUE,
     ERR_HTTP_TRAILER_INVALID,
+    ERR_IPC_CHANNEL_CLOSED,
     ERR_ILLEGAL_CONSTRUCTOR,
     ERR_INCOMPATIBLE_OPTION_PAIR,
     ERR_INVALID_ARG_TYPE,

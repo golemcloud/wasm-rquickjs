@@ -514,7 +514,7 @@
     },
     "parallel/test-util.js": {
       "skip": true,
-      "reason": "requires --expose-internals and internal/errors"
+      "reason": "[manual] amp fix attempt failed verification"
     },
 
     // === node:fs tests ===

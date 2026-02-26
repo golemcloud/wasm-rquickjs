@@ -55,6 +55,7 @@ var _ErrorPrototypeToString = Error.prototype.toString;
 var _NumberIsInteger = Number.isInteger;
 var _NumberPrototypeValueOf = Number.prototype.valueOf;
 var _StringPrototypeValueOf = String.prototype.valueOf;
+var _StringPrototypeToWellFormed = String.prototype.toWellFormed;
 var _BooleanPrototypeValueOf = Boolean.prototype.valueOf;
 
 var _TypedArrayToStringTagGetter = (function() {
@@ -942,6 +943,41 @@ export function isDate(d) {
 
 export function isFunction(arg) {
     return typeof arg === 'function';
+}
+
+export function toUSVString(input) {
+    var str = String(input);
+    if (typeof _StringPrototypeToWellFormed === 'function') {
+        return _StringPrototypeToWellFormed.call(str);
+    }
+
+    var result = '';
+    for (var i = 0; i < str.length; i++) {
+        var code = str.charCodeAt(i);
+
+        if (code >= 0xD800 && code <= 0xDBFF) {
+            if (i + 1 < str.length) {
+                var next = str.charCodeAt(i + 1);
+                if (next >= 0xDC00 && next <= 0xDFFF) {
+                    result += str.charAt(i) + str.charAt(i + 1);
+                    i++;
+                    continue;
+                }
+            }
+
+            result += '\uFFFD';
+            continue;
+        }
+
+        if (code >= 0xDC00 && code <= 0xDFFF) {
+            result += '\uFFFD';
+            continue;
+        }
+
+        result += str.charAt(i);
+    }
+
+    return result;
 }
 
 export function isPrimitive(arg) {
@@ -1898,7 +1934,7 @@ export var types = {
         return _toString(v) === '[object Promise]';
     },
     isNativeError: function isNativeError(v) {
-        return v instanceof Error;
+        return isObject(v) && _toString(v) === '[object Error]';
     },
     isAsyncFunction: function isAsyncFunction(v) {
         return _toString(v) === '[object AsyncFunction]';
@@ -2601,6 +2637,7 @@ export default {
      getCallSite,
      getCallSites,
      parseArgs,
+     toUSVString,
      types,
      TextEncoder,
      TextDecoder,
