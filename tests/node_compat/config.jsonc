@@ -437,7 +437,10 @@
         },
         "block_75_check_the_getter_option": {},
         "block_76_check_compact_number_mode": {},
-        "block_77_block_77": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_77_block_77": {
+          "skip": true,
+          "reason": "[manual] amp made no code changes"
+        },
         "block_78_block_78": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_79_block_79": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_80_inspect_prototype_properties": {},
