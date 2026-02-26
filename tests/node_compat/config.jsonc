@@ -427,7 +427,10 @@
         "block_70_verify_non_enumerable_keys_get_escaped": {},
         "block_71_check_for_special_colors": {},
         "block_72_non_indices_array_properties_are_sorted_as_well": {},
-        "block_73_manipulate_the_prototype_in_weird_ways": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_73_manipulate_the_prototype_in_weird_ways": {
+          "skip": true,
+          "reason": "[manual] amp fix caused regressions"
+        },
         "block_74_check_that_the_fallback_always_works": {
           "skip": true,
           "reason": "[manual] `test-util-inspect` currently depends on behaviors that are not reliably derivable from pure JS in this runtime (constructor-name recovery for null-prototype constructor instances, and dee..."
