@@ -3,6 +3,8 @@ import { eval_in_new_context as evalInNewContext } from '__wasm_rquickjs_builtin
 var contextIdCounter = 1;
 var contextSymbol = Symbol('vm.context');
 var identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
+var moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
+var moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
 
 function splitDeclarators(declarationList) {
     var result = [];
@@ -102,6 +104,22 @@ function compileSourceTextModuleEvaluator(source, names) {
 function createModuleNamespace(module) {
     var namespaceTarget = Object.create(null);
     var names = module._names.slice().sort();
+
+    // QuickJS does not expose virtual export keys from this proxy via
+    // Object.getOwnPropertyNames() while bindings are uninitialized.
+    // Store names out-of-band so util.inspect can still enumerate exports.
+    Object.defineProperty(namespaceTarget, moduleNamespaceExportsSymbol, {
+        value: names.slice(),
+        enumerable: false,
+        writable: false,
+        configurable: false,
+    });
+    Object.defineProperty(namespaceTarget, moduleNamespaceBindingsSymbol, {
+        value: module._bindings,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+    });
 
     Object.defineProperty(namespaceTarget, Symbol.toStringTag, {
         value: 'Module',

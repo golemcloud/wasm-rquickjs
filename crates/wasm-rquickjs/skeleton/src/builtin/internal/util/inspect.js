@@ -1115,6 +1115,7 @@ function getCtxStyle(value, constructor, tag) {
 // Look up the keys of the object.
 function getKeys(value, showHidden) {
     let keys;
+    const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
     const symbols = Object.getOwnPropertySymbols(value);
     if (showHidden) {
         keys = Object.getOwnPropertyNames(value);
@@ -1134,6 +1135,17 @@ function getKeys(value, showHidden) {
             // assert(isNativeError(err) && err.name === 'ReferenceError' &&
             //        isModuleNamespaceObject(value));
             keys = Object.getOwnPropertyNames(value);
+        }
+        // QuickJS-backed vm.SourceTextModule namespaces can surface as
+        // Module objects whose own enumerable keys are unavailable before
+        // evaluation; inspect should still format all exports.
+        if (keys.length === 0 && types.isModuleNamespaceObject(value)) {
+            const knownExports = value[moduleNamespaceExportsSymbol];
+            if (Array.isArray(knownExports)) {
+                keys = knownExports.slice();
+            } else {
+                keys = Object.getOwnPropertyNames(value);
+            }
         }
         if (symbols.length !== 0) {
             for (let i = 0; i < symbols.length; i++) {
@@ -1605,14 +1617,36 @@ function formatNamespaceObject(
     value,
     recurseTimes,
 ) {
+    const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
+    const moduleBindings = value[moduleNamespaceBindingsSymbol];
     const output = new Array(keys.length);
     for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (
+            moduleBindings &&
+            typeof key === 'string' &&
+            moduleBindings[key] !== undefined
+        ) {
+            const binding = moduleBindings[key];
+            if (binding.initialized) {
+                const tmp = { [key]: binding.value };
+                output[i] = formatProperty(ctx, tmp, recurseTimes, key, kObjectType);
+            } else {
+                const tmp = { [key]: '' };
+                output[i] = formatProperty(ctx, tmp, recurseTimes, key, kObjectType);
+                const pos = output[i].lastIndexOf(' ');
+                output[i] = output[i].slice(0, pos + 1) +
+                    ctx.stylize('<uninitialized>', 'special');
+            }
+            continue;
+        }
+
         try {
             output[i] = formatProperty(
                 ctx,
                 value,
                 recurseTimes,
-                keys[i],
+                key,
                 kObjectType,
             );
         } catch (_err) {
@@ -1621,8 +1655,8 @@ function formatNamespaceObject(
             // Use the existing functionality. This makes sure the indentation and
             // line breaks are always correct. Otherwise it is very difficult to keep
             // this aligned, even though this is a hacky way of dealing with this.
-            const tmp = { [keys[i]]: "" };
-            output[i] = formatProperty(ctx, tmp, recurseTimes, keys[i], kObjectType);
+            const tmp = { [key]: "" };
+            output[i] = formatProperty(ctx, tmp, recurseTimes, key, kObjectType);
             const pos = output[i].lastIndexOf(" ");
             // We have to find the last whitespace and have to replace that value as
             // it will be visualized as a regular string.
