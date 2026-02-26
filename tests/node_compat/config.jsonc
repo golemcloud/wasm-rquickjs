@@ -445,7 +445,10 @@
           "skip": true,
           "reason": "[manual] amp fix attempt failed verification"
         },
-        "block_79_block_79": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_79_block_79": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "block_80_inspect_prototype_properties": {},
         "block_81_regression_test_for_https_github_com_nodejs_node_issues_3573": {},
         "block_82_test_changing_util_inspect_colors_colors_and_aliases": {},

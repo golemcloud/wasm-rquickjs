@@ -627,6 +627,17 @@ Deprecated error-handling domains (sync-only). Supported API:
 
 Context propagation works through `Promise.prototype.then/catch/finally` and `setTimeout`/`setInterval`. **Limitation:** QuickJS `await` uses internal C-level `perform_promise_then` which bypasses JS-visible `Promise.prototype.then`, so context is **not** propagated across `await` boundaries.
 
+### `node:trace_events`
+
+Partial compatibility API to unblock modules that inspect tracing state.
+
+- `createTracing({ categories: string[] })` — creates a `Tracing` handle
+- `Tracing#enable()` / `Tracing#disable()` — toggles local tracing state
+- `Tracing#enabled` / `Tracing#categories` — read tracing configuration
+- `getEnabledCategories()` — returns currently enabled categories as a comma-separated string
+
+**Limitation:** No native trace sink is implemented in the WASM runtime; this is API-surface compatibility only.
+
 ### Crypto (global)
 - `crypto.randomUUID`
 - `crypto.getRandomValues`

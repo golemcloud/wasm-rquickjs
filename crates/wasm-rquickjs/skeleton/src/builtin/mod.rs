@@ -59,6 +59,7 @@ mod string_decoder;
 mod structured_clone;
 mod timeout;
 mod timers;
+mod trace_events;
 mod tls;
 mod tty;
 mod url;
@@ -190,6 +191,8 @@ pub fn add_module_resolvers(
         .with_module("repl")
         .with_module("node:console")
         .with_module("console")
+        .with_module("node:trace_events")
+        .with_module("trace_events")
         .with_module("node:tls")
         .with_module("tls")
         .with_module("node:tty")
@@ -390,6 +393,8 @@ pub fn module_loader() -> (
         .with_module("repl", repl::REEXPORT_JS)
         .with_module("node:console", console::CONSOLE_JS)
         .with_module("console", console::REEXPORT_JS)
+        .with_module("node:trace_events", trace_events::TRACE_EVENTS_JS)
+        .with_module("trace_events", trace_events::REEXPORT_JS)
         .with_module("node:tls", tls::TLS_JS)
         .with_module("tls", tls::REEXPORT_JS)
         .with_module("node:tty", tty::TTY_JS)

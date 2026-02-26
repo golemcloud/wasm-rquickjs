@@ -39,6 +39,7 @@ import * as perf_hooks from 'node:perf_hooks';
 import * as readline from 'node:readline';
 import * as readlinePromises from 'node:readline/promises';
 import * as repl from 'node:repl';
+import * as trace_events from 'node:trace_events';
 import * as tls from 'node:tls';
 import * as tty from 'node:tty';
 import * as v8 from 'node:v8';
@@ -186,6 +187,8 @@ const builtinModules = {
     'node:repl': cjsExport(repl),
     'tls': cjsExport(tls),
     'node:tls': cjsExport(tls),
+    'trace_events': cjsExport(trace_events),
+    'node:trace_events': cjsExport(trace_events),
     'tty': cjsExport(tty),
     'node:tty': cjsExport(tty),
     'v8': cjsExport(v8),
