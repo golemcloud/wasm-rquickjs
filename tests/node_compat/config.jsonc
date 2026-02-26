@@ -7491,7 +7491,7 @@
     },
     "parallel/test-permission-no-addons.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-permission-processbinding.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-permission-sqlite-load-extension.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-permission-sqlite-load-extension.js": { "skip": true, "reason": "uses spawnPromisified and permission model, not applicable in WASM" },
     "parallel/test-permission-warning-flags.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-permission-wasi.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-permission-worker-threads-cli.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -8469,43 +8469,89 @@
     },
     "parallel/test-source-map-cjs-require-cache.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-spawn-cmd-named-pipe.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-custom-functions.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-data-types.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-database-sync.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-named-parameters.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-session.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
+    "parallel/test-sqlite-custom-functions.js": {
       "split": true,
       "subtests": {
-        "test_00_creating_and_applying_a_changeset": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_database_createsession_closed_database_results_in_exception": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_02_session_changeset_closed_database_results_in_exception": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_database_applychangeset_closed_database_results_in_exception": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_04_database_createsession_use_table_option_to_track_specific_ta": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_05_database_createsession_filter_changes": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_06_database_createsession_specify_other_database": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_07_database_createsession_wrong_arguments": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_08_database_applychangeset_wrong_arguments": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_09_session_patchset": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_10_session_close_using_session_after_close_throws_exception": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_11_session_close_after_closing_database_throws_exception": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_12_session_close_closing_twice": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_input_validation": {},
+        "block_01_usebigintarguments": {},
+        "block_02_varargs": {},
+        "block_03_deterministic": {},
+        "block_04_directonly": {},
+        "block_05_return_types": {},
+        "test_06_supported_argument_types": {},
+        "test_07_propagates_thrown_errors": {},
+        "test_08_throws_if_database_is_not_open": {}
       }
     },
-    "parallel/test-sqlite-statement-sync.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-transactions.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-typed-array-and-data-view.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
+    "parallel/test-sqlite-data-types.js": {
       "split": true,
       "subtests": {
-        "test_00_err_sqlite_error_is_thrown_for_errors_originating_from_sqlit": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_in_memory_databases_are_supported": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_02_sqlite_constants_are_defined": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_pragmas_are_supported": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_04_math_functions_are_enabled": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_data_binding_and_mapping": {}
+      }
+    },
+    "parallel/test-sqlite-database-sync.js": {
+      "split": true,
+      "subtests": {
+        "test_00_databasesync_constructor": {},
+        "test_01_databasesync_prototype_open": {},
+        "test_02_databasesync_prototype_close": {},
+        "test_03_databasesync_prototype_prepare": {},
+        "test_04_databasesync_prototype_exec": {}
+      }
+    },
+    "parallel/test-sqlite-named-parameters.js": {
+      "split": true,
+      "subtests": {
+        "block_00_named_parameters": {}
+      }
+    },
+    "parallel/test-sqlite-session.js": {
+      "split": true,
+      "subtests": {
+        "test_00_creating_and_applying_a_changeset": {},
+        "test_01_database_createsession_closed_database_results_in_exception": {},
+        "test_02_session_changeset_closed_database_results_in_exception": {},
+        "test_03_database_applychangeset_closed_database_results_in_exception": {},
+        "test_04_database_createsession_use_table_option_to_track_specific_ta": {},
+        "test_05_database_createsession_filter_changes": {},
+        "test_06_database_createsession_specify_other_database": {},
+        "test_07_database_createsession_wrong_arguments": {},
+        "test_08_database_applychangeset_wrong_arguments": {},
+        "test_09_session_patchset": {},
+        "test_10_session_close_using_session_after_close_throws_exception": {},
+        "test_11_session_close_after_closing_database_throws_exception": {},
+        "test_12_session_close_closing_twice": {}
+      }
+    },
+    "parallel/test-sqlite-statement-sync.js": {
+      "split": true,
+      "subtests": {
+        "test_00_statementsync_constructor": {},
+        "test_01_statementsync_prototype_get": {},
+        "test_02_statementsync_prototype_all": {},
+        "test_03_statementsync_prototype_iterate": {},
+        "test_04_statementsync_prototype_run": {},
+        "test_05_statementsync_prototype_sourcesql": {},
+        "test_06_statementsync_prototype_expandedsql": {},
+        "test_07_statementsync_prototype_setreadbigints": {},
+        "test_08_statementsync_prototype_setallowbarenamedparameters": {}
+      }
+    },
+    "parallel/test-sqlite-transactions.js": {},
+    "parallel/test-sqlite-typed-array-and-data-view.js": {
+      "split": true,
+      "subtests": {
+        "block_00_statementsync_with_typedarray_dataview": {}
+      }
+    },
+    "parallel/test-sqlite.js": {
+      "split": true,
+      "subtests": {
+        "test_00_err_sqlite_error_is_thrown_for_errors_originating_from_sqlit": {},
+        "test_01_in_memory_databases_are_supported": {},
+        "test_02_sqlite_constants_are_defined": {},
+        "test_03_pragmas_are_supported": { "skip": true, "reason": "WAL mode not supported in WASM VFS" },
+        "test_04_math_functions_are_enabled": { "skip": true, "reason": "SQLITE_ENABLE_MATH_FUNCTIONS not set in bundled libsqlite3-sys" }
       }
     },
     "parallel/test-stack-size-limit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },

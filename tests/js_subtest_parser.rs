@@ -104,6 +104,55 @@ fn test_rewrite_for_node_test() {
 }
 
 #[test]
+fn test_suite_discovery() {
+    let source = r#"
+'use strict';
+const { suite, test } = require('node:test');
+
+suite('First suite', () => {
+    test('nested test', () => {});
+});
+
+suite('Second suite', () => {
+    test('another nested test', () => {});
+});
+"#;
+    match discover_subtests("test.js", source) {
+        SubtestDiscovery::NodeTest(tests) => {
+            assert_eq!(tests.len(), 2);
+            assert_eq!(tests[0].name, "test_00_first_suite");
+            assert_eq!(tests[1].name, "test_01_second_suite");
+        }
+        other => panic!("Expected NodeTest discovery, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_mixed_test_and_suite_discovery() {
+    let source = r#"
+'use strict';
+const { suite, test } = require('node:test');
+
+test('standalone test', () => {});
+
+suite('A suite', () => {
+    test('nested', () => {});
+});
+
+test('another standalone', () => {});
+"#;
+    match discover_subtests("test.js", source) {
+        SubtestDiscovery::NodeTest(tests) => {
+            assert_eq!(tests.len(), 3);
+            assert_eq!(tests[0].name, "test_00_standalone_test");
+            assert_eq!(tests[1].name, "test_01_a_suite");
+            assert_eq!(tests[2].name, "test_02_another_standalone");
+        }
+        other => panic!("Expected NodeTest discovery, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_no_split_for_single_block() {
     let source = "'use strict';\n{ assert(1); }";
     match discover_subtests("test.js", source) {

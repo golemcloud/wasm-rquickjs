@@ -181,6 +181,7 @@ pub enum FeatureCombination {
     None,
     LogOnly,
     HttpOnly,
+    HttpAndSqlite,
     Default,
     Golem,
 }
@@ -195,6 +196,7 @@ impl FeatureCombination {
             Self::None => "none",
             Self::LogOnly => "log",
             Self::HttpOnly => "http",
+            Self::HttpAndSqlite => "http-sqlite",
             Self::Default => "default",
             Self::Golem => "golem",
         }
@@ -207,6 +209,9 @@ impl FeatureCombination {
                 vec!["--no-default-features", "--features", "logging"]
             }
             FeatureCombination::HttpOnly => vec!["--no-default-features", "--features", "http"],
+            FeatureCombination::HttpAndSqlite => {
+                vec!["--no-default-features", "--features", "http,sqlite"]
+            }
             FeatureCombination::Default => vec![],
             FeatureCombination::Golem => vec!["--features", "golem"],
         }

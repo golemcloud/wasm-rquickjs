@@ -21,7 +21,9 @@ mod common;
 #[test_dep]
 fn prepare_node_compat() -> Arc<PreparedComponent> {
     let path = Utf8Path::new("examples/node-compat-runner");
-    let compiled = CompiledTest::new(path, true).expect("Failed to compile node-compat-runner");
+    let compiled =
+        CompiledTest::new_with_features(path, true, common::FeatureCombination::HttpAndSqlite)
+            .expect("Failed to compile node-compat-runner");
     Arc::new(PreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"))
 }
 
@@ -176,29 +178,34 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 ..TestProperties::unit_test()
             };
 
-            r.add_async_test(file_test_name, props, Some(vec!["arc_preparedcomponent".to_string()]), move |deps| {
-                let prepared: Arc<Arc<PreparedComponent>> = deps
-                    .get("arc_preparedcomponent")
-                    .expect("PreparedComponent dependency not found")
-                    .downcast::<Arc<PreparedComponent>>()
-                    .expect("PreparedComponent type mismatch");
-                let path = path.clone();
-                Box::pin(async move {
-                    let mut instance = TestInstance::from_prepared(&prepared).await?;
-                    setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+            r.add_async_test(
+                file_test_name,
+                props,
+                Some(vec!["arc_preparedcomponent".to_string()]),
+                move |deps| {
+                    let prepared: Arc<Arc<PreparedComponent>> = deps
+                        .get("arc_preparedcomponent")
+                        .expect("PreparedComponent dependency not found")
+                        .downcast::<Arc<PreparedComponent>>()
+                        .expect("PreparedComponent type mismatch");
+                    let path = path.clone();
+                    Box::pin(async move {
+                        let mut instance = TestInstance::from_prepared(&prepared).await?;
+                        setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                    let guest_path = format!("/test/{}", path);
-                    let (result, stdout, stderr) = instance
-                        .invoke_and_capture_output_with_stderr(
-                            None,
-                            "run-test",
-                            &[Val::String(guest_path)],
-                        )
-                        .await;
+                        let guest_path = format!("/test/{}", path);
+                        let (result, stdout, stderr) = instance
+                            .invoke_and_capture_output_with_stderr(
+                                None,
+                                "run-test",
+                                &[Val::String(guest_path)],
+                            )
+                            .await;
 
-                    handle_test_result(result, &stdout, &stderr)
-                })
-            });
+                        handle_test_result(result, &stdout, &stderr)
+                    })
+                },
+            );
         } else {
             // Split: one Rust test per subtest
             let suite_path = format!("tests/node_compat/suite/{}", path);
@@ -244,52 +251,57 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     SubtestDiscovery::NodeTest(_) => Some(DiscoveryData::NodeTest),
                 };
 
-                r.add_async_test(test_name, props, Some(vec!["arc_preparedcomponent".to_string()]), move |deps| {
-                    let prepared: Arc<Arc<PreparedComponent>> = deps
-                        .get("arc_preparedcomponent")
-                        .expect("PreparedComponent dependency not found")
-                        .downcast::<Arc<PreparedComponent>>()
-                        .expect("PreparedComponent type mismatch");
-                    let path = path.clone();
-                    let source = source.clone();
-                    let discovery_clone = discovery_clone.clone();
-                    Box::pin(async move {
-                        let mut instance = TestInstance::from_prepared(&prepared).await?;
-                        setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                r.add_async_test(
+                    test_name,
+                    props,
+                    Some(vec!["arc_preparedcomponent".to_string()]),
+                    move |deps| {
+                        let prepared: Arc<Arc<PreparedComponent>> = deps
+                            .get("arc_preparedcomponent")
+                            .expect("PreparedComponent dependency not found")
+                            .downcast::<Arc<PreparedComponent>>()
+                            .expect("PreparedComponent type mismatch");
+                        let path = path.clone();
+                        let source = source.clone();
+                        let discovery_clone = discovery_clone.clone();
+                        Box::pin(async move {
+                            let mut instance = TestInstance::from_prepared(&prepared).await?;
+                            setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                        // Rewrite the test file to isolate the target subtest
-                        let rewritten = match &discovery_clone {
-                            Some(DiscoveryData::Block(blocks)) => {
-                                rewrite_for_block(&source, blocks, subtest_index)
-                            }
-                            Some(DiscoveryData::NodeTest) => {
-                                rewrite_for_node_test(&source, subtest_index)
-                            }
-                            None => source.clone(),
-                        };
+                            // Rewrite the test file to isolate the target subtest
+                            let rewritten = match &discovery_clone {
+                                Some(DiscoveryData::Block(blocks)) => {
+                                    rewrite_for_block(&source, blocks, subtest_index)
+                                }
+                                Some(DiscoveryData::NodeTest) => {
+                                    rewrite_for_node_test(&source, subtest_index)
+                                }
+                                None => source.clone(),
+                            };
 
-                        // Write the rewritten file to the temp dir
-                        let test_filename = path.rsplit('/').next().unwrap_or(&path);
-                        let suite = path.split('/').next().unwrap_or("parallel");
-                        let rewritten_path = instance
-                            .temp_dir_path()
-                            .join("test")
-                            .join(suite)
-                            .join(test_filename);
-                        fs::write(&rewritten_path, &rewritten)?;
+                            // Write the rewritten file to the temp dir
+                            let test_filename = path.rsplit('/').next().unwrap_or(&path);
+                            let suite = path.split('/').next().unwrap_or("parallel");
+                            let rewritten_path = instance
+                                .temp_dir_path()
+                                .join("test")
+                                .join(suite)
+                                .join(test_filename);
+                            fs::write(&rewritten_path, &rewritten)?;
 
-                        let guest_path = format!("/test/{}", path);
-                        let (result, stdout, stderr) = instance
-                            .invoke_and_capture_output_with_stderr(
-                                None,
-                                "run-test",
-                                &[Val::String(guest_path)],
-                            )
-                            .await;
+                            let guest_path = format!("/test/{}", path);
+                            let (result, stdout, stderr) = instance
+                                .invoke_and_capture_output_with_stderr(
+                                    None,
+                                    "run-test",
+                                    &[Val::String(guest_path)],
+                                )
+                                .await;
 
-                        handle_test_result(result, &stdout, &stderr)
-                    })
-                });
+                            handle_test_result(result, &stdout, &stderr)
+                        })
+                    },
+                );
             }
         }
     }

@@ -558,6 +558,12 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
         return;
     }
 
+    // Lazy-read filter from global (set by test harness before file execution,
+    // but after module initialization)
+    if (_subtestFilter === null && typeof globalThis.__wasm_rquickjs_node_test_filter === 'number') {
+        _subtestFilter = globalThis.__wasm_rquickjs_node_test_filter;
+    }
+
     // Index-based subtest filtering
     var currentIndex = _subtestRegistrationIndex++;
     if (_subtestFilter !== null && currentIndex !== _subtestFilter) {
@@ -619,6 +625,18 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
             options: parsed.options,
             fn: parsed.fn
         });
+        return;
+    }
+
+    // Lazy-read filter from global
+    if (_subtestFilter === null && typeof globalThis.__wasm_rquickjs_node_test_filter === 'number') {
+        _subtestFilter = globalThis.__wasm_rquickjs_node_test_filter;
+    }
+
+    // Index-based subtest filtering (suites participate just like tests)
+    var currentIndex = _subtestRegistrationIndex++;
+    if (_subtestFilter !== null && currentIndex !== _subtestFilter) {
+        // Silently skip — filtered out
         return;
     }
 

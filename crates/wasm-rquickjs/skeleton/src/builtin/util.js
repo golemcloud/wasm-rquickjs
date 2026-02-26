@@ -1316,6 +1316,38 @@ function _isSingletonRuntimeObject(value) {
     return typeof process !== 'undefined' && value === process;
 }
 
+// QuickJS does not implement ES2015 Annex B __proto__ in object literals:
+// `{ __proto__: null }` creates a regular-prototype object with `__proto__` as
+// an own enumerable property, instead of setting the prototype to null.
+// This normalization converts such objects to actual null-prototype objects
+// (matching V8/Node.js semantics) so that deepStrictEqual comparisons work
+// correctly against our runtime objects which use Object.create(null).
+function _isQuickJSProtoNullArtifact(obj) {
+    if (obj === null || typeof obj !== 'object') return false;
+    if (_ArrayIsArray(obj)) return false;
+    if (_ObjectPrototypeToString.call(obj) !== '[object Object]') return false;
+    if (_ObjectGetPrototypeOf(obj) !== Object.prototype) return false;
+    var d = _ObjectGetOwnPropertyDescriptor(obj, '__proto__');
+    if (!d || d.get || d.set) return false;
+    if (d.value !== null || d.enumerable !== true) return false;
+    return true;
+}
+
+function _normalizeProtoNullArtifact(obj) {
+    if (!_isQuickJSProtoNullArtifact(obj)) return obj;
+    var clone = Object.create(null);
+    var names = _ObjectGetOwnPropertyNames(obj);
+    for (var i = 0; i < names.length; i++) {
+        if (names[i] === '__proto__') continue;
+        _ObjectDefineProperty(clone, names[i], _ObjectGetOwnPropertyDescriptor(obj, names[i]));
+    }
+    var syms = _ObjectGetOwnPropertySymbols(obj);
+    for (var i = 0; i < syms.length; i++) {
+        _ObjectDefineProperty(clone, syms[i], _ObjectGetOwnPropertyDescriptor(obj, syms[i]));
+    }
+    return clone;
+}
+
 function _deepObjEquiv(a, b, strict, memo) {
     if (a === null || a === undefined || b === null || b === undefined)
         return false;
@@ -1323,6 +1355,10 @@ function _deepObjEquiv(a, b, strict, memo) {
     if (typeof a !== 'object' && typeof b !== 'object') {
         return strict ? Object.is(a, b) : a == b;
     }
+
+    // Normalize QuickJS __proto__: null artifact on both sides
+    a = _normalizeProtoNullArtifact(a);
+    b = _normalizeProtoNullArtifact(b);
 
     // Compute tags once to avoid repeated Object.prototype.toString.call (expensive in WASM/QuickJS)
     var aTag = Object.prototype.toString.call(a);

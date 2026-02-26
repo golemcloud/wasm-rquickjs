@@ -71,6 +71,16 @@ mod webstreams;
 mod worker_threads;
 mod zlib;
 
+#[cfg(feature = "sqlite")]
+mod sqlite;
+
+#[cfg(not(feature = "sqlite"))]
+mod sqlite_disabled;
+#[cfg(not(feature = "sqlite"))]
+mod sqlite {
+    pub use super::sqlite_disabled::*;
+}
+
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
 ) -> rquickjs::loader::BuiltinResolver {
@@ -204,7 +214,10 @@ pub fn add_module_resolvers(
         .with_module("worker_threads")
         .with_module("__wasm_rquickjs_builtin/zlib_native")
         .with_module("node:zlib")
-        .with_module("zlib");
+        .with_module("zlib")
+        // SQLite - only node:sqlite, no bare "sqlite" (matches Node.js behavior)
+        .with_module("__wasm_rquickjs_builtin/sqlite_native")
+        .with_module("node:sqlite");
 
     #[cfg(feature = "golem")]
     let resolver = resolver
@@ -273,6 +286,10 @@ pub fn module_loader() -> (
         .with_module(
             "__wasm_rquickjs_builtin/net_native",
             net::js_native_module,
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/sqlite_native",
+            sqlite::js_native_module,
         );
 
     #[cfg(feature = "golem")]
@@ -406,7 +423,8 @@ pub fn module_loader() -> (
         .with_module("node:worker_threads", worker_threads::WORKER_THREADS_JS)
         .with_module("worker_threads", worker_threads::REEXPORT_JS)
         .with_module("node:zlib", zlib::ZLIB_JS)
-        .with_module("zlib", zlib::REEXPORT_JS);
+        .with_module("zlib", zlib::REEXPORT_JS)
+        .with_module("node:sqlite", sqlite::SQLITE_JS);
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

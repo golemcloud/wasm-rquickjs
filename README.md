@@ -66,8 +66,9 @@ the user's WIT world:
 
 - `logging`: enables the `wasi:logging` import to be used for the JavaScript `console` API
 - `http`: enables the `wasi:http` import to be used for the JavaScript `fetch` API
+- `sqlite`: enables the `node:sqlite` module with an embedded SQLite database engine
 
-By default both feature flags are enabled.
+By default `logging` and `http` are enabled. The `sqlite` feature must be explicitly enabled.
 
 ### Generating TypeScript module definitions
 
@@ -604,6 +605,42 @@ TCP sockets and servers built on WASI sockets. Supported API:
 - `net.Stream` — alias for `net.Socket`
 
 **Not supported:** IPC/Unix domain sockets (`path` option throws), Happy Eyeballs/`autoSelectFamily` (stubbed), `cluster` integration.
+
+### `node:sqlite`
+
+Requires the `sqlite` feature flag. Provides a synchronous SQLite database API with an embedded SQLite engine.
+
+- `DatabaseSync` — synchronous database connections (in-memory and file-backed)
+  - `prepare(sql)` — create a prepared statement
+  - `exec(sql)` — execute one or more SQL statements directly
+  - `close()` — close the database connection
+  - `open()` — reopen a closed database
+  - `isOpen` — whether the database is currently open
+  - `isTransaction` — whether a transaction is currently active
+  - `createSession([options])` — create a changeset tracking session
+  - `applyChangeset(changeset[, options])` — apply a changeset or patchset
+  - `enableLoadExtension(allow)` — enable/disable extension loading (throws in WASM)
+  - `loadExtension(path)` — load a SQLite extension (not supported in WASM)
+  - `function(name, options, func)` — register a user-defined scalar function
+  - `aggregate(name, options)` — register a user-defined aggregate function
+  - `backup(destination[, options])` — backup database to a file
+- `StatementSync` — prepared statements
+  - `run([...params])` — execute with optional parameters, return changes info
+  - `get([...params])` — fetch a single row
+  - `all([...params])` — fetch all rows
+  - `iterate([...params])` — return an iterator over rows
+  - `columns()` — return column metadata
+  - `setReadBigInts(enabled)` — toggle BigInt for integer columns
+  - `setAllowBareNamedParameters(enabled)` — allow named parameters without prefix
+  - `sourceSQL` — the original SQL source
+  - `expandedSQL` — the SQL with bound parameters expanded
+- `Session` — changeset tracking
+  - `changeset()` — get the changeset as a `Uint8Array`
+  - `patchset()` — get the patchset as a `Uint8Array`
+  - `close()` — close the session
+- SQLite constants (`SQLITE_CHANGESET_OMIT`, `SQLITE_CHANGESET_REPLACE`, `SQLITE_CHANGESET_ABORT`)
+
+**Not supported:** `loadExtension()` (throws — native extensions cannot be loaded in WASM).
 
 ### `node:diagnostics_channel`
 

@@ -148,12 +148,12 @@ fn is_require_node_test(expr: &Expression) -> bool {
     false
 }
 
-/// Check if an expression is a `test(...)` call.
-fn is_test_call(expr: &Expression) -> bool {
+/// Check if an expression is a `test(...)` or `suite(...)` call.
+fn is_test_or_suite_call(expr: &Expression) -> bool {
     if let Expression::CallExpression(call) = expr
         && let Expression::Identifier(id) = &call.callee
     {
-        return id.name == "test";
+        return id.name == "test" || id.name == "suite" || id.name == "describe";
     }
     false
 }
@@ -204,7 +204,7 @@ pub fn discover_subtests(path: &str, source: &str) -> SubtestDiscovery {
         for stmt in &program.body {
             if let Statement::ExpressionStatement(expr_stmt) = stmt
                 && let Expression::CallExpression(call) = &expr_stmt.expression
-                && is_test_call(&expr_stmt.expression)
+                && is_test_or_suite_call(&expr_stmt.expression)
             {
                 let name = extract_test_name(call)
                     .map(|n| sanitize_name(&n))

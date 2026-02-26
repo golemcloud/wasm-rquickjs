@@ -17,6 +17,7 @@ crate-type = ["cdylib"]
 default = ["http", "logging"]
 http = ["dep:golem-wasi-http"]
 logging = ["dep:wasi-logging"]
+sqlite = ["dep:rusqlite"]
 golem = ["logging", "http", "dep:golem-rust"]
 
 [dependencies]
@@ -77,6 +78,9 @@ golem-wasi-http = { version = "0.1.0", features = ["async"], optional = true }
 
 # Logging
 wasi-logging = { version = "0.0.1", optional = true }
+
+# SQLite
+rusqlite = { version = "0.38", default-features = false, features = ["bundled", "wasm32-wasi-vfs", "functions", "session", "backup"], optional = true }
 
 # Golem
 golem-rust = { version = "1.7", default-features = false, optional = true }

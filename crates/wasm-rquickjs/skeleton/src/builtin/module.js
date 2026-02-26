@@ -45,6 +45,7 @@ import * as tty from 'node:tty';
 import * as v8 from 'node:v8';
 import * as worker_threads from 'node:worker_threads';
 import * as zlib from 'node:zlib';
+import * as sqlite from 'node:sqlite';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
@@ -197,6 +198,7 @@ const builtinModules = {
     'node:worker_threads': cjsExport(worker_threads),
     'zlib': cjsExport(zlib),
     'node:zlib': cjsExport(zlib),
+    'node:sqlite': cjsExport(sqlite),
     'util/types': (cjsExport(util) && cjsExport(util).types) || {},
     'node:util/types': (cjsExport(util) && cjsExport(util).types) || {},
     '_stream_readable': cjsExport(stream) && cjsExport(stream).Readable,
