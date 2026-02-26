@@ -66,10 +66,113 @@ export const SKIP_STRINGS = 8;
 export const SKIP_SYMBOLS = 16;
 
 const previewEntriesCache = new WeakMap();
+const weakMapEntriesCache = new WeakMap();
+const weakSetEntriesCache = new WeakMap();
+
+if (typeof WeakMap === "function") {
+    const weakMapSet = WeakMap.prototype.set;
+    const weakMapDelete = WeakMap.prototype.delete;
+
+    WeakMap.prototype.set = function set(key, value) {
+        const result = weakMapSet.call(this, key, value);
+        let entries = weakMapEntriesCache.get(this);
+        if (entries === undefined) {
+            entries = [];
+            weakMapEntriesCache.set(this, entries);
+        }
+
+        for (let i = 0; i < entries.length; i++) {
+            if (Object.is(entries[i][0], key)) {
+                entries[i][1] = value;
+                return result;
+            }
+        }
+
+        entries.push([key, value]);
+        return result;
+    };
+
+    WeakMap.prototype.delete = function del(key) {
+        const deleted = weakMapDelete.call(this, key);
+        if (deleted) {
+            const entries = weakMapEntriesCache.get(this);
+            if (entries !== undefined) {
+                for (let i = 0; i < entries.length; i++) {
+                    if (Object.is(entries[i][0], key)) {
+                        entries.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+        return deleted;
+    };
+}
+
+if (typeof WeakSet === "function") {
+    const weakSetAdd = WeakSet.prototype.add;
+    const weakSetDelete = WeakSet.prototype.delete;
+
+    WeakSet.prototype.add = function add(value) {
+        const result = weakSetAdd.call(this, value);
+        let entries = weakSetEntriesCache.get(this);
+        if (entries === undefined) {
+            entries = [];
+            weakSetEntriesCache.set(this, entries);
+        }
+
+        for (let i = 0; i < entries.length; i++) {
+            if (Object.is(entries[i], value)) {
+                return result;
+            }
+        }
+
+        entries.push(value);
+        return result;
+    };
+
+    WeakSet.prototype.delete = function del(value) {
+        const deleted = weakSetDelete.call(this, value);
+        if (deleted) {
+            const entries = weakSetEntriesCache.get(this);
+            if (entries !== undefined) {
+                for (let i = 0; i < entries.length; i++) {
+                    if (Object.is(entries[i], value)) {
+                        entries.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+        return deleted;
+    };
+}
 
 const nullPrototypeConstructorNames = new WeakMap();
 const originalObjectSetPrototypeOf = Object.setPrototypeOf;
 const originalReflectSetPrototypeOf = Reflect.setPrototypeOf;
+
+export function getWeakMapEntries(value) {
+    const pairs = weakMapEntriesCache.get(value);
+    if (!Array.isArray(pairs)) {
+        return [];
+    }
+
+    const entries = [];
+    for (let i = 0; i < pairs.length; i++) {
+        entries.push(pairs[i][0], pairs[i][1]);
+    }
+    return entries;
+}
+
+export function getWeakSetEntries(value) {
+    const entries = weakSetEntriesCache.get(value);
+    if (!Array.isArray(entries)) {
+        return [];
+    }
+
+    return entries.slice();
+}
 
 function isObjectLike(value) {
     return (
@@ -101,6 +204,54 @@ function findConstructorName(value) {
         }
 
         proto = Object.getPrototypeOf(proto);
+    }
+
+    return "";
+}
+
+function findGlobalConstructorNameByPrototype(value) {
+    if (!isObjectLike(value)) {
+        return "";
+    }
+
+    let proto;
+    try {
+        proto = Object.getPrototypeOf(value);
+    } catch {
+        return "";
+    }
+
+    if (!isObjectLike(proto)) {
+        return "";
+    }
+
+    let names;
+    try {
+        names = Object.getOwnPropertyNames(globalThis);
+    } catch {
+        return "";
+    }
+
+    for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        let candidate;
+        try {
+            candidate = globalThis[name];
+        } catch {
+            continue;
+        }
+
+        if (typeof candidate !== "function" || candidate.name === "") {
+            continue;
+        }
+
+        try {
+            if (candidate.prototype === proto) {
+                return candidate.name;
+            }
+        } catch {
+            // Ignore host objects and poisoned accessors.
+        }
     }
 
     return "";
@@ -160,7 +311,12 @@ export function getConstructorName(value) {
     }
 
     const constructorName = findConstructorName(value);
-    return constructorName !== "" ? constructorName : "Object";
+    if (constructorName !== "") {
+        return constructorName;
+    }
+
+    const globalConstructorName = findGlobalConstructorNameByPrototype(value);
+    return globalConstructorName !== "" ? globalConstructorName : "Object";
 }
 
 /**
@@ -272,35 +428,48 @@ export function getOwnNonIndexProperties(
     return result;
 }
 
-export function previewEntries(iterable, isMap) {
+export function previewEntries(iterable, isMap, preserveRawEntries = false) {
+    let flattenedEntries;
+    let rawEntries;
+    let isKeyValue = true;
     if (iterable !== null && (typeof iterable === "object" || typeof iterable === "function")) {
         const cached = previewEntriesCache.get(iterable);
         if (cached !== undefined) {
-            if (isMap === true) {
-                return [cached.entries.slice(), cached.isKeyValue];
+            flattenedEntries = cached.flattenedEntries.slice();
+            rawEntries = cached.rawEntries.slice();
+            isKeyValue = cached.isKeyValue;
+        }
+    }
+
+    if (flattenedEntries === undefined || rawEntries === undefined) {
+        flattenedEntries = [];
+        rawEntries = [];
+        for (const value of iterable) {
+            rawEntries.push(value);
+            if (Array.isArray(value) && value.length >= 2) {
+                flattenedEntries.push(value[0], value[1]);
+            } else {
+                isKeyValue = false;
+                flattenedEntries.push(value);
             }
-            return cached.entries.slice();
+        }
+
+        if (iterable !== null && (typeof iterable === "object" || typeof iterable === "function")) {
+            previewEntriesCache.set(iterable, {
+                flattenedEntries: flattenedEntries.slice(),
+                rawEntries: rawEntries.slice(),
+                isKeyValue,
+            });
         }
     }
 
-    const entries = [];
-    let isKeyValue = true;
-    for (const value of iterable) {
-        if (Array.isArray(value) && value.length >= 2) {
-            entries.push(value[0], value[1]);
-        } else {
-            isKeyValue = false;
-            entries.push(value);
-        }
-    }
-
-    if (iterable !== null && (typeof iterable === "object" || typeof iterable === "function")) {
-        previewEntriesCache.set(iterable, { entries: entries.slice(), isKeyValue });
+    if (preserveRawEntries) {
+        return rawEntries;
     }
 
     if (isMap === true) {
-        return [entries, isKeyValue];
+        return [flattenedEntries, isKeyValue];
     }
 
-    return entries;
+    return flattenedEntries;
 }

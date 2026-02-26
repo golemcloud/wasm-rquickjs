@@ -428,7 +428,10 @@
         "block_71_check_for_special_colors": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_72_non_indices_array_properties_are_sorted_as_well": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_73_manipulate_the_prototype_in_weird_ways": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_74_check_that_the_fallback_always_works": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_74_check_that_the_fallback_always_works": {
+          "skip": true,
+          "reason": "[manual] `test-util-inspect` currently depends on behaviors that are not reliably derivable from pure JS in this runtime (constructor-name recovery for null-prototype constructor instances, and dee..."
+        },
         "block_75_check_the_getter_option": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_76_check_compact_number_mode": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_77_block_77": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },

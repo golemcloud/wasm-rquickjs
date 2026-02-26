@@ -30,6 +30,8 @@ import {
     getPromiseDetails,
     getProxyDetails,
     getOwnNonIndexProperties,
+    getWeakMapEntries,
+    getWeakSetEntries,
     ONLY_ENUMERABLE,
     previewEntries,
 } from "__wasm_rquickjs_builtin/internal/binding/util";
@@ -648,19 +650,23 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
         protoProps = undefined;
     }
 
-    let tag = value[Symbol.toStringTag];
+    let tag;
+    try {
+        tag = value[Symbol.toStringTag];
+    } catch (err) {
+        if (err?.name === "TypeError" && err.message === "circular reference") {
+            err.message = "Converting circular structure to JSON";
+        }
+        throw err;
+    }
     // Only list the tag in case it's non-enumerable / not an own property.
     // Otherwise we'd print this twice.
+    const hasOwnToStringTag = ctx.showHidden
+        ? Object.prototype.hasOwnProperty.call(value, Symbol.toStringTag)
+        : Object.prototype.propertyIsEnumerable.call(value, Symbol.toStringTag);
     if (
-        typeof tag !== "string"
-        // TODO(wafuwafu13): Implement
-        // (tag !== "" &&
-        //   (ctx.showHidden
-        //     ? Object.prototype.hasOwnProperty
-        //     : Object.prototype.propertyIsEnumerable)(
-        //       value,
-        //       Symbol.toStringTag,
-        //     ))
+        typeof tag !== "string" ||
+        (tag !== "" && hasOwnToStringTag)
     ) {
         tag = "";
     }
@@ -770,12 +776,12 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             keys = getKeys(value, ctx.showHidden);
             braces = getIteratorBraces("Map", tag);
             // Add braces to the formatter parameters.
-            (formatter) = formatIterator.bind(null, braces);
+            (formatter) = formatIterator.bind(null, braces, true);
         } else if (types.isSetIterator(value)) {
             keys = getKeys(value, ctx.showHidden);
             braces = getIteratorBraces("Set", tag);
             // Add braces to the formatter parameters.
-            (formatter) = formatIterator.bind(null, braces);
+            (formatter) = formatIterator.bind(null, braces, false);
         } else {
             noIterator = true;
         }
@@ -1463,17 +1469,34 @@ function getIteratorBraces(type, tag) {
     return [`[${tag}] {`, "}"];
 }
 
-function formatIterator(braces, ctx, value, recurseTimes) {
-    const { 0: entries, 1: isKeyValue } = previewEntries(value, true) || [];
+function formatIterator(braces, expectKeyValue, ctx, value, recurseTimes) {
+    const preview = previewEntries(value, expectKeyValue, !expectKeyValue);
+    const entries = expectKeyValue ? preview?.[0] : preview;
     if (!Array.isArray(entries)) {
         // QuickJS currently does not provide non-destructive iterator previews,
         // so avoid crashing when inspect() is called for diagnostics.
         return [ctx.stylize("<items unknown>", "special")];
     }
-    if (isKeyValue) {
+    if (expectKeyValue && preview?.[1] === true) {
         // Mark entry iterators as such.
         braces[0] = braces[0].replace(/ Iterator] {$/, " Entries] {");
         return formatMapIterInner(ctx, recurseTimes, entries, kMapEntries);
+    }
+
+    if (!expectKeyValue) {
+        const isSetEntries = entries.length > 0 && entries.every((entry) =>
+            Array.isArray(entry) &&
+            entry.length >= 2 &&
+            Object.is(entry[0], entry[1])
+        );
+        if (isSetEntries) {
+            braces[0] = braces[0].replace(/ Iterator] {$/, " Entries] {");
+            const flattened = [];
+            for (const entry of entries) {
+                flattened.push(entry[0], entry[1]);
+            }
+            return formatMapIterInner(ctx, recurseTimes, flattened, kMapEntries);
+        }
     }
 
     return formatSetIterInner(ctx, recurseTimes, entries, kIterator);
@@ -1840,16 +1863,12 @@ function formatWeakCollection(ctx) {
 }
 
 function formatWeakSet(ctx, value, recurseTimes) {
-    // TODO(wafuwafu13): Implement
-    // const entries = previewEntries(value);
-    const entries = value;
+    const entries = getWeakSetEntries(value);
     return formatSetIterInner(ctx, recurseTimes, entries, kWeak);
 }
 
 function formatWeakMap(ctx, value, recurseTimes) {
-    // TODO(wafuwafu13): Implement
-    // const entries = previewEntries(value);
-    const entries = value;
+    const entries = getWeakMapEntries(value);
     return formatMapIterInner(ctx, recurseTimes, entries, kWeak);
 }
 
@@ -1930,6 +1949,7 @@ function formatProperty(
     } else {
         name = ctx.stylize(strEscape(key), "string");
     }
+
     return `${name}:${extra}${str}`;
 }
 
@@ -1949,9 +1969,10 @@ function handleMaxCallStackSize(
 }
 
 function formatInspectionInterrupted(ctx, constructorName) {
+    const message = `[${constructorName}: Inspection interrupted ` +
+        "prematurely. Maximum call stack size exceeded.]";
     return ctx.stylize(
-        `[${constructorName}: Inspection interrupted ` +
-            "prematurely. Maximum call stack size exceeded.]",
+        message,
         "special",
     );
 }
