@@ -1504,6 +1504,10 @@ function formatError(
     const name = err.name != null ? err.name : "Error";
     let stack;
     const ownStackDescriptor = Object.getOwnPropertyDescriptor(err, "stack");
+    const hasEmptyOwnStack =
+        ownStackDescriptor &&
+        Object.prototype.hasOwnProperty.call(ownStackDescriptor, "value") &&
+        ownStackDescriptor.value === "";
     const stackValue = ownStackDescriptor && Object.prototype.hasOwnProperty.call(ownStackDescriptor, "value")
         ? ownStackDescriptor.value
         : err.stack;
@@ -1522,25 +1526,64 @@ function formatError(
         }
     } else {
         stack = Error.prototype.toString.call(err);
+        if (hasEmptyOwnStack) {
+            try {
+                Object.defineProperty(err, "stack", {
+                    value: stack,
+                    writable: true,
+                    configurable: true,
+                    enumerable: false,
+                });
+            } catch {
+                // Best effort: some runtimes may refuse redefining stack.
+            }
+        }
     }
 
     // QuickJS may drop the summary line and return only stack frames for some
     // tampered error-name cases. Reconstruct the header from toString() so
     // improveStack() can normalize the first line like Node does.
     if (typeof stack === "string" && stack.startsWith("    at")) {
-        if (constructor !== null) {
+        const reconstructedHeader = Error.prototype.toString.call(err);
+        if (typeof reconstructedHeader === "string" && reconstructedHeader.length !== 0) {
+            stack = `${reconstructedHeader}\n${stack}`;
+            try {
+                Object.defineProperty(err, "stack", {
+                    value: stack,
+                    writable: true,
+                    configurable: true,
+                    enumerable: false,
+                });
+            } catch {
+                // Best effort: keep formatting stable even if stack is not writable.
+            }
+        } else if (constructor !== null) {
             const hasOwnName = Object.prototype.hasOwnProperty.call(err, "name");
             const normalizedName = typeof name === "string" ? name : String(name);
             if (
                 normalizedName !== constructor ||
                 (!hasOwnName && !nativeErrorConstructorNames.has(constructor))
             ) {
-                stack = `${Error.prototype.toString.call(err)}\n${stack}`;
+                stack = `${reconstructedHeader}\n${stack}`;
             }
         } else {
             const previousName = cachedErrorName.get(err) || "Error";
             const messageSuffix = err.message ? `: ${err.message}` : "";
             stack = `${previousName}${messageSuffix}\n${stack}`;
+        }
+    }
+
+    if (typeof stack === "string" && stack.endsWith("\n")) {
+        stack = stack.replace(/\n+$/, "");
+        try {
+            Object.defineProperty(err, "stack", {
+                value: stack,
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+        } catch {
+            // Best effort: keep util.inspect output stable.
         }
     }
 
@@ -1789,9 +1832,9 @@ function formatProperty(
     let extra = " ";
     desc = desc || Object.getOwnPropertyDescriptor(value, key) || {
         value: value[key],
-        enumerable: !(isInspectableError(value) && (key === "message" || key === "stack" || key === "name")),
+        enumerable: !(isInspectableError(value) && (key === "message" || key === "stack")),
     };
-    if (isInspectableError(value) && (key === "message" || key === "stack" || key === "name")) {
+    if (isInspectableError(value) && (key === "message" || key === "stack")) {
         desc = { ...desc, enumerable: false };
     }
     if (desc.value !== undefined) {

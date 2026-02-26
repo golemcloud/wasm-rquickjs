@@ -2,19 +2,72 @@ import { inspect } from "__wasm_rquickjs_builtin/internal/util/inspect";
 
 // Normalize `Error.prototype.stack` so deleting an instance stack works like
 // Node (i.e. `delete err.stack` makes subsequent `err.stack` reads undefined).
-try {
-    Object.defineProperty(Error.prototype, "stack", {
+const nativeErrorStackDescriptor = Object.getOwnPropertyDescriptor(Error.prototype, "stack");
+const nativeErrorToString = Error.prototype.toString;
+const materializedErrorStacks = new WeakSet();
+
+function materializeOwnStack(errorInstance) {
+    if (!errorInstance || (typeof errorInstance !== "object" && typeof errorInstance !== "function")) {
+        return;
+    }
+
+    const own = Object.getOwnPropertyDescriptor(errorInstance, "stack");
+    if (own && Object.prototype.hasOwnProperty.call(own, "value") && own.configurable === true) {
+        materializedErrorStacks.add(errorInstance);
+        return;
+    }
+
+    let stackValue;
+    try {
+        if (own && typeof own.get === "function") {
+            stackValue = own.get.call(errorInstance);
+        } else if (nativeErrorStackDescriptor && typeof nativeErrorStackDescriptor.get === "function") {
+            stackValue = nativeErrorStackDescriptor.get.call(errorInstance);
+        } else if (nativeErrorStackDescriptor && Object.prototype.hasOwnProperty.call(nativeErrorStackDescriptor, "value")) {
+            stackValue = nativeErrorStackDescriptor.value;
+        }
+    } catch {
+        stackValue = undefined;
+    }
+
+    if (stackValue === undefined || stackValue === "") {
+        try {
+            stackValue = nativeErrorToString.call(errorInstance);
+        } catch {
+            stackValue = undefined;
+        }
+    }
+
+    try {
+        Object.defineProperty(errorInstance, "stack", {
+            value: stackValue,
+            writable: true,
+            configurable: true,
+            enumerable: false,
+        });
+        materializedErrorStacks.add(errorInstance);
+    } catch {
+        // Best effort only.
+    }
+}
+
+function installErrorStackShimForNonConfigurablePrototype() {
+    const NativeError = Error;
+    const ErrorShimPrototype = Object.create(NativeError.prototype);
+
+    Object.defineProperty(ErrorShimPrototype, "stack", {
         configurable: true,
         enumerable: false,
         get() {
             const own = Object.getOwnPropertyDescriptor(this, "stack");
-            if (own) {
-                if (Object.prototype.hasOwnProperty.call(own, "value")) {
-                    return own.value;
-                }
-                if (typeof own.get === "function") {
-                    return own.get.call(this);
-                }
+            if (!own) {
+                return undefined;
+            }
+            if (Object.prototype.hasOwnProperty.call(own, "value")) {
+                return own.value;
+            }
+            if (typeof own.get === "function") {
+                return own.get.call(this);
             }
             return undefined;
         },
@@ -27,8 +80,80 @@ try {
             });
         },
     });
-} catch {
-    // Keep best-effort compatibility if the runtime forbids reconfiguration.
+
+    const ErrorShim = function Error() {
+        const ctorTarget = new.target || ErrorShim;
+        const errorInstance = Reflect.construct(NativeError, arguments, NativeError);
+        materializeOwnStack(errorInstance);
+
+        const targetPrototype = (ctorTarget && ctorTarget.prototype) || ErrorShimPrototype;
+        if (Object.getPrototypeOf(errorInstance) !== targetPrototype) {
+            Object.setPrototypeOf(errorInstance, targetPrototype);
+        }
+
+        return errorInstance;
+    };
+
+    Object.setPrototypeOf(ErrorShim, NativeError);
+    ErrorShim.prototype = ErrorShimPrototype;
+    Object.defineProperty(ErrorShimPrototype, "constructor", {
+        value: NativeError,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+    });
+
+    Object.defineProperty(ErrorShim, Symbol.hasInstance, {
+        value(value) {
+            return value instanceof NativeError;
+        },
+        configurable: true,
+    });
+
+    globalThis.Error = ErrorShim;
+}
+
+if (nativeErrorStackDescriptor && nativeErrorStackDescriptor.configurable === false) {
+    try {
+        installErrorStackShimForNonConfigurablePrototype();
+    } catch {
+        // Keep the runtime default behavior if shimming fails.
+    }
+} else {
+    try {
+        Object.defineProperty(Error.prototype, "stack", {
+            configurable: true,
+            enumerable: false,
+            get: function getErrorStack() {
+                if (this === Error.prototype) {
+                    return undefined;
+                }
+
+                const own = Object.getOwnPropertyDescriptor(this, "stack");
+                if (own) {
+                    if (Object.prototype.hasOwnProperty.call(own, "value")) {
+                        return own.value;
+                    }
+                    if (typeof own.get === "function" && own.get !== getErrorStack) {
+                        return own.get.call(this);
+                    }
+                    return undefined;
+                }
+                return undefined;
+            },
+            set(value) {
+                Object.defineProperty(this, "stack", {
+                    value,
+                    writable: true,
+                    configurable: true,
+                    enumerable: false,
+                });
+                materializedErrorStacks.add(this);
+            },
+        });
+    } catch {
+        // Keep best-effort compatibility if the runtime forbids reconfiguration.
+    }
 }
 
 // Node.js includes the error code in toString() so that regex tests like
