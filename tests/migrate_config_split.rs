@@ -233,6 +233,74 @@ fn build_subtests(
         .collect()
 }
 
+/// Build merged subtests from discovery, preserving existing skip/reason for subtests
+/// that still exist in the new discovery.
+fn build_merged_subtests(
+    discovery: &SubtestDiscovery,
+    existing_subtests: &serde_json::Map<String, Value>,
+    file_skip: bool,
+    file_reason: &str,
+) -> Vec<(String, bool, String)> {
+    let names: Vec<String> = match discovery {
+        SubtestDiscovery::None => return Vec::new(),
+        SubtestDiscovery::Block(blocks) => blocks.iter().map(|b| b.name.clone()).collect(),
+        SubtestDiscovery::NodeTest(tests) => tests.iter().map(|t| t.name.clone()).collect(),
+    };
+
+    names
+        .into_iter()
+        .map(|name| {
+            if let Some(existing) = existing_subtests.get(&name) {
+                // Preserve existing skip/reason
+                let skip = existing
+                    .get("skip")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let reason = existing
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                (name, skip, reason)
+            } else if file_skip {
+                let reason = if file_reason.is_empty() {
+                    "inherited".to_string()
+                } else {
+                    format!("inherited: {}", file_reason)
+                };
+                (name, true, reason)
+            } else {
+                (name, false, String::new())
+            }
+        })
+        .collect()
+}
+
+/// Format a non-split entry value.
+fn format_unsplit_value(skip: bool, reason: &str) -> String {
+    if skip {
+        if reason.is_empty() {
+            "{ \"skip\": true }".to_string()
+        } else {
+            format!(
+                "{{ \"skip\": true, \"reason\": \"{}\" }}",
+                escape_json(reason)
+            )
+        }
+    } else {
+        "{}".to_string()
+    }
+}
+
+/// Extract discovered subtest names as a BTreeSet.
+fn discovered_names(discovery: &SubtestDiscovery) -> BTreeSet<String> {
+    match discovery {
+        SubtestDiscovery::None => BTreeSet::new(),
+        SubtestDiscovery::Block(blocks) => blocks.iter().map(|b| b.name.clone()).collect(),
+        SubtestDiscovery::NodeTest(tests) => tests.iter().map(|t| t.name.clone()).collect(),
+    }
+}
+
 /// Discover all `.js` test files from vendored suite directories.
 /// Matches the approach used by the report generator in node_compat_report.rs.
 fn discover_suite_files() -> BTreeSet<String> {
@@ -282,17 +350,21 @@ fn migrate_config_split() {
 
     let mut modified_content = content.clone();
     let mut split_count = 0;
+    let mut update_count = 0;
+    let mut unsplit_count = 0;
     let mut total_subtests = 0;
     let mut new_count = 0;
     let mut new_split_count = 0;
+    let empty_map = serde_json::Map::new();
 
-    // Phase 1: Split existing entries (text-level replacement to preserve comments)
+    // Phase 1: Split new entries and update stale split entries
     let mut split_updates: Vec<(String, String)> = Vec::new();
 
     for (test_path, opts) in tests_obj.iter() {
-        if opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false) {
-            continue;
-        }
+        let is_split = opts
+            .get("split")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let suite_file = format!("tests/node_compat/suite/{}", test_path);
         let source = match fs::read_to_string(&suite_file) {
@@ -307,15 +379,44 @@ fn migrate_config_split() {
         let file_skip = opts.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
         let file_reason = opts.get("reason").and_then(|v| v.as_str()).unwrap_or("");
 
-        let subtests = build_subtests(&discovery, file_skip, file_reason);
-        if subtests.len() < 2 {
-            continue;
-        }
+        if is_split {
+            // Check if subtests need updating
+            let existing_subtests = opts
+                .get("subtests")
+                .and_then(|v| v.as_object())
+                .unwrap_or(&empty_map);
+            let existing_names: BTreeSet<String> = existing_subtests.keys().cloned().collect();
+            let disc_names = discovered_names(&discovery);
 
-        let new_value = format_split_value(file_skip, file_reason, &subtests);
-        split_updates.push((test_path.clone(), new_value));
-        split_count += 1;
-        total_subtests += subtests.len();
+            if existing_names == disc_names {
+                continue; // No change needed
+            }
+
+            if disc_names.len() < 2 {
+                // Discovery no longer warrants split, convert back to unsplit
+                let new_value = format_unsplit_value(file_skip, file_reason);
+                split_updates.push((test_path.clone(), new_value));
+                unsplit_count += 1;
+            } else {
+                // Update split with merged subtests, preserving existing skip/reason
+                let subtests =
+                    build_merged_subtests(&discovery, existing_subtests, file_skip, file_reason);
+                let new_value = format_split_value(file_skip, file_reason, &subtests);
+                split_updates.push((test_path.clone(), new_value));
+                update_count += 1;
+                total_subtests += subtests.len();
+            }
+        } else {
+            let subtests = build_subtests(&discovery, file_skip, file_reason);
+            if subtests.len() < 2 {
+                continue;
+            }
+
+            let new_value = format_split_value(file_skip, file_reason, &subtests);
+            split_updates.push((test_path.clone(), new_value));
+            split_count += 1;
+            total_subtests += subtests.len();
+        }
     }
 
     // Apply split updates in reverse order of position to preserve byte offsets
@@ -400,6 +501,8 @@ fn migrate_config_split() {
 
     println!("Migration complete:");
     println!("  Existing files split: {}", split_count);
+    println!("  Existing splits updated: {}", update_count);
+    println!("  Existing splits unsplit: {}", unsplit_count);
     println!(
         "  New files added: {} ({} with splits)",
         new_count, new_split_count

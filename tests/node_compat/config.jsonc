@@ -77,7 +77,13 @@
         "block_05_block_05": {}
       }
     },
-    "parallel/test-assert-calltracker-getCalls.js": {},
+    "parallel/test-assert-calltracker-getCalls.js": {
+      "split": true,
+      "subtests": {
+        "test_00_assert_calltracker_getcalls": {},
+        "test_01_assert_calltracker_reset": {}
+      }
+    },
     "parallel/test-assert-calltracker-report.js": {},
     "parallel/test-assert-calltracker-verify.js": {},
     "parallel/test-assert-checktag.js": {},
@@ -163,7 +169,14 @@
       }
     },
     "parallel/test-assert-objects.js": {},
-    "parallel/test-assert-typedarray-deepequal.js": {},
+    "parallel/test-assert-typedarray-deepequal.js": {
+      "split": true,
+      "subtests": {
+        "test_00_equalarraypairs": {},
+        "test_01_looseequalarraypairs": {},
+        "test_02_notequalarraypairs": {}
+      }
+    },
 
     // === btoa/atob tests ===
     "parallel/test-btoa-atob.js": {},
@@ -7969,7 +7982,17 @@
         "block_10_block_10": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-runner-concurrency.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-concurrency.js": {
+      "skip": true,
+      "reason": "newly discovered, not yet evaluated",
+      "split": true,
+      "subtests": {
+        "test_00_concurrency_option_boolean_true": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_concurrency_option_boolean_false": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_02_concurrency_true_implies_infinity": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_03_test_multiple_files": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+      }
+    },
     "parallel/test-runner-coverage-source-map.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-coverage-thresholds.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-coverage.js": {
@@ -8130,32 +8153,61 @@
     "parallel/test-runner-option-validation.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-reporters.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-root-duration.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-runner-snapshot-file-tests.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-snapshot-file-tests.js": {
+      "skip": true,
+      "reason": "newly discovered, not yet evaluated",
+      "split": true,
+      "subtests": {
+        "test_00_t_assert_filesnapshot_validation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_t_assert_filesnapshot_update_read_flow": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+      }
+    },
     "parallel/test-runner-snapshot-tests.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_t_assert_snapshot": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_snapshots_from_multiple_files_isolation_none": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_00_snapshotmanager": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_t_assert_snapshot_validation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_02_setresolvesnapshotpath": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_03_setdefaultsnapshotserializers": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_04_t_assert_snapshot": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_05_snapshots_from_multiple_files_isolation_none": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
     "parallel/test-runner-string-to-regexp.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-subtest-after-hook.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-runner-test-filepath.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-runner-test-fullname.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-test-filepath.js": {
+      "skip": true,
+      "reason": "newly discovered, not yet evaluated",
+      "split": true,
+      "subtests": {
+        "test_00_suite": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+      }
+    },
+    "parallel/test-runner-test-fullname.js": {
+      "skip": true,
+      "reason": "newly discovered, not yet evaluated",
+      "split": true,
+      "subtests": {
+        "test_00_suite": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+      }
+    },
     "parallel/test-runner-typechecking.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-wait-for.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_returns_the_result_of_the_condition_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_returns_the_result_of_an_async_condition_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_02_errors_if_the_condition_times_out": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_polls_until_the_condition_returns_successfully": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_04_sets_last_failure_as_error_cause_on_timeouts": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_05_limits_polling_if_condition_takes_longer_than_interval": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_00_input_validation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_returns_the_result_of_the_condition_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_02_returns_the_result_of_an_async_condition_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_03_errors_if_the_condition_times_out": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_04_polls_until_the_condition_returns_successfully": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_05_sets_last_failure_as_error_cause_on_timeouts": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_06_limits_polling_if_condition_takes_longer_than_interval": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
     "parallel/test-safe-get-env.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -8166,7 +8218,8 @@
       "split": true,
       "subtests": {
         "test_00_test_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_02_same_checks_using_node_options_if_it_is_supported": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
     "parallel/test-set-incoming-message-header.js": {
@@ -8469,26 +8522,8 @@
     },
     "parallel/test-source-map-cjs-require-cache.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-spawn-cmd-named-pipe.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-custom-functions.js": {
-      "split": true,
-      "subtests": {
-        "block_00_input_validation": {},
-        "block_01_usebigintarguments": {},
-        "block_02_varargs": {},
-        "block_03_deterministic": {},
-        "block_04_directonly": {},
-        "block_05_return_types": {},
-        "test_06_supported_argument_types": {},
-        "test_07_propagates_thrown_errors": {},
-        "test_08_throws_if_database_is_not_open": {}
-      }
-    },
-    "parallel/test-sqlite-data-types.js": {
-      "split": true,
-      "subtests": {
-        "block_00_data_binding_and_mapping": {}
-      }
-    },
+    "parallel/test-sqlite-custom-functions.js": {},
+    "parallel/test-sqlite-data-types.js": {},
     "parallel/test-sqlite-database-sync.js": {
       "split": true,
       "subtests": {
@@ -8499,12 +8534,7 @@
         "test_04_databasesync_prototype_exec": {}
       }
     },
-    "parallel/test-sqlite-named-parameters.js": {
-      "split": true,
-      "subtests": {
-        "block_00_named_parameters": {}
-      }
-    },
+    "parallel/test-sqlite-named-parameters.js": {},
     "parallel/test-sqlite-session.js": {
       "split": true,
       "subtests": {
@@ -8513,14 +8543,15 @@
         "test_02_session_changeset_closed_database_results_in_exception": {},
         "test_03_database_applychangeset_closed_database_results_in_exception": {},
         "test_04_database_createsession_use_table_option_to_track_specific_ta": {},
-        "test_05_database_createsession_filter_changes": {},
-        "test_06_database_createsession_specify_other_database": {},
-        "test_07_database_createsession_wrong_arguments": {},
-        "test_08_database_applychangeset_wrong_arguments": {},
-        "test_09_session_patchset": {},
-        "test_10_session_close_using_session_after_close_throws_exception": {},
-        "test_11_session_close_after_closing_database_throws_exception": {},
-        "test_12_session_close_closing_twice": {}
+        "test_05_conflict_resolution": {},
+        "test_06_database_createsession_filter_changes": {},
+        "test_07_database_createsession_specify_other_database": {},
+        "test_08_database_createsession_wrong_arguments": {},
+        "test_09_database_applychangeset_wrong_arguments": {},
+        "test_10_session_patchset": {},
+        "test_11_session_close_using_session_after_close_throws_exception": {},
+        "test_12_session_close_after_closing_database_throws_exception": {},
+        "test_13_session_close_closing_twice": {}
       }
     },
     "parallel/test-sqlite-statement-sync.js": {
@@ -8538,20 +8569,16 @@
       }
     },
     "parallel/test-sqlite-transactions.js": {},
-    "parallel/test-sqlite-typed-array-and-data-view.js": {
-      "split": true,
-      "subtests": {
-        "block_00_statementsync_with_typedarray_dataview": {}
-      }
-    },
+    "parallel/test-sqlite-typed-array-and-data-view.js": {},
     "parallel/test-sqlite.js": {
       "split": true,
       "subtests": {
-        "test_00_err_sqlite_error_is_thrown_for_errors_originating_from_sqlit": {},
-        "test_01_in_memory_databases_are_supported": {},
-        "test_02_sqlite_constants_are_defined": {},
-        "test_03_pragmas_are_supported": { "skip": true, "reason": "WAL mode not supported in WASM VFS" },
-        "test_04_math_functions_are_enabled": { "skip": true, "reason": "SQLITE_ENABLE_MATH_FUNCTIONS not set in bundled libsqlite3-sys" }
+        "test_00_accessing_the_node_sqlite_module": {},
+        "test_01_err_sqlite_error_is_thrown_for_errors_originating_from_sqlit": {},
+        "test_02_in_memory_databases_are_supported": {},
+        "test_03_sqlite_constants_are_defined": {},
+        "test_04_pragmas_are_supported": {},
+        "test_05_math_functions_are_enabled": {}
       }
     },
     "parallel/test-stack-size-limit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9740,7 +9767,8 @@
         "test_03_sessionstorage_is_not_persisted": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_04_localstorage_throws_without_localstorage_file": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_05_localstorage_is_not_persisted_if_it_is_unused": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_06_localstorage_is_persisted_if_it_is_used": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_06_localstorage_is_persisted_if_it_is_used": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_07_webstorage_quota_for_localstorage_and_sessionstorage": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
     "parallel/test-webstream-encoding-inspect.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
