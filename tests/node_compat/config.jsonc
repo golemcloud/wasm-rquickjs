@@ -501,10 +501,7 @@
       }
     },
     "parallel/test-util-log.js": {},
-    "parallel/test-util-parse-env.js": {
-      "skip": true,
-      "reason": "requires util.parseEnv and common/fixtures"
-    },
+    "parallel/test-util-parse-env.js": {},
     "parallel/test-util-primordial-monkeypatching.js": {},
     "parallel/test-util-promisify.js": {
       "split": true,

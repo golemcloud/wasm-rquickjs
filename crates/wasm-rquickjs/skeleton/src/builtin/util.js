@@ -2450,6 +2450,126 @@ export function styleText(format, text, options) {
     return styledText;
 }
 
+// --- util.parseEnv() ---
+
+function _parseEnvTrimSpaces(input) {
+    if (input.length === 0) {
+        return '';
+    }
+
+    var start = 0;
+    var end = input.length;
+
+    while (start < end && input.charAt(start) === ' ') {
+        start++;
+    }
+
+    while (end > start && input.charAt(end - 1) === ' ') {
+        end--;
+    }
+
+    return input.slice(start, end);
+}
+
+export function parseEnv(content) {
+    if (typeof content !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('content', 'string', content);
+    }
+
+    var store = {};
+    var remaining = _parseEnvTrimSpaces(content.replace(/\r/g, ''));
+
+    while (remaining.length > 0) {
+        if (remaining.charAt(0) === '\n' || remaining.charAt(0) === '#') {
+            var commentNewline = remaining.indexOf('\n');
+            if (commentNewline !== -1) {
+                remaining = remaining.slice(commentNewline + 1);
+                continue;
+            }
+        }
+
+        var equalIndex = remaining.indexOf('=');
+        if (equalIndex === -1) {
+            break;
+        }
+
+        var key = _parseEnvTrimSpaces(remaining.slice(0, equalIndex));
+        remaining = _parseEnvTrimSpaces(remaining.slice(equalIndex + 1));
+
+        if (key.length === 0) {
+            break;
+        }
+
+        if (key.slice(0, 7) === 'export ') {
+            key = key.slice(7);
+        }
+
+        if (remaining.length === 0) {
+            store[key] = '';
+            break;
+        }
+
+        if (remaining.charAt(0) === '"') {
+            var doubleQuoteCloseIndex = remaining.indexOf('"', 1);
+            if (doubleQuoteCloseIndex !== -1) {
+                var doubleQuotedValue = remaining.slice(1, doubleQuoteCloseIndex);
+                store[key] = doubleQuotedValue.replace(/\\n/g, '\n');
+
+                var doubleQuoteNewlineIndex = remaining.indexOf('\n', doubleQuoteCloseIndex + 1);
+                if (doubleQuoteNewlineIndex !== -1) {
+                    remaining = remaining.slice(doubleQuoteNewlineIndex);
+                }
+
+                continue;
+            }
+        }
+
+        var firstChar = remaining.charAt(0);
+        if (firstChar === '\'' || firstChar === '"' || firstChar === '`') {
+            var quoteCloseIndex = remaining.indexOf(firstChar, 1);
+            if (quoteCloseIndex === -1) {
+                var unclosedQuoteNewlineIndex = remaining.indexOf('\n');
+                if (unclosedQuoteNewlineIndex !== -1) {
+                    store[key] = remaining.slice(0, unclosedQuoteNewlineIndex);
+                    remaining = remaining.slice(unclosedQuoteNewlineIndex);
+                } else {
+                    store[key] = remaining;
+                    break;
+                }
+            } else {
+                store[key] = remaining.slice(1, quoteCloseIndex);
+
+                var quotedNewlineIndex = remaining.indexOf('\n', quoteCloseIndex + 1);
+                if (quotedNewlineIndex !== -1) {
+                    remaining = remaining.slice(quotedNewlineIndex);
+                } else {
+                    break;
+                }
+            }
+
+            continue;
+        }
+
+        var newlineIndex = remaining.indexOf('\n');
+        var value;
+        if (newlineIndex !== -1) {
+            value = remaining.slice(0, newlineIndex);
+            var hashIndex = value.indexOf('#');
+            if (hashIndex !== -1) {
+                value = remaining.slice(0, hashIndex);
+            }
+            remaining = remaining.slice(newlineIndex);
+        } else {
+            value = remaining;
+            remaining = '';
+        }
+
+        store[key] = _parseEnvTrimSpaces(value);
+    }
+
+    return store;
+}
+
 // --- util.parseArgs() ---
 
 function _makeError(code, message) {
@@ -2814,6 +2934,7 @@ export default {
      isDeepStrictEqual,
      getCallSite,
      getCallSites,
+     parseEnv,
      parseArgs,
      toUSVString,
      types,
