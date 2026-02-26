@@ -151,13 +151,13 @@ const meta = [
 const isUndetectableObject = (v) => typeof v === "undefined" && v !== undefined;
 
 // deno-lint-ignore no-control-regex
-const strEscapeSequencesRegExp = /[\x00-\x1f\x27\x5c\x7f-\x9f]/;
+const strEscapeSequencesRegExp = /[\x00-\x1f\x27\x5c\x7f-\x9f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 // deno-lint-ignore no-control-regex
-const strEscapeSequencesReplacer = /[\x00-\x1f\x27\x5c\x7f-\x9f]/g;
+const strEscapeSequencesReplacer = /[\x00-\x1f\x27\x5c\x7f-\x9f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
 // deno-lint-ignore no-control-regex
-const strEscapeSequencesRegExpSingle = /[\x00-\x1f\x5c\x7f-\x9f]/;
+const strEscapeSequencesRegExpSingle = /[\x00-\x1f\x5c\x7f-\x9f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 // deno-lint-ignore no-control-regex
-const strEscapeSequencesReplacerSingle = /[\x00-\x1f\x5c\x7f-\x9f]/g;
+const strEscapeSequencesReplacerSingle = /[\x00-\x1f\x5c\x7f-\x9f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
 
 const keyStrRegExp = /^[a-zA-Z_][a-zA-Z_0-9]*$/;
 const numberRegExp = /^(0|[1-9][0-9]*)$/;
@@ -196,6 +196,7 @@ function getUserOptions(ctx, isCrossContext) {
         compact: ctx.compact,
         sorted: ctx.sorted,
         getters: ctx.getters,
+        numericSeparator: ctx.numericSeparator,
         ...ctx.userOptions,
     };
 
@@ -255,6 +256,7 @@ export function inspect(value, opts) {
         compact: inspectDefaultOptions.compact,
         sorted: inspectDefaultOptions.sorted,
         getters: inspectDefaultOptions.getters,
+        numericSeparator: inspectDefaultOptions.numericSeparator,
     };
     if (arguments.length > 1) {
         // Legacy...
@@ -427,7 +429,10 @@ function addQuotes(str, quotes) {
 }
 
 // TODO(wafuwafu13): Figure out
-const escapeFn = (str) => meta[str.charCodeAt(0)];
+function escapeFn(str) {
+    const charCode = str.charCodeAt(0);
+    return charCode < meta.length ? meta[charCode] : `\\u${charCode.toString(16)}`;
+}
 
 // Escape control characters, single quotes and the backslash.
 // This is similar to JSON stringify escaping.
@@ -482,6 +487,16 @@ function strEscape(str) {
             } else {
                 result += `${str.slice(last, i)}${meta[point]}`;
             }
+            last = i + 1;
+        } else if (point >= 0xd800 && point <= 0xdfff) {
+            if (point <= 0xdbff && i + 1 < lastIndex) {
+                const next = str.charCodeAt(i + 1);
+                if (next >= 0xdc00 && next <= 0xdfff) {
+                    i++;
+                    continue;
+                }
+            }
+            result += `${str.slice(last, i)}\\u${point.toString(16)}`;
             last = i + 1;
         }
     }
@@ -584,6 +599,7 @@ function formatValue(
                 context,
                 depth,
                 getUserOptions(ctx, isCrossContext),
+                inspect,
             );
             // If the custom inspection method returned `this`, don't go into
             // infinite recursion.
@@ -1327,23 +1343,41 @@ function getKeys(value, showHidden) {
 }
 
 function formatSet(value, ctx, _ignored, recurseTimes) {
+    const length = value.size;
+    const maxLength = Math.min(Math.max(0, ctx.maxArrayLength), length);
+    const remaining = length - maxLength;
     const output = [];
     ctx.indentationLvl += 2;
+    let i = 0;
     for (const v of value) {
+        if (i >= maxLength) break;
         Array.prototype.push.call(output, formatValue(ctx, v, recurseTimes));
+        i++;
+    }
+    if (remaining > 0) {
+        output.push(`... ${remaining} more item${remaining > 1 ? "s" : ""}`);
     }
     ctx.indentationLvl -= 2;
     return output;
 }
 
 function formatMap(value, ctx, _gnored, recurseTimes) {
+    const length = value.size;
+    const maxLength = Math.min(Math.max(0, ctx.maxArrayLength), length);
+    const remaining = length - maxLength;
     const output = [];
     ctx.indentationLvl += 2;
+    let i = 0;
     for (const { 0: k, 1: v } of value) {
+        if (i >= maxLength) break;
         output.push(
             `${formatValue(ctx, k, recurseTimes)} => ${formatValue(ctx, v, recurseTimes)
             }`,
         );
+        i++;
+    }
+    if (remaining > 0) {
+        output.push(`... ${remaining} more item${remaining > 1 ? "s" : ""}`);
     }
     ctx.indentationLvl -= 2;
     return output;

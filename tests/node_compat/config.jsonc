@@ -388,7 +388,7 @@
           "skip": true,
           "reason": "[manual] amp made no code changes"
         },
-        "block_40_test_circular_set": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_40_test_circular_set": {},
         "block_41_test_map": {
           "skip": true,
           "reason": "[manual] amp made no code changes"
