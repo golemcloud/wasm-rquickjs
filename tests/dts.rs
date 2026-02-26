@@ -4,7 +4,7 @@ use crate::common::collect_example_paths;
 use camino::{Utf8Path, Utf8PathBuf};
 use goldenfile::Mint;
 use test_r::core::{DynamicTestRegistration, TestProperties};
-use test_r::test_gen;
+use test_r::{add_test, test_gen};
 use wasm_rquickjs::generate_dts;
 
 #[allow(dead_code)]
@@ -16,12 +16,13 @@ fn gen_dts_tests(r: &mut DynamicTestRegistration) {
         let example_path_clone = example_path.clone();
         let example_name = example_path.file_name().unwrap().to_string();
 
-        r.add_sync_test(
+        add_test!(
+            r,
             example_name.clone(),
             TestProperties {
                 ..TestProperties::unit_test()
             },
-            move |_deps| {
+            || {
                 let mut mint = Mint::new("tests/goldenfiles");
 
                 let example_name = example_name.clone();
@@ -39,7 +40,7 @@ fn gen_dts_tests(r: &mut DynamicTestRegistration) {
                 }
 
                 Ok::<_, anyhow::Error>(())
-            },
+            }
         );
     }
 }

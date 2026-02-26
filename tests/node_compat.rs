@@ -10,7 +10,7 @@ use crate::common::{
 use camino::Utf8Path;
 use std::fs;
 use std::sync::Arc;
-use test_r::core::{DependencyView, DynamicTestRegistration, TestProperties};
+use test_r::core::{DynamicTestRegistration, TestProperties};
 use test_r::{test_dep, test_gen};
 use wasmtime::component::Val;
 
@@ -176,7 +176,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 ..TestProperties::unit_test()
             };
 
-            r.add_async_test(file_test_name, props, move |deps| {
+            r.add_async_test(file_test_name, props, Some(vec!["arc_preparedcomponent".to_string()]), move |deps| {
                 let prepared: Arc<Arc<PreparedComponent>> = deps
                     .get("arc_preparedcomponent")
                     .expect("PreparedComponent dependency not found")
@@ -244,7 +244,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     SubtestDiscovery::NodeTest(_) => Some(DiscoveryData::NodeTest),
                 };
 
-                r.add_async_test(test_name, props, move |deps| {
+                r.add_async_test(test_name, props, Some(vec!["arc_preparedcomponent".to_string()]), move |deps| {
                     let prepared: Arc<Arc<PreparedComponent>> = deps
                         .get("arc_preparedcomponent")
                         .expect("PreparedComponent dependency not found")
