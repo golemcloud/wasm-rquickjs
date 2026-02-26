@@ -402,7 +402,7 @@
         "block_45_a_bonafide_native_promise": {},
         "block_46_test_map_iterators": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_47_test_set_iterators": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_48_the_constructor_and_symbol_tostringtag": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_48_the_constructor_and_symbol_tostringtag": {},
         "block_49_assumes_that_the_first_numeric_character_is_the_start_of_an_": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_50_test_display_of_constructors": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_51_empty_and_circular_before_depth": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },

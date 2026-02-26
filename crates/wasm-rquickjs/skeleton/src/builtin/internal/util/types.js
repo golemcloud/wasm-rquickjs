@@ -22,12 +22,43 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 const _toString = Object.prototype.toString;
+const _getPrototypeOf = Object.getPrototypeOf;
 
 const _isObjectLike = (value) =>
     value !== null && typeof value === "object";
 
 const _isFunctionLike = (value) =>
     value !== null && typeof value === "function";
+
+const _isPrototypeInChain = (value, prototype) => {
+    if (!_isObjectLike(value) || prototype === null) {
+        return false;
+    }
+
+    let current = _getPrototypeOf(value);
+    while (current !== null) {
+        if (current === prototype) {
+            return true;
+        }
+        current = _getPrototypeOf(current);
+    }
+
+    return false;
+};
+
+const _mapIteratorPrototype = (() => {
+    if (typeof Map !== "function") {
+        return null;
+    }
+    return _getPrototypeOf(new Map().keys());
+})();
+
+const _setIteratorPrototype = (() => {
+    if (typeof Set !== "function") {
+        return null;
+    }
+    return _getPrototypeOf(new Set().values());
+})();
 
 export function isAnyArrayBuffer(value) {
     return (
@@ -99,7 +130,11 @@ export function isMap(value) {
 
 export function isMapIterator(value) {
     return (
-        _isObjectLike(value) && _toString.call(value) === "[object Map Iterator]"
+        _isObjectLike(value) &&
+        (
+            _isPrototypeInChain(value, _mapIteratorPrototype) ||
+            _toString.call(value) === "[object Map Iterator]"
+        )
     );
 }
 
@@ -147,7 +182,11 @@ export function isSet(value) {
 
 export function isSetIterator(value) {
     return (
-        _isObjectLike(value) && _toString.call(value) === "[object Set Iterator]"
+        _isObjectLike(value) &&
+        (
+            _isPrototypeInChain(value, _setIteratorPrototype) ||
+            _toString.call(value) === "[object Set Iterator]"
+        )
     );
 }
 
