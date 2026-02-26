@@ -1,5 +1,5 @@
 // Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { validateFunction, validateString } from "__wasm_rquickjs_builtin/internal/validators";
+import { validateFunction, validateString, validateUint32 } from "__wasm_rquickjs_builtin/internal/validators";
 import { normalizeEncoding, slowCases } from "__wasm_rquickjs_builtin/internal/normalize_encoding";
 export { normalizeEncoding, slowCases };
 
@@ -25,6 +25,43 @@ export function createDeferredPromise() {
     });
 
     return { promise, resolve, reject };
+}
+
+let sleepState = null;
+
+function getSleepState() {
+    if (sleepState !== null) {
+        return sleepState;
+    }
+
+    if (typeof SharedArrayBuffer === "function" &&
+        typeof Atomics === "object" &&
+        Atomics !== null &&
+        typeof Atomics.wait === "function") {
+        sleepState = new Int32Array(new SharedArrayBuffer(4));
+    }
+
+    return sleepState;
+}
+
+export function sleep(msec) {
+    validateUint32(msec, "msec");
+
+    if (msec === 0) {
+        return;
+    }
+
+    const state = getSleepState();
+    if (state !== null) {
+        Atomics.wait(state, 0, 0, msec);
+        return;
+    }
+
+    // Fallback for runtimes without SharedArrayBuffer/Atomics.wait support.
+    const start = Date.now();
+    while (Date.now() - start < msec) {
+        // Intentional busy wait.
+    }
 }
 
 // Keep a list of deprecation codes that have been warned on so we only warn on
@@ -212,6 +249,7 @@ export default {
     customInspectSymbol,
     kEnumerableProperty,
     normalizeEncoding,
+    sleep,
     once,
     deprecate,
     emitExperimentalWarning,
