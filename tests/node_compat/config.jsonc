@@ -349,7 +349,7 @@
         "block_04_truncate_output_for_arraybuffers_using_plural_or_singular_by": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_05_now_do_the_same_checks_but_from_a_different_context": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_06_block_06": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_07_dynamic_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_07_dynamic_properties": {},
         "block_08_array_with_dynamic_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_09_array_with_inherited_number_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_10_array_with_extra_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
