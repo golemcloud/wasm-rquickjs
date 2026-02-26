@@ -462,9 +462,9 @@ Implemented by https://github.com/ungap/structured-clone
 - `read`
 - `write`
 
-### `node:http` / `node:https` (client only)
+### `node:http` / `node:https`
 
-Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createServer`, `Server`, `ServerResponse`) throw a not-implemented error.
+Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled transparently). Server support uses `wasi:sockets` for TCP-level HTTP/1.1 serving.
 
 - `http.request(url|options[, callback])` — make HTTP requests
 - `http.get(url|options[, callback])` — convenience GET helper
@@ -475,9 +475,33 @@ Requires the `http` feature flag. Depends on `wasi:http`. Server APIs (`createSe
 - `http.validateHeaderValue(name, value)` — validate header value
 - `http.Agent` — connection pooling stub (options accepted, pooling is host-controlled)
 - `http.globalAgent` — default Agent instance
-- `http.ClientRequest` — outgoing request (`write`, `end`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `abort`, `destroy`, `setTimeout`)
+- `http.ClientRequest` — outgoing request (`write`, `end`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `getHeaderNames`, `getHeaders`, `getRawHeaderNames`, `flushHeaders`, `setNoDelay`, `setSocketKeepAlive`, `writableEnded`, `writableFinished`, `abort`, `destroy`, `setTimeout`)
 - `http.IncomingMessage` — incoming response (`statusCode`, `statusMessage`, `headers`, `rawHeaders`, `httpVersion`, `on('data')`, `on('end')`)
 - `https.request` / `https.get` — delegates to `http` (WASI-HTTP handles TLS transparently)
+- `http.createServer([options][, requestListener])` — create an HTTP/1.1 server (requires `wasi:sockets`)
+- `http.Server` (extends `net.Server`):
+  - `listen(port[, host][, callback])` — start listening
+  - `close([callback])` — stop accepting connections
+  - `closeAllConnections()` — forcefully close all connections
+  - `closeIdleConnections()` — close idle keep-alive connections
+  - `setTimeout(ms[, callback])` — set server timeout
+  - Properties: `timeout`, `keepAliveTimeout`, `headersTimeout`, `requestTimeout`, `maxHeadersCount`, `maxRequestsPerSocket`
+- `http.ServerResponse` (extends `EventEmitter`):
+  - `writeHead(statusCode[, statusMessage][, headers])` — send response head
+  - `setHeader(name, value)` / `getHeader(name)` / `removeHeader(name)` / `hasHeader(name)` — manage headers
+  - `getHeaders()` / `getHeaderNames()` / `getRawHeaderNames()` — retrieve headers
+  - `write(chunk[, encoding][, callback])` — write response body
+  - `end([data][, encoding][, callback])` — finish response
+  - `flushHeaders()` — force header send
+  - `writeContinue()` — send 100 Continue
+  - `addTrailers(headers)` — stub
+  - `cork()` / `uncork()` — buffer control
+  - Properties: `statusCode`, `statusMessage`, `headersSent`, `sendDate`, `finished`, `writableEnded`, `writableFinished`
+- Server-side `IncomingMessage` (extends `stream.Readable`):
+  - Properties: `method`, `url`, `headers`, `headersDistinct`, `rawHeaders`, `httpVersion`, `socket`, `complete`, `aborted`, `trailers`
+  - `setTimeout(ms[, callback])` — set request timeout
+- Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, sequential request pipelining, idle connection cleanup
+- **Not yet supported:** HTTP Upgrade/WebSocket, 1xx informational events, server-side timeout enforcement, header value injection validation, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options (DNS/address selection is host-controlled via WASI HTTP)
 
 ### `node:crypto`
 - `createHash`

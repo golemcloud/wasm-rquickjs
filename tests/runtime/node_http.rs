@@ -105,7 +105,46 @@ async fn node_http_constants(
     assert!(output.contains("globalAgent exists: true"));
     assert!(output.contains("validateHeaderName valid: passed"));
     assert!(output.contains("validateHeaderName invalid: correctly threw"));
-    assert!(output.contains("createServer: correctly threw"));
+    assert!(output.contains("createServer: succeeded, type: object"));
+
+    Ok(())
+}
+
+#[test]
+async fn node_http_self_connect(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "http-self-connect", &[]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("node:http test 5 - self-connect"));
+    assert!(output.contains("Server listening on port"));
+    assert!(output.contains("Server received request"));
+    assert!(output.contains("Got response, status: 200"));
+    assert!(output.contains("server closed"));
+
+    Ok(())
+}
+
+#[test]
+async fn node_http_self_connect_post(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "http-self-connect-post", &[]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("node:http test 6 - self-connect POST"));
+    assert!(output.contains("Server listening on port"));
+    assert!(output.contains("Server received POST request"));
+    assert!(output.contains("Server body complete: \"hello\""));
+    assert!(output.contains("Got response, status: 200"));
+    assert!(output.contains("server closed"));
 
     Ok(())
 }

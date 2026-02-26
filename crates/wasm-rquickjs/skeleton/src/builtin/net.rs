@@ -64,23 +64,39 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
 
     Ok(TcpSocket {
         inner: RefCell::new(TcpInner {
-            socket: Some(socket),
             input: None,
             output: None,
+            socket: Some(socket),
             connected: false,
             closed: false,
             generation: 0,
+            waiters: 0,
         }),
     })
 }
 
 struct TcpInner {
-    socket: Option<wasi::sockets::tcp::TcpSocket>,
+    // Drop order matters: streams must be dropped before the socket (WASI child resources).
     input: Option<InputStream>,
     output: Option<OutputStream>,
+    socket: Option<wasi::sockets::tcp::TcpSocket>,
     connected: bool,
     closed: bool,
     generation: u64,
+    /// Number of async tasks currently holding a pollable derived from this socket's streams.
+    /// Resources must not be dropped while waiters > 0.
+    waiters: u32,
+}
+
+impl TcpInner {
+    /// Drop WASI resources if the socket is closed and no async tasks are holding pollables.
+    fn finalize_close_if_ready(&mut self) {
+        if self.closed && self.waiters == 0 {
+            self.input = None;
+            self.output = None;
+            self.socket = None;
+        }
+    }
 }
 
 #[derive(Trace, JsLifetime)]
@@ -170,7 +186,7 @@ impl TcpSocket {
                 }
                 Err(ErrorCode::WouldBlock) => {
                     let pollable = {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
                             throw_socket_error(
                                 &ctx,
@@ -179,12 +195,16 @@ impl TcpSocket {
                                 "Socket was closed or reset",
                             )
                         })?;
-                        socket.subscribe()
+                        let p = socket.subscribe();
+                        inner.waiters += 1;
+                        p
                     };
                     AsyncPollable::new(pollable).wait_for().await;
                     {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
+                        inner.waiters -= 1;
                         if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
                                 &ctx,
                                 "EBADF",
@@ -255,16 +275,21 @@ impl TcpSocket {
                     // Empty read = no data yet (connection still open).
                     // Poll the input stream and retry.
                     let pollable = {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
                         let input = inner.input.as_ref().ok_or_else(|| {
                             throw_socket_error(&ctx, "EBADF", "read", "No input stream")
                         })?;
-                        input.subscribe()
+                        let p = input.subscribe();
+                        inner.waiters += 1;
+                        p
                     };
                     AsyncPollable::new(pollable).wait_for().await;
+                    // pollable is dropped here (AsyncPollable consumed by wait_for)
                     {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
+                        inner.waiters -= 1;
                         if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
                                 &ctx,
                                 "EBADF",
@@ -342,16 +367,20 @@ impl TcpSocket {
 
                 // No capacity — poll and retry
                 let pollable = {
-                    let inner = self.inner.borrow();
+                    let mut inner = self.inner.borrow_mut();
                     let output = inner.output.as_ref().ok_or_else(|| {
                         throw_socket_error(&ctx, "EBADF", "write", "No output stream")
                     })?;
-                    output.subscribe()
+                    let p = output.subscribe();
+                    inner.waiters += 1;
+                    p
                 };
                 AsyncPollable::new(pollable).wait_for().await;
                 {
-                    let inner = self.inner.borrow();
+                    let mut inner = self.inner.borrow_mut();
+                    inner.waiters -= 1;
                     if inner.closed || inner.generation != start_gen {
+                        inner.finalize_close_if_ready();
                         return Err(throw_socket_error(
                             &ctx,
                             "EBADF",
@@ -603,11 +632,33 @@ impl TcpSocket {
 
     pub fn close(&self) {
         let mut inner = self.inner.borrow_mut();
-        inner.input = None;
-        inner.output = None;
-        inner.socket.take();
+        if inner.closed {
+            return;
+        }
         inner.closed = true;
         inner.generation += 1;
+        // Shut down the socket to signal EOF to any pending read/accept pollables.
+        if let Some(ref socket) = inner.socket {
+            let _ = socket.shutdown(ShutdownType::Both);
+        }
+        // Only drop resources immediately if no async tasks are waiting on pollables.
+        // Otherwise, let the last waiter finalize the drop (see finalize_close_if_ready).
+        if inner.waiters == 0 {
+            inner.input = None;
+            inner.output = None;
+            inner.socket = None;
+        }
+    }
+
+    pub fn force_close(&self) {
+        let mut inner = self.inner.borrow_mut();
+        inner.closed = true;
+        inner.generation += 1;
+        // Drop all resources immediately, even if waiters are active.
+        // The waiters will see closed=true and exit gracefully.
+        inner.input = None;
+        inner.output = None;
+        inner.socket = None;
     }
 }
 
@@ -928,12 +979,13 @@ impl TcpListener {
 
                     let wrapped = TcpSocket {
                         inner: RefCell::new(TcpInner {
-                            socket: Some(client_socket),
                             input: Some(input),
                             output: Some(output),
+                            socket: Some(client_socket),
                             connected: true,
                             closed: false,
                             generation: 0,
+                            waiters: 0,
                         }),
                     };
 

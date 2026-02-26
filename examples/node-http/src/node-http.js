@@ -112,6 +112,40 @@ export async function httpRequestWithHeaders(port) {
     await req._endPromise;
 }
 
+// Test 5: self-connecting HTTP (server + client in same component)
+export async function httpSelfConnect() {
+    console.log('node:http test 5 - self-connect');
+
+    return new Promise((resolve, reject) => {
+        const server = http.createServer((req, res) => {
+            console.log('Server received request');
+            res.end();
+        });
+
+        server.listen(0, () => {
+            const port = server.address().port;
+            console.log('Server listening on port ' + port);
+
+            const options = {
+                agent: null,
+                port: port
+            };
+
+            http.get(options, (res) => {
+                console.log('Got response, status: ' + res.statusCode);
+                res.resume();
+                server.close(() => {
+                    console.log('server closed');
+                    resolve();
+                });
+            }).on('error', (err) => {
+                console.log('Error: ' + err.message);
+                reject(err);
+            });
+        });
+    });
+}
+
 // Test 4: static constants and validation
 export function httpConstants() {
     console.log('node:http test 4 - constants');
@@ -150,11 +184,64 @@ export function httpConstants() {
         console.log('validateHeaderName invalid: correctly threw');
     }
 
-    // createServer should throw
+    // createServer should work
     try {
-        http.createServer();
-        console.log('createServer: should have thrown');
+        const server = http.createServer();
+        console.log('createServer: succeeded, type: ' + (typeof server));
     } catch (e) {
-        console.log('createServer: correctly threw');
+        console.log('createServer: unexpectedly threw');
     }
+}
+
+// Test 6: self-connecting HTTP POST with body
+export async function httpSelfConnectPost() {
+    console.log('node:http test 6 - self-connect POST');
+
+    return new Promise((resolve, reject) => {
+        const server = http.createServer((req, res) => {
+            console.log('Server received ' + req.method + ' request');
+            let body = '';
+            req.setEncoding('utf8');
+            req.on('data', (chunk) => {
+                console.log('Server got chunk: ' + JSON.stringify(chunk));
+                body += chunk;
+            });
+            req.on('end', () => {
+                console.log('Server body complete: ' + JSON.stringify(body));
+                res.writeHead(200, { 'Content-Type': 'text/plain' });
+                res.end('OK');
+            });
+        });
+
+        server.listen(0, () => {
+            const port = server.address().port;
+            console.log('Server listening on port ' + port);
+
+            const req = http.request({
+                port: port,
+                method: 'POST',
+                path: '/'
+            }, (res) => {
+                console.log('Got response, status: ' + res.statusCode);
+                let responseBody = '';
+                res.setEncoding('utf8');
+                res.on('data', (chunk) => { responseBody += chunk; });
+                res.on('end', () => {
+                    console.log('Response body: ' + responseBody);
+                    server.close(() => {
+                        console.log('server closed');
+                        resolve();
+                    });
+                });
+            });
+
+            req.on('error', (err) => {
+                console.log('Client error: ' + err.message);
+                reject(err);
+            });
+
+            req.write('hello');
+            req.end();
+        });
+    });
 }

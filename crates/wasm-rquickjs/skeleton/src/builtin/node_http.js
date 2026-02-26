@@ -1,5 +1,5 @@
 // node:http implementation
-import { NodeHttpClientRequest, NodeHttpIncomingResponse } from '__wasm_rquickjs_builtin/node_http_native';
+import { NodeHttpClientRequest } from '__wasm_rquickjs_builtin/node_http_native';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import { channel } from 'node:diagnostics_channel';
@@ -186,6 +186,7 @@ export class IncomingMessage extends EventEmitter {
         this.trailersDistinct = {};
         this.destroyed = false;
         this._timeout = null;
+        this._encoding = null;
 
         const rawPairs = nativeRes.headers;
         this.rawHeaders = [];
@@ -228,9 +229,22 @@ export class IncomingMessage extends EventEmitter {
         return this;
     }
 
+    setEncoding(encoding) {
+        this._encoding = encoding;
+        return this;
+    }
+
     destroy(error) {
         this.destroyed = true;
         if (error) this.emit('error', error);
+        return this;
+    }
+
+    resume() {
+        return this;
+    }
+
+    pause() {
         return this;
     }
 
@@ -243,7 +257,12 @@ export class IncomingMessage extends EventEmitter {
                     this.emit('end');
                     break;
                 }
-                this.emit('data', Buffer.from(chunk));
+                const buf = Buffer.from(chunk);
+                if (this._encoding) {
+                    this.emit('data', buf.toString(this._encoding));
+                } else {
+                    this.emit('data', buf);
+                }
             }
         } catch (err) {
             this.emit('error', err);
@@ -256,6 +275,23 @@ export class IncomingMessage extends EventEmitter {
 export class ClientRequest extends EventEmitter {
     constructor(options, callback) {
         super();
+
+        if (options.method != null && typeof options.method !== 'string') {
+            let received;
+            if (typeof options.method === 'symbol') {
+                received = ` Received type symbol (${options.method.toString()})`;
+            } else if (typeof options.method === 'object') {
+                const ctorName = options.method.constructor && options.method.constructor.name;
+                received = ctorName ? ` Received an instance of ${ctorName}` : ` Received type object`;
+            } else {
+                received = ` Received type ${typeof options.method} (${String(options.method)})`;
+            }
+            const err = new TypeError(
+                'The "options.method" property must be of type string.' + received
+            );
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
 
         this.method = (options.method || 'GET').toUpperCase();
         this.protocol = options.protocol || 'http:';
@@ -392,6 +428,11 @@ export class ClientRequest extends EventEmitter {
             encoding = undefined;
         }
 
+        if (this._endPromise) {
+            if (typeof callback === 'function') callback();
+            return this;
+        }
+
         if (data != null) {
             if (typeof data === 'string') {
                 this._nativeReq.writeString(data);
@@ -459,25 +500,17 @@ export class ClientRequest extends EventEmitter {
     }
 }
 
-// ===== Server stubs =====
+// ===== Server =====
 
-const NOT_IMPLEMENTED = 'http.createServer is not supported in WebAssembly environment';
+import {
+    Server as _Server,
+    ServerResponse as _ServerResponse,
+    createServer as _createServer,
+} from '__wasm_rquickjs_builtin/node_http_server';
 
-export function createServer() {
-    throw new Error(NOT_IMPLEMENTED);
-}
-
-export class Server {
-    constructor() {
-        throw new Error(NOT_IMPLEMENTED);
-    }
-}
-
-export class ServerResponse {
-    constructor() {
-        throw new Error(NOT_IMPLEMENTED);
-    }
-}
+export const Server = _Server;
+export const ServerResponse = _ServerResponse;
+export const createServer = _createServer;
 
 // ===== request / get =====
 

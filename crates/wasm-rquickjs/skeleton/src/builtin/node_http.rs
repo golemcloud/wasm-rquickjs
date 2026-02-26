@@ -341,5 +341,6 @@ impl NodeHttpIncomingResponse {
 }
 
 pub const NODE_HTTP_JS: &str = include_str!("node_http.js");
+pub const NODE_HTTP_SERVER_JS: &str = include_str!("node_http_server.js");
 pub const REEXPORT_JS: &str =
     r#"export * from 'node:http'; export { default } from 'node:http';"#;
