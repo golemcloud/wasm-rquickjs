@@ -452,7 +452,10 @@
         "block_80_inspect_prototype_properties": {},
         "block_81_regression_test_for_https_github_com_nodejs_node_issues_3573": {},
         "block_82_test_changing_util_inspect_colors_colors_and_aliases": {},
-        "block_83_https_github_com_nodejs_node_issues_31889": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_83_https_github_com_nodejs_node_issues_31889": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "block_84_truncate_output_for_primitives_with_1_character_left": {},
         "block_85_block_85": {},
         "block_86_block_86": {},

@@ -262,18 +262,30 @@ function resolveFilename(id, parentDir) {
 }
 
 function hasAllowNativesSyntaxFlag() {
+    var runtimeFlags = globalThis.__wasm_rquickjs_v8_runtime_flags;
+    if (runtimeFlags && runtimeFlags.allowNativesSyntax === true) {
+        return true;
+    }
+
     var processObject = globalThis.process;
     if (!processObject || !Array.isArray(processObject.execArgv)) {
         return false;
     }
 
+    var enabled = false;
     for (var i = 0; i < processObject.execArgv.length; i++) {
-        if (processObject.execArgv[i] === '--allow-natives-syntax') {
-            return true;
+        var arg = String(processObject.execArgv[i]).replace(/_/g, '-');
+        if (arg === '--allow-natives-syntax') {
+            enabled = true;
+            continue;
+        }
+
+        if (arg === '--noallow-natives-syntax' || arg === '--no-allow-natives-syntax') {
+            enabled = false;
         }
     }
 
-    return false;
+    return enabled;
 }
 
 function stripV8OptimizationIntrinsics(source) {

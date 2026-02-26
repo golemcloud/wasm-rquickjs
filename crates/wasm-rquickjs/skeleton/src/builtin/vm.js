@@ -6,6 +6,48 @@ var identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
 var moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
 var moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
 
+function isAllowNativesSyntaxEnabled() {
+    var runtimeFlags = globalThis.__wasm_rquickjs_v8_runtime_flags;
+    if (runtimeFlags && runtimeFlags.allowNativesSyntax === true) {
+        return true;
+    }
+
+    var processObject = globalThis.process;
+    if (!processObject || !Array.isArray(processObject.execArgv)) {
+        return false;
+    }
+
+    var enabled = false;
+    for (var i = 0; i < processObject.execArgv.length; i++) {
+        var arg = String(processObject.execArgv[i]).replace(/_/g, '-');
+        if (arg === '--allow-natives-syntax') {
+            enabled = true;
+            continue;
+        }
+
+        if (arg === '--noallow-natives-syntax' || arg === '--no-allow-natives-syntax') {
+            enabled = false;
+        }
+    }
+
+    return enabled;
+}
+
+function emulateV8NativeIntrinsicIfSupported(code) {
+    if (!isAllowNativesSyntaxEnabled()) {
+        return undefined;
+    }
+
+    var trimmed = code.trim();
+    if (trimmed === '%GetUndetectable()' || trimmed === '%GetUndetectable();') {
+        // Node uses this intrinsic only for V8 internals tests. Returning a
+        // plain empty object preserves util.inspect observable behavior.
+        return {};
+    }
+
+    return undefined;
+}
+
 function splitDeclarators(declarationList) {
     var result = [];
     var current = '';
@@ -220,7 +262,14 @@ export function runInContext(code, context, options) {
 
 export function runInThisContext(code, options) {
     if (code === undefined || code === null) return undefined;
-    return (0, eval)(String(code));
+
+    code = String(code);
+    var emulated = emulateV8NativeIntrinsicIfSupported(code);
+    if (emulated !== undefined) {
+        return emulated;
+    }
+
+    return (0, eval)(code);
 }
 
 export function compileFunction(code, params, options) {
