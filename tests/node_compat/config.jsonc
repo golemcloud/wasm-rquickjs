@@ -354,7 +354,7 @@
         "block_09_array_with_inherited_number_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_10_array_with_extra_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_11_indices_out_of_bounds": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
-        "block_12_function_with_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
+        "block_12_function_with_properties": {},
         "block_13_anonymous_function_with_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_14_regular_expressions_with_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
         "block_15_dates_with_properties": { "skip": true, "reason": "inherited: requires --expose-internals and internal/errors" },
