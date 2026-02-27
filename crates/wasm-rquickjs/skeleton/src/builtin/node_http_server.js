@@ -568,13 +568,18 @@ function createConnectionParser(server, socket) {
         contentLength: 0,
         bodyReceived: 0,
         chunkState: null,
+        readableEnded: false,
+        closeAfterResponse: false,
     };
 
     const keepAlive = computeKeepAlive(null, '1.1');
 
     // Install a single timeout handler for idle keep-alive connections
     socket.on('timeout', function onIdleTimeout() {
-        socket.destroy();
+        const handled = server.emit('timeout', socket);
+        if (!handled) {
+            socket.destroy();
+        }
     });
 
     socket.on('data', function onData(data) {
@@ -592,12 +597,31 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('end', function onEnd() {
+        state.readableEnded = true;
+
         if (state.req && !state.req.complete) {
             state.req.complete = true;
             state.req.aborted = true;
             state.req.emit('aborted');
             state.req.push(null);
         }
+
+        if (!server.httpAllowHalfOpen) {
+            socket.end();
+            return;
+        }
+
+        const hasPendingResponse = state.res !== null;
+        const hasBufferedRequests = state.buffer.length > 0;
+        if (hasPendingResponse || hasBufferedRequests) {
+            state.closeAfterResponse = true;
+            if (!hasPendingResponse && state.state === IDLE && hasBufferedRequests) {
+                parseLoop();
+            }
+            return;
+        }
+
+        socket.end();
     });
 
     socket.on('error', function onError(err) {
@@ -660,18 +684,28 @@ function createConnectionParser(server, socket) {
 
                 // Set up finish handler for request sequencing
                 res.on('finish', function onFinish() {
-                    if (res._keepAlive && !server._closeRequested) {
-                        state.req = null;
-                        state.res = null;
-                        state.state = IDLE;
-                        // Set idle timeout for keep-alive connections
-                        socket.setTimeout(server.keepAliveTimeout || 5000);
-                        if (state.buffer.length > 0) {
-                            parseLoop();
-                        }
-                    } else {
+                    const shouldKeepAlive = res._keepAlive && !server._closeRequested;
+                    state.req = null;
+                    state.res = null;
+                    state.state = IDLE;
+
+                    if (!shouldKeepAlive) {
                         socket.end();
+                        return;
                     }
+
+                    if (state.buffer.length > 0) {
+                        parseLoop();
+                        return;
+                    }
+
+                    if (state.readableEnded && state.closeAfterResponse) {
+                        socket.end();
+                        return;
+                    }
+
+                    // Set idle timeout for keep-alive connections
+                    socket.setTimeout(server.keepAliveTimeout || 5000);
                 });
 
                 const cl = req.headers['content-length'];
@@ -885,10 +919,15 @@ function Server(options, requestListener) {
     }
     options = options || {};
 
-    NetServer.call(this, options);
+    NetServer.call(this, {
+        ...options,
+        allowHalfOpen: true,
+        noDelay: options.noDelay ?? true,
+    });
 
     this.timeout = 0;
     this.keepAliveTimeout = 5000;
+    this.httpAllowHalfOpen = false;
     this.maxHeadersCount = null;
     this.headersTimeout = 60000;
     this.requestTimeout = 0;

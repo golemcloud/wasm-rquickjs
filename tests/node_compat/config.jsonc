@@ -5637,7 +5637,10 @@
     "parallel/test-http-client-headers-host-array.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-immediate-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-insecure-http-parser-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-client-invalid-path.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-client-invalid-path.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
     "parallel/test-http-client-override-global-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-readable.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-reject-chunked-with-content-length.js": { "skip": true, "reason": "requires HTTP server functionality" },
@@ -5646,8 +5649,14 @@
     "parallel/test-http-client-timeout-on-connect.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-timeout-option-with-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-timeout-option.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-client-unescaped-path.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-common.js": { "skip": true, "reason": "requires Node.js internal modules" },
+    "parallel/test-http-client-unescaped-path.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-common.js": {
+      "skip": true,
+      "reason": "requires Node.js internal modules"
+    },
     "parallel/test-http-conn-reset.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-correct-hostname.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-debug.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
@@ -5715,15 +5724,19 @@
     "parallel/test-http-outgoing-buffer.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-outgoing-destroy.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-outgoing-internal-headernames-getter.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "inherited: requires HTTP server functionality"
+        },
         "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
       }
     },
-    "parallel/test-http-outgoing-internal-headernames-setter.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-outgoing-internal-headernames-setter.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
     "parallel/test-http-outgoing-internal-headers.js": {
       "skip": true,
       "reason": "requires HTTP server functionality",
@@ -5739,12 +5752,16 @@
       "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-outgoing-properties.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "inherited: requires HTTP server functionality"
+        },
+        "block_01_block_01": {
+          "skip": true,
+          "reason": "inherited: requires HTTP server functionality"
+        },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
         "block_04_block_04": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
@@ -5860,11 +5877,17 @@
       }
     },
     "parallel/test-http-server-options-server-response.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-server.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-server.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-set-max-idle-http-parser.js": { "skip": true, "reason": "requires Node.js internal modules" },
     "parallel/test-http-sync-write-error-during-continue.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-upgrade-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-upgrade-binary.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-upgrade-binary.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
     "parallel/test-http-upgrade-server.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-url.parse-auth-with-header-in-request.js": {
       "skip": true,
