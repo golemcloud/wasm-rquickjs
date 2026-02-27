@@ -547,27 +547,40 @@ const MULTI_VALUE_HEADERS = new Set([
 export class IncomingMessage extends EventEmitter {
     constructor(nativeRes, statusMessageOverride, httpVersionOverride) {
         super();
-        this._nativeRes = nativeRes;
-        this.statusCode = nativeRes.status;
-        if (statusMessageOverride !== undefined) {
-            this.statusMessage = statusMessageOverride;
-        } else if (typeof nativeRes.statusMessage === 'string') {
-            this.statusMessage = nativeRes.statusMessage;
+        const hasNativeResponse = nativeRes !== null &&
+            typeof nativeRes === 'object' &&
+            typeof nativeRes.status === 'number' &&
+            Array.isArray(nativeRes.headers);
+
+        this._nativeRes = hasNativeResponse ? nativeRes : null;
+        this.statusCode = hasNativeResponse ? nativeRes.status : null;
+        if (hasNativeResponse) {
+            if (statusMessageOverride !== undefined) {
+                this.statusMessage = statusMessageOverride;
+            } else if (typeof nativeRes.statusMessage === 'string') {
+                this.statusMessage = nativeRes.statusMessage;
+            } else {
+                this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
+            }
+            applyHttpVersion(this, httpVersionOverride);
         } else {
-            this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
+            this.statusMessage = null;
+            this.httpVersion = null;
+            this.httpVersionMajor = null;
+            this.httpVersionMinor = null;
         }
-        applyHttpVersion(this, httpVersionOverride);
         this.complete = false;
-        this.method = undefined;
-        this.url = undefined;
-        this.socket = null;
+        this.method = hasNativeResponse ? undefined : null;
+        this.url = hasNativeResponse ? undefined : '';
+        this.socket = hasNativeResponse ? null : nativeRes;
+        this.client = this.socket;
         this.trailers = {};
         this.trailersDistinct = {};
         this.destroyed = false;
         this._timeout = null;
         this._encoding = null;
 
-        const rawPairs = nativeRes.headers;
+        const rawPairs = hasNativeResponse ? nativeRes.headers : [];
         this.rawHeaders = [];
         this.headers = {};
         this.headersDistinct = {};
@@ -600,6 +613,14 @@ export class IncomingMessage extends EventEmitter {
                 this.headersDistinct[lower].push(value);
             }
         }
+    }
+
+    get connection() {
+        return this.socket;
+    }
+
+    set connection(value) {
+        this.socket = value;
     }
 
     setTimeout(ms, callback) {
@@ -644,6 +665,12 @@ export class IncomingMessage extends EventEmitter {
     }
 
     async _startReading() {
+        if (!this._nativeRes || typeof this._nativeRes.readBodyChunk !== 'function') {
+            this.complete = true;
+            this.emit('end');
+            return;
+        }
+
         if (this._hasNoBody()) {
             if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
                 this._nativeRes.discardBody();
