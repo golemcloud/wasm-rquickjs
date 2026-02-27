@@ -1286,6 +1286,10 @@ export class ClientRequest extends EventEmitter {
         return this;
     }
 
+    clearTimeout(callback) {
+        return this.setTimeout(0, callback);
+    }
+
     setNoDelay() {
         return this;
     }

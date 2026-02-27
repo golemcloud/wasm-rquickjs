@@ -5345,7 +5345,7 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-timeout.js": { "skip": true, "reason": "requires server-side timeout enforcement (headersTimeout, requestTimeout) which is not yet implemented" },
+    "parallel/test-http-timeout.js": {},
     "parallel/test-http-upgrade-client.js": {
       "skip": true,
       "reason": "[manual] amp partial fix caused regressions"
