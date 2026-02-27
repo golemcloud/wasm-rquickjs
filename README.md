@@ -474,6 +474,7 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `http.STATUS_CODES` — status code to reason phrase mapping
 - `http.maxHeaderSize` — constant (16384)
 - `node:_http_common` / `_http_common` — `_checkIsHttpToken(value)` and `_checkInvalidHeaderChar(value)` header validators
+- `internal/http` — internal `kOutHeaders` symbol used by `OutgoingMessage` internals
 - `http.validateHeaderName(name)` — validate header name
 - `http.validateHeaderValue(name, value)` — validate header value
 - `http.Agent` — connection pooling stub (options accepted, pooling is host-controlled)

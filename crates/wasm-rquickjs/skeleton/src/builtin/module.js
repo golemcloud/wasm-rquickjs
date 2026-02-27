@@ -47,6 +47,7 @@ import * as v8 from 'node:v8';
 import * as worker_threads from 'node:worker_threads';
 import * as zlib from 'node:zlib';
 import * as sqlite from 'node:sqlite';
+import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
@@ -209,6 +210,7 @@ const builtinModules = {
     '_stream_duplex': cjsExport(stream) && cjsExport(stream).Duplex,
     '_stream_transform': cjsExport(stream) && cjsExport(stream).Transform,
     '_stream_passthrough': cjsExport(stream) && cjsExport(stream).PassThrough,
+    'internal/http': cjsExport(internalHttp),
     'internal/fs/utils': cjsExport(internalFsUtils),
     'internal/url': cjsExport(internalUrl),
     'internal/errors': cjsExport(internalErrors),

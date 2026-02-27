@@ -5777,11 +5777,12 @@
       }
     },
     "parallel/test-http-outgoing-renderHeaders.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires HTTP server functionality" }

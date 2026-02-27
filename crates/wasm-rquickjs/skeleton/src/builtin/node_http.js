@@ -3,7 +3,9 @@ import { NodeHttpClientRequest } from '__wasm_rquickjs_builtin/node_http_native'
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import { channel } from 'node:diagnostics_channel';
+import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
 import {
+    ERR_HTTP_HEADERS_SENT,
     ERR_HTTP_INVALID_HEADER_VALUE,
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_HTTP_TOKEN,
@@ -677,6 +679,7 @@ export class IncomingMessage extends EventEmitter {
 export class OutgoingMessage extends EventEmitter {
     constructor(options = {}) {
         super();
+        this[kOutHeaders] = null;
         this.outputData = [];
         this.outputSize = 0;
         this.writable = true;
@@ -730,6 +733,23 @@ export class OutgoingMessage extends EventEmitter {
 
     _implicitHeader() {
         throw new ERR_METHOD_NOT_IMPLEMENTED('_implicitHeader()');
+    }
+
+    _renderHeaders() {
+        if (this._header) {
+            throw new ERR_HTTP_HEADERS_SENT('render');
+        }
+
+        const headersMap = this[kOutHeaders];
+        const headers = {};
+
+        if (headersMap !== null) {
+            for (const key of Object.keys(headersMap)) {
+                headers[headersMap[key][0]] = headersMap[key][1];
+            }
+        }
+
+        return headers;
     }
 
     _writeToSocket(chunk, encoding, callback) {
