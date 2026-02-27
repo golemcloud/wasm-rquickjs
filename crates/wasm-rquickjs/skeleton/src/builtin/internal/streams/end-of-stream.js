@@ -2,7 +2,12 @@
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 // deno-lint-ignore-file
 
-import { AbortError, ERR_STREAM_PREMATURE_CLOSE } from "__wasm_rquickjs_builtin/internal/errors";
+import {
+    AbortError,
+    ERR_INVALID_ARG_TYPE,
+    ERR_STREAM_PREMATURE_CLOSE,
+} from "__wasm_rquickjs_builtin/internal/errors";
+import { isNodeStream } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { once } from "__wasm_rquickjs_builtin/internal/util";
 import {
     validateAbortSignal,
@@ -68,6 +73,14 @@ export function eos(stream, options, callback) {
     validateAbortSignal(options.signal, "options.signal");
 
     callback = once(callback);
+
+    if (!isNodeStream(stream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            "stream",
+            ["ReadableStream", "WritableStream", "Stream"],
+            stream,
+        );
+    }
 
     const readable = options.readable ||
         (options.readable !== false && isReadable(stream));
