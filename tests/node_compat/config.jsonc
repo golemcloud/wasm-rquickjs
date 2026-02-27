@@ -8842,7 +8842,7 @@
         "block_04_because_a_zero_size_push_doesn_t_trigger_a_read": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-stream-end-of-streams.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream-end-of-streams.js": {},
     "parallel/test-stream-event-names.js": {
       "split": true,
       "subtests": {
