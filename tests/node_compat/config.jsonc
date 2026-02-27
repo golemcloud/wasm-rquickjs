@@ -5480,10 +5480,7 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-response-statuscode.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-response-statuscode.js": {},
     "parallel/test-http-set-cookies.js": { "skip": true, "reason": "deadlocks: two concurrent http.get requests to same-component server cause event loop deadlock with wasi:http pollables" },
     "parallel/test-http-should-keep-alive.js": {
       "skip": true,
