@@ -5725,7 +5725,10 @@
         "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
       }
     },
-    "parallel/test-http-outgoing-message-inheritance.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-outgoing-message-inheritance.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-outgoing-properties.js": {
       "skip": true,
       "reason": "requires HTTP server functionality",

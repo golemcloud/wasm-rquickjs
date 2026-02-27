@@ -7,6 +7,7 @@ import {
     ERR_HTTP_INVALID_HEADER_VALUE,
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_HTTP_TOKEN,
+    ERR_METHOD_NOT_IMPLEMENTED,
     ERR_UNESCAPED_CHARACTERS,
 } from '__wasm_rquickjs_builtin/internal/errors';
 
@@ -560,6 +561,163 @@ export class IncomingMessage extends EventEmitter {
 
 // ===== ClientRequest =====
 
+export class OutgoingMessage extends EventEmitter {
+    constructor(options = {}) {
+        super();
+        this.outputData = [];
+        this.outputSize = 0;
+        this.writable = true;
+        this.destroyed = false;
+        this.finished = false;
+        this._writableEnded = false;
+        this._writableFinished = false;
+        this.headersSent = false;
+        this._header = null;
+        this._socket = null;
+        this._highWaterMark = Number.isFinite(options && options.highWaterMark)
+            ? options.highWaterMark
+            : 16 * 1024;
+    }
+
+    get socket() {
+        return this._socket;
+    }
+
+    set socket(value) {
+        this._socket = value;
+    }
+
+    get connection() {
+        return this._socket;
+    }
+
+    set connection(value) {
+        this._socket = value;
+    }
+
+    get writableEnded() {
+        return this._writableEnded;
+    }
+
+    get writableFinished() {
+        return this._writableFinished;
+    }
+
+    get writableHighWaterMark() {
+        return this._highWaterMark;
+    }
+
+    get writableLength() {
+        return this.outputSize;
+    }
+
+    get writableObjectMode() {
+        return false;
+    }
+
+    _implicitHeader() {
+        throw new ERR_METHOD_NOT_IMPLEMENTED('_implicitHeader()');
+    }
+
+    _writeToSocket(chunk, encoding, callback) {
+        const socket = this._socket;
+        if (socket && typeof socket.write === 'function') {
+            return socket.write(chunk, encoding, callback);
+        }
+
+        const bufferedChunk = typeof chunk === 'string'
+            ? Buffer.from(chunk, encoding)
+            : Buffer.from(chunk);
+        this.outputData.push({ data: bufferedChunk, encoding, callback });
+        this.outputSize += bufferedChunk.length;
+        if (typeof callback === 'function') {
+            callback();
+        }
+        return this.outputSize < this._highWaterMark;
+    }
+
+    write(chunk, encoding, callback) {
+        if (typeof encoding === 'function') {
+            callback = encoding;
+            encoding = undefined;
+        }
+
+        if (!this._header) {
+            this._implicitHeader();
+        }
+
+        if (chunk === null) {
+            const err = new TypeError('May not write null values to stream');
+            err.code = 'ERR_STREAM_NULL_VALUES';
+            throw err;
+        }
+
+        if (chunk === undefined) {
+            const err = new TypeError(
+                'The "chunk" argument must be of type string or an instance of Buffer or Uint8Array. Received undefined'
+            );
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+
+        if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+            const err = new TypeError(
+                'The "chunk" argument must be of type string or an instance of Buffer or Uint8Array. Received type ' +
+                typeof chunk + ' (' + String(chunk) + ')'
+            );
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+
+        return this._writeToSocket(chunk, encoding, callback);
+    }
+
+    end(data, encoding, callback) {
+        if (typeof data === 'function') {
+            callback = data;
+            data = undefined;
+            encoding = undefined;
+        } else if (typeof encoding === 'function') {
+            callback = encoding;
+            encoding = undefined;
+        }
+
+        if (!this._header) {
+            this._implicitHeader();
+        }
+
+        if (data !== undefined && data !== null) {
+            this.write(data, encoding);
+        }
+
+        this._writeToSocket('', 'latin1', () => {
+            this.finished = true;
+            this._writableEnded = true;
+            this._writableFinished = true;
+            this.outputData = [];
+            this.outputSize = 0;
+            if (typeof callback === 'function') {
+                callback();
+            }
+            this.emit('finish');
+        });
+
+        return this;
+    }
+
+    destroy(error) {
+        if (this.destroyed) {
+            return this;
+        }
+        this.destroyed = true;
+        if (error) {
+            this.emit('error', error);
+        }
+        this.emit('close');
+        return this;
+    }
+}
+
 export class ClientRequest extends EventEmitter {
     constructor(options, callback) {
         super();
@@ -980,6 +1138,7 @@ export default {
     validateHeaderValue,
     Agent,
     globalAgent,
+    OutgoingMessage,
     ClientRequest,
     IncomingMessage,
     Server,

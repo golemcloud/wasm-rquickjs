@@ -477,6 +477,7 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `http.validateHeaderValue(name, value)` — validate header value
 - `http.Agent` — connection pooling stub (options accepted, pooling is host-controlled)
 - `http.globalAgent` — default Agent instance
+- `http.OutgoingMessage` — base class for writable HTTP message objects (`write`, `end`, `destroy`, `writableLength`, `writableHighWaterMark`)
 - `http.ClientRequest` — outgoing request (`write`, `end`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `getHeaderNames`, `getHeaders`, `getRawHeaderNames`, `flushHeaders`, `setNoDelay`, `setSocketKeepAlive`, `writableEnded`, `writableFinished`, `abort`, `destroy`, `setTimeout`)
 - `http.IncomingMessage` — incoming response (`statusCode`, `statusMessage`, `headers`, `rawHeaders`, `httpVersion`, `on('data')`, `on('end')`)
 - `https.request` / `https.get` — delegates to `http` (WASI-HTTP handles TLS transparently)
