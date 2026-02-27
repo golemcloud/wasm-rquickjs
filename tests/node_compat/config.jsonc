@@ -5441,10 +5441,7 @@
     "parallel/test-http-agent-maxsockets.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-agent-maxtotalsockets.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-allow-req-after-204-res.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-allow-req-after-204-res.js": {},
     "parallel/test-http-client-abort.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-check-http-token.js": {},
