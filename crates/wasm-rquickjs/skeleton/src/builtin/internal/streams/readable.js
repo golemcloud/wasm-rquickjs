@@ -480,7 +480,11 @@ Readable.prototype.read = function (n) {
         }
 
         // Call internal read method
-        this._read(state.highWaterMark);
+        try {
+            this._read(state.highWaterMark);
+        } catch (err) {
+            errorOrDestroy(this, err);
+        }
 
         state.sync = false;
         // If _read pushed data synchronously, then `reading` will be false,

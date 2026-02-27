@@ -9033,7 +9033,7 @@
       }
     },
     "parallel/test-stream-readable-to-web.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
-    "parallel/test-stream-readable-with-unimplemented-_read.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream-readable-with-unimplemented-_read.js": {},
     "parallel/test-stream-transform-split-highwatermark.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
