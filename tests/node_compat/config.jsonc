@@ -5678,7 +5678,10 @@
         "block_04_test_5_invalid_argument_type": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
       }
     },
-    "parallel/test-http-invalid-path-chars.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-invalid-path-chars.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-invalid-urls.js": {
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"

@@ -222,6 +222,13 @@ export class ERR_INVALID_HTTP_TOKEN extends TypeError {
     }
 }
 
+export class ERR_UNESCAPED_CHARACTERS extends TypeError {
+    constructor(x) {
+        super(`${x} contains unescaped characters`);
+        addCodeToMessage(this, "ERR_UNESCAPED_CHARACTERS");
+    }
+}
+
 const classRegExp = /^([A-Z][a-z0-9]*)+$/;
 
 const kTypes = [
@@ -1179,6 +1186,7 @@ export const codes = Object.freeze({
     ERR_INVALID_CALLBACK,
     ERR_INVALID_CHAR,
     ERR_INVALID_HTTP_TOKEN,
+    ERR_UNESCAPED_CHARACTERS,
     ERR_INVALID_RETURN_VALUE,
     ERR_INVALID_THIS,
     ERR_METHOD_NOT_IMPLEMENTED,

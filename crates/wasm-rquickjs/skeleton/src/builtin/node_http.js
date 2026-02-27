@@ -7,6 +7,7 @@ import {
     ERR_HTTP_INVALID_HEADER_VALUE,
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_HTTP_TOKEN,
+    ERR_UNESCAPED_CHARACTERS,
 } from '__wasm_rquickjs_builtin/internal/errors';
 
 const onClientRequestCreated = channel('http.client.request.created');
@@ -96,6 +97,7 @@ export const maxHeaderSize = 16384;
 const INVALID_HEADER_CHAR_REGEX = /[^\t\x20-\x7e\x80-\xff]/;
 const INVALID_HEADER_NAME_REGEX = /[^!#$%&'*+\-.^_`|~A-Za-z0-9]/;
 const HTTP_TOKEN_REGEX = /^[!#$%&'*+\-.^_`|~A-Za-z0-9]+$/;
+const INVALID_PATH_REGEX = /[^\u0021-\u00ff]/;
 
 function isValidHttpToken(value) {
     return typeof value === 'string' && HTTP_TOKEN_REGEX.test(value);
@@ -584,6 +586,13 @@ export class ClientRequest extends EventEmitter {
 
         if (options.method && !isValidHttpToken(options.method)) {
             throw new ERR_INVALID_HTTP_TOKEN('Method', options.method);
+        }
+
+        if (options.path) {
+            const path = String(options.path);
+            if (INVALID_PATH_REGEX.test(path)) {
+                throw new ERR_UNESCAPED_CHARACTERS('Request path');
+            }
         }
 
         this.method = (options.method || 'GET').toUpperCase();
