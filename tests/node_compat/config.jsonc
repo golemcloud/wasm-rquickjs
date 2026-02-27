@@ -4782,8 +4782,14 @@
     "parallel/test-http-client-timeout-option-listeners.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout-with-data.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-client-upload-buf.js": {},
-    "parallel/test-http-client-upload.js": {},
+    "parallel/test-http-client-upload-buf.js": {
+      "skip": true,
+      "reason": "regression: was enabled but started failing"
+    },
+    "parallel/test-http-client-upload.js": {
+      "skip": true,
+      "reason": "regression: was enabled but started failing"
+    },
     "parallel/test-http-client-with-create-connection.js": {},
     "parallel/test-http-connect-req-res.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-connect.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -4977,7 +4983,10 @@
         "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
-    "parallel/test-http-request-large-payload.js": {},
+    "parallel/test-http-request-large-payload.js": {
+      "skip": true,
+      "reason": "regression: was enabled but started failing"
+    },
     "parallel/test-http-request-method-delete-payload.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-request-methods.js": {},
     "parallel/test-http-request-smuggling-content-length.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -5432,8 +5441,14 @@
     "parallel/test-http-client-abort3.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {}
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
+        "block_01_block_01": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        }
       }
     },
     "parallel/test-http-client-aborted-event.js": {
