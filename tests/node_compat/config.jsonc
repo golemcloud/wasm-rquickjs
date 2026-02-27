@@ -5305,10 +5305,7 @@
     "parallel/test-http-end-throw-socket-handling.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-exceptions.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-get-pipeline-problem.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-incoming-pipelined-socket-destroy.js": {
-      "skip": true,
-      "reason": "requires setImmediate and complex socket lifecycle semantics during pipelined request destruction"
-    },
+    "parallel/test-http-incoming-pipelined-socket-destroy.js": {},
     "parallel/test-http-information-headers.js": {
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"

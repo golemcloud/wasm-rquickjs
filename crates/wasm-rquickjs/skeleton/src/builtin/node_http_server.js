@@ -914,7 +914,17 @@ function parseRequestHeaders(block) {
     const lines = block.split('\r\n');
     if (lines.length === 0) return null;
 
-    const requestLine = lines[0];
+    // Be tolerant to extra CRLFs between pipelined requests.
+    // Node's parser ignores these blank prefixed lines instead of treating
+    // them as malformed request lines.
+    let requestLineIndex = 0;
+    while (requestLineIndex < lines.length && lines[requestLineIndex] === '') {
+        requestLineIndex++;
+    }
+
+    if (requestLineIndex >= lines.length) return null;
+
+    const requestLine = lines[requestLineIndex];
     const parts = requestLine.split(' ');
     if (parts.length < 2) return null;
 
@@ -929,7 +939,7 @@ function parseRequestHeaders(block) {
     }
 
     const rawHeaders = [];
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = requestLineIndex + 1; i < lines.length; i++) {
         const line = lines[i];
         if (line.length === 0) continue;
         const colonIdx = line.indexOf(':');
