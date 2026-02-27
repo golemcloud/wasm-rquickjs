@@ -24,6 +24,30 @@ import {
 import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted, buildPrioritizePrompt, runAmpPrioritize, parsePrioritizeResult } from "../amp.js";
 import { commitProgress } from "../git.js";
 
+let stopRequested = false;
+
+function setupGracefulStop(): () => void {
+  stopRequested = false;
+  let sigintCount = 0;
+
+  const handler = () => {
+    sigintCount++;
+    if (sigintCount === 1) {
+      stopRequested = true;
+      console.log("\n  🛑 Stop requested — will finish current test and exit gracefully.");
+      console.log("     (Press Ctrl+C again to force-exit immediately)\n");
+    } else {
+      console.log("\n  ⚡ Force-exiting.");
+      process.exit(1);
+    }
+  };
+
+  process.on("SIGINT", handler);
+  return () => {
+    process.removeListener("SIGINT", handler);
+  };
+}
+
 interface FailingTest {
   path: string;
   subtestName?: string;
@@ -219,9 +243,11 @@ async function prioritizeSkippedTests(
 
 export async function fixCommand(category: string): Promise<void> {
   fs.mkdirSync(LOG_DIR, { recursive: true });
+  const cleanupStop = setupGracefulStop();
 
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(`  fix-node-compat: category='${category}'`);
+  console.log("  Press Ctrl+C to stop after the current test finishes.");
   console.log("═══════════════════════════════════════════════════════════════");
   console.log();
 
@@ -285,6 +311,11 @@ export async function fixCommand(category: string): Promise<void> {
   let iteration = 0;
   let priorityQueue: SkippedTest[] = [];
   while (true) {
+    if (stopRequested) {
+      console.log("  🛑 Graceful stop: finishing up after completing the previous test.");
+      break;
+    }
+
     iteration++;
 
     // Before the first iteration and every 10th iteration, batch-check and re-prioritize
@@ -328,12 +359,7 @@ export async function fixCommand(category: string): Promise<void> {
     console.log(`  Iteration ${iteration} — ${passing} passing, ${skipped.length} skipped`);
     console.log("───────────────────────────────────────────────────────────────");
     console.log();
-    console.log("Skipped tests:");
-    for (const st of skipped) {
-      const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
-      console.log(`  • ${label}`);
-      console.log(`    Reason: ${st.reason}`);
-    }
+    console.log(`Skipped tests: ${skipped.length} remaining`);
     console.log();
 
     const target = priorityQueue[0];
@@ -489,6 +515,7 @@ export async function fixCommand(category: string): Promise<void> {
     console.log();
   }
 
+  cleanupStop();
   console.log();
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(`  Done! Category '${category}' processing complete.`);
