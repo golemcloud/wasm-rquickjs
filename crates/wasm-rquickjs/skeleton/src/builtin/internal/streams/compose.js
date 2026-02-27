@@ -3,6 +3,7 @@
 // deno-lint-ignore-file
 
 import { destroyer } from "__wasm_rquickjs_builtin/internal/streams/destroy";
+import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import { isNodeStream, isReadable, isWritable } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { pipeline } from "__wasm_rquickjs_builtin/internal/streams/pipeline";
 import {
@@ -106,7 +107,7 @@ function compose(...streams) {
     d = new ComposeDuplex({
         // TODO (ronag): highWaterMark?
         writableObjectMode: !!head?.writableObjectMode,
-        readableObjectMode: !!tail?.writableObjectMode,
+        readableObjectMode: !!tail?.readableObjectMode,
         writable,
         readable,
     });
@@ -133,7 +134,7 @@ function compose(...streams) {
             }
         });
 
-        tail.on("finish", function () {
+        eos(tail, function () {
             if (onfinish) {
                 const cb = onfinish;
                 onfinish = null;
@@ -180,11 +181,12 @@ function compose(...streams) {
         ondrain = null;
         onfinish = null;
 
+        destroyer(tail, err);
+
         if (onclose === null) {
             callback(err);
         } else {
             onclose = callback;
-            destroyer(tail, err);
         }
     };
 
