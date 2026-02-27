@@ -500,6 +500,36 @@ ServerResponse.prototype.flushHeaders = function flushHeaders() {
     }
 };
 
+ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback) {
+    if (typeof encoding === 'function') {
+        callback = encoding;
+        encoding = undefined;
+    }
+
+    if (!this.socket || this.socket.destroyed) {
+        if (typeof callback === 'function') {
+            callback(new Error('Socket is closed'));
+        }
+        return false;
+    }
+
+    let chunk;
+    if (typeof data === 'string') {
+        chunk = Buffer.from(data, encoding || 'latin1');
+    } else if (data instanceof Buffer) {
+        chunk = data;
+    } else if (data instanceof Uint8Array) {
+        chunk = Buffer.from(data);
+    } else {
+        chunk = Buffer.from(String(data), encoding || 'latin1');
+    }
+
+    if (typeof callback === 'function') {
+        return this.socket.write(chunk, callback);
+    }
+    return this.socket.write(chunk);
+};
+
 ServerResponse.prototype.writeContinue = function writeContinue() {
     this.socket.write(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'));
 };

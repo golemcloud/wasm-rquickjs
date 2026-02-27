@@ -5431,7 +5431,10 @@
     "parallel/test-http-exceptions.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-get-pipeline-problem.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-incoming-pipelined-socket-destroy.js": { "skip": true, "reason": "requires setImmediate and complex socket lifecycle semantics during pipelined request destruction" },
-    "parallel/test-http-information-headers.js": { "skip": true, "reason": "requires 1xx informational response handling and client 'information' event" },
+    "parallel/test-http-information-headers.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-parser-free.js": {
       "skip": true,
       "reason": "tests Node.js internal C++ parser lifecycle, not applicable to JS-based parser"

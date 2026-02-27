@@ -287,6 +287,119 @@ function consumeCapturedResponseMetadata(hostname, port, statusCode) {
     return { statusMessage };
 }
 
+function consumeCapturedResponseSequence(hostname, port, expectedFinalStatusCode) {
+    if (!isLoopbackHostname(hostname)) {
+        return { informational: [], final: undefined };
+    }
+
+    const normalizedPort = Number(port);
+    if (!Number.isFinite(normalizedPort) || normalizedPort <= 0) {
+        return { informational: [], final: undefined };
+    }
+
+    const takeResponseSequence = globalThis.__wasm_rquickjs_take_http_response_sequence;
+    if (typeof takeResponseSequence === 'function') {
+        const sequence = takeResponseSequence(normalizedPort, expectedFinalStatusCode);
+        if (sequence && typeof sequence === 'object') {
+            const informational = Array.isArray(sequence.informational) ? sequence.informational : [];
+            const final = sequence.final && typeof sequence.final === 'object'
+                ? sequence.final
+                : undefined;
+            return { informational, final };
+        }
+    }
+
+    const takeResponseMetadata = globalThis.__wasm_rquickjs_take_http_response_metadata;
+    if (typeof takeResponseMetadata !== 'function') {
+        return {
+            informational: [],
+            final: consumeCapturedResponseMetadata(hostname, port, expectedFinalStatusCode),
+        };
+    }
+
+    const informational = [];
+    let final;
+
+    for (let i = 0; i < 64; i++) {
+        const metadata = takeResponseMetadata(normalizedPort);
+        if (!metadata || typeof metadata !== 'object') {
+            break;
+        }
+
+        const statusCode = Number(metadata.statusCode);
+        if (statusCode >= 100 && statusCode < 200 && statusCode !== 101) {
+            informational.push(metadata);
+            continue;
+        }
+
+        final = metadata;
+        break;
+    }
+
+    if (!final) {
+        final = consumeCapturedResponseMetadata(hostname, port, expectedFinalStatusCode);
+    }
+
+    return { informational, final };
+}
+
+function toInformationalHeaders(rawHeaders, fallbackHeaders) {
+    if (fallbackHeaders && typeof fallbackHeaders === 'object') {
+        return fallbackHeaders;
+    }
+
+    const headers = {};
+    if (!Array.isArray(rawHeaders)) {
+        return headers;
+    }
+
+    for (let i = 0; i < rawHeaders.length - 1; i += 2) {
+        const name = String(rawHeaders[i]);
+        const value = String(rawHeaders[i + 1]);
+        const lower = name.toLowerCase();
+        if (headers[lower] === undefined) {
+            headers[lower] = value;
+        } else {
+            headers[lower] += ', ' + value;
+        }
+    }
+
+    return headers;
+}
+
+function emitInformationEvent(request, metadata) {
+    if (!metadata || typeof metadata !== 'object') {
+        return;
+    }
+
+    const statusCode = Number(metadata.statusCode);
+    if (!Number.isFinite(statusCode) || statusCode < 100 || statusCode >= 200 || statusCode === 101) {
+        return;
+    }
+
+    const statusMessage = typeof metadata.statusMessage === 'string'
+        ? metadata.statusMessage
+        : (STATUS_CODES[statusCode] || '');
+    const httpVersion = normalizeHttpVersion(metadata.httpVersion);
+    const [majorPart, minorPart] = httpVersion.split('.');
+    const rawHeaders = Array.isArray(metadata.rawHeaders) ? metadata.rawHeaders : [];
+    const headers = toInformationalHeaders(rawHeaders, metadata.headers);
+
+    if (statusCode === 100) {
+        request.emit('continue');
+    }
+
+    request.emit('information', {
+        statusCode,
+        statusMessage,
+        httpVersion,
+        httpVersionMajor: Number(majorPart) || 1,
+        httpVersionMinor: Number(minorPart) || 1,
+        headers,
+        rawHeaders,
+    });
+}
+
 function normalizeHttpVersion(httpVersion) {
     if (typeof httpVersion === 'string' && /^\d+\.\d+$/.test(httpVersion)) {
         return httpVersion;
@@ -1035,11 +1148,16 @@ export class ClientRequest extends EventEmitter {
 
             const nativeRes = this._nativeReq.getResponse();
             if (nativeRes) {
-                const responseMetadata = consumeCapturedResponseMetadata(
+                const metadataSequence = consumeCapturedResponseSequence(
                     this.hostname,
                     this.port,
                     nativeRes.status
                 );
+                for (const informational of metadataSequence.informational) {
+                    emitInformationEvent(this, informational);
+                }
+
+                const responseMetadata = metadataSequence.final;
                 const res = new IncomingMessage(
                     nativeRes,
                     responseMetadata && responseMetadata.statusMessage,

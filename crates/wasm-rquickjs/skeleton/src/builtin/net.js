@@ -89,6 +89,26 @@ function nextTick(fn, ...args) {
 const HTTP_STATUS_MESSAGE_QUEUE_KEY = '__wasm_rquickjs_http_status_message_queue';
 const HTTP_STATUS_MESSAGE_TAKE_KEY = '__wasm_rquickjs_take_http_status_message';
 const HTTP_RESPONSE_METADATA_TAKE_KEY = '__wasm_rquickjs_take_http_response_metadata';
+const HTTP_RESPONSE_SEQUENCE_TAKE_KEY = '__wasm_rquickjs_take_http_response_sequence';
+
+function isInformationalStatusCode(statusCode) {
+    return Number.isFinite(statusCode) && statusCode >= 100 && statusCode < 200 && statusCode !== 101;
+}
+
+function toMetadata(entry) {
+    if (!entry) {
+        return undefined;
+    }
+
+    return {
+        statusCode: entry.statusCode,
+        statusMessage: entry.statusMessage,
+        httpVersion: entry.httpVersion,
+        connectionHeader: entry.connectionHeader,
+        headers: entry.headers,
+        rawHeaders: entry.rawHeaders,
+    };
+}
 
 function getHttpStatusMessageQueue() {
     if (!(globalThis[HTTP_STATUS_MESSAGE_QUEUE_KEY] instanceof Map)) {
@@ -97,14 +117,29 @@ function getHttpStatusMessageQueue() {
     return globalThis[HTTP_STATUS_MESSAGE_QUEUE_KEY];
 }
 
-function enqueueCapturedHttpStatusMessage(port, statusCode, statusMessage, httpVersion, connectionHeader) {
+function enqueueCapturedHttpStatusMessage(
+    port,
+    statusCode,
+    statusMessage,
+    httpVersion,
+    connectionHeader,
+    headers,
+    rawHeaders,
+) {
     if (!Number.isFinite(port) || port <= 0) {
         return;
     }
 
     const queue = getHttpStatusMessageQueue();
     const entries = queue.get(port) || [];
-    entries.push({ statusCode, statusMessage, httpVersion, connectionHeader });
+    entries.push({
+        statusCode,
+        statusMessage,
+        httpVersion,
+        connectionHeader,
+        headers,
+        rawHeaders,
+    });
     if (entries.length > 256) {
         entries.splice(0, entries.length - 256);
     }
@@ -145,16 +180,45 @@ function takeCapturedHttpStatusMessage(port, expectedStatusCode) {
 
 function takeCapturedHttpResponseMetadata(port, expectedStatusCode) {
     const captured = takeCapturedHttpMetadataEntry(port, expectedStatusCode);
-    if (!captured) {
-        return undefined;
+    return toMetadata(captured);
+}
+
+function takeCapturedHttpResponseSequence(port, expectedStatusCode) {
+    if (!Number.isFinite(port) || port <= 0) {
+        return { informational: [], final: undefined };
     }
 
-    return {
-        statusCode: captured.statusCode,
-        statusMessage: captured.statusMessage,
-        httpVersion: captured.httpVersion,
-        connectionHeader: captured.connectionHeader,
-    };
+    const queue = getHttpStatusMessageQueue();
+    const entries = queue.get(port);
+    if (!entries || entries.length === 0) {
+        return { informational: [], final: undefined };
+    }
+
+    let finalIndex = 0;
+    if (Number.isFinite(expectedStatusCode)) {
+        const matchingIndex = entries.findIndex((entry) => entry.statusCode === expectedStatusCode);
+        if (matchingIndex >= 0) {
+            finalIndex = matchingIndex;
+        }
+    }
+
+    let infoStart = finalIndex;
+    while (infoStart > 0 && isInformationalStatusCode(entries[infoStart - 1].statusCode)) {
+        infoStart--;
+    }
+
+    const informational = entries
+        .slice(infoStart, finalIndex)
+        .filter((entry) => isInformationalStatusCode(entry.statusCode))
+        .map(toMetadata);
+    const final = toMetadata(entries[finalIndex]);
+
+    entries.splice(infoStart, finalIndex - infoStart + 1);
+    if (entries.length === 0) {
+        queue.delete(port);
+    }
+
+    return { informational, final };
 }
 
 if (typeof globalThis[HTTP_STATUS_MESSAGE_TAKE_KEY] !== 'function') {
@@ -163,6 +227,10 @@ if (typeof globalThis[HTTP_STATUS_MESSAGE_TAKE_KEY] !== 'function') {
 
 if (typeof globalThis[HTTP_RESPONSE_METADATA_TAKE_KEY] !== 'function') {
     globalThis[HTTP_RESPONSE_METADATA_TAKE_KEY] = takeCapturedHttpResponseMetadata;
+}
+
+if (typeof globalThis[HTTP_RESPONSE_SEQUENCE_TAKE_KEY] !== 'function') {
+    globalThis[HTTP_RESPONSE_SEQUENCE_TAKE_KEY] = takeCapturedHttpResponseSequence;
 }
 
 function maybeCaptureHttpStatusLine(socket, chunk) {
@@ -177,54 +245,78 @@ function maybeCaptureHttpStatusLine(socket, chunk) {
         return;
     }
 
-    if (!socket._httpStatusLineProbe && !chunkString.startsWith('HTTP/')) {
+    if (!socket._httpStatusProbeBuffer && !chunkString.startsWith('HTTP/')) {
         return;
     }
 
-    const combined = (socket._httpStatusLineProbe || '') + chunkString;
-    const lineEnd = combined.indexOf('\r\n');
-    if (lineEnd === -1) {
-        socket._httpStatusLineProbe = combined.length > 1024 ? combined.slice(0, 1024) : combined;
-        return;
-    }
+    let combined = (socket._httpStatusProbeBuffer || '') + chunkString;
 
-    socket._httpStatusLineProbe = '';
-    const statusLine = combined.slice(0, lineEnd);
-    const match = /^HTTP\/(\d\.\d)\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
-    if (!match) {
-        return;
-    }
+    while (combined.length > 0) {
+        if (!combined.startsWith('HTTP/')) {
+            combined = '';
+            break;
+        }
 
-    const headerSection = combined.slice(lineEnd + 2);
-    const headersEnd = headerSection.indexOf('\r\n\r\n');
-    const headerBlock = headersEnd >= 0 ? headerSection.slice(0, headersEnd) : headerSection;
-    let connectionHeader;
-    if (headerBlock.length > 0) {
-        const lines = headerBlock.split('\r\n');
-        for (const line of lines) {
+        const headerEnd = combined.indexOf('\r\n\r\n');
+        if (headerEnd === -1) {
+            break;
+        }
+
+        const fullHeaderBlock = combined.slice(0, headerEnd);
+        combined = combined.slice(headerEnd + 4);
+
+        const lines = fullHeaderBlock.split('\r\n');
+        const statusLine = lines.length > 0 ? lines[0] : '';
+        const match = /^HTTP\/(\d\.\d)\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
+        if (!match) {
+            continue;
+        }
+
+        const headers = {};
+        const rawHeaders = [];
+        let connectionHeader;
+
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) {
+                continue;
+            }
             const separator = line.indexOf(':');
             if (separator <= 0) {
                 continue;
             }
-            const name = line.slice(0, separator).trim().toLowerCase();
-            if (name !== 'connection') {
-                continue;
+            const name = line.slice(0, separator).trim();
+            const value = line.slice(separator + 1).trim();
+            const lowerName = name.toLowerCase();
+            rawHeaders.push(name, value);
+            if (headers[lowerName] === undefined) {
+                headers[lowerName] = value;
+            } else {
+                headers[lowerName] += ', ' + value;
             }
-            connectionHeader = line.slice(separator + 1).trim();
-            break;
+            if (lowerName === 'connection' && connectionHeader === undefined) {
+                connectionHeader = value;
+            }
         }
+
+        const httpVersion = match[1];
+        const statusCode = Number(match[2]);
+        const statusMessage = match[3] || '';
+        enqueueCapturedHttpStatusMessage(
+            socket.localPort,
+            statusCode,
+            statusMessage,
+            httpVersion,
+            connectionHeader,
+            headers,
+            rawHeaders,
+        );
     }
 
-    const httpVersion = match[1];
-    const statusCode = Number(match[2]);
-    const statusMessage = match[3] || '';
-    enqueueCapturedHttpStatusMessage(
-        socket.localPort,
-        statusCode,
-        statusMessage,
-        httpVersion,
-        connectionHeader
-    );
+    if (combined.length > 4096) {
+        combined = combined.slice(-4096);
+    }
+    socket._httpStatusProbeBuffer = combined;
 }
 
 function isIPAddress(addr) {
@@ -273,7 +365,7 @@ function Socket(options) {
     this.localPort = undefined;
     this.localFamily = undefined;
     this._family = options.family ?? 4;
-    this._httpStatusLineProbe = '';
+    this._httpStatusProbeBuffer = '';
 
     // Shut down the socket when we're finished with it.
     this.on('end', onReadableStreamEnd);
