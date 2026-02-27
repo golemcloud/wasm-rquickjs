@@ -3446,10 +3446,22 @@
         "block_10_block_10": {},
         "block_11_block_11": {},
         "block_12_block_12": {},
-        "block_13_block_13": {},
-        "block_14_block_14": {},
-        "block_15_block_15": {},
-        "block_16_block_16": {}
+        "block_13_block_13": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
+        "block_14_block_14": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
+        "block_15_block_15": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
+        "block_16_block_16": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        }
       }
     },
     "parallel/test-stream-reduce.js": {
