@@ -4813,10 +4813,7 @@
     "parallel/test-http-client-timeout-option-listeners.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout-with-data.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-client-upload-buf.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-client-upload-buf.js": {},
     "parallel/test-http-client-upload.js": {},
     "parallel/test-http-client-with-create-connection.js": {},
     "parallel/test-http-connect-req-res.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
