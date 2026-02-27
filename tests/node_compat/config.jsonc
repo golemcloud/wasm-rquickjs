@@ -5754,10 +5754,7 @@
     "parallel/test-http-outgoing-properties.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "inherited: requires HTTP server functionality"
-        },
+        "block_00_block_00": {},
         "block_01_block_01": {
           "skip": true,
           "reason": "inherited: requires HTTP server functionality"
