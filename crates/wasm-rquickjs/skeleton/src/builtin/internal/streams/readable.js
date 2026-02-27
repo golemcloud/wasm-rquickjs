@@ -8,7 +8,7 @@ import { debuglog } from "__wasm_rquickjs_builtin/internal/util/debuglog";
 import { getDefaultHighWaterMark, getHighWaterMark } from "__wasm_rquickjs_builtin/internal/streams/state";
 import { prependListener, Stream } from "__wasm_rquickjs_builtin/internal/streams/legacy";
 import { StringDecoder } from "string_decoder";
-import { validateObject, validateBoolean, validateAbortSignal } from "__wasm_rquickjs_builtin/internal/validators";
+import { validateObject, validateBoolean, validateAbortSignal, validateInteger } from "__wasm_rquickjs_builtin/internal/validators";
 import {
     AbortError,
     ERR_INVALID_ARG_TYPE,
@@ -1552,11 +1552,9 @@ function throwIfAborted(signal) {
 function validateConcurrency(options) {
     let concurrency = 1;
     if (options?.concurrency != null) {
-        if (typeof options.concurrency !== 'number' || !(options.concurrency > 0)) {
-            throw new ERR_OUT_OF_RANGE('options.concurrency', '> 0', options.concurrency);
-        }
-        concurrency = options.concurrency;
+        concurrency = Math.floor(options.concurrency);
     }
+    validateInteger(concurrency, 'options.concurrency', 1);
     return concurrency;
 }
 
@@ -1568,8 +1566,12 @@ Readable.prototype.map = function map(fn, options) {
     if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
     const concurrency = validateConcurrency(options);
     const signal = options?.signal;
-    const hwm = options?.highWaterMark;
-    const outHWM = hwm != null ? hwm : concurrency - 1;
+    let outHWM = concurrency - 1;
+    if (options?.highWaterMark != null) {
+        outHWM = Math.floor(options.highWaterMark);
+    }
+    validateInteger(outHWM, 'options.highWaterMark', 0);
+    const queueHWM = outHWM + concurrency;
     const src = this;
 
     return readableFrom((async function* () {
@@ -1594,6 +1596,8 @@ Readable.prototype.map = function map(fn, options) {
             let errorOccurred = null;
             let resolveNext = null;
             let pumpScheduled = false;
+            let pumping = false;
+            let repumpRequested = false;
 
             const it = src[Symbol.asyncIterator]();
 
@@ -1606,6 +1610,11 @@ Readable.prototype.map = function map(fn, options) {
             }
 
             function schedulePump() {
+                if (pumping) {
+                    repumpRequested = true;
+                    return;
+                }
+
                 if (!pumpScheduled) {
                     pumpScheduled = true;
                     Promise.resolve().then(() => {
@@ -1616,53 +1625,74 @@ Readable.prototype.map = function map(fn, options) {
             }
 
             async function pump() {
-                while (!sourceDone && !ac.signal.aborted && !errorOccurred && inFlight < concurrency && queue.length < concurrency + outHWM) {
-                    let step;
-                    try {
-                        step = await it.next();
-                    } catch (e) {
-                        errorOccurred = e;
-                        onSlotReady();
-                        return;
-                    }
+                if (pumping) {
+                    repumpRequested = true;
+                    return;
+                }
 
-                    if (step.done) {
-                        sourceDone = true;
-                        onSlotReady();
-                        return;
-                    }
-
-                    const slot = { resolved: false, value: undefined, error: null };
-                    queue.push(slot);
-                    inFlight++;
-                    const chunk = step.value;
-
-                    Promise.resolve().then(async () => {
+                pumping = true;
+                try {
+                    while (!sourceDone && !combinedSignal.aborted && !errorOccurred && inFlight < concurrency && queue.length < queueHWM) {
+                        let step;
                         try {
-                            if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
-                            const result = await fn(chunk, { signal: combinedSignal });
-                            slot.value = result;
+                            step = await it.next();
                         } catch (e) {
-                            slot.error = e;
-                            if (!errorOccurred) errorOccurred = e;
-                        } finally {
+                            errorOccurred = e;
+                            onSlotReady();
+                            return;
+                        }
+
+                        if (step.done) {
+                            sourceDone = true;
+                            onSlotReady();
+                            return;
+                        }
+
+                        const slot = { resolved: false, value: undefined, error: null };
+                        queue.push(slot);
+                        inFlight++;
+                        const chunk = step.value;
+
+                        let mapped;
+                        try {
+                            if (combinedSignal.aborted) throw new AbortError(combinedSignal.reason);
+                            mapped = Promise.resolve(fn(chunk, { signal: combinedSignal }));
+                        } catch (e) {
+                            mapped = Promise.reject(e);
+                        }
+
+                        mapped.then(
+                            (result) => {
+                                slot.value = result;
+                            },
+                            (e) => {
+                                slot.error = e;
+                                if (!errorOccurred) errorOccurred = e;
+                            },
+                        ).finally(() => {
                             slot.resolved = true;
                             inFlight--;
                             onSlotReady();
                             schedulePump();
-                        }
-                    });
+                        });
+                    }
+                } finally {
+                    pumping = false;
+                    if (repumpRequested) {
+                        repumpRequested = false;
+                        schedulePump();
+                    }
                 }
             }
 
-            pump();
+            schedulePump();
 
             while (true) {
                 while (queue.length === 0 || !queue[0].resolved) {
                     if (errorOccurred) throw errorOccurred;
                     if (sourceDone && queue.length === 0) return;
-                    if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
-                    await new Promise(r => { resolveNext = r; });
+                    if (combinedSignal.aborted) throw new AbortError(combinedSignal.reason);
+                    await new Promise((r) => { resolveNext = r; });
                 }
 
                 const slot = queue.shift();
@@ -1673,7 +1703,7 @@ Readable.prototype.map = function map(fn, options) {
         } finally {
             if (cleanupSignal) cleanupSignal();
         }
-    })(), { objectMode: true, highWaterMark: outHWM });
+    })(), { objectMode: true });
 };
 
 Readable.prototype.filter = function filter(fn, options) {
