@@ -211,6 +211,7 @@ ${truncatedOutput}
 - After skeleton changes, run ./cleanup-skeleton.sh before running tests
 - Never modify vendored test files in tests/node_compat/suite/
 - Always update README.md if adding new APIs
+- ALL node:http outgoing HTTP requests must go through node:http — do not try to circumvent that using sockets
 
 Respond with either:
 - 'FIXED' if the test now passes (include what you changed)

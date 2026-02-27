@@ -328,8 +328,28 @@ ServerResponse.prototype.writeHead = function writeHead(statusCode, statusMessag
                     err.code = 'ERR_INVALID_ARG_VALUE';
                     throw err;
                 }
+
+                // Match Node.js writeHead(array) semantics:
+                // 1) remove existing values for names present in the array,
+                // 2) append array values in order while preserving duplicates.
                 for (let i = 0; i < headers.length; i += 2) {
-                    this.setHeader(headers[i], headers[i + 1]);
+                    this.removeHeader(headers[i]);
+                }
+
+                for (let i = 0; i < headers.length; i += 2) {
+                    const name = headers[i];
+                    const value = headers[i + 1];
+                    const lower = String(name).toLowerCase();
+
+                    if (lower in this._headers) {
+                        const existing = this._headers[lower];
+                        const merged = Array.isArray(existing)
+                            ? [...existing, value]
+                            : [existing, value];
+                        this.setHeader(name, merged);
+                    } else {
+                        this.setHeader(name, value);
+                    }
                 }
             }
         } else {

@@ -323,60 +323,90 @@ export async function fixCommand(category: string): Promise<void> {
   console.log("Step 3: Starting fix loop...");
   console.log();
 
-  let iteration = 0;
-  let priorityQueue: SkippedTest[] = [];
-  while (true) {
-    if (stopRequested) {
-      console.log("  🛑 Graceful stop: finishing up after completing the previous test.");
-      break;
-    }
+  const BATCH_SIZE = 30;
+  let round = 0;
 
-    iteration++;
+  outer: while (true) {
+    if (stopRequested) break;
 
-    // Before the first iteration and every 10th iteration, batch-check and re-prioritize
-    if (iteration === 1 || iteration % 10 === 1) {
-      console.log();
-      console.log("── Batch check: looking for skipped tests that already pass ──");
-      await batchCheckSkippedTests(category);
-      console.log();
+    round++;
 
-      // Re-prioritize the remaining skipped tests
-      const freshSkipped = getSkippedTests(category);
-      priorityQueue = await prioritizeSkippedTests(category, freshSkipped);
-      console.log();
-    }
+    // Batch-check all skipped tests for ones that already pass
+    console.log();
+    console.log("── Batch check: looking for skipped tests that already pass ──");
+    await batchCheckSkippedTests(category);
+    console.log();
 
-    // Refresh the skipped list and intersect with priority queue to remove stale entries
-    const skipped = getSkippedTests(category);
-    const counts = getTestCounts(category);
-
-    if (skipped.length === 0) {
+    // Get all fixable skipped tests and select a batch
+    const allSkipped = getSkippedTests(category);
+    if (allSkipped.length === 0) {
+      const counts = getTestCounts(category);
       console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! Nothing left to fix.`);
       break;
     }
 
-    // Build a set of currently-skipped labels for quick lookup
-    const skippedLabels = new Set(
-      skipped.map((st) => (st.subtestName ? `${st.path}#${st.subtestName}` : st.path)),
+    // Prioritize and select the batch
+    const prioritized = await prioritizeSkippedTests(category, allSkipped);
+    const batch = prioritized.slice(0, BATCH_SIZE);
+    const batchLabels = new Set(
+      batch.map((st) => (st.subtestName ? `${st.path}#${st.subtestName}` : st.path)),
     );
-    // Remove stale entries from priority queue
-    priorityQueue = priorityQueue.filter((st) => {
-      const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
-      return skippedLabels.has(label);
-    });
 
-    // If priority queue is empty (all prioritized tests were handled), fall back to skipped order
-    if (priorityQueue.length === 0) {
-      priorityQueue = skipped;
-    }
+    console.log();
+    console.log(`  Round ${round}: ${allSkipped.length} fixable tests total, working on batch of ${batch.length}`);
+    console.log();
 
-    const totalSkipped = counts.fixableSkipped + counts.manualSkipped;
-    console.log("───────────────────────────────────────────────────────────────");
-    console.log(`  Iteration ${iteration} — ${counts.total} test cases: ${counts.enabled} passing, ${totalSkipped} skipped (${skipped.length} fixable)`);
-    console.log("───────────────────────────────────────────────────────────────");
-    console.log();
-    console.log(`Fixable skipped tests: ${skipped.length} remaining`);
-    console.log();
+    let iteration = 0;
+    let priorityQueue = batch;
+
+    while (true) {
+      if (stopRequested) {
+        console.log("  🛑 Graceful stop: finishing up after completing the previous test.");
+        break outer;
+      }
+
+      iteration++;
+
+      // Every 10 iterations, batch-check for newly-passing tests
+      if (iteration > 1 && iteration % 10 === 1) {
+        console.log();
+        console.log("── Batch check: looking for skipped tests that already pass ──");
+        await batchCheckSkippedTests(category);
+        console.log();
+      }
+
+      // Refresh the skipped list and intersect with batch to remove handled entries
+      const skipped = getSkippedTests(category);
+      const counts = getTestCounts(category);
+
+      if (skipped.length === 0) {
+        console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! Nothing left to fix.`);
+        break outer;
+      }
+
+      // Build a set of currently-skipped labels for quick lookup
+      const skippedLabels = new Set(
+        skipped.map((st) => (st.subtestName ? `${st.path}#${st.subtestName}` : st.path)),
+      );
+      // Remove stale entries from priority queue (must still be skipped AND in current batch)
+      priorityQueue = priorityQueue.filter((st) => {
+        const label = st.subtestName ? `${st.path}#${st.subtestName}` : st.path;
+        return skippedLabels.has(label) && batchLabels.has(label);
+      });
+
+      // If all tests in the batch have been handled, break to restart with next batch
+      if (priorityQueue.length === 0) {
+        console.log("  ✅ Current batch complete. Restarting with next batch...");
+        break;
+      }
+
+      const totalSkipped = counts.fixableSkipped + counts.manualSkipped;
+      console.log("───────────────────────────────────────────────────────────────");
+      console.log(`  Round ${round}, iteration ${iteration} — ${counts.total} test cases: ${counts.enabled} passing, ${totalSkipped} skipped (${skipped.length} fixable, batch ${priorityQueue.length})`);
+      console.log("───────────────────────────────────────────────────────────────");
+      console.log();
+      console.log(`Fixable skipped tests: ${skipped.length} remaining (batch: ${priorityQueue.length})`);
+      console.log();
 
     const target = priorityQueue[0];
     const targetLabel = target.subtestName ? `${target.path}#${target.subtestName}` : target.path;
@@ -529,6 +559,7 @@ export async function fixCommand(category: string): Promise<void> {
     console.log();
     await commitProgress(category, target.path);
     console.log();
+    }
   }
 
   cleanupStop();

@@ -1002,7 +1002,7 @@ export class ClientRequest extends EventEmitter {
         this.hostname = hostname;
         this.port = port === undefined ? (this.protocol === 'https:' ? 443 : 80) : Number(port);
         this._isLoopback = this.protocol === 'http:' && isLoopbackHostname(this.hostname);
-        this._useLoopbackTransport = this._isLoopback && this.method !== 'GET' && this.method !== 'HEAD';
+        this._useLoopbackTransport = this._isLoopback;
 
         if (port) {
             this.host = hostname + ':' + port;
@@ -1184,7 +1184,9 @@ export class ClientRequest extends EventEmitter {
         }
 
         if (!hasConnectionHeader) {
-            lines.push(`Connection: ${this.shouldKeepAlive ? 'keep-alive' : 'close'}`);
+            // Loopback transport relies on connection shutdown to delimit response
+            // bodies, so default to `close` unless the caller set it explicitly.
+            lines.push('Connection: close');
         }
 
         const head = Buffer.from(lines.join('\r\n') + '\r\n\r\n', 'latin1');
@@ -1211,15 +1213,39 @@ export class ClientRequest extends EventEmitter {
         return new Promise((resolve, reject) => {
             const socket = net.createConnection({ host: this.hostname, port: this.port });
             let headerBuffer = Buffer.alloc(0);
-            let settled = false;
+            let headersResolved = false;
+            const bodyChunks = [];
+            const bodyWaiters = [];
+            let bodyEnded = false;
+            let bodyError = null;
+            let remainingContentLength = null;
 
-            const settleError = (err) => {
-                if (settled) {
+            const wakeBodyWaiters = () => {
+                while (bodyWaiters.length > 0) {
+                    const waiter = bodyWaiters.shift();
+                    waiter();
+                }
+            };
+
+            const markBodyEnded = () => {
+                if (bodyEnded) {
                     return;
                 }
-                settled = true;
+                bodyEnded = true;
+                wakeBodyWaiters();
+            };
+
+            const settleError = (err) => {
+                if (!headersResolved) {
+                    headersResolved = true;
+                    socket.destroy();
+                    reject(err);
+                    return;
+                }
+
+                bodyError = err;
+                markBodyEnded();
                 socket.destroy();
-                reject(err);
             };
 
             socket.on('error', settleError);
@@ -1233,49 +1259,143 @@ export class ClientRequest extends EventEmitter {
             });
 
             socket.on('data', (chunk) => {
-                if (settled) {
-                    return;
-                }
-
-                headerBuffer = Buffer.concat([headerBuffer, Buffer.from(chunk)]);
-                const headerEnd = headerBuffer.indexOf(HEADER_TERMINATOR);
-                if (headerEnd === -1) {
-                    return;
-                }
-
-                const headText = headerBuffer.slice(0, headerEnd).toString('latin1');
-                const lines = headText.split('\r\n');
-                const statusLine = lines.shift() || '';
-                const statusMatch = /^HTTP\/(\d\.\d)\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
-                if (!statusMatch) {
-                    settleError(new Error('Invalid HTTP response status line'));
-                    return;
-                }
-
-                const headers = [];
-                for (const line of lines) {
-                    const separator = line.indexOf(':');
-                    if (separator <= 0) {
-                        continue;
+                const dataChunk = Buffer.from(chunk);
+                if (!headersResolved) {
+                    headerBuffer = Buffer.concat([headerBuffer, dataChunk]);
+                    const headerEnd = headerBuffer.indexOf(HEADER_TERMINATOR);
+                    if (headerEnd === -1) {
+                        return;
                     }
-                    const name = line.slice(0, separator).trim();
-                    const value = line.slice(separator + 1).trim();
-                    headers.push([name, value]);
+
+                    const headText = headerBuffer.slice(0, headerEnd).toString('latin1');
+                    const bodyStart = headerBuffer.slice(headerEnd + HEADER_TERMINATOR.length);
+                    headerBuffer = Buffer.alloc(0);
+
+                    const lines = headText.split('\r\n');
+                    const statusLine = lines.shift() || '';
+                    const statusMatch = /^HTTP\/(\d\.\d)\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
+                    if (!statusMatch) {
+                        settleError(new Error('Invalid HTTP response status line'));
+                        return;
+                    }
+
+                    const headers = [];
+                    for (const line of lines) {
+                        const separator = line.indexOf(':');
+                        if (separator <= 0) {
+                            continue;
+                        }
+                        const name = line.slice(0, separator).trim();
+                        const value = line.slice(separator + 1).trim();
+                        headers.push([name, value]);
+
+                        if (name.toLowerCase() === 'content-length') {
+                            const parsedLength = Number(value);
+                            if (Number.isFinite(parsedLength) && parsedLength >= 0) {
+                                remainingContentLength = parsedLength;
+                            }
+                        }
+                    }
+
+                    headersResolved = true;
+
+                    const pushBodyChunk = (bufferChunk) => {
+                        if (remainingContentLength !== null) {
+                            if (remainingContentLength <= 0) {
+                                return;
+                            }
+
+                            if (bufferChunk.length > remainingContentLength) {
+                                bufferChunk = bufferChunk.subarray(0, remainingContentLength);
+                            }
+                            remainingContentLength -= bufferChunk.length;
+                        }
+
+                        if (bufferChunk.length > 0) {
+                            bodyChunks.push(bufferChunk);
+                            wakeBodyWaiters();
+                        }
+
+                        if (remainingContentLength === 0) {
+                            markBodyEnded();
+                            socket.destroy();
+                        }
+                    };
+
+                    const response = {
+                        status: Number(statusMatch[2]),
+                        statusMessage: statusMatch[3] || '',
+                        headers,
+                        async readBodyChunk() {
+                            while (true) {
+                                if (bodyChunks.length > 0) {
+                                    return [bodyChunks.shift(), false];
+                                }
+                                if (bodyError) {
+                                    throw bodyError;
+                                }
+                                if (bodyEnded) {
+                                    return [null, true];
+                                }
+                                await new Promise((wake) => bodyWaiters.push(wake));
+                            }
+                        },
+                        discardBody() {
+                            bodyChunks.length = 0;
+                            markBodyEnded();
+                            socket.destroy();
+                        },
+                    };
+
+                    resolve(response);
+                    if (bodyStart.length > 0) {
+                        pushBodyChunk(bodyStart);
+                    } else if (remainingContentLength === 0) {
+                        markBodyEnded();
+                        socket.destroy();
+                    }
+                    return;
                 }
 
-                settled = true;
-                socket.destroy();
-                resolve({
-                    status: Number(statusMatch[2]),
-                    statusMessage: statusMatch[3] || '',
-                    headers,
-                });
+                if (bodyEnded) {
+                    return;
+                }
+
+                let bodyChunk = dataChunk;
+                if (remainingContentLength !== null) {
+                    if (remainingContentLength <= 0) {
+                        return;
+                    }
+                    if (bodyChunk.length > remainingContentLength) {
+                        bodyChunk = bodyChunk.subarray(0, remainingContentLength);
+                    }
+                    remainingContentLength -= bodyChunk.length;
+                }
+
+                if (bodyChunk.length > 0) {
+                    bodyChunks.push(bodyChunk);
+                    wakeBodyWaiters();
+                }
+
+                if (remainingContentLength === 0) {
+                    markBodyEnded();
+                    socket.destroy();
+                }
             });
 
             socket.on('end', () => {
-                if (!settled) {
+                if (!headersResolved) {
                     settleError(new Error('Connection closed before response headers were received'));
+                    return;
                 }
+                markBodyEnded();
+            });
+
+            socket.on('close', () => {
+                if (!headersResolved) {
+                    return;
+                }
+                markBodyEnded();
             });
         });
     }
@@ -1484,7 +1604,20 @@ export class ClientRequest extends EventEmitter {
                     onClientResponseFinish.publish({ request: this, response: res });
                 }
                 this.emit('response', res);
-                await res._startReading();
+
+                const shouldReadResponseBody =
+                    res.listenerCount('data') > 0 ||
+                    res.listenerCount('end') > 0 ||
+                    res.listenerCount('readable') > 0;
+
+                if (shouldReadResponseBody) {
+                    // Start streaming the response body asynchronously. Waiting here can
+                    // block the agent queue when wasi:http pollables stall on empty bodies.
+                    void res._startReading();
+                } else if (res._nativeRes && typeof res._nativeRes.discardBody === 'function') {
+                    res._nativeRes.discardBody();
+                    res.complete = true;
+                }
             }
 
             if (typeof this._endCallback === 'function') this._endCallback();

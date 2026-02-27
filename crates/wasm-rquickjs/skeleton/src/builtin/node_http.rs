@@ -324,34 +324,46 @@ impl NodeHttpIncomingResponse {
         } = state
         {
             const CHUNK_SIZE: u64 = 4096;
-            let pollable = stream.subscribe();
-            AsyncPollable::new(pollable).wait_for().await;
+            loop {
+                match stream.read(CHUNK_SIZE) {
+                    Ok(chunk) if !chunk.is_empty() => {
+                        let js_array = TypedArray::new_copy(ctx.clone(), chunk).map_err(|_| {
+                            Exception::throw_message(
+                                &ctx,
+                                "Failed to create TypedArray from response body chunk",
+                            )
+                        })?;
+                        self.body_state = ResponseBodyState::Stream {
+                            stream,
+                            body,
+                            response,
+                        };
+                        return Ok(List((Some(js_array), false)));
+                    }
+                    Ok(_) => {
+                        let pollable = stream.subscribe();
+                        AsyncPollable::new(pollable).wait_for().await;
+                    }
+                    Err(StreamError::Closed) => {
+                        drop(stream);
+                        drop(body);
+                        drop(response);
+                        return Ok(List((None, true)));
+                    }
+                    Err(StreamError::LastOperationFailed(err)) => {
+                        let debug_message = err.to_debug_string();
+                        if debug_message.to_ascii_lowercase().contains("would") {
+                            let pollable = stream.subscribe();
+                            AsyncPollable::new(pollable).wait_for().await;
+                            continue;
+                        }
 
-            match stream.read(CHUNK_SIZE) {
-                Ok(chunk) => {
-                    let js_array = TypedArray::new_copy(ctx.clone(), chunk).map_err(|_| {
-                        Exception::throw_message(
+                        return Err(Exception::throw_message(
                             &ctx,
-                            "Failed to create TypedArray from response body chunk",
-                        )
-                    })?;
-                    self.body_state = ResponseBodyState::Stream {
-                        stream,
-                        body,
-                        response,
-                    };
-                    Ok(List((Some(js_array), false)))
+                            &format!("Failed to read response body: {debug_message}"),
+                        ));
+                    }
                 }
-                Err(StreamError::Closed) => {
-                    drop(stream);
-                    drop(body);
-                    drop(response);
-                    Ok(List((None, true)))
-                }
-                Err(StreamError::LastOperationFailed(err)) => Err(Exception::throw_message(
-                    &ctx,
-                    &format!("Failed to read response body: {}", err.to_debug_string()),
-                )),
             }
         } else {
             Ok(List((None, true)))
