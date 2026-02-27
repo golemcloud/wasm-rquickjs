@@ -3,6 +3,10 @@ import { NodeHttpClientRequest } from '__wasm_rquickjs_builtin/node_http_native'
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import { channel } from 'node:diagnostics_channel';
+import {
+    ERR_HTTP_INVALID_HEADER_VALUE,
+    ERR_INVALID_HTTP_TOKEN,
+} from '__wasm_rquickjs_builtin/internal/errors';
 
 const onClientRequestCreated = channel('http.client.request.created');
 const onClientRequestStart = channel('http.client.request.start');
@@ -91,21 +95,23 @@ export const maxHeaderSize = 16384;
 const INVALID_HEADER_CHAR_REGEX = /[^\t\x20-\x7e\x80-\xff]/;
 const INVALID_HEADER_NAME_REGEX = /[^!#$%&'*+\-.^_`|~A-Za-z0-9]/;
 
-export function validateHeaderName(name) {
+export function validateHeaderName(name, label = 'Header name') {
     if (typeof name !== 'string' || name.length === 0) {
-        throw new TypeError('Header name must be a valid HTTP token ["' + name + '"]');
+        throw new ERR_INVALID_HTTP_TOKEN(label, name);
     }
     if (INVALID_HEADER_NAME_REGEX.test(name)) {
-        throw new TypeError('Header name must be a valid HTTP token ["' + name + '"]');
+        throw new ERR_INVALID_HTTP_TOKEN(label, name);
     }
 }
 
 export function validateHeaderValue(name, value) {
     if (value === undefined) {
-        throw new TypeError('Invalid value "undefined" for header "' + name + '"');
+        throw new ERR_HTTP_INVALID_HEADER_VALUE(value, name);
     }
     if (INVALID_HEADER_CHAR_REGEX.test(value)) {
-        throw new TypeError('Invalid character in header content ["' + name + '"]');
+        const err = new TypeError('Invalid character in header content ["' + name + '"]');
+        err.code = 'ERR_INVALID_CHAR';
+        throw err;
     }
 }
 
