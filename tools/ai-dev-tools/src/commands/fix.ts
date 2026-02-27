@@ -17,12 +17,19 @@ import {
   runCategoryTests,
   runCategoryTestsIncludeIgnored,
   runSingleTest,
+  runSpecificTests,
   testPathToFilter,
   MANUAL_SKIP_PREFIX,
   type SkippedTest,
 } from "../tests.js";
 import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted, buildPrioritizePrompt, runAmpPrioritize, parsePrioritizeResult } from "../amp.js";
 import { commitProgress } from "../git.js";
+
+/** Revert all working tree changes including untracked files created by Amp. */
+function revertWorkspace(): void {
+  execSync("git checkout HEAD -- .", { cwd: REPO_ROOT, stdio: "pipe" });
+  execSync("git clean -fd", { cwd: REPO_ROOT, stdio: "pipe" });
+}
 
 let stopRequested = false;
 
@@ -134,16 +141,16 @@ async function waitForCredits(): Promise<void> {
 }
 
 /**
- * Run all tests for a category (including ignored/skipped) and enable any
- * skipped tests that already pass without any code changes.
+ * Run a specific set of skipped tests (including ignored) and enable any
+ * that already pass without any code changes.
  * Returns the number of newly-enabled tests.
  */
-async function batchCheckSkippedTests(category: string): Promise<number> {
-  const skipped = getSkippedTests(category);
+async function batchCheckSkippedTests(category: string, testsToCheck?: SkippedTest[]): Promise<number> {
+  const skipped = testsToCheck ?? getSkippedTests(category);
   if (skipped.length === 0) return 0;
 
-  console.log("  🔍 Batch-checking all skipped tests for newly-passing ones...");
-  const { output } = await runCategoryTestsIncludeIgnored(category);
+  console.log(`  🔍 Batch-checking ${skipped.length} skipped test(s) for newly-passing ones...`);
+  const { ok: batchOk, output } = await runSpecificTests(skipped, { includeIgnored: true });
 
   // Extract the set of failing filter names from the output
   const pattern = /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
@@ -151,6 +158,13 @@ async function batchCheckSkippedTests(category: string): Promise<number> {
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(output)) !== null) {
     failingFilters.add(match[1]);
+  }
+
+  // If the run failed, don't trust "absence from failing set" as evidence of passing.
+  // Tests may not have run at all (compilation error, harness crash, partial abort).
+  if (!batchOk) {
+    console.log("  ⚠ Test run failed. Skipping batch-check to avoid false positives.");
+    return 0;
   }
 
   // Find skipped tests whose filter is NOT in the failing set → they pass
@@ -224,8 +238,8 @@ async function prioritizeSkippedTests(
   }
 
   console.log("  📋 Prioritized order:");
-  for (const label of prioritized) {
-    console.log(`    1. ${label}`);
+  for (let i = 0; i < prioritized.length; i++) {
+    console.log(`    ${i + 1}. ${prioritized[i]}`);
   }
 
   // Build a lookup from label -> SkippedTest
@@ -324,18 +338,14 @@ export async function fixCommand(category: string): Promise<void> {
   console.log();
 
   const BATCH_SIZE = 30;
+  const MAX_ATTEMPTS = 2;
+  const attemptCounts = new Map<string, number>();
   let round = 0;
 
   outer: while (true) {
     if (stopRequested) break;
 
     round++;
-
-    // Batch-check all skipped tests for ones that already pass
-    console.log();
-    console.log("── Batch check: looking for skipped tests that already pass ──");
-    await batchCheckSkippedTests(category);
-    console.log();
 
     // Get all fixable skipped tests and select a batch
     const allSkipped = getSkippedTests(category);
@@ -345,9 +355,20 @@ export async function fixCommand(category: string): Promise<void> {
       break;
     }
 
-    // Prioritize and select the batch
+    // Prioritize and select the batch — boost timeout tests to the front
     const prioritized = await prioritizeSkippedTests(category, allSkipped);
+    prioritized.sort((a, b) => {
+      const aTimeout = /timed?\s*out/i.test(a.reason) ? 0 : 1;
+      const bTimeout = /timed?\s*out/i.test(b.reason) ? 0 : 1;
+      return aTimeout - bTimeout;
+    });
     const batch = prioritized.slice(0, BATCH_SIZE);
+
+    // Batch-check only the selected batch for ones that already pass
+    console.log();
+    console.log("── Batch check: looking for skipped tests that already pass ──");
+    await batchCheckSkippedTests(category, batch);
+    console.log();
     const batchLabels = new Set(
       batch.map((st) => (st.subtestName ? `${st.path}#${st.subtestName}` : st.path)),
     );
@@ -371,7 +392,7 @@ export async function fixCommand(category: string): Promise<void> {
       if (iteration > 1 && iteration % 10 === 1) {
         console.log();
         console.log("── Batch check: looking for skipped tests that already pass ──");
-        await batchCheckSkippedTests(category);
+        await batchCheckSkippedTests(category, priorityQueue);
         console.log();
       }
 
@@ -410,7 +431,22 @@ export async function fixCommand(category: string): Promise<void> {
 
     const target = priorityQueue[0];
     const targetLabel = target.subtestName ? `${target.path}#${target.subtestName}` : target.path;
-    console.log(`▶ Attempting to fix: ${targetLabel}`);
+
+    // Track attempts per test — mark as manual after MAX_ATTEMPTS
+    const attempts = (attemptCounts.get(targetLabel) ?? 0) + 1;
+    attemptCounts.set(targetLabel, attempts);
+    if (attempts > MAX_ATTEMPTS) {
+      console.log(`  ⏭ ${targetLabel}: exceeded ${MAX_ATTEMPTS} attempts. Marking for manual review.`);
+      if (target.subtestName) {
+        skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + `amp failed after ${MAX_ATTEMPTS} attempts`);
+      } else {
+        updateSkipReason(target.path, MANUAL_SKIP_PREFIX + `amp failed after ${MAX_ATTEMPTS} attempts`);
+      }
+      await commitProgress(category, target.path);
+      continue;
+    }
+
+    console.log(`▶ Attempting to fix: ${targetLabel} (attempt ${attempts}/${MAX_ATTEMPTS})`);
     console.log(`  Current skip reason: ${target.reason}`);
     console.log();
 
@@ -418,7 +454,12 @@ export async function fixCommand(category: string): Promise<void> {
     if (!fs.existsSync(testFile)) {
       console.log(`  ⚠ Test file not found: ${testFile}`);
       console.log(`    Run tests/node_compat/vendor.sh to fetch the vendored test suite.`);
-      updateSkipReason(target.path, "test file not vendored");
+      if (target.subtestName) {
+        skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "test file not vendored");
+      } else {
+        updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "test file not vendored");
+      }
+      await commitProgress(category, target.path);
       continue;
     }
 
@@ -447,8 +488,9 @@ export async function fixCommand(category: string): Promise<void> {
     console.log("  Amp agent finished. Analyzing result...");
     console.log();
 
-    // Detect credit exhaustion and wait for recharge
+    // Detect credit exhaustion — don't count this as a real attempt
     if (ampResult.isError && isCreditsExhausted(ampResult.output)) {
+      attemptCounts.set(targetLabel, attempts - 1);
       await waitForCredits();
       continue; // Retry the same test
     }
@@ -456,11 +498,11 @@ export async function fixCommand(category: string): Promise<void> {
     const ampOutput = ampResult.output;
     const result = classifyAmpResult(ampOutput);
 
-    // Check if amp actually changed any files
+    // Check if amp actually changed any files (including new untracked files)
     let hasChanges: boolean;
     try {
-      execSync("git diff --quiet HEAD", { cwd: REPO_ROOT, stdio: "pipe" });
-      hasChanges = false;
+      const status = execSync("git status --porcelain", { cwd: REPO_ROOT, encoding: "utf-8" });
+      hasChanges = status.trim().length > 0;
     } catch {
       hasChanges = true;
     }
@@ -508,8 +550,9 @@ export async function fixCommand(category: string): Promise<void> {
       if (categoryOk) {
         console.log("  ✅ Test passes and no regressions!");
       } else {
-        // Revert: re-skip the test since it or something else is failing
-        console.log("  ❌ Tests failed after enabling. Reverting to skipped.");
+        // Revert code changes (including untracked files) and re-skip the test
+        console.log("  ❌ Tests failed after enabling. Reverting code and re-skipping...");
+        revertWorkspace();
         if (target.subtestName) {
           skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
         } else {
@@ -520,10 +563,11 @@ export async function fixCommand(category: string): Promise<void> {
       console.log("  ⚠ Partial progress made. Running regression check...");
       const { ok: regrOk } = await runCategoryTests(category, { failFast: true });
       if (regrOk) {
-        console.log("  ✅ No regressions from partial changes.");
+        console.log("  ✅ No regressions from partial changes. Rotating test to end of queue.");
+        priorityQueue = [...priorityQueue.slice(1), priorityQueue[0]];
       } else {
         console.log("  ❌ Regressions from partial changes. Reverting...");
-        execSync("git checkout HEAD -- .", { cwd: REPO_ROOT, stdio: "pipe" });
+        revertWorkspace();
         if (target.subtestName) {
           skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp partial fix caused regressions");
         } else {
@@ -544,10 +588,13 @@ export async function fixCommand(category: string): Promise<void> {
           } else {
             enableTestInConfig(target.path);
           }
+        } else {
+          console.log("  ℹ Test still fails. Rotating to end of queue.");
+          priorityQueue = [...priorityQueue.slice(1), priorityQueue[0]];
         }
       } else {
         console.log("  ❌ Regressions detected. Reverting...");
-        execSync("git checkout HEAD -- .", { cwd: REPO_ROOT, stdio: "pipe" });
+        revertWorkspace();
         if (target.subtestName) {
           skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix caused regressions");
         } else {

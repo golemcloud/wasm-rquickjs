@@ -186,11 +186,13 @@ export function addSplitTestToConfig(testPath: string, subtests: Record<string, 
 }
 
 export function updateSkipReason(testPath: string, newReason: string): void {
-  const newValue: TestEntry = { skip: true, reason: clipReason(newReason) };
-
   editConfig((content) => {
-    const edits = jsonc.modify(content, ["tests", testPath], newValue, { formattingOptions });
-    return jsonc.applyEdits(content, edits);
+    let result = content;
+    let edits = jsonc.modify(result, ["tests", testPath, "skip"], true, { formattingOptions });
+    result = jsonc.applyEdits(result, edits);
+    edits = jsonc.modify(result, ["tests", testPath, "reason"], clipReason(newReason), { formattingOptions });
+    result = jsonc.applyEdits(result, edits);
+    return result;
   });
 
   console.log("  Updated skip reason");

@@ -129,6 +129,25 @@ export async function runCategoryTestsIncludeIgnored(
   );
 }
 
+/** Run a specific set of tests (by path/subtest) in a single cargo test invocation.
+ *  Uses test-r's support for multiple filter arguments. */
+export async function runSpecificTests(
+  tests: { path: string; subtestName?: string }[],
+  options?: RunOptions & { includeIgnored?: boolean },
+): Promise<{ ok: boolean; output: string }> {
+  if (tests.length === 0) return { ok: true, output: "" };
+
+  const filters = tests.map((t) => testPathToFilter(t.path, t.subtestName));
+  const logfile = path.join(LOG_DIR, `specific-${Date.now()}.txt`);
+  console.log(`  Running ${tests.length} specific test(s)...`);
+
+  const args = ["cargo", "test", "--test", "node_compat", "--", "--nocapture"];
+  if (options?.includeIgnored) args.push("--include-ignored");
+  args.push(...filters);
+
+  return run(args, logfile, options);
+}
+
 export interface TestCounts {
   /** Enabled (non-skipped) test cases — matches cargo test "passed" count. */
   enabled: number;

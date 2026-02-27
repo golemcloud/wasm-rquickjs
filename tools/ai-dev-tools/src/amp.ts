@@ -474,10 +474,18 @@ export function parsePrioritizeResult(output: string): string[] | null {
 }
 
 export function classifyAmpResult(output: string): "FIXED" | "CANNOT_FIX" | "PARTIAL" | "UNCLEAR" {
-  const upper = output.toUpperCase();
-  if (upper.includes("CANNOT_FIX")) return "CANNOT_FIX";
-  if (upper.includes("FIXED")) return "FIXED";
-  if (upper.includes("PARTIAL")) return "PARTIAL";
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (/^CANNOT_FIX\b/i.test(trimmed)) return "CANNOT_FIX";
+  }
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (/^FIXED\b/i.test(trimmed)) return "FIXED";
+  }
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (/^PARTIAL\b/i.test(trimmed)) return "PARTIAL";
+  }
   return "UNCLEAR";
 }
 
