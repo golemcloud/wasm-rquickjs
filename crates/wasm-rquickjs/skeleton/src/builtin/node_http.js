@@ -95,6 +95,11 @@ export const maxHeaderSize = 16384;
 
 const INVALID_HEADER_CHAR_REGEX = /[^\t\x20-\x7e\x80-\xff]/;
 const INVALID_HEADER_NAME_REGEX = /[^!#$%&'*+\-.^_`|~A-Za-z0-9]/;
+const HTTP_TOKEN_REGEX = /^[!#$%&'*+\-.^_`|~A-Za-z0-9]+$/;
+
+function isValidHttpToken(value) {
+    return typeof value === 'string' && HTTP_TOKEN_REGEX.test(value);
+}
 
 export function validateHeaderName(name, label = 'Header name') {
     if (typeof name !== 'string' || name.length === 0) {
@@ -576,6 +581,10 @@ export class ClientRequest extends EventEmitter {
 
         validateHostOption(options, 'hostname');
         validateHostOption(options, 'host');
+
+        if (options.method && !isValidHttpToken(options.method)) {
+            throw new ERR_INVALID_HTTP_TOKEN('Method', options.method);
+        }
 
         this.method = (options.method || 'GET').toUpperCase();
         this.protocol = options.protocol || 'http:';

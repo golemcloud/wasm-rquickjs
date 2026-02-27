@@ -5816,7 +5816,10 @@
       "reason": "requires HTTP server functionality"
     },
     "parallel/test-http-request-end.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-request-invalid-method-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-request-invalid-method-error.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-res-write-after-end.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-response-no-headers.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-server-async-dispose.js": { "skip": true, "reason": "requires HTTP server functionality" },
