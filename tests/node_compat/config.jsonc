@@ -5349,7 +5349,7 @@
     },
     "parallel/test-http-write-head-after-set-header.js": {
       "skip": true,
-      "reason": "deadlocks: two concurrent http.request calls to same-component server cause event loop deadlock with wasi:http pollables"
+      "reason": "[manual] the test currently deadlocks in the runtime pollable/executor path (same-component `node:http` client calling back into same-component server via `wasi:http`), and I could not resolve it f..."
     },
     "parallel/test-async-local-storage-http-multiclients.js": { "skip": true, "reason": "requires AsyncLocalStorage context propagation across concurrent HTTP activity which is not implemented" },
 
