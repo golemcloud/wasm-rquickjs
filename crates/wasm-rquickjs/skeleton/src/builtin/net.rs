@@ -693,6 +693,7 @@ fn create_tcp_listener_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpL
             listening: false,
             closed: false,
             generation: 0,
+            waiters: 0,
         }),
     })
 }
@@ -702,6 +703,15 @@ struct ListenerInner {
     listening: bool,
     closed: bool,
     generation: u64,
+    waiters: u32,
+}
+
+impl ListenerInner {
+    fn finalize_close_if_ready(&mut self) {
+        if self.closed && self.waiters == 0 {
+            self.socket = None;
+        }
+    }
 }
 
 #[derive(Trace, JsLifetime)]
@@ -775,7 +785,7 @@ impl TcpListener {
                 Ok(()) => break,
                 Err(ErrorCode::WouldBlock) => {
                     let pollable = {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
                             throw_socket_error(
                                 &ctx,
@@ -784,12 +794,18 @@ impl TcpListener {
                                 "Socket was closed or reset",
                             )
                         })?;
-                        socket.subscribe()
+                        let pollable = socket.subscribe();
+                        inner.waiters += 1;
+                        pollable
                     };
                     AsyncPollable::new(pollable).wait_for().await;
                     {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
+                        if inner.waiters > 0 {
+                            inner.waiters -= 1;
+                        }
                         if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
                                 &ctx,
                                 "EBADF",
@@ -891,7 +907,7 @@ impl TcpListener {
                 }
                 Err(ErrorCode::WouldBlock) => {
                     let pollable = {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
                             throw_socket_error(
                                 &ctx,
@@ -900,12 +916,18 @@ impl TcpListener {
                                 "Socket was closed or reset",
                             )
                         })?;
-                        socket.subscribe()
+                        let pollable = socket.subscribe();
+                        inner.waiters += 1;
+                        pollable
                     };
                     AsyncPollable::new(pollable).wait_for().await;
                     {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
+                        if inner.waiters > 0 {
+                            inner.waiters -= 1;
+                        }
                         if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
                                 &ctx,
                                 "EBADF",
@@ -993,7 +1015,7 @@ impl TcpListener {
                 }
                 Err(ErrorCode::WouldBlock) => {
                     let pollable = {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
                             throw_socket_error(
                                 &ctx,
@@ -1002,12 +1024,18 @@ impl TcpListener {
                                 "Socket was closed or reset",
                             )
                         })?;
-                        socket.subscribe()
+                        let pollable = socket.subscribe();
+                        inner.waiters += 1;
+                        pollable
                     };
                     AsyncPollable::new(pollable).wait_for().await;
                     {
-                        let inner = self.inner.borrow();
+                        let mut inner = self.inner.borrow_mut();
+                        if inner.waiters > 0 {
+                            inner.waiters -= 1;
+                        }
                         if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
                                 &ctx,
                                 "EBADF",
@@ -1062,7 +1090,10 @@ impl TcpListener {
 
     pub fn close(&self) {
         let mut inner = self.inner.borrow_mut();
-        if let Some(socket) = inner.socket.take() {
+        if inner.closed {
+            return;
+        }
+        if let Some(ref socket) = inner.socket {
             // Explicitly shut down the listener first so dropping the WASI
             // socket resource does not race with pending accept pollers.
             let _ = socket.shutdown(ShutdownType::Both);
@@ -1070,6 +1101,7 @@ impl TcpListener {
         inner.closed = true;
         inner.listening = false;
         inner.generation += 1;
+        inner.finalize_close_if_ready();
     }
 }
 

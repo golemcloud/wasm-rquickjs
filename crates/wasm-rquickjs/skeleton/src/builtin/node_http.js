@@ -232,9 +232,14 @@ export class Agent {
         if (options.family === 4 || options.family === 6) name += ':' + options.family;
         return name;
     }
+
+    createConnection(options, callback) {
+        return net.createConnection(options, callback);
+    }
 }
 
 export const globalAgent = new Agent();
+const defaultAgentCreateConnection = Agent.prototype.createConnection;
 
 // ===== Helpers =====
 
@@ -1365,11 +1370,72 @@ export class ClientRequest extends EventEmitter {
         return this._doSend();
     }
 
+    _createConnectionOptions() {
+        return {
+            host: this.hostname,
+            hostname: this.hostname,
+            port: this.port,
+            protocol: this.protocol,
+            path: this.path,
+        };
+    }
+
+    _runCustomAgentCreateConnectionHook() {
+        if (!this.agent || this.agent === false) {
+            return Promise.resolve();
+        }
+
+        const createConnection = this.agent.createConnection;
+        if (typeof createConnection !== 'function' || createConnection === defaultAgentCreateConnection) {
+            return Promise.resolve();
+        }
+
+        const connectOptions = this._createConnectionOptions();
+        return new Promise((resolve, reject) => {
+            let settled = false;
+
+            const settle = (err, socket) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+
+                if (socket && typeof socket.destroy === 'function') {
+                    try {
+                        socket.destroy();
+                    } catch {
+                        // Ignore teardown failures from compatibility probe sockets.
+                    }
+                }
+
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve();
+            };
+
+            let socket;
+            try {
+                socket = createConnection.call(this.agent, connectOptions, settle);
+            } catch (err) {
+                reject(err);
+                return;
+            }
+
+            if (socket !== undefined && socket !== null) {
+                settle(null, socket);
+            }
+        });
+    }
+
     async _doSend() {
         try {
             if (onClientRequestStart.hasSubscribers) {
                 onClientRequestStart.publish({ request: this });
             }
+
+            await this._runCustomAgentCreateConnectionHook();
 
             this._refreshHeaderString();
             let nativeRes;
