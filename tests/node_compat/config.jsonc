@@ -4929,10 +4929,7 @@
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients"
     },
-    "parallel/test-http-head-response-has-no-body-end.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-head-response-has-no-body-end.js": {},
     "parallel/test-http-head-response-has-no-body.js": {
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients"
