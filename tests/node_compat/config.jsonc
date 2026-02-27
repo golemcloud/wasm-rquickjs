@@ -4765,7 +4765,7 @@
         "block_05_block_05": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
-    "parallel/test-http-client-abort-event.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-client-abort-event.js": {},
     "parallel/test-http-client-abort-keep-alive-destroy-res.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-abort-keep-alive-queued-tcp-socket.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-abort-keep-alive-queued-unix-socket.js": {},
