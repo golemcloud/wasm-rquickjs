@@ -288,21 +288,22 @@ function _write(stream, chunk, encoding, cb) {
 
     if (typeof encoding === "function") {
         cb = encoding;
-        encoding = state.defaultEncoding;
-    } else {
-        if (!encoding) {
-            encoding = state.defaultEncoding;
-        } else if (encoding !== "buffer" && !Buffer.isEncoding(encoding)) {
-            throw new ERR_UNKNOWN_ENCODING(encoding);
-        }
-        if (typeof cb !== "function") {
-            cb = nop;
-        }
+        encoding = null;
+    }
+
+    if (typeof cb !== "function") {
+        cb = nop;
     }
 
     if (chunk === null) {
         throw new ERR_STREAM_NULL_VALUES();
     } else if (!state.objectMode) {
+        if (!encoding) {
+            encoding = state.defaultEncoding;
+        } else if (encoding !== "buffer" && !Buffer.isEncoding(encoding)) {
+            throw new ERR_UNKNOWN_ENCODING(encoding);
+        }
+
         if (typeof chunk === "string") {
             if (state.decodeStrings !== false) {
                 chunk = Buffer.from(chunk, encoding);
