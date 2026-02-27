@@ -1217,7 +1217,11 @@ Server.prototype.close = function close(cb) {
     this._closeRequested = true;
 
     if (this._handle) {
-        this._closeHandle();
+        if (this._acceptLoopActive) {
+            this._wakeAcceptLoop();
+        } else {
+            this._closeHandle();
+        }
     }
 
     this._maybeEmitClose();
