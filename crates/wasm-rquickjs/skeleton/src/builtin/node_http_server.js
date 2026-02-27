@@ -600,6 +600,12 @@ function createConnectionParser(server, socket) {
 
         state.buffer = Buffer.concat([state.buffer, data]);
         parseLoop();
+
+        // Track active request inactivity via server.setTimeout().
+        // Keep-alive idle timeout remains managed after responses finish.
+        if (state.res && !state.responseFinished) {
+            socket.setTimeout(server.timeout || 0);
+        }
     });
 
     socket.on('end', function onEnd() {
@@ -755,7 +761,9 @@ function createConnectionParser(server, socket) {
                     // No body
                     req.complete = true;
                     requestHasNoBody = true;
-                    state.state = AWAITING_RESPONSE;
+                    // Keep parsing pipelined requests even if earlier responses
+                    // have not finished yet.
+                    state.state = IDLE;
                 }
 
                 server.emit('request', req, res);
