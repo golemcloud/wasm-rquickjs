@@ -213,7 +213,15 @@ export const globalAgent = new Agent();
 // ===== Helpers =====
 
 function parseUrl(urlString) {
-    const parsed = new URL(urlString);
+    let parsed;
+    try {
+        parsed = new URL(urlString);
+    } catch {
+        const err = new TypeError('Invalid URL');
+        err.code = 'ERR_INVALID_URL';
+        err.input = urlString;
+        throw err;
+    }
     return {
         protocol: parsed.protocol,
         hostname: parsed.hostname,
