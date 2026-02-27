@@ -5423,10 +5423,7 @@
     "parallel/test-http-allow-req-after-204-res.js": {},
     "parallel/test-http-client-abort.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-client-check-http-token.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality"
-    },
+    "parallel/test-http-client-check-http-token.js": {},
     "parallel/test-http-client-parse-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-spurious-aborted.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-content-length.js": { "skip": true, "reason": "requires HTTP server functionality" },
