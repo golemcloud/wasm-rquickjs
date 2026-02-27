@@ -5008,10 +5008,7 @@
         "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
-    "parallel/test-http-request-large-payload.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-request-large-payload.js": {},
     "parallel/test-http-request-method-delete-payload.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-request-methods.js": {},
     "parallel/test-http-request-smuggling-content-length.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
