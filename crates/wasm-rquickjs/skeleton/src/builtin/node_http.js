@@ -556,12 +556,103 @@ function mergeCookieHeaderValues(existingValue, nextValue) {
 
 // ===== IncomingMessage =====
 
-const MULTI_VALUE_HEADERS = new Set([
-    'set-cookie',
+const SET_COOKIE_HEADER = 'set-cookie';
+const COOKIE_HEADER = 'cookie';
+const NO_DUPLICATE_HEADERS = new Set([
+    'age',
+    'authorization',
+    'content-length',
+    'content-type',
+    'etag',
+    'expires',
+    'from',
+    'host',
+    'if-modified-since',
+    'if-unmodified-since',
+    'last-modified',
+    'location',
+    'max-forwards',
+    'proxy-authorization',
+    'referer',
+    'retry-after',
+    'server',
+    'user-agent',
 ]);
 
+function normalizeIncomingRawPairs(nativeRes, responseMetadata) {
+    if (responseMetadata && Array.isArray(responseMetadata.rawHeaders)) {
+        const capturedPairs = normalizeRawHeaderPairs(responseMetadata.rawHeaders);
+        if (capturedPairs.length > 0) {
+            return capturedPairs;
+        }
+    }
+
+    if (nativeRes && Array.isArray(nativeRes.headers)) {
+        return normalizeRawHeaderPairs(nativeRes.headers);
+    }
+
+    return [];
+}
+
+function parseIncomingHeaders(rawPairs) {
+    const rawHeaders = [];
+    const headers = {};
+    const headersDistinct = {};
+
+    for (const pair of rawPairs) {
+        const name = String(pair[0]);
+        const lower = name.toLowerCase();
+        const values = Array.isArray(pair[1]) ? pair[1] : [pair[1]];
+
+        for (const value of values) {
+            const valueString = String(value);
+            rawHeaders.push(name, valueString);
+
+            if (!headersDistinct[lower]) {
+                headersDistinct[lower] = [];
+            }
+            headersDistinct[lower].push(valueString);
+
+            if (lower === SET_COOKIE_HEADER) {
+                if (Array.isArray(headers[lower])) {
+                    headers[lower].push(valueString);
+                } else if (headers[lower] !== undefined) {
+                    headers[lower] = [headers[lower], valueString];
+                } else {
+                    headers[lower] = [valueString];
+                }
+                continue;
+            }
+
+            if (lower === COOKIE_HEADER) {
+                if (headers[lower] !== undefined) {
+                    headers[lower] += '; ' + valueString;
+                } else {
+                    headers[lower] = valueString;
+                }
+                continue;
+            }
+
+            if (NO_DUPLICATE_HEADERS.has(lower)) {
+                if (headers[lower] === undefined) {
+                    headers[lower] = valueString;
+                }
+                continue;
+            }
+
+            if (headers[lower] !== undefined) {
+                headers[lower] += ', ' + valueString;
+            } else {
+                headers[lower] = valueString;
+            }
+        }
+    }
+
+    return { rawHeaders, headers, headersDistinct };
+}
+
 export class IncomingMessage extends EventEmitter {
-    constructor(nativeRes, statusMessageOverride, httpVersionOverride) {
+    constructor(nativeRes, statusMessageOverride, httpVersionOverride, responseMetadata) {
         super();
         const hasNativeResponse = nativeRes !== null &&
             typeof nativeRes === 'object' &&
@@ -596,39 +687,12 @@ export class IncomingMessage extends EventEmitter {
         this._timeout = null;
         this._encoding = null;
 
-        const rawPairs = hasNativeResponse ? nativeRes.headers : [];
-        this.rawHeaders = [];
-        this.headers = {};
-        this.headersDistinct = {};
-        for (const pair of rawPairs) {
-            const name = pair[0];
-            const value = pair[1];
-            this.rawHeaders.push(name, value);
-            const lower = name.toLowerCase();
-            if (MULTI_VALUE_HEADERS.has(lower)) {
-                if (!this.headersDistinct[lower]) {
-                    this.headersDistinct[lower] = [];
-                }
-                this.headersDistinct[lower].push(value);
-                if (Array.isArray(this.headers[lower])) {
-                    this.headers[lower].push(value);
-                } else if (this.headers[lower] !== undefined) {
-                    this.headers[lower] = [this.headers[lower], value];
-                } else {
-                    this.headers[lower] = [value];
-                }
-            } else {
-                if (this.headers[lower] !== undefined) {
-                    this.headers[lower] += ', ' + value;
-                } else {
-                    this.headers[lower] = value;
-                }
-                if (!this.headersDistinct[lower]) {
-                    this.headersDistinct[lower] = [];
-                }
-                this.headersDistinct[lower].push(value);
-            }
-        }
+        const parsedHeaders = parseIncomingHeaders(
+            hasNativeResponse ? normalizeIncomingRawPairs(nativeRes, responseMetadata) : []
+        );
+        this.rawHeaders = parsedHeaders.rawHeaders;
+        this.headers = parsedHeaders.headers;
+        this.headersDistinct = parsedHeaders.headersDistinct;
     }
 
     get connection() {
@@ -1399,7 +1463,8 @@ export class ClientRequest extends EventEmitter {
                 const res = new IncomingMessage(
                     nativeRes,
                     responseMetadata && responseMetadata.statusMessage,
-                    responseMetadata && responseMetadata.httpVersion
+                    responseMetadata && responseMetadata.httpVersion,
+                    responseMetadata
                 );
 
                 const responseConnectionHeader = res.headers.connection !== undefined

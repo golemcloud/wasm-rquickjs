@@ -87,7 +87,7 @@ export async function runCategoryTests(category: string, options?: RunOptions): 
   const logfile = path.join(LOG_DIR, `run-${Date.now()}.txt`);
   console.log(`  Running ${category} tests...`);
   const { ok, output } = await run(
-    ["cargo", "test", "--test", "node_compat", `parallel__test_${category}`, "--", "--nocapture"],
+    ["cargo", "test", "--test", "node_compat", `parallel__test_${category}_`, "--", "--nocapture"],
     logfile,
     options,
   );
@@ -123,31 +123,65 @@ export async function runCategoryTestsIncludeIgnored(
   return run(
     [
       "cargo", "test", "--test", "node_compat",
-      `parallel__test_${category}`, "--", "--nocapture", "--include-ignored",
+      `parallel__test_${category}_`, "--", "--nocapture", "--include-ignored",
     ],
     logfile,
   );
 }
 
-/** Return the count of enabled (non-skipped) tests/subtests for a category. */
-export function getEnabledTestCount(category: string): number {
+export interface TestCounts {
+  /** Enabled (non-skipped) test cases — matches cargo test "passed" count. */
+  enabled: number;
+  /** Skipped test cases eligible for automated fixing (excludes manual-skip). */
+  fixableSkipped: number;
+  /** Skipped test cases marked as manual (MANUAL_SKIP_PREFIX). */
+  manualSkipped: number;
+  /** Total test cases (enabled + fixableSkipped + manualSkipped). Should match cargo "passed + ignored". */
+  total: number;
+}
+
+/** Return counts of enabled/skipped test cases for a category, accounting for split subtests. */
+export function getTestCounts(category: string): TestCounts {
   const data = loadConfig();
   const tests = data.tests ?? {};
-  let count = 0;
+  let enabled = 0;
+  let fixableSkipped = 0;
+  let manualSkipped = 0;
 
   for (const [testPath, opts] of Object.entries(tests)) {
     if (!matchesCategory(testPath, category)) continue;
 
     if (opts.split && opts.subtests) {
       for (const [, subOpts] of Object.entries(opts.subtests)) {
-        if (!opts.skip && !subOpts.skip) count++;
+        if (!opts.skip && !subOpts.skip) {
+          enabled++;
+        } else {
+          const reason = subOpts.reason ?? opts.reason ?? "";
+          if (reason.startsWith(MANUAL_SKIP_PREFIX)) {
+            manualSkipped++;
+          } else {
+            fixableSkipped++;
+          }
+        }
       }
     } else if (!opts.skip) {
-      count++;
+      enabled++;
+    } else {
+      const reason = opts.reason ?? "";
+      if (reason.startsWith(MANUAL_SKIP_PREFIX)) {
+        manualSkipped++;
+      } else {
+        fixableSkipped++;
+      }
     }
   }
 
-  return count;
+  return { enabled, fixableSkipped, manualSkipped, total: enabled + fixableSkipped + manualSkipped };
+}
+
+/** Return the count of enabled (non-skipped) tests/subtests for a category. */
+export function getEnabledTestCount(category: string): number {
+  return getTestCounts(category).enabled;
 }
 
 function matchesCategory(testPath: string, category: string): boolean {

@@ -13,7 +13,7 @@ import {
 import {
   getVendoredTests,
   getSkippedTests,
-  getEnabledTestCount,
+  getTestCounts,
   runCategoryTests,
   runCategoryTestsIncludeIgnored,
   runSingleTest,
@@ -28,23 +28,37 @@ let stopRequested = false;
 
 function setupGracefulStop(): () => void {
   stopRequested = false;
-  let sigintCount = 0;
 
-  const handler = () => {
-    sigintCount++;
-    if (sigintCount === 1) {
+  if (!process.stdin.isTTY) {
+    return () => {};
+  }
+
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.setEncoding("utf8");
+  process.stdin.unref();
+
+  const handler = (key: string) => {
+    if (key === "q" || key === "s") {
       stopRequested = true;
       console.log("\n  🛑 Stop requested — will finish current test and exit gracefully.");
-      console.log("     (Press Ctrl+C again to force-exit immediately)\n");
-    } else {
-      console.log("\n  ⚡ Force-exiting.");
-      process.exit(1);
+      console.log("     (Press 'q' again or Ctrl+C to force-exit immediately)\n");
+      // Replace handler with force-exit on next press
+      process.stdin.removeListener("data", handler);
+      process.stdin.on("data", () => {
+        console.log("\n  ⚡ Force-exiting.");
+        process.exit(1);
+      });
     }
   };
 
-  process.on("SIGINT", handler);
+  process.stdin.on("data", handler);
   return () => {
-    process.removeListener("SIGINT", handler);
+    process.stdin.removeListener("data", handler);
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.pause();
   };
 }
 
@@ -247,7 +261,7 @@ export async function fixCommand(category: string): Promise<void> {
 
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(`  fix-node-compat: category='${category}'`);
-  console.log("  Press Ctrl+C to stop after the current test finishes.");
+  console.log("  Press 'q' to stop after the current test finishes.");
   console.log("═══════════════════════════════════════════════════════════════");
   console.log();
 
@@ -260,7 +274,8 @@ export async function fixCommand(category: string): Promise<void> {
   const missing = vendored.filter((t) => !(t in config.tests));
 
   if (missing.length === 0) {
-    console.log(`  ✅ All ${vendored.length} vendored tests already in config.jsonc`);
+    const initCounts = getTestCounts(category);
+    console.log(`  ✅ All ${vendored.length} vendored test files already in config.jsonc (${initCounts.total} test cases with subtests)`);
   } else {
     addTestsToConfigSkippedBatch(missing, category);
     console.log(`  Added ${missing.length} missing tests to config.jsonc (as skipped)`);
@@ -333,10 +348,10 @@ export async function fixCommand(category: string): Promise<void> {
 
     // Refresh the skipped list and intersect with priority queue to remove stale entries
     const skipped = getSkippedTests(category);
-    const passing = getEnabledTestCount(category);
+    const counts = getTestCounts(category);
 
     if (skipped.length === 0) {
-      console.log(`🎉 All ${passing} tests for '${category}' are passing! Nothing left to fix.`);
+      console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! Nothing left to fix.`);
       break;
     }
 
@@ -355,11 +370,12 @@ export async function fixCommand(category: string): Promise<void> {
       priorityQueue = skipped;
     }
 
+    const totalSkipped = counts.fixableSkipped + counts.manualSkipped;
     console.log("───────────────────────────────────────────────────────────────");
-    console.log(`  Iteration ${iteration} — ${passing} passing, ${skipped.length} skipped`);
+    console.log(`  Iteration ${iteration} — ${counts.total} test cases: ${counts.enabled} passing, ${totalSkipped} skipped (${skipped.length} fixable)`);
     console.log("───────────────────────────────────────────────────────────────");
     console.log();
-    console.log(`Skipped tests: ${skipped.length} remaining`);
+    console.log(`Fixable skipped tests: ${skipped.length} remaining`);
     console.log();
 
     const target = priorityQueue[0];
