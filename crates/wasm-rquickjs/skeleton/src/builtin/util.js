@@ -38,6 +38,11 @@ import { getProxyDetails as getProxyDetailsNative } from '__wasm_rquickjs_builti
 import { deprecate as _internalDeprecate } from '__wasm_rquickjs_builtin/internal/util';
 
 const _ObjectPrototypeToString = Object.prototype.toString;
+const _ObjectGetPrototypeOf = Object.getPrototypeOf;
+const _ObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const _ObjectGetOwnPropertyNames = Object.getOwnPropertyNames;
+const _ObjectGetOwnPropertySymbols = Object.getOwnPropertySymbols;
+const _ObjectDefineProperty = Object.defineProperty;
 const _ArrayIsArray = Array.isArray;
 const _DatePrototypeGetTime = Date.prototype.getTime;
 

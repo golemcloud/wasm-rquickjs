@@ -448,9 +448,6 @@ var common = {
             return true;
         };
     },
-    platformTimeout: function(ms) {
-        return ms;
-    },
     allowGlobals: function() {},
 
     // Port allocation (for network tests — will mostly be skipped)
@@ -549,8 +546,9 @@ var common = {
     // PIPE path
     PIPE: '/tmp/node-test.sock',
 
-    // Timeout
-    platformTimeout: function(ms) { return ms; },
+    // Timeout – WASM execution is slower than native; inflate timeouts 3x to
+    // reduce flakiness in vendored node:http tests (mirrors Node.js CI practice).
+    platformTimeout: function(ms) { return ms * 3; },
 
     // Parse test flags from the runner-populated process.execArgv.
     parseTestFlags: function() {

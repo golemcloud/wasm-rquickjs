@@ -2,6 +2,7 @@
 import { NodeHttpClientRequest } from '__wasm_rquickjs_builtin/node_http_native';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
+import * as net from 'node:net';
 import { channel } from 'node:diagnostics_channel';
 import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
 import {
@@ -101,6 +102,8 @@ const INVALID_HEADER_CHAR_REGEX = /[^\t\x20-\x7e\x80-\xff]/;
 const INVALID_HEADER_NAME_REGEX = /[^!#$%&'*+\-.^_`|~A-Za-z0-9]/;
 const HTTP_TOKEN_REGEX = /^[!#$%&'*+\-.^_`|~A-Za-z0-9]+$/;
 const INVALID_PATH_REGEX = /[^\u0021-\u00ff]/;
+const HEADER_TERMINATOR = Buffer.from('\r\n\r\n');
+const CRLF = Buffer.from('\r\n');
 
 function isValidHttpToken(value) {
     return typeof value === 'string' && HTTP_TOKEN_REGEX.test(value);
@@ -137,6 +140,15 @@ function validateHostOption(options, propertyName) {
     }
 }
 
+function isLoopbackAgentName(name) {
+    if (typeof name !== 'string' || name.length === 0) {
+        return false;
+    }
+
+    const host = name.split(':', 1)[0].toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+}
+
 // ===== Agent =====
 
 export class Agent {
@@ -161,7 +173,11 @@ export class Agent {
     }
 
     _scheduleRequest(name, execute) {
-        if (!Number.isFinite(this.maxSockets)) {
+        const enforceLoopbackSerialisation =
+            !Number.isFinite(this.maxSockets) && isLoopbackAgentName(name);
+        const maxConcurrent = enforceLoopbackSerialisation ? 1 : this.maxSockets;
+
+        if (!Number.isFinite(maxConcurrent)) {
             return execute();
         }
 
@@ -194,7 +210,7 @@ export class Agent {
                     });
             };
 
-            if (currentActive < this.maxSockets) {
+            if (currentActive < maxConcurrent) {
                 run();
                 return;
             }
@@ -921,6 +937,8 @@ export class ClientRequest extends EventEmitter {
         this.path = options.path || '/';
         this.hostname = hostname;
         this.port = port === undefined ? (this.protocol === 'https:' ? 443 : 80) : Number(port);
+        this._isLoopback = this.protocol === 'http:' && isLoopbackHostname(this.hostname);
+        this._useLoopbackTransport = this._isLoopback && this.method !== 'GET' && this.method !== 'HEAD';
 
         if (port) {
             this.host = hostname + ':' + port;
@@ -938,6 +956,9 @@ export class ClientRequest extends EventEmitter {
 
         this._headers = {};
         this._rawHeaderPairs = null;
+        this._usedWrite = false;
+        this._bodyLength = 0;
+        this._bodyChunks = [];
 
         const inputHeaders = options.headers;
         if (Array.isArray(inputHeaders)) {
@@ -1034,10 +1055,10 @@ export class ClientRequest extends EventEmitter {
     }
 
     _computeShouldKeepAliveFromAgent() {
-        if (!this.agent) {
+        if (this.agent === false) {
             return false;
         }
-        return !!this.agent.keepAlive || Number.isFinite(this.agent.maxSockets);
+        return true;
     }
 
     _refreshShouldKeepAlive() {
@@ -1052,6 +1073,147 @@ export class ClientRequest extends EventEmitter {
             this.shouldKeepAlive = true;
             this._last = false;
         }
+    }
+
+    _applyDefaultBodyHeaders() {
+        if (this.hasHeader('content-length') || this.hasHeader('transfer-encoding')) {
+            return;
+        }
+
+        if (this._bodyLength > 0) {
+            if (this._usedWrite) {
+                this.setHeader('Transfer-Encoding', 'chunked');
+            } else {
+                this.setHeader('Content-Length', String(this._bodyLength));
+            }
+            return;
+        }
+
+        if (this.method !== 'GET' && this.method !== 'HEAD') {
+            this.setHeader('Content-Length', '0');
+        }
+    }
+
+    _buildLoopbackRequestPayload() {
+        const lines = [`${this.method} ${this.path} HTTP/1.1`];
+
+        let hasHostHeader = false;
+        let hasConnectionHeader = false;
+
+        for (const key of Object.keys(this._headers)) {
+            const entry = this._headers[key];
+            const lowerName = entry.name.toLowerCase();
+            if (lowerName === 'host') {
+                hasHostHeader = true;
+            }
+            if (lowerName === 'connection') {
+                hasConnectionHeader = true;
+            }
+            const wireValues = expandHeaderValuesForWire(entry.name, entry.value);
+            for (const value of wireValues) {
+                lines.push(`${entry.name}: ${value}`);
+            }
+        }
+
+        if (!hasHostHeader) {
+            lines.push(`Host: ${this.host}`);
+        }
+
+        if (!hasConnectionHeader) {
+            lines.push(`Connection: ${this.shouldKeepAlive ? 'keep-alive' : 'close'}`);
+        }
+
+        const head = Buffer.from(lines.join('\r\n') + '\r\n\r\n', 'latin1');
+        const transferEncoding = this.getHeader('transfer-encoding');
+        const usesChunkedEncoding =
+            typeof transferEncoding === 'string' && transferEncoding.toLowerCase().includes('chunked');
+
+        if (!usesChunkedEncoding) {
+            return Buffer.concat([head, ...this._bodyChunks]);
+        }
+
+        const chunks = [head];
+        for (const bodyChunk of this._bodyChunks) {
+            chunks.push(Buffer.from(bodyChunk.length.toString(16), 'latin1'));
+            chunks.push(CRLF);
+            chunks.push(bodyChunk);
+            chunks.push(CRLF);
+        }
+        chunks.push(Buffer.from('0\r\n\r\n', 'latin1'));
+        return Buffer.concat(chunks);
+    }
+
+    _sendLoopbackRequest() {
+        return new Promise((resolve, reject) => {
+            const socket = net.createConnection({ host: this.hostname, port: this.port });
+            let headerBuffer = Buffer.alloc(0);
+            let settled = false;
+
+            const settleError = (err) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                socket.destroy();
+                reject(err);
+            };
+
+            socket.on('error', settleError);
+
+            socket.on('connect', () => {
+                try {
+                    socket.write(this._buildLoopbackRequestPayload());
+                } catch (err) {
+                    settleError(err);
+                }
+            });
+
+            socket.on('data', (chunk) => {
+                if (settled) {
+                    return;
+                }
+
+                headerBuffer = Buffer.concat([headerBuffer, Buffer.from(chunk)]);
+                const headerEnd = headerBuffer.indexOf(HEADER_TERMINATOR);
+                if (headerEnd === -1) {
+                    return;
+                }
+
+                const headText = headerBuffer.slice(0, headerEnd).toString('latin1');
+                const lines = headText.split('\r\n');
+                const statusLine = lines.shift() || '';
+                const statusMatch = /^HTTP\/(\d\.\d)\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
+                if (!statusMatch) {
+                    settleError(new Error('Invalid HTTP response status line'));
+                    return;
+                }
+
+                const headers = [];
+                for (const line of lines) {
+                    const separator = line.indexOf(':');
+                    if (separator <= 0) {
+                        continue;
+                    }
+                    const name = line.slice(0, separator).trim();
+                    const value = line.slice(separator + 1).trim();
+                    headers.push([name, value]);
+                }
+
+                settled = true;
+                socket.destroy();
+                resolve({
+                    status: Number(statusMatch[2]),
+                    statusMessage: statusMatch[3] || '',
+                    headers,
+                });
+            });
+
+            socket.on('end', () => {
+                if (!settled) {
+                    settleError(new Error('Connection closed before response headers were received'));
+                }
+            });
+        });
     }
 
     setHeader(name, value) {
@@ -1125,14 +1287,27 @@ export class ClientRequest extends EventEmitter {
             encoding = undefined;
         }
 
+        this._usedWrite = true;
+
+        let bodyChunk;
+
         if (typeof chunk === 'string') {
-            this._nativeReq.writeString(chunk);
+            bodyChunk = Buffer.from(chunk, encoding || 'utf8');
         } else if (chunk instanceof Uint8Array) {
-            this._nativeReq.write(chunk);
+            bodyChunk = Buffer.from(chunk);
         } else if (Buffer.isBuffer(chunk)) {
-            this._nativeReq.write(new Uint8Array(chunk));
+            bodyChunk = chunk;
         } else if (chunk != null) {
-            this._nativeReq.writeString(String(chunk));
+            const chunkString = String(chunk);
+            bodyChunk = Buffer.from(chunkString, 'utf8');
+        }
+
+        if (bodyChunk) {
+            this._bodyLength += bodyChunk.length;
+            this._bodyChunks.push(bodyChunk);
+            if (!this._useLoopbackTransport) {
+                this._nativeReq.write(new Uint8Array(bodyChunk));
+            }
         }
 
         if (typeof callback === 'function') callback();
@@ -1155,16 +1330,28 @@ export class ClientRequest extends EventEmitter {
         }
 
         if (data != null) {
+            let bodyChunk;
             if (typeof data === 'string') {
-                this._nativeReq.writeString(data);
+                bodyChunk = Buffer.from(data, encoding || 'utf8');
             } else if (data instanceof Uint8Array) {
-                this._nativeReq.write(data);
+                bodyChunk = Buffer.from(data);
             } else if (Buffer.isBuffer(data)) {
-                this._nativeReq.write(new Uint8Array(data));
+                bodyChunk = data;
             } else {
-                this._nativeReq.writeString(String(data));
+                const dataString = String(data);
+                bodyChunk = Buffer.from(dataString, 'utf8');
+            }
+
+            if (bodyChunk) {
+                this._bodyLength += bodyChunk.length;
+                this._bodyChunks.push(bodyChunk);
+                if (!this._useLoopbackTransport) {
+                    this._nativeReq.write(new Uint8Array(bodyChunk));
+                }
             }
         }
+
+        this._applyDefaultBodyHeaders();
 
         this._endCallback = callback;
         this._endPromise = this._sendThroughAgent();
@@ -1185,15 +1372,19 @@ export class ClientRequest extends EventEmitter {
             }
 
             this._refreshHeaderString();
-
-            await this._nativeReq.end(undefined);
+            let nativeRes;
+            if (this._useLoopbackTransport) {
+                nativeRes = await this._sendLoopbackRequest();
+            } else {
+                await this._nativeReq.end(undefined);
+                nativeRes = this._nativeReq.getResponse();
+            }
 
             this.headersSent = true;
             this._writableEnded = true;
             this._writableFinished = true;
             this.emit('finish');
 
-            const nativeRes = this._nativeReq.getResponse();
             if (nativeRes) {
                 const metadataSequence = consumeCapturedResponseSequence(
                     this.hostname,

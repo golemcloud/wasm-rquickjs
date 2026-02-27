@@ -5426,7 +5426,10 @@
     "parallel/test-http-client-check-http-token.js": {},
     "parallel/test-http-client-parse-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-spurious-aborted.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-content-length.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-content-length.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-end-throw-socket-handling.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-exceptions.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-get-pipeline-problem.js": { "skip": true, "reason": "requires HTTP server functionality" },

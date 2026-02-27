@@ -251,6 +251,10 @@ ServerResponse.prototype.removeHeader = function removeHeader(name) {
         throw new Error('Cannot remove headers after they are sent to the client');
     }
     const lower = name.toLowerCase();
+    if (lower === 'date') {
+        // Match Node.js behavior: removing Date disables automatic Date generation.
+        this.sendDate = false;
+    }
     delete this._headers[lower];
     delete this._headerNames[lower];
 };
@@ -570,6 +574,8 @@ function createConnectionParser(server, socket) {
         chunkState: null,
         readableEnded: false,
         closeAfterResponse: false,
+        responseFinished: false,
+        shouldKeepAliveAfterResponse: false,
     };
 
     const keepAlive = computeKeepAlive(null, '1.1');
@@ -646,6 +652,42 @@ function createConnectionParser(server, socket) {
         }
     });
 
+    function maybeFinalizeResponse() {
+        if (!state.responseFinished) {
+            return false;
+        }
+
+        if (state.req && !state.req.complete) {
+            return false;
+        }
+
+        const shouldKeepAlive = state.shouldKeepAliveAfterResponse;
+        state.responseFinished = false;
+        state.shouldKeepAliveAfterResponse = false;
+        state.req = null;
+        state.res = null;
+        state.state = IDLE;
+
+        if (!shouldKeepAlive) {
+            socket.end();
+            return true;
+        }
+
+        if (state.buffer.length > 0) {
+            parseLoop();
+            return true;
+        }
+
+        if (state.readableEnded && state.closeAfterResponse) {
+            socket.end();
+            return true;
+        }
+
+        // Set idle timeout for keep-alive connections
+        socket.setTimeout(server.keepAliveTimeout || 5000);
+        return true;
+    }
+
     function parseLoop() {
         let progress = true;
         while (progress) {
@@ -681,31 +723,14 @@ function createConnectionParser(server, socket) {
 
                 state.req = req;
                 state.res = res;
+                state.responseFinished = false;
+                state.shouldKeepAliveAfterResponse = false;
 
                 // Set up finish handler for request sequencing
                 res.on('finish', function onFinish() {
-                    const shouldKeepAlive = res._keepAlive && !server._closeRequested;
-                    state.req = null;
-                    state.res = null;
-                    state.state = IDLE;
-
-                    if (!shouldKeepAlive) {
-                        socket.end();
-                        return;
-                    }
-
-                    if (state.buffer.length > 0) {
-                        parseLoop();
-                        return;
-                    }
-
-                    if (state.readableEnded && state.closeAfterResponse) {
-                        socket.end();
-                        return;
-                    }
-
-                    // Set idle timeout for keep-alive connections
-                    socket.setTimeout(server.keepAliveTimeout || 5000);
+                    state.responseFinished = true;
+                    state.shouldKeepAliveAfterResponse = res._keepAlive && !server._closeRequested;
+                    maybeFinalizeResponse();
                 });
 
                 const cl = req.headers['content-length'];
@@ -757,6 +782,7 @@ function createConnectionParser(server, socket) {
                     state.req.complete = true;
                     state.req.push(null);
                     state.state = AWAITING_RESPONSE;
+                    maybeFinalizeResponse();
                 }
                 progress = true;
                 continue;
@@ -770,6 +796,7 @@ function createConnectionParser(server, socket) {
                     state.req.complete = true;
                     state.req.push(null);
                     state.state = AWAITING_RESPONSE;
+                    maybeFinalizeResponse();
                     progress = true;
                 } else if (result === 'error') {
                     server.emit('clientError', new Error('HPE_INVALID_CHUNK'), socket);
