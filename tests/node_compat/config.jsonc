@@ -4853,7 +4853,7 @@
     "parallel/test-http-eof-on-connect.js": {},
     "parallel/test-http-expect-continue.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-expect-handling.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-flush-headers.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-flush-headers.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
     "parallel/test-http-flush-response-headers.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-full-response.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-generic-streams.js": {
