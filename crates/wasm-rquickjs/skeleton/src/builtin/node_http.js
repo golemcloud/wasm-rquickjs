@@ -5,6 +5,7 @@ import { Buffer } from 'node:buffer';
 import { channel } from 'node:diagnostics_channel';
 import {
     ERR_HTTP_INVALID_HEADER_VALUE,
+    ERR_INVALID_ARG_TYPE,
     ERR_INVALID_HTTP_TOKEN,
 } from '__wasm_rquickjs_builtin/internal/errors';
 
@@ -112,6 +113,17 @@ export function validateHeaderValue(name, value) {
         const err = new TypeError('Invalid character in header content ["' + name + '"]');
         err.code = 'ERR_INVALID_CHAR';
         throw err;
+    }
+}
+
+function validateHostOption(options, propertyName) {
+    const value = options[propertyName];
+    if (value !== undefined && value !== null && typeof value !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE(
+            `options.${propertyName}`,
+            ['string', 'undefined', 'null'],
+            value
+        );
     }
 }
 
@@ -553,6 +565,9 @@ export class ClientRequest extends EventEmitter {
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
+
+        validateHostOption(options, 'hostname');
+        validateHostOption(options, 'host');
 
         this.method = (options.method || 'GET').toUpperCase();
         this.protocol = options.protocol || 'http:';
