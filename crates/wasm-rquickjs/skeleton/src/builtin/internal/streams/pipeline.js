@@ -4,7 +4,7 @@
 
 import { isIterable, isNodeStream, isReadableNodeStream } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { once } from "__wasm_rquickjs_builtin/internal/util";
-import { validateAbortSignal, validateCallback } from "__wasm_rquickjs_builtin/internal/validators";
+import { validateAbortSignal, validateFunction } from "__wasm_rquickjs_builtin/internal/validators";
 import {
     AbortError,
     aggregateTwoErrors,
@@ -66,7 +66,7 @@ function popCallback(streams) {
     // Streams should never be an empty array. It should always contain at least
     // a single stream. Therefore optimize for the average case instead of
     // checking for length === 0 as well.
-    validateCallback(streams[streams.length - 1]);
+    validateFunction(streams[streams.length - 1], "streams[stream.length - 1]");
     return streams.pop();
 }
 
