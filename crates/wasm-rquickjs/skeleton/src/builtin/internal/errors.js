@@ -1,4 +1,4 @@
-import { inspect } from "__wasm_rquickjs_builtin/internal/util/inspect";
+import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
 
 // Normalize `Error.prototype.stack` so deleting an instance stack works like
 // Node (i.e. `delete err.stack` makes subsequent `err.stack` reads undefined).
@@ -621,7 +621,7 @@ export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends Error {
 
 export class ERR_UNKNOWN_ENCODING extends TypeError {
     constructor(x) {
-        super(`Unknown encoding: ${x}`);
+        super(format("Unknown encoding: %s", x));
         addCodeToMessage(this, "ERR_UNKNOWN_ENCODING");
     }
 }

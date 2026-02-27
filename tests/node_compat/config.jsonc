@@ -9064,7 +9064,7 @@
       }
     },
     "parallel/test-stream-wrap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-stream-writable-change-default-encoding.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream-writable-change-default-encoding.js": {},
     "parallel/test-stream-writable-decoded-encoding.js": {
       "split": true,
       "subtests": {
