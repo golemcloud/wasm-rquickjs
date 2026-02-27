@@ -5468,7 +5468,10 @@
       "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-timeout.js": { "skip": true, "reason": "requires server-side timeout enforcement (headersTimeout, requestTimeout) which is not yet implemented" },
-    "parallel/test-http-upgrade-client.js": { "skip": true, "reason": "requires HTTP Upgrade/101 handling and raw socket takeover which is not implemented" },
+    "parallel/test-http-upgrade-client.js": {
+      "skip": true,
+      "reason": "[manual] amp partial fix caused regressions"
+    },
     "parallel/test-http-write-head-after-set-header.js": { "skip": true, "reason": "deadlocks: two concurrent http.request calls to same-component server cause event loop deadlock with wasi:http pollables" },
     "parallel/test-async-local-storage-http-multiclients.js": { "skip": true, "reason": "requires AsyncLocalStorage context propagation across concurrent HTTP activity which is not implemented" },
 
