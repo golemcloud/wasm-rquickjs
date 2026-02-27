@@ -75,6 +75,10 @@ When adding crates to `Cargo.toml_`:
 - Use pure-Rust backends (e.g., `rust_backend`) for `wasm32-wasip2` compatibility
 - Example: `whirlpool = { version = "0.10", default-features = false }`
 
+## ⚠️ node:http Transport Rule
+
+**Never use a loopback transport for `node:http`.** Every `node:http` client request MUST go through `wasi:http` (the native Rust `NodeHttpClientRequest`). Do NOT add any fallback that bypasses `wasi:http` by creating direct `node:net` socket connections for loopback/localhost addresses.
+
 ## Key Directories
 
 - `skeleton/src/builtin/` — Built-in Node.js module implementations (Rust + JS pairs)

@@ -159,6 +159,10 @@ This separation keeps Rust code focused on performance-critical operations while
 
 Load the `adding-builtin-module` skill for the full checklist, code templates, and gotchas.
 
+### ⚠️ node:http Transport Rule
+
+**Never use a loopback transport for `node:http`.** Every `node:http` client request MUST go through `wasi:http` (the native Rust `NodeHttpClientRequest`). Do NOT add any fallback that bypasses `wasi:http` by creating direct `node:net` socket connections for loopback/localhost addresses.
+
 ## Key Files
 
 - `src/main.rs` - CLI entry point

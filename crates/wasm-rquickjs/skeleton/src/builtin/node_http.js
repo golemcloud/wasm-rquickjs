@@ -2,7 +2,7 @@
 import { NodeHttpClientRequest } from '__wasm_rquickjs_builtin/node_http_native';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
-import * as net from 'node:net';
+
 import { channel } from 'node:diagnostics_channel';
 import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
 import {
@@ -102,8 +102,6 @@ const INVALID_HEADER_CHAR_REGEX = /[^\t\x20-\x7e\x80-\xff]/;
 const INVALID_HEADER_NAME_REGEX = /[^!#$%&'*+\-.^_`|~A-Za-z0-9]/;
 const HTTP_TOKEN_REGEX = /^[!#$%&'*+\-.^_`|~A-Za-z0-9]+$/;
 const INVALID_PATH_REGEX = /[^\u0021-\u00ff]/;
-const HEADER_TERMINATOR = Buffer.from('\r\n\r\n');
-const CRLF = Buffer.from('\r\n');
 
 function isValidHttpToken(value) {
     return typeof value === 'string' && HTTP_TOKEN_REGEX.test(value);
@@ -140,15 +138,6 @@ function validateHostOption(options, propertyName) {
     }
 }
 
-function isLoopbackAgentName(name) {
-    if (typeof name !== 'string' || name.length === 0) {
-        return false;
-    }
-
-    const host = name.split(':', 1)[0].toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
-}
-
 // ===== Agent =====
 
 export class Agent {
@@ -173,9 +162,7 @@ export class Agent {
     }
 
     _scheduleRequest(name, execute) {
-        const enforceLoopbackSerialisation =
-            !Number.isFinite(this.maxSockets) && isLoopbackAgentName(name);
-        const maxConcurrent = enforceLoopbackSerialisation ? 1 : this.maxSockets;
+        const maxConcurrent = this.maxSockets;
 
         if (!Number.isFinite(maxConcurrent)) {
             return execute();
@@ -1001,9 +988,6 @@ export class ClientRequest extends EventEmitter {
         this.path = options.path || '/';
         this.hostname = hostname;
         this.port = port === undefined ? (this.protocol === 'https:' ? 443 : 80) : Number(port);
-        this._isLoopback = this.protocol === 'http:' && isLoopbackHostname(this.hostname);
-        this._useLoopbackTransport = this._isLoopback;
-
         if (port) {
             this.host = hostname + ':' + port;
         } else {
@@ -1156,248 +1140,6 @@ export class ClientRequest extends EventEmitter {
         if (this.method !== 'GET' && this.method !== 'HEAD') {
             this.setHeader('Content-Length', '0');
         }
-    }
-
-    _buildLoopbackRequestPayload() {
-        const lines = [`${this.method} ${this.path} HTTP/1.1`];
-
-        let hasHostHeader = false;
-        let hasConnectionHeader = false;
-
-        for (const key of Object.keys(this._headers)) {
-            const entry = this._headers[key];
-            const lowerName = entry.name.toLowerCase();
-            if (lowerName === 'host') {
-                hasHostHeader = true;
-            }
-            if (lowerName === 'connection') {
-                hasConnectionHeader = true;
-            }
-            const wireValues = expandHeaderValuesForWire(entry.name, entry.value);
-            for (const value of wireValues) {
-                lines.push(`${entry.name}: ${value}`);
-            }
-        }
-
-        if (!hasHostHeader) {
-            lines.push(`Host: ${this.host}`);
-        }
-
-        if (!hasConnectionHeader) {
-            // Loopback transport relies on connection shutdown to delimit response
-            // bodies, so default to `close` unless the caller set it explicitly.
-            lines.push('Connection: close');
-        }
-
-        const head = Buffer.from(lines.join('\r\n') + '\r\n\r\n', 'latin1');
-        const transferEncoding = this.getHeader('transfer-encoding');
-        const usesChunkedEncoding =
-            typeof transferEncoding === 'string' && transferEncoding.toLowerCase().includes('chunked');
-
-        if (!usesChunkedEncoding) {
-            return Buffer.concat([head, ...this._bodyChunks]);
-        }
-
-        const chunks = [head];
-        for (const bodyChunk of this._bodyChunks) {
-            chunks.push(Buffer.from(bodyChunk.length.toString(16), 'latin1'));
-            chunks.push(CRLF);
-            chunks.push(bodyChunk);
-            chunks.push(CRLF);
-        }
-        chunks.push(Buffer.from('0\r\n\r\n', 'latin1'));
-        return Buffer.concat(chunks);
-    }
-
-    _sendLoopbackRequest() {
-        return new Promise((resolve, reject) => {
-            const socket = net.createConnection({ host: this.hostname, port: this.port });
-            let headerBuffer = Buffer.alloc(0);
-            let headersResolved = false;
-            const bodyChunks = [];
-            const bodyWaiters = [];
-            let bodyEnded = false;
-            let bodyError = null;
-            let remainingContentLength = null;
-
-            const wakeBodyWaiters = () => {
-                while (bodyWaiters.length > 0) {
-                    const waiter = bodyWaiters.shift();
-                    waiter();
-                }
-            };
-
-            const markBodyEnded = () => {
-                if (bodyEnded) {
-                    return;
-                }
-                bodyEnded = true;
-                wakeBodyWaiters();
-            };
-
-            const settleError = (err) => {
-                if (!headersResolved) {
-                    headersResolved = true;
-                    socket.destroy();
-                    reject(err);
-                    return;
-                }
-
-                bodyError = err;
-                markBodyEnded();
-                socket.destroy();
-            };
-
-            socket.on('error', settleError);
-
-            socket.on('connect', () => {
-                try {
-                    socket.write(this._buildLoopbackRequestPayload());
-                } catch (err) {
-                    settleError(err);
-                }
-            });
-
-            socket.on('data', (chunk) => {
-                const dataChunk = Buffer.from(chunk);
-                if (!headersResolved) {
-                    headerBuffer = Buffer.concat([headerBuffer, dataChunk]);
-                    const headerEnd = headerBuffer.indexOf(HEADER_TERMINATOR);
-                    if (headerEnd === -1) {
-                        return;
-                    }
-
-                    const headText = headerBuffer.slice(0, headerEnd).toString('latin1');
-                    const bodyStart = headerBuffer.slice(headerEnd + HEADER_TERMINATOR.length);
-                    headerBuffer = Buffer.alloc(0);
-
-                    const lines = headText.split('\r\n');
-                    const statusLine = lines.shift() || '';
-                    const statusMatch = /^HTTP\/(\d\.\d)\s+(\d{3})(?:\s*(.*))?$/.exec(statusLine);
-                    if (!statusMatch) {
-                        settleError(new Error('Invalid HTTP response status line'));
-                        return;
-                    }
-
-                    const headers = [];
-                    for (const line of lines) {
-                        const separator = line.indexOf(':');
-                        if (separator <= 0) {
-                            continue;
-                        }
-                        const name = line.slice(0, separator).trim();
-                        const value = line.slice(separator + 1).trim();
-                        headers.push([name, value]);
-
-                        if (name.toLowerCase() === 'content-length') {
-                            const parsedLength = Number(value);
-                            if (Number.isFinite(parsedLength) && parsedLength >= 0) {
-                                remainingContentLength = parsedLength;
-                            }
-                        }
-                    }
-
-                    headersResolved = true;
-
-                    const pushBodyChunk = (bufferChunk) => {
-                        if (remainingContentLength !== null) {
-                            if (remainingContentLength <= 0) {
-                                return;
-                            }
-
-                            if (bufferChunk.length > remainingContentLength) {
-                                bufferChunk = bufferChunk.subarray(0, remainingContentLength);
-                            }
-                            remainingContentLength -= bufferChunk.length;
-                        }
-
-                        if (bufferChunk.length > 0) {
-                            bodyChunks.push(bufferChunk);
-                            wakeBodyWaiters();
-                        }
-
-                        if (remainingContentLength === 0) {
-                            markBodyEnded();
-                            socket.destroy();
-                        }
-                    };
-
-                    const response = {
-                        status: Number(statusMatch[2]),
-                        statusMessage: statusMatch[3] || '',
-                        headers,
-                        async readBodyChunk() {
-                            while (true) {
-                                if (bodyChunks.length > 0) {
-                                    return [bodyChunks.shift(), false];
-                                }
-                                if (bodyError) {
-                                    throw bodyError;
-                                }
-                                if (bodyEnded) {
-                                    return [null, true];
-                                }
-                                await new Promise((wake) => bodyWaiters.push(wake));
-                            }
-                        },
-                        discardBody() {
-                            bodyChunks.length = 0;
-                            markBodyEnded();
-                            socket.destroy();
-                        },
-                    };
-
-                    resolve(response);
-                    if (bodyStart.length > 0) {
-                        pushBodyChunk(bodyStart);
-                    } else if (remainingContentLength === 0) {
-                        markBodyEnded();
-                        socket.destroy();
-                    }
-                    return;
-                }
-
-                if (bodyEnded) {
-                    return;
-                }
-
-                let bodyChunk = dataChunk;
-                if (remainingContentLength !== null) {
-                    if (remainingContentLength <= 0) {
-                        return;
-                    }
-                    if (bodyChunk.length > remainingContentLength) {
-                        bodyChunk = bodyChunk.subarray(0, remainingContentLength);
-                    }
-                    remainingContentLength -= bodyChunk.length;
-                }
-
-                if (bodyChunk.length > 0) {
-                    bodyChunks.push(bodyChunk);
-                    wakeBodyWaiters();
-                }
-
-                if (remainingContentLength === 0) {
-                    markBodyEnded();
-                    socket.destroy();
-                }
-            });
-
-            socket.on('end', () => {
-                if (!headersResolved) {
-                    settleError(new Error('Connection closed before response headers were received'));
-                    return;
-                }
-                markBodyEnded();
-            });
-
-            socket.on('close', () => {
-                if (!headersResolved) {
-                    return;
-                }
-                markBodyEnded();
-            });
-        });
     }
 
     setHeader(name, value) {
@@ -1556,13 +1298,8 @@ export class ClientRequest extends EventEmitter {
             }
 
             this._refreshHeaderString();
-            let nativeRes;
-            if (this._useLoopbackTransport) {
-                nativeRes = await this._sendLoopbackRequest();
-            } else {
-                await this._nativeReq.end(undefined);
-                nativeRes = this._nativeReq.getResponse();
-            }
+            await this._nativeReq.end(undefined);
+            const nativeRes = this._nativeReq.getResponse();
 
             this.headersSent = true;
             this._writableEnded = true;
