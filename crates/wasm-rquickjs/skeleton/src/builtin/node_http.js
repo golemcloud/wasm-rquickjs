@@ -138,6 +138,11 @@ function validateHostOption(options, propertyName) {
     }
 }
 
+function isClassBorrowConflictError(error) {
+    const message = error && error.message ? String(error.message) : '';
+    return message.includes("can't borrow a value as it is already borrowed");
+}
+
 // ===== Agent =====
 
 export class Agent {
@@ -1035,12 +1040,17 @@ export class ClientRequest extends EventEmitter {
         }
 
         this.headersSent = false;
+        this.aborted = false;
         this.destroyed = false;
         this._writableEnded = false;
         this._writableFinished = false;
         this.socket = null;
         this._timeout = null;
         this._header = null;
+        this._closeEmitted = false;
+        this._nativeAbortDeferred = false;
+
+        this._initializeCustomConnection(options);
 
         if (this._rawHeaderPairs !== null) {
             this._refreshHeaderString();
@@ -1052,6 +1062,81 @@ export class ClientRequest extends EventEmitter {
 
         if (onClientRequestCreated.hasSubscribers) {
             onClientRequestCreated.publish({ request: this });
+        }
+    }
+
+    _emitCloseOnce() {
+        if (this._closeEmitted) {
+            return;
+        }
+        this._closeEmitted = true;
+        this.emit('close');
+    }
+
+    _emitRequestError(error) {
+        if (onClientRequestError.hasSubscribers) {
+            onClientRequestError.publish({ request: this, error });
+        }
+        this.emit('error', error);
+    }
+
+    _abortNativeRequest() {
+        try {
+            this._nativeReq.abort();
+            this._nativeAbortDeferred = false;
+        } catch (error) {
+            if (!isClassBorrowConflictError(error)) {
+                throw error;
+            }
+            this._nativeAbortDeferred = true;
+        }
+    }
+
+    _initializeCustomConnection(options) {
+        let createConnection;
+        if (typeof options.createConnection === 'function') {
+            createConnection = options.createConnection;
+        } else if (this.agent && this.agent !== false && typeof this.agent.createConnection === 'function') {
+            createConnection = this.agent.createConnection.bind(this.agent);
+        }
+
+        if (!createConnection) {
+            return;
+        }
+
+        let oncreateCalled = false;
+        const oncreate = (error, socket) => {
+            if (oncreateCalled) {
+                return;
+            }
+            oncreateCalled = true;
+
+            if (error) {
+                process.nextTick(() => {
+                    this._emitRequestError(error);
+                });
+                return;
+            }
+
+            if (!socket) {
+                return;
+            }
+
+            this.socket = socket;
+            if (typeof socket.once === 'function') {
+                socket.once('error', (socketError) => {
+                    this._emitRequestError(socketError);
+                });
+            }
+        };
+
+        try {
+            const maybeSocket = createConnection(options, oncreate);
+            if (maybeSocket) {
+                oncreate(null, maybeSocket);
+            }
+        } catch (error) {
+            oncreate(error);
         }
     }
 
@@ -1301,6 +1386,15 @@ export class ClientRequest extends EventEmitter {
 
             this._refreshHeaderString();
             await this._nativeReq.end(undefined);
+
+            if (this._nativeAbortDeferred) {
+                this._abortNativeRequest();
+            }
+
+            if (this.aborted || this.destroyed) {
+                return;
+            }
+
             const nativeRes = this._nativeReq.getResponse();
 
             this.headersSent = true;
@@ -1361,27 +1455,37 @@ export class ClientRequest extends EventEmitter {
 
             if (typeof this._endCallback === 'function') this._endCallback();
         } catch (err) {
-            if (onClientRequestError.hasSubscribers) {
-                onClientRequestError.publish({ request: this, error: err });
+            if (this.aborted || this.destroyed) {
+                return;
             }
-            this.emit('error', err);
+            this._emitRequestError(err);
         }
-        this.emit('close');
+        this._emitCloseOnce();
     }
 
     abort() {
-        this._nativeReq.abort();
+        if (this.aborted) {
+            return;
+        }
+
+        this.aborted = true;
         this.destroyed = true;
+        this._abortNativeRequest();
         this.emit('abort');
-        this.emit('close');
+        this._emitCloseOnce();
     }
 
     destroy(error) {
         if (this.destroyed) return this;
-        this._nativeReq.abort();
+
+        this.aborted = true;
         this.destroyed = true;
+
+        this._abortNativeRequest();
+
         if (error) this.emit('error', error);
-        this.emit('close');
+        this._emitCloseOnce();
+
         return this;
     }
 }

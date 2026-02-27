@@ -5504,7 +5504,7 @@
       "subtests": {
         "block_00_block_00": {
           "skip": true,
-          "reason": "regression: was enabled but started failing"
+          "reason": "[manual] amp fix attempt failed verification"
         },
         "block_01_block_01": {
           "skip": true,
