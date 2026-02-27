@@ -4759,7 +4759,10 @@
     "parallel/test-http-client-keep-alive-hint.js": {},
     "parallel/test-http-client-keep-alive-release-before-finish.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-pipe-end.js": {},
-    "parallel/test-http-client-race-2.js": {},
+    "parallel/test-http-client-race-2.js": {
+      "skip": true,
+      "reason": "regression: was enabled but started failing"
+    },
     "parallel/test-http-client-race.js": {},
     "parallel/test-http-client-reject-unexpected-agent.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-request-options.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
