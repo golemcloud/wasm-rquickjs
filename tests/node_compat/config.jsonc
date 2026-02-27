@@ -5364,7 +5364,7 @@
         "block_06_block_06": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
-    "parallel/test-stream-toWeb-allows-server-response.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-stream-toWeb-allows-server-response.js": {},
     "parallel/test-stream2-httpclient-response-end.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-webstreams-compose.js": {
       "split": true,
@@ -8978,7 +8978,7 @@
       }
     },
     "parallel/test-stream-base-prototype-accessors-enumerability.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-stream-base-typechecking.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream-base-typechecking.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
     "parallel/test-stream-catch-rejections.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
@@ -9240,7 +9240,7 @@
         "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-stream-readable-to-web.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream-readable-to-web.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
     "parallel/test-stream-readable-with-unimplemented-_read.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stream-transform-split-highwatermark.js": {
       "skip": true,
@@ -9318,7 +9318,7 @@
       }
     },
     "parallel/test-stream2-compatibility.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-stream2-large-read-stall.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream2-large-read-stall.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
     "parallel/test-stream2-unpipe-leak.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stream2-writable.js": {
       "split": true,

@@ -10,8 +10,10 @@ use crate::common::{
 use camino::Utf8Path;
 use std::fs;
 use std::sync::Arc;
+use std::time::Duration;
 use test_r::core::{DynamicTestRegistration, TestProperties};
 use test_r::{test_dep, test_gen};
+use tokio::time::timeout;
 use wasmtime::component::Val;
 
 #[allow(dead_code)]
@@ -58,12 +60,16 @@ struct SubtestEntry {
     reason: Option<String>,
 }
 
+/// Default timeout for node_compat tests (in seconds).
+const DEFAULT_TEST_TIMEOUT_SECS: u64 = 120;
+
 struct TestEntry {
     path: String,
     skip: bool,
     #[allow(dead_code)]
     reason: Option<String>,
     split: bool,
+    timeout_secs: u64,
     subtests: Vec<SubtestEntry>,
 }
 
@@ -85,6 +91,10 @@ fn load_config(path: &str) -> anyhow::Result<Vec<TestEntry>> {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
         let split = opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false);
+        let timeout_secs = opts
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(DEFAULT_TEST_TIMEOUT_SECS);
 
         let mut subtests = Vec::new();
         if let Some(subtests_obj) = opts.get("subtests").and_then(|v| v.as_object()) {
@@ -112,6 +122,7 @@ fn load_config(path: &str) -> anyhow::Result<Vec<TestEntry>> {
             skip,
             reason,
             split,
+            timeout_secs,
             subtests,
         });
     }
@@ -199,6 +210,8 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
         }
         .to_string();
 
+        let test_timeout_secs = entry.timeout_secs;
+
         if !entry.split || entry.subtests.is_empty() {
             // Non-split: one Rust test per file (unchanged behavior)
             let props = TestProperties {
@@ -228,19 +241,28 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     };
                     let path = path.clone();
                     Box::pin(async move {
-                        let mut instance = TestInstance::from_prepared(&prepared).await?;
-                        setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                        let test_future = async {
+                            let mut instance = TestInstance::from_prepared(&prepared).await?;
+                            setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                        let guest_path = format!("/test/{}", path);
-                        let (result, stdout, stderr) = instance
-                            .invoke_and_capture_output_with_stderr(
-                                None,
-                                "run-test",
-                                &[Val::String(guest_path)],
-                            )
-                            .await;
+                            let guest_path = format!("/test/{}", path);
+                            let (result, stdout, stderr) = instance
+                                .invoke_and_capture_output_with_stderr(
+                                    None,
+                                    "run-test",
+                                    &[Val::String(guest_path)],
+                                )
+                                .await;
 
-                        handle_test_result(result, &stdout, &stderr)
+                            handle_test_result(result, &stdout, &stderr)
+                        };
+                        match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
+                            Ok(result) => result,
+                            Err(_) => anyhow::bail!(
+                                "Test timed out after {}s",
+                                test_timeout_secs
+                            ),
+                        }
                     })
                 },
             );
@@ -313,40 +335,49 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         let source = source.clone();
                         let discovery_clone = discovery_clone.clone();
                         Box::pin(async move {
-                            let mut instance = TestInstance::from_prepared(&prepared).await?;
-                            setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                            let test_future = async {
+                                let mut instance = TestInstance::from_prepared(&prepared).await?;
+                                setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                            // Rewrite the test file to isolate the target subtest
-                            let rewritten = match &discovery_clone {
-                                Some(DiscoveryData::Block(blocks)) => {
-                                    rewrite_for_block(&source, blocks, subtest_index)
-                                }
-                                Some(DiscoveryData::NodeTest) => {
-                                    rewrite_for_node_test(&source, subtest_index)
-                                }
-                                None => source.clone(),
+                                // Rewrite the test file to isolate the target subtest
+                                let rewritten = match &discovery_clone {
+                                    Some(DiscoveryData::Block(blocks)) => {
+                                        rewrite_for_block(&source, blocks, subtest_index)
+                                    }
+                                    Some(DiscoveryData::NodeTest) => {
+                                        rewrite_for_node_test(&source, subtest_index)
+                                    }
+                                    None => source.clone(),
+                                };
+
+                                // Write the rewritten file to the temp dir
+                                let test_filename = path.rsplit('/').next().unwrap_or(&path);
+                                let suite = path.split('/').next().unwrap_or("parallel");
+                                let rewritten_path = instance
+                                    .temp_dir_path()
+                                    .join("test")
+                                    .join(suite)
+                                    .join(test_filename);
+                                fs::write(&rewritten_path, &rewritten)?;
+
+                                let guest_path = format!("/test/{}", path);
+                                let (result, stdout, stderr) = instance
+                                    .invoke_and_capture_output_with_stderr(
+                                        None,
+                                        "run-test",
+                                        &[Val::String(guest_path)],
+                                    )
+                                    .await;
+
+                                handle_test_result(result, &stdout, &stderr)
                             };
-
-                            // Write the rewritten file to the temp dir
-                            let test_filename = path.rsplit('/').next().unwrap_or(&path);
-                            let suite = path.split('/').next().unwrap_or("parallel");
-                            let rewritten_path = instance
-                                .temp_dir_path()
-                                .join("test")
-                                .join(suite)
-                                .join(test_filename);
-                            fs::write(&rewritten_path, &rewritten)?;
-
-                            let guest_path = format!("/test/{}", path);
-                            let (result, stdout, stderr) = instance
-                                .invoke_and_capture_output_with_stderr(
-                                    None,
-                                    "run-test",
-                                    &[Val::String(guest_path)],
-                                )
-                                .await;
-
-                            handle_test_result(result, &stdout, &stderr)
+                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
+                                Ok(result) => result,
+                                Err(_) => anyhow::bail!(
+                                    "Test timed out after {}s",
+                                    test_timeout_secs
+                                ),
+                            }
                         })
                     },
                 );
