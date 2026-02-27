@@ -4779,7 +4779,7 @@
     "parallel/test-http-client-close-with-default-agent.js": {},
     "parallel/test-http-client-default-headers-exist.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
     "parallel/test-http-client-encoding.js": {},
-    "parallel/test-http-client-finished.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-client-finished.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
     "parallel/test-http-client-get-url.js": {},
     "parallel/test-http-client-headers-array.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-incomingmessage-destroy.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
