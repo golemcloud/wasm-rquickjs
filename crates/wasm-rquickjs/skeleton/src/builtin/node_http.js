@@ -1514,7 +1514,13 @@ export function request(url, options, callback) {
         opts = { ...parseUrl(url), ...(typeof options === 'object' ? options : {}) };
         if (typeof options === 'function') callback = options;
     } else if (url instanceof URL) {
-        opts = { ...urlToOptions(url), ...(typeof options === 'object' ? options : {}) };
+        // Node.js preserves custom enumerable properties attached to URL objects
+        // (for example: `url.headers = {...}`) when building request options.
+        opts = {
+            ...url,
+            ...urlToOptions(url),
+            ...(typeof options === 'object' ? options : {}),
+        };
         if (typeof options === 'function') callback = options;
     } else {
         opts = url;
