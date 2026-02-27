@@ -2850,7 +2850,10 @@
     "parallel/test-global-domexception.js": {},
     "parallel/test-global-encoder.js": {},
     "parallel/test-http-agent-getname.js": {},
-    "parallel/test-http-autoselectfamily.js": { "skip": true, "reason": "http client is backed by WASI HTTP and does not support lookup/autoSelectFamily (Happy Eyeballs) option handling; DNS/address selection is host-controlled" },
+    "parallel/test-http-autoselectfamily.js": {
+      "skip": true,
+      "reason": "http client is backed by WASI HTTP and does not support lookup/autoSelectFamily (Happy Eyeballs) option handling; DNS/address selection is host-controlled"
+    },
     "parallel/test-http-client-defaults.js": {
       "split": true,
       "subtests": {
@@ -4670,24 +4673,49 @@
     "parallel/test-diagnostics-channel-http-server-start.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-domain-http-server.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-domain-multi.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-abort-before-end.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-abort-queued.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-abort-stream-end.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-aborted.js": {
+    "parallel/test-http-abort-before-end.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
+      "reason": "requires HTTP server functionality, we only support clients"
+    },
+    "parallel/test-http-abort-queued.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality, we only support clients"
+    },
+    "parallel/test-http-abort-stream-end.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality, we only support clients"
+    },
+    "parallel/test-http-aborted.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "inherited: requires HTTP server functionality, we only support clients"
+        },
+        "block_01_block_01": {
+          "skip": true,
+          "reason": "inherited: requires HTTP server functionality, we only support clients"
+        }
       }
     },
-    "parallel/test-http-agent-abort-controller.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-agent-error-on-idle.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-agent-abort-controller.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality, we only support clients"
+    },
+    "parallel/test-http-agent-error-on-idle.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality, we only support clients"
+    },
     "parallel/test-http-agent-no-protocol.js": {},
     "parallel/test-http-agent-null.js": {},
-    "parallel/test-http-agent-remove.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-agent-scheduling.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-agent-remove.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality, we only support clients"
+    },
+    "parallel/test-http-agent-scheduling.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality, we only support clients"
+    },
     "parallel/test-http-agent-timeout.js": {
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients",
@@ -4789,10 +4817,7 @@
       "skip": true,
       "reason": "regression: was enabled but started failing"
     },
-    "parallel/test-http-client-upload.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-client-upload.js": {},
     "parallel/test-http-client-with-create-connection.js": {},
     "parallel/test-http-connect-req-res.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-connect.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -5255,11 +5280,26 @@
     "parallel/test-process-warning.js": {},
 
     // Tests using ../common/countdown (HTTP server tests - skipped)
-    "parallel/test-http-after-connect.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-destroyed-socket.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-maxsockets-respected.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-maxsockets.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-maxtotalsockets.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-after-connect.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-destroyed-socket.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-maxsockets-respected.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-maxsockets.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-maxtotalsockets.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
     "parallel/test-http-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-allow-req-after-204-res.js": {},
     "parallel/test-http-client-abort.js": { "skip": true, "reason": "requires HTTP server functionality" },
@@ -5274,14 +5314,20 @@
     "parallel/test-http-end-throw-socket-handling.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-exceptions.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-get-pipeline-problem.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-incoming-pipelined-socket-destroy.js": { "skip": true, "reason": "requires setImmediate and complex socket lifecycle semantics during pipelined request destruction" },
+    "parallel/test-http-incoming-pipelined-socket-destroy.js": {
+      "skip": true,
+      "reason": "requires setImmediate and complex socket lifecycle semantics during pipelined request destruction"
+    },
     "parallel/test-http-information-headers.js": {
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-parser-free.js": {},
     "parallel/test-http-pipe-fs.js": {},
-    "parallel/test-http-pipeline-requests-connection-leak.js": { "skip": true, "reason": "sends 10000 pipelined requests which exceeds WASM resource limits" },
+    "parallel/test-http-pipeline-requests-connection-leak.js": {
+      "skip": true,
+      "reason": "sends 10000 pipelined requests which exceeds WASM resource limits"
+    },
     "parallel/test-http-response-multiheaders.js": {},
     "parallel/test-http-response-splitting.js": {
       "skip": true,
@@ -5310,7 +5356,10 @@
       "skip": true,
       "reason": "[manual] amp partial fix caused regressions"
     },
-    "parallel/test-http-write-head-after-set-header.js": { "skip": true, "reason": "deadlocks: two concurrent http.request calls to same-component server cause event loop deadlock with wasi:http pollables" },
+    "parallel/test-http-write-head-after-set-header.js": {
+      "skip": true,
+      "reason": "deadlocks: two concurrent http.request calls to same-component server cause event loop deadlock with wasi:http pollables"
+    },
     "parallel/test-async-local-storage-http-multiclients.js": { "skip": true, "reason": "requires AsyncLocalStorage context propagation across concurrent HTTP activity which is not implemented" },
 
     // Tests using ../common/countdown (HTTP2 tests - skipped)
@@ -5430,12 +5479,30 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-http-abort-client.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-addrequest-localaddress.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-domain-reused-gc.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-keepalive-delay.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-keepalive.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-agent-reuse-drained-socket-only.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-abort-client.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-addrequest-localaddress.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-domain-reused-gc.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-keepalive-delay.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-keepalive.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
+    "parallel/test-http-agent-reuse-drained-socket-only.js": {
+      "skip": true,
+      "reason": "requires HTTP server functionality"
+    },
     "parallel/test-http-agent-timeout-option.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-buffer-sanity.js": {
       "skip": true,

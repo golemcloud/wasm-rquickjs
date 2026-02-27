@@ -1129,7 +1129,9 @@ export class ClientRequest extends EventEmitter {
         }
 
         if (this._bodyLength > 0) {
-            if (this._usedWrite) {
+            // The native wasi:http bridge sends the aggregated body payload and does not
+            // expose chunk framing control, so default to Content-Length there.
+            if (this._useLoopbackTransport && this._usedWrite) {
                 this.setHeader('Transfer-Encoding', 'chunked');
             } else {
                 this.setHeader('Content-Length', String(this._bodyLength));
