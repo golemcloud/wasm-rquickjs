@@ -4886,10 +4886,7 @@
     "parallel/test-http-header-owstext.js": {},
     "parallel/test-http-header-read.js": {},
     "parallel/test-http-hex-write.js": {},
-    "parallel/test-http-highwatermark.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-highwatermark.js": {},
     "parallel/test-http-host-header-ipv6-fail.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-host-headers.js": {
       "skip": true,
