@@ -5675,7 +5675,10 @@
       "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-import-websocket.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-incoming-matchKnownFields.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-incoming-matchKnownFields.js": {
+      "skip": true,
+      "reason": "[manual] amp partial fix caused regressions"
+    },
     "parallel/test-http-incoming-message-connection-setter.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-incoming-message-destroy.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-insecure-parser-per-stream.js": {
