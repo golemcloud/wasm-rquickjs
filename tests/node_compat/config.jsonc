@@ -5683,7 +5683,10 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-invalidheaderfield2.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-invalidheaderfield2.js": {
+      "skip": true,
+      "reason": "[manual] amp fix attempt failed verification"
+    },
     "parallel/test-http-localaddress.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-max-header-size-per-stream.js": {
       "skip": true,

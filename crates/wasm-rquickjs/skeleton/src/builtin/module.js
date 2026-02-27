@@ -31,6 +31,7 @@ import * as diagnostics_channel from 'node:diagnostics_channel';
 import * as dns from 'node:dns';
 import * as dnsPromises from 'node:dns/promises';
 import * as domain from 'node:domain';
+import * as httpCommon from 'node:_http_common';
 import * as http from 'node:http';
 import * as http2 from 'node:http2';
 import * as https from 'node:https';
@@ -170,6 +171,8 @@ const builtinModules = {
     'node:dns/promises': cjsExport(dnsPromises),
     'domain': cjsExport(domain),
     'node:domain': cjsExport(domain),
+    '_http_common': cjsExport(httpCommon),
+    'node:_http_common': cjsExport(httpCommon),
     'http': cjsExport(http),
     'node:http': cjsExport(http),
     'http2': cjsExport(http2),
