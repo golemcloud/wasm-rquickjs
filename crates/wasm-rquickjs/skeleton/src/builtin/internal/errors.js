@@ -419,10 +419,16 @@ export class ERR_INVALID_ARG_TYPE extends TypeError {
     static RangeError = ERR_INVALID_ARG_TYPE_RANGE;
 }
 
+function inspectValue(value) {
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'number' && !Number.isFinite(value)) return String(value);
+    return JSON.stringify(value);
+}
+
 export class ERR_INVALID_ARG_VALUE_RANGE extends RangeError {
     constructor(name, value, reason = "is invalid") {
         const type = name.includes(".") ? "property" : "argument";
-        const inspected = JSON.stringify(value);
+        const inspected = inspectValue(value);
 
         super(`The ${type} '${name}' ${reason}. Received ${inspected}`,);
 
@@ -433,7 +439,7 @@ export class ERR_INVALID_ARG_VALUE_RANGE extends RangeError {
 export class ERR_INVALID_ARG_VALUE extends TypeError {
     constructor(name, value, reason = "is invalid") {
         const type = name.includes(".") ? "property" : "argument";
-        const inspected = JSON.stringify(value);
+        const inspected = inspectValue(value);
 
         super(`The ${type} '${name}' ${reason}. Received ${inspected}`,);
 
