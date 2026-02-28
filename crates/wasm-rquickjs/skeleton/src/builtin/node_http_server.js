@@ -1057,7 +1057,9 @@ Server.prototype.setTimeout = function setTimeout(ms, cb) {
 Server.prototype.close = function close(cb) {
     this._closeRequested = true;
     const result = NetServer.prototype.close.call(this, cb);
-    // Defer idle connection cleanup to allow in-flight responses to complete
+    // Defer idle connection cleanup to allow in-flight response writes
+    // to flush. Using end() (graceful) instead of destroy() (abrupt)
+    // ensures queued response data reaches the client before shutdown.
     const self = this;
     Promise.resolve().then(function () {
         self.closeIdleConnections();
@@ -1077,7 +1079,7 @@ Server.prototype.closeAllConnections = function closeAllConnections() {
 Server.prototype.closeIdleConnections = function closeIdleConnections() {
     for (const conn of this._httpConnections) {
         if (conn.state === IDLE && conn.socket && !conn.socket.destroyed) {
-            conn.socket.destroy();
+            conn.socket.end();
         }
     }
 };
