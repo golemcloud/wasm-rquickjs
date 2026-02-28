@@ -20,6 +20,10 @@ function pipeline(...streams) {
             end = options.end;
         }
 
+        if (Array.isArray(streams[0]) && streams.length === 1) {
+            streams = streams[0];
+        }
+
         pl(streams, (err, value) => {
             if (err) {
                 reject(err);
