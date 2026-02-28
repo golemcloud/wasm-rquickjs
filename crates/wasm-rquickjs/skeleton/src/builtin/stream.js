@@ -20,6 +20,7 @@ import { getDefaultHighWaterMark, setDefaultHighWaterMark } from "__wasm_rquickj
 import { validateObject, validateAbortSignal } from "__wasm_rquickjs_builtin/internal/validators";
 import { ERR_INVALID_ARG_VALUE } from "__wasm_rquickjs_builtin/internal/errors";
 import { Buffer } from "buffer";
+import { nextTick } from "node:process";
 
 const { custom: customPromisify } = promisify;
 
@@ -91,6 +92,54 @@ Readable.prototype.compose = function composeMethod(stream, options) {
     return composedStream;
 };
 
+// duplexPair implementation
+const kCallback = Symbol('Callback');
+
+class DuplexSide extends Duplex {
+    #otherSide = null;
+
+    constructor(options) {
+        super(options);
+        this[kCallback] = null;
+    }
+
+    _initOtherSide(otherSide) {
+        this.#otherSide = otherSide;
+    }
+
+    _read() {
+        const callback = this[kCallback];
+        if (callback) {
+            this[kCallback] = null;
+            callback();
+        }
+    }
+
+    _write(chunk, _encoding, callback) {
+        if (chunk.length === 0) {
+            nextTick(callback);
+        } else {
+            this.#otherSide.push(chunk);
+            this.#otherSide[kCallback] = callback;
+        }
+    }
+
+    _final(callback) {
+        this.#otherSide.on('end', callback);
+        this.#otherSide.push(null);
+    }
+}
+
+function duplexPair(options) {
+    const side0 = new DuplexSide(options);
+    const side1 = new DuplexSide(options);
+    side0._initOtherSide(side1);
+    side1._initOtherSide(side0);
+    return [side0, side1];
+}
+
+Stream.duplexPair = duplexPair;
+
 Object.defineProperty(Stream, "promises", {
     configurable: true,
     enumerable: true,
@@ -113,6 +162,7 @@ export {
     getDefaultHighWaterMark,
     setDefaultHighWaterMark,
     Duplex,
+    duplexPair,
     finishedWrapper as finished,
     isDisturbed,
     isErrored,

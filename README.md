@@ -427,6 +427,7 @@ Implemented by https://github.com/ungap/structured-clone
 - `compose`
 - `destroy`
 - `Duplex`
+- `duplexPair`
 - `finished`
 - `getDefaultHighWaterMark`
 - `setDefaultHighWaterMark`
