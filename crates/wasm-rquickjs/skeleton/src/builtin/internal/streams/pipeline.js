@@ -122,12 +122,27 @@ async function pump(iterable, writable, finish) {
     writable.on("drain", resume);
     const cleanup = eos(writable, { readable: false }, resume);
 
+    // Explicitly choose sync vs async iteration to avoid relying on
+    // the engine's Async-from-Sync iterator wrapper, which may not
+    // work correctly in all QuickJS/WASM embeddings.
+    const isAsync = typeof iterable?.[Symbol.asyncIterator] === "function";
+    const iterator = isAsync
+        ? iterable[Symbol.asyncIterator]()
+        : iterable[Symbol.iterator]();
+
     try {
         if (writable.writableNeedDrain) {
             await wait();
         }
 
-        for await (const chunk of iterable) {
+        while (true) {
+            const { value, done } = isAsync
+                ? await iterator.next()
+                : iterator.next();
+            if (done) break;
+            const chunk = (value && typeof value.then === "function")
+                ? await value
+                : value;
             if (!writable.write(chunk)) {
                 await wait();
             }
