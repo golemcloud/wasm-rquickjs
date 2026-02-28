@@ -1877,7 +1877,7 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
     length |= 0;
 
     if (length === 0) {
-        queueMicrotask(() => {
+        setImmediate(() => {
             cb(null, 0, buffer);
         });
         return;
@@ -1890,7 +1890,7 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
     validateOffsetLengthRead(offset, length, buffer.byteLength);
     position = validateReadPosition(position, length);
 
-    queueMicrotask(() => {
+    setImmediate(() => {
         try {
             const bytesRead = readSync(fd, buffer, offset, length, position);
             cb(null, bytesRead, buffer);
