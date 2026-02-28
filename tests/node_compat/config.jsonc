@@ -8816,8 +8816,6 @@
       }
     },
     "parallel/test-stream-duplexpair.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
