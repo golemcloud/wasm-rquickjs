@@ -3621,7 +3621,7 @@
         "block_08_ensure_that_duplex_from_works_for_blobs": {},
         "block_09_ensure_that_given_a_promise_rejection_it_emits_an_error": {},
         "block_10_ensure_that_given_a_promise_rejection_on_an_async_function_i": {},
-        "block_11_ensure_that_duplex_from_throws_an_invalid_return_value_when_": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
+        "block_11_ensure_that_duplex_from_throws_an_invalid_return_value_when_": {},
         "block_12_ensure_data_if_a_sub_object_has_a_readable_stream_it_s_duple": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
         "block_13_ensure_data_if_a_sub_object_has_a_writable_stream_it_s_duple": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
         "block_14_ensure_data_if_a_sub_object_has_a_writable_and_readable_stre": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
