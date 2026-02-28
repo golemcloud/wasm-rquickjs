@@ -317,6 +317,11 @@ function _write(stream, chunk, encoding, cb) {
         }
 
         if (typeof chunk === "string") {
+            if (encoding === "buffer") {
+                const err = new TypeError('Second argument must be a buffer');
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
             if (state.decodeStrings !== false) {
                 chunk = Buffer.from(chunk, encoding);
                 encoding = "buffer";

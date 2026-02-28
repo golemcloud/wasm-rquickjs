@@ -8759,7 +8759,7 @@
       }
     },
     "parallel/test-stream-base-prototype-accessors-enumerability.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
-    "parallel/test-stream-base-typechecking.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
+    "parallel/test-stream-base-typechecking.js": {},
     "parallel/test-stream-catch-rejections.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
