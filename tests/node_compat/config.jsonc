@@ -8879,7 +8879,7 @@
           "reason": "[manual] amp fix attempt failed verification"
         },
         "block_35_block_35": {},
-        "block_36_block_36": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_36_block_36": {},
         "block_37_block_37": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_38_block_38": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_39_block_39": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
