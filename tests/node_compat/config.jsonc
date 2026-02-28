@@ -9049,7 +9049,7 @@
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-stream-wrap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream-wrap.js": { "skip": true, "reason": "[manual] The test requires `internal/js_stream_socket` and `internalBinding('stream_wrap')` with `ShutdownWrap` — these are Node.js C++ internals (stream base infrastructure, libuv bindings) that a..." },
     "parallel/test-stream-writable-change-default-encoding.js": {},
     "parallel/test-stream-writable-decoded-encoding.js": {
       "subtests": {
