@@ -3628,7 +3628,7 @@
         "block_15_ensure_that_given_readable_stream_that_throws_an_error_it_ca": {},
         "block_16_ensure_that_given_writable_stream_that_throws_an_error_it_ca": {},
         "block_17_block_17": {},
-        "block_18_block_18": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
+        "block_18_block_18": {},
         "block_19_block_19": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
         "block_20_block_20": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
         "block_21_block_21": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
