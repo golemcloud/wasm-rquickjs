@@ -9086,7 +9086,7 @@
         "block_24_block_24": {},
         "block_25_block_25": {},
         "block_26_block_26": {},
-        "block_27_block_27": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_27_block_27": {}
       }
     },
     "parallel/test-stream2-compatibility.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },

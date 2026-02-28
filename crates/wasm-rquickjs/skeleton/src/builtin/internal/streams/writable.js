@@ -1136,5 +1136,18 @@ Writable.toWeb = function(streamWritable) {
 
 Writable.WritableState = WritableState;
 
+if (typeof Symbol.asyncDispose !== 'undefined') {
+    Writable.prototype[Symbol.asyncDispose] = async function() {
+        let error;
+        if (!this.destroyed) {
+            error = this.writableFinished ? null : new AbortError();
+            this.destroy(error);
+        }
+        await new Promise((resolve, reject) =>
+            eos(this, (err) => (err && err.name !== 'AbortError' ? reject(err) : resolve(null))),
+        );
+    };
+}
+
 export default Writable;
 export { Writable, WritableState, newStreamWritableFromWritableStream as fromWeb, newWritableStreamFromStreamWritable as toWeb };
