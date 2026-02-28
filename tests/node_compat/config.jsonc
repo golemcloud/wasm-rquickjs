@@ -8957,7 +8957,7 @@
         "block_49_block_49": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_50_block_50": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_51_block_51": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_52_block_52": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_52_block_52": {},
         "block_53_block_53": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_54_block_54": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_55_block_55": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
