@@ -3625,7 +3625,7 @@
         "block_12_ensure_data_if_a_sub_object_has_a_readable_stream_it_s_duple": {},
         "block_13_ensure_data_if_a_sub_object_has_a_writable_stream_it_s_duple": {},
         "block_14_ensure_data_if_a_sub_object_has_a_writable_and_readable_stre": {},
-        "block_15_ensure_that_given_readable_stream_that_throws_an_error_it_ca": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
+        "block_15_ensure_that_given_readable_stream_that_throws_an_error_it_ca": {},
         "block_16_ensure_that_given_writable_stream_that_throws_an_error_it_ca": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
         "block_17_block_17": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
         "block_18_block_18": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
