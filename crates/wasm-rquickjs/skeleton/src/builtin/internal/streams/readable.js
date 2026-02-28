@@ -146,6 +146,18 @@ function Readable(options) {
         return new Readable(options);
     }
 
+    // Pre-initialize _events with well-known event slots to preserve
+    // property insertion order (matching Node.js v22 behavior).
+    if (!this._events) {
+        this._events = Object.create(null);
+        this._events.close = undefined;
+        this._events.error = undefined;
+        this._events.data = undefined;
+        this._events.end = undefined;
+        this._events.readable = undefined;
+        this._eventsCount = 0;
+    }
+
     // Checking for a Stream.Duplex instance is faster here instead of inside
     // the ReadableState constructor, at least with V8 6.5.
     const isDuplex = this instanceof Stream.Duplex;

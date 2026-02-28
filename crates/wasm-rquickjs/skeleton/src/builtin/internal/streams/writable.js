@@ -225,6 +225,18 @@ function Writable(options) {
         return new Writable(options);
     }
 
+    // Pre-initialize _events with well-known event slots to preserve
+    // property insertion order (matching Node.js v22 behavior).
+    if (!this._events) {
+        this._events = Object.create(null);
+        this._events.close = undefined;
+        this._events.error = undefined;
+        this._events.prefinish = undefined;
+        this._events.finish = undefined;
+        this._events.drain = undefined;
+        this._eventsCount = 0;
+    }
+
     this._writableState = new WritableState(options, this, isDuplex);
 
     if (options) {
