@@ -39,6 +39,11 @@ impl JsState {
     pub fn new() -> Self {
         block_on(async {
             let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+            // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
+            // shape refcount bug during heavy async/promise workloads. The default
+            // threshold (0xFF) causes GC to run too frequently, which can trigger
+            // a use-after-free in the shape reference counting code path.
+            rt.set_gc_threshold(256 * 1024 * 1024).await;
             let ctx = AsyncContext::full(&rt)
                 .await
                 .expect("Failed to create AsyncContext");
