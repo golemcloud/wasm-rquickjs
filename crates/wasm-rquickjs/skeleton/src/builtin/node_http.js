@@ -707,8 +707,13 @@ export class IncomingMessage extends EventEmitter {
     }
 
     destroy(error) {
+        if (this.destroyed) return this;
         this.destroyed = true;
+        if (this._nativeRes && !this._reading && typeof this._nativeRes.discardBody === 'function') {
+            this._nativeRes.discardBody();
+        }
         if (error) this.emit('error', error);
+        this.emit('close');
         return this;
     }
 
@@ -765,9 +770,22 @@ export class IncomingMessage extends EventEmitter {
             return;
         }
 
+        this._reading = true;
         try {
             while (true) {
+                if (this.destroyed) {
+                    if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
+                        this._nativeRes.discardBody();
+                    }
+                    break;
+                }
                 const [chunk, done] = await this._nativeRes.readBodyChunk();
+                if (this.destroyed) {
+                    if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
+                        this._nativeRes.discardBody();
+                    }
+                    break;
+                }
                 if (done || chunk === null) {
                     this.complete = true;
                     this.emit('end');
@@ -781,7 +799,11 @@ export class IncomingMessage extends EventEmitter {
                 }
             }
         } catch (err) {
-            this.emit('error', err);
+            if (!this.destroyed) {
+                this.emit('error', err);
+            }
+        } finally {
+            this._reading = false;
         }
     }
 }
