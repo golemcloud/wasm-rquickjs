@@ -258,9 +258,9 @@ function duplexify(body, name) {
         );
     }
 
-    // if (isBlob(body)) {
-    //     return duplexify(body.arrayBuffer());
-    // }
+    if (typeof Blob !== 'undefined' && body instanceof Blob) {
+        return duplexify(body.arrayBuffer());
+    }
 
     if (isIterable(body)) {
         return _from(Duplexify, body, {
@@ -323,9 +323,7 @@ function duplexify(body, name) {
     throw new ERR_INVALID_ARG_TYPE(
         name,
         [
-            // "Blob",
-            // "ReadableStream",
-            // "WritableStream",
+            "Blob",
             "Stream",
             "Iterable",
             "AsyncIterable",
