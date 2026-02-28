@@ -4794,7 +4794,7 @@
     "parallel/test-http-client-set-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout-agent.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout-connect-listener.js": {},
-    "parallel/test-http-client-timeout-event.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-client-timeout-event.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
     "parallel/test-http-client-timeout-option-listeners.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout-with-data.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
