@@ -200,6 +200,14 @@ function ServerResponse(req) {
     this._keepAlive = false;
     this._sentContentLength = false;
     this._headersSentWire = false;
+
+    // Properties needed by stream.finished / end-of-stream detection
+    this._sent100 = false;
+    this._closed = false;
+    this._defaultKeepAlive = false;
+    this._removedConnection = false;
+    this._removedContLen = false;
+    this._removedTE = false;
 }
 
 Object.setPrototypeOf(ServerResponse.prototype, EventEmitter.prototype);
@@ -674,6 +682,7 @@ function createConnectionParser(server, socket) {
             state.req.push(null);
         }
         if (state.res) {
+            state.res._closed = true;
             state.res.emit('close');
         }
     });
@@ -688,11 +697,21 @@ function createConnectionParser(server, socket) {
         }
 
         const shouldKeepAlive = state.shouldKeepAliveAfterResponse;
+        const finishedRes = state.res;
         state.responseFinished = false;
         state.shouldKeepAliveAfterResponse = false;
         state.req = null;
         state.res = null;
         state.state = IDLE;
+
+        // Emit 'close' on the response asynchronously, matching Node.js
+        // OutgoingMessage behavior where 'close' fires after 'finish'.
+        if (finishedRes) {
+            process.nextTick(function() {
+                finishedRes._closed = true;
+                finishedRes.emit('close');
+            });
+        }
 
         if (!shouldKeepAlive) {
             socket.end();
