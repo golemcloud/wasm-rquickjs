@@ -8765,7 +8765,10 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
