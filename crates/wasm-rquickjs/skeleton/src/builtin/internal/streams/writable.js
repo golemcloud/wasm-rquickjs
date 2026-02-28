@@ -899,6 +899,12 @@ Object.defineProperties(Writable.prototype, {
             return this._writableState ? this._writableState.errored : null;
         },
     },
+
+    closed: {
+        get() {
+            return this._writableState ? this._writableState.closed : false;
+        },
+    },
 });
 
 const destroy = destroyImpl.destroy;

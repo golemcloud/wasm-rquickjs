@@ -1317,6 +1317,12 @@ Object.defineProperties(Readable.prototype, {
             return this._readableState ? this._readableState.errored : null;
         },
     },
+
+    closed: {
+        get() {
+            return this._readableState ? this._readableState.closed : false;
+        },
+    },
 });
 
 Object.defineProperties(ReadableState.prototype, {
