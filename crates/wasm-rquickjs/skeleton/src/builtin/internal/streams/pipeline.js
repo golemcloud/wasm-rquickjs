@@ -88,7 +88,7 @@ async function* fromReadable(val) {
     yield* Readable.prototype[Symbol.asyncIterator].call(val);
 }
 
-async function pump(iterable, writable, finish) {
+async function pump(iterable, writable, finish, opts) {
     let error;
     let onresolve = null;
 
@@ -148,9 +148,10 @@ async function pump(iterable, writable, finish) {
             }
         }
 
-        writable.end();
-
-        await wait();
+        if (opts?.end !== false) {
+            writable.end();
+            await wait();
+        }
 
         finish();
     } catch (err) {
@@ -225,10 +226,13 @@ function pipelineImpl(streams, callback, opts) {
         const stream = streams[i];
         const reading = i < streams.length - 1;
         const writing = i > 0;
+        const end = reading || opts?.end !== false;
 
         if (isNodeStream(stream)) {
-            finishCount++;
-            destroys.push(destroyer(stream, reading, writing, finish));
+            if (end) {
+                finishCount++;
+                destroys.push(destroyer(stream, reading, writing, finish));
+            }
         }
 
         if (i === 0) {
@@ -296,7 +300,7 @@ function pipelineImpl(streams, callback, opts) {
             }
         } else if (isNodeStream(stream)) {
             if (isReadableNodeStream(ret)) {
-                ret.pipe(stream);
+                ret.pipe(stream, { end });
 
                 // Compat. Before node v10.12.0 stdio used to throw an error so
                 // pipe() did/does not end() stdio destinations.
@@ -308,7 +312,7 @@ function pipelineImpl(streams, callback, opts) {
                 ret = makeAsyncIterable(ret);
 
                 finishCount++;
-                pump(ret, stream, finish);
+                pump(ret, stream, finish, { end });
             }
             ret = stream;
         } else {
