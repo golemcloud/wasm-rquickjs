@@ -720,6 +720,19 @@ export class IncomingMessage extends EventEmitter {
         return this;
     }
 
+    pipe(dest, options) {
+        this.on('data', (chunk) => {
+            dest.write(chunk);
+        });
+        if (!options || options.end !== false) {
+            this.on('end', () => {
+                dest.end();
+            });
+        }
+        dest.emit('pipe', this);
+        return dest;
+    }
+
     _hasNoBody() {
         if ((this.statusCode >= 100 && this.statusCode < 200) ||
             this.statusCode === 204 ||
