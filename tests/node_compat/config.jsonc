@@ -8990,7 +8990,7 @@
         "block_03_finished_error": {},
         "block_04_block_04": {},
         "block_05_streamobj_is_stream_and_cleanup_is_boolean": {},
-        "block_06_listenercount_should_be_1_after_calling_finish": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_06_listenercount_should_be_1_after_calling_finish": {},
         "block_07_listenercount_should_be_0_after_calling_finish": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_08_listenercount_should_be_1_after_calling_finish": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
