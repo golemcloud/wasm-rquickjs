@@ -9043,14 +9043,8 @@
     "parallel/test-stream-wrap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stream-writable-change-default-encoding.js": {},
     "parallel/test-stream-writable-decoded-encoding.js": {
-      "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {},
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_02_block_02": {}
       }
     },
     "parallel/test-stream-writable-destroy.js": {

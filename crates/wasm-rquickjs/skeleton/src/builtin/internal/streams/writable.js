@@ -113,6 +113,9 @@ function WritableState(options, stream, isDuplex) {
     // encoding is 'binary' so we have to make this configurable.
     // Everything else in the universe uses 'utf8', though.
     this.defaultEncoding = (options && options.defaultEncoding) || "utf8";
+    if (!Buffer.isEncoding(this.defaultEncoding)) {
+      throw new ERR_UNKNOWN_ENCODING(this.defaultEncoding);
+    }
 
     // Not an actual buffer we keep track of, but a measurement
     // of how much we're waiting to get pushed to some underlying
