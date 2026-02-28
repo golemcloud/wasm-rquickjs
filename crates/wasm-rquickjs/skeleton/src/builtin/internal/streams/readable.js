@@ -11,6 +11,7 @@ import { StringDecoder } from "string_decoder";
 import { validateObject, validateBoolean, validateAbortSignal, validateInteger } from "__wasm_rquickjs_builtin/internal/validators";
 import {
     AbortError,
+    aggregateTwoErrors,
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_ARG_VALUE,
     ERR_METHOD_NOT_IMPLEMENTED,
@@ -1121,19 +1122,43 @@ function streamToAsyncIterator(stream, options) {
         stream = Readable.wrap(stream, { objectMode: true });
     }
 
-    const iter = createAsyncIterator(stream, options);
-    iter.stream = stream;
-    return iter;
-}
-
-async function* createAsyncIterator(stream, options) {
-    let callback = nop;
-
     const opts = {
         destroyOnReturn: true,
         destroyOnError: true,
         ...options,
     };
+
+    const gen = createAsyncIterator(stream, opts);
+
+    // Wrap the async generator to perform synchronous cleanup in return().
+    // QuickJS does not properly await async generator return() in
+    // for-await-of when the loop body throws, so we mark the stream
+    // as destroyed synchronously. The actual destroy() call still happens
+    // in the generator's finally block to avoid triggering side effects
+    // (like eos callbacks) before the error has propagated.
+    const iter = {
+        stream: stream,
+        next: gen.next.bind(gen),
+        return: function () {
+            if (opts.destroyOnReturn) {
+                const state = stream._readableState;
+                if (state && !state.destroyed) {
+                    if (state.autoDestroy || !state.endEmitted) {
+                        state.destroyed = true;
+                    }
+                }
+            }
+            return gen.return();
+        },
+        throw: gen.throw.bind(gen),
+        [Symbol.asyncIterator]() { return this; },
+    };
+
+    return iter;
+}
+
+async function* createAsyncIterator(stream, opts) {
+    let callback = nop;
 
     function next(resolve) {
         if (this === stream) {
@@ -1144,41 +1169,30 @@ async function* createAsyncIterator(stream, options) {
         }
     }
 
-    const state = stream._readableState;
+    stream.on("readable", next);
 
-    let error = state.errored;
-    let errorEmitted = state.errorEmitted;
-    let endEmitted = state.endEmitted;
-    let closeEmitted = state.closeEmitted;
+    // Use eos (end-of-stream) to detect premature close.
+    // When a stream is destroyed without emitting 'end', eos generates
+    // ERR_STREAM_PREMATURE_CLOSE. The error variable uses three states:
+    //   undefined = still waiting
+    //   null      = clean end (stream ended normally)
+    //   truthy    = error occurred (throw it)
+    let error;
+    const cleanup = eos(stream, { writable: false }, (err) => {
+        error = err ? aggregateTwoErrors(error, err) : null;
+        callback();
+        callback = nop;
+    });
 
-    stream
-        .on("readable", next)
-        .on("error", function (err) {
-            error = err;
-            errorEmitted = true;
-            next.call(this);
-        })
-        .on("end", function () {
-            endEmitted = true;
-            next.call(this);
-        })
-        .on("close", function () {
-            closeEmitted = true;
-            next.call(this);
-        });
-
-    let errorThrown = false;
     try {
         while (true) {
             const chunk = stream.destroyed ? null : stream.read();
             if (chunk !== null) {
                 yield chunk;
-            } else if (errorEmitted) {
+            } else if (error) {
                 throw error;
-            } else if (endEmitted) {
-                break;
-            } else if (closeEmitted) {
-                break;
+            } else if (error === null) {
+                return;
             } else {
                 await new Promise(next);
             }
@@ -1187,15 +1201,16 @@ async function* createAsyncIterator(stream, options) {
         if (opts.destroyOnError) {
             destroyImpl.destroyer(stream, err);
         }
-        errorThrown = true;
-        throw err;
+        error = aggregateTwoErrors(error, err);
+        throw error;
     } finally {
-        if (!errorThrown && opts.destroyOnReturn) {
-            if (state.autoDestroy || !endEmitted) {
-                // TODO(ronag): ERR_PREMATURE_CLOSE?
+        if (error === undefined && opts.destroyOnReturn) {
+            const state = stream._readableState;
+            if (state.autoDestroy || !state.endEmitted) {
                 destroyImpl.destroyer(stream, null);
             }
         }
+        cleanup();
     }
 }
 

@@ -161,15 +161,9 @@ export function eos(stream, options, callback) {
     let closed = isClosed(stream);
 
     if (closed) {
-        // TODO(ronag): Re-throw error if errorEmitted?
-        // TODO(ronag): Throw premature close as if finished was called?
-        // before being closed? i.e. if closed but not errored, ended or finished.
-        // TODO(ronag): Throw some kind of error? Does it make sense
-        // to call finished() on a "finished" stream?
-        // TODO(ronag): willEmitClose?
-        nextTick(() => {
-            callback();
-        });
+        // Route through onclose to detect premature close
+        // (e.g., destroyed without emitting 'end').
+        nextTick(onclose);
     }
 
     const cleanup = () => {
