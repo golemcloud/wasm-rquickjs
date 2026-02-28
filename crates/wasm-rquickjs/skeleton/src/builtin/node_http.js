@@ -1424,6 +1424,19 @@ export class ClientRequest extends EventEmitter {
             }
 
             this._refreshHeaderString();
+
+            // Emit 'finish' before the blocking wasi:http round-trip.
+            // Node.js emits 'finish' when the request body is flushed
+            // to the socket, not when the response arrives.
+            this.headersSent = true;
+            this._writableEnded = true;
+            this._writableFinished = true;
+            this.emit('finish');
+
+            if (this.aborted || this.destroyed) {
+                return;
+            }
+
             await this._nativeReq.end(undefined);
 
             if (this._nativeAbortDeferred) {
@@ -1435,11 +1448,6 @@ export class ClientRequest extends EventEmitter {
             }
 
             const nativeRes = this._nativeReq.getResponse();
-
-            this.headersSent = true;
-            this._writableEnded = true;
-            this._writableFinished = true;
-            this.emit('finish');
 
             if (nativeRes) {
                 const metadataSequence = consumeCapturedResponseSequence(
