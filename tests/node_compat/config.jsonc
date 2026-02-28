@@ -4700,7 +4700,7 @@
     },
     "parallel/test-http-agent-abort-controller.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
+      "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-agent-error-on-idle.js": {
       "skip": true,
