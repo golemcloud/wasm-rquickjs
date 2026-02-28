@@ -2517,9 +2517,7 @@ Readable.prototype.find = async function find(fn, options) {
     }
 };
 
-Readable.prototype.compose = function compose(val, options) {
-    throw new Error('Readable.prototype.compose is not implemented');
-};
+// Readable.prototype.compose is set in stream.js to avoid circular dependency
 
 // --- Symbol.asyncDispose support ---
 

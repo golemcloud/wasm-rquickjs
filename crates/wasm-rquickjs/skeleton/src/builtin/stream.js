@@ -1,9 +1,9 @@
 // Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 
-import { addAbortSignal } from "__wasm_rquickjs_builtin/internal/streams/add-abort-signal";
+import { addAbortSignal, addAbortSignalNoValidate } from "__wasm_rquickjs_builtin/internal/streams/add-abort-signal";
 import { destroyer } from "__wasm_rquickjs_builtin/internal/streams/destroy";
-import { isDisturbed, isErrored } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDisturbed, isErrored, isNodeStream, isWritable } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { isUint8Array } from "__wasm_rquickjs_builtin/internal/util/types";
 import { pipeline } from "__wasm_rquickjs_builtin/internal/streams/pipeline";
 import { promisify } from "__wasm_rquickjs_builtin/internal/util";
@@ -17,6 +17,8 @@ import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
 import Transform from "__wasm_rquickjs_builtin/internal/streams/transform";
 import Writable from "__wasm_rquickjs_builtin/internal/streams/writable";
 import { getDefaultHighWaterMark, setDefaultHighWaterMark } from "__wasm_rquickjs_builtin/internal/streams/state";
+import { validateObject, validateAbortSignal } from "__wasm_rquickjs_builtin/internal/validators";
+import { ERR_INVALID_ARG_VALUE } from "__wasm_rquickjs_builtin/internal/errors";
 import { Buffer } from "buffer";
 
 const { custom: customPromisify } = promisify;
@@ -65,6 +67,29 @@ Stream.destroy = destroyer;
 Stream.compose = compose;
 Stream.getDefaultHighWaterMark = getDefaultHighWaterMark;
 Stream.setDefaultHighWaterMark = setDefaultHighWaterMark;
+
+// Set Readable.prototype.compose here to avoid circular dependency
+// (compose.js → pipeline.js → passthrough.js → transform.js → readable.js)
+Readable.prototype.compose = function composeMethod(stream, options) {
+    if (options != null) {
+        validateObject(options, 'options');
+    }
+    if (options?.signal != null) {
+        validateAbortSignal(options.signal, 'options.signal');
+    }
+
+    if (isNodeStream(stream) && !isWritable(stream)) {
+        throw new ERR_INVALID_ARG_VALUE('stream', stream, 'must be writable');
+    }
+
+    const composedStream = compose(this, stream);
+
+    if (options?.signal) {
+        addAbortSignalNoValidate(options.signal, composedStream);
+    }
+
+    return composedStream;
+};
 
 Object.defineProperty(Stream, "promises", {
     configurable: true,
