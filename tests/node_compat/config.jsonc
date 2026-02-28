@@ -3631,7 +3631,7 @@
         "block_18_block_18": {},
         "block_19_block_19": {},
         "block_20_block_20": {},
-        "block_21_block_21": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" },
+        "block_21_block_21": {},
         "block_22_block_22": { "skip": true, "reason": "inherited: Duplex.from with readable/writable pair not fully implemented" }
       }
     },
