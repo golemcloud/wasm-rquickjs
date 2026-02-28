@@ -8984,7 +8984,7 @@
         "block_76_block_76": {},
         "block_77_block_77": {},
         "block_78_block_78": {},
-        "block_79_block_79": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_79_block_79": {}
       }
     },
     "parallel/test-stream-preprocess.js": {},
