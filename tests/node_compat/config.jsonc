@@ -8983,7 +8983,7 @@
         "block_75_block_75": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_76_block_76": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_77_block_77": {},
-        "block_78_block_78": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_78_block_78": {},
         "block_79_block_79": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
