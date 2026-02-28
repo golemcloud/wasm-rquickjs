@@ -9039,7 +9039,7 @@
         "block_04_block_04": {}
       }
     },
-    "parallel/test-stream-wrap-drain.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream-wrap-drain.js": { "skip": true, "reason": "[manual] The test requires Node.js internals (`internal/js_stream_socket` for `StreamWrap`, `internal/test/binding` for `internalBinding('stream_wrap')` / `ShutdownWrap`) and the `--expose-internal..." },
     "parallel/test-stream-wrap-encoding.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
