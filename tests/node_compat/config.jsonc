@@ -9012,11 +9012,9 @@
       }
     },
     "parallel/test-stream-readable-default-encoding.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }

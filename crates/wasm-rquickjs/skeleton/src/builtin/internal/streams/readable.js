@@ -17,6 +17,7 @@ import {
     ERR_OUT_OF_RANGE,
     ERR_STREAM_PUSH_AFTER_EOF,
     ERR_STREAM_UNSHIFT_AFTER_END_EVENT,
+    ERR_UNKNOWN_ENCODING,
 } from "__wasm_rquickjs_builtin/internal/errors";
 import _from from "__wasm_rquickjs_builtin/internal/streams/from";
 import BufferList from "__wasm_rquickjs_builtin/internal/streams/buffer_list";
@@ -121,6 +122,9 @@ function ReadableState(options, stream, isDuplex) {
     // encoding is 'binary' so we have to make this configurable.
     // Everything else in the universe uses 'utf8', though.
     this.defaultEncoding = (options && options.defaultEncoding) || "utf8";
+    if (!Buffer.isEncoding(this.defaultEncoding)) {
+        throw new ERR_UNKNOWN_ENCODING(this.defaultEncoding);
+    }
 
     // Ref the piped dest which we need a drain event on it
     // type: null | Writable | Set<Writable>.
