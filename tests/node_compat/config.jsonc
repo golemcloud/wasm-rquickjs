@@ -8884,7 +8884,7 @@
         "block_38_block_38": {},
         "block_39_block_39": {},
         "block_40_block_40": {},
-        "block_41_block_41": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_41_block_41": {}
       }
     },
     "parallel/test-stream-pipe-unpipe-streams.js": {
