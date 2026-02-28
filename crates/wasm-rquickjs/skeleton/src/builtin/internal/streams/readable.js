@@ -936,7 +936,7 @@ Readable.prototype.once = function (ev, fn) {
         this.removeListener(ev, onceWrapper);
         fn.apply(this, args);
     };
-    onceWrapper.fn = fn;
+    onceWrapper.listener = fn;
     return this.on(ev, onceWrapper);
 };
 
