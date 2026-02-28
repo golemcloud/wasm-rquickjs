@@ -8914,7 +8914,7 @@
           "skip": true,
           "reason": "[manual] **Block_08 requires streaming/full-duplex HTTP request bodies**, which is architecturally incompatible with the current wasi:http implementation."
         },
-        "block_09_block_09": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_09_block_09": {},
         "block_10_block_10": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_11_block_11": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_12_block_12": {},
