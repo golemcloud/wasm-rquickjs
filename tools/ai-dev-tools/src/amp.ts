@@ -243,9 +243,10 @@ export async function runAmp(
   category: string,
   targetTest: string,
   iteration: number,
+  mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
   const ampLog = path.join(LOG_DIR, `amp-${iteration}-${Date.now()}.txt`);
-  console.log(`  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration})${c.reset}`);
+  console.log(`  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration}, mode: ${mode})${c.reset}`);
   console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);
   console.log();
 
@@ -287,7 +288,7 @@ export async function runAmp(
       options: {
         cwd: REPO_ROOT,
         dangerouslyAllowAll: true,
-        mode: "deep",
+        mode,
         archive: true,
         labels: ["fix-node-compat", category, targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)],
       },

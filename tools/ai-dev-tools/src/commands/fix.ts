@@ -125,6 +125,46 @@ function extractFailingTests(output: string): FailingTest[] {
   return results;
 }
 
+const FLAKY_MD = path.join(LOG_DIR, "flaky.md");
+const FLAKY_RETRIES = 2;
+
+/** Append flaky test entries to flaky.md */
+function recordFlakyTests(tests: FailingTest[], targetLabel: string): void {
+  const header = !fs.existsSync(FLAKY_MD)
+    ? "# Flaky Tests\n\nTests that failed during regression checks but passed on retry.\n\n"
+    : "";
+  const timestamp = new Date().toISOString();
+  const entries = tests
+    .map((t) => {
+      const label = t.subtestName ? `${t.path}#${t.subtestName}` : t.path;
+      return `- ${label}`;
+    })
+    .join("\n");
+  const block = `${header}## ${timestamp} (while fixing ${targetLabel})\n\n${entries}\n\n`;
+  try {
+    fs.appendFileSync(FLAKY_MD, block);
+  } catch (e) {
+    console.log(`  ⚠ Failed to write flaky.md: ${e}`);
+  }
+}
+
+/**
+ * Retry only the failing tests to check if they're flaky.
+ * Returns true if all failures were flaky (passed on at least one retry).
+ */
+async function checkIfFlaky(failingTests: FailingTest[]): Promise<boolean> {
+  for (let retry = 1; retry <= FLAKY_RETRIES; retry++) {
+    console.log(`  🔄 Flaky retry ${retry}/${FLAKY_RETRIES}: re-running ${failingTests.length} failing test(s)...`);
+    const { ok } = await runSpecificTests(failingTests);
+    if (ok) {
+      console.log(`  ✅ All previously-failing tests passed on retry ${retry}. They appear to be flaky.`);
+      return true;
+    }
+  }
+  console.log(`  ❌ Failures persisted after ${FLAKY_RETRIES} retries. Not flaky.`);
+  return false;
+}
+
 const CREDIT_WAIT_MINUTES = 10;
 
 function sleep(ms: number): Promise<void> {
@@ -432,11 +472,12 @@ export async function fixCommand(category: string): Promise<void> {
     const target = priorityQueue[0];
     const targetLabel = target.subtestName ? `${target.path}#${target.subtestName}` : target.path;
 
-    // Track attempts per test — mark as manual after MAX_ATTEMPTS
+    // Track attempts per test — try smart first, then deep, then give up
     const attempts = (attemptCounts.get(targetLabel) ?? 0) + 1;
     attemptCounts.set(targetLabel, attempts);
+    const ampMode = attempts === 1 ? "smart" : "deep";
     if (attempts > MAX_ATTEMPTS) {
-      console.log(`  ⏭ ${targetLabel}: exceeded ${MAX_ATTEMPTS} attempts. Marking for manual review.`);
+      console.log(`  ⏭ ${targetLabel}: exceeded ${MAX_ATTEMPTS} attempts (smart + deep). Marking for manual review.`);
       if (target.subtestName) {
         skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + `amp failed after ${MAX_ATTEMPTS} attempts`);
       } else {
@@ -446,7 +487,7 @@ export async function fixCommand(category: string): Promise<void> {
       continue;
     }
 
-    console.log(`▶ Attempting to fix: ${targetLabel} (attempt ${attempts}/${MAX_ATTEMPTS})`);
+    console.log(`▶ Attempting to fix: ${targetLabel} (attempt ${attempts}/${MAX_ATTEMPTS}, mode: ${ampMode})`);
     console.log(`  Current skip reason: ${target.reason}`);
     console.log();
 
@@ -482,7 +523,7 @@ export async function fixCommand(category: string): Promise<void> {
 
     // Build prompt and run amp
     const prompt = buildAmpPrompt(category, target.path, target.reason, failureOutput, target.subtestName);
-    const ampResult = await runAmp(prompt, category, target.path, iteration);
+    const ampResult = await runAmp(prompt, category, target.path, iteration, ampMode);
 
     console.log();
     console.log("  Amp agent finished. Analyzing result...");
@@ -545,18 +586,47 @@ export async function fixCommand(category: string): Promise<void> {
         enableTestInConfig(target.path);
       }
 
+      // Run without failFast so we see ALL failing tests, not just the first
       console.log(`  Running ${category} tests (includes target)...`);
-      const { ok: categoryOk } = await runCategoryTests(category, { failFast: true });
+      const { ok: categoryOk, output: verifyOutput } = await runCategoryTests(category);
       if (categoryOk) {
         console.log("  ✅ Test passes and no regressions!");
       } else {
-        // Revert code changes (including untracked files) and re-skip the test
-        console.log("  ❌ Tests failed after enabling. Reverting code and re-skipping...");
-        revertWorkspace();
-        if (target.subtestName) {
-          skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+        // Extract which tests failed and check if they're just flaky
+        const regressions = extractFailingTests(verifyOutput);
+
+        // If the target test itself is among the failures, the fix didn't work — don't treat as flaky
+        const targetInRegressions = regressions.some(
+          (r) => r.path === target.path && r.subtestName === target.subtestName,
+        );
+
+        if (targetInRegressions || regressions.length === 0) {
+          if (targetInRegressions) {
+            console.log("  ❌ Target test itself failed verification. Reverting...");
+          } else {
+            console.log("  ❌ Tests failed but could not identify which ones. Reverting...");
+          }
+          revertWorkspace();
+          if (target.subtestName) {
+            skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+          } else {
+            updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+          }
         } else {
-          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+          console.log(`  ⚠ ${regressions.length} other test(s) failed. Checking if they're flaky...`);
+          const flaky = await checkIfFlaky(regressions);
+          if (flaky) {
+            console.log("  ✅ All failures were flaky. Accepting the fix.");
+            recordFlakyTests(regressions, targetLabel);
+          } else {
+            console.log("  ❌ Real regressions. Reverting code and re-skipping...");
+            revertWorkspace();
+            if (target.subtestName) {
+              skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+            } else {
+              updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+            }
+          }
         }
       }
     } else if (result === "PARTIAL") {
