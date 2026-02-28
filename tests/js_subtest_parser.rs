@@ -90,7 +90,7 @@ fn test_rewrite_for_block() {
         },
     ];
     let result = rewrite_for_block(source, &blocks, 1);
-    assert!(result.contains("assert(1)"));
+    assert!(!result.contains("assert(1)"));
     assert!(result.contains("assert(2)"));
     assert!(!result.contains("assert(3)"));
 }

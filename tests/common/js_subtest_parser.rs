@@ -263,7 +263,7 @@ pub fn rewrite_for_block(source: &str, blocks: &[BlockInfo], target_index: usize
     let bytes = source.as_bytes();
     let mut result = bytes.to_vec();
     for block in blocks.iter().rev() {
-        if block.index > target_index {
+        if block.index != target_index {
             let start = block.span.0 as usize;
             let end = block.span.1 as usize;
             // Validate span points at actual braces
