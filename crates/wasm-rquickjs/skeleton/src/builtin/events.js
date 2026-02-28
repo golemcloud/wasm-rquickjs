@@ -200,16 +200,44 @@ function _unwrapListeners(arr) {
     return ret;
 }
 
-function EventEmitter() {
-    EventEmitter.init.call(this);
+function _addCaptureRejection(emitter, promise) {
+    promise.then(undefined, function(err) {
+        try {
+            var rejectionHandler = emitter[EventEmitter.captureRejectionSymbol];
+            if (typeof rejectionHandler === 'function') {
+                rejectionHandler.call(emitter, err);
+            } else {
+                // Temporarily disable capture to avoid infinite recursion
+                // if the 'error' handler also rejects
+                var prev = emitter._captureRejections;
+                emitter._captureRejections = false;
+                emitter.emit('error', err);
+                emitter._captureRejections = prev;
+            }
+        } catch (e) {
+            // Last resort: throw to unhandled rejection
+            throw e;
+        }
+    });
 }
 
-EventEmitter.init = function init() {
+function EventEmitter(opts) {
+    EventEmitter.init.call(this, opts);
+}
+
+EventEmitter.init = function init(opts) {
     if (this._events === undefined || this._events === Object.getPrototypeOf(this)._events) {
         this._events = Object.create(null);
         this._eventsCount = 0;
     }
     this._maxListeners = this._maxListeners || undefined;
+
+    if (opts && opts.captureRejections) {
+        this._captureRejections = true;
+    } else if (this._captureRejections === undefined) {
+        this._captureRejections = false;
+    }
+
     // Domain implicit binding
     if (EventEmitter._domainInit) {
         EventEmitter._domainInit(this);
@@ -289,6 +317,9 @@ EventEmitter.prototype.emit = function emit(type) {
         return false;
     }
 
+    var capture = this._captureRejections || EventEmitter.captureRejections;
+    var needCapture = capture && !doError && type !== EventEmitter.errorMonitor;
+
     var args;
     if (arguments.length > 1) {
         args = new Array(arguments.length - 1);
@@ -296,19 +327,27 @@ EventEmitter.prototype.emit = function emit(type) {
     }
 
     if (typeof handler === 'function') {
+        var result;
         if (args) {
-            handler.apply(this, args);
+            result = handler.apply(this, args);
         } else {
-            handler.call(this);
+            result = handler.call(this);
+        }
+        if (needCapture && result != null && typeof result.then === 'function') {
+            _addCaptureRejection(this, result);
         }
     } else {
         var listeners = _arrayClone(handler);
         var len = listeners.length;
         for (var i = 0; i < len; i++) {
+            var result;
             if (args) {
-                listeners[i].apply(this, args);
+                result = listeners[i].apply(this, args);
             } else {
-                listeners[i].call(this);
+                result = listeners[i].call(this);
+            }
+            if (needCapture && result != null && typeof result.then === 'function') {
+                _addCaptureRejection(this, result);
             }
         }
     }
