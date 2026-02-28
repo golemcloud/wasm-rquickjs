@@ -7,7 +7,12 @@ import {
     ERR_INVALID_ARG_TYPE,
     ERR_STREAM_PREMATURE_CLOSE,
 } from "__wasm_rquickjs_builtin/internal/errors";
-import { isNodeStream } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import {
+    isNodeStream,
+    isClosed,
+    isWritableFinished,
+    isReadableFinished,
+} from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { once } from "__wasm_rquickjs_builtin/internal/util";
 import {
     validateAbortSignal,
@@ -43,21 +48,7 @@ function isWritable(stream) {
         !!stream._writableState;
 }
 
-function isWritableFinished(stream) {
-    if (stream.writableFinished) return true;
-    const wState = stream._writableState;
-    if (!wState || wState.errored) return false;
-    return wState.finished || (wState.ended && wState.length === 0);
-}
-
 const nop = () => { };
-
-function isReadableEnded(stream) {
-    if (stream.readableEnded) return true;
-    const rState = stream._readableState;
-    if (!rState || rState.errored) return false;
-    return rState.endEmitted || (rState.ended && rState.length === 0);
-}
 
 
 export function eos(stream, options, callback) {
@@ -107,8 +98,7 @@ export function eos(stream, options, callback) {
         isWritable(stream) === writable
     );
 
-    let writableFinished = stream.writableFinished ||
-        (wState && wState.finished);
+    let writableFinished = isWritableFinished(stream, false);
     const onfinish = () => {
         writableFinished = true;
         // Stream should not be destroyed here. If it is that
@@ -117,13 +107,12 @@ export function eos(stream, options, callback) {
         if (stream.destroyed) willEmitClose = false;
 
         if (willEmitClose && (!stream.readable || readable)) return;
-        if (!readable || readableEnded) callback.call(stream);
+        if (!readable || readableFinished) callback.call(stream);
     };
 
-    let readableEnded = stream.readableEnded ||
-        (rState && rState.endEmitted);
+    let readableFinished = isReadableFinished(stream, false);
     const onend = () => {
-        readableEnded = true;
+        readableFinished = true;
         // Stream should not be destroyed here. If it is that
         // means that user space is doing something differently and
         // we cannot trust willEmitClose.
@@ -138,13 +127,17 @@ export function eos(stream, options, callback) {
     };
 
     const onclose = () => {
-        if (readable && !readableEnded) {
-            if (!isReadableEnded(stream)) {
+        const errored = (wState && wState.errored) || (rState && rState.errored);
+        if (errored && typeof errored !== 'boolean') {
+            return callback.call(stream, errored);
+        }
+        if (readable && !readableFinished) {
+            if (!isReadableFinished(stream, false)) {
                 return callback.call(stream, new ERR_STREAM_PREMATURE_CLOSE());
             }
         }
         if (writable && !writableFinished) {
-            if (!isWritableFinished(stream)) {
+            if (!isWritableFinished(stream, false)) {
                 return callback.call(stream, new ERR_STREAM_PREMATURE_CLOSE());
             }
         }
@@ -177,20 +170,7 @@ export function eos(stream, options, callback) {
     if (options.error !== false) stream.on("error", onerror);
     stream.on("close", onclose);
 
-    // _closed is for OutgoingMessage which is not a proper Writable.
-    const closed = (!wState && !rState && stream._closed === true) || (
-        (wState && wState.closed) ||
-        (rState && rState.closed) ||
-        (wState && wState.errorEmitted) ||
-        (rState && rState.errorEmitted) ||
-        (rState && stream.req && stream.aborted) ||
-        (
-            (!wState || !willEmitClose || typeof wState.closed !== "boolean") &&
-            (!rState || !willEmitClose || typeof rState.closed !== "boolean") &&
-            (!writable || (wState && wState.finished)) &&
-            (!readable || (rState && rState.endEmitted))
-        )
-    );
+    let closed = isClosed(stream);
 
     if (closed) {
         // TODO(ronag): Re-throw error if errorEmitted?
