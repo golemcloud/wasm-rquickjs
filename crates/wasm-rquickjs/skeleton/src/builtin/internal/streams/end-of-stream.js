@@ -9,6 +9,8 @@ import {
 } from "__wasm_rquickjs_builtin/internal/errors";
 import {
     isNodeStream,
+    isReadableNodeStream,
+    isWritableNodeStream,
     isClosed,
     isWritableFinished,
     isReadableFinished,
@@ -36,18 +38,6 @@ function isServerResponse(stream) {
 }
 
 
-function isReadable(stream) {
-    return typeof stream.readable === "boolean" ||
-        typeof stream.readableEnded === "boolean" ||
-        !!stream._readableState;
-}
-
-function isWritable(stream) {
-    return typeof stream.writable === "boolean" ||
-        typeof stream.writableEnded === "boolean" ||
-        !!stream._writableState;
-}
-
 const nop = () => { };
 
 
@@ -73,10 +63,8 @@ export function eos(stream, options, callback) {
         );
     }
 
-    const readable = options.readable ||
-        (options.readable !== false && isReadable(stream));
-    const writable = options.writable ||
-        (options.writable !== false && isWritable(stream));
+    const readable = options.readable ?? isReadableNodeStream(stream);
+    const writable = options.writable ?? isWritableNodeStream(stream);
 
     const wState = stream._writableState;
     const rState = stream._readableState;
@@ -94,8 +82,8 @@ export function eos(stream, options, callback) {
         state.autoDestroy &&
         state.emitClose &&
         state.closed === false &&
-        isReadable(stream) === readable &&
-        isWritable(stream) === writable
+        isReadableNodeStream(stream) === readable &&
+        isWritableNodeStream(stream) === writable
     );
 
     let writableFinished = isWritableFinished(stream, false);
@@ -131,7 +119,7 @@ export function eos(stream, options, callback) {
         if (errored && typeof errored !== 'boolean') {
             return callback.call(stream, errored);
         }
-        if (readable && !readableFinished) {
+        if (readable && !readableFinished && isReadableNodeStream(stream, true)) {
             if (!isReadableFinished(stream, false)) {
                 return callback.call(stream, new ERR_STREAM_PREMATURE_CLOSE());
             }
