@@ -4064,7 +4064,7 @@
     "parallel/test-http-server-keep-alive-timeout.js": {},
     "parallel/test-http-set-timeout-server.js": {
       "skip": true,
-      "reason": "regression: was enabled but started failing"
+      "reason": "[manual] The test's sub-tests 1-4 use `http.get()` and `http.request()` to connect to a local HTTP server that intentionally never responds. In the WASM architecture, these client requests go throu..."
     },
     "parallel/test-http2-compat-client-upload-reject.js": {},
     "parallel/test-https-set-timeout-server.js": {},
