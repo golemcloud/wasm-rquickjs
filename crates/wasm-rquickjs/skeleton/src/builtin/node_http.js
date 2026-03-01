@@ -725,6 +725,62 @@ export class IncomingMessage extends EventEmitter {
         return this;
     }
 
+    [Symbol.asyncIterator]() {
+        const self = this;
+        const queue = [];
+        let ended = false;
+        let error = null;
+        let pending = null;
+
+        function enqueue(value, isDone, err) {
+            if (pending) {
+                const p = pending;
+                pending = null;
+                if (err) {
+                    p.reject(err);
+                } else {
+                    p.resolve({ value, done: isDone });
+                }
+            } else {
+                if (err) {
+                    error = err;
+                } else if (isDone) {
+                    ended = true;
+                } else {
+                    queue.push(value);
+                }
+            }
+        }
+
+        self.on('data', (chunk) => enqueue(chunk, false, null));
+        self.on('end', () => enqueue(undefined, true, null));
+        self.on('error', (err) => enqueue(undefined, false, err));
+
+        return {
+            [Symbol.asyncIterator]() { return this; },
+            next() {
+                if (queue.length > 0) {
+                    return Promise.resolve({ value: queue.shift(), done: false });
+                }
+                if (error) {
+                    const e = error;
+                    error = null;
+                    return Promise.reject(e);
+                }
+                if (ended) {
+                    return Promise.resolve({ value: undefined, done: true });
+                }
+                return new Promise((resolve, reject) => {
+                    pending = { resolve, reject };
+                });
+            },
+            return() {
+                self.destroy();
+                return Promise.resolve({ value: undefined, done: true });
+            }
+        };
+    }
+
     pipe(dest, options) {
         this.on('data', (chunk) => {
             dest.write(chunk);

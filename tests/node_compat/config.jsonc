@@ -5186,7 +5186,7 @@
           "skip": true,
           "reason": "[manual] amp fix caused regressions"
         },
-        "block_06_block_06": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" }
+        "block_06_block_06": {}
       }
     },
     "parallel/test-stream-toWeb-allows-server-response.js": {},

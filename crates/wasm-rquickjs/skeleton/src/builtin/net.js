@@ -1000,6 +1000,10 @@ Server.prototype.listen = function listen(...args) {
 
     if (args.length === 0) {
         options = {};
+    } else if (typeof args[0] === 'function') {
+        // listen(cb)
+        options = {};
+        cb = args[0];
     } else if (typeof args[0] === 'object' && args[0] !== null && !('port' in args[0] === false && typeof args[0] === 'number')) {
         // listen(options[, cb])
         options = args[0];
