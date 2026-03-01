@@ -2545,14 +2545,14 @@ Readable.prototype.find = async function find(fn, options) {
 
 if (typeof Symbol.asyncDispose !== 'undefined') {
     Readable.prototype[Symbol.asyncDispose] = async function() {
+        let error;
         if (!this.destroyed) {
-            this.destroy();
-            if (typeof this._readableState?.errored !== 'undefined') {
-                await new Promise((resolve) => {
-                    this.once('close', resolve);
-                });
-            }
+            error = this.readableEnded ? null : new AbortError();
+            this.destroy(error);
         }
+        await new Promise((resolve, reject) =>
+            eos(this, (err) => (err && err.name !== 'AbortError' ? reject(err) : resolve(null))),
+        );
     };
 }
 

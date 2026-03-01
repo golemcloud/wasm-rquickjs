@@ -3603,10 +3603,7 @@
         "block_05_block_05": {}
       }
     },
-    "parallel/test-stream-readable-dispose.js": {
-      "skip": true,
-      "reason": "requires Symbol.asyncDispose support in QuickJS engine"
-    },
+    "parallel/test-stream-readable-dispose.js": {},
     "parallel/test-stream-duplex-from.js": {
       "split": true,
       "subtests": {
