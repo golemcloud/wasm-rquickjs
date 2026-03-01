@@ -1084,13 +1084,10 @@ export class ClientRequest extends EventEmitter {
         this.path = options.path || '/';
         this.hostname = hostname;
         this.port = port === undefined ? (this.protocol === 'https:' ? 443 : 80) : Number(port);
-        if (port) {
-            this.host = hostname + ':' + port;
-        } else {
-            this.host = hostname;
-        }
+        this.host = hostname;
 
-        const url = this.protocol + '//' + this.host + this.path;
+        const hostWithPort = port ? hostname + ':' + port : hostname;
+        const url = this.protocol + '//' + hostWithPort + this.path;
 
         this.agent = options.agent === undefined ? globalAgent : options.agent;
         this._agentName = null;
