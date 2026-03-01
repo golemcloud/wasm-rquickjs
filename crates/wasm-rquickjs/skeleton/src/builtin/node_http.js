@@ -938,6 +938,30 @@ export class OutgoingMessage extends EventEmitter {
         }
     }
 
+    get _headerNames() {
+        const headers = this[kOutHeaders];
+        if (headers === null) return undefined;
+        const out = Object.create(null);
+        const keys = Object.keys(headers);
+        for (let i = 0; i < keys.length; i++) {
+            out[keys[i]] = headers[keys[i]][0];
+        }
+        return out;
+    }
+
+    set _headerNames(val) {
+        if (val != null && this[kOutHeaders]) {
+            const keys = Object.keys(val);
+            for (let i = 0; i < keys.length; i++) {
+                const key = keys[i];
+                const entry = this[kOutHeaders][key];
+                if (entry) {
+                    entry[0] = val[key];
+                }
+            }
+        }
+    }
+
     setHeader(name, value) {
         if (this._header) {
             throw new ERR_HTTP_HEADERS_SENT('set');
