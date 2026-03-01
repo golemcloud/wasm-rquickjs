@@ -5614,7 +5614,7 @@
           "skip": true,
           "reason": "[manual] amp fix caused regressions"
         },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
+        "block_03_block_03": {},
         "block_04_block_04": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
       }
     },
