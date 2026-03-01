@@ -1318,10 +1318,12 @@ export class ClientRequest extends EventEmitter {
         if (Array.isArray(inputHeaders)) {
             this._rawHeaderPairs = normalizeRawHeaderPairs(inputHeaders);
             for (const [name, value] of this._rawHeaderPairs) {
+                validateHeaderName(name);
                 this._mergeHeader(name, value);
             }
         } else if (inputHeaders && typeof inputHeaders === 'object') {
             for (const name of Object.keys(inputHeaders)) {
+                validateHeaderName(name);
                 this._headers[name.toLowerCase()] = { name, value: inputHeaders[name] };
             }
         }
@@ -1537,6 +1539,8 @@ export class ClientRequest extends EventEmitter {
     }
 
     setHeader(name, value) {
+        validateHeaderName(name);
+        validateHeaderValue(name, value);
         const lower = name.toLowerCase();
         this._headers[lower] = { name, value };
         if (shouldSkipNativeHeader(name, value)) {

@@ -4881,7 +4881,7 @@
     "parallel/test-http-information-processing.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-insecure-parser.js": {},
     "parallel/test-http-invalid-te.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-invalidheaderfield.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-invalidheaderfield.js": {},
     "parallel/test-http-keep-alive-close-on-header.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive-drop-requests.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive-max-requests.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
