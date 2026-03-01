@@ -1334,6 +1334,7 @@ export class ClientRequest extends EventEmitter {
             oncreateCalled = true;
 
             if (error) {
+                this._connectionFailed = true;
                 process.nextTick(() => {
                     this._emitRequestError(error);
                 });
@@ -1642,7 +1643,13 @@ export class ClientRequest extends EventEmitter {
 
             const nativeRes = this._nativeReq.getResponse();
 
-            if (nativeRes) {
+            // When createConnection failed, suppress the response event —
+            // only the error event (emitted by oncreate) should fire.
+            if (this._connectionFailed && nativeRes) {
+                if (typeof nativeRes.discardBody === 'function') {
+                    nativeRes.discardBody();
+                }
+            } else if (nativeRes) {
                 const metadataSequence = consumeCapturedResponseSequence(
                     this.hostname,
                     this.port,
