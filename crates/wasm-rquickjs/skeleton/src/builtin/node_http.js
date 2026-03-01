@@ -1142,6 +1142,22 @@ export class OutgoingMessage extends EventEmitter {
         return this;
     }
 
+    setTimeout(msecs, callback) {
+        if (callback) {
+            this.once('timeout', callback);
+        }
+
+        if (this.socket) {
+            this.socket.setTimeout(msecs);
+        } else {
+            this.once('socket', (socket) => {
+                socket.setTimeout(msecs);
+            });
+        }
+
+        return this;
+    }
+
     destroy(error) {
         if (this.destroyed) {
             return this;
