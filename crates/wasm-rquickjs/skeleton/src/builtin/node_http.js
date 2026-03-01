@@ -460,6 +460,80 @@ function isCookieHeader(name) {
     return typeof name === 'string' && name.toLowerCase() === 'cookie';
 }
 
+// ===== Socket Transport HTTP Response Parser =====
+
+function parseChunkedBody(raw) {
+    let result = '';
+    let pos = 0;
+
+    while (pos < raw.length) {
+        const lineEnd = raw.indexOf('\r\n', pos);
+        if (lineEnd === -1) break;
+
+        const sizeStr = raw.substring(pos, lineEnd).trim();
+        const size = parseInt(sizeStr, 16);
+        if (isNaN(size) || size === 0) break;
+
+        pos = lineEnd + 2;
+        result += raw.substring(pos, pos + size);
+        pos += size + 2;
+    }
+
+    return result;
+}
+
+function parseRawHttpResponse(raw) {
+    const headerEnd = raw.indexOf('\r\n\r\n');
+    if (headerEnd === -1) {
+        throw new Error('Incomplete HTTP response headers');
+    }
+
+    const headerSection = raw.substring(0, headerEnd);
+    const bodyRaw = raw.substring(headerEnd + 4);
+
+    const lines = headerSection.split('\r\n');
+    const statusLine = lines[0];
+    const match = statusLine.match(/^HTTP\/(\d+\.\d+)\s+(\d+)\s*(.*)/);
+    if (!match) {
+        throw new Error('Invalid HTTP status line');
+    }
+
+    const httpVersion = match[1];
+    const statusCode = parseInt(match[2], 10);
+    const statusMessage = match[3] || '';
+
+    const headers = [];
+    let isChunked = false;
+    let contentLength = -1;
+
+    for (let i = 1; i < lines.length; i++) {
+        const colonIdx = lines[i].indexOf(':');
+        if (colonIdx > 0) {
+            const name = lines[i].substring(0, colonIdx).trim();
+            const value = lines[i].substring(colonIdx + 1).trim();
+            headers.push([name, value]);
+            const lower = name.toLowerCase();
+            if (lower === 'transfer-encoding' && value.toLowerCase().includes('chunked')) {
+                isChunked = true;
+            }
+            if (lower === 'content-length') {
+                contentLength = parseInt(value, 10);
+            }
+        }
+    }
+
+    let body;
+    if (isChunked) {
+        body = parseChunkedBody(bodyRaw);
+    } else if (contentLength >= 0) {
+        body = bodyRaw.substring(0, contentLength);
+    } else {
+        body = bodyRaw;
+    }
+
+    return { httpVersion, statusCode, statusMessage, headers, body };
+}
+
 function stringifyHeaderValue(value) {
     return String(value);
 }
@@ -1346,6 +1420,7 @@ export class ClientRequest extends EventEmitter {
             }
 
             this.socket = socket;
+            this._useSocketTransport = true;
             if (typeof socket.once === 'function') {
                 socket.once('error', (socketError) => {
                     this._emitRequestError(socketError);
@@ -1545,7 +1620,7 @@ export class ClientRequest extends EventEmitter {
         if (bodyChunk) {
             this._bodyLength += bodyChunk.length;
             this._bodyChunks.push(bodyChunk);
-            if (!this._useLoopbackTransport) {
+            if (!this._useLoopbackTransport && !this._useSocketTransport) {
                 this._nativeReq.write(new Uint8Array(bodyChunk));
             }
         }
@@ -1585,7 +1660,7 @@ export class ClientRequest extends EventEmitter {
             if (bodyChunk) {
                 this._bodyLength += bodyChunk.length;
                 this._bodyChunks.push(bodyChunk);
-                if (!this._useLoopbackTransport) {
+                if (!this._useLoopbackTransport && !this._useSocketTransport) {
                     this._nativeReq.write(new Uint8Array(bodyChunk));
                 }
             }
@@ -1607,6 +1682,10 @@ export class ClientRequest extends EventEmitter {
     }
 
     async _doSend() {
+        if (this._useSocketTransport) {
+            return this._doSendViaSocket();
+        }
+
         try {
             if (onClientRequestStart.hasSubscribers) {
                 onClientRequestStart.publish({ request: this });
@@ -1699,6 +1778,109 @@ export class ClientRequest extends EventEmitter {
                     res.complete = true;
                 }
             }
+
+            if (typeof this._endCallback === 'function') this._endCallback();
+        } catch (err) {
+            if (this.aborted || this.destroyed) {
+                return;
+            }
+            this._emitRequestError(err);
+        }
+        this._emitCloseOnce();
+    }
+
+    async _doSendViaSocket() {
+        try {
+            if (onClientRequestStart.hasSubscribers) {
+                onClientRequestStart.publish({ request: this });
+            }
+
+            this._refreshHeaderString();
+            this.headersSent = true;
+
+            const socket = this.socket;
+
+            if (socket && typeof socket.write === 'function') {
+                socket.write(this._header);
+                for (const chunk of this._bodyChunks) {
+                    socket.write(chunk);
+                }
+            }
+
+            await Promise.resolve();
+
+            this._writableFinished = true;
+            this.emit('finish');
+
+            if (this.aborted || this.destroyed) {
+                return;
+            }
+
+            const chunks = [];
+            const raw = await new Promise((resolve, reject) => {
+                const onData = (chunk) => {
+                    chunks.push(typeof chunk === 'string' ? chunk : chunk.toString());
+                };
+                const onEnd = () => {
+                    socket.removeListener('data', onData);
+                    socket.removeListener('end', onEnd);
+                    socket.removeListener('error', onError);
+                    resolve(chunks.join(''));
+                };
+                const onError = (err) => {
+                    socket.removeListener('data', onData);
+                    socket.removeListener('end', onEnd);
+                    socket.removeListener('error', onError);
+                    reject(err);
+                };
+
+                socket.on('data', onData);
+                socket.on('end', onEnd);
+                socket.on('error', onError);
+
+                if (typeof socket.resume === 'function') {
+                    socket.resume();
+                }
+            });
+
+            if (this.aborted || this.destroyed) {
+                return;
+            }
+
+            const parsed = parseRawHttpResponse(raw);
+
+            const res = new IncomingMessage(null);
+            res.statusCode = parsed.statusCode;
+            res.statusMessage = parsed.statusMessage;
+            applyHttpVersion(res, parsed.httpVersion);
+
+            const parsedHeaders = parseIncomingHeaders(
+                parsed.headers.map(([name, value]) => [name, value])
+            );
+            res.rawHeaders = parsedHeaders.rawHeaders;
+            res.headers = parsedHeaders.headers;
+            res.headersDistinct = parsedHeaders.headersDistinct;
+
+            const responseConnectionHeader = res.headers.connection;
+            const responseShouldKeepAlive = shouldKeepAliveFromResponse(
+                res.httpVersion,
+                responseConnectionHeader
+            );
+            if (this.shouldKeepAlive && !responseShouldKeepAlive) {
+                this.shouldKeepAlive = false;
+                this._last = true;
+            }
+
+            if (onClientResponseFinish.hasSubscribers) {
+                onClientResponseFinish.publish({ request: this, response: res });
+            }
+            this.emit('response', res);
+
+            if (parsed.body.length > 0) {
+                res.emit('data', Buffer.from(parsed.body));
+            }
+            res.complete = true;
+            res.emit('end');
 
             if (typeof this._endCallback === 'function') this._endCallback();
         } catch (err) {

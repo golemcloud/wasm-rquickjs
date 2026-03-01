@@ -5510,7 +5510,7 @@
     "parallel/test-http-client-insecure-http-parser-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-invalid-path.js": {},
     "parallel/test-http-client-override-global-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-client-readable.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-client-readable.js": {},
     "parallel/test-http-client-reject-chunked-with-content-length.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-reject-cr-no-lf.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-client-req-error-dont-double-fire.js": { "skip": true, "reason": "requires HTTP server functionality" },
