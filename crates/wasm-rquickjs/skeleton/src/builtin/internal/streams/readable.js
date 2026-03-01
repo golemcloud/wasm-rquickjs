@@ -242,13 +242,13 @@ function readableAddChunk(stream, chunk, encoding, addToFront) {
             }
         } else if (chunk instanceof Buffer) {
             encoding = "";
-        } else if (Stream._isUint8Array(chunk)) {
+        } else if (ArrayBuffer.isView(chunk)) {
             chunk = Stream._uint8ArrayToBuffer(chunk);
             encoding = "";
         } else if (chunk != null) {
             err = new ERR_INVALID_ARG_TYPE(
                 "chunk",
-                ["string", "Buffer", "Uint8Array"],
+                ["string", "Buffer", "TypedArray", "DataView"],
                 chunk,
             );
         }
