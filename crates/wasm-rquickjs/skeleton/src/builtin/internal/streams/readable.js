@@ -1210,6 +1210,7 @@ async function* createAsyncIterator(stream, opts) {
                 destroyImpl.destroyer(stream, null);
             }
         }
+        stream.off("readable", next);
         cleanup();
     }
 }
