@@ -5182,7 +5182,10 @@
         "block_02_block_02": {},
         "block_03_block_03": {},
         "block_04_asynciterator_non_destroying_iterator": {},
-        "block_05_block_05": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+        "block_05_block_05": {
+          "skip": true,
+          "reason": "[manual] amp fix caused regressions"
+        },
         "block_06_block_06": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" }
       }
     },
