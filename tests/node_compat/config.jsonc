@@ -4777,7 +4777,7 @@
     "parallel/test-http-client-pipe-end.js": {},
     "parallel/test-http-client-race-2.js": {},
     "parallel/test-http-client-race.js": {},
-    "parallel/test-http-client-reject-unexpected-agent.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-client-reject-unexpected-agent.js": {},
     "parallel/test-http-client-request-options.js": {},
     "parallel/test-http-client-res-destroyed.js": {
       "skip": true,

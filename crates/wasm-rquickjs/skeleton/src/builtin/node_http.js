@@ -215,6 +215,13 @@ export class Agent {
         });
     }
 
+    addRequest() {
+        // Stub: in our WASM runtime, requests go through wasi:http directly
+        // rather than through the agent's connection pool. This method exists
+        // so that `typeof agent.addRequest === 'function'` passes the
+        // duck-type validation in ClientRequest.
+    }
+
     getName(options = {}) {
         let name = options.host || 'localhost';
         name += ':';
@@ -1302,7 +1309,19 @@ export class ClientRequest extends EventEmitter {
         const hostWithPort = port ? hostname + ':' + port : hostname;
         const url = this.protocol + '//' + hostWithPort + this.path;
 
-        this.agent = options.agent === undefined ? globalAgent : options.agent;
+        if (options.agent === false) {
+            this.agent = new Agent();
+        } else if (options.agent == null) {
+            this.agent = globalAgent;
+        } else if (typeof options.agent.addRequest === 'function') {
+            this.agent = options.agent;
+        } else {
+            throw new ERR_INVALID_ARG_TYPE(
+                'options.agent',
+                ['Agent-like Object', 'undefined', 'false'],
+                options.agent,
+            );
+        }
         this._agentName = null;
         if (this.agent && this.agent !== false && typeof this.agent.getName === 'function') {
             this._agentName = this.agent.getName(options);
