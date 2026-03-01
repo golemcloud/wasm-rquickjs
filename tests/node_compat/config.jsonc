@@ -5680,7 +5680,7 @@
     },
     "parallel/test-http-request-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-request-end-twice.js": {},
-    "parallel/test-http-request-end.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-request-end.js": {},
     "parallel/test-http-request-invalid-method-error.js": {
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
