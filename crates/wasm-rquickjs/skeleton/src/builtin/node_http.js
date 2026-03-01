@@ -921,6 +921,78 @@ export class OutgoingMessage extends EventEmitter {
         return false;
     }
 
+    get _headers() {
+        return this.getHeaders();
+    }
+
+    set _headers(val) {
+        if (val == null) {
+            this[kOutHeaders] = null;
+        } else {
+            this[kOutHeaders] = {};
+            const keys = Object.keys(val);
+            for (let i = 0; i < keys.length; i++) {
+                const name = keys[i];
+                this[kOutHeaders][name.toLowerCase()] = [name, val[name]];
+            }
+        }
+    }
+
+    setHeader(name, value) {
+        if (this._header) {
+            throw new ERR_HTTP_HEADERS_SENT('set');
+        }
+        if (this[kOutHeaders] === null) {
+            this[kOutHeaders] = {};
+        }
+        this[kOutHeaders][name.toLowerCase()] = [name, value];
+        return this;
+    }
+
+    getHeader(name) {
+        const entry = this[kOutHeaders] && this[kOutHeaders][name.toLowerCase()];
+        return entry ? entry[1] : undefined;
+    }
+
+    getHeaders() {
+        const headers = {};
+        if (this[kOutHeaders]) {
+            const keys = Object.keys(this[kOutHeaders]);
+            for (let i = 0; i < keys.length; i++) {
+                const entry = this[kOutHeaders][keys[i]];
+                headers[entry[0]] = entry[1];
+            }
+        }
+        return headers;
+    }
+
+    getHeaderNames() {
+        return this[kOutHeaders] ? Object.keys(this[kOutHeaders]) : [];
+    }
+
+    getRawHeaderNames() {
+        if (!this[kOutHeaders]) return [];
+        const keys = Object.keys(this[kOutHeaders]);
+        const names = [];
+        for (let i = 0; i < keys.length; i++) {
+            names.push(this[kOutHeaders][keys[i]][0]);
+        }
+        return names;
+    }
+
+    removeHeader(name) {
+        if (this._header) {
+            throw new ERR_HTTP_HEADERS_SENT('remove');
+        }
+        if (this[kOutHeaders]) {
+            delete this[kOutHeaders][name.toLowerCase()];
+        }
+    }
+
+    hasHeader(name) {
+        return this[kOutHeaders] !== null && name.toLowerCase() in this[kOutHeaders];
+    }
+
     _implicitHeader() {
         throw new ERR_METHOD_NOT_IMPLEMENTED('_implicitHeader()');
     }
