@@ -55,6 +55,7 @@ import * as internalUtil from '__wasm_rquickjs_builtin/internal/util';
 import * as internalUtilDebuglog from '__wasm_rquickjs_builtin/internal/util/debuglog';
 import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstreams/util';
 import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal/streams/add-abort-signal';
+import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 
 // CJS require() should return the default export (the "module object") when one
@@ -219,6 +220,7 @@ const builtinModules = {
     'internal/util/debuglog': cjsExport(internalUtilDebuglog),
     'internal/webstreams/util': cjsExport(internalWebstreamsUtil),
     'internal/streams/add-abort-signal': cjsExport(internalStreamsAddAbortSignal),
+    'internal/streams/state': cjsExport(internalStreamsState),
     'internal/test/binding': cjsExport(internalTestBinding),
 };
 

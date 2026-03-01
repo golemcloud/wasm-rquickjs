@@ -5583,7 +5583,7 @@
     "parallel/test-http-max-http-headers.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-multi-line-headers.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-no-content-length.js": {},
-    "parallel/test-http-outgoing-buffer.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-outgoing-buffer.js": {},
     "parallel/test-http-outgoing-destroy.js": {},
     "parallel/test-http-outgoing-internal-headernames-getter.js": {
       "split": true,
