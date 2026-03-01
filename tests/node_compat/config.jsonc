@@ -5619,11 +5619,9 @@
       }
     },
     "parallel/test-http-outgoing-proto.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality",
       "split": true,
       "subtests": {
-        "block_00_write": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
+        "block_00_write": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
       }
     },

@@ -966,6 +966,8 @@ export class OutgoingMessage extends EventEmitter {
         if (this._header) {
             throw new ERR_HTTP_HEADERS_SENT('set');
         }
+        validateHeaderName(name);
+        validateHeaderValue(name, value);
         if (this[kOutHeaders] === null) {
             this[kOutHeaders] = {};
         }
@@ -1019,6 +1021,22 @@ export class OutgoingMessage extends EventEmitter {
 
     _implicitHeader() {
         throw new ERR_METHOD_NOT_IMPLEMENTED('_implicitHeader()');
+    }
+
+    addTrailers(headers) {
+        const keys = Object.keys(headers);
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            const value = String(headers[key]);
+            if (!isValidHttpToken(String(key))) {
+                throw new ERR_INVALID_HTTP_TOKEN('Trailer name', key);
+            }
+            if (INVALID_HEADER_CHAR_REGEX.test(value)) {
+                const err = new TypeError('Invalid character in trailer content ["' + key + '"]');
+                err.code = 'ERR_INVALID_CHAR';
+                throw err;
+            }
+        }
     }
 
     _renderHeaders() {
@@ -1247,6 +1265,10 @@ export class ClientRequest extends EventEmitter {
         if (onClientRequestCreated.hasSubscribers) {
             onClientRequestCreated.publish({ request: this });
         }
+    }
+
+    _implicitHeader() {
+        this._refreshHeaderString();
     }
 
     _emitCloseOnce() {

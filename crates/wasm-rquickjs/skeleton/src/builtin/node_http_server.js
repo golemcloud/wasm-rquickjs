@@ -221,6 +221,10 @@ Object.defineProperty(ServerResponse.prototype, 'writableFinished', {
     get() { return this.finished; },
 });
 
+ServerResponse.prototype._implicitHeader = function _implicitHeader() {
+    this.writeHead(this.statusCode);
+};
+
 ServerResponse.prototype.setHeader = function setHeader(name, value) {
     if (this._headersSentWire) {
         throw new Error('Cannot set headers after they are sent to the client');
