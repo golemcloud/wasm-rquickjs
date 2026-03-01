@@ -4951,10 +4951,7 @@
       }
     },
     "parallel/test-http-outgoing-message-write-callback.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-outgoing-writableFinished.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-http-outgoing-writableFinished.js": {},
     "parallel/test-http-outgoing-write-types.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-parser-finish-error.js": {},
     "parallel/test-http-parser-freed-before-upgrade.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },

@@ -1461,6 +1461,7 @@ export class ClientRequest extends EventEmitter {
 
         this._applyDefaultBodyHeaders();
 
+        this._writableEnded = true;
         this._endCallback = callback;
         this._endPromise = this._sendThroughAgent();
         return this;
@@ -1485,7 +1486,12 @@ export class ClientRequest extends EventEmitter {
             // Node.js emits 'finish' when the request body is flushed
             // to the socket, not when the response arrives.
             this.headersSent = true;
-            this._writableEnded = true;
+
+            // Defer finish to next microtask so that writableFinished is
+            // still false synchronously after end() returns, matching
+            // Node.js behavior.
+            await Promise.resolve();
+
             this._writableFinished = true;
             this.emit('finish');
 
