@@ -11,6 +11,7 @@ import {
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_HTTP_TOKEN,
     ERR_METHOD_NOT_IMPLEMENTED,
+    ERR_STREAM_DESTROYED,
     ERR_UNESCAPED_CHARACTERS,
 } from '__wasm_rquickjs_builtin/internal/errors';
 
@@ -1151,6 +1152,14 @@ export class OutgoingMessage extends EventEmitter {
         if (typeof encoding === 'function') {
             callback = encoding;
             encoding = undefined;
+        }
+
+        if (this.destroyed) {
+            const err = new ERR_STREAM_DESTROYED('write');
+            if (typeof callback === 'function') {
+                callback(err);
+            }
+            return false;
         }
 
         if (!this._header) {
