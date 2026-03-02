@@ -1,9 +1,10 @@
-use golem_wasi_http::header::{HeaderName, HeaderValue};
-use golem_wasi_http::{Body, Method, Request, StreamError, Url};
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
 use std::collections::HashMap;
+use wasi::http::outgoing_handler;
+use wasi::http::types as wasi_http;
+use wasi::io::streams::{InputStream, OutputStream, StreamError};
 use wstd::runtime::AsyncPollable;
 
 #[rquickjs::module]
@@ -13,17 +14,25 @@ pub mod native_module {
 }
 
 enum ResponseBodyState {
-    Native(golem_wasi_http::Response),
+    WasiNative {
+        incoming_response: wasi_http::IncomingResponse,
+    },
     Stream {
-        stream: golem_wasi_http::InputStream,
-        body: golem_wasi_http::IncomingBody,
-        response: golem_wasi_http::Response,
+        stream: InputStream,
+        body: wasi_http::IncomingBody,
+        incoming_response: wasi_http::IncomingResponse,
     },
     Consumed,
 }
 
+pub(crate) struct RawResponse {
+    status: u16,
+    headers: Vec<Vec<String>>,
+    incoming_response: wasi_http::IncomingResponse,
+}
+
 enum PendingResponse {
-    Ready(golem_wasi_http::Response),
+    Ready(RawResponse),
     None,
 }
 
@@ -140,40 +149,101 @@ impl NodeHttpClientRequest {
 
         self.sent = true;
 
-        let parsed_url: Url = self
+        let parsed_url: url::Url = self
             .url
             .parse()
             .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
-        let method: Method = self
-            .method
-            .parse()
-            .map_err(|_| Exception::throw_message(&ctx, "failed to parse method"))?;
 
-        let client = golem_wasi_http::ClientBuilder::new()
-            .build()
-            .map_err(|_| Exception::throw_message(&ctx, "Failed to create HTTP client"))?;
+        let scheme = match parsed_url.scheme() {
+            "http" => wasi_http::Scheme::Http,
+            "https" => wasi_http::Scheme::Https,
+            other => wasi_http::Scheme::Other(other.to_string()),
+        };
 
-        let mut request = Request::new(method, parsed_url);
+        let header_entries: Vec<(String, Vec<u8>)> = self
+            .headers
+            .iter()
+            .map(|(name, value)| (name.clone(), value.as_bytes().to_vec()))
+            .collect();
 
-        for (name, value) in &self.headers {
-            let header_name = HeaderName::from_bytes(name.as_bytes())
-                .map_err(|_| Exception::throw_message(&ctx, "failed to parse header name"))?;
-            let header_value = HeaderValue::from_str(value)
-                .map_err(|_| Exception::throw_message(&ctx, "failed to parse header value"))?;
-            request.headers_mut().insert(header_name, header_value);
-        }
+        let fields = wasi_http::Fields::from_list(&header_entries)
+            .map_err(|_| Exception::throw_message(&ctx, "failed to create request headers"))?;
+
+        let outgoing_request = wasi_http::OutgoingRequest::new(fields);
+
+        let wasi_method = match self.method.as_str() {
+            "GET" => wasi_http::Method::Get,
+            "POST" => wasi_http::Method::Post,
+            "PUT" => wasi_http::Method::Put,
+            "DELETE" => wasi_http::Method::Delete,
+            "HEAD" => wasi_http::Method::Head,
+            "OPTIONS" => wasi_http::Method::Options,
+            "CONNECT" => wasi_http::Method::Connect,
+            "PATCH" => wasi_http::Method::Patch,
+            "TRACE" => wasi_http::Method::Trace,
+            other => wasi_http::Method::Other(other.to_string()),
+        };
+
+        outgoing_request
+            .set_method(&wasi_method)
+            .map_err(|_| Exception::throw_message(&ctx, "failed to set method"))?;
+
+        let path_with_query = match parsed_url.query() {
+            Some(query) => format!("{}?{}", parsed_url.path(), query),
+            None => parsed_url.path().to_string(),
+        };
+        outgoing_request
+            .set_path_with_query(Some(&path_with_query))
+            .map_err(|_| Exception::throw_message(&ctx, "failed to set path"))?;
+        outgoing_request
+            .set_scheme(Some(&scheme))
+            .map_err(|_| Exception::throw_message(&ctx, "failed to set scheme"))?;
+        outgoing_request
+            .set_authority(Some(parsed_url.authority()))
+            .map_err(|_| Exception::throw_message(&ctx, "failed to set authority"))?;
 
         if !self.body_chunks.is_empty() {
+            let body = outgoing_request
+                .body()
+                .map_err(|_| Exception::throw_message(&ctx, "failed to get request body"))?;
+            let stream = body
+                .write()
+                .map_err(|_| Exception::throw_message(&ctx, "failed to get body stream"))?;
+
             let body_bytes = std::mem::take(&mut self.body_chunks);
-            *request.body_mut() = Some(Body::from(body_bytes));
+            write_all_to_stream(&ctx, &stream, &body_bytes).await?;
+            drop(stream);
+
+            wasi_http::OutgoingBody::finish(body, None)
+                .map_err(|_| Exception::throw_message(&ctx, "failed to finish request body"))?;
         }
 
-        let response = client
-            .execute(request)
-            .await
-            .map_err(|err| Exception::throw_message(&ctx, &format!("HTTP request failed: {err}")))?;
+        let future_response = outgoing_handler::handle(outgoing_request, None)
+            .map_err(|err| {
+                Exception::throw_message(&ctx, &format!("HTTP request failed: {err:?}"))
+            })?;
 
-        self.pending = PendingResponse::Ready(response);
+        let incoming_response = get_incoming_response(&ctx, &future_response).await?;
+
+        let status = incoming_response.status();
+        let response_fields = incoming_response.headers();
+        let raw_entries = response_fields.entries();
+        let headers: Vec<Vec<String>> = raw_entries
+            .into_iter()
+            .map(|(name, value)| {
+                vec![
+                    name,
+                    String::from_utf8(value)
+                        .unwrap_or_else(|_| "Invalid header value".to_string()),
+                ]
+            })
+            .collect();
+
+        self.pending = PendingResponse::Ready(RawResponse {
+            status,
+            headers,
+            incoming_response,
+        });
 
         Ok(())
     }
@@ -187,8 +257,8 @@ impl NodeHttpClientRequest {
         }
 
         match std::mem::replace(&mut self.pending, PendingResponse::None) {
-            PendingResponse::Ready(response) => {
-                Some(NodeHttpIncomingResponse::from_response(response))
+            PendingResponse::Ready(raw) => {
+                Some(NodeHttpIncomingResponse::from_raw_response(raw))
             }
             PendingResponse::None => None,
         }
@@ -227,24 +297,13 @@ impl NodeHttpIncomingResponse {
     }
 
     #[qjs(skip)]
-    pub fn from_response(response: golem_wasi_http::Response) -> Self {
-        let headers = response
-            .headers()
-            .iter()
-            .map(|(name, value)| {
-                vec![
-                    name.to_string(),
-                    value.to_str().unwrap_or("Invalid header value").to_string(),
-                ]
-            })
-            .collect();
-
-        let status = response.status().as_u16();
-
+    pub fn from_raw_response(raw: RawResponse) -> Self {
         NodeHttpIncomingResponse {
-            body_state: ResponseBodyState::Native(response),
-            headers,
-            status,
+            body_state: ResponseBodyState::WasiNative {
+                incoming_response: raw.incoming_response,
+            },
+            headers: raw.headers,
+            status: raw.status,
         }
     }
 
@@ -261,17 +320,17 @@ impl NodeHttpIncomingResponse {
     pub fn discard_body(&mut self) {
         let state = std::mem::replace(&mut self.body_state, ResponseBodyState::Consumed);
         match state {
-            ResponseBodyState::Native(response) => {
-                drop(response);
+            ResponseBodyState::WasiNative { incoming_response } => {
+                drop(incoming_response);
             }
             ResponseBodyState::Stream {
                 stream,
                 body,
-                response,
+                incoming_response,
             } => {
                 drop(stream);
                 drop(body);
-                drop(response);
+                drop(incoming_response);
             }
             ResponseBodyState::Consumed => {}
         }
@@ -284,24 +343,29 @@ impl NodeHttpIncomingResponse {
         let state = std::mem::replace(&mut self.body_state, ResponseBodyState::Consumed);
 
         match state {
-            ResponseBodyState::Native(mut response) => {
-                let (stream, body) = response.get_raw_input_stream();
+            ResponseBodyState::WasiNative { incoming_response } => {
+                let incoming_body = incoming_response
+                    .consume()
+                    .map_err(|_| Exception::throw_message(&ctx, "failed to consume response body"))?;
+                let stream = incoming_body
+                    .stream()
+                    .map_err(|_| Exception::throw_message(&ctx, "failed to get body stream"))?;
                 self.body_state = ResponseBodyState::Stream {
                     stream,
-                    body,
-                    response,
+                    body: incoming_body,
+                    incoming_response,
                 };
                 self.read_from_stream(ctx).await
             }
             ResponseBodyState::Stream {
                 stream,
                 body,
-                response,
+                incoming_response,
             } => {
                 self.body_state = ResponseBodyState::Stream {
                     stream,
                     body,
-                    response,
+                    incoming_response,
                 };
                 self.read_from_stream(ctx).await
             }
@@ -320,7 +384,7 @@ impl NodeHttpIncomingResponse {
         if let ResponseBodyState::Stream {
             stream,
             body,
-            response,
+            incoming_response,
         } = state
         {
             const CHUNK_SIZE: u64 = 4096;
@@ -336,7 +400,7 @@ impl NodeHttpIncomingResponse {
                         self.body_state = ResponseBodyState::Stream {
                             stream,
                             body,
-                            response,
+                            incoming_response,
                         };
                         return Ok(List((Some(js_array), false)));
                     }
@@ -347,7 +411,7 @@ impl NodeHttpIncomingResponse {
                     Err(StreamError::Closed) => {
                         drop(stream);
                         drop(body);
-                        drop(response);
+                        drop(incoming_response);
                         return Ok(List((None, true)));
                     }
                     Err(StreamError::LastOperationFailed(err)) => {
@@ -369,6 +433,65 @@ impl NodeHttpIncomingResponse {
             Ok(List((None, true)))
         }
     }
+}
+
+async fn get_incoming_response<'js>(
+    ctx: &Ctx<'js>,
+    future_response: &wasi_http::FutureIncomingResponse,
+) -> rquickjs::Result<wasi_http::IncomingResponse> {
+    match future_response.get() {
+        Some(Ok(Ok(incoming_response))) => Ok(incoming_response),
+        Some(Ok(Err(err))) => Err(Exception::throw_message(
+            ctx,
+            &format!("HTTP request failed: {err:?}"),
+        )),
+        Some(Err(())) => Err(Exception::throw_message(ctx, "HTTP request failed")),
+        None => {
+            let pollable = future_response.subscribe();
+            AsyncPollable::new(pollable).wait_for().await;
+            match future_response.get() {
+                Some(Ok(Ok(incoming_response))) => Ok(incoming_response),
+                Some(Ok(Err(err))) => Err(Exception::throw_message(
+                    ctx,
+                    &format!("HTTP request failed: {err:?}"),
+                )),
+                _ => Err(Exception::throw_message(ctx, "HTTP request failed")),
+            }
+        }
+    }
+}
+
+async fn write_all_to_stream<'js>(
+    ctx: &Ctx<'js>,
+    stream: &OutputStream,
+    data: &[u8],
+) -> rquickjs::Result<()> {
+    let mut offset = 0;
+    while offset < data.len() {
+        let remaining = &data[offset..];
+        match stream.check_write() {
+            Ok(0) => {
+                let pollable = stream.subscribe();
+                AsyncPollable::new(pollable).wait_for().await;
+            }
+            Ok(permit) => {
+                let to_write = std::cmp::min(permit as usize, remaining.len());
+                stream
+                    .write(&remaining[..to_write])
+                    .map_err(|_| Exception::throw_message(ctx, "failed to write request body"))?;
+                offset += to_write;
+            }
+            Err(_) => {
+                return Err(Exception::throw_message(ctx, "failed to write request body"));
+            }
+        }
+    }
+    stream
+        .flush()
+        .map_err(|_| Exception::throw_message(ctx, "failed to flush request body"))?;
+    let pollable = stream.subscribe();
+    AsyncPollable::new(pollable).wait_for().await;
+    Ok(())
 }
 
 pub const NODE_HTTP_JS: &str = include_str!("node_http.js");
