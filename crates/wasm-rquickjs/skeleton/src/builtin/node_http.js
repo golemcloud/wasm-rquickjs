@@ -144,6 +144,29 @@ function isClassBorrowConflictError(error) {
     return message.includes("can't borrow a value as it is already borrowed");
 }
 
+// ===== FakeAgentSocket =====
+
+class FakeAgentSocket extends EventEmitter {
+    constructor() {
+        super();
+        this._isFakeAgentSocket = true;
+        this.destroyed = false;
+        this.writable = true;
+        this.readable = true;
+    }
+
+    destroy() {
+        this.destroyed = true;
+        return this;
+    }
+
+    setTimeout() { return this; }
+    setNoDelay() { return this; }
+    setKeepAlive() { return this; }
+    ref() { return this; }
+    unref() { return this; }
+}
+
 // ===== Agent =====
 
 export class Agent {
@@ -231,6 +254,26 @@ export class Agent {
         if (options.socketPath) name += ':' + options.socketPath;
         if (options.family === 4 || options.family === 6) name += ':' + options.family;
         return name;
+    }
+
+    _addSocket(name, socket) {
+        if (!this.sockets[name]) {
+            this.sockets[name] = [];
+        }
+        this.sockets[name].push(socket);
+    }
+
+    _removeSocket(name, socket) {
+        const list = this.sockets[name];
+        if (list) {
+            const idx = list.indexOf(socket);
+            if (idx !== -1) {
+                list.splice(idx, 1);
+            }
+            if (list.length === 0) {
+                delete this.sockets[name];
+            }
+        }
     }
 }
 
@@ -1680,6 +1723,27 @@ export class ClientRequest extends EventEmitter {
         return this._doSend();
     }
 
+    _setupMockSocket() {
+        if (this.socket || this._useSocketTransport) {
+            return;
+        }
+        const mockSocket = new FakeAgentSocket();
+        this.socket = mockSocket;
+        if (this.agent && this._agentName) {
+            this.agent._addSocket(this._agentName, mockSocket);
+        }
+        this.emit('socket', mockSocket);
+    }
+
+    _cleanupMockSocket() {
+        if (this.socket && this.socket._isFakeAgentSocket) {
+            if (this.agent && this._agentName) {
+                this.agent._removeSocket(this._agentName, this.socket);
+            }
+            this.socket.emit('close');
+        }
+    }
+
     async _doSend() {
         if (this._useSocketTransport) {
             return this._doSendViaSocket();
@@ -1702,6 +1766,8 @@ export class ClientRequest extends EventEmitter {
             // Node.js behavior.
             await Promise.resolve();
 
+            this._setupMockSocket();
+
             this._writableFinished = true;
             if (typeof this._endCallback === 'function') {
                 const cb = this._endCallback;
@@ -1711,6 +1777,7 @@ export class ClientRequest extends EventEmitter {
             this.emit('finish');
 
             if (this.aborted || this.destroyed) {
+                this._cleanupMockSocket();
                 return;
             }
 
@@ -1721,6 +1788,7 @@ export class ClientRequest extends EventEmitter {
             }
 
             if (this.aborted || this.destroyed) {
+                this._cleanupMockSocket();
                 return;
             }
 
@@ -1769,10 +1837,12 @@ export class ClientRequest extends EventEmitter {
 
         } catch (err) {
             if (this.aborted || this.destroyed) {
+                this._cleanupMockSocket();
                 return;
             }
             this._emitRequestError(err);
         }
+        this._cleanupMockSocket();
         this._emitCloseOnce();
     }
 
