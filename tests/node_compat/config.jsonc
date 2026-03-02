@@ -4672,7 +4672,7 @@
       "subtests": {
         "block_00_block_00": {
           "skip": true,
-          "reason": "inherited: requires HTTP server functionality, we only support clients"
+          "reason": "[manual] amp fix caused regressions"
         },
         "block_01_block_01": {
           "skip": true,
