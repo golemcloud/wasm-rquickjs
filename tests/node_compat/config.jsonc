@@ -5451,7 +5451,7 @@
     },
     "parallel/test-http-abort-client.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality"
+      "reason": "[manual] amp fix caused regressions"
     },
     "parallel/test-http-addrequest-localaddress.js": {
       "skip": true,
