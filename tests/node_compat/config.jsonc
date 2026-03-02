@@ -4885,7 +4885,7 @@
     "parallel/test-http-keep-alive-timeout-race-condition.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-keepalive-client.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-keepalive-client.js": { "skip": true, "reason": "[manual] The test requires TCP-level HTTP keep-alive where a single TCP connection is reused for multiple sequential requests. It asserts `assert.strictEqual(req.socket, serverSocket)` on the **ser..." },
     "parallel/test-http-keepalive-free.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keepalive-override.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keepalive-request.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
