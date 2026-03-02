@@ -5306,7 +5306,7 @@
     },
     "parallel/test-http-response-multiheaders.js": {
       "skip": true,
-      "reason": "regression: was enabled but started failing"
+      "reason": "[manual] wasmtime's `wasi:http` implementation strips `host` and `proxy-authorization` headers from HTTP responses (treating them as forbidden/hop-by-hop headers). The test asserts all 17 \"norepeat..."
     },
     "parallel/test-http-response-splitting.js": {
       "skip": true,
