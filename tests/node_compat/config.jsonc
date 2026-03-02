@@ -5462,10 +5462,7 @@
       "skip": true,
       "reason": "[manual] amp fix caused regressions"
     },
-    "parallel/test-http-addrequest-localaddress.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality"
-    },
+    "parallel/test-http-addrequest-localaddress.js": {},
     "parallel/test-http-agent-domain-reused-gc.js": {
       "skip": true,
       "reason": "requires HTTP server functionality"

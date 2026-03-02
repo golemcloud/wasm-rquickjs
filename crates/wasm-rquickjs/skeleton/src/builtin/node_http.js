@@ -238,11 +238,39 @@ export class Agent {
         });
     }
 
-    addRequest() {
-        // Stub: in our WASM runtime, requests go through wasi:http directly
-        // rather than through the agent's connection pool. This method exists
-        // so that `typeof agent.addRequest === 'function'` passes the
-        // duck-type validation in ClientRequest.
+    addRequest(req, options, port, localAddress) {
+        if (typeof options === 'string') {
+            options = {
+                host: options,
+                port,
+                localAddress,
+            };
+        }
+
+        const name = this.getName(options);
+
+        if (!this.sockets[name]) {
+            this.sockets[name] = [];
+        }
+
+        const freeLen = this.freeSockets[name] ? this.freeSockets[name].length : 0;
+        const sockLen = this.sockets[name].length;
+
+        if (freeLen) {
+            const socket = this.freeSockets[name].shift();
+            if (!this.freeSockets[name].length) {
+                delete this.freeSockets[name];
+            }
+            this.sockets[name].push(socket);
+        } else if (sockLen < this.maxSockets) {
+            // In our WASM runtime, requests go through wasi:http directly
+            // rather than through the agent's connection pool.
+        } else {
+            if (!this.requests[name]) {
+                this.requests[name] = [];
+            }
+            this.requests[name].push(req);
+        }
     }
 
     getName(options = {}) {
