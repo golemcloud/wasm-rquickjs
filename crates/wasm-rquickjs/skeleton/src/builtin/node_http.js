@@ -1658,7 +1658,7 @@ export class ClientRequest extends EventEmitter {
         }
 
         if (typeof callback === 'function') callback();
-        return true;
+        return this._bodyLength < (16 * 1024);
     }
 
     end(data, encoding, callback) {
@@ -1736,6 +1736,11 @@ export class ClientRequest extends EventEmitter {
             await Promise.resolve();
 
             this._writableFinished = true;
+            if (typeof this._endCallback === 'function') {
+                const cb = this._endCallback;
+                this._endCallback = null;
+                cb();
+            }
             this.emit('finish');
 
             if (this.aborted || this.destroyed) {
@@ -1811,7 +1816,6 @@ export class ClientRequest extends EventEmitter {
                 }
             }
 
-            if (typeof this._endCallback === 'function') this._endCallback();
         } catch (err) {
             if (this.aborted || this.destroyed) {
                 return;
@@ -1842,6 +1846,11 @@ export class ClientRequest extends EventEmitter {
             await Promise.resolve();
 
             this._writableFinished = true;
+            if (typeof this._endCallback === 'function') {
+                const cb = this._endCallback;
+                this._endCallback = null;
+                cb();
+            }
             this.emit('finish');
 
             if (this.aborted || this.destroyed) {
@@ -1914,7 +1923,6 @@ export class ClientRequest extends EventEmitter {
             res.complete = true;
             res.emit('end');
 
-            if (typeof this._endCallback === 'function') this._endCallback();
         } catch (err) {
             if (this.aborted || this.destroyed) {
                 return;

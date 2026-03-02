@@ -209,6 +209,7 @@ function ServerResponse(req) {
     this._removedConnection = false;
     this._removedContLen = false;
     this._removedTE = false;
+    this._outputSize = 0;
 }
 
 Object.setPrototypeOf(ServerResponse.prototype, EventEmitter.prototype);
@@ -504,8 +505,9 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         this.socket.write(chunk);
     }
 
+    this._outputSize += chunk.length;
     if (typeof cb === 'function') cb();
-    return true;
+    return this._outputSize < (16 * 1024);
 };
 
 ServerResponse.prototype.end = function end(data, encoding, cb) {
