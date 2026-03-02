@@ -542,6 +542,121 @@ function parseRawHttpResponse(raw) {
     return { httpVersion, statusCode, statusMessage, headers, body };
 }
 
+function _readHttpResponseFromSocket(socket) {
+    return new Promise((resolve, reject) => {
+        let buffer = '';
+        let headersParsed = false;
+        let contentLength = -1;
+        let isChunked = false;
+        let headerEndPos = -1;
+        let parsedResult = null;
+
+        const cleanup = () => {
+            socket.removeListener('data', onData);
+            socket.removeListener('end', onEnd);
+            socket.removeListener('error', onError);
+        };
+
+        const tryComplete = () => {
+            if (!headersParsed) {
+                headerEndPos = buffer.indexOf('\r\n\r\n');
+                if (headerEndPos === -1) return false;
+
+                const headerSection = buffer.substring(0, headerEndPos);
+                const lines = headerSection.split('\r\n');
+                const match = lines[0].match(/^HTTP\/(\d+\.\d+)\s+(\d+)\s*(.*)/);
+                if (!match) {
+                    cleanup();
+                    reject(new Error('Invalid HTTP status line'));
+                    return true;
+                }
+
+                const headers = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const colonIdx = lines[i].indexOf(':');
+                    if (colonIdx > 0) {
+                        const name = lines[i].substring(0, colonIdx).trim();
+                        const value = lines[i].substring(colonIdx + 1).trim();
+                        headers.push([name, value]);
+                        const lower = name.toLowerCase();
+                        if (lower === 'transfer-encoding' && value.toLowerCase().includes('chunked')) {
+                            isChunked = true;
+                        }
+                        if (lower === 'content-length') {
+                            contentLength = parseInt(value, 10);
+                        }
+                    }
+                }
+
+                parsedResult = {
+                    httpVersion: match[1],
+                    statusCode: parseInt(match[2], 10),
+                    statusMessage: match[3] || '',
+                    headers,
+                };
+                headersParsed = true;
+            }
+
+            const bodyData = buffer.substring(headerEndPos + 4);
+
+            if (contentLength === 0) {
+                cleanup();
+                resolve({ ...parsedResult, body: '' });
+                return true;
+            }
+
+            if (contentLength > 0) {
+                if (bodyData.length >= contentLength) {
+                    cleanup();
+                    resolve({ ...parsedResult, body: bodyData.substring(0, contentLength) });
+                    return true;
+                }
+                return false;
+            }
+
+            if (isChunked) {
+                const termIdx = bodyData.indexOf('0\r\n');
+                if (termIdx !== -1) {
+                    cleanup();
+                    resolve({ ...parsedResult, body: parseChunkedBody(bodyData) });
+                    return true;
+                }
+                return false;
+            }
+
+            return false;
+        };
+
+        const onData = (chunk) => {
+            buffer += typeof chunk === 'string' ? chunk : chunk.toString();
+            tryComplete();
+        };
+
+        const onEnd = () => {
+            cleanup();
+            if (headersParsed) {
+                const bodyData = buffer.substring(headerEndPos + 4);
+                resolve({ ...parsedResult, body: isChunked ? parseChunkedBody(bodyData) : bodyData });
+            } else {
+                reject(new Error('Connection closed before headers received'));
+            }
+        };
+
+        const onError = (err) => {
+            cleanup();
+            reject(err);
+        };
+
+        socket.on('data', onData);
+        socket.on('end', onEnd);
+        socket.on('error', onError);
+
+        if (typeof socket.resume === 'function') {
+            socket.resume();
+        }
+    });
+}
+
 function stringifyHeaderValue(value) {
     return String(value);
 }
@@ -1845,6 +1960,13 @@ export class ClientRequest extends EventEmitter {
                 onClientRequestStart.publish({ request: this });
             }
 
+            if (!this.hasHeader('host')) {
+                const hostValue = this.port && this.port !== 80 && this.port !== 443
+                    ? this.hostname + ':' + this.port
+                    : this.hostname;
+                this.setHeader('Host', hostValue);
+            }
+
             this._refreshHeaderString();
             this.headersSent = true;
 
@@ -1871,38 +1993,11 @@ export class ClientRequest extends EventEmitter {
                 return;
             }
 
-            const chunks = [];
-            const raw = await new Promise((resolve, reject) => {
-                const onData = (chunk) => {
-                    chunks.push(typeof chunk === 'string' ? chunk : chunk.toString());
-                };
-                const onEnd = () => {
-                    socket.removeListener('data', onData);
-                    socket.removeListener('end', onEnd);
-                    socket.removeListener('error', onError);
-                    resolve(chunks.join(''));
-                };
-                const onError = (err) => {
-                    socket.removeListener('data', onData);
-                    socket.removeListener('end', onEnd);
-                    socket.removeListener('error', onError);
-                    reject(err);
-                };
-
-                socket.on('data', onData);
-                socket.on('end', onEnd);
-                socket.on('error', onError);
-
-                if (typeof socket.resume === 'function') {
-                    socket.resume();
-                }
-            });
+            const parsed = await _readHttpResponseFromSocket(socket);
 
             if (this.aborted || this.destroyed) {
                 return;
             }
-
-            const parsed = parseRawHttpResponse(raw);
 
             const res = new IncomingMessage(null);
             res.statusCode = parsed.statusCode;
@@ -1915,6 +2010,12 @@ export class ClientRequest extends EventEmitter {
             res.rawHeaders = parsedHeaders.rawHeaders;
             res.headers = parsedHeaders.headers;
             res.headersDistinct = parsedHeaders.headersDistinct;
+
+            res.socket = socket;
+            res.client = socket;
+            if (socket && typeof socket.readableHighWaterMark === 'number') {
+                res.readableHighWaterMark = socket.readableHighWaterMark;
+            }
 
             const responseConnectionHeader = res.headers.connection;
             const responseShouldKeepAlive = shouldKeepAliveFromResponse(

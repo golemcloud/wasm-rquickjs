@@ -1370,7 +1370,11 @@ export function createServer(options, connectionListener) {
 }
 
 export function createConnection(...args) {
-    const socket = new Socket();
+    let options = {};
+    if (args.length > 0 && typeof args[0] === 'object' && args[0] !== null) {
+        options = args[0];
+    }
+    const socket = new Socket(options);
     return socket.connect(...args);
 }
 
