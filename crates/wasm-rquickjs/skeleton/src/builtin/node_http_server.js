@@ -679,6 +679,7 @@ function createConnectionParser(server, socket) {
         closeAfterResponse: false,
         responseFinished: false,
         shouldKeepAliveAfterResponse: false,
+        detached: false,
     };
 
     const keepAlive = computeKeepAlive(null, '1.1');
@@ -692,6 +693,8 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('data', function onData(data) {
+        if (state.detached) return;
+
         if (typeof data === 'string') {
             data = Buffer.from(data);
         } else if (!(data instanceof Buffer)) {
@@ -712,6 +715,8 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('end', function onEnd() {
+        if (state.detached) return;
+
         state.readableEnded = true;
 
         if (state.req && !state.req.aborted) {
@@ -744,6 +749,8 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('error', function onError(err) {
+        if (state.detached) return;
+
         if (state.req && !state.req.aborted) {
             if (!state.req.complete) {
                 state.req.complete = true;
@@ -756,6 +763,8 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('close', function onClose() {
+        if (state.detached) return;
+
         if (state.req && !state.req.aborted) {
             if (!state.req.complete) {
                 state.req.complete = true;
@@ -846,6 +855,24 @@ function createConnectionParser(server, socket) {
                     parsed.httpVersion,
                     parsed.rawHeaders,
                 );
+
+                // CONNECT method: hand the socket to the application
+                if (parsed.method === 'CONNECT') {
+                    const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
+                    state.buffer = Buffer.alloc(0);
+                    state.detached = true;
+                    state.req = null;
+                    state.res = null;
+                    req.complete = true;
+
+                    if (server.listenerCount('connect') > 0) {
+                        server.emit('connect', req, socket, head);
+                    } else {
+                        socket.write(Buffer.from('HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n'));
+                        socket.destroy();
+                    }
+                    return;
+                }
 
                 const connKeepAlive = computeKeepAlive(req.headers.connection, parsed.httpVersion);
                 const res = new ServerResponse(req);

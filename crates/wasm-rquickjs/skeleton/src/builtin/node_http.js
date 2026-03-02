@@ -576,6 +576,68 @@ function _readHttpResponseFromSocket(socket) {
     });
 }
 
+function _readConnectResponseHeaders(socket) {
+    return new Promise(function(resolve, reject) {
+        var buffer = '';
+
+        var cleanup = function() {
+            socket.removeListener('data', onData);
+            socket.removeListener('end', onEnd);
+            socket.removeListener('error', onError);
+        };
+
+        var onData = function(chunk) {
+            buffer += typeof chunk === 'string' ? chunk : chunk.toString();
+            var headerEnd = buffer.indexOf('\r\n\r\n');
+            if (headerEnd === -1) return;
+
+            cleanup();
+            var headerSection = buffer.substring(0, headerEnd);
+            var lines = headerSection.split('\r\n');
+            var match = lines[0].match(/^HTTP\/(\d+\.\d+)\s+(\d+)\s*(.*)/);
+            if (!match) {
+                reject(new Error('Invalid HTTP status line'));
+                return;
+            }
+
+            var headers = [];
+            for (var i = 1; i < lines.length; i++) {
+                var colonIdx = lines[i].indexOf(':');
+                if (colonIdx > 0) {
+                    headers.push([
+                        lines[i].substring(0, colonIdx).trim(),
+                        lines[i].substring(colonIdx + 1).trim(),
+                    ]);
+                }
+            }
+
+            resolve({
+                httpVersion: match[1],
+                statusCode: parseInt(match[2], 10),
+                statusMessage: match[3] || '',
+                headers: headers,
+            });
+        };
+
+        var onEnd = function() {
+            cleanup();
+            reject(new Error('Connection closed before headers received'));
+        };
+
+        var onError = function(err) {
+            cleanup();
+            reject(err);
+        };
+
+        socket.on('data', onData);
+        socket.on('end', onEnd);
+        socket.on('error', onError);
+        if (typeof socket.resume === 'function') {
+            socket.resume();
+        }
+    });
+}
+
 function stringifyHeaderValue(value) {
     return String(value);
 }
@@ -1404,6 +1466,12 @@ export class ClientRequest extends EventEmitter {
 
         this._initializeCustomConnection(options);
 
+        if (this.method === 'CONNECT' && !this._useSocketTransport) {
+            const connectSocket = _netConnect(this.port, this.hostname);
+            this.socket = connectSocket;
+            this._useSocketTransport = true;
+        }
+
         if (this._rawHeaderPairs !== null) {
             this._refreshHeaderString();
         }
@@ -1913,7 +1981,10 @@ export class ClientRequest extends EventEmitter {
                 return;
             }
 
-            const parsed = await _readHttpResponseFromSocket(socket);
+            const isConnect = this.method === 'CONNECT';
+            const parsed = isConnect
+                ? await _readConnectResponseHeaders(socket)
+                : await _readHttpResponseFromSocket(socket);
 
             if (this.aborted || this.destroyed) {
                 return;
@@ -1931,32 +2002,37 @@ export class ClientRequest extends EventEmitter {
             res.headers = parsedHeaders.headers;
             res.headersDistinct = parsedHeaders.headersDistinct;
 
-            res.socket = socket;
-            res.client = socket;
-            if (socket && typeof socket.readableHighWaterMark === 'number') {
-                res.readableHighWaterMark = socket.readableHighWaterMark;
-            }
+            if (isConnect) {
+                res.complete = true;
+                this.emit('connect', res, socket, Buffer.alloc(0));
+            } else {
+                res.socket = socket;
+                res.client = socket;
+                if (socket && typeof socket.readableHighWaterMark === 'number') {
+                    res.readableHighWaterMark = socket.readableHighWaterMark;
+                }
 
-            const responseConnectionHeader = res.headers.connection;
-            const responseShouldKeepAlive = shouldKeepAliveFromResponse(
-                res.httpVersion,
-                responseConnectionHeader
-            );
-            if (this.shouldKeepAlive && !responseShouldKeepAlive) {
-                this.shouldKeepAlive = false;
-                this._last = true;
-            }
+                const responseConnectionHeader = res.headers.connection;
+                const responseShouldKeepAlive = shouldKeepAliveFromResponse(
+                    res.httpVersion,
+                    responseConnectionHeader
+                );
+                if (this.shouldKeepAlive && !responseShouldKeepAlive) {
+                    this.shouldKeepAlive = false;
+                    this._last = true;
+                }
 
-            if (onClientResponseFinish.hasSubscribers) {
-                onClientResponseFinish.publish({ request: this, response: res });
-            }
-            this.emit('response', res);
+                if (onClientResponseFinish.hasSubscribers) {
+                    onClientResponseFinish.publish({ request: this, response: res });
+                }
+                this.emit('response', res);
 
-            if (parsed.body.length > 0) {
-                res.emit('data', Buffer.from(parsed.body));
+                if (parsed.body.length > 0) {
+                    res.emit('data', Buffer.from(parsed.body));
+                }
+                res.complete = true;
+                res.emit('end');
             }
-            res.complete = true;
-            res.emit('end');
 
         } catch (err) {
             if (this.aborted || this.destroyed) {
@@ -2013,6 +2089,8 @@ import {
     createServer as _createServer,
     _signalClientAbort,
 } from '__wasm_rquickjs_builtin/node_http_server';
+
+import { connect as _netConnect } from 'node:net';
 
 export const Server = _Server;
 export const ServerResponse = _ServerResponse;
