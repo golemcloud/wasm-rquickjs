@@ -4880,7 +4880,7 @@
     "parallel/test-http-keep-alive-pipeline-max-requests.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive-timeout-custom.js": {
       "skip": true,
-      "reason": "regression: was enabled but started failing"
+      "reason": "[manual] wasmtime-wasi-http explicitly strips hop-by-hop headers (`Keep-Alive`, `Connection`) from HTTP responses via `DEFAULT_FORBIDDEN_HEADERS` / `remove_forbidden_headers()` before the WASM gues..."
     },
     "parallel/test-http-keep-alive-timeout-race-condition.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
