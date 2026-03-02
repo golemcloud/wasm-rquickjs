@@ -4958,7 +4958,7 @@
     "parallel/test-http-pipeline-socket-parser-typeerror.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-proxy.js": {
       "skip": true,
-      "reason": "regression: was enabled but started failing"
+      "reason": "[manual] amp fix caused regressions"
     },
     "parallel/test-http-raw-headers.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-readable-data-event.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
