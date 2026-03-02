@@ -4711,7 +4711,7 @@
     "parallel/test-http-allow-content-length-304.js": {},
     "parallel/test-http-automatic-headers.js": {
       "skip": true,
-      "reason": "regression: was enabled but started failing"
+      "reason": "[manual] The test asserts `res.headers.connection === 'keep-alive'`, but the `Connection` header is classified as a **forbidden hop-by-hop header** in wasmtime's wasi:http implementation (`wasmtime..."
     },
     "parallel/test-http-bind-twice.js": {},
     "parallel/test-http-blank-header.js": {
