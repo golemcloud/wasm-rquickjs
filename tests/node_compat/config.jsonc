@@ -4789,7 +4789,7 @@
     "parallel/test-http-client-timeout-event.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
     "parallel/test-http-client-timeout-option-listeners.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-client-timeout-with-data.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-client-timeout.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-client-timeout.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
     "parallel/test-http-client-upload-buf.js": {},
     "parallel/test-http-client-upload.js": {},
     "parallel/test-http-client-with-create-connection.js": {},
