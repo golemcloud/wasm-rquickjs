@@ -4741,11 +4741,9 @@
     "parallel/test-http-chunked-smuggling.js": {},
     "parallel/test-http-chunked.js": {},
     "parallel/test-http-client-abort-destroy.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
