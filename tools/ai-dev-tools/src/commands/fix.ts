@@ -563,6 +563,11 @@ export async function fixCommand(category: string): Promise<void> {
     if (result === "CANNOT_FIX") {
       const reasonNew = MANUAL_SKIP_PREFIX + extractCannotFixReason(ampOutput);
       console.log(`  ⏭ Test cannot be fixed: ${reasonNew}`);
+      // Revert any code changes amp made before updating config
+      if (hasChanges) {
+        console.log("  ↩ Reverting code changes from CANNOT_FIX attempt...");
+        revertWorkspace();
+      }
       if (target.subtestName) {
         skipSubtestInConfig(target.path, target.subtestName, reasonNew);
       } else {
