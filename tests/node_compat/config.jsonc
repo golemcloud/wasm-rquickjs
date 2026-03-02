@@ -4939,7 +4939,7 @@
     "parallel/test-http-outgoing-end-types.js": {},
     "parallel/test-http-outgoing-finish-writable.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-outgoing-finish.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-outgoing-finished.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-outgoing-finished.js": {},
     "parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-outgoing-message-capture-rejection.js": {
       "skip": true,
