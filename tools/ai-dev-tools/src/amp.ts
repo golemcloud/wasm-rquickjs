@@ -211,7 +211,8 @@ ${truncatedOutput}
 - After skeleton changes, run ./cleanup-skeleton.sh before running tests
 - Never modify vendored test files in tests/node_compat/suite/
 - Always update README.md if adding new APIs
-- ALL node:http outgoing HTTP requests must go through node:http — do not try to circumvent that using sockets
+- ALL node:http outgoing HTTP requests must go through wasi:http (the native Rust NodeHttpClientRequest) — do not try to circumvent that using sockets
+- **NEVER introduce localhost side-channels.** Do NOT intercept socket writes to capture HTTP response metadata (status messages, headers, HTTP version) and pass them to the client via globalThis queues keyed by port. Do NOT check isLoopbackHostname() to selectively apply captured metadata. The wasi:http protocol has real limitations (no status message, no HTTP version, limited header control). If a test fails because it depends on features wasi:http cannot provide, mark it as skipped in config.jsonc with "skip": true and "reason": "wasi:http does not expose <feature>" — do NOT fake the behavior for localhost only.
 
 Respond with either:
 - 'FIXED' if the test now passes (include what you changed)

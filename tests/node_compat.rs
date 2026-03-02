@@ -335,7 +335,6 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         let source = source.clone();
                         let discovery_clone = discovery_clone.clone();
                         Box::pin(async move {
-                            let test_future = async {
                                 let mut instance = TestInstance::from_prepared(&prepared).await?;
                                 setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
@@ -361,6 +360,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                                 fs::write(&rewritten_path, &rewritten)?;
 
                                 let guest_path = format!("/test/{}", path);
+                            let test_future = async {
                                 let (result, stdout, stderr) = instance
                                     .invoke_and_capture_output_with_stderr(
                                         None,
@@ -373,10 +373,16 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                             };
                             match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
                                 Ok(result) => result,
-                                Err(_) => anyhow::bail!(
-                                    "Test timed out after {}s",
-                                    test_timeout_secs
-                                ),
+                                Err(_) => {
+                                    let stdout = instance.read_stdout().unwrap_or_default();
+                                    let stderr = instance.read_stderr().unwrap_or_default();
+                                    anyhow::bail!(
+                                        "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}",
+                                        test_timeout_secs,
+                                        stdout.trim(),
+                                        stderr.trim()
+                                    )
+                                },
                             }
                         })
                     },

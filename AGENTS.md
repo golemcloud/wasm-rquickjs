@@ -163,6 +163,16 @@ Load the `adding-builtin-module` skill for the full checklist, code templates, a
 
 **Never use a loopback transport for `node:http`.** Every `node:http` client request MUST go through `wasi:http` (the native Rust `NodeHttpClientRequest`). Do NOT add any fallback that bypasses `wasi:http` by creating direct `node:net` socket connections for loopback/localhost addresses.
 
+### ⚠️ No Localhost Side-Channels
+
+**NEVER introduce side-channels that pass metadata between the server and client based on localhost detection.** The `wasi:http` protocol has inherent limitations (e.g., no status message, no HTTP version, no raw headers beyond what the protocol exposes). These limitations are real and affect all users. Do NOT work around them by:
+- Intercepting socket writes to capture HTTP response metadata (status messages, raw headers, connection headers)
+- Storing captured metadata in global queues keyed by port number
+- Checking `isLoopbackHostname()` to selectively apply captured metadata only for localhost
+- Using any `globalThis.__wasm_rquickjs_*` side-channel to pass data between server and client
+
+If a vendored node_compat test fails because it relies on HTTP features that `wasi:http` cannot provide (e.g., custom status messages, HTTP version negotiation, informational 1xx responses), **mark the test as skipped** in `config.jsonc` with an explicit reason like `"reason": "wasi:http does not expose status messages"` rather than faking the behavior for localhost only.
+
 ## Key Files
 
 - `src/main.rs` - CLI entry point

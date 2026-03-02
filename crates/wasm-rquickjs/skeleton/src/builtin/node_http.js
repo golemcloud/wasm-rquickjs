@@ -266,158 +266,6 @@ function urlToOptions(url) {
     };
 }
 
-function isLoopbackHostname(hostname) {
-    const normalized = String(hostname || '').toLowerCase();
-    return normalized === 'localhost' ||
-        normalized === '127.0.0.1' ||
-        normalized === '::1' ||
-        normalized === '[::1]';
-}
-
-function consumeCapturedResponseMetadata(hostname, port, statusCode) {
-    if (!isLoopbackHostname(hostname)) {
-        return undefined;
-    }
-
-    const normalizedPort = Number(port);
-    if (!Number.isFinite(normalizedPort) || normalizedPort <= 0) {
-        return undefined;
-    }
-
-    const takeResponseMetadata = globalThis.__wasm_rquickjs_take_http_response_metadata;
-    if (typeof takeResponseMetadata === 'function') {
-        const metadata = takeResponseMetadata(normalizedPort, statusCode);
-        if (metadata && typeof metadata === 'object') {
-            return metadata;
-        }
-    }
-
-    const takeStatusMessage = globalThis.__wasm_rquickjs_take_http_status_message;
-    if (typeof takeStatusMessage !== 'function') {
-        return undefined;
-    }
-
-    const statusMessage = takeStatusMessage(normalizedPort, statusCode);
-    if (statusMessage === undefined) {
-        return undefined;
-    }
-
-    return { statusMessage };
-}
-
-function consumeCapturedResponseSequence(hostname, port, expectedFinalStatusCode) {
-    if (!isLoopbackHostname(hostname)) {
-        return { informational: [], final: undefined };
-    }
-
-    const normalizedPort = Number(port);
-    if (!Number.isFinite(normalizedPort) || normalizedPort <= 0) {
-        return { informational: [], final: undefined };
-    }
-
-    const takeResponseSequence = globalThis.__wasm_rquickjs_take_http_response_sequence;
-    if (typeof takeResponseSequence === 'function') {
-        const sequence = takeResponseSequence(normalizedPort, expectedFinalStatusCode);
-        if (sequence && typeof sequence === 'object') {
-            const informational = Array.isArray(sequence.informational) ? sequence.informational : [];
-            const final = sequence.final && typeof sequence.final === 'object'
-                ? sequence.final
-                : undefined;
-            return { informational, final };
-        }
-    }
-
-    const takeResponseMetadata = globalThis.__wasm_rquickjs_take_http_response_metadata;
-    if (typeof takeResponseMetadata !== 'function') {
-        return {
-            informational: [],
-            final: consumeCapturedResponseMetadata(hostname, port, expectedFinalStatusCode),
-        };
-    }
-
-    const informational = [];
-    let final;
-
-    for (let i = 0; i < 64; i++) {
-        const metadata = takeResponseMetadata(normalizedPort);
-        if (!metadata || typeof metadata !== 'object') {
-            break;
-        }
-
-        const statusCode = Number(metadata.statusCode);
-        if (statusCode >= 100 && statusCode < 200 && statusCode !== 101) {
-            informational.push(metadata);
-            continue;
-        }
-
-        final = metadata;
-        break;
-    }
-
-    if (!final) {
-        final = consumeCapturedResponseMetadata(hostname, port, expectedFinalStatusCode);
-    }
-
-    return { informational, final };
-}
-
-function toInformationalHeaders(rawHeaders, fallbackHeaders) {
-    if (fallbackHeaders && typeof fallbackHeaders === 'object') {
-        return fallbackHeaders;
-    }
-
-    const headers = {};
-    if (!Array.isArray(rawHeaders)) {
-        return headers;
-    }
-
-    for (let i = 0; i < rawHeaders.length - 1; i += 2) {
-        const name = String(rawHeaders[i]);
-        const value = String(rawHeaders[i + 1]);
-        const lower = name.toLowerCase();
-        if (headers[lower] === undefined) {
-            headers[lower] = value;
-        } else {
-            headers[lower] += ', ' + value;
-        }
-    }
-
-    return headers;
-}
-
-function emitInformationEvent(request, metadata) {
-    if (!metadata || typeof metadata !== 'object') {
-        return;
-    }
-
-    const statusCode = Number(metadata.statusCode);
-    if (!Number.isFinite(statusCode) || statusCode < 100 || statusCode >= 200 || statusCode === 101) {
-        return;
-    }
-
-    const statusMessage = typeof metadata.statusMessage === 'string'
-        ? metadata.statusMessage
-        : (STATUS_CODES[statusCode] || '');
-    const httpVersion = normalizeHttpVersion(metadata.httpVersion);
-    const [majorPart, minorPart] = httpVersion.split('.');
-    const rawHeaders = Array.isArray(metadata.rawHeaders) ? metadata.rawHeaders : [];
-    const headers = toInformationalHeaders(rawHeaders, metadata.headers);
-
-    if (statusCode === 100) {
-        request.emit('continue');
-    }
-
-    request.emit('information', {
-        statusCode,
-        statusMessage,
-        httpVersion,
-        httpVersionMajor: Number(majorPart) || 1,
-        httpVersionMinor: Number(minorPart) || 1,
-        headers,
-        rawHeaders,
-    });
-}
-
 function normalizeHttpVersion(httpVersion) {
     if (typeof httpVersion === 'string' && /^\d+\.\d+$/.test(httpVersion)) {
         return httpVersion;
@@ -772,14 +620,7 @@ const NO_DUPLICATE_HEADERS = new Set([
     'user-agent',
 ]);
 
-function normalizeIncomingRawPairs(nativeRes, responseMetadata) {
-    if (responseMetadata && Array.isArray(responseMetadata.rawHeaders)) {
-        const capturedPairs = normalizeRawHeaderPairs(responseMetadata.rawHeaders);
-        if (capturedPairs.length > 0) {
-            return capturedPairs;
-        }
-    }
-
+function normalizeIncomingRawPairs(nativeRes) {
     if (nativeRes && Array.isArray(nativeRes.headers)) {
         return normalizeRawHeaderPairs(nativeRes.headers);
     }
@@ -845,7 +686,7 @@ function parseIncomingHeaders(rawPairs) {
 }
 
 export class IncomingMessage extends EventEmitter {
-    constructor(nativeRes, statusMessageOverride, httpVersionOverride, responseMetadata) {
+    constructor(nativeRes) {
         super();
         const hasNativeResponse = nativeRes !== null &&
             typeof nativeRes === 'object' &&
@@ -855,14 +696,12 @@ export class IncomingMessage extends EventEmitter {
         this._nativeRes = hasNativeResponse ? nativeRes : null;
         this.statusCode = hasNativeResponse ? nativeRes.status : null;
         if (hasNativeResponse) {
-            if (statusMessageOverride !== undefined) {
-                this.statusMessage = statusMessageOverride;
-            } else if (typeof nativeRes.statusMessage === 'string') {
+            if (typeof nativeRes.statusMessage === 'string') {
                 this.statusMessage = nativeRes.statusMessage;
             } else {
                 this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
             }
-            applyHttpVersion(this, httpVersionOverride);
+            applyHttpVersion(this, undefined);
         } else {
             this.statusMessage = null;
             this.httpVersion = null;
@@ -882,7 +721,7 @@ export class IncomingMessage extends EventEmitter {
         this._encoding = null;
 
         const parsedHeaders = parseIncomingHeaders(
-            hasNativeResponse ? normalizeIncomingRawPairs(nativeRes, responseMetadata) : []
+            hasNativeResponse ? normalizeIncomingRawPairs(nativeRes) : []
         );
         this.rawHeaders = parsedHeaders.rawHeaders;
         this.headers = parsedHeaders.headers;
@@ -1662,13 +1501,7 @@ export class ClientRequest extends EventEmitter {
         }
 
         if (this._bodyLength > 0) {
-            // The native wasi:http bridge sends the aggregated body payload and does not
-            // expose chunk framing control, so default to Content-Length there.
-            if (this._useLoopbackTransport && this._usedWrite) {
-                this.setHeader('Transfer-Encoding', 'chunked');
-            } else {
-                this.setHeader('Content-Length', String(this._bodyLength));
-            }
+            this.setHeader('Content-Length', String(this._bodyLength));
             return;
         }
 
@@ -1772,7 +1605,7 @@ export class ClientRequest extends EventEmitter {
         if (bodyChunk) {
             this._bodyLength += bodyChunk.length;
             this._bodyChunks.push(bodyChunk);
-            if (!this._useLoopbackTransport && !this._useSocketTransport) {
+            if (!this._useSocketTransport) {
                 this._nativeReq.write(new Uint8Array(bodyChunk));
             }
         }
@@ -1826,7 +1659,7 @@ export class ClientRequest extends EventEmitter {
             if (bodyChunk) {
                 this._bodyLength += bodyChunk.length;
                 this._bodyChunks.push(bodyChunk);
-                if (!this._useLoopbackTransport && !this._useSocketTransport) {
+                if (!this._useSocketTransport) {
                     this._nativeReq.write(new Uint8Array(bodyChunk));
                 }
             }
@@ -1900,26 +1733,9 @@ export class ClientRequest extends EventEmitter {
                     nativeRes.discardBody();
                 }
             } else if (nativeRes) {
-                const metadataSequence = consumeCapturedResponseSequence(
-                    this.hostname,
-                    this.port,
-                    nativeRes.status
-                );
-                for (const informational of metadataSequence.informational) {
-                    emitInformationEvent(this, informational);
-                }
+                const res = new IncomingMessage(nativeRes);
 
-                const responseMetadata = metadataSequence.final;
-                const res = new IncomingMessage(
-                    nativeRes,
-                    responseMetadata && responseMetadata.statusMessage,
-                    responseMetadata && responseMetadata.httpVersion,
-                    responseMetadata
-                );
-
-                const responseConnectionHeader = res.headers.connection !== undefined
-                    ? res.headers.connection
-                    : (responseMetadata && responseMetadata.connectionHeader);
+                const responseConnectionHeader = res.headers.connection;
 
                 const responseShouldKeepAlive = shouldKeepAliveFromResponse(
                     res.httpVersion,

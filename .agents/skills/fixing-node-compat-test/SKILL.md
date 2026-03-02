@@ -115,3 +115,11 @@ If you need a new crate in the skeleton, add it to `crates/wasm-rquickjs/skeleto
 
 ### No platform-conditional code
 The skeleton is **always compiled to `wasm32-wasip1`**. Never write conditional code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`, `#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`, `path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code complexity.
+
+### No localhost side-channels for node:http
+**NEVER introduce side-channels that pass metadata between the HTTP server and client based on localhost detection.** The `wasi:http` protocol has inherent limitations (e.g., no status message, no HTTP version, no raw headers beyond what the protocol exposes). These are real limitations that affect all users. Do NOT work around them by:
+- Intercepting socket writes to capture HTTP response metadata (status messages, raw headers, connection headers)
+- Storing captured metadata in global queues keyed by port number (e.g., `globalThis.__wasm_rquickjs_*`)
+- Checking whether the hostname is localhost/127.0.0.1 to selectively apply captured metadata
+
+Such tricks make localhost-based vendored tests pass while hiding real behavior gaps that users will hit with non-localhost hosts. If a test fails because it relies on HTTP features that `wasi:http` cannot provide, **mark the test as skipped** in `config.jsonc` with `"skip": true` and `"reason": "wasi:http does not expose <feature>"` rather than faking the behavior.

@@ -548,6 +548,14 @@ impl TestInstance {
         self.temp_dir.path()
     }
 
+    pub fn read_stdout(&self) -> anyhow::Result<String> {
+        Ok(fs::read_to_string(&self.stdout_file)?)
+    }
+
+    pub fn read_stderr(&self) -> anyhow::Result<String> {
+        Ok(fs::read_to_string(&self.stderr_file)?)
+    }
+
     async fn invoke_and_capture_output_inner(
         &mut self,
         interface_name: Option<&str>,
