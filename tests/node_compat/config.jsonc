@@ -5153,7 +5153,7 @@
     },
     "parallel/test-http-write-head.js": {
       "skip": true,
-      "reason": "regression: was enabled but started failing"
+      "reason": "[manual] The test asserts `response.rawHeaders.includes('Test')` (line 78) — requiring header name case preservation through the HTTP transport. In wasi:http, all header names are normalized to low..."
     },
     "parallel/test-http-zero-length-write.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-zerolengthbuffer.js": {},
