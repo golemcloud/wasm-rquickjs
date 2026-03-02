@@ -4666,10 +4666,7 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-abort-stream-end.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
-    },
+    "parallel/test-http-abort-stream-end.js": {},
     "parallel/test-http-aborted.js": {
       "split": true,
       "subtests": {

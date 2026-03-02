@@ -1928,6 +1928,7 @@ export class ClientRequest extends EventEmitter {
                 if (onClientResponseFinish.hasSubscribers) {
                     onClientResponseFinish.publish({ request: this, response: res });
                 }
+                this._response = res;
                 this.emit('response', res);
 
                 const shouldReadResponseBody =
@@ -2055,8 +2056,13 @@ export class ClientRequest extends EventEmitter {
         this.aborted = true;
         this.destroyed = true;
         this._abortNativeRequest();
-        this.emit('abort');
-        this._emitCloseOnce();
+        if (this._response) {
+            this._response.destroyed = true;
+        }
+        process.nextTick(() => {
+            this.emit('abort');
+            this._emitCloseOnce();
+        });
     }
 
     destroy(error) {
