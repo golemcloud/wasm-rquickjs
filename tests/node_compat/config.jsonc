@@ -5094,7 +5094,7 @@
     "parallel/test-http-server-request-timeout-keepalive.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-request-timeout-pipelining.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-request-timeout-upgrade.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-server-response-standalone.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-server-response-standalone.js": {},
     "parallel/test-http-server-stale-close.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-timeouts-validation.js": {
       "skip": true,

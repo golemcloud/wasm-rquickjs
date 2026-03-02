@@ -197,6 +197,15 @@ export class ERR_HTTP_HEADERS_SENT extends Error {
     }
 }
 
+export class ERR_HTTP_SOCKET_ASSIGNED extends Error {
+    constructor() {
+        super(
+            "ServerResponse has an already assigned socket",
+        );
+        addCodeToMessage(this, "ERR_HTTP_SOCKET_ASSIGNED");
+    }
+}
+
 export class ERR_HTTP_INVALID_HEADER_VALUE extends TypeError {
     constructor(x, y) {
         super(
@@ -1180,6 +1189,7 @@ export const codes = Object.freeze({
     ERR_FS_FILE_TOO_LARGE,
     ERR_FS_INVALID_SYMLINK_TYPE,
     ERR_HTTP_HEADERS_SENT,
+    ERR_HTTP_SOCKET_ASSIGNED,
     ERR_HTTP_INVALID_HEADER_VALUE,
     ERR_HTTP_TRAILER_INVALID,
     ERR_IPC_CHANNEL_CLOSED,

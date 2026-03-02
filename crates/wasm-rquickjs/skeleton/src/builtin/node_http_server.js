@@ -3,6 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
+import { ERR_HTTP_SOCKET_ASSIGNED } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -213,6 +214,23 @@ function ServerResponse(req) {
 Object.setPrototypeOf(ServerResponse.prototype, EventEmitter.prototype);
 Object.setPrototypeOf(ServerResponse, EventEmitter);
 
+ServerResponse.prototype.assignSocket = function assignSocket(socket) {
+    if (this.socket) {
+        throw new ERR_HTTP_SOCKET_ASSIGNED();
+    }
+    this.socket = socket;
+    this.connection = socket;
+    socket._httpMessage = this;
+};
+
+ServerResponse.prototype.detachSocket = function detachSocket(socket) {
+    if (socket._httpMessage === this) {
+        socket._httpMessage = null;
+    }
+    this.socket = null;
+    this.connection = null;
+};
+
 Object.defineProperty(ServerResponse.prototype, 'writableEnded', {
     get() { return this._writableEnded; },
 });
@@ -375,8 +393,8 @@ ServerResponse.prototype.writeHead = function writeHead(statusCode, statusMessag
     return this;
 };
 
-ServerResponse.prototype._sendHeaders = function _sendHeaders() {
-    if (this._headersSentWire) return;
+ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
+    if (this._headersSentWire) return '';
     this._headersSentWire = true;
     this.headersSent = true;
 
@@ -441,7 +459,14 @@ ServerResponse.prototype._sendHeaders = function _sendHeaders() {
     }
 
     head += '\r\n';
-    this.socket.write(Buffer.from(head));
+    return head;
+};
+
+ServerResponse.prototype._sendHeaders = function _sendHeaders() {
+    const head = this._buildHeaderString();
+    if (head) {
+        this.socket.write(Buffer.from(head));
+    }
 };
 
 ServerResponse.prototype.write = function write(chunk, encoding, cb) {
@@ -498,9 +523,13 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         if (data && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
             const body = typeof data === 'string' ? Buffer.from(data, encoding || 'utf8') : Buffer.from(data);
             this.setHeader('Content-Length', body.length);
-            this._sendHeaders();
-            if (this._hasBody) {
-                this.socket.write(body);
+            const head = this._buildHeaderString();
+            if (this._hasBody && head) {
+                const headerBuf = Buffer.from(head);
+                const combined = Buffer.concat([headerBuf, body]);
+                this.socket.write(combined);
+            } else if (head) {
+                this.socket.write(Buffer.from(head));
             }
         } else {
             if (!data && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
@@ -519,6 +548,11 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
 
     if (this._chunked && this._hasBody) {
         this.socket.write(Buffer.from('0\r\n\r\n'));
+    }
+
+    // Write empty chunk to signal end of response (matches Node.js behavior)
+    if (this.socket && !this._chunked) {
+        this.socket.write(Buffer.alloc(0));
     }
 
     this.finished = true;
