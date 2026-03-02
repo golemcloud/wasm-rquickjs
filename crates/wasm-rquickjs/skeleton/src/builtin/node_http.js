@@ -1657,6 +1657,20 @@ export class ClientRequest extends EventEmitter {
             }
         }
 
+        // WASI HTTP requires the body to be complete before sending. Schedule
+        // an automatic end() so that requests that call write() without end()
+        // still get sent. If end() is called synchronously after write(), the
+        // auto-end is a no-op because _writableEnded will already be true.
+        if (!this._useSocketTransport && !this._autoEndScheduled) {
+            this._autoEndScheduled = true;
+            const self = this;
+            process.nextTick(function autoEnd() {
+                if (!self._writableEnded && !self.destroyed && !self.aborted) {
+                    self.end();
+                }
+            });
+        }
+
         if (typeof callback === 'function') callback();
         return this._bodyLength < (16 * 1024);
     }

@@ -205,6 +205,8 @@ function ServerResponse(req) {
     // Properties needed by stream.finished / end-of-stream detection
     this._sent100 = false;
     this._closed = false;
+    this._destroyed = false;
+    this._errored = undefined;
     this._defaultKeepAlive = false;
     this._removedConnection = false;
     this._removedContLen = false;
@@ -238,6 +240,19 @@ Object.defineProperty(ServerResponse.prototype, 'writableEnded', {
 
 Object.defineProperty(ServerResponse.prototype, 'writableFinished', {
     get() { return this.finished; },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'closed', {
+    get() { return this._closed; },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'destroyed', {
+    get() { return this._destroyed; },
+    set(value) { this._destroyed = value; },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'errored', {
+    get() { return this._errored; },
 });
 
 ServerResponse.prototype._implicitHeader = function _implicitHeader() {
@@ -476,6 +491,11 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         encoding = undefined;
     }
 
+    if (this._destroyed || this._closed) {
+        if (typeof cb === 'function') cb();
+        return false;
+    }
+
     if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
         throw new ERR_INVALID_ARG_TYPE('first argument',
             ['string', 'Buffer', 'Uint8Array'], chunk);
@@ -527,7 +547,7 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         }
     }
 
-    if (this._writableEnded) {
+    if (this._writableEnded || this._destroyed || this._closed) {
         if (typeof cb === 'function') cb();
         return this;
     }
@@ -628,6 +648,9 @@ ServerResponse.prototype.setTimeout = function setTimeout(ms, cb) {
 };
 
 ServerResponse.prototype.destroy = function destroy(err) {
+    if (this._destroyed) return this;
+    this._destroyed = true;
+    if (err) this._errored = err;
     if (this.socket) this.socket.destroy(err);
     return this;
 };
