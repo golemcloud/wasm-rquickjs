@@ -4661,10 +4661,7 @@
     "parallel/test-diagnostics-channel-http-server-start.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-domain-http-server.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-domain-multi.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-abort-before-end.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
-    },
+    "parallel/test-http-abort-before-end.js": {},
     "parallel/test-http-abort-queued.js": {
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients"
