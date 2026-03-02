@@ -4674,10 +4674,7 @@
           "skip": true,
           "reason": "[manual] amp fix caused regressions"
         },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "inherited: requires HTTP server functionality, we only support clients"
-        }
+        "block_01_block_01": {}
       }
     },
     "parallel/test-http-agent-abort-controller.js": {

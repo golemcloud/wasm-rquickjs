@@ -694,6 +694,10 @@ function shouldSkipNativeHeader(name, value) {
         // wasi:http controls authority separately from headers and rejects manual Host overrides.
         return true;
     }
+    if (lower === 'connection' || lower === 'transfer-encoding') {
+        // Transport-level headers are managed by wasi:http and must not be set manually.
+        return true;
+    }
     if (lower !== 'accept') {
         return false;
     }
@@ -872,6 +876,7 @@ export class IncomingMessage extends EventEmitter {
         this.client = this.socket;
         this.trailers = {};
         this.trailersDistinct = {};
+        this.aborted = false;
         this.destroyed = false;
         this._timeout = null;
         this._encoding = null;
@@ -2057,11 +2062,17 @@ export class ClientRequest extends EventEmitter {
         this.destroyed = true;
         this._abortNativeRequest();
         if (this._response) {
+            this._response.aborted = true;
             this._response.destroyed = true;
+            this._response.emit('aborted');
         }
+        const targetPort = this.port;
         process.nextTick(() => {
             this.emit('abort');
             this._emitCloseOnce();
+            if (targetPort) {
+                _signalClientAbort(+targetPort);
+            }
         });
     }
 
@@ -2086,6 +2097,7 @@ import {
     Server as _Server,
     ServerResponse as _ServerResponse,
     createServer as _createServer,
+    _signalClientAbort,
 } from '__wasm_rquickjs_builtin/node_http_server';
 
 export const Server = _Server;

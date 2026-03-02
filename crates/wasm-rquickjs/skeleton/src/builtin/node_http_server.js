@@ -714,11 +714,15 @@ function createConnectionParser(server, socket) {
     socket.on('end', function onEnd() {
         state.readableEnded = true;
 
-        if (state.req && !state.req.complete) {
-            state.req.complete = true;
-            state.req.aborted = true;
-            state.req.emit('aborted');
-            state.req.push(null);
+        if (state.req && !state.req.aborted) {
+            if (!state.req.complete) {
+                state.req.complete = true;
+                state.req.push(null);
+            }
+            if (!state.responseFinished) {
+                state.req.aborted = true;
+                state.req.emit('aborted');
+            }
         }
 
         if (!server.httpAllowHalfOpen) {
@@ -740,21 +744,27 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('error', function onError(err) {
-        if (state.req && !state.req.complete) {
-            state.req.complete = true;
+        if (state.req && !state.req.aborted) {
+            if (!state.req.complete) {
+                state.req.complete = true;
+                state.req.push(null);
+            }
             state.req.aborted = true;
             state.req.emit('aborted');
-            state.req.push(null);
             state.req.emit('error', err);
         }
     });
 
     socket.on('close', function onClose() {
-        if (state.req && !state.req.complete) {
-            state.req.complete = true;
-            state.req.aborted = true;
-            state.req.emit('aborted');
-            state.req.push(null);
+        if (state.req && !state.req.aborted) {
+            if (!state.req.complete) {
+                state.req.complete = true;
+                state.req.push(null);
+            }
+            if (!state.responseFinished) {
+                state.req.aborted = true;
+                state.req.emit('aborted');
+            }
         }
         if (state.res) {
             state.res._closed = true;
@@ -1098,6 +1108,8 @@ function Server(options, requestListener) {
     }
 
     const self = this;
+    this.on('listening', function () { _registerServer(self); });
+    this.on('close', function () { _unregisterServer(self); });
     this.on('connection', function connectionListener(socket) {
         // Force-close idle connections to prevent WASI resource exhaustion.
         // In WASM, each socket consumes limited resources (pollables, streams),
@@ -1159,6 +1171,52 @@ Server.prototype.closeIdleConnections = function closeIdleConnections() {
     }
 };
 
+// ===== In-process abort signaling =====
+// When client and server are in the same WASM component, aborting a WASI HTTP
+// request doesn't reliably close the underlying TCP connection. This registry
+// allows the client-side abort to directly signal the server-side connections.
+
+const _activeServersByPort = new Map();
+
+function _registerServer(server) {
+    const addr = server.address();
+    if (addr && typeof addr.port === 'number') {
+        _activeServersByPort.set(addr.port, server);
+    }
+}
+
+function _unregisterServer(server) {
+    for (const [port, s] of _activeServersByPort) {
+        if (s === server) {
+            _activeServersByPort.delete(port);
+            break;
+        }
+    }
+}
+
+export function _signalClientAbort(port) {
+    const server = _activeServersByPort.get(port);
+    if (!server) return;
+    for (const conn of server._httpConnections) {
+        if (conn.req && !conn.req.aborted && !conn.responseFinished) {
+            conn.req.aborted = true;
+            conn.req.emit('aborted');
+            if (!conn.req.complete) {
+                conn.req.complete = true;
+                conn.req.push(null);
+            }
+            if (conn.req.listenerCount('error') > 0) {
+                const abortError = new Error('aborted');
+                abortError.code = 'ECONNRESET';
+                conn.req.emit('error', abortError);
+            }
+        }
+        if (conn.socket && !conn.socket.destroyed) {
+            conn.socket.destroy();
+        }
+    }
+}
+
 // ===== createServer =====
 
 export function createServer(options, requestListener) {
@@ -1166,4 +1224,4 @@ export function createServer(options, requestListener) {
 }
 
 export { Server, ServerResponse, ServerIncomingMessage };
-export default { Server, ServerResponse, ServerIncomingMessage, createServer };
+export default { Server, ServerResponse, ServerIncomingMessage, createServer, _signalClientAbort };
