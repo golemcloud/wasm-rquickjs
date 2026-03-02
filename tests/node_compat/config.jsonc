@@ -4664,7 +4664,7 @@
     "parallel/test-http-abort-before-end.js": {},
     "parallel/test-http-abort-queued.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
+      "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-abort-stream-end.js": {
       "skip": true,
