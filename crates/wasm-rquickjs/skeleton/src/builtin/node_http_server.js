@@ -3,7 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
-import { ERR_HTTP_SOCKET_ASSIGNED } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -475,6 +475,11 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         encoding = undefined;
     }
 
+    if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+        throw new ERR_INVALID_ARG_TYPE('first argument',
+            ['string', 'Buffer', 'Uint8Array'], chunk);
+    }
+
     if (!this._headersSentWire) {
         this._sendHeaders();
     }
@@ -511,6 +516,13 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
     } else if (typeof encoding === 'function') {
         cb = encoding;
         encoding = undefined;
+    }
+
+    if (data !== undefined && data !== null) {
+        if (typeof data !== 'string' && !Buffer.isBuffer(data) && !(data instanceof Uint8Array)) {
+            throw new ERR_INVALID_ARG_TYPE('first argument',
+                ['string', 'Buffer', 'Uint8Array'], data);
+        }
     }
 
     if (this._writableEnded) {
