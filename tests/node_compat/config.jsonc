@@ -4362,10 +4362,7 @@
       "reason": "Requires --expose-gc and process.memoryUsage().external"
     },
     "parallel/test-zlib-write-after-close.js": {},
-    "parallel/test-zlib-write-after-end.js": {
-      "skip": true,
-      "reason": "Uses t.mock.fn() with mock.callCount() assertion"
-    },
+    "parallel/test-zlib-write-after-end.js": {},
     "parallel/test-zlib-write-after-flush.js": {},
     "parallel/test-zlib-close-after-error.js": {},
     "parallel/test-zlib-close-in-ondata.js": {},
