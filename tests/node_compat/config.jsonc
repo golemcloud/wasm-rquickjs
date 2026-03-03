@@ -8035,7 +8035,10 @@
           "reason": "[manual] amp fix attempt failed verification"
         },
         "test_01_throws_if_fn_is_not_a_function": {},
-        "test_02_invokes_a_custom_assertion_as_part_of_the_test_plan": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_02_invokes_a_custom_assertion_as_part_of_the_test_plan": {
+          "skip": true,
+          "reason": "[manual] amp fix attempt failed verification"
+        },
         "test_03_can_override_existing_assertions": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_04_this_is_set_to_the_testcontext": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
