@@ -10,6 +10,7 @@ import {
   crc32_compute,
   zlib_stream_new,
   zlib_stream_push,
+  zlib_stream_params,
   zlib_stream_reset,
   zlib_stream_close,
   zlib_stream_bytes_written,
@@ -612,7 +613,18 @@ class ZlibBase extends Transform {
       throw makeRangeError('ERR_OUT_OF_RANGE',
         `The value of "strategy" is out of range. It must be >= 0 and <= 4. Received ${strategy}`);
     }
-    if (callback) setTimeout(callback, 0);
+    if (this._level !== level || this._strategy !== strategy) {
+      this.flush(Z_SYNC_FLUSH, () => {
+        if (this._handle !== null) {
+          zlib_stream_params(this._handle, level, strategy);
+        }
+        this._level = level;
+        this._strategy = strategy;
+        if (callback) callback();
+      });
+    } else {
+      queueMicrotask(() => { if (callback) callback(); });
+    }
   }
 
   _processChunk(chunk, flushFlag) {

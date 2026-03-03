@@ -57,39 +57,89 @@ fn zlib_compress_sync_impl(
     }
 }
 
+/// Decompress multi-member gzip data, handling trailing null bytes and
+/// detecting invalid gzip headers (e.g. unknown compression method).
+///
+/// Returns `Ok(data)` on success, `Err(Some(msg))` for a specific data error
+/// (e.g. invalid compression method), or `Err(None)` for a generic failure.
+fn gzip_decompress_multi_member(data: &[u8]) -> Result<Vec<u8>, Option<String>> {
+    let mut output = Vec::new();
+    let mut cursor = Cursor::new(data);
+    let mut members_decoded = 0u32;
+
+    while (cursor.position() as usize) < data.len() {
+        let pos = cursor.position() as usize;
+        let remaining = &data[pos..];
+
+        // Trailing null bytes after valid gzip members are ignored (Node.js behavior)
+        if remaining.iter().all(|&b| b == 0) {
+            break;
+        }
+
+        // Need at least 2 bytes for gzip magic
+        if remaining.len() < 2 || remaining[0] != 0x1f || remaining[1] != 0x8b {
+            break;
+        }
+
+        // Gzip header byte 2 is the compression method (must be 8 = deflate)
+        if remaining.len() >= 3 && remaining[2] != 8 {
+            return Err(Some("unknown compression method".to_string()));
+        }
+
+        let mut decoder = flate2::bufread::GzDecoder::new(&mut cursor);
+        match decoder.read_to_end(&mut output) {
+            Ok(_) => {
+                members_decoded += 1;
+            }
+            Err(_) => return Err(None),
+        }
+    }
+
+    if members_decoded == 0 {
+        Err(None)
+    } else {
+        Ok(output)
+    }
+}
+
+/// Returns `(Some(data), None)` on success, `(None, Some(msg))` on a data error
+/// with a specific message, or `(None, None)` on a generic failure.
 fn zlib_decompress_sync_impl(
     data: &[u8],
     window_bits: i32,
-) -> Option<Vec<u8>> {
+) -> (Option<Vec<u8>>, Option<String>) {
     if window_bits >= 24 || window_bits == 0 {
         // gzip or auto-detect: try gzip first
-        // Use MultiGzDecoder to handle concatenated multi-member gzip streams
-        let mut decoder = flate2::read::MultiGzDecoder::new(Cursor::new(data));
-        let mut output = Vec::new();
-        match decoder.read_to_end(&mut output) {
-            Ok(_) => return Some(output),
+        match gzip_decompress_multi_member(data) {
+            Ok(output) => return (Some(output), None),
             Err(_) if window_bits == 0 => {
                 // auto-detect: fall through to try zlib
             }
-            Err(_) => return None,
+            Err(specific_msg) => return (None, specific_msg),
         }
         // Try zlib
         let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(data));
         let mut output = Vec::new();
-        decoder.read_to_end(&mut output).ok()?;
-        Some(output)
+        match decoder.read_to_end(&mut output) {
+            Ok(_) => (Some(output), None),
+            Err(_) => (None, None),
+        }
     } else if window_bits < 0 {
         // raw deflate
         let mut decoder = flate2::read::DeflateDecoder::new(Cursor::new(data));
         let mut output = Vec::new();
-        decoder.read_to_end(&mut output).ok()?;
-        Some(output)
+        match decoder.read_to_end(&mut output) {
+            Ok(_) => (Some(output), None),
+            Err(_) => (None, None),
+        }
     } else {
         // zlib format
         let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(data));
         let mut output = Vec::new();
-        decoder.read_to_end(&mut output).ok()?;
-        Some(output)
+        match decoder.read_to_end(&mut output) {
+            Ok(_) => (Some(output), None),
+            Err(_) => (None, None),
+        }
     }
 }
 
@@ -173,8 +223,16 @@ enum ZlibStreamKind {
         level: Compression,
         adler: Adler32State,
     },
+    ZlibStored {
+        buffer: Vec<u8>,
+        header_emitted: bool,
+        adler: Adler32State,
+    },
     RawCompress {
         encoder: flate2::write::DeflateEncoder<Vec<u8>>,
+    },
+    RawStored {
+        buffer: Vec<u8>,
     },
     Decompress {
         inner: Decompress,
@@ -358,6 +416,27 @@ fn zlib_stream_new_impl(
     Some(id)
 }
 
+/// Produce raw deflate stored blocks from data. All blocks are non-final.
+fn produce_stored_blocks(data: &[u8]) -> Vec<u8> {
+    let mut result = Vec::new();
+    let max_block = 65535usize;
+    let mut offset = 0;
+    while offset < data.len() {
+        let block_len = std::cmp::min(data.len() - offset, max_block);
+        result.push(0x00); // BFINAL=0, BTYPE=00 (stored)
+        result.extend_from_slice(&(block_len as u16).to_le_bytes());
+        result.extend_from_slice(&(!(block_len as u16)).to_le_bytes());
+        result.extend_from_slice(&data[offset..offset + block_len]);
+        offset += block_len;
+    }
+    result
+}
+
+/// Produce the deflate end-of-stream marker: a final empty stored block.
+fn produce_final_empty_block() -> [u8; 5] {
+    [0x01, 0x00, 0x00, 0xFF, 0xFF]
+}
+
 fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
     let mut streams = ZLIB_STREAMS.lock().unwrap();
     let stream = streams.get_mut(&id)?;
@@ -400,6 +479,36 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
             }
             Some(result)
         }
+        ZlibStreamKind::ZlibStored {
+            buffer,
+            header_emitted,
+            adler,
+        } => {
+            let mut result = Vec::new();
+            // Emit zlib header on first push with data or flush
+            if !*header_emitted && (!data.is_empty() || flush != 0) {
+                result.extend_from_slice(&compute_zlib_header(Compression::none()));
+                *header_emitted = true;
+            }
+            if !data.is_empty() {
+                adler.update(data);
+                buffer.extend_from_slice(data);
+            }
+            if flush == 4 {
+                // Z_FINISH: produce stored blocks + final empty block + adler32
+                result.extend_from_slice(&produce_stored_blocks(buffer));
+                result.extend_from_slice(&produce_final_empty_block());
+                let checksum = adler.finish();
+                result.extend_from_slice(&checksum.to_be_bytes());
+                buffer.clear();
+            } else if flush == 1 || flush == 2 || flush == 3 {
+                // Flush: produce stored blocks from buffered data
+                result.extend_from_slice(&produce_stored_blocks(buffer));
+                buffer.clear();
+            }
+            // Z_NO_FLUSH: just buffer, return empty (or just the header)
+            Some(result)
+        }
         ZlibStreamKind::RawCompress { encoder } => {
             if !data.is_empty() {
                 encoder.write_all(data).ok()?;
@@ -413,6 +522,24 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
             let result = encoder.get_ref().clone();
             encoder.get_mut().clear();
             Some(result)
+        }
+        ZlibStreamKind::RawStored { buffer } => {
+            if !data.is_empty() {
+                buffer.extend_from_slice(data);
+            }
+            if flush == 4 {
+                // Z_FINISH: produce stored blocks + final empty block
+                let mut result = produce_stored_blocks(buffer);
+                result.extend_from_slice(&produce_final_empty_block());
+                buffer.clear();
+                Some(result)
+            } else if flush == 1 || flush == 2 || flush == 3 {
+                let result = produce_stored_blocks(buffer);
+                buffer.clear();
+                Some(result)
+            } else {
+                Some(Vec::new())
+            }
         }
         ZlibStreamKind::Decompress { inner, .. } => {
             let mut output = vec![0u8; data.len() + 1024];
@@ -583,8 +710,20 @@ fn zlib_stream_reset_impl(id: u32) -> bool {
                 *header_emitted = false;
                 *adler = Adler32State::new();
             }
+            ZlibStreamKind::ZlibStored {
+                buffer,
+                header_emitted,
+                adler,
+            } => {
+                buffer.clear();
+                *header_emitted = false;
+                *adler = Adler32State::new();
+            }
             ZlibStreamKind::RawCompress { encoder } => {
                 let _ = encoder.reset(Vec::new());
+            }
+            ZlibStreamKind::RawStored { buffer } => {
+                buffer.clear();
             }
             ZlibStreamKind::Decompress {
                 inner, zlib_header, ..
@@ -610,6 +749,71 @@ fn zlib_stream_reset_impl(id: u32) -> bool {
         true
     } else {
         false
+    }
+}
+
+fn zlib_stream_params_impl(id: u32, level: i32, _strategy: i32) -> bool {
+    let mut streams = ZLIB_STREAMS.lock().unwrap();
+    let stream = match streams.get_mut(&id) {
+        Some(s) => s,
+        None => return false,
+    };
+
+    let compression = map_compression_level(level);
+    let is_stored = level == 0;
+
+    match &stream.kind {
+        ZlibStreamKind::ZlibCompress {
+            header_emitted,
+            adler,
+            ..
+        }
+        | ZlibStreamKind::ZlibStored {
+            header_emitted,
+            adler,
+            ..
+        } => {
+            let was_header_emitted = *header_emitted;
+            let adler_state = Adler32State {
+                a: adler.a,
+                b: adler.b,
+            };
+            if is_stored {
+                stream.kind = ZlibStreamKind::ZlibStored {
+                    buffer: Vec::new(),
+                    header_emitted: was_header_emitted,
+                    adler: adler_state,
+                };
+            } else {
+                stream.kind = ZlibStreamKind::ZlibCompress {
+                    encoder: flate2::write::DeflateEncoder::new(Vec::new(), compression),
+                    header_emitted: was_header_emitted,
+                    level: compression,
+                    adler: adler_state,
+                };
+            }
+            true
+        }
+        ZlibStreamKind::RawCompress { .. } | ZlibStreamKind::RawStored { .. } => {
+            if is_stored {
+                stream.kind = ZlibStreamKind::RawStored {
+                    buffer: Vec::new(),
+                };
+            } else {
+                stream.kind = ZlibStreamKind::RawCompress {
+                    encoder: flate2::write::DeflateEncoder::new(Vec::new(), compression),
+                };
+            }
+            true
+        }
+        ZlibStreamKind::GzipCompress { .. } => {
+            stream.kind = ZlibStreamKind::GzipCompress {
+                encoder: flate2::write::GzEncoder::new(Vec::new(), compression),
+                level: compression,
+            };
+            true
+        }
+        _ => true, // Decompression streams don't need params change
     }
 }
 
@@ -771,7 +975,7 @@ fn brotli_stream_bytes_written_impl(id: u32) -> u32 {
 
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use rquickjs::TypedArray;
+    use rquickjs::{Ctx, TypedArray};
 
     // ===== One-shot functions =====
 
@@ -788,14 +992,24 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn zlib_decompress_sync(
-        data: TypedArray<'_, u8>,
+    pub fn zlib_decompress_sync<'js>(
+        ctx: Ctx<'js>,
+        data: TypedArray<'js, u8>,
         window_bits: i32,
-    ) -> Option<Vec<u8>> {
+    ) -> rquickjs::Result<Option<Vec<u8>>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to zlibDecompressSync is detached");
-        super::zlib_decompress_sync_impl(input, window_bits)
+        let (result, error_msg) = super::zlib_decompress_sync_impl(input, window_bits);
+        if let Some(msg) = error_msg {
+            // Throw a JS Error with both message and code properties
+            let error_ctor: rquickjs::Function = ctx.globals().get("Error")?;
+            let error_obj: rquickjs::Object = error_ctor.call((&msg,))?;
+            error_obj.set("code", "Z_DATA_ERROR")?;
+            Err(ctx.throw(error_obj.into_value()))
+        } else {
+            Ok(result)
+        }
     }
 
     #[rquickjs::function]
@@ -844,6 +1058,11 @@ pub mod native_module {
             .as_bytes()
             .expect("the Uint8Array passed to zlibStreamPush is detached");
         super::zlib_stream_push_impl(id, input, flush)
+    }
+
+    #[rquickjs::function]
+    pub fn zlib_stream_params(id: u32, level: i32, strategy: i32) -> bool {
+        super::zlib_stream_params_impl(id, level, strategy)
     }
 
     #[rquickjs::function]

@@ -4307,20 +4307,14 @@
     "parallel/test-zlib-flush-write-sync-interleaved.js": {},
     "parallel/test-zlib-from-concatenated-gzip.js": {},
     "parallel/test-zlib-from-gzip.js": {},
-    "parallel/test-zlib-from-gzip-with-trailing-garbage.js": {
-      "skip": true,
-      "reason": "Tests precise error code handling for trailing garbage"
-    },
+    "parallel/test-zlib-from-gzip-with-trailing-garbage.js": {},
     "parallel/test-zlib-invalid-input-memory.js": {},
     "parallel/test-zlib-kmaxlength-rangeerror.js": {
       "skip": true,
       "reason": "Modifies buffer.kMaxLength at runtime before requiring zlib"
     },
     "parallel/test-zlib-maxOutputLength.js": {},
-    "parallel/test-zlib-params.js": {
-      "skip": true,
-      "reason": "Actual params() level change mid-stream not supported"
-    },
+    "parallel/test-zlib-params.js": {},
     "parallel/test-zlib-random-byte-pipes.js": {},
     "parallel/test-zlib-reset-before-write.js": {},
     "parallel/test-zlib-truncated.js": {},
