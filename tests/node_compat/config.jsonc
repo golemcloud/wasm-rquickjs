@@ -7968,7 +7968,10 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_default_timeout_infinity": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_default_timeout_infinity": {
+          "skip": true,
+          "reason": "[manual] The test requires `child_process.spawnSync` to actually spawn Node.js processes in CLI `--test` runner mode with `NODE_DEBUG=test_runner`, then inspect stderr for timeout configuration deb..."
+        },
         "test_01_timeout_of_10ms": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_02_isolation_none_uses_the_test_timeout_flag": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
