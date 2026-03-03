@@ -4288,10 +4288,7 @@
     "parallel/test-zlib-object-write.js": {},
     "parallel/test-zlib-premature-end.js": {},
     "parallel/test-zlib-brotli-16GB.js": {},
-    "parallel/test-zlib-brotli-flush.js": {
-      "skip": true,
-      "reason": "Requires precise brotli flush byte output comparison"
-    },
+    "parallel/test-zlib-brotli-flush.js": {},
     "parallel/test-zlib-brotli-from-brotli.js": {},
     "parallel/test-zlib-brotli-kmaxlength-rangeerror.js": {
       "skip": true,

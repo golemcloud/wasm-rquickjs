@@ -477,9 +477,8 @@ struct BrotliStream {
 
 enum BrotliStreamKind {
     Compress {
-        buffer: Vec<u8>,
-        quality: i32,
-        lgwin: i32,
+        compressor: Option<brotli::CompressorWriter<Vec<u8>>>,
+        has_data: bool,
     },
     DecompressBuffering {
         buffer: Vec<u8>,
@@ -494,11 +493,19 @@ static BROTLI_STREAMS: LazyLock<Mutex<HashMap<u32, BrotliStream>>> =
 
 fn brotli_stream_new_impl(mode: u8, params_json: &str) -> Option<u32> {
     let kind = match mode {
-        0 => BrotliStreamKind::Compress {
-            buffer: Vec::new(),
-            quality: parse_brotli_quality(params_json),
-            lgwin: parse_brotli_lgwin(params_json),
-        },
+        0 => {
+            let quality = parse_brotli_quality(params_json);
+            let lgwin = parse_brotli_lgwin(params_json);
+            BrotliStreamKind::Compress {
+                compressor: Some(brotli::CompressorWriter::new(
+                    Vec::new(),
+                    4096,
+                    quality as u32,
+                    lgwin as u32,
+                )),
+                has_data: false,
+            }
+        }
         1 => BrotliStreamKind::DecompressBuffering {
             buffer: Vec::new(),
         },
@@ -524,22 +531,30 @@ fn brotli_stream_push_impl(id: u32, data: &[u8], flush: u8) -> Option<Vec<u8>> {
 
     match &mut stream.kind {
         BrotliStreamKind::Compress {
-            buffer,
-            quality,
-            lgwin,
+            compressor,
+            has_data,
         } => {
-            buffer.extend_from_slice(data);
-            // flush == 2 means finish (BROTLI_OPERATION_FINISH)
             if flush == 2 {
-                let params = brotli::enc::BrotliEncoderParams {
-                    quality: *quality,
-                    lgwin: *lgwin,
-                    ..Default::default()
-                };
-                let mut output = Vec::new();
-                let mut reader = Cursor::new(&buffer[..]);
-                brotli::BrotliCompress(&mut reader, &mut output, &params).ok()?;
-                buffer.clear();
+                // BROTLI_OPERATION_FINISH: write remaining data and finalize
+                if let Some(mut c) = compressor.take() {
+                    if !data.is_empty() {
+                        c.write_all(data).ok()?;
+                    }
+                    let output = c.into_inner();
+                    Some(output)
+                } else {
+                    Some(Vec::new())
+                }
+            } else if let Some(c) = compressor {
+                if !data.is_empty() {
+                    *has_data = true;
+                    c.write_all(data).ok()?;
+                }
+                if flush == 1 && *has_data {
+                    // BROTLI_OPERATION_FLUSH — only flush when data has been written
+                    c.flush().ok()?;
+                }
+                let output = c.get_mut().drain(..).collect();
                 Some(output)
             } else {
                 Some(Vec::new())

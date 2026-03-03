@@ -543,6 +543,9 @@ class ZlibBase extends Transform {
   flush(kind, callback) {
     if (typeof kind === 'function') {
       callback = kind;
+      kind = undefined;
+    }
+    if (kind === undefined) {
       kind = this._isBrotli ? BROTLI_OPERATION_FLUSH : Z_FULL_FLUSH;
     }
     if (this._closed) {
@@ -633,7 +636,7 @@ class ZlibBase extends Transform {
       const flush = this._flushFlag !== Z_NO_FLUSH ? this._flushFlag : Z_NO_FLUSH;
       this._flushFlag = Z_NO_FLUSH;
       if (this._isBrotli) {
-        result = brotli_stream_push(this._handle, data, 0);
+        result = brotli_stream_push(this._handle, data, flush);
       } else {
         result = zlib_stream_push(this._handle, data, flush || Z_NO_FLUSH);
       }
