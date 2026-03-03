@@ -4350,12 +4350,10 @@
       }
     },
     "parallel/test-zlib-failed-init.js": {
-      "skip": true,
-      "reason": "Tests internal _level/_strategy properties with NaN",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: Tests internal _level/_strategy properties with NaN" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: Tests internal _level/_strategy properties with NaN" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-zlib-unzip-one-byte-chunks.js": {

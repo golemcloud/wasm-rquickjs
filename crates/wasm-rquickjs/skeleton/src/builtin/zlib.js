@@ -377,10 +377,10 @@ function toUint8Array(buf) {
 
 function validateZlibOptions(opts, mode) {
   opts = opts || {};
-  const level = opts.level !== undefined ? opts.level : Z_DEFAULT_COMPRESSION;
+  const level = (opts.level !== undefined && !Number.isNaN(opts.level)) ? opts.level : Z_DEFAULT_COMPRESSION;
   const windowBits = opts.windowBits !== undefined ? opts.windowBits : Z_DEFAULT_WINDOWBITS;
   const memLevel = opts.memLevel !== undefined ? opts.memLevel : Z_DEFAULT_MEMLEVEL;
-  const strategy = opts.strategy !== undefined ? opts.strategy : Z_DEFAULT_STRATEGY;
+  const strategy = (opts.strategy !== undefined && !Number.isNaN(opts.strategy)) ? opts.strategy : Z_DEFAULT_STRATEGY;
   const chunkSize = opts.chunkSize !== undefined ? opts.chunkSize : Z_DEFAULT_CHUNK;
   const flush = opts.flush !== undefined ? opts.flush : Z_NO_FLUSH;
   const finishFlush = opts.finishFlush !== undefined ? opts.finishFlush : Z_FINISH;
@@ -408,13 +408,21 @@ function validateZlibOptions(opts, mode) {
     }
   }
   if (opts.level !== undefined) {
-    validateRangeInt(opts.level, 'options.level', Z_MIN_LEVEL, Z_MAX_LEVEL);
+    if (Number.isNaN(opts.level)) {
+      // Node.js treats NaN level as Z_DEFAULT_COMPRESSION
+    } else {
+      validateRangeInt(opts.level, 'options.level', Z_MIN_LEVEL, Z_MAX_LEVEL);
+    }
   }
   if (opts.memLevel !== undefined) {
     validateRangeInt(opts.memLevel, 'options.memLevel', Z_MIN_MEMLEVEL, Z_MAX_MEMLEVEL);
   }
   if (opts.strategy !== undefined) {
-    validateRangeInt(opts.strategy, 'options.strategy', 0, 4);
+    if (Number.isNaN(opts.strategy)) {
+      // Node.js treats NaN strategy as Z_DEFAULT_STRATEGY
+    } else {
+      validateRangeInt(opts.strategy, 'options.strategy', 0, 4);
+    }
   }
   if (opts.flush !== undefined) {
     validateRangeInt(opts.flush, 'options.flush', 0, Z_BLOCK);
