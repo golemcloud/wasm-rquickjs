@@ -8039,7 +8039,7 @@
           "skip": true,
           "reason": "[manual] amp fix attempt failed verification"
         },
-        "test_03_can_override_existing_assertions": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_03_can_override_existing_assertions": {},
         "test_04_this_is_set_to_the_testcontext": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
