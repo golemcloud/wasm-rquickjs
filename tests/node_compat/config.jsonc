@@ -4353,10 +4353,7 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-zlib-unzip-one-byte-chunks.js": {
-      "skip": true,
-      "reason": "Tests one-byte streaming unzip of concatenated gzip"
-    },
+    "parallel/test-zlib-unzip-one-byte-chunks.js": {},
 
     // === node:dns tests ===
     "parallel/test-dns-promises-exists.js": {},

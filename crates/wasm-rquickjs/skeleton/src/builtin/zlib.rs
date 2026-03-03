@@ -187,6 +187,7 @@ enum ZlibStreamKind {
         inner: Decompress,
         header_buf: Vec<u8>,
         header_parsed: bool,
+        trailer_remaining: usize,
     },
 }
 
@@ -324,6 +325,7 @@ fn zlib_stream_new_impl(
             inner: Decompress::new(false), // raw deflate, we handle gzip header manually
             header_buf: Vec::new(),
             header_parsed: false,
+            trailer_remaining: 0,
         },
         // 4: deflate raw compress
         4 => ZlibStreamKind::RawCompress {
@@ -339,6 +341,7 @@ fn zlib_stream_new_impl(
             inner: Decompress::new(false),
             header_buf: Vec::new(),
             header_parsed: false,
+            trailer_remaining: 0,
         },
         _ => return None,
     };
@@ -384,7 +387,8 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
                 encoder.get_mut().clear();
                 let checksum = adler.finish();
                 result.extend_from_slice(&checksum.to_be_bytes());
-            } else if flush == 2 || flush == 3 {
+            } else if flush == 1 || flush == 2 || flush == 3 {
+                // Z_PARTIAL_FLUSH / Z_SYNC_FLUSH / Z_FULL_FLUSH
                 encoder.flush().ok()?;
                 result.extend_from_slice(encoder.get_ref());
                 encoder.get_mut().clear();
@@ -401,7 +405,8 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
             }
             if flush == 4 {
                 encoder.try_finish().ok()?;
-            } else if flush == 2 || flush == 3 {
+            } else if flush == 1 || flush == 2 || flush == 3 {
+                // Z_PARTIAL_FLUSH / Z_SYNC_FLUSH / Z_FULL_FLUSH
                 encoder.flush().ok()?;
             }
             let result = encoder.get_ref().clone();
@@ -411,8 +416,8 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
         ZlibStreamKind::Decompress { inner, .. } => {
             let mut output = vec![0u8; data.len() + 1024];
             let flush_mode = map_flush_decompress(flush);
-            let total_out = decompress_loop(inner, data, &mut output, flush_mode)?;
-            output.truncate(total_out);
+            let result = decompress_loop(inner, data, &mut output, flush_mode)?;
+            output.truncate(result.output_len);
             Some(output)
         }
         ZlibStreamKind::GzipCompress { encoder, .. } => {
@@ -422,8 +427,8 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
             if flush == 4 {
                 // Z_FINISH — finalize the gzip stream
                 encoder.try_finish().ok()?;
-            } else if flush == 2 || flush == 3 {
-                // Z_SYNC_FLUSH / Z_FULL_FLUSH — flush buffered data
+            } else if flush == 1 || flush == 2 || flush == 3 {
+                // Z_PARTIAL_FLUSH / Z_SYNC_FLUSH / Z_FULL_FLUSH — flush buffered data
                 encoder.flush().ok()?;
             }
             let result = encoder.get_ref().clone();
@@ -434,52 +439,88 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
             inner,
             header_buf,
             header_parsed,
+            trailer_remaining,
         } => {
-            let payload = if *header_parsed {
-                // Header already parsed, all data is deflate payload
-                data
-            } else {
-                // Accumulate header bytes
-                header_buf.extend_from_slice(data);
-                if let Some(header_len) = parse_gzip_header(header_buf) {
-                    *header_parsed = true;
-                    let payload = header_buf[header_len..].to_vec();
-                    header_buf.clear();
-                    if payload.is_empty() {
-                        return Some(Vec::new());
-                    }
-                    // Use a temporary to avoid borrow issues
-                    let mut output = vec![0u8; payload.len() + 4096];
-                    let flush_mode = map_flush_decompress(flush);
-                    let total_out = decompress_loop(inner, &payload, &mut output, flush_mode)?;
-                    output.truncate(total_out);
-                    return Some(output);
-                } else {
-                    // Need more header bytes
-                    return Some(Vec::new());
+            let mut all_output = Vec::new();
+            let mut remaining: Vec<u8> = data.to_vec();
+
+            loop {
+                if remaining.is_empty() {
+                    break;
                 }
-            };
-            if payload.is_empty() {
-                return Some(Vec::new());
+
+                // Phase 1: Skip gzip trailer bytes (CRC32 + ISIZE = 8 bytes)
+                if *trailer_remaining > 0 {
+                    let skip = std::cmp::min(remaining.len(), *trailer_remaining);
+                    *trailer_remaining -= skip;
+                    remaining.drain(..skip);
+                    if *trailer_remaining > 0 {
+                        // Still need more trailer bytes
+                        break;
+                    }
+                    // Trailer fully consumed, prepare for next member
+                    *inner = Decompress::new(false);
+                    *header_parsed = false;
+                    if remaining.is_empty() {
+                        break;
+                    }
+                }
+
+                // Phase 2: Parse gzip header if needed
+                if !*header_parsed {
+                    header_buf.extend_from_slice(&remaining);
+                    remaining.clear();
+                    if let Some(header_len) = parse_gzip_header(header_buf) {
+                        *header_parsed = true;
+                        remaining = header_buf[header_len..].to_vec();
+                        header_buf.clear();
+                        if remaining.is_empty() {
+                            break;
+                        }
+                    } else {
+                        // Need more header bytes
+                        break;
+                    }
+                }
+
+                // Phase 3: Decompress raw deflate data
+                let mut output = vec![0u8; remaining.len() + 4096];
+                let flush_mode = map_flush_decompress(flush);
+                let result = decompress_loop(inner, &remaining, &mut output, flush_mode)?;
+                output.truncate(result.output_len);
+                all_output.extend_from_slice(&output);
+
+                if result.stream_end {
+                    // Deflate stream ended; remaining bytes are trailer + possibly next member
+                    remaining.drain(..result.input_consumed);
+                    *trailer_remaining = 8; // gzip trailer: CRC32 (4) + ISIZE (4)
+                    // Loop back to skip trailer and potentially process next member
+                } else {
+                    break;
+                }
             }
-            let mut output = vec![0u8; payload.len() + 4096];
-            let flush_mode = map_flush_decompress(flush);
-            let total_out = decompress_loop(inner, payload, &mut output, flush_mode)?;
-            output.truncate(total_out);
-            Some(output)
+
+            Some(all_output)
         }
     }
 }
 
+
+struct DecompressResult {
+    output_len: usize,
+    input_consumed: usize,
+    stream_end: bool,
+}
 
 fn decompress_loop(
     inner: &mut Decompress,
     data: &[u8],
     output: &mut Vec<u8>,
     flush_mode: FlushDecompress,
-) -> Option<usize> {
+) -> Option<DecompressResult> {
     let mut total_out = 0;
     let mut input_offset = 0;
+    let mut stream_end = false;
 
     loop {
         if total_out >= output.len().saturating_sub(256) {
@@ -499,7 +540,10 @@ fn decompress_loop(
         total_out += produced;
 
         match status {
-            Status::StreamEnd => break,
+            Status::StreamEnd => {
+                stream_end = true;
+                break;
+            }
             Status::BufError => {
                 if input_offset >= data.len() && produced == 0 {
                     break;
@@ -517,7 +561,11 @@ fn decompress_loop(
         }
     }
 
-    Some(total_out)
+    Some(DecompressResult {
+        output_len: total_out,
+        input_consumed: input_offset,
+        stream_end,
+    })
 }
 
 fn zlib_stream_reset_impl(id: u32) -> bool {
@@ -549,10 +597,12 @@ fn zlib_stream_reset_impl(id: u32) -> bool {
                 inner,
                 header_buf,
                 header_parsed,
+                trailer_remaining,
             } => {
                 *inner = Decompress::new(false);
                 header_buf.clear();
                 *header_parsed = false;
+                *trailer_remaining = 0;
             }
         }
         stream.bytes_written = 0;
