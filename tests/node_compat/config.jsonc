@@ -4303,10 +4303,7 @@
     "parallel/test-zlib-destroy-pipe.js": {},
     "parallel/test-zlib-flush.js": {},
     "parallel/test-zlib-flush-drain.js": {},
-    "parallel/test-zlib-flush-drain-longblock.js": {
-      "skip": true,
-      "reason": "Complex flush/drain/pipe interaction"
-    },
+    "parallel/test-zlib-flush-drain-longblock.js": {},
     "parallel/test-zlib-flush-write-sync-interleaved.js": {
       "skip": true,
       "reason": "Tests precise ordering of write+flush+read interleaving"

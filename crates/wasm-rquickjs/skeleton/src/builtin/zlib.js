@@ -641,40 +641,40 @@ class ZlibBase extends Transform {
   }
 
   _transform(chunk, encoding, callback) {
-    if (this._handle === null) this._initHandle();
+   if (this._handle === null) this._initHandle();
 
-    // Validate input type - throw synchronously so write() throws (matches Node.js behavior)
-    if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
-      throw makeTypeError('ERR_INVALID_ARG_TYPE',
-        'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
-        invalidArgTypeHelper(chunk));
-    }
+   // Validate input type - throw synchronously so write() throws (matches Node.js behavior)
+   if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
+     throw makeTypeError('ERR_INVALID_ARG_TYPE',
+       'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
+       invalidArgTypeHelper(chunk));
+   }
 
-    const buf = toBuffer(chunk);
-    const data = toUint8Array(buf);
-    this._bytesWritten += data.length;
+   const buf = toBuffer(chunk);
+   const data = toUint8Array(buf);
+   this._bytesWritten += data.length;
 
-    try {
-      let result;
-      const flush = this._flushFlag !== Z_NO_FLUSH ? this._flushFlag : Z_NO_FLUSH;
-      this._flushFlag = Z_NO_FLUSH;
-      if (this._isBrotli) {
-        result = brotli_stream_push(this._handle, data, flush);
-      } else {
-        result = zlib_stream_push(this._handle, data, flush || Z_NO_FLUSH);
-      }
-      if (result === null || result === undefined) {
-        this._closeHandle();
-        callback(makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error'));
-        return;
-      }
-      if (result && result.length > 0) {
-        this.push(Buffer.from(result));
-      }
-      callback();
-    } catch (err) {
-      callback(err);
-    }
+   try {
+     let result;
+     const flush = this._flushFlag !== Z_NO_FLUSH ? this._flushFlag : Z_NO_FLUSH;
+     this._flushFlag = Z_NO_FLUSH;
+     if (this._isBrotli) {
+       result = brotli_stream_push(this._handle, data, flush);
+     } else {
+       result = zlib_stream_push(this._handle, data, flush || Z_NO_FLUSH);
+     }
+     if (result === null || result === undefined) {
+       this._closeHandle();
+       callback(makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error'));
+       return;
+     }
+     if (result && result.length > 0) {
+       this.push(Buffer.from(result));
+     }
+     callback();
+   } catch (err) {
+     callback(err);
+   }
   }
 
   _flush(callback) {

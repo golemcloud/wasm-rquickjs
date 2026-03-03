@@ -180,11 +180,13 @@ enum ZlibStreamKind {
         zlib_header: bool,
     },
     GzipCompress {
-        buffer: Vec<u8>,
+        encoder: flate2::write::GzEncoder<Vec<u8>>,
         level: Compression,
     },
     GzipDecompress {
-        buffer: Vec<u8>,
+        inner: Decompress,
+        header_buf: Vec<u8>,
+        header_parsed: bool,
     },
 }
 
@@ -229,6 +231,64 @@ fn compute_zlib_header(level: Compression) -> [u8; 2] {
     [cmf, flg]
 }
 
+/// Parse a gzip header and return the number of bytes consumed.
+/// Returns None if there aren't enough bytes yet.
+fn parse_gzip_header(buf: &[u8]) -> Option<usize> {
+    if buf.len() < 10 {
+        return None;
+    }
+    // Check magic number
+    if buf[0] != 0x1f || buf[1] != 0x8b {
+        return None;
+    }
+    // Check compression method (must be 8 = deflate)
+    if buf[2] != 8 {
+        return None;
+    }
+    let flags = buf[3];
+    let mut pos = 10; // Past the fixed header
+
+    // FEXTRA
+    if flags & 0x04 != 0 {
+        if buf.len() < pos + 2 {
+            return None;
+        }
+        let extra_len = u16::from_le_bytes([buf[pos], buf[pos + 1]]) as usize;
+        pos += 2 + extra_len;
+        if buf.len() < pos {
+            return None;
+        }
+    }
+    // FNAME
+    if flags & 0x08 != 0 {
+        while pos < buf.len() && buf[pos] != 0 {
+            pos += 1;
+        }
+        if pos >= buf.len() {
+            return None;
+        }
+        pos += 1; // skip null terminator
+    }
+    // FCOMMENT
+    if flags & 0x10 != 0 {
+        while pos < buf.len() && buf[pos] != 0 {
+            pos += 1;
+        }
+        if pos >= buf.len() {
+            return None;
+        }
+        pos += 1; // skip null terminator
+    }
+    // FHCRC
+    if flags & 0x02 != 0 {
+        if buf.len() < pos + 2 {
+            return None;
+        }
+        pos += 2;
+    }
+    Some(pos)
+}
+
 static ZLIB_STREAMS: LazyLock<Mutex<HashMap<u32, ZlibStream>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -254,13 +314,17 @@ fn zlib_stream_new_impl(
             inner: Decompress::new(true),
             zlib_header: true,
         },
-        // 2: gzip compress — buffer and compress on finish
+        // 2: gzip compress — streaming with flush support
         2 => ZlibStreamKind::GzipCompress {
-            buffer: Vec::new(),
+            encoder: flate2::write::GzEncoder::new(Vec::new(), compression),
             level: compression,
         },
-        // 3: gzip decompress — buffer and decompress on finish
-        3 => ZlibStreamKind::GzipDecompress { buffer: Vec::new() },
+        // 3: gzip decompress — streaming with incremental decompression
+        3 => ZlibStreamKind::GzipDecompress {
+            inner: Decompress::new(false), // raw deflate, we handle gzip header manually
+            header_buf: Vec::new(),
+            header_parsed: false,
+        },
         // 4: deflate raw compress
         4 => ZlibStreamKind::RawCompress {
             encoder: flate2::write::DeflateEncoder::new(Vec::new(), compression),
@@ -270,8 +334,12 @@ fn zlib_stream_new_impl(
             inner: Decompress::new(false),
             zlib_header: false,
         },
-        // 6: unzip (auto-detect gzip/zlib) — buffer and decompress on finish
-        6 => ZlibStreamKind::GzipDecompress { buffer: Vec::new() },
+        // 6: unzip (auto-detect gzip/zlib) — streaming decompression
+        6 => ZlibStreamKind::GzipDecompress {
+            inner: Decompress::new(false),
+            header_buf: Vec::new(),
+            header_parsed: false,
+        },
         _ => return None,
     };
 
@@ -347,29 +415,58 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
             output.truncate(total_out);
             Some(output)
         }
-        ZlibStreamKind::GzipCompress { buffer, level } => {
-            buffer.extend_from_slice(data);
-            if flush == 4 {
-                // Z_FINISH — compress everything
-                let mut encoder = flate2::write::GzEncoder::new(Vec::new(), *level);
-                encoder.write_all(buffer).ok()?;
-                let result = encoder.finish().ok()?;
-                buffer.clear();
-                Some(result)
-            } else {
-                Some(Vec::new())
+        ZlibStreamKind::GzipCompress { encoder, .. } => {
+            if !data.is_empty() {
+                encoder.write_all(data).ok()?;
             }
+            if flush == 4 {
+                // Z_FINISH — finalize the gzip stream
+                encoder.try_finish().ok()?;
+            } else if flush == 2 || flush == 3 {
+                // Z_SYNC_FLUSH / Z_FULL_FLUSH — flush buffered data
+                encoder.flush().ok()?;
+            }
+            let result = encoder.get_ref().clone();
+            encoder.get_mut().clear();
+            Some(result)
         }
-        ZlibStreamKind::GzipDecompress { buffer } => {
-            buffer.extend_from_slice(data);
-            if flush == 4 {
-                // Z_FINISH — decompress everything, auto-detecting format
-                let result = zlib_decompress_sync_impl(buffer, 0)?;
-                buffer.clear();
-                Some(result)
+        ZlibStreamKind::GzipDecompress {
+            inner,
+            header_buf,
+            header_parsed,
+        } => {
+            let payload = if *header_parsed {
+                // Header already parsed, all data is deflate payload
+                data
             } else {
-                Some(Vec::new())
+                // Accumulate header bytes
+                header_buf.extend_from_slice(data);
+                if let Some(header_len) = parse_gzip_header(header_buf) {
+                    *header_parsed = true;
+                    let payload = header_buf[header_len..].to_vec();
+                    header_buf.clear();
+                    if payload.is_empty() {
+                        return Some(Vec::new());
+                    }
+                    // Use a temporary to avoid borrow issues
+                    let mut output = vec![0u8; payload.len() + 4096];
+                    let flush_mode = map_flush_decompress(flush);
+                    let total_out = decompress_loop(inner, &payload, &mut output, flush_mode)?;
+                    output.truncate(total_out);
+                    return Some(output);
+                } else {
+                    // Need more header bytes
+                    return Some(Vec::new());
+                }
+            };
+            if payload.is_empty() {
+                return Some(Vec::new());
             }
+            let mut output = vec![0u8; payload.len() + 4096];
+            let flush_mode = map_flush_decompress(flush);
+            let total_out = decompress_loop(inner, payload, &mut output, flush_mode)?;
+            output.truncate(total_out);
+            Some(output)
         }
     }
 }
@@ -396,21 +493,26 @@ fn decompress_loop(
             .decompress(&data[input_offset..], &mut output[total_out..], flush_mode)
             .ok()?;
 
-        input_offset += inner.total_in() as usize - before_in;
-        total_out += inner.total_out() as usize - before_out;
+        let consumed = inner.total_in() as usize - before_in;
+        let produced = inner.total_out() as usize - before_out;
+        input_offset += consumed;
+        total_out += produced;
 
         match status {
             Status::StreamEnd => break,
             Status::BufError => {
-                if input_offset >= data.len() {
+                if input_offset >= data.len() && produced == 0 {
                     break;
                 }
                 output.resize(output.len() * 2, 0);
             }
             Status::Ok => {
-                if input_offset >= data.len() && matches!(flush_mode, FlushDecompress::None) {
+                if input_offset >= data.len() && produced == 0 {
+                    // All input consumed and no output produced — done
                     break;
                 }
+                // If all input consumed but output was still produced,
+                // the decompressor may have more buffered output — continue
             }
         }
     }
@@ -440,11 +542,17 @@ fn zlib_stream_reset_impl(id: u32) -> bool {
             } => {
                 *inner = Decompress::new(*zlib_header);
             }
-            ZlibStreamKind::GzipCompress { buffer, .. } => {
-                buffer.clear();
+            ZlibStreamKind::GzipCompress { encoder, level } => {
+                *encoder = flate2::write::GzEncoder::new(Vec::new(), *level);
             }
-            ZlibStreamKind::GzipDecompress { buffer } => {
-                buffer.clear();
+            ZlibStreamKind::GzipDecompress {
+                inner,
+                header_buf,
+                header_parsed,
+            } => {
+                *inner = Decompress::new(false);
+                header_buf.clear();
+                *header_parsed = false;
             }
         }
         stream.bytes_written = 0;
