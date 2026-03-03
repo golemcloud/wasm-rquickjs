@@ -384,8 +384,12 @@ function validateZlibOptions(opts, mode) {
     }
   }
   if (opts.windowBits !== undefined) {
-    const minWB = (mode === GZIP || mode === GUNZIP) ? 9 : Z_MIN_WINDOWBITS;
-    validateRangeInt(opts.windowBits, 'options.windowBits', minWB, Z_MAX_WINDOWBITS);
+    const isDecompression = (mode === INFLATE || mode === GUNZIP || mode === INFLATERAW || mode === UNZIP);
+    // windowBits=0 is valid for decompression modes (means "auto-detect from header")
+    if (!(isDecompression && opts.windowBits === 0)) {
+      const minWB = (mode === GZIP || mode === GUNZIP) ? 9 : Z_MIN_WINDOWBITS;
+      validateRangeInt(opts.windowBits, 'options.windowBits', minWB, Z_MAX_WINDOWBITS);
+    }
   }
   if (opts.level !== undefined) {
     validateRangeInt(opts.level, 'options.level', Z_MIN_LEVEL, Z_MAX_LEVEL);
@@ -706,7 +710,7 @@ class _Deflate extends ZlibBase {
 
 class _Inflate extends ZlibBase {
   constructor(opts) {
-    const validated = validateZlibOptions(opts);
+    const validated = validateZlibOptions(opts, INFLATE);
     super(opts, INFLATE);
     this._windowBits = validated.windowBits;
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
@@ -777,7 +781,7 @@ class _DeflateRaw extends ZlibBase {
 
 class _InflateRaw extends ZlibBase {
   constructor(opts) {
-    const validated = validateZlibOptions(opts);
+    const validated = validateZlibOptions(opts, INFLATERAW);
     super(opts, INFLATERAW);
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : Z_NO_FLUSH;
@@ -793,7 +797,7 @@ class _InflateRaw extends ZlibBase {
 
 class _Unzip extends ZlibBase {
   constructor(opts) {
-    const validated = validateZlibOptions(opts);
+    const validated = validateZlibOptions(opts, UNZIP);
     super(opts, UNZIP);
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : Z_NO_FLUSH;

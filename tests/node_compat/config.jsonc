@@ -10617,11 +10617,9 @@
       }
     },
     "parallel/test-zlib-zero-windowBits.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_zlib_should_support_zero_windowbits": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_zlib_should_support_zero_windowbits": {},
         "test_01_windowbits_should_be_valid": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
