@@ -8227,7 +8227,7 @@
       "split": true,
       "subtests": {
         "test_00_input_validation": {},
-        "test_01_returns_the_result_of_the_condition_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_returns_the_result_of_the_condition_function": {},
         "test_02_returns_the_result_of_an_async_condition_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_03_errors_if_the_condition_times_out": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_04_polls_until_the_condition_returns_successfully": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
