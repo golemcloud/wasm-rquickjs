@@ -14,6 +14,21 @@ var _subtestFilter = (typeof globalThis.__wasm_rquickjs_node_test_filter === 'nu
     : null;
 var _subtestRegistrationIndex = 0;
 
+// --- Custom assertions registry (testAssertions.register) ---
+var _customAssertions = {};
+
+var testAssertionsModule = {
+    register: function register(name, fn) {
+        if (typeof name !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('name', 'string', name);
+        }
+        if (typeof fn !== 'function') {
+            throw new ERR_INVALID_ARG_TYPE('fn', 'function', fn);
+        }
+        _customAssertions[name] = fn;
+    }
+};
+
 // --- Suite context ---
 
 function SuiteContext(name, parent, filePath) {
@@ -88,6 +103,17 @@ function TestContext(name, parent, filePath) {
     tAssert.fileSnapshot = function fileSnapshot(_value, _path) {
         throw new Error('fileSnapshot is not supported in this context');
     };
+    // Apply custom assertions registered via testAssertions.register()
+    var ctx = this;
+    var customKeys = Object.keys(_customAssertions);
+    for (var ci = 0; ci < customKeys.length; ci++) {
+        var ckey = customKeys[ci];
+        tAssert[ckey] = (function(fn) {
+            return function() {
+                return fn.apply(ctx, arguments);
+            };
+        })(_customAssertions[ckey]);
+    }
     this.assert = tAssert;
 }
 
@@ -1270,6 +1296,7 @@ export {
     afterEach,
     mock,
     run,
+    testAssertionsModule as assert,
     _awaitPendingTests,
     __setFilterIndex,
     __clearFilter
