@@ -8207,7 +8207,7 @@
         "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-runner-typechecking.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-typechecking.js": {},
     "parallel/test-runner-wait-for.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",

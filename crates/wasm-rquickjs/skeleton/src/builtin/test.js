@@ -555,7 +555,7 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
     if (currentSuite) {
         // Inside a describe/suite — register for later execution
         currentSuite.tests.push(parsed);
-        return;
+        return Promise.resolve(undefined);
     }
 
     // Lazy-read filter from global (set by test harness before file execution,
@@ -568,22 +568,25 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
     var currentIndex = _subtestRegistrationIndex++;
     if (_subtestFilter !== null && currentIndex !== _subtestFilter) {
         // Silently skip — filtered out
-        return;
+        return Promise.resolve(undefined);
     }
 
     // Top-level test — run immediately
     var result = runTest(parsed, rootSuite);
     if (result.status === 'async') {
-        _pendingTestPromises.push(result.promise.then(function (resolved) {
+        var p = result.promise.then(function (resolved) {
             if (resolved && resolved.status === 'fail') {
                 throw resolved.error || new Error('Test "' + resolved.name + '" failed');
             }
-        }));
-        return;
+            return undefined;
+        });
+        _pendingTestPromises.push(p);
+        return p;
     }
     if (result.status === 'fail') {
         throw result.error;
     }
+    return Promise.resolve(undefined);
 }
 
 test.skip = function (nameOrOpts, optionsOrFn, maybeFn) {
@@ -592,9 +595,10 @@ test.skip = function (nameOrOpts, optionsOrFn, maybeFn) {
 
     if (currentSuite) {
         currentSuite.tests.push(parsed);
-        return;
+        return Promise.resolve(undefined);
     }
     // Top-level skip — no-op (no failure)
+    return Promise.resolve(undefined);
 };
 
 test.todo = function (nameOrOpts, optionsOrFn, maybeFn) {
@@ -603,10 +607,11 @@ test.todo = function (nameOrOpts, optionsOrFn, maybeFn) {
 
     if (currentSuite) {
         currentSuite.tests.push(parsed);
-        return;
+        return Promise.resolve(undefined);
     }
     // Top-level todo — run but don't fail on error
     runTest(parsed, rootSuite);
+    return Promise.resolve(undefined);
 };
 
 test.only = function (nameOrOpts, optionsOrFn, maybeFn) {
