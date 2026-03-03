@@ -4,6 +4,7 @@
 // and an aggregate error is thrown after all tests in a suite complete.
 
 import assert from 'node:assert';
+import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
 
 var currentSuite = null;
 // Check for globalThis-based filter (set by test harness before file execution)
@@ -180,6 +181,90 @@ TestContext.prototype.beforeEach = function (fn) {
 
 TestContext.prototype.afterEach = function (fn) {
     this._afterEachFns.push(fn);
+};
+
+TestContext.prototype.waitFor = function waitFor(condition, options) {
+    if (typeof condition !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('condition', 'function', condition);
+    }
+
+    if (options !== undefined && (options === null || typeof options !== 'object')) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+
+    var opts = options || {};
+
+    if (opts.interval !== undefined && typeof opts.interval !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('options.interval', 'number', opts.interval);
+    }
+
+    if (opts.timeout !== undefined && typeof opts.timeout !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('options.timeout', 'number', opts.timeout);
+    }
+
+    var interval = opts.interval !== undefined ? opts.interval : 50;
+    var timeout = opts.timeout !== undefined ? opts.timeout : 30000;
+
+    return new Promise(function (resolve, reject) {
+        var lastError = null;
+        var done = false;
+        var pollTimerId = null;
+
+        var timeoutId = setTimeout(function () {
+            if (done) return;
+            done = true;
+            if (pollTimerId !== null) {
+                clearTimeout(pollTimerId);
+            }
+            var err = new Error('waitFor() timed out');
+            if (lastError) {
+                err.cause = lastError;
+            }
+            reject(err);
+        }, timeout);
+
+        var running = false;
+
+        function poll() {
+            if (done || running) return;
+            running = true;
+
+            try {
+                var result = condition();
+                if (result && typeof result.then === 'function') {
+                    result.then(function (val) {
+                        running = false;
+                        if (!done) {
+                            done = true;
+                            clearTimeout(timeoutId);
+                            resolve(val);
+                        }
+                    }, function (e) {
+                        running = false;
+                        lastError = e;
+                        if (!done) {
+                            pollTimerId = setTimeout(poll, interval);
+                        }
+                    });
+                } else {
+                    running = false;
+                    if (!done) {
+                        done = true;
+                        clearTimeout(timeoutId);
+                        resolve(result);
+                    }
+                }
+            } catch (e) {
+                running = false;
+                lastError = e;
+                if (!done) {
+                    pollTimerId = setTimeout(poll, interval);
+                }
+            }
+        }
+
+        poll();
+    });
 };
 
 // --- Sentinel errors ---
