@@ -3,7 +3,7 @@ use std::io::{Cursor, Read, Write};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex};
 
-use flate2::{Compress, Compression, Decompress, FlushCompress, FlushDecompress, Status};
+use flate2::{Compression, Decompress, FlushDecompress, Status};
 
 // ===== Handle ID generation =====
 
@@ -23,16 +23,6 @@ fn map_compression_level(level: i32) -> Compression {
     }
 }
 
-fn map_flush_compress(flush: i32) -> FlushCompress {
-    match flush {
-        0 => FlushCompress::None,
-        1 => FlushCompress::Partial,
-        2 => FlushCompress::Sync,
-        3 => FlushCompress::Full,
-        4 => FlushCompress::Finish,
-        _ => FlushCompress::None,
-    }
-}
 
 fn map_flush_decompress(flush: i32) -> FlushDecompress {
     match flush {
@@ -176,8 +166,14 @@ struct ZlibStream {
 }
 
 enum ZlibStreamKind {
-    Compress {
-        inner: Compress,
+    ZlibCompress {
+        encoder: flate2::write::DeflateEncoder<Vec<u8>>,
+        header_emitted: bool,
+        level: Compression,
+        adler: Adler32State,
+    },
+    RawCompress {
+        encoder: flate2::write::DeflateEncoder<Vec<u8>>,
     },
     Decompress {
         inner: Decompress,
@@ -190,6 +186,47 @@ enum ZlibStreamKind {
     GzipDecompress {
         buffer: Vec<u8>,
     },
+}
+
+struct Adler32State {
+    a: u32,
+    b: u32,
+}
+
+impl Adler32State {
+    fn new() -> Self {
+        Adler32State { a: 1, b: 0 }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        for &byte in data {
+            self.a = (self.a + byte as u32) % 65521;
+            self.b = (self.b + self.a) % 65521;
+        }
+    }
+
+    fn finish(&self) -> u32 {
+        (self.b << 16) | self.a
+    }
+}
+
+fn compute_zlib_header(level: Compression) -> [u8; 2] {
+    // CMF: CM=8 (deflate), CINFO=7 (window 32768)
+    let cmf: u8 = 0x78;
+    // FLG: FLEVEL based on compression level, no dict
+    let flevel = match level.level() {
+        0 | 1 => 0,
+        2..=5 => 1,
+        6 => 2,
+        _ => 3,
+    };
+    let mut flg: u8 = flevel << 6;
+    // FCHECK: (CMF * 256 + FLG) must be divisible by 31
+    let check = (cmf as u16 * 256 + flg as u16) % 31;
+    if check != 0 {
+        flg += (31 - check) as u8;
+    }
+    [cmf, flg]
 }
 
 static ZLIB_STREAMS: LazyLock<Mutex<HashMap<u32, ZlibStream>>> =
@@ -205,9 +242,12 @@ fn zlib_stream_new_impl(
     let compression = map_compression_level(level);
 
     let kind = match mode {
-        // 0: deflate (zlib format)
-        0 => ZlibStreamKind::Compress {
-            inner: Compress::new(compression, true),
+        // 0: deflate (zlib format) — uses raw DeflateEncoder + manual zlib header/checksum
+        0 => ZlibStreamKind::ZlibCompress {
+            encoder: flate2::write::DeflateEncoder::new(Vec::new(), compression),
+            header_emitted: false,
+            level: compression,
+            adler: Adler32State::new(),
         },
         // 1: inflate (zlib format)
         1 => ZlibStreamKind::Decompress {
@@ -222,8 +262,8 @@ fn zlib_stream_new_impl(
         // 3: gzip decompress — buffer and decompress on finish
         3 => ZlibStreamKind::GzipDecompress { buffer: Vec::new() },
         // 4: deflate raw compress
-        4 => ZlibStreamKind::Compress {
-            inner: Compress::new(compression, false),
+        4 => ZlibStreamKind::RawCompress {
+            encoder: flate2::write::DeflateEncoder::new(Vec::new(), compression),
         },
         // 5: deflate raw decompress
         5 => ZlibStreamKind::Decompress {
@@ -253,12 +293,52 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
     stream.bytes_written += data.len() as u32;
 
     match &mut stream.kind {
-        ZlibStreamKind::Compress { inner } => {
-            let mut output = vec![0u8; data.len() + 1024];
-            let flush_mode = map_flush_compress(flush);
-            let total_out = compress_loop(inner, data, &mut output, flush_mode)?;
-            output.truncate(total_out);
-            Some(output)
+        ZlibStreamKind::ZlibCompress {
+            encoder,
+            header_emitted,
+            level,
+            adler,
+        } => {
+            let mut result = Vec::new();
+            // Emit zlib header on first push with data or flush
+            if !*header_emitted && (!data.is_empty() || flush != 0) {
+                result.extend_from_slice(&compute_zlib_header(*level));
+                *header_emitted = true;
+            }
+            if !data.is_empty() {
+                adler.update(data);
+                encoder.write_all(data).ok()?;
+            }
+            if flush == 4 {
+                // Z_FINISH: finalize deflate stream and append adler32
+                encoder.try_finish().ok()?;
+                result.extend_from_slice(encoder.get_ref());
+                encoder.get_mut().clear();
+                let checksum = adler.finish();
+                result.extend_from_slice(&checksum.to_be_bytes());
+            } else if flush == 2 || flush == 3 {
+                encoder.flush().ok()?;
+                result.extend_from_slice(encoder.get_ref());
+                encoder.get_mut().clear();
+            } else {
+                // Z_NO_FLUSH: collect any output the encoder produced
+                result.extend_from_slice(encoder.get_ref());
+                encoder.get_mut().clear();
+            }
+            Some(result)
+        }
+        ZlibStreamKind::RawCompress { encoder } => {
+            if !data.is_empty() {
+                encoder.write_all(data).ok()?;
+            }
+            if flush == 4 {
+                encoder.try_finish().ok()?;
+            } else if flush == 2 || flush == 3 {
+                encoder.flush().ok()?;
+            }
+            let result = encoder.get_ref().clone();
+            encoder.get_mut().clear();
+            Some(result)
         }
         ZlibStreamKind::Decompress { inner, .. } => {
             let mut output = vec![0u8; data.len() + 1024];
@@ -294,50 +374,6 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
     }
 }
 
-fn compress_loop(
-    inner: &mut Compress,
-    data: &[u8],
-    output: &mut Vec<u8>,
-    flush_mode: FlushCompress,
-) -> Option<usize> {
-    let mut total_out = 0;
-    let mut input_offset = 0;
-
-    loop {
-        if total_out >= output.len().saturating_sub(256) {
-            output.resize(output.len() * 2, 0);
-        }
-
-        let before_in = inner.total_in() as usize;
-        let before_out = inner.total_out() as usize;
-
-        let status = inner
-            .compress(&data[input_offset..], &mut output[total_out..], flush_mode)
-            .ok()?;
-
-        input_offset += inner.total_in() as usize - before_in;
-        total_out += inner.total_out() as usize - before_out;
-
-        match status {
-            Status::StreamEnd => break,
-            Status::BufError => {
-                if input_offset >= data.len()
-                    && matches!(flush_mode, FlushCompress::None | FlushCompress::Partial)
-                {
-                    break;
-                }
-                output.resize(output.len() * 2, 0);
-            }
-            Status::Ok => {
-                if input_offset >= data.len() && matches!(flush_mode, FlushCompress::None) {
-                    break;
-                }
-            }
-        }
-    }
-
-    Some(total_out)
-}
 
 fn decompress_loop(
     inner: &mut Decompress,
@@ -386,8 +422,18 @@ fn zlib_stream_reset_impl(id: u32) -> bool {
     let mut streams = ZLIB_STREAMS.lock().unwrap();
     if let Some(stream) = streams.get_mut(&id) {
         match &mut stream.kind {
-            ZlibStreamKind::Compress { inner } => {
-                inner.reset();
+            ZlibStreamKind::ZlibCompress {
+                encoder,
+                header_emitted,
+                adler,
+                ..
+            } => {
+                let _ = encoder.reset(Vec::new());
+                *header_emitted = false;
+                *adler = Adler32State::new();
+            }
+            ZlibStreamKind::RawCompress { encoder } => {
+                let _ = encoder.reset(Vec::new());
             }
             ZlibStreamKind::Decompress {
                 inner, zlib_header, ..

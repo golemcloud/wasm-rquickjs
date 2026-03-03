@@ -4319,10 +4319,7 @@
       }
     },
     "parallel/test-zlib-destroy-pipe.js": {},
-    "parallel/test-zlib-flush.js": {
-      "skip": true,
-      "reason": "Tests precise byte-level flush output comparison"
-    },
+    "parallel/test-zlib-flush.js": {},
     "parallel/test-zlib-flush-drain.js": {},
     "parallel/test-zlib-flush-drain-longblock.js": {
       "skip": true,

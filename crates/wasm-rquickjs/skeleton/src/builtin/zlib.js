@@ -549,13 +549,14 @@ class ZlibBase extends Transform {
       return;
     }
 
+    // Set flush flag BEFORE write so _transform sees it synchronously
+    this._flushFlag = kind;
     // Write an empty chunk with the requested flush
     this.write(Buffer.alloc(0), '', () => {
       // Force read to emit anything buffered in readable state
       this.read(0);
       if (callback) callback();
     });
-    this._flushFlag = kind;
   }
 
   params(level, strategy, callback) {
