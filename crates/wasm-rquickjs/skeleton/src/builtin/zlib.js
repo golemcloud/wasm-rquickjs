@@ -612,12 +612,11 @@ class ZlibBase extends Transform {
   _transform(chunk, encoding, callback) {
     if (this._handle === null) this._initHandle();
 
-    // Validate input type
+    // Validate input type - throw synchronously so write() throws (matches Node.js behavior)
     if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
-      callback(makeTypeError('ERR_INVALID_ARG_TYPE',
+      throw makeTypeError('ERR_INVALID_ARG_TYPE',
         'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
-        invalidArgTypeHelper(chunk)));
-      return;
+        invalidArgTypeHelper(chunk));
     }
 
     const buf = toBuffer(chunk);

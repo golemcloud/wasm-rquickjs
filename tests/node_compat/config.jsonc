@@ -4291,10 +4291,7 @@
       "reason": "Requires Constructor.call(this) inheritance pattern which doesn't work with ES6 class-based internals"
     },
     "parallel/test-zlib-invalid-input.js": {},
-    "parallel/test-zlib-object-write.js": {
-      "skip": true,
-      "reason": "process.nextTick arg count panic when Transform write validation triggers error propagation"
-    },
+    "parallel/test-zlib-object-write.js": {},
     "parallel/test-zlib-premature-end.js": {},
     "parallel/test-zlib-brotli-16GB.js": {
       "skip": true,
