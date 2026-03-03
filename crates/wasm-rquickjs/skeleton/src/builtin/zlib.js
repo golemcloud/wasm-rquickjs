@@ -515,7 +515,10 @@ class ZlibBase extends Transform {
     }
     this._closed = true;
     this._closeHandle();
-    if (callback) setTimeout(callback, 0);
+    if (callback) {
+      this.once('close', callback);
+    }
+    this.destroy();
   }
 
   _closeHandle() {

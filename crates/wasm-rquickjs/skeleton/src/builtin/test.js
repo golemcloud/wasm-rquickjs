@@ -736,7 +736,11 @@ function MockTracker() {
 MockTracker.prototype.method = function (obj, methodName, implementation) {
     var original = obj[methodName];
     var callLog = [];
-    var mockInfo = { calls: callLog };
+    var mockInfo = {
+        calls: callLog,
+        callCount: function () { return callLog.length; },
+        resetCalls: function () { callLog.length = 0; },
+    };
 
     var wrapper = function () {
         var args = Array.prototype.slice.call(arguments);
@@ -768,7 +772,11 @@ MockTracker.prototype.method = function (obj, methodName, implementation) {
 MockTracker.prototype.fn = function (impl) {
     var fn = impl || function () {};
     var callLog = [];
-    var mockInfo = { calls: callLog };
+    var mockInfo = {
+        calls: callLog,
+        callCount: function () { return callLog.length; },
+        resetCalls: function () { callLog.length = 0; },
+    };
 
     var wrapper = function () {
         var args = Array.prototype.slice.call(arguments);

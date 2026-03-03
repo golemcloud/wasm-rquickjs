@@ -4361,10 +4361,7 @@
       "skip": true,
       "reason": "Requires --expose-gc and process.memoryUsage().external"
     },
-    "parallel/test-zlib-write-after-close.js": {
-      "skip": true,
-      "reason": "Uses t.mock.fn() with mock.callCount() assertion"
-    },
+    "parallel/test-zlib-write-after-close.js": {},
     "parallel/test-zlib-write-after-end.js": {
       "skip": true,
       "reason": "Uses t.mock.fn() with mock.callCount() assertion"
