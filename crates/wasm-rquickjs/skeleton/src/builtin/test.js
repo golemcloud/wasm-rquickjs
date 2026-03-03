@@ -66,7 +66,25 @@ function TestContext(name, parent) {
     this._beforeEachFns = [];
     this._afterEachFns = [];
     this.mock = new MockTracker();
-    this.assert = assert;
+
+    // Build t.assert: copy assert methods excluding AssertionError, CallTracker, strict,
+    // and add snapshot/fileSnapshot per Node.js spec.
+    var uncopiedKeys = ['AssertionError', 'CallTracker', 'strict'];
+    var tAssert = {};
+    var assertKeys = Object.keys(assert);
+    for (var i = 0; i < assertKeys.length; i++) {
+        var key = assertKeys[i];
+        if (!uncopiedKeys.includes(key)) {
+            tAssert[key] = assert[key];
+        }
+    }
+    tAssert.snapshot = function snapshot(_value, _options) {
+        throw new Error('snapshot is not supported in this context');
+    };
+    tAssert.fileSnapshot = function fileSnapshot(_value, _path) {
+        throw new Error('fileSnapshot is not supported in this context');
+    };
+    this.assert = tAssert;
 }
 
 Object.defineProperty(TestContext.prototype, 'fullName', {

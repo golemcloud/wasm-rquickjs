@@ -7930,11 +7930,9 @@
     "parallel/test-require-unicode.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-resource-usage.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-assert.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_expected_methods_are_on_t_assert": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_expected_methods_are_on_t_assert": {},
         "test_01_t_assert_ok_correctly_parses_the_stacktrace": {}
       }
     },
