@@ -7953,7 +7953,10 @@
           "skip": true,
           "reason": "[manual] This test requires `child_process.spawnSync()` to spawn real Node.js processes (`node --test`) and inspect their `stderr` output for concurrency configuration strings. WebAssembly componen..."
         },
-        "test_03_isolation_none_uses_a_concurrency_of_one": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_03_isolation_none_uses_a_concurrency_of_one": {
+          "skip": true,
+          "reason": "[manual] This test requires `child_process.spawnSync` to spawn a real Node.js process with CLI flags (`--test --experimental-test-isolation=none`) and inspect its stderr output for internal concurr..."
+        },
         "test_04_isolation_none_overrides_test_concurrency": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
