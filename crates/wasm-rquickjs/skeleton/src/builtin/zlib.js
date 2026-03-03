@@ -1,6 +1,7 @@
 // node:zlib implementation
 import { Transform } from 'node:stream';
 import { Buffer } from 'node:buffer';
+import bufferModule from 'node:buffer';
 import {
   zlib_compress_sync,
   zlib_decompress_sync,
@@ -18,6 +19,20 @@ import {
   brotli_stream_close,
   brotli_stream_bytes_written,
 } from '__wasm_rquickjs_builtin/zlib_native';
+
+// Capture buffer.kMaxLength at require('zlib') time, matching Node.js CJS behavior
+let _capturedKMaxLength = null;
+const _DEFAULT_KMAXLENGTH = 0x7fffffff;
+
+export function _captureKMaxLength() {
+  if (_capturedKMaxLength === null) {
+    _capturedKMaxLength = bufferModule.kMaxLength;
+  }
+}
+
+function _getKMaxLength() {
+  return _capturedKMaxLength !== null ? _capturedKMaxLength : _DEFAULT_KMAXLENGTH;
+}
 
 // ===== Constants =====
 
@@ -993,6 +1008,7 @@ function doSyncCompress(data, opts, windowBitsOverride, mode) {
 
 function doSyncDecompress(data, opts, windowBitsOverride, mode) {
   const validated = validateZlibOptions(opts, mode);
+  const maxLen = validated.maxOutputLength !== undefined ? validated.maxOutputLength : _getKMaxLength();
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
@@ -1001,9 +1017,9 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Decompression failed');
   }
   const output = Buffer.from(result);
-  if (validated.maxOutputLength !== undefined && output.length > validated.maxOutputLength) {
+  if (output.length > maxLen) {
     throw makeRangeError('ERR_BUFFER_TOO_LARGE',
-      `Cannot create a Buffer larger than ${validated.maxOutputLength} bytes`);
+      `Cannot create a Buffer larger than ${maxLen} bytes`);
   }
   if (validated.info) {
     const EngineClass = windowBitsOverride >= 24 ? _Gunzip :
@@ -1061,6 +1077,7 @@ export function brotliCompressSync(data, opts) {
 
 export function brotliDecompressSync(data, opts) {
   const validated = validateBrotliOptions(opts);
+  const maxLen = validated.maxOutputLength !== undefined ? validated.maxOutputLength : _getKMaxLength();
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const result = _brotli_decompress_sync(uint8);
@@ -1068,9 +1085,9 @@ export function brotliDecompressSync(data, opts) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');
   }
   const output = Buffer.from(result);
-  if (validated.maxOutputLength !== undefined && output.length > validated.maxOutputLength) {
+  if (output.length > maxLen) {
     throw makeRangeError('ERR_BUFFER_TOO_LARGE',
-      `Cannot create a Buffer larger than ${validated.maxOutputLength} bytes`);
+      `Cannot create a Buffer larger than ${maxLen} bytes`);
   }
   if (validated.info) {
     return { buffer: output, engine: new _BrotliDecompress(opts) };

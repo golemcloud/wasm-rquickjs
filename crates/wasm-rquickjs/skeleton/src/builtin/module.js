@@ -578,6 +578,11 @@ function makeRequire(parentDir, parentModule) {
             throw new TypeError("The 'id' argument must be of type string. Received " + typeof id);
         }
 
+        // Capture buffer.kMaxLength for zlib on first require (matches Node.js CJS capture-at-require semantics)
+        if ((id === 'zlib' || id === 'node:zlib') && zlib._captureKMaxLength) {
+            zlib._captureKMaxLength();
+        }
+
         // Builtin modules
         var builtin = builtinModules[id];
         if (builtin !== undefined) {
