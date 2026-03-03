@@ -16,9 +16,10 @@ var _subtestRegistrationIndex = 0;
 
 // --- Suite context ---
 
-function SuiteContext(name, parent) {
+function SuiteContext(name, parent, filePath) {
     this.name = name;
     this.parent = parent;
+    this.filePath = filePath || (parent ? parent.filePath : undefined);
     this.tests = [];
     this.suites = [];
     this.beforeFns = [];
@@ -54,9 +55,10 @@ SuiteContext.prototype.collectAfterEach = function () {
 
 // --- Test context (t) ---
 
-function TestContext(name, parent) {
+function TestContext(name, parent, filePath) {
     this.name = name;
     this.signal = { aborted: false };
+    this.filePath = filePath || (parent ? parent.filePath : undefined);
     this._parent = parent;
     this._suite = (parent instanceof SuiteContext) ? parent : (parent ? parent._suite : null);
     this._diagnostics = [];
@@ -375,7 +377,8 @@ function runTest(parsed, parentSuite) {
     // Handle todo
     var isTodo = options.todo === true || typeof options.todo === 'string';
 
-    var ctx = new TestContext(name, parentSuite);
+    var filePath = moduleContext ? moduleContext.filename : undefined;
+    var ctx = new TestContext(name, parentSuite, filePath);
 
     // Collect beforeEach from parent suite chain
     var beforeEachFns = parentSuite ? parentSuite.collectBeforeEach() : [];
@@ -516,7 +519,7 @@ function runSubtests(ctx) {
 
 // --- Run a suite ---
 
-function runSuite(name, options, fn, parentSuite) {
+function runSuite(name, options, fn, parentSuite, moduleContext) {
     // Handle skip
     if (options.skip === true || (typeof options.skip === 'string' && options.skip)) {
         return { status: 'skip', name: name };
@@ -524,7 +527,8 @@ function runSuite(name, options, fn, parentSuite) {
 
     var isTodo = options.todo === true || typeof options.todo === 'string';
 
-    var suite = new SuiteContext(name, parentSuite);
+    var filePath = moduleContext ? moduleContext.filename : undefined;
+    var suite = new SuiteContext(name, parentSuite, filePath);
     var prevSuite = currentSuite;
     currentSuite = suite;
 
@@ -576,7 +580,7 @@ function executeSuite(suite, isTodo) {
         var entry = suite.tests[i];
         var result;
         if (entry.type === 'suite') {
-            result = runSuite(entry.name, entry.options, entry.fn, suite);
+            result = runSuite(entry.name, entry.options, entry.fn, suite, entry.moduleContext);
         } else {
             result = runTest(entry, suite);
         }
@@ -643,7 +647,7 @@ function flushTopLevel() {
         var result;
 
         if (entry.type === 'suite') {
-            result = runSuite(entry.name, entry.options, entry.fn, rootSuite);
+            result = runSuite(entry.name, entry.options, entry.fn, rootSuite, entry.moduleContext);
         } else {
             result = runTest(entry, rootSuite);
         }
@@ -757,7 +761,8 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
             type: 'suite',
             name: parsed.name,
             options: parsed.options,
-            fn: parsed.fn
+            fn: parsed.fn,
+            moduleContext: parsed.moduleContext
         });
         return;
     }
@@ -775,7 +780,7 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
     }
 
     // Top-level suite — run immediately
-    var result = runSuite(parsed.name, parsed.options, parsed.fn, rootSuite);
+    var result = runSuite(parsed.name, parsed.options, parsed.fn, rootSuite, parsed.moduleContext);
     if (result.status === 'fail') {
         throw result.error;
     }
@@ -790,7 +795,8 @@ describe.skip = function (nameOrOpts, optionsOrFn, maybeFn) {
             type: 'suite',
             name: parsed.name,
             options: parsed.options,
-            fn: parsed.fn
+            fn: parsed.fn,
+            moduleContext: parsed.moduleContext
         });
         return;
     }
@@ -806,11 +812,12 @@ describe.todo = function (nameOrOpts, optionsOrFn, maybeFn) {
             type: 'suite',
             name: parsed.name,
             options: parsed.options,
-            fn: parsed.fn
+            fn: parsed.fn,
+            moduleContext: parsed.moduleContext
         });
         return;
     }
-    runSuite(parsed.name, parsed.options, parsed.fn, rootSuite);
+    runSuite(parsed.name, parsed.options, parsed.fn, rootSuite, parsed.moduleContext);
 };
 
 describe.only = function (nameOrOpts, optionsOrFn, maybeFn) {

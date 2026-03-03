@@ -8195,8 +8195,6 @@
     "parallel/test-runner-string-to-regexp.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-subtest-after-hook.js": {},
     "parallel/test-runner-test-filepath.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "test_00_suite": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
