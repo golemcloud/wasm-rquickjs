@@ -8105,7 +8105,7 @@
           "skip": true,
           "reason": "newly discovered, not yet evaluated"
         },
-        "test_05_functions_can_be_mocked_multiple_times_at_once": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_05_functions_can_be_mocked_multiple_times_at_once": {},
         "test_06_internal_no_op_function_can_be_reused_as_methods": {
           "skip": true,
           "reason": "newly discovered, not yet evaluated"

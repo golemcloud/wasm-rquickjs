@@ -1029,19 +1029,84 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
     return wrapper;
 };
 
-MockTracker.prototype.fn = function (impl) {
-    var fn = impl || function () {};
+MockTracker.prototype.fn = function (original, implementation, options) {
+    // Handle overloaded signatures:
+    // fn() → no-op spy
+    // fn(options) → no-op spy with options
+    // fn(original) → spy on original
+    // fn(original, implementation) → mock original with implementation
+    // fn(original, options) → spy with options
+    // fn(original, implementation, options) → mock with options
+    if (typeof original === 'object' && original !== null) {
+        options = original;
+        original = undefined;
+        implementation = undefined;
+    } else if (typeof implementation === 'object' && implementation !== null) {
+        options = implementation;
+        implementation = undefined;
+    }
+    options = options || {};
+
+    if ('times' in options) {
+        if (typeof options.times !== 'number') {
+            throw new TypeError('The "options.times" property must be of type number');
+        }
+        if (options.times < 1 || !Number.isInteger(options.times)) {
+            throw new RangeError('The value of "options.times" is out of range');
+        }
+    }
+
+    var originalFn = typeof original === 'function' ? original : function () {};
+    var currentImpl = typeof implementation === 'function' ? implementation : originalFn;
     var callLog = [];
+    var timesRemaining = options.times;
+    var onceImpls = {};
+
     var mockInfo = {
         calls: callLog,
         callCount: function () { return callLog.length; },
         resetCalls: function () { callLog.length = 0; },
+        restore: function () {
+            currentImpl = originalFn;
+            timesRemaining = undefined;
+        },
+        mockImplementation: function (newImpl) {
+            currentImpl = newImpl;
+        },
+        mockImplementationOnce: function (newImpl, onCall) {
+            if (onCall !== undefined) {
+                if (onCall < callLog.length) {
+                    throw new RangeError('The value of "onCall" is out of range. It must be >= ' + callLog.length);
+                }
+            } else {
+                onCall = callLog.length;
+                while (onceImpls.hasOwnProperty(onCall)) {
+                    onCall++;
+                }
+            }
+            onceImpls[onCall] = newImpl;
+        },
     };
 
     var wrapper = function () {
         var args = Array.prototype.slice.call(arguments);
         var callRecord = { arguments: args, result: undefined, error: undefined, target: undefined, this: this };
+        var callIndex = callLog.length;
         try {
+            var fn;
+            if (onceImpls.hasOwnProperty(callIndex)) {
+                fn = onceImpls[callIndex];
+                delete onceImpls[callIndex];
+            } else if (timesRemaining !== undefined && timesRemaining > 0) {
+                fn = currentImpl;
+                timesRemaining--;
+                if (timesRemaining === 0) {
+                    currentImpl = originalFn;
+                    timesRemaining = undefined;
+                }
+            } else {
+                fn = currentImpl;
+            }
             var result = fn.apply(this, arguments);
             callRecord.result = result;
             callLog.push(callRecord);
