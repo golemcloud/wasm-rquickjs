@@ -4308,10 +4308,7 @@
       "skip": true,
       "reason": "Tests precise ordering of write+flush+read interleaving"
     },
-    "parallel/test-zlib-from-concatenated-gzip.js": {
-      "skip": true,
-      "reason": "Multi-member gzip with fs.createReadStream + pipe + tmpdir"
-    },
+    "parallel/test-zlib-from-concatenated-gzip.js": {},
     "parallel/test-zlib-from-gzip.js": {},
     "parallel/test-zlib-from-gzip-with-trailing-garbage.js": {
       "skip": true,

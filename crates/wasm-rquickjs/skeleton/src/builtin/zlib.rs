@@ -63,7 +63,8 @@ fn zlib_decompress_sync_impl(
 ) -> Option<Vec<u8>> {
     if window_bits >= 24 || window_bits == 0 {
         // gzip or auto-detect: try gzip first
-        let mut decoder = flate2::read::GzDecoder::new(Cursor::new(data));
+        // Use MultiGzDecoder to handle concatenated multi-member gzip streams
+        let mut decoder = flate2::read::MultiGzDecoder::new(Cursor::new(data));
         let mut output = Vec::new();
         match decoder.read_to_end(&mut output) {
             Ok(_) => return Some(output),
