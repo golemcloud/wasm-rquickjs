@@ -11,6 +11,21 @@ const MAX_GROUP_INDENTATION = 1000;
 
 let globalGroupIndentation = '';
 
+function formatArgs(args) {
+    if (args.length === 0) return '';
+    if (args.length === 1 && typeof args[0] === 'string') return args[0];
+    return util.format(...args);
+}
+
+function applyAssertPrefix(args) {
+    if (args.length > 0 && typeof args[0] === 'string') {
+        args[0] = `Assertion failed: ${args[0]}`;
+    } else {
+        args.unshift('Assertion failed');
+    }
+    return args;
+}
+
 function applyGroupIndent(message, groupIndentation) {
     if (!groupIndentation) {
         return message;
@@ -57,17 +72,8 @@ function writeToConfiguredStream(stream, message, nativeWriter, groupIndentation
 }
 
 export function assert(condition, ...v) {
-    if (condition) {
-        return;
-    }
-
-    if (v.length > 0 && typeof v[0] === 'string') {
-        v[0] = `Assertion failed: ${v[0]}`;
-    } else {
-        v.unshift('Assertion failed');
-    }
-
-    warn(...v);
+    if (condition) return;
+    warn(...applyAssertPrefix(v));
 }
 
 const CLEAR_CONSOLE_CURSOR_HOME = '\u001b[1;1H';
@@ -212,8 +218,7 @@ function _getStderr() {
 }
 
 export function debug(...v) {
-    const msg = util.format(...v);
-    writeToConfiguredStream(_getStdout(), msg, consoleNative.debug, globalGroupIndentation);
+    writeToConfiguredStream(_getStdout(), formatArgs(v), consoleNative.debug, globalGroupIndentation);
 }
 
 export function dir(object, options) {
@@ -236,8 +241,7 @@ export function dirxml(...v) {
 }
 
 export function error(...v) {
-    const msg = util.format(...v);
-    writeToConfiguredStream(_getStderr(), msg, consoleNative.error, globalGroupIndentation);
+    writeToConfiguredStream(_getStderr(), formatArgs(v), consoleNative.error, globalGroupIndentation);
 }
 
 export function group(label) {
@@ -257,14 +261,13 @@ export function groupEnd() {
 }
 
 export function info(...v) {
-    const msg = util.format(...v);
-    writeToConfiguredStream(_getStdout(), msg, consoleNative.info, globalGroupIndentation);
+    writeToConfiguredStream(_getStdout(), formatArgs(v), consoleNative.info, globalGroupIndentation);
 }
 
 export function log(...v) {
     let msg;
     try {
-        msg = util.format(...v);
+        msg = formatArgs(v);
     } catch (e) {
         msg = `[Unable to format: ${e.message}]`;
     }
@@ -293,7 +296,7 @@ export function timeEnd(label) {
 }
 
 export function trace(...v) {
-    const err = new Error(util.format(...v));
+    const err = new Error(formatArgs(v));
     err.name = 'Trace';
 
     if (typeof Error.captureStackTrace === 'function') {
@@ -305,8 +308,7 @@ export function trace(...v) {
 }
 
 export function warn(...v) {
-    const msg = util.format(...v);
-    writeToConfiguredStream(_getStderr(), msg, consoleNative.warn, globalGroupIndentation);
+    writeToConfiguredStream(_getStderr(), formatArgs(v), consoleNative.warn, globalGroupIndentation);
 }
 
 const tableChars = {
@@ -722,17 +724,8 @@ Console.prototype.trace = function(...args) {
     this.error(formatTraceStack(err));
 };
 Console.prototype.assert = function(condition, ...v) {
-    if (condition) {
-        return;
-    }
-
-    if (v.length > 0 && typeof v[0] === 'string') {
-        v[0] = `Assertion failed: ${v[0]}`;
-    } else {
-        v.unshift('Assertion failed');
-    }
-
-    this.warn(...v);
+    if (condition) return;
+    this.warn(...applyAssertPrefix(v));
 };
 Console.prototype.clear = function() { clearStream(this._stdout); };
 Console.prototype.count = function(label) {
