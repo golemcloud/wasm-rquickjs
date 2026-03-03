@@ -8008,7 +8008,7 @@
         "test_03_test_multiple_files": {}
       }
     },
-    "parallel/test-runner-coverage-source-map.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-coverage-source-map.js": {},
     "parallel/test-runner-coverage-thresholds.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-coverage.js": {
       "skip": true,
