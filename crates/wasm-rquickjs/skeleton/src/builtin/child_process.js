@@ -497,6 +497,11 @@ function runInline(command, args, options) {
             throw new Error(FIPS_STARTUP_ERROR);
         }
 
+        if (execArgv.indexOf('--experimental-test-coverage') !== -1 &&
+            (!process.features || !process.features.inspector)) {
+            capturedStderr += 'Warning: coverage could not be collected\n';
+        }
+
         var secureHeapErrors = validateSecureHeapFlags(execArgv);
         if (secureHeapErrors.length > 0) {
             status = 9;

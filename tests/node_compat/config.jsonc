@@ -8011,11 +8011,9 @@
     "parallel/test-runner-coverage-source-map.js": {},
     "parallel/test-runner-coverage-thresholds.js": {},
     "parallel/test-runner-coverage.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_test_coverage_report": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_test_coverage_report": {},
         "test_01_test_tap_coverage_reporter": {},
         "test_02_test_spec_coverage_reporter": {},
         "test_03_single_process_coverage_is_the_same_with_test": {},
