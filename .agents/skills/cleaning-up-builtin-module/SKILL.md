@@ -90,6 +90,7 @@ Read the full Rust and JS source files. Then consult the oracle for a thorough c
 - **Rust improvements**: Clippy suggestions, unnecessary `clone()`, better error handling patterns
 - **Native ↔ JS boundary shifts**: Opportunities to move logic between the Rust native bridge and the JS wrapper (see "Moving Logic Between Rust and JS" below)
 - **WIRE_JS minimization**: Check if logic in the module's `WIRE_JS` snippet can be moved into the JS wrapper module itself, leaving WIRE_JS as a minimal import-and-assign-to-globalThis (see "Minimizing WIRE_JS" below)
+- **Test-cheating workarounds**: Code whose sole purpose is to make vendored node_compat tests pass without providing value to real users (see "Detecting Test-Cheating Workarounds" below)
 
 **Important constraints to tell the oracle**:
 - The module's **observable behavior must not change** — all existing tests must continue to pass
@@ -231,6 +232,22 @@ globalThis.myGlobal = __x;
 - The resulting `globalThis` object must have the exact same property descriptors (enumerable, configurable, writable), method `.name` values, and prototype chain as before.
 - If WIRE_JS does something that genuinely requires running *after* the module is imported (e.g., reading from another global that's set by a different WIRE_JS), it cannot be moved into the `.js` file and must stay in WIRE_JS.
 
+### Detecting Test-Cheating Workarounds
+
+Verify that the module implementation does not **cheat** to pass vendored node_compat tests. "Cheating" means code whose sole purpose is making test cases pass, with no actual value for real users. These workarounds produce **asymmetric behavior** — tests see one code path while real-world usage hits a different, inferior one.
+
+**Red flags to look for**:
+- **Loopback/localhost detection**: Code that checks whether a request targets `localhost`, `127.0.0.1`, or `::1` and takes a special path (e.g., bypassing `wasi:http` with a direct socket connection). Real users connect to arbitrary hosts and must get the same behavior.
+- **Side-channels via `globalThis`**: Global variables or queues (e.g., `globalThis.__wasm_rquickjs_*`) used to pass metadata between client and server that only works for same-process connections. This fakes features that `wasi:http` genuinely cannot provide.
+- **Test-specific branching**: Conditional logic that checks for patterns only found in test inputs (specific port numbers, specific header values used by tests, etc.) and returns hardcoded or fabricated results.
+- **Metadata fabrication**: Capturing HTTP metadata (status messages, raw headers, HTTP version) from one side of a connection and injecting it into the other side to simulate features the underlying transport doesn't support.
+
+**What to do when you find cheating code**:
+1. **Report it** — document what the workaround does and why it's problematic
+2. **Remove it** — delete the workaround entirely; the module should use the same code path for all connections
+3. **Accept test failures** — if removing the workaround causes vendored node_compat tests to fail because they rely on features the platform genuinely cannot provide (e.g., `wasi:http` doesn't expose status messages), **mark those tests as skipped** in `config.jsonc` with an explicit reason (e.g., `"reason": "wasi:http does not expose status messages"`)
+4. **Never re-introduce the cheat** — the correct response to a platform limitation is to skip the test, not to fake the behavior
+
 ### Moving logic between Rust and JS
 
 As part of the cleanup you may move logic between the native Rust bridge and the JS wrapper. This is a tradeoff between **runtime performance** and **simplicity of expressing idiomatic JS patterns**.
@@ -265,3 +282,4 @@ As part of the cleanup you may move logic between the native Rust bridge and the
 6. **Preserve all exported symbols** — the module's public API must not change
 7. **Preserve error fidelity** — error codes, messages, and validation order must remain identical
 8. **NEVER modify vendored third-party JS files** in `builtin/` (e.g., `ieee754.js`, `base64.js`, `fetch-blob-*.js`, `formdata-polyfill-*.js`, `web-streams-polyfill-*.js`)
+9. **NEVER allow test-cheating workarounds** — code that exists solely to make vendored tests pass (e.g., loopback side-channels, localhost-only special paths, metadata fabrication between client and server) must be removed. If a platform limitation means a test cannot pass honestly, skip the test with an explicit reason rather than faking the behavior

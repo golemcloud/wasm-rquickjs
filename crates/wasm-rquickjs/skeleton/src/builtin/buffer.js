@@ -1,10 +1,7 @@
 /*!
- * The buffer module from node.js, for the browser.
- *
- * @author   Feross Aboukhadijeh <https://feross.org>
- * @license  MIT
+ * The buffer module from node.js.
+ * Based on https://github.com/feross/buffer (MIT license).
  */
-/* eslint-disable no-proto */
 
 'use strict'
 
@@ -15,10 +12,7 @@ import { Blob as _BlobImport, File as _FileImport } from "__wasm_rquickjs_builti
 import { inspect as utilInspect } from "__wasm_rquickjs_builtin/internal/util/inspect"
 import { ALL_PROPERTIES, ONLY_ENUMERABLE, getOwnNonIndexProperties } from "__wasm_rquickjs_builtin/internal/binding/util"
 
-const customInspectSymbol =
-    (typeof Symbol === 'function' && typeof Symbol['for'] === 'function') // eslint-disable-line dot-notation
-        ? Symbol['for']('nodejs.util.inspect.custom') // eslint-disable-line dot-notation
-        : null
+const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom')
 
 let _inspectMaxBytes = 50
 export const INSPECT_MAX_BYTES = 50
@@ -85,42 +79,7 @@ function installRepeatLimitGuard (maxStringLength) {
 
 installRepeatLimitGuard(K_STRING_MAX_LENGTH)
 
-/**
- * If `Buffer.TYPED_ARRAY_SUPPORT`:
- *   === true    Use Uint8Array implementation (fastest)
- *   === false   Print warning and recommend using `buffer` v4.x which has an Object
- *               implementation (most compatible, even IE6)
- *
- * Browsers that support typed arrays are IE 10+, Firefox 4+, Chrome 7+, Safari 5.1+,
- * Opera 11.6+, iOS 4.2+.
- *
- * We report that the browser does not support typed arrays if the are not subclassable
- * using __proto__. Firefox 4-29 lacks support for adding new properties to `Uint8Array`
- * (See: https://bugzilla.mozilla.org/show_bug.cgi?id=695438). IE 10 lacks support
- * for __proto__ and has a buggy typed array implementation.
- */
-Buffer.TYPED_ARRAY_SUPPORT = typedArraySupport()
-
-if (!Buffer.TYPED_ARRAY_SUPPORT && typeof console !== 'undefined' &&
-    typeof console.error === 'function') {
-    console.error(
-        'This browser lacks typed array (Uint8Array) support which is required by ' +
-        '`buffer` v5.x. Use `buffer` v4.x if you require old browser support.'
-    )
-}
-
-function typedArraySupport () {
-    // Can typed array instances be augmented?
-    try {
-        const arr = new Uint8Array(1)
-        const proto = { foo: function () { return 42 } }
-        Object.setPrototypeOf(proto, Uint8Array.prototype)
-        Object.setPrototypeOf(arr, proto)
-        return arr.foo() === 42
-    } catch (e) {
-        return false
-    }
-}
+Buffer.TYPED_ARRAY_SUPPORT = true
 
 Object.defineProperty(Buffer.prototype, 'parent', {
     enumerable: true,
@@ -241,9 +200,8 @@ function from (value, encodingOrOffset, length) {
         return fromArrayBuffer(value, encodingOrOffset, length)
     }
 
-    if (typeof SharedArrayBuffer !== 'undefined' &&
-        (isInstance(value, SharedArrayBuffer) ||
-            (value && isInstance(value.buffer, SharedArrayBuffer)))) {
+    if (isInstance(value, SharedArrayBuffer) ||
+        (value && isInstance(value.buffer, SharedArrayBuffer))) {
         return fromArrayBuffer(value, encodingOrOffset, length)
     }
 
@@ -279,7 +237,7 @@ function from (value, encodingOrOffset, length) {
     const b = fromObject(value)
     if (b) return b
 
-    if (typeof Symbol !== 'undefined' && Symbol.toPrimitive != null &&
+    if (Symbol.toPrimitive != null &&
         typeof value[Symbol.toPrimitive] === 'function') {
         const primitive = value[Symbol.toPrimitive]('string')
         if (typeof primitive === 'string') {
@@ -485,8 +443,7 @@ function fromArrayBuffer (array, byteOffset, length) {
     if (typeof byteLength !== 'number' &&
         source != null &&
         (isInstance(source.buffer, ArrayBuffer) ||
-            (typeof SharedArrayBuffer !== 'undefined' &&
-                isInstance(source.buffer, SharedArrayBuffer)))) {
+                isInstance(source.buffer, SharedArrayBuffer))) {
         source = source.buffer
         byteLength = getArrayBufferByteLength(source)
     }
@@ -660,8 +617,7 @@ function byteLength (string, encoding) {
     if (ArrayBuffer.isView(string) || isInstance(string, ArrayBuffer)) {
         return string.byteLength
     }
-    if (typeof SharedArrayBuffer !== 'undefined' &&
-        isInstance(string, SharedArrayBuffer)) {
+    if (isInstance(string, SharedArrayBuffer)) {
         return string.byteLength
     }
     if (typeof string !== 'string') {
@@ -782,12 +738,6 @@ function slowToString (encoding, start, end) {
     }
 }
 
-// This property is used by `Buffer.isBuffer` (and the `is-buffer` npm package)
-// to detect a Buffer instance. It's not possible to use `instanceof Buffer`
-// reliably in a browserify context because there could be multiple different
-// copies of the 'buffer' package in use. This method works even for Buffer
-// instances that were created from another copy of the `buffer` package.
-// See: https://github.com/feross/buffer/issues/154
 Buffer.prototype._isBuffer = true
 
 function swap (b, n, m) {
@@ -894,9 +844,7 @@ Buffer.prototype.inspect = function inspect (_recurseTimes, ctx) {
 
     return '<' + constructorName + ' ' + str + '>'
 }
-if (customInspectSymbol) {
-    Buffer.prototype[customInspectSymbol] = Buffer.prototype.inspect
-}
+Buffer.prototype[customInspectSymbol] = Buffer.prototype.inspect
 
 Buffer.prototype.compare = function compare (target, start, end, thisStart, thisEnd) {
     if (!isInstance(target, Uint8Array)) {
@@ -1035,14 +983,11 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
         return arrayIndexOf(buffer, val, byteOffset, encoding, dir)
     } else if (typeof val === 'number') {
         val = val & 0xFF // Search for a byte value [0-255]
-        if (typeof Uint8Array.prototype.indexOf === 'function') {
-            if (dir) {
-                return Uint8Array.prototype.indexOf.call(buffer, val, byteOffset)
-            } else {
-                return Uint8Array.prototype.lastIndexOf.call(buffer, val, byteOffset)
-            }
+        if (dir) {
+            return Uint8Array.prototype.indexOf.call(buffer, val, byteOffset)
+        } else {
+            return Uint8Array.prototype.lastIndexOf.call(buffer, val, byteOffset)
         }
-        return arrayIndexOf(buffer, [val], byteOffset, encoding, dir)
     }
 
     throw new ERR_INVALID_ARG_TYPE('value', ['number', 'string', 'Buffer', 'Uint8Array'], val)
@@ -2084,12 +2029,6 @@ Buffer.prototype.readBigUint64BE = Buffer.prototype.readBigUInt64BE
 Buffer.prototype.writeBigUint64LE = Buffer.prototype.writeBigUInt64LE
 Buffer.prototype.writeBigUint64BE = Buffer.prototype.writeBigUInt64BE
 
-function checkIEEE754 (buf, value, offset, ext) {
-    if (offset + ext > buf.length) {
-        throw new ERR_BUFFER_OUT_OF_BOUNDS()
-    }
-}
-
 function writeFloat (buf, value, offset, littleEndian) {
     value = +value
     if (offset === undefined) offset = 0
@@ -2164,8 +2103,7 @@ Buffer.prototype.copy = function copy (target, targetStart, start, end) {
 
     const len = end - start
 
-    if (this === target && typeof Uint8Array.prototype.copyWithin === 'function') {
-        // Use built-in when available, missing from IE11
+    if (this === target) {
         this.copyWithin(targetStart, start, end)
     } else {
         Uint8Array.prototype.set.call(
@@ -2487,19 +2425,13 @@ function blitBuffer (src, dst, offset, length) {
     return i
 }
 
-// ArrayBuffer or Uint8Array objects from other contexts (i.e. iframes) do not pass
-// the `instanceof` check but they should be treated as of that type.
-// See: https://github.com/feross/buffer/issues/166
 function isInstance (obj, type) {
     return obj instanceof type ||
         (obj != null && obj.constructor != null && obj.constructor.name != null &&
             obj.constructor.name === type.name) ||
         (type === Uint8Array && Buffer.isBuffer(obj))
 }
-function numberIsNaN (obj) {
-    // For IE11 support
-    return obj !== obj // eslint-disable-line no-self-compare
-}
+const numberIsNaN = Number.isNaN
 
 // Create lookup table for `toString('hex')`
 // See: https://github.com/feross/buffer/issues/219
@@ -2736,13 +2668,8 @@ export function isUtf8 (source) {
     return true
 }
 
-// Return not function with Error if BigInt not supported
 function defineBigIntMethod (fn) {
-    return typeof BigInt === 'undefined' ? BufferBigIntNotDefined : fn
-}
-
-function BufferBigIntNotDefined () {
-    throw new Error('BigInt not supported')
+    return fn
 }
 
 const _defaultExport = {
