@@ -10620,7 +10620,7 @@
       "split": true,
       "subtests": {
         "test_00_zlib_should_support_zero_windowbits": {},
-        "test_01_windowbits_should_be_valid": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_01_windowbits_should_be_valid": {}
       }
     },
     "parallel/test-zlib.js": {},
