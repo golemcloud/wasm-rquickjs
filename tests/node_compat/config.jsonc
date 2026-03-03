@@ -10625,7 +10625,7 @@
         "test_01_windowbits_should_be_valid": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-zlib.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-zlib.js": {},
     "sequential/test-async-wrap-getasyncid.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",

@@ -359,7 +359,7 @@ function toUint8Array(buf) {
 
 // ===== Validation for zlib options =====
 
-function validateZlibOptions(opts) {
+function validateZlibOptions(opts, mode) {
   opts = opts || {};
   const level = opts.level !== undefined ? opts.level : Z_DEFAULT_COMPRESSION;
   const windowBits = opts.windowBits !== undefined ? opts.windowBits : Z_DEFAULT_WINDOWBITS;
@@ -384,7 +384,8 @@ function validateZlibOptions(opts) {
     }
   }
   if (opts.windowBits !== undefined) {
-    validateRangeInt(opts.windowBits, 'options.windowBits', Z_MIN_WINDOWBITS, Z_MAX_WINDOWBITS);
+    const minWB = (mode === GZIP || mode === GUNZIP) ? 9 : Z_MIN_WINDOWBITS;
+    validateRangeInt(opts.windowBits, 'options.windowBits', minWB, Z_MAX_WINDOWBITS);
   }
   if (opts.level !== undefined) {
     validateRangeInt(opts.level, 'options.level', Z_MIN_LEVEL, Z_MAX_LEVEL);
@@ -722,7 +723,7 @@ class _Inflate extends ZlibBase {
 
 class _Gzip extends ZlibBase {
   constructor(opts) {
-    const validated = validateZlibOptions(opts);
+    const validated = validateZlibOptions(opts, GZIP);
     super(opts, GZIP);
     this._level = validated.level;
     this._windowBits = validated.windowBits;
@@ -741,7 +742,7 @@ class _Gzip extends ZlibBase {
 
 class _Gunzip extends ZlibBase {
   constructor(opts) {
-    const validated = validateZlibOptions(opts);
+    const validated = validateZlibOptions(opts, GUNZIP);
     super(opts, GUNZIP);
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : Z_NO_FLUSH;
@@ -884,8 +885,8 @@ export function createBrotliDecompress(opts) { return new _BrotliDecompress(opts
 
 // ===== Sync convenience functions =====
 
-function doSyncCompress(data, opts, windowBitsOverride) {
-  const validated = validateZlibOptions(opts);
+function doSyncCompress(data, opts, windowBitsOverride, mode) {
+  const validated = validateZlibOptions(opts, mode);
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
@@ -902,8 +903,8 @@ function doSyncCompress(data, opts, windowBitsOverride) {
   return output;
 }
 
-function doSyncDecompress(data, opts, windowBitsOverride) {
-  const validated = validateZlibOptions(opts);
+function doSyncDecompress(data, opts, windowBitsOverride, mode) {
+  const validated = validateZlibOptions(opts, mode);
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
@@ -922,11 +923,11 @@ function doSyncDecompress(data, opts, windowBitsOverride) {
 }
 
 export function gzipSync(data, opts) {
-  return doSyncCompress(data, opts, 31);
+  return doSyncCompress(data, opts, 31, GZIP);
 }
 
 export function gunzipSync(data, opts) {
-  return doSyncDecompress(data, opts, 31);
+  return doSyncDecompress(data, opts, 31, GUNZIP);
 }
 
 export function deflateSync(data, opts) {
