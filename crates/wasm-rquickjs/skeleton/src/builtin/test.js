@@ -556,10 +556,10 @@ function runSuite(name, options, fn, parentSuite, moduleContext) {
     }
 
     currentSuite = prevSuite;
-    return executeSuite(suite, isTodo);
+    return executeSuite(suite, isTodo, options.concurrency === true);
 }
 
-function executeSuite(suite, isTodo) {
+function executeSuite(suite, isTodo, concurrent) {
     var failures = 0;
     var errors = [];
 
@@ -575,59 +575,91 @@ function executeSuite(suite, isTodo) {
         }
     }
 
-    // Run child suites and tests in order they were registered
-    for (var i = 0; i < suite.tests.length; i++) {
-        var entry = suite.tests[i];
-        var result;
-        if (entry.type === 'suite') {
-            result = runSuite(entry.name, entry.options, entry.fn, suite, entry.moduleContext);
-        } else {
-            result = runTest(entry, suite);
-        }
-
-        if (result.status === 'async' || result.status === 'async-suite') {
-            var promise = result.promise;
-            if (promise) {
-                _pendingTestPromises.push(promise.then(function (resolved) {
-                    if (resolved && resolved.status === 'fail') {
-                        throw resolved.error || new Error('Test "' + resolved.name + '" failed');
-                    }
-                }));
-            }
-            continue;
-        }
-
-        if (result.status === 'fail') {
+    function handleResult(result) {
+        if (result && result.status === 'fail') {
             failures++;
             errors.push(result.error || new Error('Test "' + result.name + '" failed'));
         }
     }
 
-    // Run after hooks (always, even on failure)
-    for (var a = 0; a < suite.afterFns.length; a++) {
-        try {
-            suite.afterFns[a]();
-        } catch (e) {
-            failures++;
-            errors.push(e);
+    function finalize() {
+        // Run after hooks (always, even on failure)
+        for (var a = 0; a < suite.afterFns.length; a++) {
+            try {
+                suite.afterFns[a]();
+            } catch (e) {
+                failures++;
+                errors.push(e);
+            }
         }
-    }
 
-    if (isTodo) {
-        return { status: 'todo', name: suite.name };
-    }
-
-    if (failures > 0) {
-        var error;
-        if (errors.length === 1) {
-            error = errors[0];
-        } else {
-            error = new AggregateError(errors, failures + ' test(s) failed');
+        if (isTodo) {
+            return { status: 'todo', name: suite.name };
         }
-        return { status: 'fail', name: suite.name, error: error };
+
+        if (failures > 0) {
+            var error;
+            if (errors.length === 1) {
+                error = errors[0];
+            } else {
+                error = new AggregateError(errors, failures + ' test(s) failed');
+            }
+            return { status: 'fail', name: suite.name, error: error };
+        }
+
+        return { status: 'pass', name: suite.name };
     }
 
-    return { status: 'pass', name: suite.name };
+    var idx = 0;
+
+    function runNext() {
+        while (idx < suite.tests.length) {
+            var entry = suite.tests[idx++];
+            var result;
+            if (entry.type === 'suite') {
+                result = runSuite(entry.name, entry.options, entry.fn, suite, entry.moduleContext);
+            } else {
+                result = runTest(entry, suite);
+            }
+
+            if (result.status === 'async' || result.status === 'async-suite') {
+                var promise = result.promise;
+                if (concurrent) {
+                    // Concurrent mode: push to pending and continue
+                    if (promise) {
+                        _pendingTestPromises.push(promise.then(function (resolved) {
+                            if (resolved && resolved.status === 'fail') {
+                                throw resolved.error || new Error('Test "' + resolved.name + '" failed');
+                            }
+                        }));
+                    }
+                    continue;
+                } else {
+                    // Sequential mode: await this test, then continue
+                    if (promise) {
+                        return promise.then(function (resolved) {
+                            handleResult(resolved);
+                            return runNext();
+                        });
+                    }
+                    continue;
+                }
+            }
+
+            handleResult(result);
+        }
+
+        return finalize();
+    }
+
+    var finalResult = runNext();
+
+    if (finalResult && typeof finalResult.then === 'function') {
+        // Sequential mode produced an async chain; return as async-suite
+        return { status: 'async-suite', name: suite.name, promise: finalResult };
+    }
+
+    return finalResult;
 }
 
 // --- Top-level collection ---
@@ -781,7 +813,15 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
 
     // Top-level suite — run immediately
     var result = runSuite(parsed.name, parsed.options, parsed.fn, rootSuite, parsed.moduleContext);
-    if (result.status === 'fail') {
+    if (result.status === 'async-suite') {
+        if (result.promise) {
+            _pendingTestPromises.push(result.promise.then(function (resolved) {
+                if (resolved && resolved.status === 'fail') {
+                    throw resolved.error || new Error('Suite "' + resolved.name + '" failed');
+                }
+            }));
+        }
+    } else if (result.status === 'fail') {
         throw result.error;
     }
 }

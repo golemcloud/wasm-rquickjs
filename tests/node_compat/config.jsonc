@@ -8003,7 +8003,7 @@
       "split": true,
       "subtests": {
         "test_00_concurrency_option_boolean_true": {},
-        "test_01_concurrency_option_boolean_false": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_concurrency_option_boolean_false": {},
         "test_02_concurrency_true_implies_infinity": {
           "skip": true,
           "reason": "newly discovered, not yet evaluated"
