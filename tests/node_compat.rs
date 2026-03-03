@@ -243,6 +243,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     Box::pin(async move {
                         let test_future = async {
                             let mut instance = TestInstance::from_prepared(&prepared).await?;
+                            instance.set_epoch_deadline(test_timeout_secs);
                             setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
                             let guest_path = format!("/test/{}", path);
@@ -336,6 +337,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         let discovery_clone = discovery_clone.clone();
                         Box::pin(async move {
                                 let mut instance = TestInstance::from_prepared(&prepared).await?;
+                                instance.set_epoch_deadline(test_timeout_secs);
                                 setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
                                 // Rewrite the test file to isolate the target subtest

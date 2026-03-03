@@ -229,10 +229,19 @@ impl PreparedComponent {
         let mut config = wasmtime::Config::default();
         config.async_support(true);
         config.wasm_component_model(true);
+        config.epoch_interruption(true);
         config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
         config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
         config.cache(Some(wasmtime::Cache::from_file(None)?));
         let engine = Engine::new(&config)?;
+
+        // Start a background thread that increments the epoch every second,
+        // enabling epoch-based interruption to enforce timeouts on spinning WASM.
+        let epoch_engine = engine.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            epoch_engine.increment_epoch();
+        });
         let mut linker: Linker<Host> = Linker::new(&engine);
 
         wasmtime_wasi::p2::add_to_linker_with_options_async(
@@ -487,6 +496,7 @@ impl TestInstance {
         };
 
         let mut store = Store::new(engine, host);
+        store.set_epoch_deadline(120); // default: 120 ticks (~120 seconds with 1s epoch thread)
 
         let instance = linker.instantiate_async(&mut store, component).await?;
 
@@ -542,6 +552,10 @@ impl TestInstance {
             stdout,
             stderr,
         )
+    }
+
+    pub fn set_epoch_deadline(&mut self, ticks: u64) {
+        self.store.set_epoch_deadline(ticks);
     }
 
     pub fn temp_dir_path(&self) -> &Utf8Path {
