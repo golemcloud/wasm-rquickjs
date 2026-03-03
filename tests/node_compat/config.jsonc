@@ -8111,7 +8111,7 @@
           "reason": "newly discovered, not yet evaluated"
         },
         "test_07_methods_can_be_mocked_multiple_times_but_not_at_the_same_tim": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_08_spies_on_an_object_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_08_spies_on_an_object_method": {},
         "test_09_spies_on_a_getter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_10_spies_on_a_setter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_11_spy_functions_can_be_bound": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },

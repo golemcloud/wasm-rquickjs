@@ -877,10 +877,20 @@ function MockTracker() {
 MockTracker.prototype.method = function (obj, methodName, implementation) {
     var original = obj[methodName];
     var callLog = [];
+    var tracker = this;
     var mockInfo = {
         calls: callLog,
         callCount: function () { return callLog.length; },
         resetCalls: function () { callLog.length = 0; },
+        restore: function () {
+            obj[methodName] = original;
+            for (var i = tracker._mocks.length - 1; i >= 0; i--) {
+                if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
+                    tracker._mocks.splice(i, 1);
+                    break;
+                }
+            }
+        },
     };
 
     var wrapper = function () {
