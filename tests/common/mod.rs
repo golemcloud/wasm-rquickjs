@@ -17,8 +17,9 @@ use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{Component, Func, Instance, Linker, ResourceAny, ResourceTable, Val};
 use wasmtime::{Engine, Store};
-use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
-use wasmtime_wasi::{DirPerms, FilePerms};
+use wasmtime_wasi::cli::OutputFile;
+use wasmtime_wasi::p2::bindings;
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 pub fn collect_example_paths() -> anyhow::Result<Vec<Utf8PathBuf>> {
@@ -85,7 +86,6 @@ pub struct TestInstance {
 impl TestInstance {
     pub async fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
-        config.async_support(true);
         config.wasm_component_model(true);
         let engine = Engine::new(&config)?;
         let mut linker: Linker<Host> = Linker::new(&engine);
@@ -217,16 +217,16 @@ impl TestInstance {
     }
 
     async fn perform_invoke(&mut self, func: Func, args: &[Val]) -> anyhow::Result<Vec<Val>> {
-        let mut results = (0..func.results(&mut self.store).len())
+        let mut results = (0..func.ty(&self.store).results().len())
             .map(|_| Val::Bool(false))
             .collect::<Vec<_>>();
         func.call_async(&mut self.store, args, &mut results).await?;
-        func.post_return_async(&mut self.store).await?;
         Ok(results)
     }
 
     pub async fn drop_resource(&mut self, resource: ResourceAny) -> anyhow::Result<()> {
-        resource.resource_drop_async::<Host>(&mut self.store).await
+        resource.resource_drop_async(&mut self.store).await?;
+        Ok(())
     }
 }
 
@@ -369,21 +369,18 @@ struct Host {
     pub wasi_http: Arc<WasiHttpCtx>,
 }
 
-impl IoView for Host {
-    fn table(&mut self) -> &mut ResourceTable {
-        Arc::get_mut(&mut self.table)
-            .expect("ResourceTable is shared and cannot be borrowed mutably")
-            .get_mut()
-            .expect("ResourceTable mutex must never fail")
-    }
-}
-
 impl WasiView for Host {
-    fn ctx(&mut self) -> &mut WasiCtx {
-        Arc::get_mut(&mut self.wasi)
-            .expect("WasiCtx is shared and cannot be borrowed mutably")
-            .get_mut()
-            .expect("WasiCtx mutex must never fail")
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView {
+            ctx: Arc::get_mut(&mut self.wasi)
+                .expect("WasiCtx is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("WasiCtx mutex must never fail"),
+            table: Arc::get_mut(&mut self.table)
+                .expect("ResourceTable is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("ResourceTable mutex must never fail"),
+        }
     }
 }
 
@@ -391,6 +388,13 @@ impl WasiHttpView for Host {
     fn ctx(&mut self) -> &mut WasiHttpCtx {
         Arc::get_mut(&mut self.wasi_http)
             .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
+    }
+
+    fn table(&mut self) -> &mut ResourceTable {
+        Arc::get_mut(&mut self.table)
+            .expect("ResourceTable is shared and cannot be borrowed mutably")
+            .get_mut()
+            .expect("ResourceTable mutex must never fail")
     }
 }
 
