@@ -874,23 +874,132 @@ function MockTracker() {
     this._mocks = [];
 }
 
-MockTracker.prototype.method = function (obj, methodName, implementation) {
-    var original = obj[methodName];
-    var callLog = [];
+MockTracker.prototype.method = function (obj, methodName, implementation, options) {
+    // Handle overloaded signature: method(obj, name, options) vs method(obj, name, impl, options)
+    if (implementation !== null && typeof implementation === 'object' && !options) {
+        options = implementation;
+        implementation = undefined;
+    }
+    options = options || {};
+
+    if (options.getter && options.setter) {
+        throw new Error("The property 'options.setter' cannot be used with 'options.getter'");
+    }
+
     var tracker = this;
+    var callLog = [];
     var mockInfo = {
         calls: callLog,
         callCount: function () { return callLog.length; },
         resetCalls: function () { callLog.length = 0; },
-        restore: function () {
-            obj[methodName] = original;
+    };
+
+    if (options.getter) {
+        var descriptor = Object.getOwnPropertyDescriptor(obj, methodName) || {};
+        var originalGetter = descriptor.get;
+
+        var spyGetter = function () {
+            var callRecord = { arguments: [], result: undefined, error: undefined, target: undefined, this: this };
+            try {
+                var result;
+                if (implementation) {
+                    result = implementation.call(this);
+                } else if (originalGetter) {
+                    result = originalGetter.call(this);
+                }
+                callRecord.result = result;
+                callLog.push(callRecord);
+                return result;
+            } catch (e) {
+                callRecord.error = e;
+                callLog.push(callRecord);
+                throw e;
+            }
+        };
+
+        mockInfo.restore = function () {
+            Object.defineProperty(obj, methodName, {
+                get: originalGetter,
+                set: descriptor.set,
+                configurable: true,
+                enumerable: descriptor.enumerable !== false,
+            });
             for (var i = tracker._mocks.length - 1; i >= 0; i--) {
                 if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
                     tracker._mocks.splice(i, 1);
                     break;
                 }
             }
-        },
+        };
+
+        var getterWrapper = { mock: mockInfo };
+        Object.defineProperty(obj, methodName, {
+            get: spyGetter,
+            set: descriptor.set,
+            configurable: true,
+            enumerable: descriptor.enumerable !== false,
+        });
+        this._mocks.push({ obj: obj, methodName: methodName, type: 'getter', originalDescriptor: descriptor });
+        return getterWrapper;
+    } else if (options.setter) {
+        var descriptor = Object.getOwnPropertyDescriptor(obj, methodName) || {};
+        var originalSetter = descriptor.set;
+
+        var spySetter = function (val) {
+            var callRecord = { arguments: [val], result: undefined, error: undefined, target: undefined, this: this };
+            try {
+                var result;
+                if (implementation) {
+                    result = implementation.call(this, val);
+                } else if (originalSetter) {
+                    result = originalSetter.call(this, val);
+                }
+                callRecord.result = result;
+                callLog.push(callRecord);
+            } catch (e) {
+                callRecord.error = e;
+                callLog.push(callRecord);
+                throw e;
+            }
+        };
+
+        mockInfo.restore = function () {
+            Object.defineProperty(obj, methodName, {
+                get: descriptor.get,
+                set: originalSetter,
+                configurable: true,
+                enumerable: descriptor.enumerable !== false,
+            });
+            for (var i = tracker._mocks.length - 1; i >= 0; i--) {
+                if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
+                    tracker._mocks.splice(i, 1);
+                    break;
+                }
+            }
+        };
+
+        var setterWrapper = { mock: mockInfo };
+        Object.defineProperty(obj, methodName, {
+            get: descriptor.get,
+            set: spySetter,
+            configurable: true,
+            enumerable: descriptor.enumerable !== false,
+        });
+        this._mocks.push({ obj: obj, methodName: methodName, type: 'setter', originalDescriptor: descriptor });
+        return setterWrapper;
+    }
+
+    // Regular method mocking (no getter/setter)
+    var original = obj[methodName];
+
+    mockInfo.restore = function () {
+        obj[methodName] = original;
+        for (var i = tracker._mocks.length - 1; i >= 0; i--) {
+            if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
+                tracker._mocks.splice(i, 1);
+                break;
+            }
+        }
     };
 
     var wrapper = function () {
@@ -950,7 +1059,17 @@ MockTracker.prototype.fn = function (impl) {
 MockTracker.prototype.restoreAll = function () {
     for (var i = this._mocks.length - 1; i >= 0; i--) {
         var m = this._mocks[i];
-        m.obj[m.methodName] = m.original;
+        if (m.type === 'getter' || m.type === 'setter') {
+            var desc = m.originalDescriptor;
+            Object.defineProperty(m.obj, m.methodName, {
+                get: desc.get,
+                set: desc.set,
+                configurable: true,
+                enumerable: desc.enumerable !== false,
+            });
+        } else {
+            m.obj[m.methodName] = m.original;
+        }
     }
     this._mocks = [];
 };
@@ -958,14 +1077,48 @@ MockTracker.prototype.restoreAll = function () {
 MockTracker.prototype.reset = function () {
     for (var i = 0; i < this._mocks.length; i++) {
         var m = this._mocks[i];
-        if (m.obj[m.methodName] && m.obj[m.methodName].mock) {
-            m.obj[m.methodName].mock.calls.length = 0;
+        if (m.type === 'getter' || m.type === 'setter') {
+            // For getter/setter mocks, the wrapper object is not directly accessible
+            // from the object; reset is handled differently
+        } else {
+            if (m.obj[m.methodName] && m.obj[m.methodName].mock) {
+                m.obj[m.methodName].mock.calls.length = 0;
+            }
         }
     }
 };
 
-MockTracker.prototype.getter = function () {};
-MockTracker.prototype.setter = function () {};
+MockTracker.prototype.getter = function (obj, methodName, implementation, options) {
+    if (typeof implementation === 'object' && implementation !== null && !options) {
+        options = implementation;
+        implementation = undefined;
+    }
+    options = options || {};
+    if (options.getter === false) {
+        throw new Error("The property 'options.getter' cannot be false");
+    }
+    if (options.setter) {
+        throw new Error("The property 'options.setter' cannot be used with 'options.getter'");
+    }
+    options.getter = true;
+    return this.method(obj, methodName, implementation, options);
+};
+
+MockTracker.prototype.setter = function (obj, methodName, implementation, options) {
+    if (typeof implementation === 'object' && implementation !== null && !options) {
+        options = implementation;
+        implementation = undefined;
+    }
+    options = options || {};
+    if (options.setter === false) {
+        throw new Error("The property 'options.setter' cannot be false");
+    }
+    if (options.getter) {
+        throw new Error("The property 'options.setter' cannot be used with 'options.getter'");
+    }
+    options.setter = true;
+    return this.method(obj, methodName, implementation, options);
+};
 MockTracker.prototype.timers = { enable: function () {}, reset: function () {}, tick: function () {} };
 
 var mock = new MockTracker();
