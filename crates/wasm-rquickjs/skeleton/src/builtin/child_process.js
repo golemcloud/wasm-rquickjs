@@ -72,8 +72,8 @@ function unsupportedSpawnSyncResult(command) {
     return {
         pid: 0,
         output: null,
-        stdout: undefined,
-        stderr: undefined,
+        stdout: Buffer.alloc(0),
+        stderr: Buffer.alloc(0),
         status: null,
         signal: null,
         error,
@@ -422,6 +422,35 @@ function runInline(command, args, options) {
     var execArgv = parsedChildArgs.execArgv;
     var invocationArgs = parsedChildArgs.invocationArgs;
 
+    var hasTestFlag = execArgv.indexOf('--test') !== -1;
+    if (!hasTestFlag) {
+        for (var j = 0; j < invocationArgs.length; j++) {
+            if (invocationArgs[j] === '--test') {
+                hasTestFlag = true;
+                break;
+            }
+        }
+    }
+    if (hasTestFlag) {
+        var conflictingFlags = ['--check', '--interactive', '--eval', '-e', '--print', '-p'];
+        var conflictFlag = null;
+        for (var k = 0; k < conflictingFlags.length; k++) {
+            var flag = conflictingFlags[k];
+            if (execArgv.indexOf(flag) !== -1) {
+                conflictFlag = flag;
+                break;
+            }
+            if (invocationArgs.indexOf(flag) !== -1) {
+                conflictFlag = flag;
+                break;
+            }
+        }
+        if (conflictFlag !== null) {
+            var encoding = getOutputEncoding(options);
+            return buildOutputResult('', conflictFlag + ' cannot be used with --test\n', 1, encoding);
+        }
+    }
+
     if (invocationArgs.length === 0) {
         return unsupportedSpawnSyncResult(command);
     }
@@ -576,6 +605,15 @@ function runInline(command, args, options) {
                 scriptPath = path.resolve(childCwd, scriptPath);
             }
             var scriptArgs = invocationArgs.slice(1);
+
+            if (execArgv.indexOf('--test') !== -1) {
+                var fsForTest = runtimeRequire('node:fs');
+                if (!fsForTest.existsSync(scriptPath)) {
+                    capturedStderr += "Could not find '" + invocationArgs[0] + "'\n";
+                    status = 1;
+                    return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
+                }
+            }
 
             process.argv = [String(command), scriptPath].concat(scriptArgs);
 

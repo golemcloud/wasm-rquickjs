@@ -7983,21 +7983,20 @@
       }
     },
     "parallel/test-runner-cli.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
+      "exclude_loops": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_07_block_07": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_08_block_08": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_09_block_09": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_10_block_10": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_block_00": {},
+        "block_01_block_01": { "skip": true, "reason": "[manual] requires Node.js test runner (--test mode with directory scanning, TAP output)" },
+        "block_02_block_02": { "skip": true, "reason": "[manual] requires Node.js test runner (--test with --loader/--require)" },
+        "block_03_block_03": { "skip": true, "reason": "[manual] requires Node.js --test-shard option validation" },
+        "block_04_block_04": { "skip": true, "reason": "[manual] requires Node.js --test-shard option validation" },
+        "block_05_block_05": { "skip": true, "reason": "[manual] requires Node.js --test-shard option validation" },
+        "block_06_block_06": { "skip": true, "reason": "[manual] requires Node.js --test-shard option validation" },
+        "block_07_block_07": { "skip": true, "reason": "[manual] requires Node.js --test-shard option validation" },
+        "block_08_block_08": { "skip": true, "reason": "[manual] requires Node.js --test-shard option (first shard)" },
+        "block_09_block_09": { "skip": true, "reason": "[manual] requires Node.js --test-shard option (last shard)" },
+        "block_10_block_10": { "skip": true, "reason": "[manual] requires Node.js test runner (file matching)" }
       }
     },
     "parallel/test-runner-concurrency.js": {
