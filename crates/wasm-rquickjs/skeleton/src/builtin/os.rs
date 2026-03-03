@@ -67,7 +67,7 @@ pub mod native_module {
     /// Returns the system uptime in seconds.
     #[rquickjs::function]
     pub fn uptime() -> f64 {
-        let now_ns = wasi::clocks::monotonic_clock::now();
+        let now_ns = wasip2::clocks::monotonic_clock::now();
         (now_ns as f64) / 1_000_000_000.0
     }
 

@@ -447,7 +447,7 @@ fn generate_import_module(
             special_methods.push(quote! {
                 pub async fn promise(&mut self) -> () {
                     let pollable = self.inner.take().expect("Resource has already been disposed");
-                    let pollable: wasi::io::poll::Pollable = unsafe { wasi::io::poll::Pollable::from_handle(pollable.take_handle()) };
+                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
                     wstd::runtime::AsyncPollable::new(pollable).wait_for().await;
                 }
             });
