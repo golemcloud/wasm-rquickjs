@@ -481,8 +481,11 @@ enum BrotliStreamKind {
         quality: i32,
         lgwin: i32,
     },
-    Decompress {
+    DecompressBuffering {
         buffer: Vec<u8>,
+    },
+    DecompressStreaming {
+        decompressor: brotli::Decompressor<Cursor<Vec<u8>>>,
     },
 }
 
@@ -496,7 +499,7 @@ fn brotli_stream_new_impl(mode: u8, params_json: &str) -> Option<u32> {
             quality: parse_brotli_quality(params_json),
             lgwin: parse_brotli_lgwin(params_json),
         },
-        1 => BrotliStreamKind::Decompress {
+        1 => BrotliStreamKind::DecompressBuffering {
             buffer: Vec::new(),
         },
         _ => return None,
@@ -542,19 +545,38 @@ fn brotli_stream_push_impl(id: u32, data: &[u8], flush: u8) -> Option<Vec<u8>> {
                 Some(Vec::new())
             }
         }
-        BrotliStreamKind::Decompress { buffer } => {
+        BrotliStreamKind::DecompressBuffering { buffer } => {
             buffer.extend_from_slice(data);
             // flush == 2 means finish (BROTLI_OPERATION_FINISH)
             if flush == 2 {
-                let mut output = Vec::new();
-                let mut reader = Cursor::new(&buffer[..]);
-                brotli::BrotliDecompress(&mut reader, &mut output).ok()?;
-                buffer.clear();
-                Some(output)
+                let input = std::mem::take(buffer);
+                let mut decompressor = brotli::Decompressor::new(Cursor::new(input), 4096);
+                let chunk_size = 16 * 1024;
+                let mut chunk = vec![0u8; chunk_size];
+                let n = decompressor.read(&mut chunk).ok()?;
+                chunk.truncate(n);
+                stream.kind = BrotliStreamKind::DecompressStreaming { decompressor };
+                Some(chunk)
             } else {
                 Some(Vec::new())
             }
         }
+        BrotliStreamKind::DecompressStreaming { .. } => Some(Vec::new()),
+    }
+}
+
+fn brotli_stream_pull_impl(id: u32, max_bytes: u32) -> Option<Vec<u8>> {
+    let mut streams = BROTLI_STREAMS.lock().unwrap();
+    let stream = streams.get_mut(&id)?;
+
+    match &mut stream.kind {
+        BrotliStreamKind::DecompressStreaming { decompressor } => {
+            let mut chunk = vec![0u8; max_bytes as usize];
+            let n = decompressor.read(&mut chunk).ok()?;
+            chunk.truncate(n);
+            Some(chunk)
+        }
+        _ => Some(Vec::new()),
     }
 }
 
@@ -678,6 +700,11 @@ pub mod native_module {
             .as_bytes()
             .expect("the Uint8Array passed to brotliStreamPush is detached");
         super::brotli_stream_push_impl(id, input, flush)
+    }
+
+    #[rquickjs::function]
+    pub fn brotli_stream_pull(id: u32, max_bytes: u32) -> Option<Vec<u8>> {
+        super::brotli_stream_pull_impl(id, max_bytes)
     }
 
     #[rquickjs::function]

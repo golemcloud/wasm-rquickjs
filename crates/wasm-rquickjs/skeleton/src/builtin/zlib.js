@@ -14,6 +14,7 @@ import {
   zlib_stream_bytes_written,
   brotli_stream_new,
   brotli_stream_push,
+  brotli_stream_pull,
   brotli_stream_close,
   brotli_stream_bytes_written,
 } from '__wasm_rquickjs_builtin/zlib_native';
@@ -843,11 +844,67 @@ class _BrotliDecompress extends ZlibBase {
     this._isBrotli = true;
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : BROTLI_OPERATION_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : BROTLI_OPERATION_PROCESS;
+    this._brotliFlushCb = null;
   }
   _initHandle() {
     this._handle = brotli_stream_new(1, '{}');
     if (this._handle === null || this._handle === undefined) {
       throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
+    }
+  }
+  _flush(callback) {
+    if (this._handle === null) {
+      callback();
+      return;
+    }
+    try {
+      const result = brotli_stream_push(this._handle, new Uint8Array(0), 2);
+      if (result === null || result === undefined) {
+        this._closeHandle();
+        callback(makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error'));
+        return;
+      }
+      if (result && result.length > 0) {
+        const ok = this.push(Buffer.from(result));
+        if (!ok) {
+          this._brotliFlushCb = callback;
+          return;
+        }
+      }
+      this._drainBrotliStream(callback);
+    } catch (err) {
+      this._closeHandle();
+      callback(err);
+    }
+  }
+  _drainBrotliStream(callback) {
+    try {
+      while (this._handle !== null) {
+        const chunk = brotli_stream_pull(this._handle, Z_DEFAULT_CHUNK);
+        if (!chunk || chunk.length === 0) {
+          this._closeHandle();
+          callback();
+          return;
+        }
+        const ok = this.push(Buffer.from(chunk));
+        if (!ok) {
+          this._brotliFlushCb = callback;
+          return;
+        }
+      }
+      callback();
+    } catch (err) {
+      this._closeHandle();
+      callback(err);
+    }
+  }
+  _read(n) {
+    if (this._brotliFlushCb) {
+      const cb = this._brotliFlushCb;
+      this._brotliFlushCb = null;
+      this._drainBrotliStream(cb);
+    } else {
+      super._read(n);
     }
   }
 }

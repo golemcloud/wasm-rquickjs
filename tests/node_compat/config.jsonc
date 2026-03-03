@@ -4287,10 +4287,7 @@
     "parallel/test-zlib-invalid-input.js": {},
     "parallel/test-zlib-object-write.js": {},
     "parallel/test-zlib-premature-end.js": {},
-    "parallel/test-zlib-brotli-16GB.js": {
-      "skip": true,
-      "reason": "Requires 16GB memory allocation; not feasible in WASM"
-    },
+    "parallel/test-zlib-brotli-16GB.js": {},
     "parallel/test-zlib-brotli-flush.js": {
       "skip": true,
       "reason": "Requires precise brotli flush byte output comparison"
