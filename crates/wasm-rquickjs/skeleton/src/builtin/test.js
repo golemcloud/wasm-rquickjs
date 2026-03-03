@@ -5,6 +5,7 @@
 
 import assert from 'node:assert';
 import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
+import { validateNumber, validateInteger } from '__wasm_rquickjs_builtin/internal/validators';
 
 var currentSuite = null;
 // Check for globalThis-based filter (set by test harness before file execution)
@@ -320,6 +321,16 @@ function parseTestArgs(nameOrOpts, optionsOrFn, maybeFn) {
 
     if (!options) options = {};
     if (!fn) fn = function () {};
+
+    // Validate timeout option
+    if (options.timeout != null && options.timeout !== Infinity) {
+        validateNumber(options.timeout, 'options.timeout', 0, 2147483647);
+    }
+
+    // Validate concurrency option
+    if (options.concurrency != null && typeof options.concurrency !== 'boolean') {
+        validateInteger(options.concurrency, 'options.concurrency', 1, 2 ** 31);
+    }
 
     var moduleContext = globalThis.__wasm_rquickjs_current_module;
     var capturedModuleContext = undefined;

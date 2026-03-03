@@ -8163,7 +8163,7 @@
         "test_02_works_with_test_skip_pattern": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-runner-option-validation.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-option-validation.js": {},
     "parallel/test-runner-reporters.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-root-duration.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-snapshot-file-tests.js": {
