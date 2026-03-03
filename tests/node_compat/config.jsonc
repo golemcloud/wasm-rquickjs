@@ -7945,7 +7945,10 @@
           "skip": true,
           "reason": "[manual] This test requires `child_process.spawnSync` to spawn an actual Node.js process with the `--test` CLI flag and then inspects `NODE_DEBUG=test_runner` stderr output for internal concurrency..."
         },
-        "test_01_concurrency_of_one": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_concurrency_of_one": {
+          "skip": true,
+          "reason": "[manual] This test uses `spawnSync(process.execPath, ['--test', '--test-concurrency=1'])` to spawn a Node.js child process in `--test` CLI mode and asserts on internal `NODE_DEBUG=test_runner` diag..."
+        },
         "test_02_concurrency_of_two": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_03_isolation_none_uses_a_concurrency_of_one": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_04_isolation_none_overrides_test_concurrency": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
