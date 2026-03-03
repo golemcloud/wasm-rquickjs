@@ -4346,10 +4346,7 @@
       "skip": true,
       "reason": "Modifies buffer.kMaxLength at runtime before requiring zlib"
     },
-    "parallel/test-zlib-maxOutputLength.js": {
-      "skip": true,
-      "reason": "maxOutputLength not implemented in native layer"
-    },
+    "parallel/test-zlib-maxOutputLength.js": {},
     "parallel/test-zlib-params.js": {
       "skip": true,
       "reason": "Actual params() level change mid-stream not supported"

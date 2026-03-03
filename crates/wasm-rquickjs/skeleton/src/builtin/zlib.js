@@ -919,6 +919,10 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Decompression failed');
   }
   const output = Buffer.from(result);
+  if (validated.maxOutputLength !== undefined && output.length > validated.maxOutputLength) {
+    throw makeRangeError('ERR_BUFFER_TOO_LARGE',
+      `Cannot create a Buffer larger than ${validated.maxOutputLength} bytes`);
+  }
   if (validated.info) {
     const EngineClass = windowBitsOverride >= 24 ? _Gunzip :
                         windowBitsOverride < 0 ? _InflateRaw :
@@ -982,6 +986,10 @@ export function brotliDecompressSync(data, opts) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');
   }
   const output = Buffer.from(result);
+  if (validated.maxOutputLength !== undefined && output.length > validated.maxOutputLength) {
+    throw makeRangeError('ERR_BUFFER_TOO_LARGE',
+      `Cannot create a Buffer larger than ${validated.maxOutputLength} bytes`);
+  }
   if (validated.info) {
     return { buffer: output, engine: new _BrotliDecompress(opts) };
   }
