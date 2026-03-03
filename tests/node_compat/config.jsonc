@@ -7976,7 +7976,10 @@
           "skip": true,
           "reason": "[manual] All subtests in `test-runner-cli-timeout.js` require `child_process.spawnSync` to spawn a **real Node.js process** in CLI `--test` runner mode with `NODE_DEBUG=test_runner`, then inspect s..."
         },
-        "test_02_isolation_none_uses_the_test_timeout_flag": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_02_isolation_none_uses_the_test_timeout_flag": {
+          "skip": true,
+          "reason": "[manual] All subtests in `test-runner-cli-timeout.js` require `child_process.spawnSync` to spawn real Node.js child processes in CLI `--test` runner mode, then inspect their stderr for timeout debu..."
+        }
       }
     },
     "parallel/test-runner-cli.js": {
