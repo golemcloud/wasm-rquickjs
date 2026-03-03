@@ -4286,10 +4286,7 @@
       "reason": "Byte-by-byte streaming with flush hangs due to buffered gzip/brotli streaming implementation"
     },
     "parallel/test-zlib-close-after-write.js": {},
-    "parallel/test-zlib-deflate-raw-inherits.js": {
-      "skip": true,
-      "reason": "Requires Constructor.call(this) inheritance pattern which doesn't work with ES6 class-based internals"
-    },
+    "parallel/test-zlib-deflate-raw-inherits.js": {},
     "parallel/test-zlib-invalid-input.js": {},
     "parallel/test-zlib-object-write.js": {},
     "parallel/test-zlib-premature-end.js": {},

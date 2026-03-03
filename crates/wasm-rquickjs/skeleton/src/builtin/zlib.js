@@ -857,7 +857,28 @@ class _BrotliDecompress extends ZlibBase {
 // Also supports `Wrapper.call(this, opts)` for prototype inheritance patterns.
 function makeZlibWrapper(InternalClass) {
   function Wrapper(opts) {
-    // Always create via `new InternalClass(opts)` regardless of call style
+    if (new.target) {
+      // Called with `new Wrapper(opts)` — normal construction
+      return new InternalClass(opts);
+    }
+    // Called without `new` — check for .call(this, opts) inheritance pattern
+    if (this != null && this instanceof InternalClass) {
+      // Inheritance pattern: Constructor.call(this, opts)
+      // Create a proper instance and copy all own properties to this
+      const instance = new InternalClass(opts);
+      const names = Object.getOwnPropertyNames(instance);
+      for (let i = 0; i < names.length; i++) {
+        Object.defineProperty(this, names[i],
+          Object.getOwnPropertyDescriptor(instance, names[i]));
+      }
+      const symbols = Object.getOwnPropertySymbols(instance);
+      for (let i = 0; i < symbols.length; i++) {
+        Object.defineProperty(this, symbols[i],
+          Object.getOwnPropertyDescriptor(instance, symbols[i]));
+      }
+      return this;
+    }
+    // Factory-style call without new: DeflateRaw(opts)
     return new InternalClass(opts);
   }
   // Make instanceof work: `new Wrapper() instanceof Wrapper` => true
