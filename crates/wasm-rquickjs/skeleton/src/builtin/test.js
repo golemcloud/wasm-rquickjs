@@ -25,12 +25,14 @@ function SuiteContext(name, parent) {
     this.afterEachFns = [];
 }
 
-SuiteContext.prototype.fullName = function () {
-    if (this.parent && this.parent.name) {
-        return this.parent.fullName() + ' > ' + this.name;
+Object.defineProperty(SuiteContext.prototype, 'fullName', {
+    get: function () {
+        if (this.parent && this.parent.name) {
+            return this.parent.fullName + ' > ' + this.name;
+        }
+        return this.name || '';
     }
-    return this.name || '';
-};
+});
 
 SuiteContext.prototype.collectBeforeEach = function () {
     var fns = [];
@@ -50,10 +52,11 @@ SuiteContext.prototype.collectAfterEach = function () {
 
 // --- Test context (t) ---
 
-function TestContext(name, suite) {
+function TestContext(name, parent) {
     this.name = name;
     this.signal = { aborted: false };
-    this._suite = suite;
+    this._parent = parent;
+    this._suite = (parent instanceof SuiteContext) ? parent : (parent ? parent._suite : null);
     this._diagnostics = [];
     this._skipMessage = undefined;
     this._todoMessage = undefined;
@@ -68,9 +71,9 @@ function TestContext(name, suite) {
 
 Object.defineProperty(TestContext.prototype, 'fullName', {
     get: function () {
-        var suiteName = this._suite ? this._suite.fullName() : '';
-        if (suiteName) {
-            return suiteName + ' > ' + this.name;
+        var parentName = this._parent ? this._parent.fullName : '';
+        if (parentName) {
+            return parentName + ' > ' + this.name;
         }
         return this.name;
     }
@@ -93,14 +96,14 @@ TestContext.prototype.todo = function (msg) {
 TestContext.prototype.test = function (name, optionsOrFn, maybeFn) {
     var parsed = parseTestArgs(name, optionsOrFn, maybeFn);
     var fn = parsed.fn;
-    var parentSuite = this._suite;
+    var parentTest = this;
 
     // Handle skip
     if (parsed.options.skip === true || (typeof parsed.options.skip === 'string' && parsed.options.skip)) {
         return Promise.resolve();
     }
 
-    var childCtx = new TestContext(parsed.name, parentSuite);
+    var childCtx = new TestContext(parsed.name, parentTest);
 
     var runSubtest = function () {
         try {
@@ -401,7 +404,7 @@ function runSuite(name, options, fn, parentSuite) {
 
     try {
         // Run the describe/suite callback to discover tests
-        var result = fn();
+        var result = fn(suite);
         if (result && typeof result.then === 'function') {
             // Async suite discovery — need to await it
             return {

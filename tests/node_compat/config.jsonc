@@ -8199,12 +8199,10 @@
       }
     },
     "parallel/test-runner-test-fullname.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_suite": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_00_suite": {},
+        "test_01_test_01": {}
       }
     },
     "parallel/test-runner-typechecking.js": {},
