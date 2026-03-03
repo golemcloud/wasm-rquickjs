@@ -291,7 +291,7 @@ export async function runAmp(
         dangerouslyAllowAll: true,
         mode,
         archive: true,
-        labels: ["fix-node-compat", category, targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)],
+        labels: ["fix-node-compat", category.replace(/_/g, "-"), targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)],
       },
     })) {
       if (message.type === "system") {
@@ -416,7 +416,7 @@ export async function runAmpPrioritize(
         cwd: REPO_ROOT,
         mode: "smart",
         archive: true,
-        labels: ["fix-node-compat", category, "prioritize"],
+        labels: ["fix-node-compat", category.replace(/_/g, "-"), "prioritize"],
       },
     })) {
       if (message.type === "assistant") {

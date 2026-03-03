@@ -15,15 +15,55 @@ export interface SkippedTest {
 /** Prefix for skip reasons that require manual intervention — the fix loop won't pick these up. */
 export const MANUAL_SKIP_PREFIX = "[manual] ";
 
+/**
+ * Map from report-style module names (snake_case, as shown in the Rust
+ * node_compat_report) to the list of filename prefixes used in the vendored
+ * test suite.  For example the report module "test_runner" corresponds to
+ * filenames like `test-runner-*.js`.
+ *
+ * Categories whose module name already matches the filename prefix (e.g.
+ * "crypto" → `test-crypto-*.js`) don't need an entry here.
+ */
+const CATEGORY_ALIASES: Record<string, string[]> = {
+  test_runner:          ["runner"],
+  string_decoder:       ["string-decoder", "stringdecoder"],
+  child_process:        ["child-process", "child_process"],
+  worker_threads:       ["worker", "worker-threads"],
+  async_hooks:          ["async-hooks", "async-context", "async-local-storage"],
+  perf_hooks:           ["perf", "performance"],
+  diagnostics_channel:  ["diagnostics"],
+  trace_events:         ["trace"],
+  abort:                ["abortcontroller", "abortsignal", "aborted"],
+};
+
+/**
+ * Return the list of filename prefixes that should be matched for a given
+ * category.  Accepts both the filename prefix itself ("runner") and the
+ * report-style module name ("test_runner").
+ */
+function categoryPrefixes(category: string): string[] {
+  // Direct alias lookup (e.g. "test_runner" → ["runner"])
+  if (CATEGORY_ALIASES[category]) return CATEGORY_ALIASES[category];
+
+  // Check if the category is itself one of the alias values and return it as-is
+  for (const prefixes of Object.values(CATEGORY_ALIASES)) {
+    if (prefixes.includes(category)) return [category];
+  }
+
+  // No alias — the category name is the filename prefix (e.g. "crypto")
+  return [category];
+}
+
 /** Return sorted list of vendored test paths (relative to suite/) for a category. */
 export function getVendoredTests(category: string): string[] {
   const suiteRoot = path.join(REPO_ROOT, "tests", "node_compat", "suite");
-  const prefixPattern = path.join(SUITE_DIR, `test-${category}-*.js`);
-  const exactPattern = path.join(SUITE_DIR, `test-${category}.js`);
+  const prefixes = categoryPrefixes(category);
 
   const files = new Set<string>();
-  for (const f of globSync(prefixPattern)) files.add(f);
-  for (const f of globSync(exactPattern)) files.add(f);
+  for (const prefix of prefixes) {
+    for (const f of globSync(path.join(SUITE_DIR, `test-${prefix}-*.js`))) files.add(f);
+    for (const f of globSync(path.join(SUITE_DIR, `test-${prefix}.js`))) files.add(f);
+  }
 
   return [...files]
     .map((f) => path.relative(suiteRoot, f))
@@ -82,12 +122,18 @@ export function testPathToFilter(testPath: string, subtestName?: string): string
   return filter;
 }
 
+/** Build cargo test filter patterns for a category. */
+function categoryTestFilters(category: string): string[] {
+  return categoryPrefixes(category).map((p) => `parallel__test_${p.replace(/-/g, "_")}_`);
+}
+
 /** Run all enabled (non-ignored) tests for a category. */
 export async function runCategoryTests(category: string, options?: RunOptions): Promise<{ ok: boolean; output: string }> {
   const logfile = path.join(LOG_DIR, `run-${Date.now()}.txt`);
   console.log(`  Running ${category} tests...`);
+  const filters = categoryTestFilters(category);
   const { ok, output } = await run(
-    ["cargo", "test", "--test", "node_compat", `parallel__test_${category}_`, "--", "--nocapture"],
+    ["cargo", "test", "--test", "node_compat", ...filters, "--", "--nocapture"],
     logfile,
     options,
   );
@@ -119,11 +165,12 @@ export async function runCategoryTestsIncludeIgnored(
   category: string,
 ): Promise<{ ok: boolean; output: string }> {
   const logfile = path.join(LOG_DIR, `newly-passing-${Date.now()}.txt`);
+  const filters = categoryTestFilters(category);
   console.log("  Checking if any other skipped tests now pass...");
   return run(
     [
       "cargo", "test", "--test", "node_compat",
-      `parallel__test_${category}_`, "--", "--nocapture", "--include-ignored",
+      ...filters, "--", "--nocapture", "--include-ignored",
     ],
     logfile,
   );
@@ -204,8 +251,9 @@ export function getEnabledTestCount(category: string): number {
 }
 
 function matchesCategory(testPath: string, category: string): boolean {
-  return (
-    testPath.startsWith(`parallel/test-${category}-`) ||
-    testPath === `parallel/test-${category}.js`
+  return categoryPrefixes(category).some(
+    (prefix) =>
+      testPath.startsWith(`parallel/test-${prefix}-`) ||
+      testPath === `parallel/test-${prefix}.js`,
   );
 }
