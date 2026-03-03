@@ -1090,7 +1090,8 @@ MockTracker.prototype.fn = function (original, implementation, options) {
 
     var wrapper = function () {
         var args = Array.prototype.slice.call(arguments);
-        var callRecord = { arguments: args, result: undefined, error: undefined, target: undefined, this: this };
+        var isConstructorCall = new.target !== undefined;
+        var callRecord = { arguments: args, result: undefined, error: undefined, target: isConstructorCall ? originalFn : undefined, this: undefined };
         var callIndex = callLog.length;
         try {
             var fn;
@@ -1107,7 +1108,14 @@ MockTracker.prototype.fn = function (original, implementation, options) {
             } else {
                 fn = currentImpl;
             }
-            var result = fn.apply(this, arguments);
+            var result;
+            if (isConstructorCall) {
+                result = Reflect.construct(fn, args);
+                callRecord.this = result;
+            } else {
+                result = fn.apply(this, arguments);
+                callRecord.this = this;
+            }
             callRecord.result = result;
             callLog.push(callRecord);
             return result;
