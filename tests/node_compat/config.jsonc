@@ -4281,10 +4281,7 @@
       }
     },
     "parallel/test-zlib-invalid-arg-value-brotli-compress.js": {},
-    "parallel/test-zlib-bytes-read.js": {
-      "skip": true,
-      "reason": "Byte-by-byte streaming with flush hangs due to buffered gzip/brotli streaming implementation"
-    },
+    "parallel/test-zlib-bytes-read.js": {},
     "parallel/test-zlib-close-after-write.js": {},
     "parallel/test-zlib-deflate-raw-inherits.js": {},
     "parallel/test-zlib-invalid-input.js": {},
