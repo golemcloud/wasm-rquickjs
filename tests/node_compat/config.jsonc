@@ -7977,14 +7977,18 @@
       }
     },
     "parallel/test-runner-concurrency.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "test_00_concurrency_option_boolean_true": {},
         "test_01_concurrency_option_boolean_false": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_02_concurrency_true_implies_infinity": {},
-        "test_03_test_multiple_files": {}
+        "test_02_concurrency_true_implies_infinity": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
+        "test_03_test_multiple_files": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        }
       }
     },
     "parallel/test-runner-coverage-source-map.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
