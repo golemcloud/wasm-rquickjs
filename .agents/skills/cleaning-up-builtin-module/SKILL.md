@@ -90,7 +90,7 @@ Read the full Rust and JS source files. Then consult the oracle for a thorough c
 - **Rust improvements**: Clippy suggestions, unnecessary `clone()`, better error handling patterns
 - **Native ↔ JS boundary shifts**: Opportunities to move logic between the Rust native bridge and the JS wrapper (see "Moving Logic Between Rust and JS" below)
 - **WIRE_JS minimization**: Check if logic in the module's `WIRE_JS` snippet can be moved into the JS wrapper module itself, leaving WIRE_JS as a minimal import-and-assign-to-globalThis (see "Minimizing WIRE_JS" below)
-- **Test-cheating workarounds**: Code whose sole purpose is to make vendored node_compat tests pass without providing value to real users (see "Detecting Test-Cheating Workarounds" below)
+- **Test-cheating workarounds**: Code whose sole purpose is to make vendored node_compat tests pass without providing value to real users. This applies to ALL modules, not just HTTP — look for hardcoded return values, stub implementations that fake success, feature-detection lies, test-pattern branching, global side-channels, and platform capability fabrication (see "Detecting Test-Cheating Workarounds" below for the full checklist)
 
 **Important constraints to tell the oracle**:
 - The module's **observable behavior must not change** — all existing tests must continue to pass
@@ -107,7 +107,24 @@ Review the oracle's suggestions and classify each as:
 3. **Medium risk**: Structural changes that reorganize how code flows (e.g., extracting/inlining functions, reordering operations)
 4. **Skip**: Changes that are too risky or would alter observable behavior
 
-### Step 6: Apply improvements incrementally
+### Step 6: Verify against test-cheating workarounds
+
+**This step applies to EVERY module, not just HTTP-related ones.** Before applying any other improvements, scan the module for test-cheating code (see "Detecting Test-Cheating Workarounds" below). This is a separate, mandatory step — not just an item on the oracle's checklist — because cheating code must be removed regardless of risk category.
+
+"Test-cheating" means **any code whose primary purpose is making vendored node_compat tests pass rather than providing genuine functionality to real users**. This can appear in any module — `buffer`, `crypto`, `path`, `util`, `stream`, etc. — not just networking modules.
+
+1. Read through the module's JS and Rust code looking for the red flags listed in "Detecting Test-Cheating Workarounds"
+2. If cheating code is found:
+   a. **Document it** — describe what the workaround does and why it's problematic
+   b. **Remove it entirely** — the module must use the same code path for all inputs
+   c. **Run the full test suite for the module** (runtime + node_compat)
+   d. **For any newly failing node_compat tests**: mark them as `"skip": true` in `config.jsonc` with an explicit `"reason"` explaining the platform limitation (e.g., `"reason": "QuickJS does not support this V8-specific behavior"`)
+   e. **Never re-introduce the cheat** — a skipped test with a clear reason is always preferable to faked behavior
+3. If no cheating code is found, proceed to Step 7
+
+This step takes priority over all other cleanup work. Cheating code is a correctness issue, not a style issue.
+
+### Step 7: Apply improvements incrementally
 
 Apply changes **one category at a time**, starting with the safest:
 
@@ -125,7 +142,7 @@ Apply changes **one category at a time**, starting with the safest:
 
 **Group related safe changes** (e.g., all dead code removals) into a single batch if they don't interact. But keep distinct logical changes separate so failures can be isolated.
 
-### Step 7: Run Clippy and format
+### Step 8: Run Clippy and format
 
 After all improvements are applied:
 
@@ -136,7 +153,7 @@ cargo clippy -- -Dwarnings
 
 Fix any issues introduced by the changes.
 
-### Step 8: Cross-module regression check
+### Step 9: Cross-module regression check
 
 Run tests for **other modules** that might be affected. Choose modules that:
 - Import from or depend on the cleaned-up module
@@ -165,7 +182,7 @@ cargo test --test node_compat parallel__test_<related> -- --nocapture 2>&1 | tee
 | `util` | nearly everything — test broadly |
 | `encoding` | `buffer`, `string_decoder`, `fs` |
 
-### Step 9: Handle regressions
+### Step 10: Handle regressions
 
 If cross-module tests fail:
 
@@ -178,7 +195,7 @@ If you cannot isolate the cause:
 1. Use binary search — revert half the changes, test, narrow down
 2. As a last resort, revert all changes and retry with only the safe category
 
-### Step 10: Final verification
+### Step 11: Final verification
 
 Run the full set of tests one more time to confirm the final state is clean:
 
@@ -234,18 +251,26 @@ globalThis.myGlobal = __x;
 
 ### Detecting Test-Cheating Workarounds
 
-Verify that the module implementation does not **cheat** to pass vendored node_compat tests. "Cheating" means code whose sole purpose is making test cases pass, with no actual value for real users. These workarounds produce **asymmetric behavior** — tests see one code path while real-world usage hits a different, inferior one.
+**This section applies to ALL modules, not just HTTP.** Verify that the module implementation does not **cheat** to pass vendored node_compat tests. "Cheating" means any code whose sole purpose is making test cases pass, with no actual value for real users. These workarounds produce **asymmetric behavior** — tests see one code path while real-world usage hits a different, inferior one.
 
-**Red flags to look for**:
-- **Loopback/localhost detection**: Code that checks whether a request targets `localhost`, `127.0.0.1`, or `::1` and takes a special path (e.g., bypassing `wasi:http` with a direct socket connection). Real users connect to arbitrary hosts and must get the same behavior.
-- **Side-channels via `globalThis`**: Global variables or queues (e.g., `globalThis.__wasm_rquickjs_*`) used to pass metadata between client and server that only works for same-process connections. This fakes features that `wasi:http` genuinely cannot provide.
-- **Test-specific branching**: Conditional logic that checks for patterns only found in test inputs (specific port numbers, specific header values used by tests, etc.) and returns hardcoded or fabricated results.
-- **Metadata fabrication**: Capturing HTTP metadata (status messages, raw headers, HTTP version) from one side of a connection and injecting it into the other side to simulate features the underlying transport doesn't support.
+The core question to ask about any suspicious code: **"Would this code path ever execute for a real user, or does it only exist because a vendored test expects it?"** If the answer is the latter, it's cheating.
+
+**General red flags to look for in ANY module**:
+- **Hardcoded return values**: Functions that return specific values that happen to match what tests expect, instead of computing the result properly (e.g., returning a hardcoded string for an unimplemented operation instead of throwing)
+- **Stub implementations that fake success**: Methods that silently succeed (return `0`, return `true`, return empty string) instead of being properly unimplemented — making tests pass while real callers get silently wrong results
+- **Feature detection that always lies**: Code that reports a capability as available when it isn't actually implemented (e.g., reporting a cipher as supported when `getCiphers()` just returns a static list but the cipher doesn't actually work)
+- **Special-case branching for test patterns**: Conditional logic that checks for patterns only found in test inputs (specific values, sizes, strings used by tests) and returns fabricated results for those specific inputs
+- **Global side-channels**: Global variables (e.g., `globalThis.__wasm_rquickjs_*`) used to pass data between components in a way that only works in the test environment (same-process) but not in real deployments
+- **Platform capability fabrication**: Code that fakes platform features our runtime doesn't support (e.g., pretending to support `process.getuid()` by returning `0`, pretending to support signals, faking file descriptors)
+
+**HTTP-specific red flags** (for `node:http`, `node:https`, and related modules):
+- **Loopback/localhost detection**: Code that checks whether a request targets `localhost`, `127.0.0.1`, or `::1` and takes a special path (e.g., bypassing `wasi:http` with a direct socket connection)
+- **Metadata fabrication**: Capturing HTTP metadata (status messages, raw headers, HTTP version) from one side of a connection and injecting it into the other side to simulate features the underlying transport doesn't support
 
 **What to do when you find cheating code**:
 1. **Report it** — document what the workaround does and why it's problematic
-2. **Remove it** — delete the workaround entirely; the module should use the same code path for all connections
-3. **Accept test failures** — if removing the workaround causes vendored node_compat tests to fail because they rely on features the platform genuinely cannot provide (e.g., `wasi:http` doesn't expose status messages), **mark those tests as skipped** in `config.jsonc` with an explicit reason (e.g., `"reason": "wasi:http does not expose status messages"`)
+2. **Remove it** — delete the workaround entirely; the module should use the same code path for all inputs
+3. **Accept test failures** — if removing the workaround causes vendored node_compat tests to fail because they rely on features the platform genuinely cannot provide, **mark those tests as skipped** in `config.jsonc` with an explicit reason (e.g., `"reason": "QuickJS does not support this V8-specific behavior"`, `"reason": "wasi:http does not expose status messages"`, `"reason": "WASI does not provide OS user/group APIs"`)
 4. **Never re-introduce the cheat** — the correct response to a platform limitation is to skip the test, not to fake the behavior
 
 ### Moving logic between Rust and JS

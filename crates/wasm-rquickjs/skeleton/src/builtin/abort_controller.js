@@ -37,12 +37,6 @@ import { _eventTrusted } from 'node:events';
 const signalState = new WeakMap();
 const INTERNAL_TOKEN = Symbol('AbortSignal.internal');
 
-const _timeoutFinalizer = null;
-
-// Signals with active abort listeners are kept alive (strong ref) to prevent GC.
-// When all listeners are removed, the signal is released and can be collected.
-const _gcPersistentSignals = new Set();
-
 function getSignalState(signal) {
     const state = signalState.get(signal);
     if (!state) {
@@ -53,6 +47,17 @@ function getSignalState(signal) {
 
 function createAbortSignal() {
     return new AbortSignal(INTERNAL_TOKEN);
+}
+
+// Abort a signal: mark as aborted, set reason, dispatch trusted abort event.
+function abortSignal(signal, reason) {
+    const state = signalState.get(signal);
+    if (!state || state.aborted) return;
+    state.aborted = true;
+    state.reason = reason;
+    const event = new Event('abort');
+    _eventTrusted.set(event, true);
+    signal.dispatchEvent(event);
 }
 
 // AbortSignal implementation
@@ -84,66 +89,27 @@ class AbortSignal {
     }
 
     set onabort(handler) {
-        const state = getSignalState(this);
-        state.onabort = handler;
-        if (handler != null) {
-            _gcPersistentSignals.add(this);
-        } else if (state.listeners.length === 0) {
-            _gcPersistentSignals.delete(this);
-        }
+        getSignalState(this).onabort = handler;
     }
 
     static abort(reason) {
         const signal = createAbortSignal();
         const state = signalState.get(signal);
         state.aborted = true;
-        if (reason !== undefined) {
-            state.reason = reason;
-        } else {
-            state.reason = new DOMException('This operation was aborted', 'AbortError');
-        }
+        state.reason = reason !== undefined
+            ? reason
+            : new DOMException('This operation was aborted', 'AbortError');
         return signal;
     }
 
     static timeout(milliseconds) {
         const signal = createAbortSignal();
-
-        // Pin signal temporarily to prevent QuickJS from collecting it before
-        // the caller has a chance to attach listeners (QuickJS doesn't guarantee
-        // WeakRef referents survive within the same synchronous turn like V8).
-        _gcPersistentSignals.add(signal);
-
-        const ref = new WeakRef(signal);
         const timeoutId = setTimeout(() => {
-            const s = ref.deref();
-            if (!s) return;
-            const st = signalState.get(s);
-            if (!st || st.aborted) return;
-            st.aborted = true;
-            st.reason = new DOMException('The operation timed out.', 'TimeoutError');
-            const event = new Event('abort');
-            _eventTrusted.set(event, true);
-            s.dispatchEvent(event);
+            abortSignal(signal, new DOMException('The operation timed out.', 'TimeoutError'));
         }, milliseconds);
         if (timeoutId && typeof timeoutId.unref === 'function') {
             timeoutId.unref();
         }
-        if (_timeoutFinalizer) {
-            _timeoutFinalizer.register(signal, timeoutId);
-        }
-
-        // After the current synchronous turn, unpin if no listeners were attached.
-        // Use the WeakRef to avoid the microtask closure itself preventing GC.
-        queueMicrotask(() => {
-            const s = ref.deref();
-            if (s) {
-                const st = signalState.get(s);
-                if (st && st.listeners.length === 0 && st.onabort === null) {
-                    _gcPersistentSignals.delete(s);
-                }
-            }
-        });
-
         return signal;
     }
 
@@ -192,7 +158,6 @@ class AbortSignal {
                 listener,
                 once: opts.once || false
             });
-            _gcPersistentSignals.add(this);
         }
     }
 
@@ -203,9 +168,6 @@ class AbortSignal {
         const index = state.listeners.findIndex(l => l.listener === listener);
         if (index !== -1) {
             state.listeners.splice(index, 1);
-            if (state.listeners.length === 0 && state.onabort === null) {
-                _gcPersistentSignals.delete(this);
-            }
         }
     }
 
@@ -239,10 +201,6 @@ class AbortSignal {
             }
         }
 
-        if (state.listeners.length === 0 && state.onabort === null) {
-            _gcPersistentSignals.delete(this);
-        }
-
         return !event.defaultPrevented;
     }
 }
@@ -270,20 +228,14 @@ class AbortController {
     }
 
     abort(reason) {
-        const signal = this.signal;
-        const state = signalState.get(signal);
-        if (state.aborted) {
-            return;
-        }
-        state.aborted = true;
-        if (reason !== undefined) {
-            state.reason = reason;
-        } else {
-            state.reason = new DOMException('The operation was aborted.', 'AbortError');
-        }
-        const event = new Event('abort');
-        _eventTrusted.set(event, true);
-        signal.dispatchEvent(event);
+        const state = getControllerState(this);
+        const signal = state.signal;
+        abortSignal(
+            signal,
+            reason !== undefined
+                ? reason
+                : new DOMException('The operation was aborted.', 'AbortError'),
+        );
     }
 }
 

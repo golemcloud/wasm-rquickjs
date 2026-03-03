@@ -31,7 +31,7 @@ class Timeout {
     refresh() {
         if (!this._destroyed) {
             timeoutNative.clear_schedule(this._id);
-            var bound = this._bound || this._callback.bind(this);
+            const bound = this._bound || this._callback.bind(this);
             this._bound = bound;
             this._id = timeoutNative.schedule(bound, this._delay, this._isInterval, this._args);
         }
@@ -102,5 +102,5 @@ export function clearTimeout(id) {
     }
 }
 
-export var clearInterval = clearTimeout;
-export var clearImmediate = clearTimeout;
+export const clearInterval = clearTimeout;
+export const clearImmediate = clearTimeout;

@@ -1,7 +1,12 @@
 // node:async_hooks - partial implementation with AsyncLocalStorage
 // Context propagation through Promise.prototype.then/catch/finally and setTimeout/setInterval.
-// NOTE: QuickJS `await` uses internal C-level perform_promise_then and bypasses JS-visible
-// Promise.prototype.then, so await propagation is NOT possible — this is an accepted limitation.
+//
+// Intentional deviations from upstream Node.js:
+// - executionAsyncId/triggerAsyncId/executionAsyncResource are stubs (no native async_wrap)
+// - AsyncResource.runInAsyncScope is a plain fn.apply (no hook emit since createHook is a no-op)
+// - AsyncResource.bind / AsyncLocalStorage.bind are essentially identity (no context frame capture)
+// - QuickJS `await` uses internal C-level perform_promise_then and bypasses JS-visible
+//   Promise.prototype.then, so await propagation is NOT possible — this is an accepted limitation.
 
 let _nextAsyncId = 1;
 
@@ -141,29 +146,28 @@ function _restoreContext(snapshot, fn, thisArg, args) {
     return wrapped();
 }
 
+// Wrap a callback to restore the captured async context when invoked.
+// Returns non-function values unchanged (e.g. undefined/null handlers in .then).
+function _wrapCallback(snapshot, cb) {
+    if (typeof cb !== 'function') return cb;
+    return function(...a) { return _restoreContext(snapshot, cb, this, a); };
+}
+
 const _originalThen = Promise.prototype.then;
 const _originalCatch = Promise.prototype.catch;
 const _originalFinally = Promise.prototype.finally;
 
 Promise.prototype.then = function(onFulfilled, onRejected) {
     const snapshot = _captureContext();
-    const wrappedFulfilled = typeof onFulfilled === 'function'
-        ? function(...a) { return _restoreContext(snapshot, onFulfilled, this, a); }
-        : onFulfilled;
-    const wrappedRejected = typeof onRejected === 'function'
-        ? function(...a) { return _restoreContext(snapshot, onRejected, this, a); }
-        : onRejected;
-    return _originalThen.call(this, wrappedFulfilled, wrappedRejected);
+    return _originalThen.call(this, _wrapCallback(snapshot, onFulfilled), _wrapCallback(snapshot, onRejected));
 };
 
 Promise.prototype.catch = function(onRejected) {
     const snapshot = _captureContext();
-    const wrapped = typeof onRejected === 'function'
-        ? function(...a) { return _restoreContext(snapshot, onRejected, this, a); }
-        : onRejected;
-    return _originalCatch.call(this, wrapped);
+    return _originalCatch.call(this, _wrapCallback(snapshot, onRejected));
 };
 
+// finally handler receives no arguments, so use a specialized wrapper
 Promise.prototype.finally = function(onFinally) {
     const snapshot = _captureContext();
     const wrapped = typeof onFinally === 'function'
