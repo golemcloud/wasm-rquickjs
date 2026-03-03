@@ -8097,10 +8097,7 @@
           "reason": "newly discovered, not yet evaluated"
         },
         "test_02_spies_on_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_a_no_op_spy_function_is_created_by_default": {
-          "skip": true,
-          "reason": "newly discovered, not yet evaluated"
-        },
+        "test_03_a_no_op_spy_function_is_created_by_default": {},
         "test_04_internal_no_op_function_can_be_reused": {
           "skip": true,
           "reason": "newly discovered, not yet evaluated"
