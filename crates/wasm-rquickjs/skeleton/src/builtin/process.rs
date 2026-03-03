@@ -8,6 +8,20 @@ pub mod native_module {
     use std::time::Instant;
 
     #[rquickjs::function]
+    pub fn memory_usage(ctx: Ctx<'_>) -> Vec<i64> {
+        let rt = unsafe { rquickjs::qjs::JS_GetRuntime(ctx.as_raw().as_ptr()) };
+        let mut stats = std::mem::MaybeUninit::uninit();
+        unsafe { rquickjs::qjs::JS_ComputeMemoryUsage(rt, stats.as_mut_ptr()) };
+        let stats = unsafe { stats.assume_init() };
+        vec![
+            stats.malloc_size,
+            stats.memory_used_size,
+            stats.obj_size,
+            stats.binary_object_size,
+        ]
+    }
+
+    #[rquickjs::function]
     pub fn write_stdout(data: String) {
         let _ = std::io::stdout().write_all(data.as_bytes());
         let _ = std::io::stdout().flush();

@@ -4315,10 +4315,7 @@
     "parallel/test-zlib-random-byte-pipes.js": {},
     "parallel/test-zlib-reset-before-write.js": {},
     "parallel/test-zlib-truncated.js": {},
-    "parallel/test-zlib-unused-weak.js": {
-      "skip": true,
-      "reason": "Requires --expose-gc and process.memoryUsage().external"
-    },
+    "parallel/test-zlib-unused-weak.js": {},
     "parallel/test-zlib-write-after-close.js": {},
     "parallel/test-zlib-write-after-end.js": {},
     "parallel/test-zlib-write-after-flush.js": {},

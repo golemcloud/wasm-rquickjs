@@ -4,7 +4,8 @@ import {
     next_tick,
     write_stdout,
     write_stderr,
-    hrtime_ns
+    hrtime_ns,
+    memory_usage as _native_memory_usage
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
@@ -196,11 +197,18 @@ process.cpuUsage = function cpuUsage(previousValue) {
 };
 
 process.memoryUsage = function memoryUsage() {
-    return { rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 };
+    var stats = _native_memory_usage();
+    return {
+        rss: stats[0],
+        heapTotal: stats[1],
+        heapUsed: stats[1],
+        external: stats[2],
+        arrayBuffers: stats[3],
+    };
 };
 
 process.memoryUsage.rss = function rss() {
-    return 0;
+    return _native_memory_usage()[0];
 };
 
 process.constrainedMemory = function constrainedMemory() {

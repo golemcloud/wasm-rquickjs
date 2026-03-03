@@ -3,11 +3,8 @@ pub mod native_module {
     use rquickjs::Ctx;
 
     #[rquickjs::function]
-    pub fn gc(_ctx: Ctx<'_>) {
-        let state = crate::internal::get_js_state();
-        state
-            .gc_pending
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+    pub fn gc(ctx: Ctx<'_>) {
+        ctx.run_gc();
     }
 }
 
