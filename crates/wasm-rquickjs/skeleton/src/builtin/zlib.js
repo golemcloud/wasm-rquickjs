@@ -522,6 +522,7 @@ class ZlibBase extends Transform {
     this._bytesWritten = 0;
     this._finishFlush = Z_FINISH;
     this._flushFlag = Z_NO_FLUSH;
+    this._pendingFlushes = [];
   }
 
   get bytesWritten() {
@@ -576,9 +577,7 @@ class ZlibBase extends Transform {
       return;
     }
 
-    // Set flush flag BEFORE write so _transform sees it synchronously
-    this._flushFlag = kind;
-    // Write an empty chunk with the requested flush
+    this._pendingFlushes.push(kind);
     this.write(Buffer.alloc(0), '', () => {
       // Force read to emit anything buffered in readable state
       this.read(0);
@@ -656,8 +655,15 @@ class ZlibBase extends Transform {
 
    try {
      let result;
-     const flush = this._flushFlag !== Z_NO_FLUSH ? this._flushFlag : Z_NO_FLUSH;
-     this._flushFlag = Z_NO_FLUSH;
+     let flush;
+     if (data.length === 0 && this._pendingFlushes.length > 0) {
+       flush = this._pendingFlushes.shift();
+     } else {
+       flush = this._flushFlag;
+       if (this._flushFlag !== Z_NO_FLUSH) {
+         this._flushFlag = Z_NO_FLUSH;
+       }
+     }
      if (this._isBrotli) {
        result = brotli_stream_push(this._handle, data, flush);
      } else {
@@ -671,7 +677,7 @@ class ZlibBase extends Transform {
      if (result && result.length > 0) {
        this.push(Buffer.from(result));
      }
-     callback();
+     queueMicrotask(callback);
    } catch (err) {
      callback(err);
    }
@@ -1203,6 +1209,58 @@ const _default = {
   unzip,
   brotliCompress,
   brotliDecompress,
+
+  // Constants (directly accessible like Node.js)
+  Z_NO_FLUSH,
+  Z_PARTIAL_FLUSH,
+  Z_SYNC_FLUSH,
+  Z_FULL_FLUSH,
+  Z_FINISH,
+  Z_BLOCK,
+  Z_OK,
+  Z_STREAM_END,
+  Z_NEED_DICT,
+  Z_ERRNO,
+  Z_STREAM_ERROR,
+  Z_DATA_ERROR,
+  Z_MEM_ERROR,
+  Z_BUF_ERROR,
+  Z_VERSION_ERROR,
+  Z_NO_COMPRESSION,
+  Z_BEST_SPEED,
+  Z_BEST_COMPRESSION,
+  Z_DEFAULT_COMPRESSION,
+  Z_FILTERED,
+  Z_HUFFMAN_ONLY,
+  Z_RLE,
+  Z_FIXED,
+  Z_DEFAULT_STRATEGY,
+  Z_DEFAULT_WINDOWBITS,
+  Z_MIN_CHUNK,
+  Z_MAX_CHUNK,
+  Z_DEFAULT_CHUNK,
+  Z_MIN_WINDOWBITS,
+  Z_MAX_WINDOWBITS,
+  Z_MIN_LEVEL,
+  Z_MAX_LEVEL,
+  Z_DEFAULT_LEVEL,
+  Z_MIN_MEMLEVEL,
+  Z_MAX_MEMLEVEL,
+  Z_DEFAULT_MEMLEVEL,
+  DEFLATE,
+  INFLATE,
+  GZIP,
+  GUNZIP,
+  DEFLATERAW,
+  INFLATERAW,
+  UNZIP,
+  BROTLI_DECODE,
+  BROTLI_ENCODE,
+  BROTLI_OPERATION_PROCESS,
+  BROTLI_OPERATION_FLUSH,
+  BROTLI_OPERATION_FINISH,
+  BROTLI_OPERATION_EMIT_METADATA,
+  ZLIB_VERNUM,
 };
 
 Object.defineProperty(_default, 'constants', {

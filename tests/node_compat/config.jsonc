@@ -4304,10 +4304,7 @@
     "parallel/test-zlib-flush.js": {},
     "parallel/test-zlib-flush-drain.js": {},
     "parallel/test-zlib-flush-drain-longblock.js": {},
-    "parallel/test-zlib-flush-write-sync-interleaved.js": {
-      "skip": true,
-      "reason": "Tests precise ordering of write+flush+read interleaving"
-    },
+    "parallel/test-zlib-flush-write-sync-interleaved.js": {},
     "parallel/test-zlib-from-concatenated-gzip.js": {},
     "parallel/test-zlib-from-gzip.js": {},
     "parallel/test-zlib-from-gzip-with-trailing-garbage.js": {
