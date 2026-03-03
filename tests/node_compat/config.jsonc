@@ -4309,10 +4309,7 @@
     "parallel/test-zlib-from-gzip.js": {},
     "parallel/test-zlib-from-gzip-with-trailing-garbage.js": {},
     "parallel/test-zlib-invalid-input-memory.js": {},
-    "parallel/test-zlib-kmaxlength-rangeerror.js": {
-      "skip": true,
-      "reason": "Modifies buffer.kMaxLength at runtime before requiring zlib"
-    },
+    "parallel/test-zlib-kmaxlength-rangeerror.js": {},
     "parallel/test-zlib-maxOutputLength.js": {},
     "parallel/test-zlib-params.js": {},
     "parallel/test-zlib-random-byte-pipes.js": {},
