@@ -279,6 +279,12 @@ function runTest(parsed, parentSuite) {
         }
     };
 
+    var runCtxAfterFns = function () {
+        for (var af = 0; af < ctx._afterFns.length; af++) {
+            try { ctx._afterFns[af](); } catch (ignored) {}
+        }
+    };
+
     try {
         // Run beforeEach hooks
         for (var i = 0; i < beforeEachFns.length; i++) {
@@ -291,6 +297,7 @@ function runTest(parsed, parentSuite) {
         // If test returned a promise, return an async result that can be awaited
         if (result && typeof result.then === 'function') {
             var asyncResult = result.then(function () {
+                runCtxAfterFns();
                 ctx.mock.restoreAll();
                 runAfterEach();
                 restoreModuleContext();
@@ -299,6 +306,7 @@ function runTest(parsed, parentSuite) {
                 }
                 return { status: 'pass', name: name };
             }, function (e) {
+                runCtxAfterFns();
                 ctx.mock.restoreAll();
                 runAfterEachSafe();
                 restoreModuleContext();
@@ -321,9 +329,12 @@ function runTest(parsed, parentSuite) {
         if (ctx._subtests.length > 0) {
             var subResult = runSubtests(ctx);
             if (subResult.failures > 0 && !isTodo) {
+                runCtxAfterFns();
                 ctx.mock.restoreAll();
                 return { status: 'fail', name: name, error: subResult.error };
             }
+        } else {
+            runCtxAfterFns();
         }
 
         ctx.mock.restoreAll();
@@ -335,6 +346,7 @@ function runTest(parsed, parentSuite) {
 
         return { status: 'pass', name: name };
     } catch (e) {
+        runCtxAfterFns();
         ctx.mock.restoreAll();
         runAfterEachSafe();
 

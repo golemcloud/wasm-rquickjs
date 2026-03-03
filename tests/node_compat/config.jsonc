@@ -8188,7 +8188,7 @@
       }
     },
     "parallel/test-runner-string-to-regexp.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-runner-subtest-after-hook.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-subtest-after-hook.js": {},
     "parallel/test-runner-test-filepath.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
