@@ -8061,17 +8061,27 @@
     "parallel/test-runner-mock-timers-scheduler.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-mock-timers.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-mocking.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_spies_on_a_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_spies_on_a_bound_function": {},
+        "test_00_spies_on_a_function": {},
+        "test_01_spies_on_a_bound_function": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "test_02_spies_on_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_a_no_op_spy_function_is_created_by_default": {},
-        "test_04_internal_no_op_function_can_be_reused": {},
+        "test_03_a_no_op_spy_function_is_created_by_default": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
+        "test_04_internal_no_op_function_can_be_reused": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "test_05_functions_can_be_mocked_multiple_times_at_once": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_06_internal_no_op_function_can_be_reused_as_methods": {},
+        "test_06_internal_no_op_function_can_be_reused_as_methods": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "test_07_methods_can_be_mocked_multiple_times_but_not_at_the_same_tim": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_08_spies_on_an_object_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_09_spies_on_a_getter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
@@ -8083,7 +8093,10 @@
         "test_15_it_should_throw_given_an_inexistent_property_on_a_object_ins": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_16_spy_functions_can_be_used_on_classes_inheritance": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_17_spy_functions_don_t_affect_the_prototype_chain": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_18_mocked_functions_report_thrown_errors": {},
+        "test_18_mocked_functions_report_thrown_errors": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "test_19_mocked_constructors_report_thrown_errors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_20_mocks_a_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_21_mocks_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
@@ -8097,7 +8110,10 @@
         "test_29_method_fails_if_field_is_a_property_instead_of_a_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_30_mocks_can_be_auto_restored": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_31_mock_implementation_can_be_changed_dynamically": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_32_local_mocks_are_auto_restored_after_the_test_finishes": {},
+        "test_32_local_mocks_are_auto_restored_after_the_test_finishes": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "test_33_reset_mock_calls": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_34_uses_top_level_mock": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_35_the_getter_and_setter_options_cannot_be_used_together": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },

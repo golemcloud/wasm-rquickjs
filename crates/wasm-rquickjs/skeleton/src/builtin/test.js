@@ -744,7 +744,7 @@ MockTracker.prototype.method = function (obj, methodName, implementation) {
 
     var wrapper = function () {
         var args = Array.prototype.slice.call(arguments);
-        var callRecord = { arguments: args, result: undefined, error: undefined };
+        var callRecord = { arguments: args, result: undefined, error: undefined, target: undefined, this: this };
         try {
             var result;
             if (implementation) {
@@ -780,7 +780,7 @@ MockTracker.prototype.fn = function (impl) {
 
     var wrapper = function () {
         var args = Array.prototype.slice.call(arguments);
-        var callRecord = { arguments: args, result: undefined, error: undefined };
+        var callRecord = { arguments: args, result: undefined, error: undefined, target: undefined, this: this };
         try {
             var result = fn.apply(this, arguments);
             callRecord.result = result;
