@@ -7957,7 +7957,10 @@
           "skip": true,
           "reason": "[manual] This test requires `child_process.spawnSync` to spawn a real Node.js process with CLI flags (`--test --experimental-test-isolation=none`) and inspect its stderr output for internal concurr..."
         },
-        "test_04_isolation_none_overrides_test_concurrency": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_04_isolation_none_overrides_test_concurrency": {
+          "skip": true,
+          "reason": "[manual] This test requires `child_process.spawnSync` to spawn a real Node.js process with CLI flags (`--test --experimental-test-isolation=none --test-concurrency=2`) and inspect its stderr output..."
+        }
       }
     },
     "parallel/test-runner-cli-timeout.js": {
