@@ -187,28 +187,28 @@
       "reason": "Tests use internal/webstreams/util kState symbol to inspect web stream internals",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_07_block_07": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_08_block_08": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_09_block_09": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_10_block_10": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_11_block_11": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_12_block_12": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_13_block_13": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_14_block_14": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_15_block_15": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_16_block_16": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_17_block_17": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_18_block_18": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_19_block_19": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_20_block_20": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" },
-        "block_21_block_21": { "skip": true, "reason": "inherited: Tests use internal/webstreams/util kState symbol to inspect web stream internals" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_block_06": {},
+        "block_07_block_07": {},
+        "block_08_block_08": {},
+        "block_09_block_09": {},
+        "block_10_block_10": {},
+        "block_11_block_11": {},
+        "block_12_block_12": {},
+        "block_13_block_13": {},
+        "block_14_block_14": {},
+        "block_15_block_15": {},
+        "block_16_block_16": {},
+        "block_17_block_17": {},
+        "block_18_block_18": {},
+        "block_19_block_19": {},
+        "block_20_block_20": {},
+        "block_21_block_21": {}
       }
     },
     "parallel/test-blob-createobjecturl.js": {},
@@ -352,10 +352,7 @@
     "parallel/test-util-inspect.js": {
       "split": true,
       "subtests": {
-        "block_00_special_function_inspection": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
+        "block_00_special_function_inspection": {},
         "block_01_block_01": {},
         "block_02_block_02": {},
         "block_03_block_03": {},
@@ -388,30 +385,18 @@
         "block_30_util_inspect_should_display_the_escaped_value_of_a_key": {},
         "block_31_escape_unpaired_surrogate_pairs": {},
         "block_32_test_util_inspect_styles_and_util_inspect_colors": {},
-        "block_33_new_api_accepts_an_options_object": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
+        "block_33_new_api_accepts_an_options_object": {},
         "block_34_block_34": {},
         "block_35_block_35": {},
         "block_36_block_36": {},
         "block_37_without_it": {},
         "block_38_test_boxed_primitives_with_own_properties": {},
-        "block_39_test_set": {
-          "skip": true,
-          "reason": "[manual] amp made no code changes"
-        },
+        "block_39_test_set": {},
         "block_40_test_circular_set": {},
-        "block_41_test_map": {
-          "skip": true,
-          "reason": "[manual] amp made no code changes"
-        },
+        "block_41_test_map": {},
         "block_42_test_circular_map": {},
         "block_43_test_multiple_circular_references": {},
-        "block_44_test_promise": {
-          "skip": true,
-          "reason": "[manual] QuickJS appears to enforce `Error.stack` behavior for this specific path at engine level (not fully overridable from JS shims). I verified `delete err.stack` still returns a truthy `err.st..."
-        },
+        "block_44_test_promise": {},
         "block_45_a_bonafide_native_promise": {},
         "block_46_test_map_iterators": {},
         "block_47_test_set_iterators": {},
@@ -440,35 +425,17 @@
         "block_70_verify_non_enumerable_keys_get_escaped": {},
         "block_71_check_for_special_colors": {},
         "block_72_non_indices_array_properties_are_sorted_as_well": {},
-        "block_73_manipulate_the_prototype_in_weird_ways": {
-          "skip": true,
-          "reason": "[manual] amp fix caused regressions"
-        },
-        "block_74_check_that_the_fallback_always_works": {
-          "skip": true,
-          "reason": "[manual] `test-util-inspect` currently depends on behaviors that are not reliably derivable from pure JS in this runtime (constructor-name recovery for null-prototype constructor instances, and dee..."
-        },
+        "block_73_manipulate_the_prototype_in_weird_ways": {},
+        "block_74_check_that_the_fallback_always_works": {},
         "block_75_check_the_getter_option": {},
         "block_76_check_compact_number_mode": {},
-        "block_77_block_77": {
-          "skip": true,
-          "reason": "[manual] amp made no code changes"
-        },
-        "block_78_block_78": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
-        "block_79_block_79": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
+        "block_77_block_77": {},
+        "block_78_block_78": {},
+        "block_79_block_79": {},
         "block_80_inspect_prototype_properties": {},
         "block_81_regression_test_for_https_github_com_nodejs_node_issues_3573": {},
         "block_82_test_changing_util_inspect_colors_colors_and_aliases": {},
-        "block_83_https_github_com_nodejs_node_issues_31889": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
+        "block_83_https_github_com_nodejs_node_issues_31889": {},
         "block_84_truncate_output_for_primitives_with_1_character_left": {},
         "block_85_block_85": {},
         "block_86_block_86": {},
@@ -476,10 +443,7 @@
         "block_88_block_88": {},
         "block_89_block_89": {},
         "block_90_block_90": {},
-        "block_91_block_91": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
+        "block_91_block_91": {},
         "block_92_regression_test_for_https_github_com_nodejs_node_issues_4124": {},
         "block_93_block_93": {},
         "block_94_block_94": {},
@@ -503,10 +467,7 @@
     "parallel/test-util-promisify.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
+        "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_block_02": {},
         "block_03_block_03": {},
@@ -541,10 +502,7 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-util.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-util.js": {},
 
     // === node:fs tests ===
     "parallel/test-fs-access.js": {
@@ -833,7 +791,7 @@
         "block_00_readfile_and_readfilesync_should_fail_if_the_file_is_too_big": { "skip": true, "reason": "inherited: requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation" },
         "block_01_block_01": {},
         "block_02_block_02": {},
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires process.pid, common.expectsError, ERR_FS_FILE_TOO_LARGE, AbortSignal.abort, and ERR_INVALID_ARG_TYPE validation" }
+        "block_03_block_03": {}
       }
     },
     "parallel/test-fs-readfile-empty.js": {},
@@ -900,7 +858,7 @@
         "block_00_test_the_asynchronous_version": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_01_test_the_synchronous_version": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_02_test_input_validation": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
+        "block_03_block_03": {}
       }
     },
     "parallel/test-fs-rmdir-recursive.js": {
@@ -947,15 +905,15 @@
       "reason": "statSync with bigint option returns undefined (bigint stat not implemented)",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_07_block_07": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" },
-        "block_08_block_08": { "skip": true, "reason": "inherited: statSync with bigint option returns undefined (bigint stat not implemented)" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_block_06": {},
+        "block_07_block_07": {},
+        "block_08_block_08": {}
       }
     },
     "parallel/test-fs-statfs.js": {
@@ -998,9 +956,9 @@
       "reason": "requires validation of custom fs option methods",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires validation of custom fs option methods" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires validation of custom fs option methods" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires validation of custom fs option methods" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-fs-stream-options.js": {
@@ -1008,8 +966,8 @@
       "reason": "requires validation of fd type and path type in stream constructors",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires validation of fd type and path type in stream constructors" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires validation of fd type and path type in stream constructors" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-fs-symlink-buffer-path.js": {},
@@ -1038,16 +996,16 @@
       "reason": "assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_block_06": {},
         "block_07_block_07": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
         "block_08_block_08": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_09_block_09": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" }
+        "block_09_block_09": {}
       }
     },
     "parallel/test-fs-truncate-clear-file-zero.js": {
@@ -1066,8 +1024,8 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
+        "block_01_block_01": {},
+        "block_02_block_02": {},
         "block_03_rangeerror_when_offset_bytelength": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_04_rangeerror_when_bytelength_kiomaxlength_and_length_bytelengt": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
       }
@@ -1079,11 +1037,11 @@
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_01_getdirents": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
         "block_05_getdirent": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
+        "block_06_block_06": {},
         "block_07_block_07": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_08_block_08": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
       }
@@ -1105,7 +1063,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" }
+        "block_01_block_01": {}
       }
     },
     "parallel/test-fs-watch-close-when-destroyed.js": {
@@ -1118,8 +1076,8 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" }
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-fs-watch-enoent.js": {
@@ -1202,10 +1160,10 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires child_process.exec and process.on('exit')" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires child_process.exec and process.on('exit')" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires child_process.exec and process.on('exit')" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires child_process.exec and process.on('exit')" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: requires child_process.exec and process.on('exit')" }
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {}
       }
     },
     "parallel/test-fs-write-buffer.js": {
@@ -1484,11 +1442,11 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
         "block_06_block_06": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
         "block_07_block_07": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" }
       }
@@ -1499,11 +1457,11 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
+        "block_01_block_01": {},
+        "block_02_block_02": {},
         "block_03_block_03": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
         "block_04_block_04": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
+        "block_05_block_05": {},
         "block_06_block_06": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
         "block_07_block_07": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" }
       }
@@ -1514,8 +1472,8 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
+        "block_01_block_01": {},
+        "block_02_block_02": {},
         "block_03_block_03": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
         "block_04_block_04": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
         "block_05_block_05": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
@@ -1523,8 +1481,8 @@
         "block_07_block_07": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
         "block_08_block_08": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
         "block_09_block_09": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_10_block_10": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" },
-        "block_11_block_11": { "skip": true, "reason": "inherited: requires --expose-internals and internal/event_target" }
+        "block_10_block_10": {},
+        "block_11_block_11": {}
       }
     },
 
@@ -1552,7 +1510,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
+        "block_01_block_01": {},
         "block_02_block_02": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_04_block_04": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
@@ -1564,17 +1522,17 @@
         "block_10_block_10": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_11_block_11": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_12_block_12": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
-        "block_13_block_13": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
-        "block_14_block_14": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
-        "block_15_block_15": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
-        "block_16_block_16": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
+        "block_13_block_13": {},
+        "block_14_block_14": {},
+        "block_15_block_15": {},
+        "block_16_block_16": {},
         "block_17_block_17": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_18_block_18": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_19_block_19": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_20_block_20": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_21_block_21": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
-        "block_22_block_22": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
-        "block_23_block_23": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
+        "block_22_block_22": {},
+        "block_23_block_23": {},
         "block_24_block_24": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" },
         "block_25_block_25": { "skip": true, "reason": "inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties" }
       }
@@ -1624,10 +1582,10 @@
         "block_10_block_10": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
         "block_11_block_11": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
         "block_12_block_12": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
-        "block_13_block_13": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
-        "block_14_block_14": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
-        "block_15_block_15": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
-        "block_16_block_16": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
+        "block_13_block_13": {},
+        "block_14_block_14": {},
+        "block_15_block_15": {},
+        "block_16_block_16": {},
         "block_17_block_17": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
         "block_18_block_18": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
         "block_19_block_19": { "skip": true, "reason": "inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs" },
@@ -2027,9 +1985,9 @@
         "block_11_block_11": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_12_block_12": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_13_early_if_no_openssl_binary_is_found": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
-        "block_14_block_14": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
+        "block_14_block_14": {},
         "block_15_regression_test_for_https_github_com_nodejs_node_issues_4079": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
-        "block_16_block_16": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
+        "block_16_block_16": {},
         "block_17_block_17": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_18_block_18": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" }
       }
@@ -2507,8 +2465,8 @@
       "reason": "requires child_process which is not available in WASM",
       "split": true,
       "subtests": {
-        "block_00_default_value": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
-        "block_01_default_value": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
+        "block_00_default_value": {},
+        "block_01_default_value": {},
         "block_02_block_02": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
         "block_03_block_03": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
         "block_04_block_04": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
@@ -2549,7 +2507,7 @@
       "split": true,
       "subtests": {
         "block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
-        "block_01_verify_that_a_maxbuffer_size_of_infinity_works": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
+        "block_01_verify_that_a_maxbuffer_size_of_infinity_works": {},
         "block_02_default_maxbuffer_size_is_1024_1024": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" }
       }
     },
@@ -2561,7 +2519,7 @@
         "block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
         "block_01_verify_that_a_maxbuffer_size_of_infinity_works": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
         "block_02_default_maxbuffer_size_is_1024_1024": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" },
-        "block_03_default_maxbuffer_size_is_1024_1024": { "skip": true, "reason": "inherited: requires child_process which is not available in WASM" }
+        "block_03_default_maxbuffer_size_is_1024_1024": {}
       }
     },
     "parallel/test-child-process-exit-code.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
@@ -2850,10 +2808,7 @@
     "parallel/test-global-domexception.js": {},
     "parallel/test-global-encoder.js": {},
     "parallel/test-http-agent-getname.js": {},
-    "parallel/test-http-autoselectfamily.js": {
-      "skip": true,
-      "reason": "http client is backed by WASI HTTP and does not support lookup/autoSelectFamily (Happy Eyeballs) option handling; DNS/address selection is host-controlled"
-    },
+    "parallel/test-http-autoselectfamily.js": {},
     "parallel/test-http-client-defaults.js": {
       "split": true,
       "subtests": {
@@ -2863,7 +2818,7 @@
       }
     },
     "parallel/test-http-methods.js": {},
-    "parallel/test-https-autoselectfamily.js": { "skip": true, "reason": "https.createServer() is not supported (throws); additionally WASI HTTP client does not honor lookup/autoSelectFamily options" },
+    "parallel/test-https-autoselectfamily.js": {},
     "parallel/test-http2-client-upload-reject.js": {},
     "parallel/test-http2-request-response-proto.js": {},
     "parallel/test-instanceof.js": {},
@@ -3188,8 +3143,8 @@
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: requires child_process.spawn for child env verification" },
         "block_01_block_01": { "skip": true, "reason": "inherited: requires child_process.spawn for child env verification" },
-        "block_02_https_github_com_nodejs_node_issues_45380": { "skip": true, "reason": "inherited: requires child_process.spawn for child env verification" },
-        "block_03_https_github_com_nodejs_node_issues_32920": { "skip": true, "reason": "inherited: requires child_process.spawn for child env verification" }
+        "block_02_https_github_com_nodejs_node_issues_45380": {},
+        "block_03_https_github_com_nodejs_node_issues_32920": {}
       }
     },
     "parallel/test-process-exception-capture-errors.js": {},
@@ -4837,15 +4792,13 @@
     "parallel/test-http-flush-response-headers.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-full-response.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-generic-streams.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
-      "split": true,
+"split": true,
       "subtests": {
-        "block_00_test_1_simple_http_test_no_keep_alive": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_test_2_keep_alive_for_2_requests": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_test_3_connection_close_request_response_with_chunked": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_03_the_same_as_test_3_but_with_content_length_headers": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_04_test_5_the_client_sends_garbage": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_test_1_simple_http_test_no_keep_alive": {},
+        "block_01_test_2_keep_alive_for_2_requests": {},
+        "block_02_test_3_connection_close_request_response_with_chunked": {},
+        "block_03_the_same_as_test_3_but_with_content_length_headers": {},
+        "block_04_test_5_the_client_sends_garbage": {}
       }
     },
     "parallel/test-http-head-request.js": {},
@@ -4943,7 +4896,7 @@
         "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
-    "parallel/test-http-outgoing-message-write-callback.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-http-outgoing-message-write-callback.js": {},
     "parallel/test-http-outgoing-writableFinished.js": {},
     "parallel/test-http-outgoing-write-types.js": {},
     "parallel/test-http-parser-finish-error.js": {},
@@ -5233,7 +5186,7 @@
         "block_12_block_12": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
         "block_13_block_13": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
         "block_14_block_14": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_15_block_15": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
+        "block_15_block_15": {},
         "block_16_block_16": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
@@ -5524,58 +5477,38 @@
     "parallel/test-http-default-encoding.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-dns-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-extra-response.js": {},
-    "parallel/test-http-header-validators.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
-    "parallel/test-http-hostname-typechecking.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-http-header-validators.js": {},
+    "parallel/test-http-hostname-typechecking.js": {},
     "parallel/test-http-import-websocket.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-incoming-matchKnownFields.js": {
       "skip": true,
       "reason": "[manual] amp partial fix caused regressions"
     },
     "parallel/test-http-incoming-message-connection-setter.js": {},
-    "parallel/test-http-incoming-message-destroy.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-http-incoming-message-destroy.js": {},
     "parallel/test-http-insecure-parser-per-stream.js": {
       "skip": true,
       "reason": "requires HTTP server functionality",
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_an_invalid_header": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
-        "block_02_test_3_the_client_sends_an_invalid_header": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
-        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
+        "block_00_test_1_the_server_sends_an_invalid_header": {},
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_02_test_3_the_client_sends_an_invalid_header": {},
+        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {},
         "block_04_test_5_invalid_argument_type": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
       }
     },
-    "parallel/test-http-invalid-path-chars.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
-    "parallel/test-http-invalid-urls.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
-    "parallel/test-http-invalidheaderfield2.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-http-invalid-path-chars.js": {},
+    "parallel/test-http-invalid-urls.js": {},
+    "parallel/test-http-invalidheaderfield2.js": {},
     "parallel/test-http-localaddress.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-max-header-size-per-stream.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality",
-      "split": true,
+"split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
-        "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": { "skip": true, "reason": "inherited: requires HTTP server functionality" },
-        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires HTTP server functionality" }
+        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": {},
+        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {}
       }
     },
     "parallel/test-http-max-header-size.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
@@ -5600,10 +5533,7 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-http-outgoing-message-inheritance.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-http-outgoing-message-inheritance.js": {},
     "parallel/test-http-outgoing-properties.js": {
       "split": true,
       "subtests": {
@@ -5646,7 +5576,7 @@
     "parallel/test-http-parser-bad-ref.js": { "skip": true, "reason": "requires Node.js internal modules" },
     "parallel/test-http-parser-lazy-loaded.js": { "skip": true, "reason": "requires Node.js internal modules" },
     "parallel/test-http-parser-memory-retention.js": { "skip": true, "reason": "requires Node.js internal modules" },
-    "parallel/test-http-parser-multiple-execute.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-parser-multiple-execute.js": {},
     "parallel/test-http-parser-timeout-reset.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-parser.js": {
       "skip": true,
@@ -5680,10 +5610,7 @@
     "parallel/test-http-request-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-request-end-twice.js": {},
     "parallel/test-http-request-end.js": {},
-    "parallel/test-http-request-invalid-method-error.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-http-request-invalid-method-error.js": {},
     "parallel/test-http-res-write-after-end.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-response-no-headers.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-server-async-dispose.js": { "skip": true, "reason": "requires HTTP server functionality" },
@@ -5711,7 +5638,7 @@
       "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-set-max-idle-http-parser.js": { "skip": true, "reason": "requires Node.js internal modules" },
-    "parallel/test-http-sync-write-error-during-continue.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "parallel/test-http-sync-write-error-during-continue.js": {},
     "parallel/test-http-upgrade-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-upgrade-binary.js": {
       "skip": true,
@@ -6232,8 +6159,8 @@
       "reason": "requires TLS/HTTPS which is not supported in WASM",
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_an_invalid_header": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" },
+        "block_00_test_1_the_server_sends_an_invalid_header": {},
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
         "block_02_test_3_the_client_sends_an_invalid_header": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" },
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" },
         "block_04_test_5_invalid_argument_type": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" }
@@ -6247,8 +6174,8 @@
       "reason": "requires TLS/HTTPS which is not supported in WASM",
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" },
+        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
         "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" },
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "skip": true, "reason": "inherited: requires TLS/HTTPS which is not supported in WASM" }
       }
@@ -6368,10 +6295,10 @@
     "es-module/test-esm-repl-imports.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-repl.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-symlink-main.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-esm-symlink-type.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-symlink-type.js": {},
     "es-module/test-esm-symlink.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-type-field-errors-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-esm-type-field-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-type-field-errors.js": {},
     "es-module/test-esm-undefined-cjs-global-like-variables.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-unknown-extension.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-url-extname.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -6585,7 +6512,7 @@
     "parallel/test-c-ares.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-cli-bad-options.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-cli-eval-event.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-cli-node-options-disallowed.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-cli-node-options-disallowed.js": {},
     "parallel/test-cli-node-options-docs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-cli-node-options.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-cli-node-print-help.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -6626,7 +6553,7 @@
     "parallel/test-cluster-net-listen-ipv6only-false.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-cluster-shared-handle-bind-privileged-port.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-code-cache.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-common-countdown.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-common-countdown.js": {},
     "parallel/test-common-expect-warning.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-common-must-not-call.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-common.js": {
@@ -7260,7 +7187,7 @@
     "parallel/test-internal-util-classwrapper.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-internal-util-decorate-error-stack.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-internal-util-helpers.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-internal-util-normalizeencoding.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-internal-util-normalizeencoding.js": {},
     "parallel/test-internal-util-objects.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
@@ -7288,7 +7215,7 @@
     "parallel/test-internal-webidl-converttoint.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-intl-v8BreakIterator.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-intl.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-js-stream-call-properties.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-js-stream-call-properties.js": {},
     "parallel/test-kill-segfault-freebsd.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-listen-fd-cluster.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-listen-fd-detached-inherit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -7403,9 +7330,9 @@
     "parallel/test-os-eol.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-os-homedir-no-envvar.js": {},
     "parallel/test-os-process-priority.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-os-userinfo-handles-getter-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-os-userinfo-handles-getter-errors.js": {},
     "parallel/test-os.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-outgoing-message-destroy.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-outgoing-message-destroy.js": {},
     "parallel/test-outgoing-message-pipe.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-pending-deprecation.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-perf-hooks-histogram.js": {
@@ -7498,7 +7425,7 @@
       "split": true,
       "subtests": {
         "block_00_guarantee_the_initial_state": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_to_spawn_unless_allow_worker_is_sent": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_01_to_spawn_unless_allow_worker_is_sent": {}
       }
     },
     "parallel/test-permission-child-process-cli.js": {
@@ -7714,7 +7641,7 @@
       "split": true,
       "subtests": {
         "block_00_assert_legit_flags_are_allowed_and_bogus_flags_are_disallowe": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_assert_all_canonical_flags_begin_with_dash_es": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_01_assert_all_canonical_flags_begin_with_dash_es": {},
         "block_02_assert_immutability_of_process_allowednodeenvironmentflags": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
@@ -8067,7 +7994,7 @@
       "split": true,
       "subtests": {
         "test_00_expected_methods_are_on_t_assert": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_t_assert_ok_correctly_parses_the_stacktrace": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_01_t_assert_ok_correctly_parses_the_stacktrace": {}
       }
     },
     "parallel/test-runner-cli-concurrency.js": {
@@ -8115,10 +8042,10 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_concurrency_option_boolean_true": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_concurrency_option_boolean_true": {},
         "test_01_concurrency_option_boolean_false": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_02_concurrency_true_implies_infinity": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_test_multiple_files": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_02_concurrency_true_implies_infinity": {},
+        "test_03_test_multiple_files": {}
       }
     },
     "parallel/test-runner-coverage-source-map.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -8129,17 +8056,17 @@
       "split": true,
       "subtests": {
         "test_00_test_coverage_report": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_test_tap_coverage_reporter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_02_test_spec_coverage_reporter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_single_process_coverage_is_the_same_with_test": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_04_coverage_is_combined_for_multiple_processes": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_05_coverage_reports_on_lines_functions_and_branches": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_06_coverage_with_esm_hook_source_irrelevant": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_07_coverage_with_esm_hook_source_transpiled": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_08_coverage_with_excluded_files": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_09_coverage_with_included_files": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_10_coverage_with_included_and_excluded_files": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_11_correctly_prints_the_coverage_report_of_files_contained_in_p": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_01_test_tap_coverage_reporter": {},
+        "test_02_test_spec_coverage_reporter": {},
+        "test_03_single_process_coverage_is_the_same_with_test": {},
+        "test_04_coverage_is_combined_for_multiple_processes": {},
+        "test_05_coverage_reports_on_lines_functions_and_branches": {},
+        "test_06_coverage_with_esm_hook_source_irrelevant": {},
+        "test_07_coverage_with_esm_hook_source_transpiled": {},
+        "test_08_coverage_with_excluded_files": {},
+        "test_09_coverage_with_included_files": {},
+        "test_10_coverage_with_included_and_excluded_files": {},
+        "test_11_correctly_prints_the_coverage_report_of_files_contained_in_p": {}
       }
     },
     "parallel/test-runner-custom-assertions.js": {
@@ -8198,12 +8125,12 @@
       "split": true,
       "subtests": {
         "test_00_spies_on_a_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_spies_on_a_bound_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_01_spies_on_a_bound_function": {},
         "test_02_spies_on_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_a_no_op_spy_function_is_created_by_default": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_04_internal_no_op_function_can_be_reused": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_03_a_no_op_spy_function_is_created_by_default": {},
+        "test_04_internal_no_op_function_can_be_reused": {},
         "test_05_functions_can_be_mocked_multiple_times_at_once": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_06_internal_no_op_function_can_be_reused_as_methods": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_06_internal_no_op_function_can_be_reused_as_methods": {},
         "test_07_methods_can_be_mocked_multiple_times_but_not_at_the_same_tim": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_08_spies_on_an_object_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_09_spies_on_a_getter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
@@ -8215,7 +8142,7 @@
         "test_15_it_should_throw_given_an_inexistent_property_on_a_object_ins": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_16_spy_functions_can_be_used_on_classes_inheritance": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_17_spy_functions_don_t_affect_the_prototype_chain": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_18_mocked_functions_report_thrown_errors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_18_mocked_functions_report_thrown_errors": {},
         "test_19_mocked_constructors_report_thrown_errors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_20_mocks_a_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_21_mocks_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
@@ -8229,7 +8156,7 @@
         "test_29_method_fails_if_field_is_a_property_instead_of_a_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_30_mocks_can_be_auto_restored": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_31_mock_implementation_can_be_changed_dynamically": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_32_local_mocks_are_auto_restored_after_the_test_finishes": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_32_local_mocks_are_auto_restored_after_the_test_finishes": {},
         "test_33_reset_mock_calls": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_34_uses_top_level_mock": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_35_the_getter_and_setter_options_cannot_be_used_together": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
@@ -8311,7 +8238,7 @@
       "split": true,
       "subtests": {
         "test_00_suite": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_01_test_01": {}
       }
     },
     "parallel/test-runner-test-fullname.js": {
@@ -8355,8 +8282,8 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_headers_setter_function_set_a_header_correctly": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_trailers_setter_function_set_a_header_correctly": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_headers_setter_function_set_a_header_correctly": {},
+        "block_01_trailers_setter_function_set_a_header_correctly": {},
         "block_02_addheaderlines_function_set_a_header_correctly": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
@@ -9096,7 +9023,7 @@
     },
     "parallel/test-stream2-compatibility.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stream2-large-read-stall.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
-    "parallel/test-stream2-unpipe-leak.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream2-unpipe-leak.js": {},
     "parallel/test-stream2-writable.js": {
       "split": true,
       "subtests": {
@@ -9169,8 +9096,8 @@
       }
     },
     "parallel/test-timers-linked-list.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-timers-nested.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-timers-next-tick.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-timers-nested.js": {},
+    "parallel/test-timers-next-tick.js": {},
     "parallel/test-timers-now.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-timers-ordering.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-timers-refresh.js": {
@@ -9215,7 +9142,7 @@
     "parallel/test-tls-cipher-list.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-cli-max-version-1.2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-cli-max-version-1.3.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-tls-cli-min-max-conflict.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-tls-cli-min-max-conflict.js": {},
     "parallel/test-tls-cli-min-version-1.0.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-cli-min-version-1.1.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-cli-min-version-1.2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9557,7 +9484,7 @@
     },
     "parallel/test-vfs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-access-process-env.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-vm-api-handles-getter-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-vm-api-handles-getter-errors.js": {},
     "parallel/test-vm-attributes-property-not-on-sandbox.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-basic.js": {
       "skip": true,
@@ -9656,7 +9583,7 @@
     "parallel/test-vm-module-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-module-import-meta.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-module-link.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-vm-module-reevaluate.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-vm-module-reevaluate.js": {},
     "parallel/test-vm-module-synthetic.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-new-script-new-context.js": {
       "split": true,
@@ -9838,9 +9765,9 @@
       "subtests": {
         "block_00_test_sign_verify_rsassa_pkcs1_v1_5": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_01_test_sign_verify_rsa_pss": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_test_sign_verify_ecdsa": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_test_sign_verify_hmac": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_test_sign_verify_ed25519": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_02_test_sign_verify_ecdsa": {},
+        "block_03_test_sign_verify_hmac": {},
+        "block_04_test_sign_verify_ed25519": {},
         "block_05_test_sign_verify_ed448": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
@@ -9956,7 +9883,7 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_textencoder": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_test_textencoder": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
@@ -10463,9 +10390,7 @@
     "parallel/test-worker-memory.js": {},
     "parallel/test-worker-message-channel-sharedarraybuffer.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-worker-message-channel.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
-      "split": true,
+"split": true,
       "subtests": {
         "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
@@ -10494,7 +10419,7 @@
       }
     },
     "parallel/test-worker-message-not-serializable.js": {},
-    "parallel/test-worker-message-port-arraybuffer.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-worker-message-port-arraybuffer.js": {},
     "parallel/test-worker-message-port-close.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
@@ -10503,7 +10428,7 @@
         "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_refs_https_github_com_nodejs_node_issues_42296": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_03_refs_https_github_com_nodejs_node_issues_42296": {}
       }
     },
     "parallel/test-worker-message-port-constructor.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -10726,7 +10651,7 @@
         "block_17_dirhandle": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "sequential/test-cli-syntax-bad.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "sequential/test-cli-syntax-bad.js": {},
     "sequential/test-cli-syntax-file-not-found.js": {},
     "sequential/test-cli-syntax-good.js": {},
     "sequential/test-cli-syntax-require.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -10765,7 +10690,7 @@
     "sequential/test-debugger-debug-brk.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-debugger-invalid-args.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-debugger-pid.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "sequential/test-deprecation-flags.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "sequential/test-deprecation-flags.js": {},
     "sequential/test-dgram-bind-shared-ports.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-dgram-implicit-bind-failure.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-dgram-pingpong.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -10830,8 +10755,8 @@
         "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_not_block_the_event_loop": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_https_github_com_joyent_node_issues_6690": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_03_not_block_the_event_loop": {},
+        "block_04_https_github_com_joyent_node_issues_6690": {},
         "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
@@ -10903,7 +10828,7 @@
     },
     "sequential/test-pipe.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-process-title.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "sequential/test-process-warnings.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "sequential/test-process-warnings.js": {},
     "sequential/test-repl-timeout-throw.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-resolution-inspect-brk.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-single-executable-application-assets-raw.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -10933,7 +10858,7 @@
     "sequential/test-single-executable-application-use-code-cache.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-single-executable-application.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-stream2-stderr-sync.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "sequential/test-timers-block-eventloop.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "sequential/test-timers-block-eventloop.js": {},
     "sequential/test-timers-set-interval-excludes-callback-duration.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-tls-connect.js": {
       "skip": true,
