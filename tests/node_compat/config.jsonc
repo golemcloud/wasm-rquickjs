@@ -8005,10 +8005,7 @@
         "test_00_concurrency_option_boolean_true": {},
         "test_01_concurrency_option_boolean_false": {},
         "test_02_concurrency_true_implies_infinity": {},
-        "test_03_test_multiple_files": {
-          "skip": true,
-          "reason": "newly discovered, not yet evaluated"
-        }
+        "test_03_test_multiple_files": {}
       }
     },
     "parallel/test-runner-coverage-source-map.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
