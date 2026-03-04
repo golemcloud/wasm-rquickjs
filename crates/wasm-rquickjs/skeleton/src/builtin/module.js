@@ -656,10 +656,31 @@ export function require(id) {
 
 export function createRequire(filename) {
     var filepath;
-    if (typeof filename === 'string' && filename.startsWith('file://')) {
-        filepath = filename.slice(7);
+    var isUrlObj = filename instanceof URL ||
+        (filename !== null && typeof filename === 'object' &&
+         typeof filename.href === 'string' && typeof filename.protocol === 'string');
+
+    if (isUrlObj || (typeof filename === 'string' && !pathModule.isAbsolute(filename))) {
+        try {
+            filepath = nodeUrl.fileURLToPath(filename);
+        } catch (e) {
+            var inspected = typeof filename === 'string' ? "'" + filename + "'" :
+                (typeof util.inspect === 'function' ? util.inspect(filename) : String(filename));
+            var err = new TypeError(
+                "The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received " + inspected
+            );
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+    } else if (typeof filename !== 'string') {
+        var inspected2 = typeof util.inspect === 'function' ? util.inspect(filename) : String(filename);
+        var err2 = new TypeError(
+            "The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received " + inspected2
+        );
+        err2.code = 'ERR_INVALID_ARG_VALUE';
+        throw err2;
     } else {
-        filepath = String(filename);
+        filepath = filename;
     }
     var dir = pathModule.dirname(filepath);
     return makeRequire(dir, null);
