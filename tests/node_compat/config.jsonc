@@ -8110,7 +8110,7 @@
         "test_17_spy_functions_don_t_affect_the_prototype_chain": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_18_mocked_functions_report_thrown_errors": {},
         "test_19_mocked_constructors_report_thrown_errors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_20_mocks_a_function": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_20_mocks_a_function": {},
         "test_21_mocks_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_22_mocks_an_object_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_23_mocks_a_getter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
