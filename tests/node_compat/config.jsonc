@@ -7176,7 +7176,7 @@
     "parallel/test-mime-whatwg.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-builtin.js": {},
     "parallel/test-module-children.js": {},
-    "parallel/test-module-circular-symlinks.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-circular-symlinks.js": {},
     "parallel/test-module-create-require-multibyte.js": {
       "split": true,
       "subtests": {

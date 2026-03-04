@@ -603,6 +603,53 @@ var mainModule = {
     children: [],
 };
 
+function resolveFromNodeModules(id, parentDir) {
+    var dirs = _nodeModulePaths(parentDir);
+    for (var i = 0; i < dirs.length; i++) {
+        var candidate = pathModule.join(dirs[i], id);
+
+        // Try as directory: check package.json "main" field
+        var pkgJsonPath = pathModule.join(candidate, 'package.json');
+        var pkgJson = tryReadFile(pkgJsonPath);
+        if (pkgJson !== null) {
+            try {
+                var pkg = JSON.parse(pkgJson);
+                if (typeof pkg.main === 'string') {
+                    var mainPath = pathModule.resolve(candidate, pkg.main);
+                    var mainCandidates = [
+                        mainPath,
+                        mainPath + '.js',
+                        mainPath + '.json',
+                        pathModule.join(mainPath, 'index.js'),
+                        pathModule.join(mainPath, 'index.json'),
+                    ];
+                    for (var m = 0; m < mainCandidates.length; m++) {
+                        var content = tryReadFile(mainCandidates[m]);
+                        if (content !== null) return { filename: mainCandidates[m], content: content };
+                    }
+                }
+            } catch (e) { /* invalid JSON, skip */ }
+        }
+
+        // Try as directory: index.js / index.json
+        var indexJs = pathModule.join(candidate, 'index.js');
+        var content = tryReadFile(indexJs);
+        if (content !== null) return { filename: indexJs, content: content };
+
+        var indexJson = pathModule.join(candidate, 'index.json');
+        content = tryReadFile(indexJson);
+        if (content !== null) return { filename: indexJson, content: content };
+
+        // Try as file with extension
+        content = tryReadFile(candidate + '.js');
+        if (content !== null) return { filename: candidate + '.js', content: content };
+
+        content = tryReadFile(candidate + '.json');
+        if (content !== null) return { filename: candidate + '.json', content: content };
+    }
+    return null;
+}
+
 function makeRequire(parentDir, parentModule) {
     function localRequire(id) {
         if (typeof id !== 'string') {
@@ -627,6 +674,13 @@ function makeRequire(parentDir, parentModule) {
             return mod.exports;
         }
 
+        // node_modules resolution for bare specifiers
+        var nmResolved = resolveFromNodeModules(id, parentDir);
+        if (nmResolved) {
+            var mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
+            return mod.exports;
+        }
+
         var err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
         throw err;
@@ -641,6 +695,11 @@ function makeRequire(parentDir, parentModule) {
         if (id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
             var resolved = resolveFilename(id, parentDir);
             return resolved.filename;
+        }
+        // node_modules resolution for bare specifiers
+        var nmResolved = resolveFromNodeModules(id, parentDir);
+        if (nmResolved) {
+            return nmResolved.filename;
         }
         var err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
