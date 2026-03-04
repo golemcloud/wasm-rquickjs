@@ -7,17 +7,17 @@ import assert from 'node:assert';
 import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
 import { validateNumber, validateInteger } from '__wasm_rquickjs_builtin/internal/validators';
 
-var currentSuite = null;
+let currentSuite = null;
 // Check for globalThis-based filter (set by test harness before file execution)
-var _subtestFilter = (typeof globalThis.__wasm_rquickjs_node_test_filter === 'number')
+let _subtestFilter = (typeof globalThis.__wasm_rquickjs_node_test_filter === 'number')
     ? globalThis.__wasm_rquickjs_node_test_filter
     : null;
-var _subtestRegistrationIndex = 0;
+let _subtestRegistrationIndex = 0;
 
 // --- Custom assertions registry (testAssertions.register) ---
-var _customAssertions = {};
+const _customAssertions = {};
 
-var testAssertionsModule = {
+const testAssertionsModule = {
     register: function register(name, fn) {
         if (typeof name !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('name', 'string', name);
@@ -36,7 +36,6 @@ function SuiteContext(name, parent, filePath) {
     this.parent = parent;
     this.filePath = filePath || (parent ? parent.filePath : undefined);
     this.tests = [];
-    this.suites = [];
     this.beforeFns = [];
     this.afterFns = [];
     this.beforeEachFns = [];
@@ -46,14 +45,14 @@ function SuiteContext(name, parent, filePath) {
 Object.defineProperty(SuiteContext.prototype, 'fullName', {
     get: function () {
         if (this.parent && this.parent.name) {
-            return this.parent.fullName + ' > ' + this.name;
+            return `${this.parent.fullName} > ${this.name}`;
         }
         return this.name || '';
     }
 });
 
 SuiteContext.prototype.collectBeforeEach = function () {
-    var fns = [];
+    let fns = [];
     if (this.parent) {
         fns = this.parent.collectBeforeEach();
     }
@@ -61,7 +60,7 @@ SuiteContext.prototype.collectBeforeEach = function () {
 };
 
 SuiteContext.prototype.collectAfterEach = function () {
-    var fns = this.afterEachFns.slice();
+    let fns = this.afterEachFns.slice();
     if (this.parent) {
         fns = fns.concat(this.parent.collectAfterEach());
     }
@@ -79,7 +78,6 @@ function TestContext(name, parent, filePath) {
     this._diagnostics = [];
     this._skipMessage = undefined;
     this._todoMessage = undefined;
-    this._subtests = [];
     this._beforeFns = [];
     this._afterFns = [];
     this._beforeEachFns = [];
@@ -88,11 +86,11 @@ function TestContext(name, parent, filePath) {
 
     // Build t.assert: copy assert methods excluding AssertionError, CallTracker, strict,
     // and add snapshot/fileSnapshot per Node.js spec.
-    var uncopiedKeys = ['AssertionError', 'CallTracker', 'strict'];
-    var tAssert = {};
-    var assertKeys = Object.keys(assert);
-    for (var i = 0; i < assertKeys.length; i++) {
-        var key = assertKeys[i];
+    const uncopiedKeys = ['AssertionError', 'CallTracker', 'strict'];
+    const tAssert = {};
+    const assertKeys = Object.keys(assert);
+    for (let i = 0; i < assertKeys.length; i++) {
+        const key = assertKeys[i];
         if (!uncopiedKeys.includes(key)) {
             tAssert[key] = assert[key];
         }
@@ -104,24 +102,19 @@ function TestContext(name, parent, filePath) {
         throw new Error('fileSnapshot is not supported in this context');
     };
     // Apply custom assertions registered via testAssertions.register()
-    var ctx = this;
-    var customKeys = Object.keys(_customAssertions);
-    for (var ci = 0; ci < customKeys.length; ci++) {
-        var ckey = customKeys[ci];
-        tAssert[ckey] = (function(fn) {
-            return function() {
-                return fn.apply(ctx, arguments);
-            };
-        })(_customAssertions[ckey]);
+    const customKeys = Object.keys(_customAssertions);
+    for (let ci = 0; ci < customKeys.length; ci++) {
+        const ckey = customKeys[ci];
+        tAssert[ckey] = wrapCustomAssertion(_customAssertions[ckey], this);
     }
     this.assert = tAssert;
 }
 
 Object.defineProperty(TestContext.prototype, 'fullName', {
     get: function () {
-        var parentName = this._parent ? this._parent.fullName : '';
+        const parentName = this._parent ? this._parent.fullName : '';
         if (parentName) {
-            return parentName + ' > ' + this.name;
+            return `${parentName} > ${this.name}`;
         }
         return this.name;
     }
@@ -142,58 +135,54 @@ TestContext.prototype.todo = function (msg) {
 };
 
 TestContext.prototype.test = function (name, optionsOrFn, maybeFn) {
-    var parsed = parseTestArgs(name, optionsOrFn, maybeFn);
-    var fn = parsed.fn;
-    var parentTest = this;
+    const parsed = parseTestArgs(name, optionsOrFn, maybeFn);
+    const fn = parsed.fn;
+    const parentTest = this;
 
     // Handle skip
-    if (parsed.options.skip === true || (typeof parsed.options.skip === 'string' && parsed.options.skip)) {
+    if (isSkipOption(parsed.options.skip)) {
         return Promise.resolve();
     }
 
-    var childCtx = new TestContext(parsed.name, parentTest);
+    const childCtx = new TestContext(parsed.name, parentTest);
+    const restoreMocks = function () { childCtx.mock.restoreAll(); };
 
-    var runSubtest = function () {
-        try {
-            var result;
-            if (fn.length >= 2) {
-                // done callback pattern
-                return new Promise(function (resolve, reject) {
-                    var done = function (err) {
-                        childCtx.mock.restoreAll();
-                        if (err) reject(err);
-                        else resolve();
-                    };
-                    try {
-                        fn.call(childCtx, childCtx, done);
-                    } catch (e) {
-                        childCtx.mock.restoreAll();
-                        reject(e);
-                    }
-                });
-            }
-
-            result = fn.call(childCtx, childCtx);
-            if (result && typeof result.then === 'function') {
-                return result.then(function () {
-                    childCtx.mock.restoreAll();
-                }, function (e) {
-                    childCtx.mock.restoreAll();
-                    throw e;
-                });
-            }
-            childCtx.mock.restoreAll();
-            return Promise.resolve();
-        } catch (e) {
-            childCtx.mock.restoreAll();
-            if (e instanceof SkipError) {
-                return Promise.resolve();
-            }
-            return Promise.reject(e);
+    try {
+        if (fn.length >= 2) {
+            // done callback pattern
+            return new Promise(function (resolve, reject) {
+                const done = function (err) {
+                    restoreMocks();
+                    if (err) reject(err);
+                    else resolve();
+                };
+                try {
+                    fn.call(childCtx, childCtx, done);
+                } catch (e) {
+                    restoreMocks();
+                    reject(e);
+                }
+            });
         }
-    };
 
-    return runSubtest();
+        const result = fn.call(childCtx, childCtx);
+        if (result && typeof result.then === 'function') {
+            return result.then(function () {
+                restoreMocks();
+            }, function (e) {
+                restoreMocks();
+                throw e;
+            });
+        }
+        restoreMocks();
+        return Promise.resolve();
+    } catch (e) {
+        restoreMocks();
+        if (e instanceof SkipError) {
+            return Promise.resolve();
+        }
+        return Promise.reject(e);
+    }
 };
 
 TestContext.prototype.before = function (fn) {
@@ -221,7 +210,7 @@ TestContext.prototype.waitFor = function waitFor(condition, options) {
         throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
     }
 
-    var opts = options || {};
+    const opts = options || {};
 
     if (opts.interval !== undefined && typeof opts.interval !== 'number') {
         throw new ERR_INVALID_ARG_TYPE('options.interval', 'number', opts.interval);
@@ -231,35 +220,35 @@ TestContext.prototype.waitFor = function waitFor(condition, options) {
         throw new ERR_INVALID_ARG_TYPE('options.timeout', 'number', opts.timeout);
     }
 
-    var interval = opts.interval !== undefined ? opts.interval : 50;
-    var timeout = opts.timeout !== undefined ? opts.timeout : 30000;
+    const interval = opts.interval !== undefined ? opts.interval : 50;
+    const timeout = opts.timeout !== undefined ? opts.timeout : 30000;
 
     return new Promise(function (resolve, reject) {
-        var lastError = null;
-        var done = false;
-        var pollTimerId = null;
+        let lastError = null;
+        let done = false;
+        let pollTimerId = null;
 
-        var timeoutId = setTimeout(function () {
+        const timeoutId = setTimeout(function () {
             if (done) return;
             done = true;
             if (pollTimerId !== null) {
                 clearTimeout(pollTimerId);
             }
-            var err = new Error('waitFor() timed out');
+            const err = new Error('waitFor() timed out');
             if (lastError) {
                 err.cause = lastError;
             }
             reject(err);
         }, timeout);
 
-        var running = false;
+        let running = false;
 
         function poll() {
             if (done || running) return;
             running = true;
 
             try {
-                var result = condition();
+                const result = condition();
                 if (result && typeof result.then === 'function') {
                     result.then(function (val) {
                         running = false;
@@ -296,6 +285,26 @@ TestContext.prototype.waitFor = function waitFor(condition, options) {
     });
 };
 
+// --- Helpers ---
+
+function isSkipOption(skip) {
+    return skip === true || (typeof skip === 'string' && skip);
+}
+
+function wrapCustomAssertion(fn, ctx) {
+    return function () { return fn.apply(ctx, arguments); };
+}
+
+function runHookList(hooks) {
+    for (let i = 0; i < hooks.length; i++) hooks[i]();
+}
+
+function runHookListSafe(hooks) {
+    for (let i = 0; i < hooks.length; i++) {
+        try { hooks[i](); } catch (ignored) {}
+    }
+}
+
 // --- Sentinel errors ---
 
 function SkipError(message) {
@@ -315,7 +324,7 @@ TodoError.prototype.constructor = TodoError;
 // --- Argument parsing ---
 
 function parseTestArgs(nameOrOpts, optionsOrFn, maybeFn) {
-    var name, options, fn;
+    let name, options, fn;
 
     if (typeof nameOrOpts === 'function') {
         // (fn) form
@@ -360,8 +369,8 @@ function parseTestArgs(nameOrOpts, optionsOrFn, maybeFn) {
         validateInteger(options.concurrency, 'options.concurrency', 1, 2 ** 31);
     }
 
-    var moduleContext = globalThis.__wasm_rquickjs_current_module;
-    var capturedModuleContext = undefined;
+    const moduleContext = globalThis.__wasm_rquickjs_current_module;
+    let capturedModuleContext = undefined;
     if (moduleContext && typeof moduleContext.source === 'string') {
         capturedModuleContext = {
             filename: moduleContext.filename,
@@ -375,83 +384,66 @@ function parseTestArgs(nameOrOpts, optionsOrFn, maybeFn) {
 // --- Run a single test ---
 
 function runTest(parsed, parentSuite) {
-    var name = parsed.name;
-    var options = parsed.options;
-    var fn = parsed.fn;
-    var moduleContext = parsed.moduleContext;
+    const name = parsed.name;
+    const options = parsed.options;
+    const fn = parsed.fn;
+    const moduleContext = parsed.moduleContext;
 
-    var previousModuleContext = globalThis.__wasm_rquickjs_current_module;
-    var hasModuleContext = !!(moduleContext && typeof moduleContext.source === 'string');
+    const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
+    const hasModuleContext = !!(moduleContext && typeof moduleContext.source === 'string');
     if (hasModuleContext) {
         globalThis.__wasm_rquickjs_current_module = moduleContext;
     }
 
-    var restoreModuleContext = function () {
+    const restoreModuleContext = function () {
         if (hasModuleContext) {
             globalThis.__wasm_rquickjs_current_module = previousModuleContext;
         }
     };
 
-    var isAsync = false;
+    let isAsync = false;
 
     // Handle skip
-    if (options.skip === true || (typeof options.skip === 'string' && options.skip)) {
+    if (isSkipOption(options.skip)) {
         restoreModuleContext();
         return { status: 'skip', name: name, message: typeof options.skip === 'string' ? options.skip : '' };
     }
 
     // Handle todo
-    var isTodo = options.todo === true || typeof options.todo === 'string';
+    const isTodo = options.todo === true || typeof options.todo === 'string';
 
-    var filePath = moduleContext ? moduleContext.filename : undefined;
-    var ctx = new TestContext(name, parentSuite, filePath);
+    const filePath = moduleContext ? moduleContext.filename : undefined;
+    const ctx = new TestContext(name, parentSuite, filePath);
 
     // Collect beforeEach from parent suite chain
-    var beforeEachFns = parentSuite ? parentSuite.collectBeforeEach() : [];
-    var afterEachFns = parentSuite ? parentSuite.collectAfterEach() : [];
+    const beforeEachFns = parentSuite ? parentSuite.collectBeforeEach() : [];
+    const afterEachFns = parentSuite ? parentSuite.collectAfterEach() : [];
 
-    var runAfterEach = function () {
-        for (var j = 0; j < afterEachFns.length; j++) {
-            afterEachFns[j]();
-        }
-    };
-
-    var runAfterEachSafe = function () {
-        for (var k = 0; k < afterEachFns.length; k++) {
-            try { afterEachFns[k](); } catch (ignored) {}
-        }
-    };
-
-    var runCtxAfterFns = function () {
-        for (var af = 0; af < ctx._afterFns.length; af++) {
-            try { ctx._afterFns[af](); } catch (ignored) {}
-        }
+    const cleanup = function () {
+        runHookListSafe(ctx._afterFns);
+        ctx.mock.restoreAll();
     };
 
     try {
         // Run beforeEach hooks
-        for (var i = 0; i < beforeEachFns.length; i++) {
-            beforeEachFns[i]();
-        }
+        runHookList(beforeEachFns);
 
         // Run the test function with ctx as both `this` and first argument
-        var result = fn.call(ctx, ctx);
+        const result = fn.call(ctx, ctx);
 
         // If test returned a promise, return an async result that can be awaited
         if (result && typeof result.then === 'function') {
-            var asyncResult = result.then(function () {
-                runCtxAfterFns();
-                ctx.mock.restoreAll();
-                runAfterEach();
+            const asyncResult = result.then(function () {
+                cleanup();
+                runHookList(afterEachFns);
                 restoreModuleContext();
                 if (isTodo) {
                     return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
                 }
                 return { status: 'pass', name: name };
             }, function (e) {
-                runCtxAfterFns();
-                ctx.mock.restoreAll();
-                runAfterEachSafe();
+                cleanup();
+                runHookListSafe(afterEachFns);
                 restoreModuleContext();
                 if (e instanceof SkipError) {
                     return { status: 'skip', name: name, message: e.message };
@@ -468,20 +460,8 @@ function runTest(parsed, parentSuite) {
             return { status: 'async', name: name, promise: asyncResult };
         }
 
-        // Run subtests if any
-        if (ctx._subtests.length > 0) {
-            var subResult = runSubtests(ctx);
-            if (subResult.failures > 0 && !isTodo) {
-                runCtxAfterFns();
-                ctx.mock.restoreAll();
-                return { status: 'fail', name: name, error: subResult.error };
-            }
-        } else {
-            runCtxAfterFns();
-        }
-
-        ctx.mock.restoreAll();
-        runAfterEach();
+        cleanup();
+        runHookList(afterEachFns);
 
         if (isTodo) {
             return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
@@ -489,9 +469,8 @@ function runTest(parsed, parentSuite) {
 
         return { status: 'pass', name: name };
     } catch (e) {
-        runCtxAfterFns();
-        ctx.mock.restoreAll();
-        runAfterEachSafe();
+        cleanup();
+        runHookListSafe(afterEachFns);
 
         if (e instanceof SkipError) {
             return { status: 'skip', name: name, message: e.message };
@@ -510,67 +489,30 @@ function runTest(parsed, parentSuite) {
     }
 }
 
-function runSubtests(ctx) {
-    var failures = 0;
-    var errors = [];
-
-    // Run before hooks
-    for (var b = 0; b < ctx._beforeFns.length; b++) {
-        ctx._beforeFns[b]();
-    }
-
-    for (var i = 0; i < ctx._subtests.length; i++) {
-        var subtestParsed = ctx._subtests[i];
-        var result = runTest(subtestParsed, ctx._suite);
-        if (result.status === 'fail') {
-            failures++;
-            errors.push(result.error);
-        }
-    }
-
-    // Run after hooks
-    for (var a = 0; a < ctx._afterFns.length; a++) {
-        try { ctx._afterFns[a](); } catch (ignored) {}
-    }
-
-    var error = null;
-    if (errors.length === 1) {
-        error = errors[0];
-    } else if (errors.length > 1) {
-        error = new AggregateError(errors, failures + ' subtest(s) failed');
-    }
-
-    return { failures: failures, error: error };
-}
-
 // --- Run a suite ---
 
 function runSuite(name, options, fn, parentSuite, moduleContext) {
     // Handle skip
-    if (options.skip === true || (typeof options.skip === 'string' && options.skip)) {
+    if (isSkipOption(options.skip)) {
         return { status: 'skip', name: name };
     }
 
-    var isTodo = options.todo === true || typeof options.todo === 'string';
+    const isTodo = options.todo === true || typeof options.todo === 'string';
 
-    var filePath = moduleContext ? moduleContext.filename : undefined;
-    var suite = new SuiteContext(name, parentSuite, filePath);
-    var prevSuite = currentSuite;
+    const filePath = moduleContext ? moduleContext.filename : undefined;
+    const suite = new SuiteContext(name, parentSuite, filePath);
+    const prevSuite = currentSuite;
     currentSuite = suite;
 
     try {
         // Run the describe/suite callback to discover tests
-        var result = fn(suite);
+        const result = fn(suite);
         if (result && typeof result.then === 'function') {
             // Async suite discovery — need to await it
             return {
                 status: 'async-suite',
                 name: name,
-                promise: result,
-                suite: suite,
-                prevSuite: prevSuite,
-                isTodo: isTodo,
-                parentSuite: parentSuite
+                promise: result
             };
         }
     } catch (e) {
@@ -586,11 +528,11 @@ function runSuite(name, options, fn, parentSuite, moduleContext) {
 }
 
 function executeSuite(suite, isTodo, concurrent) {
-    var failures = 0;
-    var errors = [];
+    let failures = 0;
+    const errors = [];
 
     // Run before hooks
-    for (var b = 0; b < suite.beforeFns.length; b++) {
+    for (let b = 0; b < suite.beforeFns.length; b++) {
         try {
             suite.beforeFns[b]();
         } catch (e) {
@@ -604,13 +546,13 @@ function executeSuite(suite, isTodo, concurrent) {
     function handleResult(result) {
         if (result && result.status === 'fail') {
             failures++;
-            errors.push(result.error || new Error('Test "' + result.name + '" failed'));
+            errors.push(result.error || new Error(`Test "${result.name}" failed`));
         }
     }
 
     function finalize() {
         // Run after hooks (always, even on failure)
-        for (var a = 0; a < suite.afterFns.length; a++) {
+        for (let a = 0; a < suite.afterFns.length; a++) {
             try {
                 suite.afterFns[a]();
             } catch (e) {
@@ -624,11 +566,11 @@ function executeSuite(suite, isTodo, concurrent) {
         }
 
         if (failures > 0) {
-            var error;
+            let error;
             if (errors.length === 1) {
                 error = errors[0];
             } else {
-                error = new AggregateError(errors, failures + ' test(s) failed');
+                error = new AggregateError(errors, `${failures} test(s) failed`);
             }
             return { status: 'fail', name: suite.name, error: error };
         }
@@ -636,12 +578,12 @@ function executeSuite(suite, isTodo, concurrent) {
         return { status: 'pass', name: suite.name };
     }
 
-    var idx = 0;
+    let idx = 0;
 
     function runNext() {
         while (idx < suite.tests.length) {
-            var entry = suite.tests[idx++];
-            var result;
+            const entry = suite.tests[idx++];
+            let result;
             if (entry.type === 'suite') {
                 result = runSuite(entry.name, entry.options, entry.fn, suite, entry.moduleContext);
             } else {
@@ -649,13 +591,13 @@ function executeSuite(suite, isTodo, concurrent) {
             }
 
             if (result.status === 'async' || result.status === 'async-suite') {
-                var promise = result.promise;
+                const promise = result.promise;
                 if (concurrent) {
                     // Concurrent mode: push to pending and continue
                     if (promise) {
                         _pendingTestPromises.push(promise.then(function (resolved) {
                             if (resolved && resolved.status === 'fail') {
-                                throw resolved.error || new Error('Test "' + resolved.name + '" failed');
+                                throw resolved.error || new Error(`Test "${resolved.name}" failed`);
                             }
                         }));
                     }
@@ -678,7 +620,7 @@ function executeSuite(suite, isTodo, concurrent) {
         return finalize();
     }
 
-    var finalResult = runNext();
+    const finalResult = runNext();
 
     if (finalResult && typeof finalResult.then === 'function') {
         // Sequential mode produced an async chain; return as async-suite
@@ -690,58 +632,21 @@ function executeSuite(suite, isTodo, concurrent) {
 
 // --- Top-level collection ---
 
-var topLevelTests = [];
-var rootSuite = new SuiteContext('', null);
-var _pendingTestPromises = [];
-
-function flushTopLevel() {
-    if (topLevelTests.length === 0) return;
-
-    var failures = 0;
-    var errors = [];
-
-    for (var i = 0; i < topLevelTests.length; i++) {
-        var entry = topLevelTests[i];
-        var result;
-
-        if (entry.type === 'suite') {
-            result = runSuite(entry.name, entry.options, entry.fn, rootSuite, entry.moduleContext);
-        } else {
-            result = runTest(entry, rootSuite);
-        }
-
-        if (result.status === 'async' || result.status === 'async-suite') {
-            var promise = result.promise;
-            if (promise) {
-                _pendingTestPromises.push(promise.then(function (resolved) {
-                    if (resolved && resolved.status === 'fail') {
-                        throw resolved.error || new Error('Test "' + resolved.name + '" failed');
-                    }
-                }));
-            }
-            continue;
-        }
-
-        if (result.status === 'fail') {
-            failures++;
-            errors.push(result.error || new Error('Test "' + result.name + '" failed'));
-        }
-    }
-
-    topLevelTests = [];
-
-    if (failures > 0) {
-        if (errors.length === 1) {
-            throw errors[0];
-        }
-        throw new AggregateError(errors, failures + ' test(s) failed');
-    }
-}
+const rootSuite = new SuiteContext('', null);
+let _pendingTestPromises = [];
 
 // --- Public API ---
 
+function shouldSkipByFilter() {
+    if (_subtestFilter === null && typeof globalThis.__wasm_rquickjs_node_test_filter === 'number') {
+        _subtestFilter = globalThis.__wasm_rquickjs_node_test_filter;
+    }
+    const currentIndex = _subtestRegistrationIndex++;
+    return _subtestFilter !== null && currentIndex !== _subtestFilter;
+}
+
 function test(nameOrOpts, optionsOrFn, maybeFn) {
-    var parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
+    const parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
 
     if (currentSuite) {
         // Inside a describe/suite — register for later execution
@@ -749,25 +654,17 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
         return Promise.resolve(undefined);
     }
 
-    // Lazy-read filter from global (set by test harness before file execution,
-    // but after module initialization)
-    if (_subtestFilter === null && typeof globalThis.__wasm_rquickjs_node_test_filter === 'number') {
-        _subtestFilter = globalThis.__wasm_rquickjs_node_test_filter;
-    }
-
-    // Index-based subtest filtering
-    var currentIndex = _subtestRegistrationIndex++;
-    if (_subtestFilter !== null && currentIndex !== _subtestFilter) {
+    if (shouldSkipByFilter()) {
         // Silently skip — filtered out
         return Promise.resolve(undefined);
     }
 
     // Top-level test — run immediately
-    var result = runTest(parsed, rootSuite);
+    const result = runTest(parsed, rootSuite);
     if (result.status === 'async') {
-        var p = result.promise.then(function (resolved) {
+        const p = result.promise.then(function (resolved) {
             if (resolved && resolved.status === 'fail') {
-                throw resolved.error || new Error('Test "' + resolved.name + '" failed');
+                throw resolved.error || new Error(`Test "${resolved.name}" failed`);
             }
             return undefined;
         });
@@ -781,7 +678,7 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
 }
 
 test.skip = function (nameOrOpts, optionsOrFn, maybeFn) {
-    var parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
+    const parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
     parsed.options.skip = true;
 
     if (currentSuite) {
@@ -793,7 +690,7 @@ test.skip = function (nameOrOpts, optionsOrFn, maybeFn) {
 };
 
 test.todo = function (nameOrOpts, optionsOrFn, maybeFn) {
-    var parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
+    const parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
     parsed.options.todo = true;
 
     if (currentSuite) {
@@ -811,7 +708,7 @@ test.only = function (nameOrOpts, optionsOrFn, maybeFn) {
 };
 
 function describe(nameOrOpts, optionsOrFn, maybeFn) {
-    var parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
+    const parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
 
     if (currentSuite) {
         // Nested suite
@@ -825,25 +722,18 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
         return;
     }
 
-    // Lazy-read filter from global
-    if (_subtestFilter === null && typeof globalThis.__wasm_rquickjs_node_test_filter === 'number') {
-        _subtestFilter = globalThis.__wasm_rquickjs_node_test_filter;
-    }
-
-    // Index-based subtest filtering (suites participate just like tests)
-    var currentIndex = _subtestRegistrationIndex++;
-    if (_subtestFilter !== null && currentIndex !== _subtestFilter) {
+    if (shouldSkipByFilter()) {
         // Silently skip — filtered out
         return;
     }
 
     // Top-level suite — run immediately
-    var result = runSuite(parsed.name, parsed.options, parsed.fn, rootSuite, parsed.moduleContext);
+    const result = runSuite(parsed.name, parsed.options, parsed.fn, rootSuite, parsed.moduleContext);
     if (result.status === 'async-suite') {
         if (result.promise) {
             _pendingTestPromises.push(result.promise.then(function (resolved) {
                 if (resolved && resolved.status === 'fail') {
-                    throw resolved.error || new Error('Suite "' + resolved.name + '" failed');
+                    throw resolved.error || new Error(`Suite "${resolved.name}" failed`);
                 }
             }));
         }
@@ -853,7 +743,7 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
 }
 
 describe.skip = function (nameOrOpts, optionsOrFn, maybeFn) {
-    var parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
+    const parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
     parsed.options.skip = true;
 
     if (currentSuite) {
@@ -870,7 +760,7 @@ describe.skip = function (nameOrOpts, optionsOrFn, maybeFn) {
 };
 
 describe.todo = function (nameOrOpts, optionsOrFn, maybeFn) {
-    var parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
+    const parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
     parsed.options.todo = true;
 
     if (currentSuite) {
@@ -890,12 +780,12 @@ describe.only = function (nameOrOpts, optionsOrFn, maybeFn) {
     return describe(nameOrOpts, optionsOrFn, maybeFn);
 };
 
-var it = test;
+const it = test;
 it.skip = test.skip;
 it.todo = test.todo;
 it.only = test.only;
 
-var suite = describe;
+const suite = describe;
 suite.skip = describe.skip;
 suite.todo = describe.todo;
 suite.only = describe.only;
@@ -936,6 +826,15 @@ function afterEach(fn) {
 
 // --- MockTracker ---
 
+function removeMockEntry(tracker, obj, methodName) {
+    for (let i = tracker._mocks.length - 1; i >= 0; i--) {
+        if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
+            tracker._mocks.splice(i, 1);
+            break;
+        }
+    }
+}
+
 function MockTracker() {
     this._mocks = [];
 }
@@ -952,22 +851,22 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
         throw new Error("The property 'options.setter' cannot be used with 'options.getter'");
     }
 
-    var tracker = this;
-    var callLog = [];
-    var mockInfo = {
+    const tracker = this;
+    const callLog = [];
+    const mockInfo = {
         calls: callLog,
         callCount: function () { return callLog.length; },
         resetCalls: function () { callLog.length = 0; },
     };
 
     if (options.getter) {
-        var descriptor = Object.getOwnPropertyDescriptor(obj, methodName) || {};
-        var originalGetter = descriptor.get;
+        const descriptor = Object.getOwnPropertyDescriptor(obj, methodName) || {};
+        const originalGetter = descriptor.get;
 
-        var spyGetter = function () {
-            var callRecord = { arguments: [], result: undefined, error: undefined, target: undefined, this: this };
+        const spyGetter = function () {
+            const callRecord = { arguments: [], result: undefined, error: undefined, target: undefined, this: this };
             try {
-                var result;
+                let result;
                 if (implementation) {
                     result = implementation.call(this);
                 } else if (originalGetter) {
@@ -990,15 +889,10 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
                 configurable: true,
                 enumerable: descriptor.enumerable !== false,
             });
-            for (var i = tracker._mocks.length - 1; i >= 0; i--) {
-                if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
-                    tracker._mocks.splice(i, 1);
-                    break;
-                }
-            }
+            removeMockEntry(tracker, obj, methodName);
         };
 
-        var getterWrapper = { mock: mockInfo };
+        const getterWrapper = { mock: mockInfo };
         Object.defineProperty(obj, methodName, {
             get: spyGetter,
             set: descriptor.set,
@@ -1008,13 +902,13 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
         this._mocks.push({ obj: obj, methodName: methodName, type: 'getter', originalDescriptor: descriptor });
         return getterWrapper;
     } else if (options.setter) {
-        var descriptor = Object.getOwnPropertyDescriptor(obj, methodName) || {};
-        var originalSetter = descriptor.set;
+        const descriptor = Object.getOwnPropertyDescriptor(obj, methodName) || {};
+        const originalSetter = descriptor.set;
 
-        var spySetter = function (val) {
-            var callRecord = { arguments: [val], result: undefined, error: undefined, target: undefined, this: this };
+        const spySetter = function (val) {
+            const callRecord = { arguments: [val], result: undefined, error: undefined, target: undefined, this: this };
             try {
-                var result;
+                let result;
                 if (implementation) {
                     result = implementation.call(this, val);
                 } else if (originalSetter) {
@@ -1036,15 +930,10 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
                 configurable: true,
                 enumerable: descriptor.enumerable !== false,
             });
-            for (var i = tracker._mocks.length - 1; i >= 0; i--) {
-                if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
-                    tracker._mocks.splice(i, 1);
-                    break;
-                }
-            }
+            removeMockEntry(tracker, obj, methodName);
         };
 
-        var setterWrapper = { mock: mockInfo };
+        const setterWrapper = { mock: mockInfo };
         Object.defineProperty(obj, methodName, {
             get: descriptor.get,
             set: spySetter,
@@ -1056,23 +945,18 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
     }
 
     // Regular method mocking (no getter/setter)
-    var original = obj[methodName];
+    const original = obj[methodName];
 
     mockInfo.restore = function () {
         obj[methodName] = original;
-        for (var i = tracker._mocks.length - 1; i >= 0; i--) {
-            if (tracker._mocks[i].obj === obj && tracker._mocks[i].methodName === methodName) {
-                tracker._mocks.splice(i, 1);
-                break;
-            }
-        }
+        removeMockEntry(tracker, obj, methodName);
     };
 
-    var wrapper = function () {
-        var args = Array.prototype.slice.call(arguments);
-        var callRecord = { arguments: args, result: undefined, error: undefined, target: undefined, this: this };
+    const wrapper = function () {
+        const args = Array.prototype.slice.call(arguments);
+        const callRecord = { arguments: args, result: undefined, error: undefined, target: undefined, this: this };
         try {
-            var result;
+            let result;
             if (implementation) {
                 result = implementation.apply(this, arguments);
             } else {
@@ -1122,13 +1006,13 @@ MockTracker.prototype.fn = function (original, implementation, options) {
         }
     }
 
-    var originalFn = typeof original === 'function' ? original : function () {};
-    var currentImpl = typeof implementation === 'function' ? implementation : originalFn;
-    var callLog = [];
-    var timesRemaining = options.times;
-    var onceImpls = {};
+    const originalFn = typeof original === 'function' ? original : function () {};
+    let currentImpl = typeof implementation === 'function' ? implementation : originalFn;
+    const callLog = [];
+    let timesRemaining = options.times;
+    const onceImpls = {};
 
-    var mockInfo = {
+    const mockInfo = {
         calls: callLog,
         callCount: function () { return callLog.length; },
         resetCalls: function () { callLog.length = 0; },
@@ -1142,7 +1026,7 @@ MockTracker.prototype.fn = function (original, implementation, options) {
         mockImplementationOnce: function (newImpl, onCall) {
             if (onCall !== undefined) {
                 if (onCall < callLog.length) {
-                    throw new RangeError('The value of "onCall" is out of range. It must be >= ' + callLog.length);
+                    throw new RangeError(`The value of "onCall" is out of range. It must be >= ${callLog.length}`);
                 }
             } else {
                 onCall = callLog.length;
@@ -1154,13 +1038,13 @@ MockTracker.prototype.fn = function (original, implementation, options) {
         },
     };
 
-    var wrapper = function () {
-        var args = Array.prototype.slice.call(arguments);
-        var isConstructorCall = new.target !== undefined;
-        var callRecord = { arguments: args, result: undefined, error: undefined, target: isConstructorCall ? originalFn : undefined, this: undefined };
-        var callIndex = callLog.length;
+    const wrapper = function () {
+        const args = Array.prototype.slice.call(arguments);
+        const isConstructorCall = new.target !== undefined;
+        const callRecord = { arguments: args, result: undefined, error: undefined, target: isConstructorCall ? originalFn : undefined, this: undefined };
+        const callIndex = callLog.length;
         try {
-            var fn;
+            let fn;
             if (onceImpls.hasOwnProperty(callIndex)) {
                 fn = onceImpls[callIndex];
                 delete onceImpls[callIndex];
@@ -1174,7 +1058,7 @@ MockTracker.prototype.fn = function (original, implementation, options) {
             } else {
                 fn = currentImpl;
             }
-            var result;
+            let result;
             if (isConstructorCall) {
                 result = Reflect.construct(fn, args);
                 callRecord.this = result;
@@ -1196,10 +1080,10 @@ MockTracker.prototype.fn = function (original, implementation, options) {
 };
 
 MockTracker.prototype.restoreAll = function () {
-    for (var i = this._mocks.length - 1; i >= 0; i--) {
-        var m = this._mocks[i];
+    for (let i = this._mocks.length - 1; i >= 0; i--) {
+        const m = this._mocks[i];
         if (m.type === 'getter' || m.type === 'setter') {
-            var desc = m.originalDescriptor;
+            const desc = m.originalDescriptor;
             Object.defineProperty(m.obj, m.methodName, {
                 get: desc.get,
                 set: desc.set,
@@ -1214,8 +1098,8 @@ MockTracker.prototype.restoreAll = function () {
 };
 
 MockTracker.prototype.reset = function () {
-    for (var i = 0; i < this._mocks.length; i++) {
-        var m = this._mocks[i];
+    for (let i = 0; i < this._mocks.length; i++) {
+        const m = this._mocks[i];
         if (m.type === 'getter' || m.type === 'setter') {
             // For getter/setter mocks, the wrapper object is not directly accessible
             // from the object; reset is handled differently
@@ -1260,7 +1144,7 @@ MockTracker.prototype.setter = function (obj, methodName, implementation, option
 };
 MockTracker.prototype.timers = { enable: function () {}, reset: function () {}, tick: function () {} };
 
-var mock = new MockTracker();
+const mock = new MockTracker();
 
 function run() {
     // Stub — no-op for now
@@ -1279,7 +1163,7 @@ function __clearFilter() {
 
 async function _awaitPendingTests() {
     while (_pendingTestPromises.length > 0) {
-        var promises = _pendingTestPromises;
+        const promises = _pendingTestPromises;
         _pendingTestPromises = [];
         await Promise.all(promises);
     }

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "node:fs";
 import { REPO_ROOT, SUITE_DIR, LOG_DIR } from "./paths.js";
@@ -160,21 +159,6 @@ export async function runSingleTest(
   );
 }
 
-/** Run all category tests including ignored, to find newly-passing ones. */
-export async function runCategoryTestsIncludeIgnored(
-  category: string,
-): Promise<{ ok: boolean; output: string }> {
-  const logfile = path.join(LOG_DIR, `newly-passing-${Date.now()}.txt`);
-  const filters = categoryTestFilters(category);
-  console.log("  Checking if any other skipped tests now pass...");
-  return run(
-    [
-      "cargo", "test", "--test", "node_compat",
-      ...filters, "--", "--nocapture", "--include-ignored",
-    ],
-    logfile,
-  );
-}
 
 /** Run a specific set of tests (by path/subtest) in a single cargo test invocation.
  *  Uses test-r's support for multiple filter arguments. */

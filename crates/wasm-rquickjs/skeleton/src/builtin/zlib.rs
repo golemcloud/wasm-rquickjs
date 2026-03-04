@@ -102,6 +102,12 @@ fn gzip_decompress_multi_member(data: &[u8]) -> Result<Vec<u8>, Option<String>> 
     }
 }
 
+fn read_to_vec<R: Read>(mut reader: R) -> Option<Vec<u8>> {
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).ok()?;
+    Some(output)
+}
+
 /// Returns `(Some(data), None)` on success, `(None, Some(msg))` on a data error
 /// with a specific message, or `(None, None)` on a generic failure.
 fn zlib_decompress_sync_impl(
@@ -118,28 +124,13 @@ fn zlib_decompress_sync_impl(
             Err(specific_msg) => return (None, specific_msg),
         }
         // Try zlib
-        let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(data));
-        let mut output = Vec::new();
-        match decoder.read_to_end(&mut output) {
-            Ok(_) => (Some(output), None),
-            Err(_) => (None, None),
-        }
+        (read_to_vec(flate2::read::ZlibDecoder::new(Cursor::new(data))), None)
     } else if window_bits < 0 {
         // raw deflate
-        let mut decoder = flate2::read::DeflateDecoder::new(Cursor::new(data));
-        let mut output = Vec::new();
-        match decoder.read_to_end(&mut output) {
-            Ok(_) => (Some(output), None),
-            Err(_) => (None, None),
-        }
+        (read_to_vec(flate2::read::DeflateDecoder::new(Cursor::new(data))), None)
     } else {
         // zlib format
-        let mut decoder = flate2::read::ZlibDecoder::new(Cursor::new(data));
-        let mut output = Vec::new();
-        match decoder.read_to_end(&mut output) {
-            Ok(_) => (Some(output), None),
-            Err(_) => (None, None),
-        }
+        (read_to_vec(flate2::read::ZlibDecoder::new(Cursor::new(data))), None)
     }
 }
 
@@ -167,9 +158,9 @@ fn brotli_decompress_sync_impl(data: &[u8]) -> Option<Vec<u8>> {
     Some(output)
 }
 
-fn parse_brotli_quality(params_json: &str) -> i32 {
-    if let Some(pos) = params_json.find("\"quality\"") {
-        let rest = &params_json[pos + 9..];
+fn parse_json_i32(params_json: &str, key: &str, default: i32) -> i32 {
+    if let Some(pos) = params_json.find(key) {
+        let rest = &params_json[pos + key.len()..];
         if let Some(colon) = rest.find(':') {
             let after_colon = rest[colon + 1..].trim_start();
             let num_str: String = after_colon
@@ -181,24 +172,15 @@ fn parse_brotli_quality(params_json: &str) -> i32 {
             }
         }
     }
-    11 // brotli default
+    default
+}
+
+fn parse_brotli_quality(params_json: &str) -> i32 {
+    parse_json_i32(params_json, "\"quality\"", 11)
 }
 
 fn parse_brotli_lgwin(params_json: &str) -> i32 {
-    if let Some(pos) = params_json.find("\"lgwin\"") {
-        let rest = &params_json[pos + 7..];
-        if let Some(colon) = rest.find(':') {
-            let after_colon = rest[colon + 1..].trim_start();
-            let num_str: String = after_colon
-                .chars()
-                .take_while(|c| c.is_ascii_digit() || *c == '-')
-                .collect();
-            if let Ok(v) = num_str.parse::<i32>() {
-                return v;
-            }
-        }
-    }
-    22 // brotli default
+    parse_json_i32(params_json, "\"lgwin\"", 22)
 }
 
 // ===== CRC32 impl =====
@@ -917,7 +899,7 @@ fn brotli_stream_push_impl(id: u32, data: &[u8], flush: u8) -> Option<Vec<u8>> {
                     // BROTLI_OPERATION_FLUSH — only flush when data has been written
                     c.flush().ok()?;
                 }
-                let output = c.get_mut().drain(..).collect();
+                let output = std::mem::take(c.get_mut());
                 Some(output)
             } else {
                 Some(Vec::new())

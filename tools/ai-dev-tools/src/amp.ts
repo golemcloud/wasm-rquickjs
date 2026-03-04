@@ -129,16 +129,10 @@ function formatToolUse(name: string, input: Record<string, unknown>): string {
       const q = truncLine(String(input.query ?? ""), 80);
       return `${icon} ${toolName} ${c.dim}${q}${c.reset}`;
     }
-    case "Task": {
-      const desc = truncLine(String(input.description ?? ""), 80);
-      return `${icon} ${toolName} ${c.blue}${desc}${c.reset}`;
-    }
-    case "oracle": {
-      const task = truncLine(String(input.task ?? ""), 80);
-      return `${icon} ${toolName} ${c.blue}${task}${c.reset}`;
-    }
+    case "Task":
+    case "oracle":
     case "librarian": {
-      const q = truncLine(String(input.query ?? ""), 80);
+      const q = truncLine(String(input.task ?? input.query ?? input.description ?? ""), 80);
       return `${icon} ${toolName} ${c.blue}${q}${c.reset}`;
     }
     case "apply_patch": {
@@ -479,13 +473,7 @@ export function classifyAmpResult(output: string): "FIXED" | "CANNOT_FIX" | "PAR
   for (const line of output.split("\n")) {
     const trimmed = line.trim();
     if (/^CANNOT_FIX\b/i.test(trimmed)) return "CANNOT_FIX";
-  }
-  for (const line of output.split("\n")) {
-    const trimmed = line.trim();
     if (/^FIXED\b/i.test(trimmed)) return "FIXED";
-  }
-  for (const line of output.split("\n")) {
-    const trimmed = line.trim();
     if (/^PARTIAL\b/i.test(trimmed)) return "PARTIAL";
   }
   return "UNCLEAR";

@@ -15,7 +15,6 @@ import {
   getSkippedTests,
   getTestCounts,
   runCategoryTests,
-  runCategoryTestsIncludeIgnored,
   runSingleTest,
   runSpecificTests,
   testPathToFilter,
@@ -24,6 +23,8 @@ import {
 } from "../tests.js";
 import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted, buildPrioritizePrompt, runAmpPrioritize, parsePrioritizeResult } from "../amp.js";
 import { commitProgress } from "../git.js";
+
+const CARGO_FAIL_RE = /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
 
 /** Revert all working tree changes including untracked files created by Amp. */
 function revertWorkspace(): void {
@@ -88,7 +89,7 @@ function extractFailingTests(output: string): FailingTest[] {
   // Match both formats:
   //   Finished test: node_compat::gen_node_compat_tests::parallel__test_foo_js  [FAILED]
   //   test gen_node_compat_tests::parallel__test_foo_js ... FAILED
-  const pattern = /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
+  const pattern = new RegExp(CARGO_FAIL_RE.source, CARGO_FAIL_RE.flags);
   const failingFilters = new Set<string>();
   let match: RegExpExecArray | null;
 
@@ -193,7 +194,7 @@ async function batchCheckSkippedTests(category: string, testsToCheck?: SkippedTe
   const { ok: batchOk, output } = await runSpecificTests(skipped, { includeIgnored: true });
 
   // Extract the set of failing filter names from the output
-  const pattern = /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
+  const pattern = new RegExp(CARGO_FAIL_RE.source, CARGO_FAIL_RE.flags);
   const failingFilters = new Set<string>();
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(output)) !== null) {

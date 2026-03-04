@@ -1,11 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { REPO_ROOT } from "../paths.js";
-import { enableTestInConfig, enableSubtestInConfig, loadConfig } from "../config.js";
+import { REPO_ROOT, CONFIG_PATH } from "../paths.js";
+import { enableTestInConfig, enableSubtestInConfig } from "../config.js";
 import * as jsonc from "jsonc-parser";
 
 const REPORT_PATH = path.join(REPO_ROOT, "tests", "node_compat", "report.md");
-const CONFIG_PATH = path.join(REPO_ROOT, "tests", "node_compat", "config.jsonc");
 
 const formattingOptions: jsonc.FormattingOptions = {
   insertSpaces: true,

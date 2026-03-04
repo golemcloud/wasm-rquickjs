@@ -259,10 +259,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         };
                         match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
                             Ok(result) => result,
-                            Err(_) => anyhow::bail!(
-                                "Test timed out after {}s",
-                                test_timeout_secs
-                            ),
+                            Err(_) => anyhow::bail!("Test timed out after {}s", test_timeout_secs),
                         }
                     })
                 },
@@ -336,32 +333,32 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         let source = source.clone();
                         let discovery_clone = discovery_clone.clone();
                         Box::pin(async move {
-                                let mut instance = TestInstance::from_prepared(&prepared).await?;
-                                instance.set_epoch_deadline(test_timeout_secs);
-                                setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                            let mut instance = TestInstance::from_prepared(&prepared).await?;
+                            instance.set_epoch_deadline(test_timeout_secs);
+                            setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                                // Rewrite the test file to isolate the target subtest
-                                let rewritten = match &discovery_clone {
-                                    Some(DiscoveryData::Block(blocks)) => {
-                                        rewrite_for_block(&source, blocks, subtest_index)
-                                    }
-                                    Some(DiscoveryData::NodeTest) => {
-                                        rewrite_for_node_test(&source, subtest_index)
-                                    }
-                                    None => source.clone(),
-                                };
+                            // Rewrite the test file to isolate the target subtest
+                            let rewritten = match &discovery_clone {
+                                Some(DiscoveryData::Block(blocks)) => {
+                                    rewrite_for_block(&source, blocks, subtest_index)
+                                }
+                                Some(DiscoveryData::NodeTest) => {
+                                    rewrite_for_node_test(&source, subtest_index)
+                                }
+                                None => source.clone(),
+                            };
 
-                                // Write the rewritten file to the temp dir
-                                let test_filename = path.rsplit('/').next().unwrap_or(&path);
-                                let suite = path.split('/').next().unwrap_or("parallel");
-                                let rewritten_path = instance
-                                    .temp_dir_path()
-                                    .join("test")
-                                    .join(suite)
-                                    .join(test_filename);
-                                fs::write(&rewritten_path, &rewritten)?;
+                            // Write the rewritten file to the temp dir
+                            let test_filename = path.rsplit('/').next().unwrap_or(&path);
+                            let suite = path.split('/').next().unwrap_or("parallel");
+                            let rewritten_path = instance
+                                .temp_dir_path()
+                                .join("test")
+                                .join(suite)
+                                .join(test_filename);
+                            fs::write(&rewritten_path, &rewritten)?;
 
-                                let guest_path = format!("/test/{}", path);
+                            let guest_path = format!("/test/{}", path);
                             let test_future = async {
                                 let (result, stdout, stderr) = instance
                                     .invoke_and_capture_output_with_stderr(
@@ -373,7 +370,8 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
                                 handle_test_result(result, &stdout, &stderr)
                             };
-                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
+                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await
+                            {
                                 Ok(result) => result,
                                 Err(_) => {
                                     let stdout = instance.read_stdout().unwrap_or_default();
@@ -384,7 +382,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                                         stdout.trim(),
                                         stderr.trim()
                                     )
-                                },
+                                }
                             }
                         })
                     },

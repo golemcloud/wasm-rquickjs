@@ -730,6 +730,12 @@ class ZlibBase extends Transform {
   }
 }
 
+function assertHandle(handle) {
+  if (handle === null || handle === undefined) {
+    throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
+  }
+}
+
 // ===== Zlib classes =====
 // Node.js zlib classes can be called with or without `new`.
 // ES6 classes can't be called without `new`, so we use a wrapper pattern:
@@ -750,9 +756,7 @@ class _Deflate extends ZlibBase {
   }
   _initHandle() {
     this._handle = zlib_stream_new(0, this._level, this._windowBits, this._memLevel, this._strategy);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -767,9 +771,7 @@ class _Inflate extends ZlibBase {
   }
   _initHandle() {
     this._handle = zlib_stream_new(1, 0, this._windowBits, 0, 0);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -786,9 +788,7 @@ class _Gzip extends ZlibBase {
   }
   _initHandle() {
     this._handle = zlib_stream_new(2, this._level, this._windowBits, this._memLevel, this._strategy);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -801,9 +801,7 @@ class _Gunzip extends ZlibBase {
   }
   _initHandle() {
     this._handle = zlib_stream_new(3, 0, 15, 0, 0);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -821,9 +819,7 @@ class _DeflateRaw extends ZlibBase {
   }
   _initHandle() {
     this._handle = zlib_stream_new(4, this._level, this._windowBits, this._memLevel, this._strategy);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -837,9 +833,7 @@ class _InflateRaw extends ZlibBase {
   }
   _initHandle() {
     this._handle = zlib_stream_new(5, 0, 15, 0, 0);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -852,9 +846,7 @@ class _Unzip extends ZlibBase {
   }
   _initHandle() {
     this._handle = zlib_stream_new(6, 0, 15, 0, 0);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -875,9 +867,7 @@ class _BrotliCompress extends ZlibBase {
     if (this._handle !== null) return;
     const paramsJson = brotliParamsToJson(this._brotliParams);
     this._handle = brotli_stream_new(0, paramsJson);
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
 }
 
@@ -892,9 +882,7 @@ class _BrotliDecompress extends ZlibBase {
   }
   _initHandle() {
     this._handle = brotli_stream_new(1, '{}');
-    if (this._handle === null || this._handle === undefined) {
-      throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
-    }
+    assertHandle(this._handle);
   }
   _flush(callback) {
     if (this._handle === null) {
@@ -967,15 +955,9 @@ function makeZlibWrapper(InternalClass) {
       // Inheritance pattern: Constructor.call(this, opts)
       // Create a proper instance and copy all own properties to this
       const instance = new InternalClass(opts);
-      const names = Object.getOwnPropertyNames(instance);
-      for (let i = 0; i < names.length; i++) {
-        Object.defineProperty(this, names[i],
-          Object.getOwnPropertyDescriptor(instance, names[i]));
-      }
-      const symbols = Object.getOwnPropertySymbols(instance);
-      for (let i = 0; i < symbols.length; i++) {
-        Object.defineProperty(this, symbols[i],
-          Object.getOwnPropertyDescriptor(instance, symbols[i]));
+      for (const key of Reflect.ownKeys(instance)) {
+        Object.defineProperty(this, key,
+          Object.getOwnPropertyDescriptor(instance, key));
       }
       return this;
     }

@@ -34,6 +34,21 @@ function editConfig(apply: (content: string) => string): void {
   fs.writeFileSync(CONFIG_PATH, apply(content));
 }
 
+function applyModify(content: string, jsonPath: jsonc.JSONPath, value: unknown, opts?: jsonc.ModificationOptions): string {
+  const edits = jsonc.modify(content, jsonPath, value, { formattingOptions, ...opts });
+  return jsonc.applyEdits(content, edits);
+}
+
+function insertionIndexForPrefix(categoryPrefix: string): (properties: string[]) => number {
+  return (properties) => {
+    let lastMatch = -1;
+    for (let i = 0; i < properties.length; i++) {
+      if (properties[i].startsWith(categoryPrefix)) lastMatch = i;
+    }
+    return lastMatch >= 0 ? lastMatch + 1 : properties.length;
+  };
+}
+
 export function loadConfig(): Config {
   const content = fs.readFileSync(CONFIG_PATH, "utf-8");
   return jsonc.parse(content) as Config;
@@ -53,17 +68,9 @@ export function addTestToConfigSkipped(
   const newValue: TestEntry = { skip: true, reason: clipReason(reason) };
 
   editConfig((content) => {
-    const edits = jsonc.modify(content, ["tests", testPath], newValue, {
-      formattingOptions,
-      getInsertionIndex: (properties) => {
-        let lastMatch = -1;
-        for (let i = 0; i < properties.length; i++) {
-          if (properties[i].startsWith(categoryPrefix)) lastMatch = i;
-        }
-        return lastMatch >= 0 ? lastMatch + 1 : properties.length;
-      },
+    return applyModify(content, ["tests", testPath], newValue, {
+      getInsertionIndex: insertionIndexForPrefix(categoryPrefix),
     });
-    return jsonc.applyEdits(content, edits);
   });
 
   console.log(`  Added "${testPath}" as skipped to config.jsonc`);
@@ -82,17 +89,9 @@ export function addTestsToConfigSkippedBatch(
   editConfig((content) => {
     let result = content;
     for (const testPath of testPaths) {
-      const edits = jsonc.modify(result, ["tests", testPath], newValue, {
-        formattingOptions,
-        getInsertionIndex: (properties) => {
-          let lastMatch = -1;
-          for (let i = 0; i < properties.length; i++) {
-            if (properties[i].startsWith(categoryPrefix)) lastMatch = i;
-          }
-          return lastMatch >= 0 ? lastMatch + 1 : properties.length;
-        },
+      result = applyModify(result, ["tests", testPath], newValue, {
+        getInsertionIndex: insertionIndexForPrefix(categoryPrefix),
       });
-      result = jsonc.applyEdits(result, edits);
     }
     return result;
   });
@@ -110,21 +109,17 @@ export function enableTestInConfig(testPath: string): void {
     if (entry?.split && entry?.subtests) {
       // Split entry: remove skip/reason but preserve split and subtests
       let result = content;
-      let edits = jsonc.modify(result, ["tests", testPath, "skip"], undefined, { formattingOptions });
-      result = jsonc.applyEdits(result, edits);
-      edits = jsonc.modify(result, ["tests", testPath, "reason"], undefined, { formattingOptions });
-      result = jsonc.applyEdits(result, edits);
+      result = applyModify(result, ["tests", testPath, "skip"], undefined);
+      result = applyModify(result, ["tests", testPath, "reason"], undefined);
       // Also clear skip on all subtests
       for (const subtestName of Object.keys(entry.subtests)) {
-        edits = jsonc.modify(result, ["tests", testPath, "subtests", subtestName], {}, { formattingOptions });
-        result = jsonc.applyEdits(result, edits);
+        result = applyModify(result, ["tests", testPath, "subtests", subtestName], {});
       }
       return result;
     }
 
     // Non-split: replace with empty object (existing behavior)
-    const edits = jsonc.modify(content, ["tests", testPath], {}, { formattingOptions });
-    return jsonc.applyEdits(content, edits);
+    return applyModify(content, ["tests", testPath], {});
   });
 
   console.log(`  Enabled "${testPath}" in config.jsonc`);
@@ -139,23 +134,19 @@ export function enableSubtestInConfig(testPath: string, subtestName: string): vo
     // If parent is skipped, lift the parent skip and explicitly skip all other subtests
     if (entry?.skip && entry?.subtests) {
       const parentReason = entry.reason ?? "no reason given";
-      let edits = jsonc.modify(result, ["tests", testPath, "skip"], undefined, { formattingOptions });
-      result = jsonc.applyEdits(result, edits);
-      edits = jsonc.modify(result, ["tests", testPath, "reason"], undefined, { formattingOptions });
-      result = jsonc.applyEdits(result, edits);
+      result = applyModify(result, ["tests", testPath, "skip"], undefined);
+      result = applyModify(result, ["tests", testPath, "reason"], undefined);
 
       for (const otherName of Object.keys(entry.subtests)) {
         if (otherName !== subtestName && !entry.subtests[otherName].skip) {
           const val: SubtestEntry = { skip: true, reason: parentReason };
-          edits = jsonc.modify(result, ["tests", testPath, "subtests", otherName], val, { formattingOptions });
-          result = jsonc.applyEdits(result, edits);
+          result = applyModify(result, ["tests", testPath, "subtests", otherName], val);
         }
       }
     }
 
     // Enable the target subtest
-    const edits = jsonc.modify(result, ["tests", testPath, "subtests", subtestName], {}, { formattingOptions });
-    return jsonc.applyEdits(result, edits);
+    return applyModify(result, ["tests", testPath, "subtests", subtestName], {});
   });
   console.log(`  Enabled subtest "${subtestName}" in "${testPath}"`);
 }
@@ -163,8 +154,7 @@ export function enableSubtestInConfig(testPath: string, subtestName: string): vo
 export function skipSubtestInConfig(testPath: string, subtestName: string, reason: string): void {
   const newValue: SubtestEntry = { skip: true, reason: clipReason(reason) };
   editConfig((content) => {
-    const edits = jsonc.modify(content, ["tests", testPath, "subtests", subtestName], newValue, { formattingOptions });
-    return jsonc.applyEdits(content, edits);
+    return applyModify(content, ["tests", testPath, "subtests", subtestName], newValue);
   });
   console.log(`  Skipped subtest "${subtestName}" in "${testPath}"`);
 }
@@ -173,12 +163,10 @@ export function addSplitTestToConfig(testPath: string, subtests: Record<string, 
   editConfig((content) => {
     let result = content;
     // Set split flag
-    let edits = jsonc.modify(result, ["tests", testPath, "split"], true, { formattingOptions });
-    result = jsonc.applyEdits(result, edits);
+    result = applyModify(result, ["tests", testPath, "split"], true);
     // Add each subtest
     for (const [name, entry] of Object.entries(subtests)) {
-      edits = jsonc.modify(result, ["tests", testPath, "subtests", name], entry, { formattingOptions });
-      result = jsonc.applyEdits(result, edits);
+      result = applyModify(result, ["tests", testPath, "subtests", name], entry);
     }
     return result;
   });
@@ -188,10 +176,8 @@ export function addSplitTestToConfig(testPath: string, subtests: Record<string, 
 export function updateSkipReason(testPath: string, newReason: string): void {
   editConfig((content) => {
     let result = content;
-    let edits = jsonc.modify(result, ["tests", testPath, "skip"], true, { formattingOptions });
-    result = jsonc.applyEdits(result, edits);
-    edits = jsonc.modify(result, ["tests", testPath, "reason"], clipReason(newReason), { formattingOptions });
-    result = jsonc.applyEdits(result, edits);
+    result = applyModify(result, ["tests", testPath, "skip"], true);
+    result = applyModify(result, ["tests", testPath, "reason"], clipReason(newReason));
     return result;
   });
 

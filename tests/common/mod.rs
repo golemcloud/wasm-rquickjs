@@ -238,9 +238,11 @@ impl PreparedComponent {
         // Start a background thread that increments the epoch every second,
         // enabling epoch-based interruption to enforce timeouts on spinning WASM.
         let epoch_engine = engine.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            epoch_engine.increment_epoch();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                epoch_engine.increment_epoch();
+            }
         });
         let mut linker: Linker<Host> = Linker::new(&engine);
 
