@@ -7188,7 +7188,7 @@
     "parallel/test-module-globalpaths-nodepath.js": {},
     "parallel/test-module-isBuiltin.js": {},
     "parallel/test-module-loading-error.js": {},
-    "parallel/test-module-loading-globalpaths.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-loading-globalpaths.js": { "skip": true, "reason": "[manual] This test requires `child_process.execFileSync` to spawn real Node.js child processes from copied binaries, testing module resolution from global paths (`$HOME/.node_modules`, `$HOME/.node..." },
     "parallel/test-module-main-extension-lookup.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-main-fail.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-main-preserve-symlinks-fail.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
