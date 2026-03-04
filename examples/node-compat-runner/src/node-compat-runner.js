@@ -139,7 +139,11 @@ export const runTest = async (testPath) => {
         if (testPath.endsWith('.mjs')) {
             await import(testPath);
         } else {
-            require(testPath);
+            // Use createRequire('/') so the test module gets parent: null,
+            // simulating Node.js's behavior when running a script directly
+            // (i.e., `node test.js` where module.parent is null).
+            var testRequire = require('node:module').createRequire('/');
+            testRequire(testPath);
         }
         // Await any pending async tests from node:test
         var testModule = require('node:test');

@@ -66,11 +66,11 @@ import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/bind
 // mirrors Node.js CJS/ESM interop behaviour.
 function cjsExport(ns) {
     if (!ns || ns.default === undefined) return ns;
-    var def = ns.default;
+    const def = ns.default;
     if (typeof def === 'function' || (typeof def === 'object' && def !== null)) {
-        var keys = Object.keys(ns);
-        for (var i = 0; i < keys.length; i++) {
-            var k = keys[i];
+        const keys = Object.keys(ns);
+        for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
             if (k !== 'default' && !(k in def)) {
                 def[k] = ns[k];
             }
@@ -78,6 +78,68 @@ function cjsExport(ns) {
     }
     return def;
 }
+
+// Precompute cjsExport results once per namespace to avoid redundant calls
+const pathCjs = cjsExport(pathModule);
+const pathPosixCjs = cjsExport(pathPosix);
+const pathWin32Cjs = cjsExport(pathWin32);
+const fsCjs = cjsExport(fsModule);
+const fsPromisesCjs = cjsExport(fsPromises);
+const utilCjs = cjsExport(util);
+const bufferCjs = cjsExport(buffer);
+const osCjs = cjsExport(os);
+const eventsCjs = cjsExport(events);
+const streamCjs = cjsExport(stream);
+const streamPromisesCjs = cjsExport(streamPromises);
+const streamConsumersCjs = cjsExport(streamConsumers);
+const streamWebCjs = cjsExport(streamWeb);
+const childProcessCjs = cjsExport(child_process);
+const stringDecoderCjs = cjsExport(string_decoder);
+const processCjs = cjsExport(processModule);
+const assertCjs = cjsExport(assert);
+const assertStrictCjs = cjsExport(assertStrict);
+const nodeTestCjs = cjsExport(nodeTest);
+const querystringCjs = cjsExport(querystring);
+const nodeUrlCjs = cjsExport(nodeUrl);
+const vmCjs = cjsExport(vm);
+const timersCjs = cjsExport(timers);
+const timersPromisesCjs = cjsExport(timersPromises);
+const consoleCjs = cjsExport(consoleMod);
+const asyncHooksCjs = cjsExport(async_hooks);
+const clusterCjs = cjsExport(cluster);
+const dgramCjs = cjsExport(dgram);
+const diagnosticsChannelCjs = cjsExport(diagnostics_channel);
+const dnsCjs = cjsExport(dns);
+const dnsPromisesCjs = cjsExport(dnsPromises);
+const domainCjs = cjsExport(domain);
+const httpCommonCjs = cjsExport(httpCommon);
+const httpCjs = cjsExport(http);
+const http2Cjs = cjsExport(http2);
+const httpsCjs = cjsExport(https);
+const netCjs = cjsExport(net);
+const perfHooksCjs = cjsExport(perf_hooks);
+const readlineCjs = cjsExport(readline);
+const readlinePromisesCjs = cjsExport(readlinePromises);
+const replCjs = cjsExport(repl);
+const traceEventsCjs = cjsExport(trace_events);
+const tlsCjs = cjsExport(tls);
+const ttyCjs = cjsExport(tty);
+const v8Cjs = cjsExport(v8);
+const workerThreadsCjs = cjsExport(worker_threads);
+const zlibCjs = cjsExport(zlib);
+const sqliteCjs = cjsExport(sqlite);
+const internalHttpCjs = cjsExport(internalHttp);
+const internalFsUtilsCjs = cjsExport(internalFsUtils);
+const internalUrlCjs = cjsExport(internalUrl);
+const internalErrorsCjs = cjsExport(internalErrors);
+const internalUtilCjs = cjsExport(internalUtil);
+const internalUtilDebuglogCjs = cjsExport(internalUtilDebuglog);
+const internalWebstreamsUtilCjs = cjsExport(internalWebstreamsUtil);
+const internalStreamsAddAbortSignalCjs = cjsExport(internalStreamsAddAbortSignal);
+const internalStreamsStateCjs = cjsExport(internalStreamsState);
+const internalTestBindingCjs = cjsExport(internalTestBinding);
+
+const utilTypes = (utilCjs && utilCjs.types) || {};
 
 const cryptoCjs = (() => {
     const out = {};
@@ -101,135 +163,100 @@ const cryptoCjs = (() => {
     return out;
 })();
 
-const builtinModules = {
-    'path': cjsExport(pathModule),
-    'node:path': cjsExport(pathModule),
-    'path/posix': cjsExport(pathPosix),
-    'node:path/posix': cjsExport(pathPosix),
-    'path/win32': cjsExport(pathWin32),
-    'node:path/win32': cjsExport(pathWin32),
-    'fs': cjsExport(fsModule),
-    'node:fs': cjsExport(fsModule),
-    'fs/promises': cjsExport(fsPromises),
-    'node:fs/promises': cjsExport(fsPromises),
-    'internal/fs/promises': cjsExport(fsPromises),
-    'util': cjsExport(util),
-    'node:util': cjsExport(util),
-    'sys': cjsExport(util),
-    'node:sys': cjsExport(util),
-    'buffer': cjsExport(buffer),
-    'node:buffer': cjsExport(buffer),
-    'os': cjsExport(os),
-    'node:os': cjsExport(os),
-    'events': cjsExport(events),
-    'node:events': cjsExport(events),
-    'stream': cjsExport(stream),
-    'node:stream': cjsExport(stream),
-    'stream/promises': cjsExport(streamPromises),
-    'node:stream/promises': cjsExport(streamPromises),
-    'stream/consumers': cjsExport(streamConsumers),
-    'node:stream/consumers': cjsExport(streamConsumers),
-    'stream/web': cjsExport(streamWeb),
-    'node:stream/web': cjsExport(streamWeb),
-    'crypto': cryptoCjs,
-    'node:crypto': cryptoCjs,
-    'child_process': cjsExport(child_process),
-    'node:child_process': cjsExport(child_process),
-    'string_decoder': cjsExport(string_decoder),
-    'node:string_decoder': cjsExport(string_decoder),
-    'process': cjsExport(processModule),
-    'node:process': cjsExport(processModule),
-    'assert': cjsExport(assert),
-    'node:assert': cjsExport(assert),
-    'assert/strict': cjsExport(assertStrict),
-    'node:assert/strict': cjsExport(assertStrict),
-    'test': cjsExport(nodeTest),
-    'node:test': cjsExport(nodeTest),
-    'querystring': cjsExport(querystring),
-    'node:querystring': cjsExport(querystring),
-    'url': cjsExport(nodeUrl),
-    'node:url': cjsExport(nodeUrl),
-    'vm': cjsExport(vm),
-    'node:vm': cjsExport(vm),
-    'timers': cjsExport(timers),
-    'node:timers': cjsExport(timers),
-    'timers/promises': cjsExport(timersPromises),
-    'node:timers/promises': cjsExport(timersPromises),
-    get 'console'() {
+// Build the builtin module map with both bare and node:-prefixed keys.
+// Helper to register a module under both 'name' and 'node:name'.
+function registerBuiltin(map, name, value) {
+    map[name] = value;
+    map['node:' + name] = value;
+}
+
+const builtinModuleMap = {};
+registerBuiltin(builtinModuleMap, 'path', pathCjs);
+registerBuiltin(builtinModuleMap, 'path/posix', pathPosixCjs);
+registerBuiltin(builtinModuleMap, 'path/win32', pathWin32Cjs);
+registerBuiltin(builtinModuleMap, 'fs', fsCjs);
+registerBuiltin(builtinModuleMap, 'fs/promises', fsPromisesCjs);
+builtinModuleMap['internal/fs/promises'] = fsPromisesCjs;
+registerBuiltin(builtinModuleMap, 'util', utilCjs);
+registerBuiltin(builtinModuleMap, 'sys', utilCjs);
+registerBuiltin(builtinModuleMap, 'buffer', bufferCjs);
+registerBuiltin(builtinModuleMap, 'os', osCjs);
+registerBuiltin(builtinModuleMap, 'events', eventsCjs);
+registerBuiltin(builtinModuleMap, 'stream', streamCjs);
+registerBuiltin(builtinModuleMap, 'stream/promises', streamPromisesCjs);
+registerBuiltin(builtinModuleMap, 'stream/consumers', streamConsumersCjs);
+registerBuiltin(builtinModuleMap, 'stream/web', streamWebCjs);
+registerBuiltin(builtinModuleMap, 'crypto', cryptoCjs);
+registerBuiltin(builtinModuleMap, 'child_process', childProcessCjs);
+registerBuiltin(builtinModuleMap, 'string_decoder', stringDecoderCjs);
+registerBuiltin(builtinModuleMap, 'process', processCjs);
+registerBuiltin(builtinModuleMap, 'assert', assertCjs);
+registerBuiltin(builtinModuleMap, 'assert/strict', assertStrictCjs);
+registerBuiltin(builtinModuleMap, 'test', nodeTestCjs);
+registerBuiltin(builtinModuleMap, 'querystring', querystringCjs);
+registerBuiltin(builtinModuleMap, 'url', nodeUrlCjs);
+registerBuiltin(builtinModuleMap, 'vm', vmCjs);
+registerBuiltin(builtinModuleMap, 'timers', timersCjs);
+registerBuiltin(builtinModuleMap, 'timers/promises', timersPromisesCjs);
+Object.defineProperty(builtinModuleMap, 'console', {
+    get() {
         const c = globalThis.console;
         if (c && consoleMod.Console) c.Console = consoleMod.Console;
-        return c || cjsExport(consoleMod);
+        return c || consoleCjs;
     },
-    get 'node:console'() {
-        return this['console'];
+    configurable: true,
+    enumerable: true,
+});
+Object.defineProperty(builtinModuleMap, 'node:console', {
+    get() {
+        return builtinModuleMap['console'];
     },
-    'async_hooks': cjsExport(async_hooks),
-    'node:async_hooks': cjsExport(async_hooks),
-    'cluster': cjsExport(cluster),
-    'node:cluster': cjsExport(cluster),
-    'dgram': cjsExport(dgram),
-    'node:dgram': cjsExport(dgram),
-    'diagnostics_channel': cjsExport(diagnostics_channel),
-    'node:diagnostics_channel': cjsExport(diagnostics_channel),
-    'dns': cjsExport(dns),
-    'node:dns': cjsExport(dns),
-    'dns/promises': cjsExport(dnsPromises),
-    'node:dns/promises': cjsExport(dnsPromises),
-    'domain': cjsExport(domain),
-    'node:domain': cjsExport(domain),
-    '_http_common': cjsExport(httpCommon),
-    'node:_http_common': cjsExport(httpCommon),
-    'http': cjsExport(http),
-    'node:http': cjsExport(http),
-    'http2': cjsExport(http2),
-    'node:http2': cjsExport(http2),
-    'https': cjsExport(https),
-    'node:https': cjsExport(https),
-    'net': cjsExport(net),
-    'node:net': cjsExport(net),
-    'perf_hooks': cjsExport(perf_hooks),
-    'node:perf_hooks': cjsExport(perf_hooks),
-    'readline': cjsExport(readline),
-    'node:readline': cjsExport(readline),
-    'readline/promises': cjsExport(readlinePromises),
-    'node:readline/promises': cjsExport(readlinePromises),
-    'repl': cjsExport(repl),
-    'node:repl': cjsExport(repl),
-    'tls': cjsExport(tls),
-    'node:tls': cjsExport(tls),
-    'trace_events': cjsExport(trace_events),
-    'node:trace_events': cjsExport(trace_events),
-    'tty': cjsExport(tty),
-    'node:tty': cjsExport(tty),
-    'v8': cjsExport(v8),
-    'node:v8': cjsExport(v8),
-    'worker_threads': cjsExport(worker_threads),
-    'node:worker_threads': cjsExport(worker_threads),
-    'zlib': cjsExport(zlib),
-    'node:zlib': cjsExport(zlib),
-    'node:sqlite': cjsExport(sqlite),
-    'util/types': (cjsExport(util) && cjsExport(util).types) || {},
-    'node:util/types': (cjsExport(util) && cjsExport(util).types) || {},
-    '_stream_readable': cjsExport(stream) && cjsExport(stream).Readable,
-    '_stream_writable': cjsExport(stream) && cjsExport(stream).Writable,
-    '_stream_duplex': cjsExport(stream) && cjsExport(stream).Duplex,
-    '_stream_transform': cjsExport(stream) && cjsExport(stream).Transform,
-    '_stream_passthrough': cjsExport(stream) && cjsExport(stream).PassThrough,
-    'internal/http': cjsExport(internalHttp),
-    'internal/fs/utils': cjsExport(internalFsUtils),
-    'internal/url': cjsExport(internalUrl),
-    'internal/errors': cjsExport(internalErrors),
-    'internal/util': cjsExport(internalUtil),
-    'internal/util/debuglog': cjsExport(internalUtilDebuglog),
-    'internal/webstreams/util': cjsExport(internalWebstreamsUtil),
-    'internal/streams/add-abort-signal': cjsExport(internalStreamsAddAbortSignal),
-    'internal/streams/state': cjsExport(internalStreamsState),
-    'internal/test/binding': cjsExport(internalTestBinding),
-};
+    configurable: true,
+    enumerable: true,
+});
+registerBuiltin(builtinModuleMap, 'async_hooks', asyncHooksCjs);
+registerBuiltin(builtinModuleMap, 'cluster', clusterCjs);
+registerBuiltin(builtinModuleMap, 'dgram', dgramCjs);
+registerBuiltin(builtinModuleMap, 'diagnostics_channel', diagnosticsChannelCjs);
+registerBuiltin(builtinModuleMap, 'dns', dnsCjs);
+registerBuiltin(builtinModuleMap, 'dns/promises', dnsPromisesCjs);
+registerBuiltin(builtinModuleMap, 'domain', domainCjs);
+registerBuiltin(builtinModuleMap, '_http_common', httpCommonCjs);
+registerBuiltin(builtinModuleMap, 'http', httpCjs);
+registerBuiltin(builtinModuleMap, 'http2', http2Cjs);
+registerBuiltin(builtinModuleMap, 'https', httpsCjs);
+registerBuiltin(builtinModuleMap, 'net', netCjs);
+registerBuiltin(builtinModuleMap, 'perf_hooks', perfHooksCjs);
+registerBuiltin(builtinModuleMap, 'readline', readlineCjs);
+registerBuiltin(builtinModuleMap, 'readline/promises', readlinePromisesCjs);
+registerBuiltin(builtinModuleMap, 'repl', replCjs);
+registerBuiltin(builtinModuleMap, 'tls', tlsCjs);
+registerBuiltin(builtinModuleMap, 'trace_events', traceEventsCjs);
+registerBuiltin(builtinModuleMap, 'tty', ttyCjs);
+registerBuiltin(builtinModuleMap, 'v8', v8Cjs);
+registerBuiltin(builtinModuleMap, 'worker_threads', workerThreadsCjs);
+registerBuiltin(builtinModuleMap, 'zlib', zlibCjs);
+builtinModuleMap['node:sqlite'] = sqliteCjs;
+registerBuiltin(builtinModuleMap, 'util/types', utilTypes);
+builtinModuleMap['_stream_readable'] = streamCjs && streamCjs.Readable;
+builtinModuleMap['_stream_writable'] = streamCjs && streamCjs.Writable;
+builtinModuleMap['_stream_duplex'] = streamCjs && streamCjs.Duplex;
+builtinModuleMap['_stream_transform'] = streamCjs && streamCjs.Transform;
+builtinModuleMap['_stream_passthrough'] = streamCjs && streamCjs.PassThrough;
+builtinModuleMap['internal/http'] = internalHttpCjs;
+builtinModuleMap['internal/fs/utils'] = internalFsUtilsCjs;
+builtinModuleMap['internal/url'] = internalUrlCjs;
+builtinModuleMap['internal/errors'] = internalErrorsCjs;
+builtinModuleMap['internal/util'] = internalUtilCjs;
+builtinModuleMap['internal/util/debuglog'] = internalUtilDebuglogCjs;
+builtinModuleMap['internal/webstreams/util'] = internalWebstreamsUtilCjs;
+builtinModuleMap['internal/streams/add-abort-signal'] = internalStreamsAddAbortSignalCjs;
+builtinModuleMap['internal/streams/state'] = internalStreamsStateCjs;
+builtinModuleMap['internal/test/binding'] = internalTestBindingCjs;
 
 // Self-reference will be added after the module object is created (see bottom of file)
 
-const builtinModuleNames = Object.keys(builtinModules).filter(
+const builtinModuleNames = Object.keys(builtinModuleMap).filter(
     (name) => !name.startsWith('node:') && !name.startsWith('internal/') && !name.startsWith('_')
 );
 
@@ -239,8 +266,8 @@ const schemelessBlockList = new Set(['test', 'sqlite']);
 // Build public module ID sets matching Node.js semantics
 const publicBuiltinIdSet = new Set();
 const publicBuiltinWithoutSchemeSet = new Set();
-for (var _i = 0; _i < builtinModuleNames.length; _i++) {
-    var _name = builtinModuleNames[_i];
+for (let _i = 0; _i < builtinModuleNames.length; _i++) {
+    const _name = builtinModuleNames[_i];
     if (_name.startsWith('internal/')) continue;
     if (_name.startsWith('node:')) continue;
     if (_name.startsWith('__wasm_rquickjs_builtin')) continue;
@@ -271,11 +298,11 @@ function tryReadFile(filename) {
 }
 
 // Shared require.extensions registry (mirrors Node.js Module._extensions)
-var requireExtensions = Object.create(null);
+const requireExtensions = Object.create(null);
 requireExtensions['.js'] = function _defaultJs(mod, filename) { /* built-in */ };
 requireExtensions['.json'] = function _defaultJson(mod, filename) { /* built-in */ };
 requireExtensions['.node'] = function _defaultNode(mod, filename) { /* built-in */ };
-var _defaultExtHandlers = new Set([requireExtensions['.js'], requireExtensions['.json'], requireExtensions['.node']]);
+const _defaultExtHandlers = new Set([requireExtensions['.js'], requireExtensions['.json'], requireExtensions['.node']]);
 
 // Path cache (settable; used by tests to reset resolution state)
 var _pathCache = Object.create(null);
@@ -647,7 +674,7 @@ function loadModule(resolvedFilename, source, parentModule) {
 }
 
 // The root "main" module
-var mainModule = {
+const mainModule = {
     id: '.',
     filename: '/',
     path: '/',
@@ -721,7 +748,7 @@ function makeRequire(parentDir, parentModule) {
         }
 
         // Builtin modules
-        var builtin = builtinModules[id];
+        var builtin = builtinModuleMap[id];
         if (builtin !== undefined) {
             return builtin;
         }
@@ -777,7 +804,7 @@ function makeRequire(parentDir, parentModule) {
 }
 
 // The global require, rooted at '/'
-var globalRequire = makeRequire('/', mainModule);
+const globalRequire = makeRequire('/', mainModule);
 
 export function require(id) {
     return globalRequire(id);
@@ -822,8 +849,8 @@ export function isBuiltinModule(id) {
 }
 
 // "node_modules" reversed as char codes: s-e-l-u-d-o-m-_-e-d-o-n
-var nmChars = [115, 101, 108, 117, 100, 111, 109, 95, 101, 100, 111, 110];
-var nmLen = nmChars.length;
+const nmChars = [115, 101, 108, 117, 100, 111, 109, 95, 101, 100, 111, 110];
+const nmLen = nmChars.length;
 
 function _nodeModulePaths(from) {
     from = pathModule.resolve(from);
@@ -958,7 +985,7 @@ function runMain() {
     }
 }
 
-var moduleExports = {
+const moduleExports = {
     require: globalRequire,
     createRequire,
     builtinModules: builtinModuleNames,
@@ -977,7 +1004,7 @@ var moduleExports = {
 };
 
 // Add self-reference so require('module') works
-builtinModules['module'] = moduleExports;
-builtinModules['node:module'] = moduleExports;
+builtinModuleMap['module'] = moduleExports;
+builtinModuleMap['node:module'] = moduleExports;
 
 export default moduleExports;
