@@ -8080,7 +8080,7 @@
     "parallel/test-runner-misc.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-mock-timers-date.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-mock-timers-scheduler.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-runner-mock-timers.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-mock-timers.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
     "parallel/test-runner-mocking.js": {
       "split": true,
       "subtests": {
