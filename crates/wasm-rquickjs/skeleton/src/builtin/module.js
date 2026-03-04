@@ -696,11 +696,46 @@ export function isBuiltinModule(id) {
     return isBuiltin(id);
 }
 
+// "node_modules" reversed as char codes: s-e-l-u-d-o-m-_-e-d-o-n
+var nmChars = [115, 101, 108, 117, 100, 111, 109, 95, 101, 100, 111, 110];
+var nmLen = nmChars.length;
+
+function _nodeModulePaths(from) {
+    from = pathModule.resolve(from);
+
+    if (from === '/') {
+        return ['/node_modules'];
+    }
+
+    var paths = [];
+    for (var i = from.length - 1, p = 0, last = from.length; i >= 0; --i) {
+        var code = from.charCodeAt(i);
+        if (code === 47) { // '/'
+            if (p !== nmLen) {
+                paths.push(from.slice(0, last) + '/node_modules');
+            }
+            last = i;
+            p = 0;
+        } else if (p !== -1) {
+            if (nmChars[p] === code) {
+                ++p;
+            } else {
+                p = -1;
+            }
+        }
+    }
+
+    paths.push('/node_modules');
+
+    return paths;
+}
+
 var moduleExports = {
     require: globalRequire,
     createRequire,
     builtinModules: builtinModuleNames,
     isBuiltin: isBuiltinModule,
+    _nodeModulePaths: _nodeModulePaths,
 };
 
 // Add self-reference so require('module') works
