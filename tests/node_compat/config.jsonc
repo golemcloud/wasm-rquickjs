@@ -7193,17 +7193,15 @@
     "parallel/test-module-main-fail.js": {},
     "parallel/test-module-main-preserve-symlinks-fail.js": {},
     "parallel/test-module-multi-extensions.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_block_06": {}
       }
     },
     "parallel/test-module-nodemodulepaths.js": {},

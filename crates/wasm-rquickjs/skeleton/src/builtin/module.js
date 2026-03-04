@@ -270,6 +270,29 @@ function tryReadFile(filename) {
     }
 }
 
+// Shared require.extensions registry (mirrors Node.js Module._extensions)
+var requireExtensions = Object.create(null);
+requireExtensions['.js'] = function _defaultJs(mod, filename) { /* built-in */ };
+requireExtensions['.json'] = function _defaultJson(mod, filename) { /* built-in */ };
+requireExtensions['.node'] = function _defaultNode(mod, filename) { /* built-in */ };
+var _defaultExtHandlers = new Set([requireExtensions['.js'], requireExtensions['.json'], requireExtensions['.node']]);
+
+// Path cache (settable; used by tests to reset resolution state)
+var _pathCache = Object.create(null);
+
+function findLongestRegisteredExtension(filename) {
+    var name = pathModule.basename(filename);
+    var startIndex = 0;
+    var index;
+    while ((index = name.indexOf('.', startIndex)) !== -1) {
+        startIndex = index + 1;
+        if (index === 0) continue; // Skip leading dot (dotfiles)
+        var ext = name.slice(index);
+        if (requireExtensions[ext]) return ext;
+    }
+    return '.js';
+}
+
 function resolveFilename(id, parentDir) {
     var candidate;
     if (pathModule.isAbsolute(id)) {
@@ -278,20 +301,29 @@ function resolveFilename(id, parentDir) {
         candidate = pathModule.resolve(parentDir, id);
     }
 
-    // Try: exact path, .js, .json, /index.js, /index.json
-    var candidates = [
-        candidate,
-        candidate + '.js',
-        candidate + '.json',
-        pathModule.join(candidate, 'index.js'),
-        pathModule.join(candidate, 'index.json'),
-    ];
+    // Try exact path
+    var content = tryReadFile(candidate);
+    if (content !== null) {
+        return { filename: candidate, content: content };
+    }
 
-    for (var i = 0; i < candidates.length; i++) {
-        var content = tryReadFile(candidates[i]);
+    // Try with each registered extension
+    var exts = Object.keys(requireExtensions);
+    for (var i = 0; i < exts.length; i++) {
+        content = tryReadFile(candidate + exts[i]);
         if (content !== null) {
-            return { filename: candidates[i], content: content };
+            return { filename: candidate + exts[i], content: content };
         }
+    }
+
+    // Try as directory: index.js, index.json
+    content = tryReadFile(pathModule.join(candidate, 'index.js'));
+    if (content !== null) {
+        return { filename: pathModule.join(candidate, 'index.js'), content: content };
+    }
+    content = tryReadFile(pathModule.join(candidate, 'index.json'));
+    if (content !== null) {
+        return { filename: pathModule.join(candidate, 'index.json'), content: content };
     }
 
     var err = new Error("Cannot find module '" + id + "' from '" + parentDir + "'");
@@ -553,7 +585,17 @@ function loadModule(resolvedFilename, source, parentModule) {
         parentModule.children.push(mod);
     }
 
-    if (resolvedFilename.endsWith('.node')) {
+    // Check for custom extension handler
+    var ext = findLongestRegisteredExtension(resolvedFilename);
+    var handler = requireExtensions[ext];
+    if (handler && !_defaultExtHandlers.has(handler)) {
+        try {
+            handler(mod, resolvedFilename);
+        } catch (err) {
+            delete moduleCache[resolvedFilename];
+            throw err;
+        }
+    } else if (resolvedFilename.endsWith('.node')) {
         delete moduleCache[resolvedFilename];
         throw new Error("Native .node modules are not supported in WASM: '" + resolvedFilename + "'");
     } else if (resolvedFilename.endsWith('.json')) {
@@ -695,6 +737,7 @@ function makeRequire(parentDir, parentModule) {
     }
 
     localRequire.cache = moduleCache;
+    localRequire.extensions = requireExtensions;
 
     localRequire.resolve = function resolve(id) {
         if (isBuiltin(id)) {
@@ -846,6 +889,8 @@ var moduleExports = {
     isBuiltin: isBuiltinModule,
     _nodeModulePaths: _nodeModulePaths,
     _initPaths: _initPaths,
+    _pathCache: _pathCache,
+    _extensions: requireExtensions,
     globalPaths: globalPaths,
     setSourceMapsSupport,
 };
