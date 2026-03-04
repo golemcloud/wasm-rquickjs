@@ -809,12 +809,36 @@ function setSourceMapsSupport(enabled, options) {
     }
 }
 
+var globalPaths = [];
+
+function _initPaths() {
+    var nodePath = globalThis.process && globalThis.process.env && globalThis.process.env.NODE_PATH;
+    var paths = [];
+    if (nodePath) {
+        var parts = nodePath.split(':');
+        for (var i = 0; i < parts.length; i++) {
+            var p = parts[i].trim();
+            if (p.length > 0) {
+                paths.push(pathModule.resolve(p));
+            }
+        }
+    }
+    globalPaths.length = 0;
+    for (var j = 0; j < paths.length; j++) {
+        globalPaths.push(paths[j]);
+    }
+}
+
+_initPaths();
+
 var moduleExports = {
     require: globalRequire,
     createRequire,
     builtinModules: builtinModuleNames,
     isBuiltin: isBuiltinModule,
     _nodeModulePaths: _nodeModulePaths,
+    _initPaths: _initPaths,
+    globalPaths: globalPaths,
     setSourceMapsSupport,
 };
 
