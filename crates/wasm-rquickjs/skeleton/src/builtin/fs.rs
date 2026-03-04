@@ -210,6 +210,44 @@ fn apply_emulated_symlink_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>) {
     stat_obj.set("isSymlink", true).unwrap();
 }
 
+/// Resolve emulated symlinks in a path. For each component of the path, if
+/// the accumulated prefix is an emulated symlink, replace it with the target.
+/// This makes file operations transparent through emulated symlinks.
+#[cfg(not(unix))]
+fn resolve_emulated_symlinks(path: &str) -> String {
+    let symlinks = EMULATED_SYMLINKS.lock().unwrap();
+    if symlinks.is_empty() {
+        return path.to_string();
+    }
+
+    // Find the longest symlink prefix that matches
+    let mut best_prefix_len = 0;
+    let mut best_target: Option<&str> = None;
+
+    for (symlink_path, target) in symlinks.iter() {
+        let sp_len = symlink_path.len();
+        if sp_len > best_prefix_len {
+            if path == symlink_path.as_str() {
+                best_prefix_len = sp_len;
+                best_target = Some(target.as_str());
+            } else if path.len() > sp_len
+                && path.starts_with(symlink_path.as_str())
+                && path.as_bytes()[sp_len] == b'/'
+            {
+                best_prefix_len = sp_len;
+                best_target = Some(target.as_str());
+            }
+        }
+    }
+
+    if let Some(target) = best_target {
+        let suffix = &path[best_prefix_len..];
+        format!("{target}{suffix}")
+    } else {
+        path.to_string()
+    }
+}
+
 fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
     match err.kind() {
         std::io::ErrorKind::NotFound => ("ENOENT", -2, "no such file or directory"),
@@ -616,6 +654,12 @@ pub mod native_module {
         use std::io::{Seek, SeekFrom};
 
         let result = Object::new(ctx.clone()).unwrap();
+
+        #[cfg(not(unix))]
+        let fs_path = super::resolve_emulated_symlinks(&path);
+        #[cfg(unix)]
+        let fs_path = path.clone();
+
         let mut opts = OpenOptions::new();
 
         let read = flags & 2 != 0 || flags & 1 == 0; // O_RDWR or O_RDONLY
@@ -637,7 +681,7 @@ pub mod native_module {
             opts.append(true); // O_APPEND
         }
 
-        match opts.open(&path) {
+        match opts.open(&fs_path) {
             Ok(mut file) => {
                 // If O_APPEND, seek to end
                 if flags & 1024 != 0 {
@@ -890,7 +934,13 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_stat(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
-        match std::fs::metadata(&path) {
+
+        #[cfg(not(unix))]
+        let fs_path = super::resolve_emulated_symlinks(&path);
+        #[cfg(unix)]
+        let fs_path = path.clone();
+
+        match std::fs::metadata(&fs_path) {
             Ok(meta) => {
                 let stat_obj = super::metadata_to_obj(&ctx, &meta);
                 #[cfg(not(unix))]
@@ -916,7 +966,20 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_lstat(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
-        match std::fs::symlink_metadata(&path) {
+
+        // For lstat: if the path itself is an emulated symlink, use the
+        // original path (we'll mark it as symlink below). Otherwise resolve
+        // intermediate symlinks so paths through symlinks work.
+        #[cfg(not(unix))]
+        let fs_path = if super::get_emulated_symlink_target(&path).is_some() {
+            path.clone()
+        } else {
+            super::resolve_emulated_symlinks(&path)
+        };
+        #[cfg(unix)]
+        let fs_path = path.clone();
+
+        match std::fs::symlink_metadata(&fs_path) {
             Ok(meta) => {
                 let stat_obj = super::metadata_to_obj(&ctx, &meta);
                 #[cfg(not(unix))]
@@ -998,7 +1061,12 @@ pub mod native_module {
             return result;
         }
 
-        match std::fs::read_dir(&path) {
+        #[cfg(not(unix))]
+        let fs_path = super::resolve_emulated_symlinks(&path);
+        #[cfg(unix)]
+        let fs_path = path.clone();
+
+        match std::fs::read_dir(&fs_path) {
             Ok(entries) => {
                 let arr = Array::new(ctx.clone()).unwrap();
                 let mut idx = 0usize;
@@ -1043,8 +1111,13 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_access(ctx: Ctx<'_>, path: String, _mode: i32) -> Option<Object<'_>> {
+        #[cfg(not(unix))]
+        let fs_path = super::resolve_emulated_symlinks(&path);
+        #[cfg(unix)]
+        let fs_path = path.clone();
+
         // For WASI, just check if the path exists (and is accessible)
-        match std::fs::metadata(&path) {
+        match std::fs::metadata(&fs_path) {
             Ok(_) => None,
             Err(err) => Some(super::make_fs_error(&ctx, &err, "access", Some(&path))),
         }
@@ -1537,7 +1610,12 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_exists(path: String) -> bool {
-        std::path::Path::new(&path).exists()
+        #[cfg(not(unix))]
+        let fs_path = super::resolve_emulated_symlinks(&path);
+        #[cfg(unix)]
+        let fs_path = path;
+
+        std::path::Path::new(&fs_path).exists()
     }
 }
 

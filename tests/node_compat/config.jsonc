@@ -7232,7 +7232,7 @@
         "test_08_striptypescripttypes_source_map_when_mode_is_transform_and_s": {}
       }
     },
-    "parallel/test-module-symlinked-peer-modules.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-symlinked-peer-modules.js": {},
     "parallel/test-module-version.js": {},
     "parallel/test-module-wrap.js": {},
     "parallel/test-module-wrapper.js": { "skip": true, "reason": "[manual] The test requires `child_process.execFileSync` to spawn a new Node.js subprocess (`execFileSync(node, [cjsModuleWrapTest])`). Process spawning is fundamentally impossible in a WASM compone..." },
