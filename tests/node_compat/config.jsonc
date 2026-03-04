@@ -7208,7 +7208,7 @@
     "parallel/test-module-parent-deprecation.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-prototype-mutation.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-readonly.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-module-relative-lookup.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-relative-lookup.js": {},
     "parallel/test-module-run-main-monkey-patch.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-setsourcemapssupport.js": {
       "split": true,

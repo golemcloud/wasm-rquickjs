@@ -850,6 +850,44 @@ function _nodeModulePaths(from) {
     return paths;
 }
 
+function _resolveLookupPaths(request, parent) {
+    if (isBuiltinModule(request)) {
+        return null;
+    }
+
+    // Check if request is a relative path (starts with ./ or ../)
+    // On non-Windows, .\ is NOT a relative path separator
+    var isRelative = false;
+    if (request.length > 0 && request.charAt(0) === '.') {
+        if (request.length === 1) {
+            isRelative = true;
+        } else {
+            var second = request.charAt(1);
+            if (second === '/' || second === '.') {
+                isRelative = true;
+            }
+        }
+    }
+
+    if (!isRelative) {
+        var paths;
+        if (parent && parent.paths && parent.paths.length) {
+            paths = parent.paths.concat(globalPaths);
+        } else {
+            paths = globalPaths.slice();
+        }
+        return paths.length > 0 ? paths : null;
+    }
+
+    // Relative path with no parent
+    if (!parent || !parent.id || !parent.filename) {
+        return ['.'];
+    }
+
+    var parentDir = pathModule.dirname(parent.filename);
+    return [parentDir].concat(parent.paths || []);
+}
+
 function setSourceMapsSupport(enabled, options) {
     if (typeof enabled !== 'boolean') {
         throw new ERR_INVALID_ARG_TYPE('enabled', 'boolean', enabled);
@@ -883,6 +921,12 @@ function _initPaths() {
             }
         }
     }
+
+    var homeDir = (globalThis.process && globalThis.process.env && globalThis.process.env.HOME) || '/root';
+    paths.push(pathModule.resolve(homeDir, '.node_modules'));
+    paths.push(pathModule.resolve(homeDir, '.node_libraries'));
+    paths.push('/usr/local/lib/node');
+
     globalPaths.length = 0;
     for (var j = 0; j < paths.length; j++) {
         globalPaths.push(paths[j]);
@@ -899,6 +943,7 @@ var moduleExports = {
     wrap: wrap,
     wrapper: wrapper,
     _nodeModulePaths: _nodeModulePaths,
+    _resolveLookupPaths: _resolveLookupPaths,
     _initPaths: _initPaths,
     _pathCache: _pathCache,
     _extensions: requireExtensions,
