@@ -7205,7 +7205,7 @@
       }
     },
     "parallel/test-module-nodemodulepaths.js": {},
-    "parallel/test-module-parent-deprecation.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-parent-deprecation.js": {},
     "parallel/test-module-prototype-mutation.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-readonly.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-relative-lookup.js": {},
