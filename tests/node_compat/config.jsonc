@@ -7219,11 +7219,9 @@
     },
     "parallel/test-module-stat.js": {},
     "parallel/test-module-strip-types.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_striptypescripttypes": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_striptypescripttypes": {},
         "test_01_striptypescripttypes_explicit": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_02_striptypescripttypes_code_is_not_a_string": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_03_striptypescripttypes_invalid_mode": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
