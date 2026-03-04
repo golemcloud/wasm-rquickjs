@@ -114,6 +114,8 @@ const builtinModules = {
     'internal/fs/promises': cjsExport(fsPromises),
     'util': cjsExport(util),
     'node:util': cjsExport(util),
+    'sys': cjsExport(util),
+    'node:sys': cjsExport(util),
     'buffer': cjsExport(buffer),
     'node:buffer': cjsExport(buffer),
     'os': cjsExport(os),
@@ -228,8 +230,30 @@ const builtinModules = {
 
 const builtinModuleNames = Object.keys(builtinModules);
 
+// Modules that require the 'node:' prefix (cannot be required as bare specifiers)
+const schemelessBlockList = new Set(['test', 'sqlite']);
+
+// Build public module ID sets matching Node.js semantics
+const publicBuiltinIdSet = new Set();
+const publicBuiltinWithoutSchemeSet = new Set();
+for (var _i = 0; _i < builtinModuleNames.length; _i++) {
+    var _name = builtinModuleNames[_i];
+    if (_name.startsWith('internal/')) continue;
+    if (_name.startsWith('node:')) continue;
+    if (_name.startsWith('__wasm_rquickjs_builtin')) continue;
+    publicBuiltinIdSet.add(_name);
+    if (!schemelessBlockList.has(_name)) {
+        publicBuiltinWithoutSchemeSet.add(_name);
+    }
+}
+
 function isBuiltin(id) {
-    return builtinModules[id] !== undefined;
+    if (typeof id !== 'string') return false;
+    if (publicBuiltinWithoutSchemeSet.has(id)) return true;
+    if (id.startsWith('node:')) {
+        return publicBuiltinIdSet.has(id.slice(5));
+    }
+    return false;
 }
 
 // Module cache: resolved absolute path -> Module object

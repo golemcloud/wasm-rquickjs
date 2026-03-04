@@ -7188,7 +7188,7 @@
     },
     "parallel/test-module-create-require.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-globalpaths-nodepath.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-module-isBuiltin.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-isBuiltin.js": {},
     "parallel/test-module-loading-error.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-loading-globalpaths.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-main-extension-lookup.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
