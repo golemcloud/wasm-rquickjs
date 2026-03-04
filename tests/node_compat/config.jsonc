@@ -7225,7 +7225,7 @@
         "test_01_striptypescripttypes_explicit": {},
         "test_02_striptypescripttypes_code_is_not_a_string": {},
         "test_03_striptypescripttypes_invalid_mode": {},
-        "test_04_striptypescripttypes_sourcemap_throws_when_mode_is_strip": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_04_striptypescripttypes_sourcemap_throws_when_mode_is_strip": {},
         "test_05_striptypescripttypes_sourceurl_throws_when_mode_is_strip": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_06_striptypescripttypes_source_map_when_mode_is_transform": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_07_striptypescripttypes_source_map_when_mode_is_transform_and_s": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
