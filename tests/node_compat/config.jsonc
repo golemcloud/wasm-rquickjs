@@ -7228,7 +7228,7 @@
         "test_04_striptypescripttypes_sourcemap_throws_when_mode_is_strip": {},
         "test_05_striptypescripttypes_sourceurl_throws_when_mode_is_strip": {},
         "test_06_striptypescripttypes_source_map_when_mode_is_transform": {},
-        "test_07_striptypescripttypes_source_map_when_mode_is_transform_and_s": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_07_striptypescripttypes_source_map_when_mode_is_transform_and_s": {},
         "test_08_striptypescripttypes_source_map_when_mode_is_transform_and_s": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
