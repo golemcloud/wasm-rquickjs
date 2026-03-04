@@ -8196,7 +8196,7 @@
         "test_05_snapshots_from_multiple_files_isolation_none": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-runner-string-to-regexp.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-runner-string-to-regexp.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
     "parallel/test-runner-subtest-after-hook.js": {},
     "parallel/test-runner-test-filepath.js": {
       "split": true,
