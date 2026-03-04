@@ -48,6 +48,7 @@ import * as worker_threads from 'node:worker_threads';
 import * as zlib from 'node:zlib';
 import * as sqlite from 'node:sqlite';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
+import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
@@ -730,12 +731,32 @@ function _nodeModulePaths(from) {
     return paths;
 }
 
+function setSourceMapsSupport(enabled, options) {
+    if (typeof enabled !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('enabled', 'boolean', enabled);
+    }
+    if (options === undefined) {
+        options = {};
+    }
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+    }
+    var { nodeModules, generatedCode } = options;
+    if (nodeModules !== undefined && typeof nodeModules !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.nodeModules', 'boolean', nodeModules);
+    }
+    if (generatedCode !== undefined && typeof generatedCode !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.generatedCode', 'boolean', generatedCode);
+    }
+}
+
 var moduleExports = {
     require: globalRequire,
     createRequire,
     builtinModules: builtinModuleNames,
     isBuiltin: isBuiltinModule,
     _nodeModulePaths: _nodeModulePaths,
+    setSourceMapsSupport,
 };
 
 // Add self-reference so require('module') works
