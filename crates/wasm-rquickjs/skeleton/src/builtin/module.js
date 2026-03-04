@@ -935,6 +935,17 @@ function _initPaths() {
 
 _initPaths();
 
+function _stat(filename) {
+    try {
+        var st = fsModule.statSync(filename);
+        if (st.isDirectory()) return 1;
+        if (st.isFile()) return 0;
+        return -2;
+    } catch (e) {
+        return -2;
+    }
+}
+
 var moduleExports = {
     require: globalRequire,
     createRequire,
@@ -947,6 +958,7 @@ var moduleExports = {
     _initPaths: _initPaths,
     _pathCache: _pathCache,
     _extensions: requireExtensions,
+    _stat: _stat,
     globalPaths: globalPaths,
     setSourceMapsSupport,
 };

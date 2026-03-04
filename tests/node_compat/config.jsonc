@@ -7217,7 +7217,7 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-module-stat.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-stat.js": {},
     "parallel/test-module-strip-types.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
