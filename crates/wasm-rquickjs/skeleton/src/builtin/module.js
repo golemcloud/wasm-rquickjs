@@ -553,7 +553,10 @@ function loadModule(resolvedFilename, source, parentModule) {
         parentModule.children.push(mod);
     }
 
-    if (resolvedFilename.endsWith('.json')) {
+    if (resolvedFilename.endsWith('.node')) {
+        delete moduleCache[resolvedFilename];
+        throw new Error("Native .node modules are not supported in WASM: '" + resolvedFilename + "'");
+    } else if (resolvedFilename.endsWith('.json')) {
         try {
             mod.exports = JSON.parse(source);
         } catch (e) {
@@ -653,7 +656,12 @@ function resolveFromNodeModules(id, parentDir) {
 function makeRequire(parentDir, parentModule) {
     function localRequire(id) {
         if (typeof id !== 'string') {
-            throw new TypeError("The 'id' argument must be of type string. Received " + typeof id);
+            throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
+        }
+        if (id === '') {
+            var argErr = new TypeError("The argument 'id' must be a non-empty string. Received ''");
+            argErr.code = 'ERR_INVALID_ARG_VALUE';
+            throw argErr;
         }
 
         // Capture buffer.kMaxLength for zlib on first require (matches Node.js CJS capture-at-require semantics)
