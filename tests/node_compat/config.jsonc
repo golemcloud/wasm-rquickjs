@@ -7239,7 +7239,7 @@
       }
     },
     "parallel/test-module-symlinked-peer-modules.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-module-version.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-version.js": {},
     "parallel/test-module-wrap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-wrapper.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-navigator.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },

@@ -137,6 +137,7 @@ process.config = {
         v8_enable_i18n_support: 0,
         asan: 0,
         openssl_quic: 0,
+        node_module_version: 127,
     },
 };
 Object.freeze(process.config.target_defaults);
