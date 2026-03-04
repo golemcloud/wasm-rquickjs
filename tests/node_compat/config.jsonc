@@ -7190,7 +7190,7 @@
     "parallel/test-module-loading-error.js": {},
     "parallel/test-module-loading-globalpaths.js": { "skip": true, "reason": "[manual] This test requires `child_process.execFileSync` to spawn real Node.js child processes from copied binaries, testing module resolution from global paths (`$HOME/.node_modules`, `$HOME/.node..." },
     "parallel/test-module-main-extension-lookup.js": { "skip": true, "reason": "[manual] The test requires `child_process.execFileSync` to spawn new Node.js child processes, which is fundamentally impossible in a WebAssembly/WASI environment. Updated the skip reason in `config..." },
-    "parallel/test-module-main-fail.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-main-fail.js": {},
     "parallel/test-module-main-preserve-symlinks-fail.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-multi-extensions.js": {
       "skip": true,

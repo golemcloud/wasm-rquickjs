@@ -34,6 +34,10 @@ function formatErrorForStderr(err) {
         text = String(err);
     }
 
+    if (err && typeof err.code === 'string') {
+        text += ' {\n  code: \'' + err.code + '\'\n}';
+    }
+
     if (!text.endsWith('\n')) {
         text += '\n';
     }
@@ -1220,7 +1224,37 @@ export function spawn(command, args, options) {
 
 // Synchronous process creation functions
 export function execFileSync(file, args, options) {
-    throw createNotSupportedError('execFileSync');
+    var normalizedArgs = [];
+    var normalizedOptions = {};
+
+    if (Array.isArray(args)) {
+        normalizedArgs = args;
+        if (options && typeof options === 'object') {
+            normalizedOptions = options;
+        }
+    } else if (args && typeof args === 'object') {
+        normalizedOptions = args;
+    }
+
+    var result = spawnSync(file, normalizedArgs, normalizedOptions);
+
+    if (result.status !== 0) {
+        var err = new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
+        err.status = result.status;
+        err.signal = result.signal;
+        err.stdout = result.stdout;
+        err.stderr = result.stderr;
+        err.pid = result.pid;
+        err.output = result.output;
+        throw err;
+    }
+
+    var encoding = getOutputEncoding(normalizedOptions);
+    if (encoding && encoding !== 'buffer') {
+        return result.stdout ? result.stdout.toString(encoding) : '';
+    }
+
+    return result.stdout;
 }
 
 export function execSync(command, options) {
