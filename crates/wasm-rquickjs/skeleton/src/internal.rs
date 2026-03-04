@@ -1,7 +1,7 @@
 use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
 use rquickjs::function::{Args, Constructor};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, ScriptLoader};
+use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver, ScriptLoader};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
     Object, Promise, Value, async_with,
@@ -12,6 +12,147 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
+
+/// Resolver that strips `file://` URL prefixes so that `import('file:///path/to/mod.mjs')`
+/// resolves to the filesystem path `/path/to/mod.mjs`.
+struct FileUrlResolver;
+
+impl Resolver for FileUrlResolver {
+    fn resolve<'js>(&mut self, _ctx: &Ctx<'js>, _base: &str, name: &str) -> rquickjs::Result<String> {
+        if let Some(path) = name.strip_prefix("file://") {
+            Ok(path.to_string())
+        } else {
+            Err(Error::new_resolving(_base, name))
+        }
+    }
+}
+
+/// Resolver that handles bare specifier imports by walking up the directory tree
+/// looking for `node_modules/<name>/` directories, reading their `package.json`
+/// to find the entry point.
+struct NodeModulesResolver;
+
+impl NodeModulesResolver {
+    fn try_resolve(&self, base: &str, name: &str) -> Option<String> {
+        use std::path::{Path, PathBuf};
+
+        // Only handle bare specifiers (not relative, absolute, or URL)
+        if name.starts_with('.')
+            || name.starts_with('/')
+            || name.contains("://")
+        {
+            return None;
+        }
+
+        // Extract directory from base module path
+        let base_dir = Path::new(base).parent()?;
+
+        // Walk up directory tree looking for node_modules
+        let mut dir = base_dir.to_path_buf();
+        loop {
+            let nm_dir = dir.join("node_modules").join(name);
+            if nm_dir.is_dir() {
+                // Try package.json main field
+                let pkg_path = nm_dir.join("package.json");
+                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
+                    if let Some(main) = Self::extract_json_string_field(&pkg_content, "main") {
+                        // Try the main entry with various extensions
+                        let main_path = nm_dir.join(&main);
+                        let candidates = [
+                            main_path.clone(),
+                            main_path.with_extension("mjs"),
+                            main_path.with_extension("js"),
+                            main_path.join("index.mjs"),
+                            main_path.join("index.js"),
+                        ];
+                        for candidate in &candidates {
+                            if candidate.is_file() {
+                                return Some(candidate.to_string_lossy().into_owned());
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: index.mjs, index.js
+                let fallbacks: [PathBuf; 2] = [
+                    nm_dir.join("index.mjs"),
+                    nm_dir.join("index.js"),
+                ];
+                for fallback in &fallbacks {
+                    if fallback.is_file() {
+                        return Some(fallback.to_string_lossy().into_owned());
+                    }
+                }
+            }
+
+            if !dir.pop() {
+                break;
+            }
+        }
+
+        None
+    }
+
+    /// Extract a simple string field value from a JSON object string.
+    fn extract_json_string_field(json: &str, field: &str) -> Option<String> {
+        let pattern = format!("\"{}\"", field);
+        let idx = json.find(&pattern)?;
+        let after_key = &json[idx + pattern.len()..];
+        let after_colon = after_key.trim_start();
+        let after_colon = after_colon.strip_prefix(':')?;
+        let after_colon = after_colon.trim_start();
+        let after_colon = after_colon.strip_prefix('"')?;
+        let end = after_colon.find('"')?;
+        Some(after_colon[..end].to_string())
+    }
+}
+
+impl Resolver for NodeModulesResolver {
+    fn resolve<'js>(&mut self, _ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        self.try_resolve(base, name)
+            .ok_or_else(|| Error::new_resolving(base, name))
+    }
+}
+
+/// Loader that wraps CJS `.js` files in ESM-compatible wrappers when loaded via `import()`.
+/// This enables ESM modules to import CJS packages from `node_modules`.
+struct CjsCompatLoader;
+
+impl Loader for CjsCompatLoader {
+    fn load<'js>(&mut self, ctx: &Ctx<'js>, path: &str) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.ends_with(".js") {
+            return Err(Error::new_loading(path));
+        }
+
+        let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
+
+        // Detect CJS patterns
+        let is_cjs = source.contains("module.exports")
+            || source.contains("exports.")
+            || (source.contains("require(") && !source.contains("import "));
+
+        if !is_cjs {
+            // Treat as ESM
+            return Module::declare(ctx.clone(), path, source.as_bytes().to_vec());
+        }
+
+        // Wrap CJS source in ESM-compatible wrapper
+        let wrapped = format!(
+            r#"var module = {{ exports: {{}} }};
+var exports = module.exports;
+(function(module, exports) {{
+{}
+}})(module, exports);
+var __cjs_default = module.exports;
+export default __cjs_default;
+export var __esModule = __cjs_default && __cjs_default.__esModule;
+"#,
+            source
+        );
+
+        Module::declare(ctx.clone(), path, wrapped.as_bytes().to_vec())
+    }
+}
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
@@ -80,7 +221,7 @@ impl JsState {
                 .with_pattern("{}.js")
                 .with_pattern("{}.mjs");
 
-            let resolver = (builtin_resolver, file_resolver);
+            let resolver = (FileUrlResolver, builtin_resolver, NodeModulesResolver, file_resolver);
 
             let mut builtin_loader = BuiltinLoader::default()
                 .with_module(crate::JS_EXPORT_MODULE_NAME, crate::JS_EXPORT_MODULE);
@@ -92,6 +233,7 @@ impl JsState {
                 builtin_loader,
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
+                CjsCompatLoader,
                 ScriptLoader::default().with_extension("mjs"),
             );
 

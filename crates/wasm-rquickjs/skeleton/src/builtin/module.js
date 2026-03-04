@@ -668,7 +668,7 @@ function resolveFromNodeModules(id, parentDir) {
         if (pkgJson !== null) {
             try {
                 var pkg = JSON.parse(pkgJson);
-                if (typeof pkg.main === 'string') {
+                if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string') {
                     var mainPath = pathModule.resolve(candidate, pkg.main);
                     var mainCandidates = [
                         mainPath,
@@ -766,7 +766,12 @@ function makeRequire(parentDir, parentModule) {
         throw err;
     };
 
-    localRequire.main = mainModule;
+    Object.defineProperty(localRequire, 'main', {
+        value: mainModule,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+    });
 
     return localRequire;
 }
