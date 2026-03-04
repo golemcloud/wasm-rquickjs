@@ -8112,7 +8112,7 @@
         "test_19_mocked_constructors_report_thrown_errors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_20_mocks_a_function": {},
         "test_21_mocks_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_22_mocks_an_object_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_22_mocks_an_object_method": {},
         "test_23_mocks_a_getter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_24_mocks_a_setter": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_25_mocks_a_getter_with_syntax_sugar": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
