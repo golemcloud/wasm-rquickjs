@@ -7209,7 +7209,7 @@
     "parallel/test-module-prototype-mutation.js": {},
     "parallel/test-module-readonly.js": {},
     "parallel/test-module-relative-lookup.js": {},
-    "parallel/test-module-run-main-monkey-patch.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-run-main-monkey-patch.js": {},
     "parallel/test-module-setsourcemapssupport.js": {
       "split": true,
       "subtests": {

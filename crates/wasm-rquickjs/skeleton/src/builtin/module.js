@@ -951,6 +951,13 @@ function _stat(filename) {
     }
 }
 
+function runMain() {
+    var mainScript = process.argv[1];
+    if (mainScript) {
+        globalRequire(mainScript);
+    }
+}
+
 var moduleExports = {
     require: globalRequire,
     createRequire,
@@ -958,6 +965,7 @@ var moduleExports = {
     isBuiltin: isBuiltinModule,
     wrap: wrap,
     wrapper: wrapper,
+    runMain: runMain,
     _nodeModulePaths: _nodeModulePaths,
     _resolveLookupPaths: _resolveLookupPaths,
     _initPaths: _initPaths,

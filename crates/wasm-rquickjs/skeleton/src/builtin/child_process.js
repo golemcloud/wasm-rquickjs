@@ -121,7 +121,7 @@ function isInlineEvalOption(value) {
 }
 
 function execArgTakesValue(arg) {
-    return arg === '--openssl-config' || arg === '--input-type';
+    return arg === '--openssl-config' || arg === '--input-type' || arg === '--require' || arg === '-r';
 }
 
 function splitExecArgvAndInvocationArgs(args) {
@@ -579,6 +579,21 @@ function runInline(command, args, options) {
             }
         }
 
+        // Handle --require / -r preloading
+        for (var ri = 0; ri < execArgv.length; ri++) {
+            var ea = execArgv[ri];
+            if (ea === '--require' || ea === '-r') {
+                if (ri + 1 < execArgv.length) {
+                    ri++;
+                    var requirePath = execArgv[ri];
+                    if (!path.isAbsolute(requirePath)) {
+                        requirePath = path.resolve(childCwd, requirePath);
+                    }
+                    runtimeRequire(requirePath);
+                }
+            }
+        }
+
         if (invocationArgs.length >= 2 && isInlineEvalOption(invocationArgs[0])) {
             var savedModuleContext = globalThis.__wasm_rquickjs_current_module;
             var hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
@@ -630,7 +645,12 @@ function runInline(command, args, options) {
                 delete runtimeRequire.cache[scriptPath];
             }
 
-            runtimeRequire(scriptPath);
+            var moduleModule = runtimeRequire('module');
+            if (moduleModule && typeof moduleModule.runMain === 'function') {
+                moduleModule.runMain();
+            } else {
+                runtimeRequire(scriptPath);
+            }
         }
     } catch (err) {
         if (err && err.__isProcessExit) {
