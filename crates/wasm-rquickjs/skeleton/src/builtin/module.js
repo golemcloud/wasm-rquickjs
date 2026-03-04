@@ -542,6 +542,15 @@ function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
     err[arrowMessageSymbol] = arrowMessage;
 }
 
+var wrapper = [
+    '(function (exports, require, module, __filename, __dirname) { ',
+    '\n});'
+];
+
+function wrap(script) {
+    return wrapper[0] + script + wrapper[1];
+}
+
 function compileCjs(filename, source) {
     // Strip shebang
     if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
@@ -554,8 +563,8 @@ function compileCjs(filename, source) {
     var cjsLineOffsets = getCjsLineOffsetRegistry();
     cjsLineOffsets[filename] = 2;
 
-    return new Function('exports', 'require', 'module', '__filename', '__dirname',
-        source + '\n//# sourceURL=' + filename + '\n');
+    var wrappedSource = wrap(source + '\n//# sourceURL=' + filename + '\n');
+    return (0, eval)(wrappedSource);
 }
 
 function loadModule(resolvedFilename, source, parentModule) {
@@ -887,6 +896,8 @@ var moduleExports = {
     createRequire,
     builtinModules: builtinModuleNames,
     isBuiltin: isBuiltinModule,
+    wrap: wrap,
+    wrapper: wrapper,
     _nodeModulePaths: _nodeModulePaths,
     _initPaths: _initPaths,
     _pathCache: _pathCache,
