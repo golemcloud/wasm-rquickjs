@@ -528,7 +528,11 @@ function compileCjs(filename, source) {
 function loadModule(resolvedFilename, source, parentModule) {
     // Check cache
     if (moduleCache[resolvedFilename]) {
-        return moduleCache[resolvedFilename];
+        var cached = moduleCache[resolvedFilename];
+        if (parentModule && parentModule.children && !parentModule.children.includes(cached)) {
+            parentModule.children.push(cached);
+        }
+        return cached;
     }
 
     var mod = {
