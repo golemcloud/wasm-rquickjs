@@ -7237,7 +7237,7 @@
     "parallel/test-module-symlinked-peer-modules.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-module-version.js": {},
     "parallel/test-module-wrap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-module-wrapper.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-module-wrapper.js": { "skip": true, "reason": "[manual] The test requires `child_process.execFileSync` to spawn a new Node.js subprocess (`execFileSync(node, [cjsModuleWrapTest])`). Process spawning is fundamentally impossible in a WASM compone..." },
     "parallel/test-navigator.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-next-tick-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-next-tick-ordering.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
