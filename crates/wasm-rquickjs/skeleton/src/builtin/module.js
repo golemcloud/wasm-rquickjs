@@ -228,7 +228,9 @@ const builtinModules = {
 
 // Self-reference will be added after the module object is created (see bottom of file)
 
-const builtinModuleNames = Object.keys(builtinModules);
+const builtinModuleNames = Object.keys(builtinModules).filter(
+    (name) => !name.startsWith('node:') && !name.startsWith('internal/') && !name.startsWith('_')
+);
 
 // Modules that require the 'node:' prefix (cannot be required as bare specifiers)
 const schemelessBlockList = new Set(['test', 'sqlite']);
