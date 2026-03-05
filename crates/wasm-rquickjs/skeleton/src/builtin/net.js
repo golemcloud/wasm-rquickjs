@@ -269,6 +269,10 @@ Socket.prototype.connect = function connect(...args) {
         throw new ERR_OUT_OF_RANGE('options.autoSelectFamilyAttemptTimeout', '>= 1', options.autoSelectFamilyAttemptTimeout);
     }
 
+    if (options.path !== undefined && typeof options.path !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('options.path', 'string', options.path);
+    }
+
     if (options.path) {
         const ipcEntry = _ipcListeners[options.path];
         if (!ipcEntry) {
