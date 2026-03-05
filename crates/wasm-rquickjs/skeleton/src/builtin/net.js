@@ -612,6 +612,7 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                     }
 
                     this.push(null);
+                    this.read(0);
                     break;
                 }
                 this.bytesRead += chunk.length;
