@@ -3086,7 +3086,7 @@
       }
     },
     "parallel/test-net-socket-write-error.js": {},
-    "parallel/test-net-stream.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-stream.js": {},
     "parallel/test-net-sync-cork.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-throttle.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-timeout-no-handle.js": {},
