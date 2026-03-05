@@ -3056,7 +3056,7 @@
     "parallel/test-net-server-try-ports.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-server-unref-persistent.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-server-unref.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-settimeout.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-settimeout.js": {},
     "parallel/test-net-socket-byteswritten.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-socket-close-after-end.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-socket-connect-invalid-autoselectfamily.js": {},
