@@ -2888,7 +2888,7 @@
       "subtests": {
         "block_00_block_00": {},
         "block_01_block_01": {},
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires child_process" }
+        "block_02_block_02": {}
       }
     },
     "parallel/test-net-can-reset-timeout.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
