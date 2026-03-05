@@ -3001,7 +3001,7 @@
     "parallel/test-net-server-capture-rejection.js": { "skip": true, "reason": "requires captureRejections option" },
     "parallel/test-net-server-close-before-calling-lookup-callback.js": { "skip": true, "reason": "requires DNS lookup" },
     "parallel/test-net-server-close-before-ipc-response.js": { "skip": true, "reason": "requires cluster" },
-    "parallel/test-net-server-close.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-server-close.js": {},
     "parallel/test-net-server-drop-connections-in-cluster.js": { "skip": true, "reason": "requires cluster" },
     "parallel/test-net-server-drop-connections.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-server-keepalive.js": { "skip": true, "reason": "requires internal/test/binding" },
