@@ -290,6 +290,72 @@ Socket.prototype.connect = function connect(...args) {
         delete options.path;
     }
 
+    // Reset state for reconnection (Node.js allows calling connect() on a
+    // destroyed socket to reconnect)
+    if (this.destroyed) {
+        this._handle = null;
+        this._reading = false;
+        this._readToken++;
+        this.destroyed = false;
+        this.readable = true;
+        this._httpStatusProbeBuffer = '';
+
+        const rState = this._readableState;
+        if (rState) {
+            rState.destroyed = false;
+            rState.reading = false;
+            rState.ended = false;
+            rState.endEmitted = false;
+            rState.closed = false;
+            rState.closeEmitted = false;
+            rState.errored = null;
+            rState.errorEmitted = false;
+            rState.dataEmitted = false;
+            rState.flowing = null;
+            rState.needReadable = false;
+            rState.emittedReadable = false;
+            rState.resumeScheduled = false;
+            rState.awaitDrainWriters = null;
+            rState.multiAwaitDrain = false;
+            rState.buffer = new (rState.buffer.constructor)();
+            rState.length = 0;
+            rState.pipes = [];
+        }
+
+        const wState = this._writableState;
+        if (wState) {
+            wState.ended = false;
+            wState.ending = false;
+            wState.destroyed = false;
+            wState.finished = false;
+            wState.errorEmitted = false;
+            wState.closed = false;
+            wState.closeEmitted = false;
+            wState.errored = null;
+            wState.finalCalled = false;
+            wState.prefinished = false;
+            wState.writing = false;
+            wState.length = 0;
+            wState.needDrain = false;
+            wState.writecb = null;
+            wState.writelen = 0;
+            wState.afterWriteTickInfo = null;
+            wState.buffered = [];
+            wState.bufferedIndex = 0;
+            wState.pendingcb = 0;
+            wState.corked = 0;
+        }
+    }
+
+    // Reset write method if it was overridden (e.g., writeAfterFIN)
+    if (this.write !== Socket.prototype.write) {
+        this.write = Socket.prototype.write;
+    }
+
+    // Reset bytes counters for new connection
+    this.bytesRead = 0;
+    this._bytesDispatched = 0;
+
     this.connecting = true;
     this.writable = true;
 
