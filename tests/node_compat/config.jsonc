@@ -2891,7 +2891,7 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-net-can-reset-timeout.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-can-reset-timeout.js": {},
     "parallel/test-net-child-process-connect-reset.js": { "skip": true, "reason": "requires child_process" },
     "parallel/test-net-client-bind-twice.js": { "skip": true, "reason": "requires socket.connect with localAddress/localPort binding" },
     "parallel/test-net-connect-abort-controller.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
