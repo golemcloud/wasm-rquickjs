@@ -2897,7 +2897,7 @@
     "parallel/test-net-connect-abort-controller.js": {},
     "parallel/test-net-connect-after-destroy.js": {},
     "parallel/test-net-connect-buffer.js": {},
-    "parallel/test-net-connect-buffer2.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-connect-buffer2.js": {},
     "parallel/test-net-connect-call-socket-connect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-connect-destroy.js": {},
     "parallel/test-net-connect-immediate-destroy.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
