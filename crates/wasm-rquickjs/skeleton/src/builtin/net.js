@@ -408,6 +408,9 @@ Socket.prototype.connect = function connect(...args) {
         return err;
     };
 
+    const localAddress = options.localAddress;
+    const localPort = options.localPort;
+
     const connectAttempt = (ip, addressFamily, onResult) => {
         if (addressFamily === 6) {
             nextTick(onResult, createConnectError(ip));
@@ -418,6 +421,11 @@ Socket.prototype.connect = function connect(...args) {
 
         (async () => {
             try {
+                if (localAddress !== undefined || localPort !== undefined) {
+                    const bindAddr = localAddress || (addressFamily === 4 ? '0.0.0.0' : '::');
+                    const bindPort = localPort !== undefined ? localPort : 0;
+                    await handle.bind(bindAddr, bindPort);
+                }
                 await handle.connect(ip, port);
                 onResult(null, handle);
             } catch (e) {

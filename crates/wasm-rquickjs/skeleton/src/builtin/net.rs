@@ -116,6 +116,102 @@ impl TcpSocket {
         ))
     }
 
+    pub async fn bind(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
+        let ip = parse_ip_address(&addr).ok_or_else(|| {
+            throw_socket_error(
+                &ctx,
+                "EINVAL",
+                "bind",
+                &format!("Invalid address: {addr}"),
+            )
+        })?;
+        let sock_addr = ip_socket_address(ip, port as u16);
+
+        let start_gen = {
+            let inner = self.inner.borrow();
+            if inner.closed {
+                return Err(throw_socket_error(
+                    &ctx,
+                    "EBADF",
+                    "bind",
+                    "Socket is closed",
+                ));
+            }
+            inner.generation
+        };
+
+        // start_bind
+        {
+            let inner = self.inner.borrow();
+            let network = instance_network();
+            let socket = inner.socket.as_ref().ok_or_else(|| {
+                throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
+            })?;
+            socket.start_bind(&network, sock_addr).map_err(|e| {
+                throw_socket_error(
+                    &ctx,
+                    error_code_to_errno(e),
+                    "bind",
+                    &format!("bind failed: {e:?}"),
+                )
+            })?;
+        }
+
+        // Poll until finish_bind succeeds
+        loop {
+            let result = {
+                let inner = self.inner.borrow();
+                let socket = inner.socket.as_ref().ok_or_else(|| {
+                    throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
+                })?;
+                socket.finish_bind()
+            };
+            match result {
+                Ok(()) => break,
+                Err(ErrorCode::WouldBlock) => {
+                    let pollable = {
+                        let mut inner = self.inner.borrow_mut();
+                        let socket = inner.socket.as_ref().ok_or_else(|| {
+                            throw_socket_error(
+                                &ctx,
+                                "EBADF",
+                                "bind",
+                                "Socket was closed or reset",
+                            )
+                        })?;
+                        let pollable = socket.subscribe();
+                        inner.waiters += 1;
+                        pollable
+                    };
+                    AsyncPollable::new(pollable).wait_for().await;
+                    {
+                        let mut inner = self.inner.borrow_mut();
+                        inner.waiters -= 1;
+                        if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
+                            return Err(throw_socket_error(
+                                &ctx,
+                                "EBADF",
+                                "bind",
+                                "Socket was closed or reset",
+                            ));
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(throw_socket_error(
+                        &ctx,
+                        error_code_to_errno(e),
+                        "bind",
+                        &format!("bind failed: {e:?}"),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn connect(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
         let ip = parse_ip_address(&addr).ok_or_else(|| {
             throw_socket_error(
