@@ -316,5 +316,16 @@ export function internalBinding(name) {
         return contextifyTestBinding;
     }
 
+    if (name === "os") {
+        if (!globalThis.__wasm_rquickjs_internal_os_binding) {
+            globalThis.__wasm_rquickjs_internal_os_binding = {
+                getHomeDirectory(ctx) {
+                    // Default no-op; real implementation is in os.js
+                },
+            };
+        }
+        return globalThis.__wasm_rquickjs_internal_os_binding;
+    }
+
     throw new Error(`No such binding: ${name}`);
 }

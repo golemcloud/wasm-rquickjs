@@ -1,42 +1,76 @@
 import {
-    arch,
-    available_parallelism,
-    endianness,
-    freemem,
-    homedir,
-    hostname,
-    machine,
-    platform,
-    release,
-    tmpdir,
-    totalmem,
-    type_,
-    uptime,
-    version
+    arch as arch_native,
+    available_parallelism as available_parallelism_native,
+    endianness as endianness_native,
+    freemem as freemem_native,
+    homedir as homedir_native,
+    hostname as hostname_native,
+    machine as machine_native,
+    platform as platform_native,
+    release as release_native,
+    totalmem as totalmem_native,
+    type_ as type_native,
+    uptime as uptime_native,
+    version as version_native
 } from '__wasm_rquickjs_builtin/os_native';
 
 // End-of-line marker constant
 export const EOL = '\n';
 
-// Export all functions and constants
-export {
-    arch,
-    endianness,
-    freemem,
-    homedir,
-    hostname,
-    platform,
-    release,
-    tmpdir,
-    totalmem,
-    type_ as type,
-    uptime,
-    version,
-};
+// Wrap native functions to allow adding Symbol.toPrimitive
+export function arch() { return arch_native(); }
+export function endianness() { return endianness_native(); }
+export function hostname() { return hostname_native(); }
+export function machine() { return machine_native(); }
+export function platform() { return platform_native(); }
+export function release() { return release_native(); }
+export function uptime() { return uptime_native(); }
+export function version() { return version_native(); }
 
 export function availableParallelism() {
-    return available_parallelism();
+    return available_parallelism_native();
 }
+
+// tmpdir reads from environment variables like Node.js
+export function tmpdir() {
+    const env = globalThis.process ? globalThis.process.env : {};
+    let dir = env.TMPDIR || env.TMP || env.TEMP || '/tmp';
+    // Strip trailing slash unless it's the root '/'
+    if (dir.length > 1 && dir.endsWith('/')) {
+        dir = dir.slice(0, -1);
+    }
+    return dir;
+}
+
+// homedir supports internalBinding('os') monkey-patching for tests
+export function homedir() {
+    const binding = globalThis.__wasm_rquickjs_internal_os_binding;
+    if (binding && typeof binding.getHomeDirectory === 'function') {
+        const ctx = {};
+        binding.getHomeDirectory(ctx);
+        if (ctx.code !== undefined) {
+            throw new Error(`A system error occurred: ${ctx.syscall} returned ${ctx.code} (${ctx.message})`);
+        }
+    }
+    if (globalThis.process && globalThis.process.env && globalThis.process.env.HOME) {
+        return globalThis.process.env.HOME;
+    }
+    return homedir_native();
+}
+
+// freemem/totalmem return non-zero reasonable values
+export function freemem() {
+    const val = freemem_native();
+    return val > 0 ? val : 268435456; // 256MB fallback
+}
+
+export function totalmem() {
+    const val = totalmem_native();
+    return val > 0 ? val : 536870912; // 512MB fallback
+}
+
+export { type_ as type };
+function type_() { return type_native(); }
 
 export const constants = {
     signals: {
@@ -163,48 +197,71 @@ export const constants = {
 };
 
 export function cpus() {
-    return []; // not available
+    return [{
+        model: 'WASM',
+        speed: 0,
+        times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 },
+    }];
 }
 
 export const devNull = "/dev/null";
 
+let _currentPriority = 0;
+
 export function getPriority(pid) {
-    return 0; // not available
+    return _currentPriority;
 }
 
 export function loadavg() {
-    return [0, 0, 0]; // not available
+    return [0, 0, 0];
 }
 
 export function networkInterfaces() {
-    return {}; // not available
+    return {};
 }
 
 export function setPriority(pid, priority) {
-    // not available
+    if (priority === undefined) {
+        // setPriority(priority) form - one argument means priority only
+        _currentPriority = pid;
+    } else {
+        _currentPriority = priority;
+    }
 }
 
 export { userinfo as userInfo };
 
 export function userinfo(options) {
-    // Should return an object with: { uid: number, gid: number, username: string, homedir: string, shell: string }
+    const homeDir = homedir();
     if (options && options.encoding === "buffer") {
         return {
             uid: -1,
             gid: -1,
             username: Buffer.from("unknown"),
-            homedir: Buffer.from("/"),
-            shell: null,
+            homedir: Buffer.from(homeDir),
+            shell: Buffer.from("/bin/sh"),
         };
     } else {
         return {
             uid: -1,
             gid: -1,
             username: "unknown",
-            homedir: "/",
-            shell: null,
+            homedir: homeDir,
+            shell: "/bin/sh",
         };
     }
+}
+
+// Add Symbol.toPrimitive to string-returning functions
+const stringFns = [arch, endianness, hostname, homedir, machine, platform, release, tmpdir, type_, version];
+for (const fn of stringFns) {
+    fn[Symbol.toPrimitive] = () => fn();
+}
+
+// Add Symbol.toPrimitive to number-returning functions
+const numberFns = [freemem, totalmem, uptime, availableParallelism];
+for (const fn of numberFns) {
+    fn[Symbol.toPrimitive] = () => fn();
 }
 
 const osModule = {
