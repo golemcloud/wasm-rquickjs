@@ -7260,7 +7260,7 @@
     "parallel/test-openssl-ca-options.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-options-binding.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-os-checked-function.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-os-eol.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-os-eol.js": {},
     "parallel/test-os-homedir-no-envvar.js": {},
     "parallel/test-os-process-priority.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-os-userinfo-handles-getter-errors.js": {},

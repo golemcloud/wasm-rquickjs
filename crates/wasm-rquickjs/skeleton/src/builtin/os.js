@@ -207,8 +207,7 @@ export function userinfo(options) {
     }
 }
 
-export default {
-    EOL,
+const osModule = {
     arch,
     availableParallelism,
     constants,
@@ -233,3 +232,12 @@ export default {
     userinfo,
     version,
 };
+
+Object.defineProperty(osModule, 'EOL', {
+    configurable: true,
+    enumerable: true,
+    writable: false,
+    value: EOL,
+});
+
+export default osModule;
