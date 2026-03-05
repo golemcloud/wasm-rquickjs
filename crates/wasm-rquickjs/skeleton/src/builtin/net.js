@@ -954,6 +954,7 @@ Server.prototype.listen = function listen(...args) {
                 this._acceptLoop();
             } catch (e) {
                 const err = parseNativeError(e);
+                err.syscall = 'listen';
                 err.address = ip;
                 err.port = port;
                 this.emit('error', err);

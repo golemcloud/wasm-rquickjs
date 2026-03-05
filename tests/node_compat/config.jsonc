@@ -2860,7 +2860,7 @@
       }
     },
     "parallel/test-net-better-error-messages-listen-path.js": {},
-    "parallel/test-net-better-error-messages-listen.js": { "skip": true, "reason": "error message format mismatch" },
+    "parallel/test-net-better-error-messages-listen.js": {},
     "parallel/test-net-better-error-messages-path.js": {
       "skip": true,
       "reason": "requires Unix domain sockets (IPC path)",
