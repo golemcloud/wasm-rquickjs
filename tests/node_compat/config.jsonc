@@ -2870,7 +2870,7 @@
     },
     "parallel/test-net-better-error-messages-port-hostname.js": {},
     "parallel/test-net-binary.js": {},
-    "parallel/test-net-bind-twice.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-bind-twice.js": {},
     "parallel/test-net-blocklist.js": {
       "split": true,
       "subtests": {
