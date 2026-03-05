@@ -14,6 +14,13 @@ import {
     version as version_native
 } from '__wasm_rquickjs_builtin/os_native';
 
+import {
+    ERR_INVALID_ARG_TYPE,
+    ERR_OUT_OF_RANGE,
+    ERR_SYSTEM_ERROR,
+} from '__wasm_rquickjs_builtin/internal/errors';
+import { validateInt32 } from '__wasm_rquickjs_builtin/internal/validators';
+
 // End-of-line marker constant
 export const EOL = '\n';
 
@@ -206,10 +213,26 @@ export function cpus() {
 
 export const devNull = "/dev/null";
 
-let _currentPriority = 0;
+const _priorities = new Map();
 
 export function getPriority(pid) {
-    return _currentPriority;
+    if (pid !== undefined) {
+        validateInt32(pid, 'pid');
+    }
+
+    const id = (pid === undefined || pid === 0) ? 0 : pid;
+
+    // Simulate ESRCH for non-existent processes (pid 0 = current process is always valid)
+    if (id !== 0 && id !== (globalThis.process ? globalThis.process.pid : 0)) {
+        throw new ERR_SYSTEM_ERROR({
+            code: 'ESRCH',
+            syscall: 'uv_os_getpriority',
+            message: 'no such process',
+            errno: -3,
+        });
+    }
+
+    return _priorities.get(0) || 0;
 }
 
 export function loadavg() {
@@ -223,10 +246,12 @@ export function networkInterfaces() {
 export function setPriority(pid, priority) {
     if (priority === undefined) {
         // setPriority(priority) form - one argument means priority only
-        _currentPriority = pid;
-    } else {
-        _currentPriority = priority;
+        priority = pid;
+        pid = 0;
     }
+    validateInt32(pid, 'pid');
+    validateInt32(priority, 'priority', constants.priority.PRIORITY_HIGHEST, constants.priority.PRIORITY_LOW);
+    _priorities.set(0, priority);
 }
 
 export { userinfo as userInfo };

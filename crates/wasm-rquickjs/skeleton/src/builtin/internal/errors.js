@@ -866,6 +866,11 @@ export const ERR_FS_EISDIR = makeSystemErrorWithCode(
     "Path is a directory",
 );
 
+export const ERR_SYSTEM_ERROR = makeSystemErrorWithCode(
+    "ERR_SYSTEM_ERROR",
+    "A system error occurred",
+);
+
 export const ERR_FS_CP_DIR_TO_NON_DIR = makeSystemErrorWithCode('ERR_FS_CP_DIR_TO_NON_DIR',
     'Cannot overwrite directory with non-directory');
 export const ERR_FS_CP_EEXIST = makeSystemErrorWithCode('ERR_FS_CP_EEXIST', 'Target already exists');
@@ -1221,6 +1226,7 @@ export const codes = Object.freeze({
     ERR_STREAM_PUSH_AFTER_EOF,
     ERR_STREAM_UNSHIFT_AFTER_END_EVENT,
     ERR_STREAM_WRITE_AFTER_END,
+    ERR_SYSTEM_ERROR,
     ERR_UNAVAILABLE_DURING_EXIT,
     ERR_UNKNOWN_ENCODING,
 });
