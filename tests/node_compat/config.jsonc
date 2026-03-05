@@ -2883,7 +2883,7 @@
       }
     },
     "parallel/test-net-buffersize.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-bytes-read.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-bytes-read.js": {},
     "parallel/test-net-bytes-stats.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-bytes-written-large.js": {
       "skip": true,
