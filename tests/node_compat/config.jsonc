@@ -2900,7 +2900,7 @@
     "parallel/test-net-client-bind-twice.js": { "skip": true, "reason": "requires socket.connect with localAddress/localPort binding" },
     "parallel/test-net-connect-abort-controller.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-connect-after-destroy.js": {},
-    "parallel/test-net-connect-buffer.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-connect-buffer.js": {},
     "parallel/test-net-connect-buffer2.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-connect-call-socket-connect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-connect-destroy.js": {},

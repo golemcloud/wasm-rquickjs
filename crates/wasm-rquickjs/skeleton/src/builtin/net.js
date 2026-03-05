@@ -125,11 +125,10 @@ function Socket(options) {
     this._reading = false;
     this._readToken = 0;
     this.connecting = false;
-    this.pending = true;
     this._timeout = null;
     this._timeoutValue = 0;
     this.bytesRead = 0;
-    this.bytesWritten = 0;
+    this._bytesDispatched = 0;
     this.remoteAddress = undefined;
     this.remotePort = undefined;
     this.remoteFamily = undefined;
@@ -169,6 +168,27 @@ Object.defineProperty(Socket.prototype, 'bufferSize', {
     get() {
         return this.writableLength || 0;
     },
+});
+
+Object.defineProperty(Socket.prototype, 'pending', {
+    get() {
+        return !this._handle || this.connecting;
+    },
+    configurable: true,
+});
+
+Object.defineProperty(Socket.prototype, 'bytesWritten', {
+    get() {
+        let bytes = this._bytesDispatched;
+        if (this._writableState) {
+            bytes += this._writableState.length;
+        }
+        return bytes;
+    },
+    set(val) {
+        this._bytesDispatched = val;
+    },
+    configurable: true,
 });
 
 Object.defineProperty(Socket.prototype, 'readyState', {
@@ -281,7 +301,6 @@ Socket.prototype.connect = function connect(...args) {
     const completeConnection = (handle) => {
         this._handle = handle;
         this.connecting = false;
-        this.pending = false;
 
         try {
             const [ra, rp, rf] = this._handle.remote_address();
@@ -628,7 +647,7 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     (async () => {
         try {
             const written = await this._handle.write(byteArray);
-            this.bytesWritten += written;
+            this._bytesDispatched += written;
             this._resetTimeout();
             callback(null);
         } catch (e) {
@@ -1015,7 +1034,6 @@ Server.prototype._acceptLoop = function _acceptLoop() {
                     socket._handle = clientHandle;
                     socket.server = this;
                     socket.connecting = false;
-                    socket.pending = false;
                     socket.readable = true;
                     socket.writable = true;
                     socket.remoteAddress = addr;
