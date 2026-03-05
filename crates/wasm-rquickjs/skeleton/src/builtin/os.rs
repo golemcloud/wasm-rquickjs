@@ -58,29 +58,11 @@ pub mod native_module {
         "wasm-rquickjs".to_string()
     }
 
-    /// Returns the temporary directory path.
-    #[rquickjs::function]
-    pub fn tmpdir() -> String {
-        "/tmp".to_string()
-    }
-
     /// Returns the system uptime in seconds.
     #[rquickjs::function]
     pub fn uptime() -> f64 {
         let now_ns = wasi::clocks::monotonic_clock::now();
         (now_ns as f64) / 1_000_000_000.0
-    }
-
-    /// Returns the total system memory in bytes.
-    #[rquickjs::function]
-    pub fn totalmem() -> u64 {
-        0 // not available
-    }
-
-    /// Returns the free system memory in bytes.
-    #[rquickjs::function]
-    pub fn freemem() -> u64 {
-        0 // not available
     }
 
     /// Returns a string identifying the kernel version.

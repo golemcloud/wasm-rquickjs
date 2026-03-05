@@ -3075,7 +3075,7 @@
     "parallel/test-net-socket-reset-twice.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-socket-setnodelay.js": {},
     "parallel/test-net-socket-timeout-unref.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-socket-timeout.js": { "skip": true, "reason": "setTimeout validation works but test crashes in TCP server close (WASI resource drop issue)" },
+    "parallel/test-net-socket-timeout.js": {},
     "parallel/test-net-socket-write-after-close.js": {
       "skip": true,
       "reason": "net.js TCP implementation incomplete - needs event handling and API fixes",

@@ -2,23 +2,17 @@ import {
     arch as arch_native,
     available_parallelism as available_parallelism_native,
     endianness as endianness_native,
-    freemem as freemem_native,
     homedir as homedir_native,
     hostname as hostname_native,
     machine as machine_native,
     platform as platform_native,
     release as release_native,
-    totalmem as totalmem_native,
     type_ as type_native,
     uptime as uptime_native,
     version as version_native
 } from '__wasm_rquickjs_builtin/os_native';
 
-import {
-    ERR_INVALID_ARG_TYPE,
-    ERR_OUT_OF_RANGE,
-    ERR_SYSTEM_ERROR,
-} from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_SYSTEM_ERROR } from '__wasm_rquickjs_builtin/internal/errors';
 import { validateInt32 } from '__wasm_rquickjs_builtin/internal/validators';
 
 // End-of-line marker constant
@@ -26,7 +20,9 @@ export const EOL = '\n';
 
 // Wrap native functions to allow adding Symbol.toPrimitive
 export function arch() { return arch_native(); }
-export function endianness() { return endianness_native(); }
+
+const _endianness = endianness_native();
+export function endianness() { return _endianness; }
 export function hostname() { return hostname_native(); }
 export function machine() { return machine_native(); }
 export function platform() { return platform_native(); }
@@ -49,7 +45,8 @@ export function tmpdir() {
     return dir;
 }
 
-// homedir supports internalBinding('os') monkey-patching for tests
+// Must consult internalBinding('os').getHomeDirectory first so Node's
+// test-os-checked-function monkey-patch is observed even if HOME is set.
 export function homedir() {
     const binding = globalThis.__wasm_rquickjs_internal_os_binding;
     if (binding && typeof binding.getHomeDirectory === 'function') {
@@ -65,16 +62,9 @@ export function homedir() {
     return homedir_native();
 }
 
-// freemem/totalmem return non-zero reasonable values
-export function freemem() {
-    const val = freemem_native();
-    return val > 0 ? val : 268435456; // 256MB fallback
-}
-
-export function totalmem() {
-    const val = totalmem_native();
-    return val > 0 ? val : 536870912; // 512MB fallback
-}
+// WASI does not expose system memory info; return reasonable stub values
+export function freemem() { return 268435456; } // 256MB
+export function totalmem() { return 536870912; } // 512MB
 
 export { type_ as type };
 function type_() { return type_native(); }
