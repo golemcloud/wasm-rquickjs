@@ -3062,7 +3062,7 @@
     "parallel/test-net-socket-connect-invalid-autoselectfamily.js": {},
     "parallel/test-net-socket-connect-invalid-autoselectfamilyattempttimeout.js": {},
     "parallel/test-net-socket-connect-without-cb.js": {},
-    "parallel/test-net-socket-connecting.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-socket-connecting.js": {},
     "parallel/test-net-socket-constructor.js": { "skip": true, "reason": "requires cluster" },
     "parallel/test-net-socket-destroy-send.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-socket-destroy-twice.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },

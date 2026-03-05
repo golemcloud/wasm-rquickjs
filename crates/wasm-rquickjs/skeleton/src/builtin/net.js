@@ -191,6 +191,16 @@ Object.defineProperty(Socket.prototype, 'bytesWritten', {
     configurable: true,
 });
 
+Object.defineProperty(Socket.prototype, '_connecting', {
+    get() {
+        return this.connecting;
+    },
+    set(val) {
+        this.connecting = val;
+    },
+    configurable: true,
+});
+
 Object.defineProperty(Socket.prototype, 'readyState', {
     get() {
         if (this.connecting) return 'opening';
