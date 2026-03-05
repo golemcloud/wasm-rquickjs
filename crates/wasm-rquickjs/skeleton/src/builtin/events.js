@@ -723,6 +723,10 @@ EventEmitter.getEventListeners = function(emitterOrTarget, eventName) {
     if (typeof emitterOrTarget.listeners === 'function') {
         return emitterOrTarget.listeners(eventName);
     }
+    // EventTarget / AbortSignal support
+    if (emitterOrTarget._listeners && emitterOrTarget._listeners[eventName]) {
+        return emitterOrTarget._listeners[eventName].map(function(e) { return e.listener; });
+    }
     return [];
 };
 

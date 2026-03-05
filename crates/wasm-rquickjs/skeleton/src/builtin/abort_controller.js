@@ -68,10 +68,10 @@ class AbortSignal {
             err.code = 'ERR_ILLEGAL_CONSTRUCTOR';
             throw err;
         }
+        this._listeners = Object.create(null);
         signalState.set(this, {
             aborted: false,
             reason: undefined,
-            listeners: [],
             onabort: null,
         });
     }
@@ -152,22 +152,25 @@ class AbortSignal {
 
         if (type !== 'abort') return;
 
-        const state = getSignalState(this);
-        if (!state.listeners.find(l => l.listener === listener)) {
-            state.listeners.push({
+        if (!this._listeners[type]) {
+            this._listeners[type] = [];
+        }
+        if (!this._listeners[type].find(l => l.listener === listener)) {
+            this._listeners[type].push({
                 listener,
-                once: opts.once || false
+                capture: opts.capture || false,
+                once: opts.once || false,
             });
         }
     }
 
     removeEventListener(type, listener, options) {
-        if (!listener || type !== 'abort') return;
+        if (!listener || !this._listeners[type]) return;
 
-        const state = getSignalState(this);
-        const index = state.listeners.findIndex(l => l.listener === listener);
+        const capture = typeof options === 'boolean' ? options : !!(options && options.capture);
+        const index = this._listeners[type].findIndex(l => l.listener === listener && l.capture === capture);
         if (index !== -1) {
-            state.listeners.splice(index, 1);
+            this._listeners[type].splice(index, 1);
         }
     }
 
@@ -184,7 +187,10 @@ class AbortSignal {
             }
         }
 
-        const listenersToCall = [...state.listeners];
+        const entries = this._listeners[event.type];
+        if (!entries) return !event.defaultPrevented;
+
+        const listenersToCall = [...entries];
 
         for (const item of listenersToCall) {
             try {
@@ -194,9 +200,9 @@ class AbortSignal {
             }
 
             if (item.once) {
-                const index = state.listeners.indexOf(item);
+                const index = entries.indexOf(item);
                 if (index !== -1) {
-                    state.listeners.splice(index, 1);
+                    entries.splice(index, 1);
                 }
             }
         }
