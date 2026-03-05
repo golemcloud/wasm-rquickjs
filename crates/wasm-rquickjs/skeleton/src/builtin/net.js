@@ -2,6 +2,8 @@ import Duplex from '__wasm_rquickjs_builtin/internal/streams/duplex';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import dns from 'node:dns';
+import fs from 'node:fs';
+import pathModule from 'node:path';
 import { create_tcp_socket, create_tcp_listener } from '__wasm_rquickjs_builtin/net_native';
 import {
     ERR_INVALID_ARG_TYPE,
@@ -86,6 +88,9 @@ function nextTick(fn, ...args) {
     Promise.resolve().then(() => fn(...args));
 }
 
+// IPC path → TCP loopback mapping for in-process Unix socket emulation
+const _ipcListeners = {};
+
 function isIPAddress(addr) {
     if (!addr || typeof addr !== 'string') return false;
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(addr)) return true;
@@ -160,6 +165,12 @@ function writeAfterFIN(chunk, encoding, cb) {
 Object.setPrototypeOf(Socket.prototype, Duplex.prototype);
 Object.setPrototypeOf(Socket, Duplex);
 
+Object.defineProperty(Socket.prototype, 'bufferSize', {
+    get() {
+        return this.writableLength || 0;
+    },
+});
+
 Object.defineProperty(Socket.prototype, 'readyState', {
     get() {
         if (this.connecting) return 'opening';
@@ -229,7 +240,20 @@ Socket.prototype.connect = function connect(...args) {
     }
 
     if (options.path) {
-        throw makeError('ERR_SOCKET_BAD_TYPE', 'IPC sockets are not supported in WebAssembly');
+        const ipcEntry = _ipcListeners[options.path];
+        if (!ipcEntry) {
+            const ipcPath = options.path;
+            this.connecting = true;
+            nextTick(() => {
+                this.connecting = false;
+                const err = makeError('ENOENT', `connect ENOENT ${ipcPath}`);
+                this.destroy(err);
+            });
+            return this;
+        }
+        options.port = ipcEntry.port;
+        options.host = ipcEntry.host;
+        delete options.path;
     }
 
     this.connecting = true;
@@ -550,23 +574,21 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                 const chunk = await this._handle.read(16384);
                 if (token !== this._readToken) break;
                 if (chunk === null || chunk === undefined) {
-                    if (!this.allowHalfOpen) {
-                        if (!this.writableEnded) {
-                            this.end();
-                        }
+                    if (!this.allowHalfOpen && !this.writableEnded) {
+                        this.end();
+                    }
 
-                        if (!this.destroyed) {
-                            const destroyAfterTurn = () => {
-                                globalThis.setTimeout(() => {
-                                    if (!this.destroyed) this.destroy();
-                                }, 0);
-                            };
+                    if (!this.destroyed) {
+                        const destroyAfterTurn = () => {
+                            globalThis.setTimeout(() => {
+                                if (!this.destroyed) this.destroy();
+                            }, 0);
+                        };
 
-                            if (this.writableFinished || this.writable === false) {
-                                destroyAfterTurn();
-                            } else {
-                                this.once('finish', destroyAfterTurn);
-                            }
+                        if (this.writableFinished || this.writable === false) {
+                            destroyAfterTurn();
+                        } else {
+                            this.once('finish', destroyAfterTurn);
                         }
                     }
 
@@ -793,16 +815,81 @@ Server.prototype.listen = function listen(...args) {
         if (typeof args[idx] === 'number') {
             options.backlog = args[idx++];
         }
+        // Find callback among remaining args (handles undefined host/backlog)
+        while (idx < args.length && typeof args[idx] !== 'function') {
+            idx++;
+        }
         cb = args[idx];
     }
 
     // Node gives `port` precedence over `path` when both are present.
-    // WASM has no Unix-domain socket support, so emulate a minimal IPC
-    // listen lifecycle for tests that only observe `listening`/`close`.
+    // WASM has no Unix-domain socket support, so emulate IPC via TCP loopback.
     if (options.path && options.port === undefined) {
         this._ipcPath = options.path;
-        this.listening = true;
-        nextTick(() => this.emit('listening'));
+        const ipcPath = options.path;
+        const ipcBacklog = options.backlog || 511;
+
+        // Check for EADDRINUSE (path already in use by another server)
+        if (_ipcListeners[ipcPath]) {
+            nextTick(() => {
+                const err = makeError('EADDRINUSE', `listen EADDRINUSE: address already in use ${ipcPath}`);
+                err.address = ipcPath;
+                err.errno = errnoMap['EADDRINUSE'] || 0;
+                err.syscall = 'listen';
+                this.emit('error', err);
+            });
+            return this;
+        }
+
+        // Check that the parent directory exists
+        try {
+            const dir = pathModule.dirname(ipcPath);
+            fs.accessSync(dir);
+        } catch (_) {
+            nextTick(() => {
+                const err = makeError('ENOENT', `listen ENOENT: no such file or directory, listen '${ipcPath}'`);
+                err.address = ipcPath;
+                err.syscall = 'listen';
+                this.emit('error', err);
+            });
+            return this;
+        }
+
+        if (cb) this.once('listening', cb);
+
+        const doIpcListen = (ip, family) => {
+            (async () => {
+                try {
+                    this._handle = create_tcp_listener(family);
+                    await this._handle.bind(ip, 0);
+                    this._handle.set_backlog(ipcBacklog);
+                    await this._handle.listen();
+                    this.listening = true;
+                    this._accepting = true;
+                    this._closeRequested = false;
+
+                    const [, assignedPort] = this._handle.local_address();
+                    _ipcListeners[ipcPath] = { host: ip, port: assignedPort };
+
+                    // Create a placeholder file so fs.statSync works on the path
+                    try {
+                        let mode = 0o600;
+                        if (options.readableAll) mode |= 0o044;
+                        if (options.writableAll) mode |= 0o022;
+                        fs.writeFileSync(ipcPath, '');
+                        fs.chmodSync(ipcPath, mode);
+                    } catch (_) {}
+
+                    this.emit('listening');
+                    this._acceptLoop();
+                } catch (e) {
+                    const err = parseNativeError(e);
+                    err.address = ipcPath;
+                    this.emit('error', err);
+                }
+            })();
+        };
+        doIpcListen('127.0.0.1', 4);
         return this;
     }
 
@@ -926,6 +1013,7 @@ Server.prototype._acceptLoop = function _acceptLoop() {
 
                     const socket = new Socket({ allowHalfOpen: this.allowHalfOpen });
                     socket._handle = clientHandle;
+                    socket.server = this;
                     socket.connecting = false;
                     socket.pending = false;
                     socket.readable = true;
@@ -983,6 +1071,10 @@ Server.prototype.close = function close(cb) {
     this._accepting = false;
     this._acceptToken++;
     this.listening = false;
+    if (this._ipcPath) {
+        delete _ipcListeners[this._ipcPath];
+        try { fs.unlinkSync(this._ipcPath); } catch (_) {}
+    }
     this._ipcPath = null;
     this._closeRequested = true;
 
@@ -1012,6 +1104,7 @@ Server.prototype.address = function address() {
 
 Server.prototype.getConnections = function getConnections(cb) {
     nextTick(cb, null, this._connections);
+    return this;
 };
 
 Server.prototype.ref = function ref() { return this; };
