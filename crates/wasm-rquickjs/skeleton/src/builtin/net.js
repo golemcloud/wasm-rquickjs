@@ -116,7 +116,7 @@ function Socket(options) {
     const streamOptions = {
         ...options,
         allowHalfOpen: options.allowHalfOpen !== undefined ? options.allowHalfOpen : false,
-        autoDestroy: false,
+        autoDestroy: true,
     };
 
     Duplex.call(this, streamOptions);
@@ -685,24 +685,6 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                 const chunk = await this._handle.read(16384);
                 if (token !== this._readToken) break;
                 if (chunk === null || chunk === undefined) {
-                    if (!this.allowHalfOpen && !this.writableEnded) {
-                        this.end();
-                    }
-
-                    if (!this.destroyed) {
-                        const destroyAfterTurn = () => {
-                            globalThis.setTimeout(() => {
-                                if (!this.destroyed) this.destroy();
-                            }, 0);
-                        };
-
-                        if (this.writableFinished || this.writable === false) {
-                            destroyAfterTurn();
-                        } else {
-                            this.once('finish', destroyAfterTurn);
-                        }
-                    }
-
                     this.push(null);
                     this.read(0);
                     break;
