@@ -2979,7 +2979,7 @@
     "parallel/test-net-persistent-ref-unref.js": { "skip": true, "reason": "requires internalBinding('tcp_wrap')" },
     "parallel/test-net-pingpong.js": {},
     "parallel/test-net-pipe-connect-errors.js": { "skip": true, "reason": "requires Unix domain sockets (IPC path)" },
-    "parallel/test-net-reconnect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-reconnect.js": {},
     "parallel/test-net-remote-address-port.js": {},
     "parallel/test-net-remote-address.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-reuseport.js": { "skip": true, "reason": "requires reusePort option and cluster" },

@@ -138,6 +138,7 @@ function Socket(options) {
     this.localFamily = undefined;
     this._family = options.family ?? 4;
     this._httpStatusProbeBuffer = '';
+    this._hadError = false;
 
     // Shut down the socket when we're finished with it.
     this.on('end', onReadableStreamEnd);
@@ -164,6 +165,14 @@ function writeAfterFIN(chunk, encoding, cb) {
 
 Object.setPrototypeOf(Socket.prototype, Duplex.prototype);
 Object.setPrototypeOf(Socket, Duplex);
+
+const _superEmit = EventEmitter.prototype.emit;
+Socket.prototype.emit = function emit(event, ...args) {
+    if (event === 'close' && args.length === 0) {
+        return _superEmit.call(this, 'close', !!this._hadError);
+    }
+    return _superEmit.call(this, event, ...args);
+};
 
 Object.defineProperty(Socket.prototype, 'bufferSize', {
     get() {
@@ -300,6 +309,7 @@ Socket.prototype.connect = function connect(...args) {
         this.destroyed = false;
         this.readable = true;
         this._httpStatusProbeBuffer = '';
+        this._hadError = false;
 
         const rState = this._readableState;
         if (rState) {
@@ -312,7 +322,6 @@ Socket.prototype.connect = function connect(...args) {
             rState.errored = null;
             rState.errorEmitted = false;
             rState.dataEmitted = false;
-            rState.flowing = null;
             rState.needReadable = false;
             rState.emittedReadable = false;
             rState.resumeScheduled = false;
@@ -749,6 +758,7 @@ Socket.prototype._final = function _final(callback) {
 };
 
 Socket.prototype._destroy = function _destroy(err, callback) {
+    this._hadError = !!err;
     this._reading = false;
     this._readToken++;
     this._clearTimeout();
