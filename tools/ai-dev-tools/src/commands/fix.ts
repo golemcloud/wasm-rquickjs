@@ -62,11 +62,15 @@ function setupGracefulStop(): () => void {
 
   process.stdin.on("data", handler);
   return () => {
-    process.stdin.removeListener("data", handler);
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
+    try {
+      process.stdin.removeListener("data", handler);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+      }
+      process.stdin.pause();
+    } catch (e) {
+      console.error("  ⚠ cleanupStop error (non-fatal):", e);
     }
-    process.stdin.pause();
   };
 }
 
@@ -312,6 +316,15 @@ async function prioritizeSkippedTests(
 
 export async function fixCommand(category: string): Promise<void> {
   fs.mkdirSync(LOG_DIR, { recursive: true });
+  // Global safety nets — convert silent exits into visible diagnostics
+  process.on("unhandledRejection", (err) => {
+    console.error("\n⚠ UNHANDLED REJECTION:", err);
+  });
+  process.on("uncaughtException", (err) => {
+    console.error("\n⚠ UNCAUGHT EXCEPTION:", err);
+    process.exit(1);
+  });
+
   const cleanupStop = setupGracefulStop();
 
   console.log("═══════════════════════════════════════════════════════════════");
@@ -392,7 +405,8 @@ export async function fixCommand(category: string): Promise<void> {
     const allSkipped = getSkippedTests(category);
     if (allSkipped.length === 0) {
       const counts = getTestCounts(category);
-      console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! Nothing left to fix.`);
+      console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! No fixable tests remaining.`);
+      console.log(`   (${counts.manualSkipped} tests marked for manual review)`);
       break;
     }
 
@@ -442,7 +456,8 @@ export async function fixCommand(category: string): Promise<void> {
       const counts = getTestCounts(category);
 
       if (skipped.length === 0) {
-        console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! Nothing left to fix.`);
+        console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! No fixable tests remaining.`);
+        console.log(`   (${counts.manualSkipped} tests marked for manual review)`);
         break outer;
       }
 
@@ -456,9 +471,13 @@ export async function fixCommand(category: string): Promise<void> {
         return skippedLabels.has(label) && batchLabels.has(label);
       });
 
-      // If all tests in the batch have been handled, break to restart with next batch
+      // If all tests in the batch have been handled, break inner loop to restart with next batch
       if (priorityQueue.length === 0) {
-        console.log("  ✅ Current batch complete. Restarting with next batch...");
+        const remainingFixable = getSkippedTests(category).length;
+        console.log(`  ✅ Current batch complete. ${remainingFixable} fixable test(s) remain.`);
+        if (remainingFixable > 0) {
+          console.log("  🔄 Restarting with next batch...");
+        }
         break;
       }
 
