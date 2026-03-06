@@ -88,6 +88,27 @@ function nextTick(fn, ...args) {
     Promise.resolve().then(() => fn(...args));
 }
 
+function createHandleWrap() {
+    return {
+        setKeepAlive: function() {},
+        setNoDelay: function() {},
+        set_keep_alive: function() {},
+        set_no_delay: function() {},
+        close: function() {},
+    };
+}
+
+function forwardNativeHandle(wrap, handle) {
+    wrap.read = handle.read.bind(handle);
+    wrap.write = handle.write.bind(handle);
+    wrap.shutdown = handle.shutdown.bind(handle);
+    wrap.close = handle.close.bind(handle);
+    wrap.remote_address = handle.remote_address.bind(handle);
+    wrap.local_address = handle.local_address.bind(handle);
+    wrap.set_no_delay = handle.set_no_delay.bind(handle);
+    wrap.set_keep_alive = handle.set_keep_alive.bind(handle);
+}
+
 // IPC path → TCP loopback mapping for in-process Unix socket emulation
 const _ipcListeners = {};
 
@@ -369,6 +390,19 @@ Socket.prototype.connect = function connect(...args) {
     this.connecting = true;
     this.writable = true;
 
+    // Create handle wrapper early so _handle is available synchronously
+    // (matches Node.js behavior where _handle = new TCP() at top of connect)
+    this._handle = createHandleWrap();
+
+    // Store keepAlive options for processing after connection
+    if (options.keepAlive) {
+        const msecs = options.keepAliveInitialDelay;
+        this._keepAliveOnConnect = true;
+        this._keepAliveDelay = msecs === undefined ? 0 : Math.max(~~(msecs / 1000), 0);
+    } else {
+        this._keepAliveOnConnect = false;
+    }
+
     if (cb) this.once('connect', cb);
 
     const port = options.port;
@@ -389,7 +423,7 @@ Socket.prototype.connect = function connect(...args) {
     }
 
     const completeConnection = (handle) => {
-        this._handle = handle;
+        forwardNativeHandle(this._handle, handle);
         this.connecting = false;
 
         try {
@@ -404,6 +438,10 @@ Socket.prototype.connect = function connect(...args) {
             this.localPort = lp;
             this.localFamily = lf;
         } catch (_) {}
+
+        if (this._keepAliveOnConnect) {
+            this._handle.setKeepAlive(true, this._keepAliveDelay);
+        }
 
         this.emit('connect');
         this.emit('ready');
@@ -1118,7 +1156,8 @@ Server.prototype._acceptLoop = function _acceptLoop() {
                     }
 
                     const socket = new Socket({ allowHalfOpen: this.allowHalfOpen });
-                    socket._handle = clientHandle;
+                    socket._handle = createHandleWrap();
+                    forwardNativeHandle(socket._handle, clientHandle);
                     socket.server = this;
                     socket.connecting = false;
                     socket.readable = true;
