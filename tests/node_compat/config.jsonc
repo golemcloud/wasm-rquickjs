@@ -3087,7 +3087,7 @@
     "parallel/test-net-throttle.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-timeout-no-handle.js": {},
     "parallel/test-net-writable.js": {},
-    "parallel/test-net-write-after-close.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-write-after-close.js": {},
     "parallel/test-net-write-after-end-nt.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-write-arguments.js": {},
     "parallel/test-net-write-cb-on-destroy-before-connect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
