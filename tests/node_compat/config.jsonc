@@ -2941,7 +2941,7 @@
     "parallel/test-net-keepalive.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-large-string.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-listen-after-destroying-stdin.js": { "skip": true, "reason": "requires process.stdin" },
-    "parallel/test-net-listen-close-server-callback-is-not-function.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-listen-close-server-callback-is-not-function.js": {},
     "parallel/test-net-listen-error.js": {},
     "parallel/test-net-listen-exclusive-random-ports.js": { "skip": true, "reason": "requires cluster" },
     "parallel/test-net-listen-fd0.js": { "skip": true, "reason": "requires fd option for listen" },
