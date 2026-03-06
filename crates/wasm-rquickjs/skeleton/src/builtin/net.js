@@ -978,7 +978,7 @@ Server.prototype.listen = function listen(...args) {
                     fs.chmodSync(ipcPath, mode);
                 } catch (_) {}
 
-                nextTick(() => this.emit('listening'));
+                nextTick(() => { if (!this._closeRequested) this.emit('listening'); });
                 this._acceptLoop();
             } catch (e) {
                 const err = parseNativeError(e);
@@ -1016,7 +1016,7 @@ Server.prototype.listen = function listen(...args) {
             this._accepting = true;
             this._closeRequested = false;
             this._connectionKey = (family === 6 ? '6' : '4') + ':' + ip + ':' + port;
-            nextTick(() => this.emit('listening'));
+            nextTick(() => { if (!this._closeRequested) this.emit('listening'); });
             this._acceptLoop();
         } catch (e) {
             const err = parseNativeError(e);

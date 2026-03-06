@@ -6173,7 +6173,7 @@
         "block_04_backlog_argument_without_host_argument": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" }
       }
     },
-    "parallel/test-net-listen-close-server.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-listen-close-server.js": {},
     "sequential/test-http-econnrefused.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "sequential/test-http-keep-alive-large-write.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "sequential/test-http-keepalive-maxsockets.js": { "skip": true, "reason": "requires HTTP server functionality" },
