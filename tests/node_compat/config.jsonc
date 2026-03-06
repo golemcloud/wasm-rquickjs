@@ -3061,7 +3061,7 @@
     "parallel/test-net-socket-connecting.js": {},
     "parallel/test-net-socket-constructor.js": { "skip": true, "reason": "requires cluster" },
     "parallel/test-net-socket-destroy-send.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-socket-destroy-twice.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-socket-destroy-twice.js": {},
     "parallel/test-net-socket-end-before-connect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-socket-end-callback.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-socket-local-address.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
