@@ -925,6 +925,163 @@ impl TcpListener {
         Ok(())
     }
 
+    pub fn bind_sync(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
+        let ip = parse_ip_address(&addr).ok_or_else(|| {
+            throw_socket_error(
+                &ctx,
+                "EINVAL",
+                "bind",
+                &format!("Invalid address: {addr}"),
+            )
+        })?;
+        let sock_addr = ip_socket_address(ip, port as u16);
+
+        {
+            let inner = self.inner.borrow();
+            if inner.closed {
+                return Err(throw_socket_error(
+                    &ctx,
+                    "EBADF",
+                    "bind",
+                    "Socket is closed",
+                ));
+            }
+        }
+
+        {
+            let inner = self.inner.borrow();
+            let network = instance_network();
+            let socket = inner.socket.as_ref().ok_or_else(|| {
+                throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
+            })?;
+            socket.start_bind(&network, sock_addr).map_err(|e| {
+                throw_socket_error(
+                    &ctx,
+                    error_code_to_errno(e),
+                    "bind",
+                    &format!("bind failed: {e:?}"),
+                )
+            })?;
+        }
+
+        loop {
+            let result = {
+                let inner = self.inner.borrow();
+                let socket = inner.socket.as_ref().ok_or_else(|| {
+                    throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
+                })?;
+                socket.finish_bind()
+            };
+            match result {
+                Ok(()) => break,
+                Err(ErrorCode::WouldBlock) => {
+                    let pollable = {
+                        let inner = self.inner.borrow();
+                        let socket = inner.socket.as_ref().ok_or_else(|| {
+                            throw_socket_error(
+                                &ctx,
+                                "EBADF",
+                                "bind",
+                                "Socket was closed or reset",
+                            )
+                        })?;
+                        socket.subscribe()
+                    };
+                    wasi::io::poll::poll(&[&pollable]);
+                }
+                Err(e) => {
+                    return Err(throw_socket_error(
+                        &ctx,
+                        error_code_to_errno(e),
+                        "bind",
+                        &format!("bind failed: {e:?}"),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn listen_sync(&self, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+        {
+            let inner = self.inner.borrow();
+            if inner.closed {
+                return Err(throw_socket_error(
+                    &ctx,
+                    "EBADF",
+                    "listen",
+                    "Socket is closed",
+                ));
+            }
+            if inner.listening {
+                return Err(throw_socket_error(
+                    &ctx,
+                    "EINVAL",
+                    "listen",
+                    "Socket is already listening",
+                ));
+            }
+        }
+
+        {
+            let inner = self.inner.borrow();
+            let socket = inner.socket.as_ref().ok_or_else(|| {
+                throw_socket_error(&ctx, "EBADF", "listen", "Socket was closed or reset")
+            })?;
+            socket.start_listen().map_err(|e| {
+                throw_socket_error(
+                    &ctx,
+                    error_code_to_errno(e),
+                    "listen",
+                    &format!("listen failed: {e:?}"),
+                )
+            })?;
+        }
+
+        loop {
+            let result = {
+                let inner = self.inner.borrow();
+                let socket = inner.socket.as_ref().ok_or_else(|| {
+                    throw_socket_error(&ctx, "EBADF", "listen", "Socket was closed or reset")
+                })?;
+                socket.finish_listen()
+            };
+            match result {
+                Ok(()) => {
+                    let mut inner = self.inner.borrow_mut();
+                    inner.listening = true;
+                    break;
+                }
+                Err(ErrorCode::WouldBlock) => {
+                    let pollable = {
+                        let inner = self.inner.borrow();
+                        let socket = inner.socket.as_ref().ok_or_else(|| {
+                            throw_socket_error(
+                                &ctx,
+                                "EBADF",
+                                "listen",
+                                "Socket was closed or reset",
+                            )
+                        })?;
+                        socket.subscribe()
+                    };
+                    wasi::io::poll::poll(&[&pollable]);
+                }
+                Err(e) => {
+                    return Err(throw_socket_error(
+                        &ctx,
+                        error_code_to_errno(e),
+                        "listen",
+                        &format!("listen failed: {e:?}"),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn set_backlog(&self, ctx: Ctx<'_>, size: u64) -> rquickjs::Result<()> {
         let inner = self.inner.borrow();
         if inner.closed {

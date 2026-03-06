@@ -122,6 +122,7 @@ function Socket(options) {
     Duplex.call(this, streamOptions);
 
     this._handle = null;
+    this._connectingHandle = null;
     this._reading = false;
     this._readToken = 0;
     this.connecting = false;
@@ -418,6 +419,7 @@ Socket.prototype.connect = function connect(...args) {
         }
 
         const handle = create_tcp_socket(addressFamily);
+        this._connectingHandle = handle;
 
         (async () => {
             try {
@@ -427,8 +429,10 @@ Socket.prototype.connect = function connect(...args) {
                     await handle.bind(bindAddr, bindPort);
                 }
                 await handle.connect(ip, port);
+                this._connectingHandle = null;
                 onResult(null, handle);
             } catch (e) {
+                this._connectingHandle = null;
                 const err = parseNativeError(e);
                 err.address = ip;
                 err.port = port;
@@ -766,6 +770,10 @@ Socket.prototype._destroy = function _destroy(err, callback) {
     this._reading = false;
     this._readToken++;
     this._clearTimeout();
+    if (this._connectingHandle) {
+        try { this._connectingHandle.close(); } catch (_) {}
+        this._connectingHandle = null;
+    }
     if (this._handle) {
         this._handle.close();
         this._handle = null;
@@ -966,36 +974,34 @@ Server.prototype.listen = function listen(...args) {
         if (cb) this.once('listening', cb);
 
         const doIpcListen = (ip, family) => {
-            (async () => {
+            try {
+                this._handle = create_tcp_listener(family);
+                this._handle.bind_sync(ip, 0);
+                this._handle.set_backlog(ipcBacklog);
+                this._handle.listen_sync();
+                this.listening = true;
+                this._accepting = true;
+                this._closeRequested = false;
+
+                const [, assignedPort] = this._handle.local_address();
+                _ipcListeners[ipcPath] = { host: ip, port: assignedPort };
+
+                // Create a placeholder file so fs.statSync works on the path
                 try {
-                    this._handle = create_tcp_listener(family);
-                    await this._handle.bind(ip, 0);
-                    this._handle.set_backlog(ipcBacklog);
-                    await this._handle.listen();
-                    this.listening = true;
-                    this._accepting = true;
-                    this._closeRequested = false;
+                    let mode = 0o600;
+                    if (options.readableAll) mode |= 0o044;
+                    if (options.writableAll) mode |= 0o022;
+                    fs.writeFileSync(ipcPath, '');
+                    fs.chmodSync(ipcPath, mode);
+                } catch (_) {}
 
-                    const [, assignedPort] = this._handle.local_address();
-                    _ipcListeners[ipcPath] = { host: ip, port: assignedPort };
-
-                    // Create a placeholder file so fs.statSync works on the path
-                    try {
-                        let mode = 0o600;
-                        if (options.readableAll) mode |= 0o044;
-                        if (options.writableAll) mode |= 0o022;
-                        fs.writeFileSync(ipcPath, '');
-                        fs.chmodSync(ipcPath, mode);
-                    } catch (_) {}
-
-                    this.emit('listening');
-                    this._acceptLoop();
-                } catch (e) {
-                    const err = parseNativeError(e);
-                    err.address = ipcPath;
-                    this.emit('error', err);
-                }
-            })();
+                nextTick(() => this.emit('listening'));
+                this._acceptLoop();
+            } catch (e) {
+                const err = parseNativeError(e);
+                err.address = ipcPath;
+                nextTick(() => this.emit('error', err));
+            }
         };
         doIpcListen('127.0.0.1', 4);
         return this;
@@ -1018,26 +1024,24 @@ Server.prototype.listen = function listen(...args) {
     const backlog = options.backlog || 511;
 
     const doListen = (ip, family) => {
-        (async () => {
-            try {
-                this._handle = create_tcp_listener(family);
-                await this._handle.bind(ip, port);
-                this._handle.set_backlog(backlog);
-                await this._handle.listen();
-                this.listening = true;
-                this._accepting = true;
-                this._closeRequested = false;
-                this._connectionKey = (family === 6 ? '6' : '4') + ':' + ip + ':' + port;
-                this.emit('listening');
-                this._acceptLoop();
-            } catch (e) {
-                const err = parseNativeError(e);
-                err.syscall = 'listen';
-                err.address = ip;
-                err.port = port;
-                this.emit('error', err);
-            }
-        })();
+        try {
+            this._handle = create_tcp_listener(family);
+            this._handle.bind_sync(ip, port);
+            this._handle.set_backlog(backlog);
+            this._handle.listen_sync();
+            this.listening = true;
+            this._accepting = true;
+            this._closeRequested = false;
+            this._connectionKey = (family === 6 ? '6' : '4') + ':' + ip + ':' + port;
+            nextTick(() => this.emit('listening'));
+            this._acceptLoop();
+        } catch (e) {
+            const err = parseNativeError(e);
+            err.syscall = 'listen';
+            err.address = ip;
+            err.port = port;
+            nextTick(() => this.emit('error', err));
+        }
     };
 
     if (isIPAddress(host)) {
