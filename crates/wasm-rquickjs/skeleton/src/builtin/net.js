@@ -892,6 +892,7 @@ function Server(options, connectionListener) {
     this._keepAlive = options.keepAlive || false;
     this._keepAliveInitialDelay = options.keepAliveInitialDelay || 0;
     this.allowHalfOpen = options.allowHalfOpen || false;
+    this._unrefed = false;
 
     if (connectionListener) this.on('connection', connectionListener);
 }
@@ -1147,6 +1148,9 @@ Server.prototype._acceptLoop = function _acceptLoop() {
                     this._connections++;
                     socket.on('close', () => {
                         this._connections--;
+                        if (this._unrefed && this._connections === 0 && this.listening) {
+                            this.close();
+                        }
                         this._maybeEmitClose();
                     });
 
@@ -1219,8 +1223,14 @@ Server.prototype.getConnections = function getConnections(cb) {
     return this;
 };
 
-Server.prototype.ref = function ref() { return this; };
-Server.prototype.unref = function unref() { return this; };
+Server.prototype.ref = function ref() {
+    this._unrefed = false;
+    return this;
+};
+Server.prototype.unref = function unref() {
+    this._unrefed = true;
+    return this;
+};
 
 Server.prototype[Symbol.asyncDispose] = function () {
     if (!this._handle) {
