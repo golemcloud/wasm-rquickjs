@@ -2815,9 +2815,9 @@
       }
     },
     "parallel/test-http-methods.js": {},
-    "parallel/test-https-autoselectfamily.js": {},
-    "parallel/test-http2-client-upload-reject.js": {},
-    "parallel/test-http2-request-response-proto.js": {},
+    "parallel/test-https-autoselectfamily.js": { "skip": true, "reason": "requires HTTPS/TLS which is not available in WASI" },
+    "parallel/test-http2-client-upload-reject.js": { "skip": true, "reason": "requires HTTP/2 which is not supported" },
+    "parallel/test-http2-request-response-proto.js": { "skip": true, "reason": "requires HTTP/2 which is not supported" },
     "parallel/test-instanceof.js": {},
     "parallel/test-microtask-queue-integration.js": {},
     "parallel/test-module-cache.js": {},
@@ -4009,13 +4009,13 @@
     "parallel/test-http-agent-close.js": {},
     "parallel/test-http-agent-false.js": {},
     "parallel/test-http-client-read-in-error.js": {},
-    "parallel/test-http-server-keep-alive-timeout.js": {},
+    "parallel/test-http-server-keep-alive-timeout.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-set-timeout-server.js": {
       "skip": true,
       "reason": "[manual] The test's sub-tests 1-4 use `http.get()` and `http.request()` to connect to a local HTTP server that intentionally never responds. In the WASM architecture, these client requests go throu..."
     },
-    "parallel/test-http2-compat-client-upload-reject.js": {},
-    "parallel/test-https-set-timeout-server.js": {},
+    "parallel/test-http2-compat-client-upload-reject.js": { "skip": true, "reason": "requires HTTP/2 which is not supported" },
+    "parallel/test-https-set-timeout-server.js": { "skip": true, "reason": "requires HTTPS/TLS which is not available in WASI" },
     "parallel/test-messagechannel.js": {},
     "parallel/test-performance-measure-detail.js": {},
     "parallel/test-performance-measure.js": {},
@@ -4207,7 +4207,7 @@
     "sequential/test-net-server-listen-ipv6-link-local.js": {},
     "sequential/test-require-cache-without-stat.js": {},
     "sequential/test-stream2-fs.js": {},
-    "sequential/test-https-server-keep-alive-timeout.js": {},
+    "sequential/test-https-server-keep-alive-timeout.js": { "skip": true, "reason": "requires HTTPS/TLS which is not available in WASI" },
     "sequential/test-buffer-creation-regression.js": {
       "skip": true,
       "reason": "QuickJS error message casing mismatch prevents graceful skip; WASM cannot allocate 4GB ArrayBuffer anyway"
@@ -4597,12 +4597,12 @@
     },
     "parallel/test-http-agent-uninitialized-with-handle.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-agent-uninitialized.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-allow-content-length-304.js": {},
+    "parallel/test-http-allow-content-length-304.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-automatic-headers.js": {
       "skip": true,
       "reason": "[manual] The test asserts `res.headers.connection === 'keep-alive'`, but the `Connection` header is classified as a **forbidden hop-by-hop header** in wasmtime's wasi:http implementation (`wasmtime..."
     },
-    "parallel/test-http-bind-twice.js": {},
+    "parallel/test-http-bind-twice.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-blank-header.js": {
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients"
@@ -4620,9 +4620,9 @@
       }
     },
     "parallel/test-http-chunk-problem.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-chunked-304.js": {},
-    "parallel/test-http-chunked-smuggling.js": {},
-    "parallel/test-http-chunked.js": {},
+    "parallel/test-http-chunked-304.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-chunked-smuggling.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-chunked.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-client-abort-destroy.js": {
       "split": true,
       "subtests": {
@@ -4685,16 +4685,16 @@
     "parallel/test-http-connect-req-res.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-connect.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-content-length-mismatch.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-contentLength0.js": {},
+    "parallel/test-http-contentLength0.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-createConnection.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-date-header.js": {},
+    "parallel/test-http-date-header.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-decoded-auth.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-default-port.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-destroyed-socket-write2.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-dont-set-default-headers-with-set-header.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-dont-set-default-headers-with-setHost.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-dont-set-default-headers.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-double-content-length.js": {},
+    "parallel/test-http-double-content-length.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-dummy-characters-smuggling.js": {
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients",
@@ -4736,10 +4736,12 @@
       }
     },
     "parallel/test-http-head-request.js": {},
-    "parallel/test-http-head-response-has-no-body-end-implicit-headers.js": {},
-    "parallel/test-http-head-response-has-no-body-end.js": {},
-    "parallel/test-http-head-response-has-no-body.js": {},
+    "parallel/test-http-head-response-has-no-body-end-implicit-headers.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-head-response-has-no-body-end.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-head-response-has-no-body.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-head-throw-on-response-body-write.js": {
+      "skip": true,
+      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -4748,19 +4750,19 @@
       }
     },
     "parallel/test-http-header-badrequest.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-header-obstext.js": {},
+    "parallel/test-http-header-obstext.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-header-overflow.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-header-owstext.js": {},
+    "parallel/test-http-header-owstext.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-header-read.js": {},
-    "parallel/test-http-hex-write.js": {},
-    "parallel/test-http-highwatermark.js": {},
+    "parallel/test-http-hex-write.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-highwatermark.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-host-header-ipv6-fail.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-host-headers.js": {},
-    "parallel/test-http-incoming-message-options.js": {},
+    "parallel/test-http-incoming-message-options.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-information-processing.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-insecure-parser.js": {},
     "parallel/test-http-invalid-te.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-invalidheaderfield.js": {},
+    "parallel/test-http-invalidheaderfield.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-keep-alive-close-on-header.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive-drop-requests.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keep-alive-max-requests.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -4776,9 +4778,9 @@
     "parallel/test-http-keepalive-free.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keepalive-override.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-keepalive-request.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-listening.js": {},
+    "parallel/test-http-listening.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-localaddress-bind-error.js": {},
-    "parallel/test-http-malformed-request.js": {},
+    "parallel/test-http-malformed-request.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-many-ended-pipelines.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-max-headers-count.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-max-sockets.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -4807,6 +4809,8 @@
     "parallel/test-http-no-read-no-dump.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-nodelay.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-outgoing-destroyed.js": {
+      "skip": true,
+      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -4816,10 +4820,10 @@
     },
     "parallel/test-http-outgoing-end-cork.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-outgoing-end-multiple.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
-    "parallel/test-http-outgoing-end-types.js": {},
+    "parallel/test-http-outgoing-end-types.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-outgoing-finish-writable.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-outgoing-finish.js": {},
-    "parallel/test-http-outgoing-finished.js": {},
+    "parallel/test-http-outgoing-finish.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-outgoing-finished.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-outgoing-message-capture-rejection.js": {
       "skip": true,
@@ -4831,8 +4835,8 @@
       }
     },
     "parallel/test-http-outgoing-message-write-callback.js": {},
-    "parallel/test-http-outgoing-writableFinished.js": {},
-    "parallel/test-http-outgoing-write-types.js": {},
+    "parallel/test-http-outgoing-writableFinished.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-outgoing-write-types.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-parser-finish-error.js": {},
     "parallel/test-http-parser-freed-before-upgrade.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-pause-no-dump.js": {},
@@ -4918,7 +4922,7 @@
         "block_06_block_06": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
-    "parallel/test-http-response-writehead-returns-this.js": {},
+    "parallel/test-http-response-writehead-returns-this.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-same-map.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-capture-rejections.js": {
       "skip": true,
@@ -4932,7 +4936,7 @@
     },
     "parallel/test-http-server-client-error.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-close-all.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-server-close-idle-wait-response.js": {},
+    "parallel/test-http-server-close-idle-wait-response.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-server-close-idle.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-connection-list-when-close.js": {
       "skip": true,
@@ -4969,7 +4973,7 @@
     },
     "parallel/test-http-server-options-incoming-message.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-reject-chunked-with-content-length.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-server-reject-cr-no-lf.js": {},
+    "parallel/test-http-server-reject-cr-no-lf.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-server-request-timeout-delayed-body.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-request-timeout-delayed-headers.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-request-timeout-interrupted-body.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -4977,7 +4981,7 @@
     "parallel/test-http-server-request-timeout-keepalive.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-request-timeout-pipelining.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-request-timeout-upgrade.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-server-response-standalone.js": {},
+    "parallel/test-http-server-response-standalone.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-server-stale-close.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-server-timeouts-validation.js": {
       "skip": true,
@@ -4994,9 +4998,9 @@
       }
     },
     "parallel/test-http-server-unconsume-consume.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-server-unconsume.js": {},
+    "parallel/test-http-server-unconsume.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-server-write-after-end.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-server-write-end-after-end.js": {},
+    "parallel/test-http-server-write-end-after-end.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-set-header-chain.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-set-timeout.js": {
       "skip": true,
@@ -5005,7 +5009,7 @@
     "parallel/test-http-set-trailers.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-socket-encoding-error.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-socket-error-listeners.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-status-message.js": {},
+    "parallel/test-http-status-message.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-timeout-client-warning.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-timeout-overflow.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-transfer-encoding-repeated-chunked.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -5024,12 +5028,14 @@
     "parallel/test-http-upgrade-advertise.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-upgrade-client2.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-upgrade-reconsume-stream.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-http-upgrade-server2.js": {},
+    "parallel/test-http-upgrade-server2.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-wget.js": {},
     "parallel/test-http-writable-true-after-close.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-write-callbacks.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-write-empty-string.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-http-write-head-2.js": {
+      "skip": true,
+      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -5167,7 +5173,7 @@
       "reason": "requires HTTP server functionality"
     },
     "parallel/test-http-agent.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
-    "parallel/test-http-allow-req-after-204-res.js": {},
+    "parallel/test-http-allow-req-after-204-res.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-client-abort.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
     "parallel/test-http-client-agent.js": {},
     "parallel/test-http-client-check-http-token.js": {},
@@ -5180,7 +5186,7 @@
     "parallel/test-http-end-throw-socket-handling.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-exceptions.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-get-pipeline-problem.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-incoming-pipelined-socket-destroy.js": {},
+    "parallel/test-http-incoming-pipelined-socket-destroy.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-information-headers.js": {
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
@@ -5204,7 +5210,7 @@
       "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-response-statuscode.js": {},
-    "parallel/test-http-set-cookies.js": {},
+    "parallel/test-http-set-cookies.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-should-keep-alive.js": {
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
@@ -5234,7 +5240,7 @@
     "parallel/test-http2-client-data-end.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-client-stream-destroy-before-connect.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-client-unescaped-path.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
-    "parallel/test-http2-client-upload.js": {},
+    "parallel/test-http2-client-upload.js": { "skip": true, "reason": "requires HTTP/2 which is not supported" },
     "parallel/test-http2-compat-serverresponse-destroy.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-create-client-connect.js": {
       "skip": true,
@@ -5407,7 +5413,7 @@
     "parallel/test-http-debug.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
     "parallel/test-http-default-encoding.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-dns-error.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-extra-response.js": {},
+    "parallel/test-http-extra-response.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-header-validators.js": {},
     "parallel/test-http-hostname-typechecking.js": {},
     "parallel/test-http-import-websocket.js": { "skip": true, "reason": "requires HTTP server functionality" },
@@ -5434,6 +5440,8 @@
     "parallel/test-http-invalidheaderfield2.js": {},
     "parallel/test-http-localaddress.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-max-header-size-per-stream.js": {
+      "skip": true,
+      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
 "split": true,
       "subtests": {
         "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
@@ -5445,8 +5453,8 @@
     "parallel/test-http-max-header-size.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
     "parallel/test-http-max-http-headers.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-multi-line-headers.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-no-content-length.js": {},
-    "parallel/test-http-outgoing-buffer.js": {},
+    "parallel/test-http-no-content-length.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
+    "parallel/test-http-outgoing-buffer.js": { "skip": true, "reason": "requires Node.js internal modules (--expose-internals)" },
     "parallel/test-http-outgoing-destroy.js": {},
     "parallel/test-http-outgoing-internal-headernames-getter.js": {
       "split": true,
@@ -5457,6 +5465,8 @@
     },
     "parallel/test-http-outgoing-internal-headernames-setter.js": {},
     "parallel/test-http-outgoing-internal-headers.js": {
+      "skip": true,
+      "reason": "requires Node.js internal modules (--expose-internals)",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -5466,6 +5476,8 @@
     },
     "parallel/test-http-outgoing-message-inheritance.js": {},
     "parallel/test-http-outgoing-properties.js": {
+      "skip": true,
+      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -5486,6 +5498,8 @@
       }
     },
     "parallel/test-http-outgoing-renderHeaders.js": {
+      "skip": true,
+      "reason": "requires Node.js internal modules (--expose-internals)",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -5544,13 +5558,13 @@
     "parallel/test-http-server-async-dispose.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-server-clear-timer.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-server-close-destroy-timeout.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "parallel/test-http-server-connections-checking-leak.js": {},
+    "parallel/test-http-server-connections-checking-leak.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-server-keepalive-req-gc.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-server-method.query.js": {
       "skip": true,
       "reason": "requires HTTP server functionality"
     },
-    "parallel/test-http-server-multiple-client-error.js": {},
+    "parallel/test-http-server-multiple-client-error.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-server-options-highwatermark.js": {
       "skip": true,
       "reason": "requires HTTP server functionality",
@@ -5566,7 +5580,7 @@
       "reason": "[manual] amp fix attempt failed verification"
     },
     "parallel/test-http-set-max-idle-http-parser.js": { "skip": true, "reason": "requires Node.js internal modules" },
-    "parallel/test-http-sync-write-error-during-continue.js": {},
+    "parallel/test-http-sync-write-error-during-continue.js": { "skip": true, "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI" },
     "parallel/test-http-upgrade-agent.js": { "skip": true, "reason": "requires HTTP server functionality" },
     "parallel/test-http-upgrade-binary.js": {
       "skip": true,
@@ -5888,7 +5902,7 @@
     "parallel/test-http2-request-remove-connect-listener.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-res-corked.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-res-writable-properties.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
-    "parallel/test-http2-reset-flood.js": {},
+    "parallel/test-http2-reset-flood.js": { "skip": true, "reason": "requires HTTP/2 which is not supported" },
     "parallel/test-http2-respond-errors.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-respond-file-204.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
     "parallel/test-http2-respond-file-304.js": { "skip": true, "reason": "requires HTTP2 server functionality" },
