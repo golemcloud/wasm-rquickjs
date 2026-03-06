@@ -293,7 +293,7 @@ impl TestResult {
 fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     let path = Utf8Path::new("examples/node-compat-runner");
     let name = "node-compat-runner";
-    let feature_combination_label = "http";
+    let feature_combination_label = "http-sqlite";
     let wrapper_crate_root = Utf8Path::new("tmp")
         .join(name)
         .join(feature_combination_label);
@@ -327,7 +327,7 @@ fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         .arg("build")
         .arg("--target-dir")
         .arg(&shared_target)
-        .args(["--no-default-features", "--features", "http"])
+        .args(["--no-default-features", "--features", "http,sqlite"])
         .current_dir(&wrapper_crate_root)
         .status()?;
 
@@ -457,6 +457,8 @@ fn classify_test(filename: &str) -> &str {
         || name.starts_with("duplex")
     {
         "stream"
+    } else if name.starts_with("sqlite") {
+        "sqlite"
     } else {
         "other"
     }
