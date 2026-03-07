@@ -5579,7 +5579,7 @@ fn randomize_typed_array<V>(array: TypedArray<V>) {
 pub const WEB_CRYPTO_JS: &str = include_str!("web-crypto.js");
 
 // Re-export for aliases
-pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/web_crypto';"#;
+pub const REEXPORT_JS: &str = r#"import * as _crypto from '__wasm_rquickjs_builtin/web_crypto'; export * from '__wasm_rquickjs_builtin/web_crypto'; export default _crypto;"#;
 
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"

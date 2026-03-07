@@ -11,6 +11,8 @@ Tests an npm library by creating small test apps, verifying them on Node.js, the
 
 The goal is **documentation, not fixing**. We create 1–5 focused test scripts for a library, confirm they pass on Node.js, then run each through the WASM runtime and record every error, missing API, or behavioral difference in `tests/libraries/libraries.md`.
 
+**Bundler choice:** We use **Rollup** (not esbuild) for bundling because this matches the production Golem CLI toolchain (`golem-cli` uses Rollup with `@rollup/plugin-commonjs` and `@rollup/plugin-node-resolve`). This ensures test results reflect what real Golem users will experience. Rollup's `@rollup/plugin-commonjs` hoists CJS `require()` calls to ESM `import` statements, unlike esbuild which generates a `createRequire(import.meta.url)` shim that fails when `import.meta.url` is undefined.
+
 ## Step 1: Pick the Library
 
 - If the user provides a library name, use that.
@@ -27,7 +29,7 @@ Use the **librarian** tool to understand what the library does, its core API sur
 
 Create **~5 small test scripts** in `tests/libraries/<package-name>/`. Each test script should:
 
-- Be a **standalone CommonJS file** (`.js`) that can run with `node <file>.js`
+- Be a **standalone ESM file** (`.js`) that exports a `run` function
 - Use `assert` or simple `console.log`-based checks — no test framework dependencies
 - Exit with code 0 on success, non-zero on failure (use `process.exit(1)` or let uncaught errors propagate)
 - **Not require API keys, network services, databases, or manual intervention**
@@ -41,8 +43,9 @@ tests/libraries/<package-name>/
 ├── test-01-basic.js        # Core functionality
 ├── test-02-validation.js   # Input validation, edge cases
 ├── test-03-advanced.js     # More complex features
+├── rollup.config.mjs       # Rollup config (see template below)
 ├── run-node.mjs            # Shared Node.js runner (see below)
-├── package.json            # Minimal: { "dependencies": { "<pkg>": "<version>" } }
+├── package.json            # Dependencies + rollup devDeps
 └── results.md              # Test results (created in Step 6)
 ```
 
@@ -62,7 +65,7 @@ export const run = () => {
 };
 ```
 
-**Important:** Always use `import` statements, not `require()`. While the wasm-rquickjs runtime supports both, esbuild's ESM output generates a `__require` shim for `require()` calls that throws "Dynamic require of X is not supported" when run on Node.js. Using `import` works correctly in both environments — esbuild bundles library imports inline, and Node.js built-ins (like `assert`) are kept as external ESM imports.
+**Important:** Always use `import` statements, not `require()`. Rollup's `@rollup/plugin-commonjs` converts CJS `require()` calls from dependencies into ESM imports, but test source files should use native ESM `import` for clarity and compatibility with both Node.js and the WASM runtime.
 
 ### Shared Node.js runner
 
@@ -83,14 +86,63 @@ try {
 }
 ```
 
+### Rollup config template
+
+Create `rollup.config.mjs` in each package directory. This mirrors the production Golem CLI Rollup config:
+
+```js
+// rollup.config.mjs
+import commonjs from "@rollup/plugin-commonjs";
+import json from "@rollup/plugin-json";
+import nodeResolve from "@rollup/plugin-node-resolve";
+import fs from "fs";
+
+// Discover all test-*.js files automatically
+const testFiles = fs.readdirSync(".").filter(f => f.startsWith("test-") && f.endsWith(".js"));
+
+// Node.js built-in modules — kept as external imports (the runtime provides them)
+const nodeBuiltins = [
+  "assert", "buffer", "child_process", "crypto", "dgram", "dns", "events",
+  "fs", "http", "http2", "https", "module", "net", "os", "path",
+  "perf_hooks", "querystring", "readline", "stream", "string_decoder",
+  "tls", "url", "util", "v8", "vm", "worker_threads", "zlib",
+];
+
+const externalPackages = (id) => {
+  // Keep Node.js built-ins as external imports
+  const bare = id.replace(/^node:/, "");
+  return nodeBuiltins.includes(bare);
+};
+
+export default testFiles.map((input) => ({
+  input,
+  output: {
+    file: `dist/${input.replace(".js", ".bundle.js")}`,
+    format: "esm",
+    inlineDynamicImports: true,
+    sourcemap: false,
+  },
+  external: externalPackages,
+  plugins: [
+    nodeResolve({
+      extensions: [".mjs", ".js", ".json", ".node"],
+    }),
+    commonjs({
+      include: ["node_modules/**"],
+    }),
+    json(),
+  ],
+}));
+```
+
 ### ESM-only packages
 
 Some modern npm packages (e.g., `got` v12+, `node-fetch` v3+, `chalk` v5+) only ship ESM — they have `"type": "module"` in their `package.json` and no CJS fallback. This is fine for our workflow because:
 
-- **For Node.js testing:** Our test files are ESM (they use `export`), and esbuild handles resolving ESM dependencies during bundling.
-- **For WASM bundling:** esbuild with `--bundle --format=esm` inlines all ESM imports into the final bundle.
+- **For Node.js testing:** Our test files are ESM (they use `export`), and Rollup handles resolving ESM dependencies during bundling.
+- **For WASM bundling:** Rollup with `nodeResolve` + `commonjs` plugins inlines all imports (both ESM and CJS) into the final bundle.
 
-No special handling is needed — esbuild resolves both CJS and ESM dependencies transparently during the bundle step.
+No special handling is needed — Rollup resolves both CJS and ESM dependencies transparently during the bundle step.
 
 ## Step 4: Install Dependencies, Bundle, and Verify on Node.js
 
@@ -100,14 +152,8 @@ First install dependencies and bundle:
 cd tests/libraries/<package-name>
 npm install
 
-# Bundle each test (see Step 5c for the full esbuild command with externals)
-npx esbuild test-01-basic.js --bundle --platform=node --format=esm \
-  --outfile=dist/test-01-basic.bundle.js \
-  --external:assert --external:buffer --external:crypto --external:events \
-  --external:fs --external:http --external:https --external:module --external:net \
-  --external:os --external:path --external:stream --external:tls --external:url \
-  --external:util --external:zlib --external:querystring --external:string_decoder \
-  --external:dns --external:child_process --external:worker_threads
+# Bundle all test files at once using the rollup config
+npx rollup -c rollup.config.mjs
 ```
 
 Then verify the **bundled** output on Node.js:
@@ -150,17 +196,17 @@ world lib-<package-name> {
 
 ### 5c. Use the bundles from Step 4
 
-The bundled test files in `dist/` (created and verified in Step 4) are ready to use. Each bundle is a self-contained ESM file with the library code inlined and Node.js built-ins preserved as `require()` calls (via esbuild's `__require` shim) for the runtime to resolve.
+The bundled test files in `dist/` (created and verified in Step 4) are ready to use. Each bundle is a self-contained ESM file with the library code inlined and Node.js built-ins preserved as ESM `import` statements for the runtime to resolve.
 
 #### When bundling fails
 
-If esbuild cannot bundle a library (native bindings, dynamic `require()`, WASM binaries, etc.), **do not attempt workarounds**. Record the failure in `results.md`:
+If Rollup cannot bundle a library (native bindings, dynamic `require()`, WASM binaries, etc.), **do not attempt workarounds**. Record the failure in `results.md`:
 
 ```markdown
 ### Bundling
 
-This library **cannot be bundled** with esbuild:
-- **Error:** `<exact esbuild error>`
+This library **cannot be bundled** with Rollup:
+- **Error:** `<exact Rollup error>`
 - **Reason:** Requires native N-API bindings / uses dynamic require() / loads .node files
 - **Impact:** Library cannot be tested in the wasm-rquickjs runtime without a bundleable alternative
 ```
@@ -292,6 +338,25 @@ To fully test this library, a user would need to:
 
 3. **Mark the library status** in `libraries.md` as ⚠️ with a note like "Partially tested — API calls require credentials"
 
+## Package.json Template
+
+The `package.json` for each test directory should include Rollup and its plugins as dev dependencies:
+
+```json
+{
+  "private": true,
+  "dependencies": {
+    "<package-name>": "<version>"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.0.0"
+  }
+}
+```
+
 ## Important Rules
 
 1. **Do NOT attempt to fix any issues** — only document them
@@ -303,3 +368,4 @@ To fully test this library, a user would need to:
 7. **Use the dual-mode ESM format** — tests export a `run` function and use `import` for all imports (see Step 3)
 8. **Always use wasmtime CLI to run tests** — do NOT write Rust test harnesses in `tests/runtime/`
 9. **Always use `edit_file` to update `libraries.md`** — never overwrite the entire file
+10. **Always use Rollup for bundling** — do NOT use esbuild; Rollup matches the production Golem CLI toolchain
