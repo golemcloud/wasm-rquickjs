@@ -36,7 +36,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 13 | Prisma Client | `@prisma/client` | ⬜ | — | Type-safe ORM for PostgreSQL, MySQL, SQLite, MongoDB |
+| 13 | Prisma Client | `@prisma/client` | ❌ | 2026-03-07 | Node tests pass after `prisma generate`, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 14 | TypeORM | `typeorm` | ⬜ | — | Active Record & Data Mapper ORM |
 | 15 | Drizzle ORM | `drizzle-orm` | ⬜ | — | Lightweight TypeScript-first SQL ORM |
 | 16 | Sequelize | `sequelize` | ⬜ | — | Mature Promise-based ORM |

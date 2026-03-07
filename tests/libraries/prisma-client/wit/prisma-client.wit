@@ -1,0 +1,5 @@
+package test:lib-prisma-client;
+
+world lib-prisma-client {
+  export run: func() -> string;
+}
