@@ -950,7 +950,7 @@ function normalizeIncomingRawPairs(nativeRes) {
     return [];
 }
 
-function parseIncomingHeaders(rawPairs) {
+function parseIncomingHeaders(rawPairs, joinDuplicateHeaders) {
     const rawHeaders = [];
     const headers = {};
     const headersDistinct = {};
@@ -989,6 +989,16 @@ function parseIncomingHeaders(rawPairs) {
                 continue;
             }
 
+            if (joinDuplicateHeaders) {
+                // When joinDuplicateHeaders is true, join ALL duplicates with ', '
+                if (headers[lower] !== undefined) {
+                    headers[lower] += ', ' + valueString;
+                } else {
+                    headers[lower] = valueString;
+                }
+                continue;
+            }
+
             if (NO_DUPLICATE_HEADERS.has(lower)) {
                 if (headers[lower] === undefined) {
                     headers[lower] = valueString;
@@ -1007,9 +1017,9 @@ function parseIncomingHeaders(rawPairs) {
     return { rawHeaders, headers, headersDistinct };
 }
 
-export function IncomingMessage(nativeRes) {
+export function IncomingMessage(nativeRes, options) {
     if (!(this instanceof IncomingMessage)) {
-        return new IncomingMessage(nativeRes);
+        return new IncomingMessage(nativeRes, options);
     }
 
     Readable.call(this, {});
@@ -1047,8 +1057,10 @@ export function IncomingMessage(nativeRes) {
     this._dumped = false;
     this._timeout = null;
 
+    const joinDup = !!(options && options.joinDuplicateHeaders);
     const parsedHeaders = parseIncomingHeaders(
-        hasNativeResponse ? normalizeIncomingRawPairs(nativeRes) : []
+        hasNativeResponse ? normalizeIncomingRawPairs(nativeRes) : [],
+        joinDup
     );
     this.rawHeaders = parsedHeaders.rawHeaders;
     this.headers = parsedHeaders.headers;
@@ -1656,16 +1668,6 @@ export class ClientRequest extends OutgoingMessage {
             throw err;
         }
 
-        const hostname = options.hostname || options.host || 'localhost';
-        const port = options.port;
-        this.path = options.path || '/';
-        this.hostname = hostname;
-        this.port = port === undefined ? (this.protocol === 'https:' ? 443 : 80) : Number(port);
-        this.host = hostname;
-
-        const hostWithPort = port ? hostname + ':' + port : hostname;
-        const url = this.protocol + '//' + hostWithPort + this.path;
-
         if (options.insecureHTTPParser !== undefined && typeof options.insecureHTTPParser !== 'boolean') {
             throw new ERR_INVALID_ARG_TYPE(
                 'options.insecureHTTPParser',
@@ -1674,6 +1676,7 @@ export class ClientRequest extends OutgoingMessage {
             );
         }
 
+        // Resolve agent before computing port so agent.defaultPort is available
         if (options.agent === false) {
             this.agent = new Agent();
         } else if (options.agent == null) {
@@ -1691,6 +1694,19 @@ export class ClientRequest extends OutgoingMessage {
         if (this.agent && this.agent !== false && typeof this.agent.getName === 'function') {
             this._agentName = this.agent.getName(options);
         }
+
+        const hostname = options.hostname || options.host || 'localhost';
+        const port = options.port;
+        const defaultPort = options.defaultPort || (this.agent && this.agent.defaultPort);
+        const protocolDefault = this.protocol === 'https:' ? 443 : 80;
+        const effectivePort = (port !== undefined && port !== null) ? Number(port) : (defaultPort || protocolDefault);
+        this.path = options.path || '/';
+        this.hostname = hostname;
+        this.port = effectivePort;
+        this.host = hostname;
+
+        const hostWithPort = hostname + ':' + effectivePort;
+        const url = this.protocol + '//' + hostWithPort + this.path;
 
         this._rawHeaderPairs = null;
         this._usedWrite = false;
@@ -1731,8 +1747,16 @@ export class ClientRequest extends OutgoingMessage {
         this._last = false;
         this._refreshShouldKeepAlive();
 
-        this._nativeReq = new NodeHttpClientRequest(this.method, url, {});
-        if (this[kOutHeaders]) {
+        this._nativeReq = new NodeHttpClientRequest(this.method, url);
+        if (this._rawHeaderPairs) {
+            // Array headers: preserve duplicates by using appendHeader
+            for (const [name, value] of this._rawHeaderPairs) {
+                if (shouldSkipNativeHeader(name, value)) {
+                    continue;
+                }
+                this._nativeReq.appendHeader(name, headerValueForNative(name, value));
+            }
+        } else if (this[kOutHeaders]) {
             for (const key of Object.keys(this[kOutHeaders])) {
                 const entry = this[kOutHeaders][key];
                 if (shouldSkipNativeHeader(entry[0], entry[1])) {
@@ -1757,6 +1781,7 @@ export class ClientRequest extends OutgoingMessage {
         this._nativeAbortDeferred = false;
         this._hasCustomLookup = typeof options.lookup === 'function';
         this._response = null;
+        this._joinDuplicateHeaders = !!options.joinDuplicateHeaders;
 
         this._initializeCustomConnection(options);
 
@@ -2350,7 +2375,7 @@ export class ClientRequest extends OutgoingMessage {
                     nativeRes.discardBody();
                 }
             } else if (nativeRes) {
-                const res = new IncomingMessage(nativeRes);
+                const res = new IncomingMessage(nativeRes, { joinDuplicateHeaders: this._joinDuplicateHeaders });
 
                 // Link response to the request's mock socket
                 if (this.socket) {

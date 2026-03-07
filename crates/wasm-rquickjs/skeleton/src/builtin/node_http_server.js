@@ -54,7 +54,14 @@ const COOKIE_HEADER = 'cookie';
 const SET_COOKIE_HEADER = 'set-cookie';
 const INVALID_HEADER_CHAR_REGEX = /[^\t\x20-\x7e\x80-\xff]/;
 
-function parseHeaders(rawPairs) {
+const SERVER_NO_DUPLICATE_HEADERS = new Set([
+    'age', 'authorization', 'content-length', 'content-type', 'etag',
+    'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since',
+    'last-modified', 'location', 'max-forwards', 'proxy-authorization',
+    'referer', 'retry-after', 'server', 'user-agent',
+]);
+
+function parseHeaders(rawPairs, joinDuplicateHeaders) {
     const headers = {};
     const headersDistinct = {};
     const rawHeaders = [];
@@ -84,8 +91,18 @@ function parseHeaders(rawPairs) {
             } else {
                 headers[lower] = value;
             }
-        } else {
+        } else if (joinDuplicateHeaders) {
             if (headers[lower] !== undefined) {
+                headers[lower] += ', ' + value;
+            } else {
+                headers[lower] = value;
+            }
+        } else {
+            if (SERVER_NO_DUPLICATE_HEADERS.has(lower)) {
+                if (headers[lower] === undefined) {
+                    headers[lower] = value;
+                }
+            } else if (headers[lower] !== undefined) {
                 headers[lower] += ', ' + value;
             } else {
                 headers[lower] = value;
@@ -98,9 +115,9 @@ function parseHeaders(rawPairs) {
 
 // ===== ServerIncomingMessage (extends Readable) =====
 
-function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs) {
+function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs, joinDuplicateHeaders) {
     if (!(this instanceof ServerIncomingMessage)) {
-        return new ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs);
+        return new ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs, joinDuplicateHeaders);
     }
 
     Readable.call(this, {});
@@ -115,7 +132,7 @@ function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs)
     this.httpVersionMajor = parseInt(parts[0], 10) || 1;
     this.httpVersionMinor = parseInt(parts[1], 10) || 1;
 
-    const parsed = parseHeaders(rawHeaderPairs);
+    const parsed = parseHeaders(rawHeaderPairs, !!joinDuplicateHeaders);
     this.headers = parsed.headers;
     this.headersDistinct = parsed.headersDistinct;
     this.rawHeaders = parsed.rawHeaders;
@@ -937,6 +954,7 @@ function createConnectionParser(server, socket) {
                     parsed.url,
                     parsed.httpVersion,
                     parsed.rawHeaders,
+                    server._joinDuplicateHeaders,
                 );
 
                 // CONNECT method: hand the socket to the application
@@ -954,6 +972,28 @@ function createConnectionParser(server, socket) {
                         socket.write(Buffer.from('HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n'));
                         socket.destroy();
                     }
+                    return;
+                }
+
+                // Upgrade request: emit 'upgrade' event before host header check
+                const connHeader = req.headers.connection;
+                const isUpgrade = connHeader && connHeader.toLowerCase().split(',').some(t => t.trim() === 'upgrade');
+                if (isUpgrade && server.listenerCount('upgrade') > 0) {
+                    const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
+                    state.buffer = Buffer.alloc(0);
+                    state.detached = true;
+                    state.req = null;
+                    state.res = null;
+                    req.complete = true;
+                    server.emit('upgrade', req, socket, head);
+                    return;
+                }
+
+                // requireHostHeader check (default true for HTTP/1.1)
+                if (server._requireHostHeader && parsed.httpVersion === '1.1' && req.headers.host === undefined) {
+                    server.emit('clientError', new Error('HPE_MISSING_HOST_HEADER'), socket);
+                    socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
+                    socket.end();
                     return;
                 }
 
@@ -1161,6 +1201,10 @@ function parseRequestHeaders(block) {
         const colonIdx = line.indexOf(':');
         if (colonIdx === -1) continue;
         const name = line.substring(0, colonIdx);
+        // Reject header names with spaces (request smuggling prevention per RFC 7230)
+        if (/[^\x21-\x7e]/.test(name) || name.length === 0) {
+            return null;
+        }
         const value = line.substring(colonIdx + 1).trim();
         rawHeaders.push(name, value);
     }
@@ -1214,6 +1258,8 @@ function Server(options, requestListener) {
     this.requestTimeout = 300000;
     this.maxRequestsPerSocket = 0;
     this._rejectNonStandardBodyWrites = !!options.rejectNonStandardBodyWrites;
+    this._requireHostHeader = options.requireHostHeader !== false;
+    this._joinDuplicateHeaders = !!options.joinDuplicateHeaders;
 
     // Apply timeout options with validation
     if (options.headersTimeout !== undefined) {

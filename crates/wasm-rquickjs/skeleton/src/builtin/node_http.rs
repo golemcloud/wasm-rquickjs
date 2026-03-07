@@ -1,7 +1,6 @@
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
-use std::collections::HashMap;
 use wasi::http::outgoing_handler;
 use wasi::http::types as wasi_http;
 use wasi::io::streams::{InputStream, OutputStream, StreamError};
@@ -57,7 +56,7 @@ pub struct NodeHttpClientRequest {
     method: String,
     url: String,
     #[qjs(skip_trace)]
-    headers: HashMap<String, String>,
+    headers: Vec<(String, String)>,
     #[qjs(skip_trace)]
     state: RequestState,
     aborted: bool,
@@ -65,22 +64,18 @@ pub struct NodeHttpClientRequest {
 
 impl Default for NodeHttpClientRequest {
     fn default() -> Self {
-        Self::new(
-            "GET".to_string(),
-            "http://localhost".to_string(),
-            HashMap::new(),
-        )
+        Self::new("GET".to_string(), "http://localhost".to_string())
     }
 }
 
 #[rquickjs::methods(rename_all = "camelCase")]
 impl NodeHttpClientRequest {
     #[qjs(constructor)]
-    pub fn new(method: String, url: String, headers: HashMap<String, String>) -> Self {
+    pub fn new(method: String, url: String) -> Self {
         NodeHttpClientRequest {
             method,
             url,
-            headers,
+            headers: Vec::new(),
             state: RequestState::Created {
                 buffered_body: Vec::new(),
             },
@@ -318,7 +313,25 @@ impl NodeHttpClientRequest {
                 "Cannot set headers after request has been sent",
             ));
         }
-        self.headers.insert(name, value);
+        let lower = name.to_ascii_lowercase();
+        self.headers.retain(|(n, _)| n.to_ascii_lowercase() != lower);
+        self.headers.push((name, value));
+        Ok(())
+    }
+
+    pub fn append_header<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        name: String,
+        value: String,
+    ) -> rquickjs::Result<()> {
+        if !matches!(self.state, RequestState::Created { .. }) {
+            return Err(Exception::throw_message(
+                &ctx,
+                "Cannot set headers after request has been sent",
+            ));
+        }
+        self.headers.push((name, value));
         Ok(())
     }
 
@@ -329,7 +342,8 @@ impl NodeHttpClientRequest {
                 "Cannot remove headers after request has been sent",
             ));
         }
-        self.headers.remove(&name);
+        let lower = name.to_ascii_lowercase();
+        self.headers.retain(|(n, _)| n.to_ascii_lowercase() != lower);
         Ok(())
     }
 

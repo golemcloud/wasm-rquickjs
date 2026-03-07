@@ -4874,30 +4874,26 @@
     "parallel/test-http-remove-header-stays-removed.js": { "skip": true, "reason": "hangs: test uses raw TCP for header removal verification" },
     "parallel/test-http-req-close-robust-from-tampering.js": { "skip": true, "reason": "hangs: relies on close event tampering edge case" },
     "parallel/test-http-request-arguments.js": {},
-    "parallel/test-http-request-dont-override-options.js": { "skip": true, "reason": "hangs: relies on Agent.addRequest not mutating options" },
+    "parallel/test-http-request-dont-override-options.js": {},
     "parallel/test-http-request-host-header.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": { "skip": true, "reason": "wasi:http automatically adds Host header from URL, cannot send request without Host" },
+        "block_01_block_01": {}
       }
     },
     "parallel/test-http-request-join-authorization-headers.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-http-request-large-payload.js": {},
     "parallel/test-http-request-method-delete-payload.js": {},
     "parallel/test-http-request-methods.js": {},
-    "parallel/test-http-request-smuggling-content-length.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for request smuggling detection" },
+    "parallel/test-http-request-smuggling-content-length.js": {},
     "parallel/test-http-res-write-end-dont-take-array.js": {},
     "parallel/test-http-response-add-header-after-sent.js": {},
     "parallel/test-http-response-close.js": {
