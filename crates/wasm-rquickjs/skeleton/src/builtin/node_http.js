@@ -12,6 +12,7 @@ import {
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_HTTP_TOKEN,
     ERR_METHOD_NOT_IMPLEMENTED,
+    ERR_OUT_OF_RANGE,
     ERR_STREAM_CANNOT_PIPE,
     ERR_STREAM_DESTROYED,
     ERR_UNESCAPED_CHARACTERS,
@@ -188,15 +189,37 @@ class FakeAgentSocket extends EventEmitter {
 
 // ===== Agent =====
 
-export class Agent {
+export class Agent extends EventEmitter {
     constructor(options = {}) {
+        super();
+
+        // Validate maxTotalSockets
+        if (options.maxTotalSockets !== undefined && options.maxTotalSockets !== null) {
+            if (typeof options.maxTotalSockets !== 'number') {
+                throw new ERR_INVALID_ARG_TYPE('maxTotalSockets', 'number', options.maxTotalSockets);
+            }
+            if (options.maxTotalSockets <= 0 || Number.isNaN(options.maxTotalSockets)) {
+                throw new ERR_OUT_OF_RANGE('maxTotalSockets', '> 0', options.maxTotalSockets);
+            }
+        }
+
+        // Validate scheduling
+        const scheduling = options.scheduling || 'lifo';
+        if (scheduling !== 'fifo' && scheduling !== 'lifo') {
+            const err = new TypeError(
+                `The argument 'scheduling' must be one of: 'fifo', 'lifo'. Received '${scheduling}'`
+            );
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+
         this.keepAlive = options.keepAlive || false;
         this.keepAliveMsecs = options.keepAliveMsecs || 1000;
         this.maxSockets = options.maxSockets || Infinity;
         this.maxTotalSockets = options.maxTotalSockets || Infinity;
         this.maxFreeSockets = options.maxFreeSockets || 256;
         this.timeout = options.timeout;
-        this.scheduling = options.scheduling || 'lifo';
+        this.scheduling = scheduling;
         this.freeSockets = {};
         this.requests = {};
         this.sockets = {};
@@ -204,20 +227,65 @@ export class Agent {
         this._requestQueue = {};
     }
 
+    get totalSocketCount() {
+        let n = 0;
+        for (const key of Object.keys(this.sockets)) {
+            n += this.sockets[key].length;
+        }
+        for (const key of Object.keys(this.freeSockets)) {
+            n += this.freeSockets[key].length;
+        }
+        return n;
+    }
+
     destroy() {
+        for (const key of Object.keys(this.sockets)) {
+            const list = this.sockets[key];
+            for (const socket of list) {
+                if (socket && typeof socket.destroy === 'function') {
+                    socket.destroy();
+                }
+            }
+        }
+        for (const key of Object.keys(this.freeSockets)) {
+            const list = this.freeSockets[key];
+            for (const socket of list) {
+                if (socket && typeof socket.destroy === 'function') {
+                    socket.destroy();
+                }
+            }
+        }
+        this.sockets = {};
+        this.freeSockets = {};
+        this.requests = {};
         this._activeRequestCount = {};
         this._requestQueue = {};
     }
 
-    _scheduleRequest(name, execute) {
-        const maxConcurrent = this.maxSockets;
+    _getTotalActiveCount() {
+        let total = 0;
+        for (const key of Object.keys(this._activeRequestCount)) {
+            total += this._activeRequestCount[key];
+        }
+        return total;
+    }
 
-        if (!Number.isFinite(maxConcurrent)) {
+    _canRunRequest(key) {
+        const perKey = this._activeRequestCount[key] || 0;
+        const total = this._getTotalActiveCount();
+        return (perKey < this.maxSockets || !Number.isFinite(this.maxSockets)) &&
+               (total < this.maxTotalSockets || !Number.isFinite(this.maxTotalSockets));
+    }
+
+    _scheduleRequest(name, execute) {
+        const maxPerKey = this.maxSockets;
+        const maxTotal = this.maxTotalSockets;
+
+        if (!Number.isFinite(maxPerKey) && !Number.isFinite(maxTotal)) {
             return execute();
         }
 
         const key = name || 'default';
-        const currentActive = this._activeRequestCount[key] || 0;
 
         return new Promise((resolve, reject) => {
             const run = () => {
@@ -234,18 +302,11 @@ export class Agent {
                             delete this._activeRequestCount[key];
                         }
 
-                        const queue = this._requestQueue[key];
-                        if (queue && queue.length > 0) {
-                            const next = queue.shift();
-                            if (queue.length === 0) {
-                                delete this._requestQueue[key];
-                            }
-                            next();
-                        }
+                        this._drainQueues();
                     });
             };
 
-            if (currentActive < maxConcurrent) {
+            if (this._canRunRequest(key)) {
                 run();
                 return;
             }
@@ -255,6 +316,26 @@ export class Agent {
             }
             this._requestQueue[key].push(run);
         });
+    }
+
+    _drainQueues() {
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const key of Object.keys(this._requestQueue)) {
+                const queue = this._requestQueue[key];
+                if (!queue || queue.length === 0) continue;
+
+                if (this._canRunRequest(key)) {
+                    const next = queue.shift();
+                    if (queue.length === 0) {
+                        delete this._requestQueue[key];
+                    }
+                    next();
+                    changed = true;
+                }
+            }
+        }
     }
 
     addRequest(req, options, port, localAddress) {
@@ -319,6 +400,19 @@ export class Agent {
             }
             if (list.length === 0) {
                 delete this.sockets[name];
+            }
+        }
+    }
+
+    _removeFreeSocket(name, socket) {
+        const list = this.freeSockets[name];
+        if (list) {
+            const idx = list.indexOf(socket);
+            if (idx !== -1) {
+                list.splice(idx, 1);
+            }
+            if (list.length === 0) {
+                delete this.freeSockets[name];
             }
         }
     }
@@ -1936,6 +2030,7 @@ export class ClientRequest extends OutgoingMessage {
             return;
         }
         const mockSocket = new FakeAgentSocket();
+        mockSocket._httpMessage = this;
         this.socket = mockSocket;
         if (this.agent && this._agentName) {
             this.agent._addSocket(this._agentName, mockSocket);
@@ -1945,10 +2040,38 @@ export class ClientRequest extends OutgoingMessage {
 
     _cleanupMockSocket() {
         if (this.socket && this.socket._isFakeAgentSocket) {
-            if (this.agent && this._agentName) {
-                this.agent._removeSocket(this._agentName, this.socket);
+            const socket = this.socket;
+            const agent = this.agent;
+            const name = this._agentName;
+
+            if (agent && name) {
+                agent._removeSocket(name, socket);
+
+                if (this.shouldKeepAlive && agent.keepAlive && !socket.destroyed) {
+                    if (!agent.freeSockets[name]) {
+                        agent.freeSockets[name] = [];
+                    }
+                    if (agent.freeSockets[name].length < agent.maxFreeSockets) {
+                        agent.freeSockets[name].push(socket);
+
+                        const onFreeSocketError = () => {
+                            agent._removeFreeSocket(name, socket);
+                            socket.destroy();
+                        };
+                        socket.once('error', onFreeSocketError);
+                        socket._freeSocketErrorListener = onFreeSocketError;
+
+                        socket.emit('free');
+                        agent.emit('free', socket, {
+                            host: this.hostname,
+                            port: this.port,
+                        });
+                        return;
+                    }
+                }
             }
-            this.socket.emit('close');
+
+            socket.emit('close');
         }
     }
 

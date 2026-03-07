@@ -4570,19 +4570,13 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-agent-error-on-idle.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
-    },
+    "parallel/test-http-agent-error-on-idle.js": {},
     "parallel/test-http-agent-no-protocol.js": {},
     "parallel/test-http-agent-null.js": {},
-    "parallel/test-http-agent-remove.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
-    },
+    "parallel/test-http-agent-remove.js": {},
     "parallel/test-http-agent-scheduling.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
+      "reason": "requires actual TCP socket reuse with port identity tracking; wasi:http creates new connections per request"
     },
     "parallel/test-http-agent-timeout.js": {
       "skip": true,
@@ -5180,20 +5174,11 @@
     },
     "parallel/test-http-agent-destroyed-socket.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality"
+      "reason": "requires request queuing via addRequest and socket identity tracking; wasi:http creates new connections per request"
     },
-    "parallel/test-http-agent-maxsockets-respected.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality"
-    },
-    "parallel/test-http-agent-maxsockets.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality"
-    },
-    "parallel/test-http-agent-maxtotalsockets.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality"
-    },
+    "parallel/test-http-agent-maxsockets-respected.js": {},
+    "parallel/test-http-agent-maxsockets.js": {},
+    "parallel/test-http-agent-maxtotalsockets.js": {},
     "parallel/test-http-agent.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
     "parallel/test-http-allow-req-after-204-res.js": {},
     "parallel/test-http-client-abort.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
@@ -5402,15 +5387,15 @@
     },
     "parallel/test-http-agent-keepalive-delay.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality"
+      "reason": "requires createConnection with real socket keepAlive options; wasi:http does not expose socket-level options"
     },
     "parallel/test-http-agent-keepalive.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality"
+      "reason": "requires actual TCP socket reuse with reusedSocket tracking; wasi:http creates new connections per request"
     },
     "parallel/test-http-agent-reuse-drained-socket-only.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality"
+      "reason": "requires net.createServer with pauseOnConnect and socket.localPort; unavailable with wasi:http"
     },
     "parallel/test-http-agent-timeout-option.js": { "skip": true, "reason": "hangs: requires real socket with timeout/listeners tracking; lookup callback prevents connection" },
     "parallel/test-http-buffer-sanity.js": {

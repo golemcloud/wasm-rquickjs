@@ -741,5 +741,6 @@ async fn write_all_to_stream<'js>(
 pub const NODE_HTTP_JS: &str = include_str!("node_http.js");
 pub const NODE_HTTP_SERVER_JS: &str = include_str!("node_http_server.js");
 pub const HTTP_COMMON_JS: &str = include_str!("node_http_common.js");
+pub const HTTP_AGENT_JS: &str = include_str!("node_http_agent.js");
 pub const REEXPORT_JS: &str =
     r#"export * from 'node:http'; export { default } from 'node:http';"#;
