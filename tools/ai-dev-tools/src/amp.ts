@@ -313,7 +313,7 @@ export async function runAmpWithSkill(
   iteration: number,
   mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
-  const safeLabel = libraryName.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32);
+  const safeLabel = libraryName.replace(/[^a-zA-Z0-9-]/g, "-").replace(/^-+/, "").replace(/-+$/, "").slice(0, 32);
   return runAmpGeneric(prompt, [taskLabel, safeLabel], iteration, mode);
 }
 
