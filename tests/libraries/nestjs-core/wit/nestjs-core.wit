@@ -1,0 +1,5 @@
+package test:lib-nestjs-core;
+
+world lib-nestjs-core {
+  export run: func() -> string;
+}
