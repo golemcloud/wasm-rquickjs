@@ -1,0 +1,5 @@
+package test:lib-node-fetch;
+
+world lib-node-fetch {
+  export run: func() -> string;
+}
