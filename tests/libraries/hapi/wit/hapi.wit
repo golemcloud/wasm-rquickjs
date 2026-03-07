@@ -1,0 +1,5 @@
+package test:lib-hapi;
+
+world lib-hapi {
+  export run: func() -> string;
+}
