@@ -3,7 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
-import { ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -181,8 +181,8 @@ function _validateStatusMessage(statusMessage) {
 
 // ===== ServerResponse =====
 
-function ServerResponse(req) {
-    if (!(this instanceof ServerResponse)) return new ServerResponse(req);
+function ServerResponse(req, options) {
+    if (!(this instanceof ServerResponse)) return new ServerResponse(req, options);
     EventEmitter.call(this);
 
     this.req = req;
@@ -201,6 +201,7 @@ function ServerResponse(req) {
     this._keepAlive = false;
     this._sentContentLength = false;
     this._headersSentWire = false;
+    this._rejectNonStandardBodyWrites = !!(options && options.rejectNonStandardBodyWrites);
 
     // Properties needed by stream.finished / end-of-stream detection
     this._sent100 = false;
@@ -506,6 +507,9 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     }
 
     if (!this._hasBody) {
+        if (this._rejectNonStandardBodyWrites) {
+            throw new ERR_HTTP_BODY_NOT_ALLOWED();
+        }
         if (typeof cb === 'function') cb();
         return true;
     }
@@ -641,6 +645,67 @@ ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback
 
 ServerResponse.prototype.writeContinue = function writeContinue() {
     this.socket.write(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'));
+};
+
+const LINK_HEADER_REGEX = /^<[^>]*>(\s*;\s*[^;]+)*$/;
+
+function _validateLinkHeaderFormat(value) {
+    if (typeof value !== 'string' || !LINK_HEADER_REGEX.test(value)) {
+        throw new ERR_INVALID_ARG_VALUE(
+            'hints.link', value, 'must have a valid format "<URI>; ...<attributes>"'
+        );
+    }
+    return value;
+}
+
+function _validateLinkHeaderValue(value) {
+    if (typeof value === 'string') {
+        return _validateLinkHeaderFormat(value);
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => _validateLinkHeaderFormat(item)).join(', ');
+    }
+    throw new ERR_INVALID_ARG_TYPE('hints.link', ['string', 'Array'], value);
+}
+
+ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
+    if (typeof hints !== 'object' || hints === null || Array.isArray(hints)) {
+        throw new ERR_INVALID_ARG_TYPE('hints', 'Object', hints);
+    }
+
+    let head = 'HTTP/1.1 103 Early Hints\r\n';
+
+    const headers = {};
+    const keys = Object.keys(hints);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (key.toLowerCase() === 'link') {
+            const validated = _validateLinkHeaderValue(hints[key]);
+            if (validated.length > 0) {
+                headers[key] = validated;
+            }
+        } else {
+            headers[key] = hints[key];
+        }
+    }
+
+    const headerKeys = Object.keys(headers);
+    if (headerKeys.length === 0) {
+        if (typeof cb === 'function') cb();
+        return;
+    }
+
+    for (let i = 0; i < headerKeys.length; i++) {
+        const key = headerKeys[i];
+        head += key + ': ' + headers[key] + '\r\n';
+    }
+    head += '\r\n';
+
+    if (typeof cb === 'function') {
+        this.socket.write(Buffer.from(head), cb);
+    } else {
+        this.socket.write(Buffer.from(head));
+    }
 };
 
 ServerResponse.prototype.addTrailers = function addTrailers() {
@@ -880,7 +945,9 @@ function createConnectionParser(server, socket) {
                 }
 
                 const connKeepAlive = computeKeepAlive(req.headers.connection, parsed.httpVersion);
-                const res = new ServerResponse(req);
+                const res = new ServerResponse(req, {
+                    rejectNonStandardBodyWrites: server._rejectNonStandardBodyWrites,
+                });
                 res._keepAlive = connKeepAlive;
 
                 state.req = req;
@@ -1133,6 +1200,7 @@ function Server(options, requestListener) {
     this.headersTimeout = 60000;
     this.requestTimeout = 300000;
     this.maxRequestsPerSocket = 0;
+    this._rejectNonStandardBodyWrites = !!options.rejectNonStandardBodyWrites;
 
     // Apply timeout options with validation
     if (options.headersTimeout !== undefined) {

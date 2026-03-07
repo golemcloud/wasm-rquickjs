@@ -206,6 +206,15 @@ export class ERR_HTTP_SOCKET_ASSIGNED extends Error {
     }
 }
 
+export class ERR_HTTP_BODY_NOT_ALLOWED extends Error {
+    constructor() {
+        super(
+            "Adding content for this request method or response status is not allowed.",
+        );
+        addCodeToMessage(this, "ERR_HTTP_BODY_NOT_ALLOWED");
+    }
+}
+
 export class ERR_HTTP_INVALID_HEADER_VALUE extends TypeError {
     constructor(x, y) {
         super(
@@ -1193,6 +1202,7 @@ export const codes = Object.freeze({
     ERR_FS_EISDIR,
     ERR_FS_FILE_TOO_LARGE,
     ERR_FS_INVALID_SYMLINK_TYPE,
+    ERR_HTTP_BODY_NOT_ALLOWED,
     ERR_HTTP_HEADERS_SENT,
     ERR_HTTP_SOCKET_ASSIGNED,
     ERR_HTTP_INVALID_HEADER_VALUE,

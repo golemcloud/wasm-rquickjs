@@ -2387,6 +2387,7 @@ export class ClientRequest extends OutgoingMessage {
                     res._nativeRes.discardBody();
                     res.complete = true;
                     res.push(null);
+                    res.resume();
                 }
             }
 

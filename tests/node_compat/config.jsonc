@@ -4711,18 +4711,16 @@
       }
     },
     "parallel/test-http-dump-req-when-res-ends.js": { "skip": true, "reason": "hangs: relies on response stream cleanup behavior" },
-    "parallel/test-http-early-hints-invalid-argument.js": { "skip": true, "reason": "hangs: 103 Early Hints not supported via wasi:http" },
+    "parallel/test-http-early-hints-invalid-argument.js": { "skip": true, "reason": "hangs: test calls server.close() from server handler without consuming client response, causing WASM event loop to not drain" },
     "parallel/test-http-early-hints.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {}
       }
     },
     "parallel/test-http-eof-on-connect.js": {},
@@ -4746,13 +4744,11 @@
     "parallel/test-http-head-response-has-no-body-end.js": {},
     "parallel/test-http-head-response-has-no-body.js": {},
     "parallel/test-http-head-throw-on-response-body-write.js": {
-      "skip": true,
-      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-http-header-badrequest.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for malformed headers" },
