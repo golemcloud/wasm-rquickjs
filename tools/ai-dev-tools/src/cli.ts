@@ -5,6 +5,7 @@ import { fixCommand } from "./commands/fix.js";
 import { fixBatchCommand } from "./commands/fix-batch.js";
 import { syncConfigCommand } from "./commands/sync-config.js";
 import { ensureAllVendoredCommand } from "./commands/ensure-all-vendored.js";
+import { testLibrariesCommand } from "./commands/test-libraries.js";
 
 const USAGE = `\
 ai-dev-tools — AI-powered development tools for wasm-rquickjs
@@ -14,6 +15,7 @@ Usage:
   ai-dev-tools fix-batch <category>       Fix skipped tests in grouped batches (for http)
   ai-dev-tools sync-config [--dry-run]    Update config.jsonc from the compat report
   ai-dev-tools ensure-all-vendored [--dry-run]  Ensure ALL vendored tests are in config.jsonc
+  ai-dev-tools test-libraries             Test npm library compatibility (iterates all untested)
   ai-dev-tools --help                     Show this help message
 
 Examples:
@@ -24,12 +26,14 @@ Examples:
   npx ai-dev-tools sync-config --dry-run
   npx ai-dev-tools ensure-all-vendored
   npx ai-dev-tools ensure-all-vendored --dry-run
+  npx ai-dev-tools test-libraries
 
   # Or during development:
   npx tsx src/cli.ts fix net
   npx tsx src/cli.ts fix-batch http
   npx tsx src/cli.ts sync-config
   npx tsx src/cli.ts ensure-all-vendored
+  npx tsx src/cli.ts test-libraries
 `;
 
 const CATEGORY_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -91,6 +95,10 @@ async function main(): Promise<void> {
     }
     case "ensure-all-vendored": {
       await ensureAllVendoredCommand({ dryRun: !!values["dry-run"] });
+      break;
+    }
+    case "test-libraries": {
+      await testLibrariesCommand();
       break;
     }
     default:

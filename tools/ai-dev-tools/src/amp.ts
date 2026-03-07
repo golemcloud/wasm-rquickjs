@@ -306,10 +306,30 @@ export function isCreditsExhausted(output: string): boolean {
   return CREDIT_EXHAUSTION_PATTERNS.some((p) => p.test(output));
 }
 
+export async function runAmpWithSkill(
+  prompt: string,
+  taskLabel: string,
+  libraryName: string,
+  iteration: number,
+  mode: "smart" | "deep" = "deep",
+): Promise<AmpResult> {
+  const safeLabel = libraryName.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32);
+  return runAmpGeneric(prompt, [taskLabel, safeLabel], iteration, mode);
+}
+
 export async function runAmp(
   prompt: string,
   category: string,
   targetTest: string,
+  iteration: number,
+  mode: "smart" | "deep" = "deep",
+): Promise<AmpResult> {
+  return runAmpGeneric(prompt, ["fix-node-compat", category.replace(/_/g, "-"), targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)], iteration, mode);
+}
+
+async function runAmpGeneric(
+  prompt: string,
+  labels: string[],
   iteration: number,
   mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
@@ -358,7 +378,7 @@ export async function runAmp(
         dangerouslyAllowAll: true,
         mode,
         archive: true,
-        labels: ["fix-node-compat", category.replace(/_/g, "-"), targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)],
+        labels,
       },
     })) {
       if (message.type === "system") {
