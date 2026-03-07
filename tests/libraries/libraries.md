@@ -26,7 +26,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 8 | Axios | `axios` | ⬜ | — | Promise-based HTTP client |
+| 8 | Axios | `axios` | ✅ | 2026-03-07 | All 5 tests pass (utilities, headers, interceptors, HTTP GET, HTTP POST) |
 | 9 | Got | `got` | ⬜ | — | Human-friendly HTTP client, ESM-native |
 | 10 | node-fetch | `node-fetch` | ⬜ | — | Fetch API polyfill for Node.js |
 | 11 | undici | `undici` | ⬜ | — | Official Node.js HTTP/1.1 client |
