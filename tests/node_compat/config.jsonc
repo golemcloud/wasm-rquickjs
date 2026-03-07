@@ -4823,29 +4823,25 @@
     "parallel/test-http-no-read-no-dump.js": { "skip": true, "reason": "hangs: relies on unconsumed request body behavior" },
     "parallel/test-http-nodelay.js": { "skip": true, "reason": "hangs: relies on socket.setNoDelay verification" },
     "parallel/test-http-outgoing-destroyed.js": {
-      "skip": true,
-      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": { "skip": true, "reason": "client never calls end(), wasi:http cannot finalize request to get response" },
+        "block_01_block_01": { "skip": true, "reason": "client never calls end(), wasi:http cannot finalize request to get response" },
+        "block_02_block_02": {}
       }
     },
-    "parallel/test-http-outgoing-end-cork.js": { "skip": true, "reason": "hangs: relies on cork/uncork buffering behavior" },
+    "parallel/test-http-outgoing-end-cork.js": { "skip": true, "reason": "relies on keepAlive socket reuse and backpressure which are not supported in WASI" },
     "parallel/test-http-outgoing-end-multiple.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
     "parallel/test-http-outgoing-end-types.js": {},
-    "parallel/test-http-outgoing-finish-writable.js": { "skip": true, "reason": "hangs: relies on writable state after finish" },
+    "parallel/test-http-outgoing-finish-writable.js": {},
     "parallel/test-http-outgoing-finish.js": {},
     "parallel/test-http-outgoing-finished.js": {},
-    "parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js": { "skip": true, "reason": "hangs: relies on encoding-specific write behavior" },
+    "parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js": { "skip": true, "reason": "hangs: creates 4 concurrent server-client pairs with net.connect raw TCP" },
     "parallel/test-http-outgoing-message-capture-rejection.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": { "skip": true, "reason": "relies on server-side drain/backpressure and captureRejections propagation" },
+        "block_01_block_01": { "skip": true, "reason": "client never calls end(), wasi:http cannot finalize request" }
       }
     },
     "parallel/test-http-outgoing-message-write-callback.js": {},
@@ -5521,15 +5517,13 @@
     },
     "parallel/test-http-outgoing-message-inheritance.js": {},
     "parallel/test-http-outgoing-properties.js": {
-      "skip": true,
-      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_block_02": {
           "skip": true,
-          "reason": "[manual] amp fix caused regressions"
+          "reason": "server-based test with writableLength tracking requires precise socket HWM"
         },
         "block_03_block_03": {},
         "block_04_block_04": {}

@@ -230,6 +230,9 @@ function ServerResponse(req, options) {
     this._removedContLen = false;
     this._removedTE = false;
     this._outputSize = 0;
+
+    // OutgoingMessage-compatible properties
+    this.writable = true;
 }
 
 Object.setPrototypeOf(ServerResponse.prototype, EventEmitter.prototype);
@@ -275,6 +278,18 @@ Object.defineProperty(ServerResponse.prototype, 'errored', {
 
 Object.defineProperty(ServerResponse.prototype, 'writableCorked', {
     get() { return this.socket ? this.socket.writableCorked : 0; },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'writableObjectMode', {
+    get() { return false; },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'writableHighWaterMark', {
+    get() { return this.socket ? this.socket.writableHighWaterMark : 16 * 1024; },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'writableLength', {
+    get() { return this._outputSize; },
 });
 
 ServerResponse.prototype._implicitHeader = function _implicitHeader() {
@@ -437,8 +452,10 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
     const statusMessage = _validateStatusMessage(
         this.statusMessage || STATUS_CODES[this.statusCode] || 'Unknown',
     );
-    const httpVersion = this.req.httpVersion || '1.1';
-    let head = 'HTTP/' + httpVersion + ' ' + this.statusCode + ' ' + statusMessage + '\r\n';
+    // Node.js always responds with HTTP/1.1 regardless of request version
+    let head = 'HTTP/1.1 ' + this.statusCode + ' ' + statusMessage + '\r\n';
+    // Use request HTTP version for chunked encoding decision
+    const requestHttpVersion = this.req.httpVersion || '1.1';
 
     const code = this.statusCode;
     const isHeadRequest = this.req.method === 'HEAD';
@@ -467,7 +484,7 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         this._chunked = te === 'chunked';
     } else if (!isHeadRequest) {
         // Neither Content-Length nor Transfer-Encoding set, body expected
-        if (httpVersion === '1.1') {
+        if (requestHttpVersion === '1.1') {
             this._chunked = true;
             head += 'Transfer-Encoding: chunked\r\n';
         }
@@ -751,7 +768,12 @@ ServerResponse.prototype.destroy = function destroy(err) {
     if (this._destroyed) return this;
     this._destroyed = true;
     if (err) this._errored = err;
-    if (this.socket) this.socket.destroy(err);
+    // If the response was already ended without error, don't forcefully
+    // destroy the socket - let it flush pending writes to the client.
+    // Forceful destroy (RST) can prevent wasi:http from delivering the response.
+    if (this.socket && (err || !this._writableEnded)) {
+        this.socket.destroy(err);
+    }
     return this;
 };
 
