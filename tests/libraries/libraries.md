@@ -200,7 +200,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 90 | compression | `compression` | ⬜ | — | Express gzip compression middleware |
 | 91 | multer | `multer` | ⬜ | — | Multipart/form-data handling (file uploads) |
-| 92 | form-data | `form-data` | ⬜ | — | Construct multipart form data |
+| 92 | form-data | `form-data` | ❌ | 2026-03-07 | CJS `require()` of Node built-ins at top level fails — `globalThis.require` not yet set during ESM module init |
 
 ## Utility Libraries
 

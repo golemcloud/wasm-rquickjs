@@ -1,0 +1,5 @@
+package test:lib-form-data;
+
+world lib-form-data {
+  export run: func() -> string;
+}
