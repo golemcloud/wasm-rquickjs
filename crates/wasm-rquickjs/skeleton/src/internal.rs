@@ -245,12 +245,29 @@ impl JsState {
                 global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                     .expect("Failed to initialize resource table");
 
+                // Phase 1: Wire built-in globals (globalThis.require, Buffer, process, etc.)
+                // This must complete before user code runs, because bundled CJS-in-ESM code
+                // (e.g. esbuild's __require shim) checks `typeof require` at the top level
+                // during module evaluation. ES module semantics hoist all imports and evaluate
+                // them before the module body, so wiring and user import cannot share a single
+                // Module::evaluate call.
                 let wiring = crate::builtin::wire_builtins();
                 Module::evaluate(
                     ctx.clone(),
-                    "test",
+                    "__wasm_rquickjs_init_wiring",
+                    wiring,
+                )
+                .catch(&ctx)
+                .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
+                .finish::<()>()
+                .catch(&ctx)
+                .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
+
+                // Phase 2: Import the user module (now globalThis.require is available)
+                Module::evaluate(
+                    ctx.clone(),
+                    "__wasm_rquickjs_init_entry",
                     format!(r#"
-                    {wiring}
                     import * as userModule from '{}';
                     globalThis.userModule = userModule;
                     "#, crate::JS_EXPORT_MODULE_NAME),

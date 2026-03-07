@@ -7,6 +7,7 @@ import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { channel } from 'node:diagnostics_channel';
 import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
 import {
+    AbortError,
     ERR_HTTP_HEADERS_SENT,
     ERR_HTTP_INVALID_HEADER_VALUE,
     ERR_INVALID_ARG_TYPE,
@@ -1755,6 +1756,7 @@ export class ClientRequest extends OutgoingMessage {
         this._closeEmitted = false;
         this._nativeAbortDeferred = false;
         this._hasCustomLookup = typeof options.lookup === 'function';
+        this._response = null;
 
         this._initializeCustomConnection(options);
 
@@ -1766,6 +1768,24 @@ export class ClientRequest extends OutgoingMessage {
 
         if (typeof callback === 'function') {
             this.once('response', callback);
+        }
+
+        // AbortSignal support
+        if (options.signal != null) {
+            const signal = options.signal;
+            if (signal.aborted) {
+                // Pre-aborted: destroy synchronously (sets destroyed=true),
+                // error/close deferred via nextTick so callers can attach listeners.
+                this.destroy(new AbortError(signal.reason));
+            } else {
+                const onAbort = () => {
+                    this.destroy(new AbortError(signal.reason));
+                };
+                signal.addEventListener('abort', onAbort, { once: true });
+                this.once('close', () => {
+                    signal.removeEventListener('abort', onAbort);
+                });
+            }
         }
 
         const requestTimeout = options.timeout !== undefined ? options.timeout
@@ -2483,7 +2503,7 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     abort() {
-        if (this.aborted) {
+        if (this.aborted || this.destroyed) {
             return;
         }
 
@@ -2508,13 +2528,29 @@ export class ClientRequest extends OutgoingMessage {
     destroy(error) {
         if (this.destroyed) return this;
 
-        this.aborted = true;
         this.destroyed = true;
 
         this._abortNativeRequest();
 
-        if (error) this.emit('error', error);
-        this._emitCloseOnce();
+        if (!error && !this._response) {
+            // Request destroyed before receiving a response — emit ECONNRESET
+            // matching Node.js behavior for destroyed pending requests.
+            error = new Error('socket hang up');
+            error.code = 'ECONNRESET';
+        }
+
+        // Defer error/close to nextTick so callers can attach listeners
+        // after construction (e.g., pre-aborted AbortSignal case).
+        if (error) {
+            process.nextTick(() => {
+                this.emit('error', error);
+                this._emitCloseOnce();
+            });
+        } else {
+            process.nextTick(() => {
+                this._emitCloseOnce();
+            });
+        }
 
         return this;
     }
