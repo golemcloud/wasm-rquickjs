@@ -3,14 +3,16 @@
 import { parseArgs } from "node:util";
 import { fixCommand } from "./commands/fix.js";
 import { syncConfigCommand } from "./commands/sync-config.js";
+import { ensureAllVendoredCommand } from "./commands/ensure-all-vendored.js";
 
 const USAGE = `\
 ai-dev-tools — AI-powered development tools for wasm-rquickjs
 
 Usage:
-  ai-dev-tools fix <category>        Fix skipped node-compat tests for a category
-  ai-dev-tools sync-config [--dry-run]  Update config.jsonc from the compat report
-  ai-dev-tools --help                 Show this help message
+  ai-dev-tools fix <category>             Fix skipped node-compat tests for a category
+  ai-dev-tools sync-config [--dry-run]    Update config.jsonc from the compat report
+  ai-dev-tools ensure-all-vendored [--dry-run]  Ensure ALL vendored tests are in config.jsonc
+  ai-dev-tools --help                     Show this help message
 
 Examples:
   npx ai-dev-tools fix net
@@ -18,10 +20,13 @@ Examples:
   npx ai-dev-tools fix fs
   npx ai-dev-tools sync-config
   npx ai-dev-tools sync-config --dry-run
+  npx ai-dev-tools ensure-all-vendored
+  npx ai-dev-tools ensure-all-vendored --dry-run
 
   # Or during development:
   npx tsx src/cli.ts fix net
   npx tsx src/cli.ts sync-config
+  npx tsx src/cli.ts ensure-all-vendored
 `;
 
 const CATEGORY_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -62,6 +67,10 @@ async function main(): Promise<void> {
     }
     case "sync-config": {
       await syncConfigCommand({ dryRun: !!values["dry-run"] });
+      break;
+    }
+    case "ensure-all-vendored": {
+      await ensureAllVendoredCommand({ dryRun: !!values["dry-run"] });
       break;
     }
     default:

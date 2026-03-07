@@ -516,6 +516,11 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         chunk = Buffer.from(chunk);
     }
 
+    if (chunk.length === 0) {
+        if (typeof cb === 'function') cb();
+        return true;
+    }
+
     if (this._chunked) {
         const hex = chunk.length.toString(16);
         this.socket.write(Buffer.from(hex + '\r\n'));
@@ -1126,8 +1131,35 @@ function Server(options, requestListener) {
     this.httpAllowHalfOpen = false;
     this.maxHeadersCount = null;
     this.headersTimeout = 60000;
-    this.requestTimeout = 0;
+    this.requestTimeout = 300000;
     this.maxRequestsPerSocket = 0;
+
+    // Apply timeout options with validation
+    if (options.headersTimeout !== undefined) {
+        this.headersTimeout = options.headersTimeout;
+    }
+    if (options.requestTimeout !== undefined) {
+        this.requestTimeout = options.requestTimeout;
+    }
+    // Validate: if both explicitly provided and requestTimeout < headersTimeout, throw.
+    // requestTimeout === 0 means "disabled" in Node.js, so skip the comparison.
+    if (options.headersTimeout !== undefined && options.requestTimeout !== undefined) {
+        if (this.requestTimeout > 0 && this.requestTimeout < this.headersTimeout) {
+            const err = new RangeError(
+                'The value of "requestTimeout" is out of range. ' +
+                'It must be >= headersTimeout (' + this.headersTimeout + '). ' +
+                'Received ' + this.requestTimeout
+            );
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+    } else if (options.requestTimeout !== undefined && options.headersTimeout === undefined) {
+        // Only requestTimeout provided: clamp headersTimeout down if needed
+        if (this.requestTimeout > 0 && this.headersTimeout > this.requestTimeout) {
+            this.headersTimeout = this.requestTimeout;
+        }
+    }
+
     this._httpConnections = new Set();
 
     if (requestListener) {

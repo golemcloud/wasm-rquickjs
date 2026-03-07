@@ -31,9 +31,24 @@ pub(crate) struct RawResponse {
     incoming_response: wasi_http::IncomingResponse,
 }
 
-enum PendingResponse {
-    Ready(RawResponse),
-    None,
+enum RequestState {
+    Created {
+        buffered_body: Vec<u8>,
+    },
+    Started {
+        body: wasi_http::OutgoingBody,
+        stream: OutputStream,
+        future_response: wasi_http::FutureIncomingResponse,
+    },
+    /// Transient state while an async write or finish is in progress.
+    /// Prevents re-entrant calls from seeing Aborted incorrectly.
+    Writing,
+    BodyFinished {
+        future_response: wasi_http::FutureIncomingResponse,
+    },
+    ResponseReady(RawResponse),
+    Consumed,
+    Aborted,
 }
 
 #[derive(Trace, JsLifetime)]
@@ -44,11 +59,8 @@ pub struct NodeHttpClientRequest {
     #[qjs(skip_trace)]
     headers: HashMap<String, String>,
     #[qjs(skip_trace)]
-    body_chunks: Vec<u8>,
-    #[qjs(skip_trace)]
-    pending: PendingResponse,
+    state: RequestState,
     aborted: bool,
-    sent: bool,
 }
 
 impl Default for NodeHttpClientRequest {
@@ -69,86 +81,23 @@ impl NodeHttpClientRequest {
             method,
             url,
             headers,
-            body_chunks: Vec::new(),
-            pending: PendingResponse::None,
+            state: RequestState::Created {
+                buffered_body: Vec::new(),
+            },
             aborted: false,
-            sent: false,
         }
     }
 
-    pub fn write<'js>(&mut self, ctx: Ctx<'js>, chunk: TypedArray<'js, u8>) -> rquickjs::Result<()> {
+    pub async fn start<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
         if self.aborted {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
-        if self.sent {
-            return Err(Exception::throw_message(&ctx, "Request has already been sent"));
-        }
-        let bytes = chunk.as_bytes().ok_or_else(|| {
-            Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
-        })?;
-        self.body_chunks.extend_from_slice(bytes);
-        Ok(())
-    }
-
-    pub fn write_string<'js>(&mut self, ctx: Ctx<'js>, data: String) -> rquickjs::Result<()> {
-        if self.aborted {
-            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
-        }
-        if self.sent {
-            return Err(Exception::throw_message(&ctx, "Request has already been sent"));
-        }
-        self.body_chunks.extend_from_slice(data.as_bytes());
-        Ok(())
-    }
-
-    pub fn set_header<'js>(
-        &mut self,
-        ctx: Ctx<'js>,
-        name: String,
-        value: String,
-    ) -> rquickjs::Result<()> {
-        if self.sent {
-            return Err(Exception::throw_message(
-                &ctx,
-                "Cannot set headers after request has been sent",
-            ));
-        }
-        self.headers.insert(name, value);
-        Ok(())
-    }
-
-    pub fn remove_header<'js>(&mut self, ctx: Ctx<'js>, name: String) -> rquickjs::Result<()> {
-        if self.sent {
-            return Err(Exception::throw_message(
-                &ctx,
-                "Cannot remove headers after request has been sent",
-            ));
-        }
-        self.headers.remove(&name);
-        Ok(())
-    }
-
-    pub async fn end<'js>(
-        &mut self,
-        ctx: Ctx<'js>,
-        chunk: Option<TypedArray<'js, u8>>,
-    ) -> rquickjs::Result<()> {
-        if self.aborted {
-            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
-        }
-        if self.sent {
-            return Err(Exception::throw_message(&ctx, "Request has already been sent"));
+        if !matches!(self.state, RequestState::Created { .. }) {
+            return Ok(());
         }
 
-        if let Some(chunk) = chunk {
-            let bytes = chunk.as_bytes().ok_or_else(|| {
-                Exception::throw_message(&ctx, "the Uint8Array passed to end is detached")
-            })?;
-            self.body_chunks.extend_from_slice(bytes);
-        }
-
-        self.sent = true;
-
+        // Build the outgoing request BEFORE taking ownership of state,
+        // so that errors leave the buffered body intact.
         let parsed_url: url::Url = self
             .url
             .parse()
@@ -202,49 +151,302 @@ impl NodeHttpClientRequest {
             .set_authority(Some(parsed_url.authority()))
             .map_err(|_| Exception::throw_message(&ctx, "failed to set authority"))?;
 
-        if !self.body_chunks.is_empty() {
-            let body = outgoing_request
-                .body()
-                .map_err(|_| Exception::throw_message(&ctx, "failed to get request body"))?;
-            let stream = body
-                .write()
-                .map_err(|_| Exception::throw_message(&ctx, "failed to get body stream"))?;
+        let body = outgoing_request
+            .body()
+            .map_err(|_| Exception::throw_message(&ctx, "failed to get request body"))?;
+        let stream = body
+            .write()
+            .map_err(|_| Exception::throw_message(&ctx, "failed to get body stream"))?;
 
-            let body_bytes = std::mem::take(&mut self.body_chunks);
-            write_all_to_stream(&ctx, &stream, &body_bytes).await?;
-            drop(stream);
+        let future_response = outgoing_handler::handle(outgoing_request, None).map_err(|err| {
+            Exception::throw_message(&ctx, &format!("HTTP request failed: {err:?}"))
+        })?;
 
-            wasi_http::OutgoingBody::finish(body, None)
-                .map_err(|_| Exception::throw_message(&ctx, "failed to finish request body"))?;
+        // Now take the buffered body — all fallible construction succeeded.
+        let buffered_body =
+            if let RequestState::Created { buffered_body } = std::mem::replace(
+                &mut self.state,
+                RequestState::Started {
+                    body,
+                    stream,
+                    future_response,
+                },
+            ) {
+                buffered_body
+            } else {
+                unreachable!("checked Created above")
+            };
+
+        // Flush any data that was buffered via sync write() before start().
+        if !buffered_body.is_empty() {
+            if let RequestState::Started {
+                stream: ref s, ..
+            } = self.state
+            {
+                write_all_to_stream(&ctx, s, &buffered_body).await?;
+            }
         }
 
-        let future_response = outgoing_handler::handle(outgoing_request, None)
-            .map_err(|err| {
-                Exception::throw_message(&ctx, &format!("HTTP request failed: {err:?}"))
+        Ok(())
+    }
+
+    pub fn write<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        chunk: TypedArray<'js, u8>,
+    ) -> rquickjs::Result<()> {
+        if self.aborted {
+            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+        }
+
+        let bytes = chunk.as_bytes().ok_or_else(|| {
+            Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
+        })?;
+
+        match &mut self.state {
+            RequestState::Created { buffered_body } => {
+                buffered_body.extend_from_slice(bytes);
+                Ok(())
+            }
+            _ => Err(Exception::throw_message(
+                &ctx,
+                "Cannot write after request has been started",
+            )),
+        }
+    }
+
+    pub fn write_string<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        data: String,
+    ) -> rquickjs::Result<()> {
+        if self.aborted {
+            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+        }
+
+        match &mut self.state {
+            RequestState::Created { buffered_body } => {
+                buffered_body.extend_from_slice(data.as_bytes());
+                Ok(())
+            }
+            _ => Err(Exception::throw_message(
+                &ctx,
+                "Cannot write after request has been started",
+            )),
+        }
+    }
+
+    pub async fn write_stream<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        chunk: TypedArray<'js, u8>,
+    ) -> rquickjs::Result<()> {
+        if self.aborted {
+            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+        }
+        self.ensure_started(&ctx).await?;
+
+        let bytes = chunk.as_bytes().ok_or_else(|| {
+            Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
+        })?;
+
+        let taken = std::mem::replace(&mut self.state, RequestState::Writing);
+        if let RequestState::Started {
+            body,
+            stream,
+            future_response,
+        } = taken
+        {
+            let result = write_all_to_stream(&ctx, &stream, bytes).await;
+            self.state = RequestState::Started {
+                body,
+                stream,
+                future_response,
+            };
+            result
+        } else {
+            self.state = taken;
+            Err(Exception::throw_message(
+                &ctx,
+                "Cannot write after request body has been finished",
+            ))
+        }
+    }
+
+    pub async fn write_string_stream<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        data: String,
+    ) -> rquickjs::Result<()> {
+        if self.aborted {
+            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+        }
+        self.ensure_started(&ctx).await?;
+
+        let taken = std::mem::replace(&mut self.state, RequestState::Writing);
+        if let RequestState::Started {
+            body,
+            stream,
+            future_response,
+        } = taken
+        {
+            let result = write_all_to_stream(&ctx, &stream, data.as_bytes()).await;
+            self.state = RequestState::Started {
+                body,
+                stream,
+                future_response,
+            };
+            result
+        } else {
+            self.state = taken;
+            Err(Exception::throw_message(
+                &ctx,
+                "Cannot write after request body has been finished",
+            ))
+        }
+    }
+
+    pub fn set_header<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        name: String,
+        value: String,
+    ) -> rquickjs::Result<()> {
+        if !matches!(self.state, RequestState::Created { .. }) {
+            return Err(Exception::throw_message(
+                &ctx,
+                "Cannot set headers after request has been sent",
+            ));
+        }
+        self.headers.insert(name, value);
+        Ok(())
+    }
+
+    pub fn remove_header<'js>(&mut self, ctx: Ctx<'js>, name: String) -> rquickjs::Result<()> {
+        if !matches!(self.state, RequestState::Created { .. }) {
+            return Err(Exception::throw_message(
+                &ctx,
+                "Cannot remove headers after request has been sent",
+            ));
+        }
+        self.headers.remove(&name);
+        Ok(())
+    }
+
+    pub async fn finish<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        chunk: Option<TypedArray<'js, u8>>,
+    ) -> rquickjs::Result<()> {
+        if self.aborted {
+            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+        }
+        self.ensure_started(&ctx).await?;
+
+        if let Some(chunk) = chunk {
+            let bytes = chunk.as_bytes().ok_or_else(|| {
+                Exception::throw_message(&ctx, "the Uint8Array passed to finish is detached")
             })?;
+            let taken = std::mem::replace(&mut self.state, RequestState::Writing);
+            if let RequestState::Started {
+                body,
+                stream,
+                future_response,
+            } = taken
+            {
+                let result = write_all_to_stream(&ctx, &stream, bytes).await;
+                if result.is_err() {
+                    self.state = RequestState::Started {
+                        body,
+                        stream,
+                        future_response,
+                    };
+                    return result;
+                }
+                self.state = RequestState::Started {
+                    body,
+                    stream,
+                    future_response,
+                };
+            } else {
+                self.state = taken;
+                return Err(Exception::throw_message(
+                    &ctx,
+                    "Cannot finish: request not in started state",
+                ));
+            }
+        }
 
-        let incoming_response = get_incoming_response(&ctx, &future_response).await?;
+        let taken = std::mem::replace(&mut self.state, RequestState::Writing);
+        if let RequestState::Started {
+            body,
+            stream,
+            future_response,
+        } = taken
+        {
+            drop(stream);
+            wasi_http::OutgoingBody::finish(body, None)
+                .map_err(|_| Exception::throw_message(&ctx, "failed to finish request body"))?;
+            self.state = RequestState::BodyFinished { future_response };
+            Ok(())
+        } else {
+            self.state = taken;
+            Err(Exception::throw_message(
+                &ctx,
+                "Cannot finish: request not in started state",
+            ))
+        }
+    }
 
-        let status = incoming_response.status();
-        let response_fields = incoming_response.headers();
-        let raw_entries = response_fields.entries();
-        let headers: Vec<Vec<String>> = raw_entries
-            .into_iter()
-            .map(|(name, value)| {
-                vec![
-                    name,
-                    String::from_utf8(value)
-                        .unwrap_or_else(|_| "Invalid header value".to_string()),
-                ]
-            })
-            .collect();
+    pub async fn wait_for_response<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
+        if self.aborted {
+            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+        }
 
-        self.pending = PendingResponse::Ready(RawResponse {
-            status,
-            headers,
-            incoming_response,
-        });
+        let taken = std::mem::replace(&mut self.state, RequestState::Writing);
+        if let RequestState::BodyFinished { future_response } = taken {
+            let incoming_response = get_incoming_response(&ctx, &future_response).await?;
 
+            let status = incoming_response.status();
+            let response_fields = incoming_response.headers();
+            let raw_entries = response_fields.entries();
+            let headers: Vec<Vec<String>> = raw_entries
+                .into_iter()
+                .map(|(name, value)| {
+                    vec![
+                        name,
+                        String::from_utf8(value)
+                            .unwrap_or_else(|_| "Invalid header value".to_string()),
+                    ]
+                })
+                .collect();
+
+            self.state = RequestState::ResponseReady(RawResponse {
+                status,
+                headers,
+                incoming_response,
+            });
+            Ok(())
+        } else {
+            self.state = taken;
+            Err(Exception::throw_message(
+                &ctx,
+                "Cannot wait for response: request body not finished",
+            ))
+        }
+    }
+
+    pub async fn end<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        chunk: Option<TypedArray<'js, u8>>,
+    ) -> rquickjs::Result<()> {
+        if self.aborted {
+            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+        }
+
+        self.finish(ctx.clone(), chunk).await?;
+        self.wait_for_response(ctx).await?;
         Ok(())
     }
 
@@ -256,17 +458,28 @@ impl NodeHttpClientRequest {
             return None;
         }
 
-        match std::mem::replace(&mut self.pending, PendingResponse::None) {
-            PendingResponse::Ready(raw) => {
-                Some(NodeHttpIncomingResponse::from_raw_response(raw))
-            }
-            PendingResponse::None => None,
+        let taken = std::mem::replace(&mut self.state, RequestState::Consumed);
+        if let RequestState::ResponseReady(raw) = taken {
+            Some(NodeHttpIncomingResponse::from_raw_response(raw))
+        } else {
+            self.state = taken;
+            None
         }
     }
 
     pub fn abort(&mut self) {
         self.aborted = true;
-        self.pending = PendingResponse::None;
+        self.state = RequestState::Aborted;
+    }
+}
+
+impl NodeHttpClientRequest {
+    async fn ensure_started<'js>(&mut self, ctx: &Ctx<'js>) -> rquickjs::Result<()> {
+        if matches!(self.state, RequestState::Created { .. }) {
+            self.start(ctx.clone()).await
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -435,26 +648,57 @@ impl NodeHttpIncomingResponse {
     }
 }
 
+fn http_error_to_node_code(err: &wasi_http::ErrorCode) -> &'static str {
+    match err {
+        wasi_http::ErrorCode::ConnectionTerminated => "ECONNRESET",
+        wasi_http::ErrorCode::ConnectionReadTimeout => "ETIMEDOUT",
+        wasi_http::ErrorCode::ConnectionWriteTimeout => "ETIMEDOUT",
+        wasi_http::ErrorCode::ConnectionTimeout => "ETIMEDOUT",
+        wasi_http::ErrorCode::HttpResponseTimeout => "ETIMEDOUT",
+        wasi_http::ErrorCode::ConnectionRefused => "ECONNREFUSED",
+        wasi_http::ErrorCode::DnsTimeout => "ENOTFOUND",
+        wasi_http::ErrorCode::DnsError(e) => {
+            if e.rcode.as_deref() == Some("NXDOMAIN")
+                || e.info_code.map_or(false, |c| c == 3)
+            {
+                "ENOTFOUND"
+            } else {
+                "EAI_FAIL"
+            }
+        }
+        wasi_http::ErrorCode::DestinationNotFound => "ENOTFOUND",
+        wasi_http::ErrorCode::DestinationUnavailable => "ECONNREFUSED",
+        wasi_http::ErrorCode::HttpResponseIncomplete => "ECONNRESET",
+        wasi_http::ErrorCode::HttpProtocolError => "ECONNRESET",
+        wasi_http::ErrorCode::InternalError(_) => "ECONNRESET",
+        _ => "EIO",
+    }
+}
+
+fn throw_http_error(ctx: &Ctx<'_>, err: &wasi_http::ErrorCode) -> rquickjs::Error {
+    let code = http_error_to_node_code(err);
+    let message = format!("{err:?}");
+    let escaped = message.replace('\\', "\\\\").replace('"', "\\\"");
+    Exception::throw_message(
+        ctx,
+        &format!("{{\"code\":\"{code}\",\"syscall\":\"request\",\"message\":\"{escaped}\"}}"),
+    )
+}
+
 async fn get_incoming_response<'js>(
     ctx: &Ctx<'js>,
     future_response: &wasi_http::FutureIncomingResponse,
 ) -> rquickjs::Result<wasi_http::IncomingResponse> {
     match future_response.get() {
         Some(Ok(Ok(incoming_response))) => Ok(incoming_response),
-        Some(Ok(Err(err))) => Err(Exception::throw_message(
-            ctx,
-            &format!("HTTP request failed: {err:?}"),
-        )),
+        Some(Ok(Err(err))) => Err(throw_http_error(ctx, &err)),
         Some(Err(())) => Err(Exception::throw_message(ctx, "HTTP request failed")),
         None => {
             let pollable = future_response.subscribe();
             AsyncPollable::new(pollable).wait_for().await;
             match future_response.get() {
                 Some(Ok(Ok(incoming_response))) => Ok(incoming_response),
-                Some(Ok(Err(err))) => Err(Exception::throw_message(
-                    ctx,
-                    &format!("HTTP request failed: {err:?}"),
-                )),
+                Some(Ok(Err(err))) => Err(throw_http_error(ctx, &err)),
                 _ => Err(Exception::throw_message(ctx, "HTTP request failed")),
             }
         }

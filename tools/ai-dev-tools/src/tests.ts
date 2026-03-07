@@ -28,11 +28,21 @@ const CATEGORY_ALIASES: Record<string, string[]> = {
   string_decoder:       ["string-decoder", "stringdecoder"],
   child_process:        ["child-process", "child_process"],
   worker_threads:       ["worker", "worker-threads"],
-  async_hooks:          ["async-hooks", "async-context", "async-local-storage"],
+  async_hooks:          ["async-hooks", "async-context", "async-local-storage", "async-wrap"],
   perf_hooks:           ["perf", "performance"],
   diagnostics_channel:  ["diagnostics"],
   trace_events:         ["trace"],
   abort:                ["abortcontroller", "abortsignal", "aborted"],
+  module:               ["module", "require", "esm", "cjs", "loaders"],
+  events:               ["events", "event-emitter"],
+  fs:                   ["fs", "file"],
+  http:                 ["http", "http2", "https"],
+  tls:                  ["tls", "ssl"],
+  timers:               ["timers", "settimeout", "setinterval", "setimmediate"],
+  stream:               ["stream", "readable", "writable", "transform", "duplex"],
+  encoding:             ["encoding", "textdecoder", "textencoder"],
+  fetch:                ["fetch", "response", "request", "headers"],
+  inspector:            ["inspector", "debugger"],
 };
 
 /**
@@ -53,20 +63,39 @@ function categoryPrefixes(category: string): string[] {
   return [category];
 }
 
+/** All suite subdirectories to scan for vendored test files. */
+const SUITE_DIRS = ["parallel", "sequential", "es-module"];
+
 /** Return sorted list of vendored test paths (relative to suite/) for a category. */
 export function getVendoredTests(category: string): string[] {
   const suiteRoot = path.join(REPO_ROOT, "tests", "node_compat", "suite");
   const prefixes = categoryPrefixes(category);
 
   const files = new Set<string>();
-  for (const prefix of prefixes) {
-    for (const f of globSync(path.join(SUITE_DIR, `test-${prefix}-*.js`))) files.add(f);
-    for (const f of globSync(path.join(SUITE_DIR, `test-${prefix}.js`))) files.add(f);
+  for (const suiteDir of SUITE_DIRS) {
+    const dir = path.join(suiteRoot, suiteDir);
+    for (const prefix of prefixes) {
+      for (const f of globSync(path.join(dir, `test-${prefix}-*.js`))) files.add(f);
+      for (const f of globSync(path.join(dir, `test-${prefix}.js`))) files.add(f);
+    }
   }
 
   return [...files]
     .map((f) => path.relative(suiteRoot, f))
     .sort();
+}
+
+/** Return ALL vendored test paths (relative to suite/) across all suites. */
+export function getAllVendoredTests(): string[] {
+  const suiteRoot = path.join(REPO_ROOT, "tests", "node_compat", "suite");
+  const files: string[] = [];
+  for (const suiteDir of SUITE_DIRS) {
+    const dir = path.join(suiteRoot, suiteDir);
+    for (const f of globSync(path.join(dir, "*.js"))) {
+      files.push(path.relative(suiteRoot, f));
+    }
+  }
+  return files.sort();
 }
 
 /** Return skipped tests for a category from config.jsonc. */
@@ -123,7 +152,15 @@ export function testPathToFilter(testPath: string, subtestName?: string): string
 
 /** Build cargo test filter patterns for a category. */
 function categoryTestFilters(category: string): string[] {
-  return categoryPrefixes(category).map((p) => `parallel__test_${p.replace(/-/g, "_")}_`);
+  const filters: string[] = [];
+  for (const prefix of categoryPrefixes(category)) {
+    const p = prefix.replace(/-/g, "_");
+    for (const suite of SUITE_DIRS) {
+      const s = suite.replace(/-/g, "_");
+      filters.push(`${s}__test_${p}_`);
+    }
+  }
+  return filters;
 }
 
 /** Run all enabled (non-ignored) tests for a category. */
@@ -235,9 +272,11 @@ export function getEnabledTestCount(category: string): number {
 }
 
 function matchesCategory(testPath: string, category: string): boolean {
-  return categoryPrefixes(category).some(
-    (prefix) =>
-      testPath.startsWith(`parallel/test-${prefix}-`) ||
-      testPath === `parallel/test-${prefix}.js`,
+  return categoryPrefixes(category).some((prefix) =>
+    SUITE_DIRS.some(
+      (suite) =>
+        testPath.startsWith(`${suite}/test-${prefix}-`) ||
+        testPath === `${suite}/test-${prefix}.js`,
+    ),
   );
 }

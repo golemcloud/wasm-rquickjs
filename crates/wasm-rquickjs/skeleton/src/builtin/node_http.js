@@ -2,6 +2,7 @@
 import { NodeHttpClientRequest } from '__wasm_rquickjs_builtin/node_http_native';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
+import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 
 import { channel } from 'node:diagnostics_channel';
 import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
@@ -11,6 +12,7 @@ import {
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_HTTP_TOKEN,
     ERR_METHOD_NOT_IMPLEMENTED,
+    ERR_STREAM_CANNOT_PIPE,
     ERR_STREAM_DESTROYED,
     ERR_UNESCAPED_CHARACTERS,
 } from '__wasm_rquickjs_builtin/internal/errors';
@@ -142,6 +144,23 @@ function validateHostOption(options, propertyName) {
 function isClassBorrowConflictError(error) {
     const message = error && error.message ? String(error.message) : '';
     return message.includes("can't borrow a value as it is already borrowed");
+}
+
+function _parseNativeHttpError(error) {
+    const msg = error && error.message ? error.message : (typeof error === 'string' ? error : '');
+    if (!msg) return error;
+    try {
+        const parsed = JSON.parse(msg);
+        if (parsed && parsed.code) {
+            const err = new Error(parsed.message || `${parsed.syscall} ${parsed.code}`);
+            err.code = parsed.code;
+            if (parsed.syscall) err.syscall = parsed.syscall;
+            return err;
+        }
+    } catch (_) {
+        // not JSON, return as-is
+    }
+    return error;
 }
 
 // ===== FakeAgentSocket =====
@@ -818,231 +837,233 @@ function parseIncomingHeaders(rawPairs) {
     return { rawHeaders, headers, headersDistinct };
 }
 
-export class IncomingMessage extends EventEmitter {
-    constructor(nativeRes) {
-        super();
-        const hasNativeResponse = nativeRes !== null &&
-            typeof nativeRes === 'object' &&
-            typeof nativeRes.status === 'number' &&
-            Array.isArray(nativeRes.headers);
+export function IncomingMessage(nativeRes) {
+    if (!(this instanceof IncomingMessage)) {
+        return new IncomingMessage(nativeRes);
+    }
 
-        this._nativeRes = hasNativeResponse ? nativeRes : null;
-        this.statusCode = hasNativeResponse ? nativeRes.status : null;
-        if (hasNativeResponse) {
-            if (typeof nativeRes.statusMessage === 'string') {
-                this.statusMessage = nativeRes.statusMessage;
-            } else {
-                this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
-            }
-            applyHttpVersion(this, undefined);
+    Readable.call(this, {});
+
+    const hasNativeResponse = nativeRes !== null &&
+        typeof nativeRes === 'object' &&
+        typeof nativeRes.status === 'number' &&
+        Array.isArray(nativeRes.headers);
+
+    this._nativeRes = hasNativeResponse ? nativeRes : null;
+    this.statusCode = hasNativeResponse ? nativeRes.status : null;
+    if (hasNativeResponse) {
+        if (typeof nativeRes.statusMessage === 'string') {
+            this.statusMessage = nativeRes.statusMessage;
         } else {
-            this.statusMessage = null;
-            this.httpVersion = null;
-            this.httpVersionMajor = null;
-            this.httpVersionMinor = null;
+            this.statusMessage = STATUS_CODES[nativeRes.status] || 'Unknown';
         }
-        this.complete = false;
-        this.method = hasNativeResponse ? undefined : null;
-        this.url = hasNativeResponse ? undefined : '';
-        this.socket = hasNativeResponse ? null : nativeRes;
-        this.client = this.socket;
-        this.trailers = {};
-        this.trailersDistinct = {};
-        this.aborted = false;
-        this.destroyed = false;
-        this._timeout = null;
-        this._encoding = null;
+        applyHttpVersion(this, undefined);
+    } else {
+        this.statusMessage = null;
+        this.httpVersion = null;
+        this.httpVersionMajor = null;
+        this.httpVersionMinor = null;
+    }
+    this.complete = false;
+    this.method = hasNativeResponse ? undefined : null;
+    this.url = hasNativeResponse ? undefined : '';
+    this.socket = hasNativeResponse ? null : nativeRes;
+    this.client = this.socket;
+    this.trailers = {};
+    this.trailersDistinct = {};
+    this.rawTrailers = [];
+    this.aborted = false;
+    this._consuming = false;
+    this._dumped = false;
+    this._timeout = null;
 
-        const parsedHeaders = parseIncomingHeaders(
-            hasNativeResponse ? normalizeIncomingRawPairs(nativeRes) : []
-        );
-        this.rawHeaders = parsedHeaders.rawHeaders;
-        this.headers = parsedHeaders.headers;
-        this.headersDistinct = parsedHeaders.headersDistinct;
+    const parsedHeaders = parseIncomingHeaders(
+        hasNativeResponse ? normalizeIncomingRawPairs(nativeRes) : []
+    );
+    this.rawHeaders = parsedHeaders.rawHeaders;
+    this.headers = parsedHeaders.headers;
+    this.headersDistinct = parsedHeaders.headersDistinct;
+}
+
+Object.setPrototypeOf(IncomingMessage.prototype, Readable.prototype);
+Object.setPrototypeOf(IncomingMessage, Readable);
+
+Object.defineProperty(IncomingMessage.prototype, 'connection', {
+    get() { return this.socket; },
+    set(value) { this.socket = value; },
+    configurable: true,
+    enumerable: false,
+});
+
+IncomingMessage.prototype.setTimeout = function setTimeout(ms, callback) {
+    this._timeout = ms;
+    if (callback) this.once('timeout', callback);
+    return this;
+};
+
+IncomingMessage.prototype._read = function _read(n) {
+    if (!this._consuming) {
+        this._consuming = true;
+        void this._pumpBody();
+    }
+};
+
+IncomingMessage.prototype._pumpBody = async function _pumpBody() {
+    if (!this._nativeRes || typeof this._nativeRes.readBodyChunk !== 'function') {
+        this.complete = true;
+        this.push(null);
+        return;
     }
 
-    get connection() {
-        return this.socket;
-    }
-
-    set connection(value) {
-        this.socket = value;
-    }
-
-    setTimeout(ms, callback) {
-        this._timeout = ms;
-        if (callback) this.once('timeout', callback);
-        return this;
-    }
-
-    setEncoding(encoding) {
-        this._encoding = encoding;
-        return this;
-    }
-
-    destroy(error) {
-        if (this.destroyed) return this;
-        this.destroyed = true;
-        if (this._nativeRes && !this._reading && typeof this._nativeRes.discardBody === 'function') {
+    if (this._hasNoBody()) {
+        if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
             this._nativeRes.discardBody();
         }
-        if (error) this.emit('error', error);
-        this.emit('close');
-        return this;
+        this.complete = true;
+        this.push(null);
+        return;
     }
 
-    resume() {
-        return this;
-    }
-
-    pause() {
-        return this;
-    }
-
-    [Symbol.asyncIterator]() {
-        const self = this;
-        const queue = [];
-        let ended = false;
-        let error = null;
-        let pending = null;
-
-        function enqueue(value, isDone, err) {
-            if (pending) {
-                const p = pending;
-                pending = null;
-                if (err) {
-                    p.reject(err);
-                } else {
-                    p.resolve({ value, done: isDone });
+    try {
+        while (true) {
+            if (this.destroyed) {
+                if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
+                    this._nativeRes.discardBody();
                 }
-            } else {
-                if (err) {
-                    error = err;
-                } else if (isDone) {
-                    ended = true;
-                } else {
-                    queue.push(value);
+                break;
+            }
+            const [chunk, done] = await this._nativeRes.readBodyChunk();
+            if (this.destroyed) {
+                if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
+                    this._nativeRes.discardBody();
                 }
+                break;
+            }
+            if (done || chunk === null) {
+                this.complete = true;
+                this.push(null);
+                break;
+            }
+            const buf = Buffer.from(chunk);
+            if (!this.push(buf)) {
+                // Backpressure: wait for _read to be called again
+                this._consuming = false;
+                return;
             }
         }
+    } catch (err) {
+        this.destroy(err);
+    }
+};
 
-        self.on('data', (chunk) => enqueue(chunk, false, null));
-        self.on('end', () => enqueue(undefined, true, null));
-        self.on('error', (err) => enqueue(undefined, false, err));
+IncomingMessage.prototype._destroy = function _destroy(err, cb) {
+    if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
+        this._nativeRes.discardBody();
+    }
+    cb(err);
+};
 
-        return {
-            [Symbol.asyncIterator]() { return this; },
-            next() {
-                if (queue.length > 0) {
-                    return Promise.resolve({ value: queue.shift(), done: false });
-                }
-                if (error) {
-                    const e = error;
-                    error = null;
-                    return Promise.reject(e);
-                }
-                if (ended) {
-                    return Promise.resolve({ value: undefined, done: true });
-                }
-                return new Promise((resolve, reject) => {
-                    pending = { resolve, reject };
-                });
-            },
-            return() {
-                self.destroy();
-                return Promise.resolve({ value: undefined, done: true });
-            }
-        };
+IncomingMessage.prototype._hasNoBody = function _hasNoBody() {
+    if ((this.statusCode >= 100 && this.statusCode < 200) ||
+        this.statusCode === 204 ||
+        this.statusCode === 304) {
+        return true;
     }
 
-    pipe(dest, options) {
-        this.on('data', (chunk) => {
-            dest.write(chunk);
-        });
-        if (!options || options.end !== false) {
-            this.on('end', () => {
-                dest.end();
-            });
-        }
-        dest.emit('pipe', this);
-        return dest;
+    const contentLength = this.headers['content-length'];
+    if (contentLength === undefined) {
+        return false;
     }
 
-    _hasNoBody() {
-        if ((this.statusCode >= 100 && this.statusCode < 200) ||
-            this.statusCode === 204 ||
-            this.statusCode === 304) {
-            return true;
-        }
+    const parsed = Number(contentLength);
+    return Number.isFinite(parsed) && parsed <= 0;
+};
 
-        const contentLength = this.headers['content-length'];
-        if (contentLength === undefined) {
-            return false;
-        }
-
-        const parsed = Number(contentLength);
-        return Number.isFinite(parsed) && parsed <= 0;
-    }
-
-    async _startReading() {
-        if (!this._nativeRes || typeof this._nativeRes.readBodyChunk !== 'function') {
-            this.complete = true;
-            this.emit('end');
-            return;
-        }
-
-        if (this._hasNoBody()) {
-            if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
-                this._nativeRes.discardBody();
-            }
-            this.complete = true;
-            this.emit('end');
-            return;
-        }
-
-        this._reading = true;
-        try {
-            while (true) {
-                if (this.destroyed) {
-                    if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
-                        this._nativeRes.discardBody();
-                    }
-                    break;
-                }
-                const [chunk, done] = await this._nativeRes.readBodyChunk();
-                if (this.destroyed) {
-                    if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
-                        this._nativeRes.discardBody();
-                    }
-                    break;
-                }
-                if (done || chunk === null) {
-                    this.complete = true;
-                    this.emit('end');
-                    break;
-                }
-                const buf = Buffer.from(chunk);
-                if (this._encoding) {
-                    this.emit('data', buf.toString(this._encoding));
-                } else {
-                    this.emit('data', buf);
-                }
-            }
-        } catch (err) {
-            if (!this.destroyed) {
-                this.emit('error', err);
-            }
-        } finally {
-            this._reading = false;
-        }
+function matchKnownFields(field, lowercased) {
+    const lower = lowercased ? field : field.toLowerCase();
+    switch (lower) {
+        // First-wins (single value, no prefix)
+        case 'content-type':
+        case 'content-length':
+        case 'user-agent':
+        case 'referer':
+        case 'host':
+        case 'authorization':
+        case 'proxy-authorization':
+        case 'if-modified-since':
+        case 'if-unmodified-since':
+        case 'from':
+        case 'location':
+        case 'max-forwards':
+        case 'retry-after':
+        case 'etag':
+        case 'last-modified':
+        case 'server':
+        case 'age':
+        case 'expires':
+        case 'content-disposition':
+            return lower;
+        // Set-cookie: array
+        case 'set-cookie':
+            return '\u0001' + lower;
+        // Cookie: semicolon-join
+        case 'cookie':
+            return '\u0002' + lower;
+        // Default: comma-join
+        default:
+            return '\u0000' + lower;
     }
 }
+
+IncomingMessage.prototype._addHeaderLine = function _addHeaderLine(field, value, dest) {
+    const match = matchKnownFields(field, false);
+    const flag = match.charCodeAt(0);
+    let name;
+
+    if (flag <= 2) {
+        name = match.substring(1);
+    } else {
+        name = match;
+    }
+
+    if (flag === 0) {
+        // \u0000 prefix: comma-join
+        if (dest[name] !== undefined) {
+            dest[name] += ', ' + value;
+        } else {
+            dest[name] = value;
+        }
+    } else if (flag === 1) {
+        // \u0001 prefix: set-cookie array
+        if (dest[name] !== undefined) {
+            if (Array.isArray(dest[name])) {
+                dest[name].push(value);
+            } else {
+                dest[name] = [dest[name], value];
+            }
+        } else {
+            dest[name] = [value];
+        }
+    } else if (flag === 2) {
+        // \u0002 prefix: cookie semicolon-join
+        if (dest[name] !== undefined) {
+            dest[name] += '; ' + value;
+        } else {
+            dest[name] = value;
+        }
+    } else {
+        // No prefix: first-wins (single value headers)
+        if (dest[name] === undefined) {
+            dest[name] = value;
+        }
+    }
+};
 
 // ===== ClientRequest =====
 
 export class OutgoingMessage extends EventEmitter {
     constructor(options = {}) {
-        super();
+        super({ captureRejections: options && options.captureRejections });
         this[kOutHeaders] = null;
         this.outputData = [];
         this.outputSize = 0;
@@ -1054,6 +1075,7 @@ export class OutgoingMessage extends EventEmitter {
         this.headersSent = false;
         this._header = null;
         this._socket = null;
+        this._corked = 0;
         this._highWaterMark = Number.isFinite(options && options.highWaterMark)
             ? options.highWaterMark
             : 16 * 1024;
@@ -1160,7 +1182,7 @@ export class OutgoingMessage extends EventEmitter {
             const keys = Object.keys(this[kOutHeaders]);
             for (let i = 0; i < keys.length; i++) {
                 const entry = this[kOutHeaders][keys[i]];
-                headers[entry[0]] = entry[1];
+                headers[keys[i]] = entry[1];
             }
         }
         return headers;
@@ -1340,6 +1362,67 @@ export class OutgoingMessage extends EventEmitter {
         return this;
     }
 
+    appendHeader(name, value) {
+        if (this._header) {
+            throw new ERR_HTTP_HEADERS_SENT('set');
+        }
+        validateHeaderName(name);
+        validateHeaderValue(name, value);
+        if (this[kOutHeaders] === null) {
+            this[kOutHeaders] = {};
+        }
+        const key = name.toLowerCase();
+        const existing = this[kOutHeaders][key];
+        if (existing) {
+            const prev = existing[1];
+            if (Array.isArray(prev)) {
+                prev.push(value);
+            } else {
+                existing[1] = [prev, value];
+            }
+        } else {
+            this[kOutHeaders][key] = [name, value];
+        }
+        return this;
+    }
+
+    cork() {
+        if (!this._corked) this._corked = 0;
+        this._corked++;
+    }
+
+    uncork() {
+        if (!this._corked) return;
+        this._corked--;
+    }
+
+    get writableCorked() {
+        return this._corked || 0;
+    }
+
+    flushHeaders() {
+        if (!this._header) {
+            this._implicitHeader();
+        }
+    }
+
+    setHeaders(headers) {
+        if (headers && typeof headers[Symbol.iterator] === 'function') {
+            for (const [key, value] of headers) {
+                this.setHeader(key, value);
+            }
+        } else if (headers && typeof headers === 'object') {
+            for (const key of Object.keys(headers)) {
+                this.setHeader(key, headers[key]);
+            }
+        }
+        return this;
+    }
+
+    pipe() {
+        this.emit('error', new ERR_STREAM_CANNOT_PIPE());
+    }
+
     destroy(error) {
         if (this.destroyed) {
             return this;
@@ -1353,9 +1436,9 @@ export class OutgoingMessage extends EventEmitter {
     }
 }
 
-export class ClientRequest extends EventEmitter {
+export class ClientRequest extends OutgoingMessage {
     constructor(options, callback) {
-        super();
+        super(options);
 
         if (options.method != null && typeof options.method !== 'string') {
             let received;
@@ -1381,6 +1464,12 @@ export class ClientRequest extends EventEmitter {
             throw new ERR_INVALID_HTTP_TOKEN('Method', options.method);
         }
 
+        if (options.timeout !== undefined) {
+            if (typeof options.timeout !== 'number') {
+                throw new ERR_INVALID_ARG_TYPE('timeout', 'number', options.timeout);
+            }
+        }
+
         if (options.path) {
             const path = String(options.path);
             if (INVALID_PATH_REGEX.test(path)) {
@@ -1391,6 +1480,12 @@ export class ClientRequest extends EventEmitter {
         this.method = (options.method || 'GET').toUpperCase();
         this.protocol = options.protocol || 'http:';
 
+        if (this.protocol !== 'http:' && this.protocol !== 'https:') {
+            const err = new TypeError('Protocol "' + this.protocol + '" not supported. Expected "http:" or "https:"');
+            err.code = 'ERR_INVALID_PROTOCOL';
+            throw err;
+        }
+
         const hostname = options.hostname || options.host || 'localhost';
         const port = options.port;
         this.path = options.path || '/';
@@ -1400,6 +1495,14 @@ export class ClientRequest extends EventEmitter {
 
         const hostWithPort = port ? hostname + ':' + port : hostname;
         const url = this.protocol + '//' + hostWithPort + this.path;
+
+        if (options.insecureHTTPParser !== undefined && typeof options.insecureHTTPParser !== 'boolean') {
+            throw new ERR_INVALID_ARG_TYPE(
+                'options.insecureHTTPParser',
+                'boolean',
+                options.insecureHTTPParser,
+            );
+        }
 
         if (options.agent === false) {
             this.agent = new Agent();
@@ -1419,7 +1522,6 @@ export class ClientRequest extends EventEmitter {
             this._agentName = this.agent.getName(options);
         }
 
-        this._headers = {};
         this._rawHeaderPairs = null;
         this._usedWrite = false;
         this._bodyLength = 0;
@@ -1435,7 +1537,14 @@ export class ClientRequest extends EventEmitter {
         } else if (inputHeaders && typeof inputHeaders === 'object') {
             for (const name of Object.keys(inputHeaders)) {
                 validateHeaderName(name);
-                this._headers[name.toLowerCase()] = { name, value: inputHeaders[name] };
+                const value = inputHeaders[name];
+                if (name.toLowerCase() === 'host' && Array.isArray(value)) {
+                    throw new ERR_INVALID_ARG_TYPE('options.headers.host', 'string', value);
+                }
+                if (this[kOutHeaders] === null) {
+                    this[kOutHeaders] = {};
+                }
+                this[kOutHeaders][name.toLowerCase()] = [name, value];
             }
         }
 
@@ -1445,22 +1554,25 @@ export class ClientRequest extends EventEmitter {
         this._refreshShouldKeepAlive();
 
         this._nativeReq = new NodeHttpClientRequest(this.method, url, {});
-        for (const key of Object.keys(this._headers)) {
-            const entry = this._headers[key];
-            if (shouldSkipNativeHeader(entry.name, entry.value)) {
-                continue;
+        if (this[kOutHeaders]) {
+            for (const key of Object.keys(this[kOutHeaders])) {
+                const entry = this[kOutHeaders][key];
+                if (shouldSkipNativeHeader(entry[0], entry[1])) {
+                    continue;
+                }
+                this._nativeReq.setHeader(entry[0], headerValueForNative(entry[0], entry[1]));
             }
-            this._nativeReq.setHeader(entry.name, headerValueForNative(entry.name, entry.value));
         }
 
-        this.headersSent = false;
+        this._pendingWrites = [];
+        this._bufferedBytes = 0;
+        this._needDrain = false;
+        this._flushPromise = Promise.resolve();
+        this._nativeStarted = false;
+
         this.aborted = false;
-        this.destroyed = false;
-        this._writableEnded = false;
-        this._writableFinished = false;
         this.socket = null;
         this._timeout = null;
-        this._header = null;
         this._closeEmitted = false;
         this._nativeAbortDeferred = false;
 
@@ -1472,12 +1584,14 @@ export class ClientRequest extends EventEmitter {
             this._useSocketTransport = true;
         }
 
-        if (this._rawHeaderPairs !== null) {
-            this._refreshHeaderString();
-        }
-
         if (typeof callback === 'function') {
             this.once('response', callback);
+        }
+
+        const requestTimeout = options.timeout !== undefined ? options.timeout
+            : (this.agent && this.agent.timeout != null ? this.agent.timeout : undefined);
+        if (requestTimeout !== undefined && requestTimeout > 0) {
+            this.setTimeout(requestTimeout);
         }
 
         if (onClientRequestCreated.hasSubscribers) {
@@ -1498,10 +1612,11 @@ export class ClientRequest extends EventEmitter {
     }
 
     _emitRequestError(error) {
+        const parsed = _parseNativeHttpError(error);
         if (onClientRequestError.hasSubscribers) {
-            onClientRequestError.publish({ request: this, error });
+            onClientRequestError.publish({ request: this, error: parsed });
         }
-        this.emit('error', error);
+        this.emit('error', parsed);
     }
 
     _abortNativeRequest() {
@@ -1566,27 +1681,22 @@ export class ClientRequest extends EventEmitter {
         }
     }
 
-    get writableEnded() {
-        return this._writableEnded;
-    }
-
-    get writableFinished() {
-        return this._writableFinished;
-    }
-
     _mergeHeader(name, value) {
         const lower = String(name).toLowerCase();
-        const existing = this._headers[lower];
+        if (this[kOutHeaders] === null) {
+            this[kOutHeaders] = {};
+        }
+        const existing = this[kOutHeaders][lower];
 
         if (isCookieHeader(name) && existing) {
-            this._headers[lower] = {
-                name: existing.name,
-                value: mergeCookieHeaderValues(existing.value, value),
-            };
+            this[kOutHeaders][lower] = [
+                existing[0],
+                mergeCookieHeaderValues(existing[1], value),
+            ];
             return;
         }
 
-        this._headers[lower] = { name: String(name), value };
+        this[kOutHeaders][lower] = [String(name), value];
     }
 
     _refreshHeaderString() {
@@ -1599,12 +1709,12 @@ export class ClientRequest extends EventEmitter {
                     rendered += `${name}: ${value}\r\n`;
                 }
             }
-        } else {
-            for (const key of Object.keys(this._headers)) {
-                const entry = this._headers[key];
-                const wireValues = expandHeaderValuesForWire(entry.name, entry.value);
+        } else if (this[kOutHeaders]) {
+            for (const key of Object.keys(this[kOutHeaders])) {
+                const entry = this[kOutHeaders][key];
+                const wireValues = expandHeaderValuesForWire(entry[0], entry[1]);
                 for (const value of wireValues) {
-                    rendered += `${entry.name}: ${value}\r\n`;
+                    rendered += `${entry[0]}: ${value}\r\n`;
                 }
             }
         }
@@ -1650,56 +1760,43 @@ export class ClientRequest extends EventEmitter {
     }
 
     setHeader(name, value) {
+        if (this._nativeStarted || this.headersSent) {
+            throw new ERR_HTTP_HEADERS_SENT('set');
+        }
         validateHeaderName(name);
         validateHeaderValue(name, value);
-        const lower = name.toLowerCase();
-        this._headers[lower] = { name, value };
+        if (this[kOutHeaders] === null) {
+            this[kOutHeaders] = {};
+        }
+        this[kOutHeaders][name.toLowerCase()] = [name, value];
         if (shouldSkipNativeHeader(name, value)) {
             this._nativeReq.removeHeader(name);
         } else {
             this._nativeReq.setHeader(name, headerValueForNative(name, value));
         }
         this._rawHeaderPairs = null;
+        this._header = null;
         this._refreshShouldKeepAlive();
-        this._refreshHeaderString();
-    }
-
-    getHeader(name) {
-        const entry = this._headers[name.toLowerCase()];
-        return entry ? entry.value : undefined;
+        return this;
     }
 
     removeHeader(name) {
-        const lower = name.toLowerCase();
-        delete this._headers[lower];
+        if (this._nativeStarted || this.headersSent) {
+            throw new ERR_HTTP_HEADERS_SENT('remove');
+        }
+        if (this[kOutHeaders]) {
+            delete this[kOutHeaders][name.toLowerCase()];
+        }
         this._nativeReq.removeHeader(name);
         this._rawHeaderPairs = null;
+        this._header = null;
         this._refreshShouldKeepAlive();
-        this._refreshHeaderString();
-    }
-
-    hasHeader(name) {
-        return name.toLowerCase() in this._headers;
-    }
-
-    getHeaderNames() {
-        return Object.keys(this._headers).map(k => this._headers[k].name);
-    }
-
-    getHeaders() {
-        const result = {};
-        for (const key of Object.keys(this._headers)) {
-            result[this._headers[key].name] = this._headers[key].value;
-        }
-        return result;
-    }
-
-    getRawHeaderNames() {
-        return Object.keys(this._headers).map(k => this._headers[k].name);
     }
 
     flushHeaders() {
-        this._refreshHeaderString();
+        if (!this._header) {
+            this._refreshHeaderString();
+        }
     }
 
     setTimeout(ms, callback) {
@@ -1729,7 +1826,6 @@ export class ClientRequest extends EventEmitter {
         this._usedWrite = true;
 
         let bodyChunk;
-
         if (typeof chunk === 'string') {
             bodyChunk = Buffer.from(chunk, encoding || 'utf8');
         } else if (chunk instanceof Uint8Array) {
@@ -1737,34 +1833,30 @@ export class ClientRequest extends EventEmitter {
         } else if (Buffer.isBuffer(chunk)) {
             bodyChunk = chunk;
         } else if (chunk != null) {
-            const chunkString = String(chunk);
-            bodyChunk = Buffer.from(chunkString, 'utf8');
+            bodyChunk = Buffer.from(String(chunk), 'utf8');
         }
 
         if (bodyChunk) {
             this._bodyLength += bodyChunk.length;
             this._bodyChunks.push(bodyChunk);
-            if (!this._useSocketTransport) {
-                this._nativeReq.write(new Uint8Array(bodyChunk));
+
+            if (this._useSocketTransport) {
+                // Socket transport path unchanged
+            } else {
+                this._pendingWrites.push({ chunk: bodyChunk, cb: typeof callback === 'function' ? callback : null });
+                this._bufferedBytes += bodyChunk.length;
+                this._scheduleFlush();
             }
         }
 
-        // WASI HTTP requires the body to be complete before sending. Schedule
-        // an automatic end() so that requests that call write() without end()
-        // still get sent. If end() is called synchronously after write(), the
-        // auto-end is a no-op because _writableEnded will already be true.
-        if (!this._useSocketTransport && !this._autoEndScheduled) {
-            this._autoEndScheduled = true;
-            const self = this;
-            process.nextTick(function autoEnd() {
-                if (!self._writableEnded && !self.destroyed && !self.aborted) {
-                    self.end();
-                }
-            });
+        if (this._useSocketTransport) {
+            if (typeof callback === 'function') callback();
+            return this._bodyLength < (16 * 1024);
         }
 
-        if (typeof callback === 'function') callback();
-        return this._bodyLength < (16 * 1024);
+        const ret = this._bufferedBytes < (16 * 1024);
+        if (!ret) this._needDrain = true;
+        return ret;
     }
 
     end(data, encoding, callback) {
@@ -1783,25 +1875,7 @@ export class ClientRequest extends EventEmitter {
         }
 
         if (data != null) {
-            let bodyChunk;
-            if (typeof data === 'string') {
-                bodyChunk = Buffer.from(data, encoding || 'utf8');
-            } else if (data instanceof Uint8Array) {
-                bodyChunk = Buffer.from(data);
-            } else if (Buffer.isBuffer(data)) {
-                bodyChunk = data;
-            } else {
-                const dataString = String(data);
-                bodyChunk = Buffer.from(dataString, 'utf8');
-            }
-
-            if (bodyChunk) {
-                this._bodyLength += bodyChunk.length;
-                this._bodyChunks.push(bodyChunk);
-                if (!this._useSocketTransport) {
-                    this._nativeReq.write(new Uint8Array(bodyChunk));
-                }
-            }
+            this.write(data, encoding);
         }
 
         this._applyDefaultBodyHeaders();
@@ -1810,6 +1884,44 @@ export class ClientRequest extends EventEmitter {
         this._endCallback = callback;
         this._endPromise = this._sendThroughAgent();
         return this;
+    }
+
+    _scheduleFlush() {
+        this._flushPromise = this._flushPromise
+            .then(() => this._flushLoop())
+            .catch((err) => {
+                if (!this.destroyed && !this.aborted) {
+                    this._emitRequestError(err);
+                }
+            });
+    }
+
+    async _flushLoop() {
+        if (this.destroyed || this.aborted) return;
+
+        // Start native request on first flush (locks headers)
+        if (!this._nativeStarted) {
+            await this._nativeReq.start();
+            this._nativeStarted = true;
+            this.headersSent = true;
+        }
+
+        while (this._pendingWrites.length > 0) {
+            if (this.destroyed || this.aborted) return;
+            const { chunk, cb } = this._pendingWrites.shift();
+
+            await this._nativeReq.writeStream(new Uint8Array(chunk));
+
+            this._bufferedBytes -= chunk.length;
+            if (cb) {
+                try { cb(null); } catch (_) {}
+            }
+
+            if (this._needDrain && this._bufferedBytes < (16 * 1024)) {
+                this._needDrain = false;
+                this.emit('drain');
+            }
+        }
     }
 
     _sendThroughAgent() {
@@ -1852,18 +1964,20 @@ export class ClientRequest extends EventEmitter {
 
             this._refreshHeaderString();
 
-            // Emit 'finish' before the blocking wasi:http round-trip.
-            // Node.js emits 'finish' when the request body is flushed
-            // to the socket, not when the response arrives.
-            this.headersSent = true;
+            // Wait for any in-flight flush, then flush remaining writes (serialized)
+            await (this._flushPromise = this._flushPromise.then(() => this._flushLoop()));
 
-            // Defer finish to next microtask so that writableFinished is
-            // still false synchronously after end() returns, matching
-            // Node.js behavior.
-            await Promise.resolve();
+            if (this.aborted || this.destroyed) {
+                this._cleanupMockSocket();
+                return;
+            }
 
             this._setupMockSocket();
 
+            // Finish the request body
+            await this._nativeReq.finish(undefined);
+
+            // Emit finish AFTER body is committed
             this._writableFinished = true;
             if (typeof this._endCallback === 'function') {
                 const cb = this._endCallback;
@@ -1877,7 +1991,8 @@ export class ClientRequest extends EventEmitter {
                 return;
             }
 
-            await this._nativeReq.end(undefined);
+            // Wait for and process the response
+            await this._nativeReq.waitForResponse();
 
             if (this._nativeAbortDeferred) {
                 this._abortNativeRequest();
@@ -1916,18 +2031,18 @@ export class ClientRequest extends EventEmitter {
                 this._response = res;
                 this.emit('response', res);
 
-                const shouldReadResponseBody =
-                    res.listenerCount('data') > 0 ||
-                    res.listenerCount('end') > 0 ||
-                    res.listenerCount('readable') > 0;
+                const hasDataListeners = res.listenerCount('data') > 0;
+                const hasEndListeners = res.listenerCount('end') > 0;
+                const hasReadableListeners = res.listenerCount('readable') > 0;
 
-                if (shouldReadResponseBody) {
-                    // Start streaming the response body asynchronously. Waiting here can
-                    // block the agent queue when wasi:http pollables stall on empty bodies.
-                    void res._startReading();
+                if (hasDataListeners || hasEndListeners) {
+                    res.resume();
+                } else if (hasReadableListeners) {
+                    res.read(0);
                 } else if (res._nativeRes && typeof res._nativeRes.discardBody === 'function') {
                     res._nativeRes.discardBody();
                     res.complete = true;
+                    res.push(null);
                 }
             }
 
@@ -2008,8 +2123,8 @@ export class ClientRequest extends EventEmitter {
             } else {
                 res.socket = socket;
                 res.client = socket;
-                if (socket && typeof socket.readableHighWaterMark === 'number') {
-                    res.readableHighWaterMark = socket.readableHighWaterMark;
+                if (socket && typeof socket.readableHighWaterMark === 'number' && res._readableState) {
+                    res._readableState.highWaterMark = socket.readableHighWaterMark;
                 }
 
                 const responseConnectionHeader = res.headers.connection;
@@ -2028,10 +2143,10 @@ export class ClientRequest extends EventEmitter {
                 this.emit('response', res);
 
                 if (parsed.body.length > 0) {
-                    res.emit('data', Buffer.from(parsed.body));
+                    res.push(Buffer.from(parsed.body));
                 }
                 res.complete = true;
-                res.emit('end');
+                res.push(null);
             }
 
         } catch (err) {
