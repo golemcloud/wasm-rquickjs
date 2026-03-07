@@ -15,7 +15,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 1 | Express | `express` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails: missing `string_decoder` default export |
-| 2 | Fastify | `fastify` | ⬜ | — | High-performance HTTP framework with built-in schema validation |
+| 2 | Fastify | `fastify` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails in `node:module.createRequire` with undefined filename |
 | 3 | NestJS Core | `@nestjs/core` | ⬜ | — | Enterprise framework with DI, decorators, microservices |
 | 4 | NestJS Common | `@nestjs/common` | ⬜ | — | Core decorators, pipes, guards, interceptors |
 | 5 | Koa | `koa` | ⬜ | — | Lightweight middleware-based framework |

@@ -1,0 +1,5 @@
+package test:lib-fastify;
+
+world lib-fastify {
+  export run: func() -> string;
+}
