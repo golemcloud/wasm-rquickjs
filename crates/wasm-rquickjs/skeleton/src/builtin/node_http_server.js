@@ -3,7 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
-import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -256,13 +256,17 @@ Object.defineProperty(ServerResponse.prototype, 'errored', {
     get() { return this._errored; },
 });
 
+Object.defineProperty(ServerResponse.prototype, 'writableCorked', {
+    get() { return this.socket ? this.socket.writableCorked : 0; },
+});
+
 ServerResponse.prototype._implicitHeader = function _implicitHeader() {
     this.writeHead(this.statusCode);
 };
 
 ServerResponse.prototype.setHeader = function setHeader(name, value) {
     if (this._headersSentWire) {
-        throw new Error('Cannot set headers after they are sent to the client');
+        throw new ERR_HTTP_HEADERS_SENT('set');
     }
     if (typeof name !== 'string' || !/^[\x21-\x7e]+$/.test(name)) {
         const err = new TypeError(`Header name must be a valid HTTP token ["${String(name)}"]`);
@@ -295,7 +299,7 @@ ServerResponse.prototype.hasHeader = function hasHeader(name) {
 
 ServerResponse.prototype.removeHeader = function removeHeader(name) {
     if (this._headersSentWire) {
-        throw new Error('Cannot remove headers after they are sent to the client');
+        throw new ERR_HTTP_HEADERS_SENT('remove');
     }
     const lower = name.toLowerCase();
     if (lower === 'date') {
@@ -324,9 +328,7 @@ ServerResponse.prototype.getRawHeaderNames = function getRawHeaderNames() {
 
 ServerResponse.prototype.writeHead = function writeHead(statusCode, statusMessage, headers) {
     if (this.headersSent) {
-        const err = new Error('Cannot render headers after they are sent to the client');
-        err.code = 'ERR_HTTP_HEADERS_SENT';
-        throw err;
+        throw new ERR_HTTP_HEADERS_SENT('render');
     }
 
     if (typeof statusMessage === 'object' && statusMessage !== null) {
@@ -563,7 +565,9 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
     this._writableEnded = true;
 
     if (!this._headersSentWire) {
-        if (data && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
+        if (data && !this.headersSent && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
+            // writeHead() was NOT called and full body is known at end-time:
+            // set Content-Length and combine headers + body into a single write.
             const body = typeof data === 'string' ? Buffer.from(data, encoding || 'utf8') : Buffer.from(data);
             this.setHeader('Content-Length', body.length);
             const head = this._buildHeaderString();
@@ -574,19 +578,19 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
             } else if (head) {
                 this.socket.write(Buffer.from(head));
             }
+            data = null; // already written
         } else {
+            // writeHead() was called or explicit CL/TE set: send headers separately,
+            // letting chunked encoding handle the body (matches Node.js behavior).
             if (!data && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
                 this.setHeader('Content-Length', 0);
             }
             this._sendHeaders();
-            if (data) {
-                this.write(data, encoding);
-            }
         }
-    } else {
-        if (data) {
-            this.write(data, encoding);
-        }
+    }
+
+    if (data) {
+        this.write(data, encoding);
     }
 
     if (this._chunked && this._hasBody) {
@@ -596,6 +600,11 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
     // Write empty chunk to signal end of response (matches Node.js behavior)
     if (this.socket && !this._chunked) {
         this.socket.write(Buffer.alloc(0));
+    }
+
+    // Uncork the socket to flush any buffered writes (matches Node.js behavior)
+    if (this.socket && typeof this.socket.uncork === 'function') {
+        this.socket.uncork();
     }
 
     this.finished = true;
@@ -645,6 +654,10 @@ ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback
 
 ServerResponse.prototype.writeContinue = function writeContinue() {
     this.socket.write(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'));
+};
+
+ServerResponse.prototype.writeProcessing = function writeProcessing() {
+    this.socket.write(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'));
 };
 
 const LINK_HEADER_REGEX = /^<[^>]*>(\s*;\s*[^;]+)*$/;

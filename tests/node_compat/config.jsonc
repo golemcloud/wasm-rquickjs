@@ -4899,28 +4899,26 @@
     "parallel/test-http-request-methods.js": {},
     "parallel/test-http-request-smuggling-content-length.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for request smuggling detection" },
     "parallel/test-http-res-write-end-dont-take-array.js": {},
-    "parallel/test-http-response-add-header-after-sent.js": { "skip": true, "reason": "hangs: relies on setHeader-after-sent error" },
+    "parallel/test-http-response-add-header-after-sent.js": {},
     "parallel/test-http-response-close.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
-    "parallel/test-http-response-cork.js": { "skip": true, "reason": "hangs: relies on cork/uncork buffering behavior" },
+    "parallel/test-http-response-cork.js": {},
     "parallel/test-http-response-multi-content-length.js": {
       "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
+      "reason": "wasi:http does not produce HPE_UNEXPECTED_CONTENT_LENGTH error code for duplicate content-length headers",
       "split": true,
       "subtests": {
-        "block_00_test_adding_an_extra_content_length_header_using_setheader": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_test_adding_an_extra_content_length_header_using_writehead": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_test_adding_an_extra_content_length_header_using_setheader": { "skip": true, "reason": "wasi:http does not produce HPE_UNEXPECTED_CONTENT_LENGTH error code" },
+        "block_01_test_adding_an_extra_content_length_header_using_writehead": { "skip": true, "reason": "wasi:http does not produce HPE_UNEXPECTED_CONTENT_LENGTH error code" }
       }
     },
-    "parallel/test-http-response-readable.js": { "skip": true, "reason": "hangs: relies on response readable stream behavior" },
+    "parallel/test-http-response-readable.js": {},
     "parallel/test-http-response-remove-header-after-sent.js": { "skip": true, "reason": "hangs: relies on removeHeader-after-sent error" },
     "parallel/test-http-response-setheaders.js": {
       "skip": true,
@@ -5617,7 +5615,7 @@
     "parallel/test-http-request-end.js": {},
     "parallel/test-http-request-invalid-method-error.js": {},
     "parallel/test-http-res-write-after-end.js": { "skip": true, "reason": "hangs: relies on write-after-end error handling" },
-    "parallel/test-http-response-no-headers.js": { "skip": true, "reason": "hangs: test uses raw TCP for headerless response" },
+    "parallel/test-http-response-no-headers.js": { "skip": true, "reason": "test uses raw TCP (net.createServer) with HTTP/0.9 responses that wasi:http cannot parse" },
     "parallel/test-http-server-async-dispose.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "parallel/test-http-server-clear-timer.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "parallel/test-http-server-close-destroy-timeout.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
