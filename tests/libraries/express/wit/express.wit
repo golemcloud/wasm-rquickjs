@@ -1,0 +1,5 @@
+package test:lib-express;
+
+world lib-express {
+  export run: func() -> string;
+}
