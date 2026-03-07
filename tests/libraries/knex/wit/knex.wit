@@ -1,0 +1,5 @@
+package test:lib-knex;
+
+world lib-knex {
+  export run: func() -> string;
+}
