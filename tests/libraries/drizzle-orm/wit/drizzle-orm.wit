@@ -1,0 +1,5 @@
+package test:lib-drizzle-orm;
+
+world lib-drizzle-orm {
+  export run: func() -> string;
+}
