@@ -2,6 +2,7 @@
 
 import { parseArgs } from "node:util";
 import { fixCommand } from "./commands/fix.js";
+import { fixBatchCommand } from "./commands/fix-batch.js";
 import { syncConfigCommand } from "./commands/sync-config.js";
 import { ensureAllVendoredCommand } from "./commands/ensure-all-vendored.js";
 
@@ -9,7 +10,8 @@ const USAGE = `\
 ai-dev-tools — AI-powered development tools for wasm-rquickjs
 
 Usage:
-  ai-dev-tools fix <category>             Fix skipped node-compat tests for a category
+  ai-dev-tools fix <category>             Fix skipped node-compat tests one at a time
+  ai-dev-tools fix-batch <category>       Fix skipped tests in grouped batches (for http)
   ai-dev-tools sync-config [--dry-run]    Update config.jsonc from the compat report
   ai-dev-tools ensure-all-vendored [--dry-run]  Ensure ALL vendored tests are in config.jsonc
   ai-dev-tools --help                     Show this help message
@@ -17,7 +19,7 @@ Usage:
 Examples:
   npx ai-dev-tools fix net
   npx ai-dev-tools fix crypto
-  npx ai-dev-tools fix fs
+  npx ai-dev-tools fix-batch http
   npx ai-dev-tools sync-config
   npx ai-dev-tools sync-config --dry-run
   npx ai-dev-tools ensure-all-vendored
@@ -25,6 +27,7 @@ Examples:
 
   # Or during development:
   npx tsx src/cli.ts fix net
+  npx tsx src/cli.ts fix-batch http
   npx tsx src/cli.ts sync-config
   npx tsx src/cli.ts ensure-all-vendored
 `;
@@ -63,6 +66,23 @@ async function main(): Promise<void> {
         process.exit(1);
       }
       await fixCommand(category);
+      break;
+    }
+    case "fix-batch": {
+      const category = positionals[1];
+      if (!category) {
+        console.error("Error: fix-batch command requires a <category> argument");
+        console.log();
+        console.log(USAGE);
+        process.exit(1);
+      }
+      if (!CATEGORY_PATTERN.test(category)) {
+        console.error(
+          `Error: invalid category '${category}'. Must be lowercase alphanumeric (e.g., http, net).`,
+        );
+        process.exit(1);
+      }
+      await fixBatchCommand(category, { dryRun: !!values["dry-run"] });
       break;
     }
     case "sync-config": {

@@ -154,6 +154,79 @@ function formatToolUse(name: string, input: Record<string, unknown>): string {
   }
 }
 
+export function buildBatchPrompt(
+  category: string,
+  groupName: string,
+  tests: { path: string; subtestName?: string; reason: string }[],
+  failureOutput: string,
+): string {
+  const testList = tests.map((t) => {
+    const label = t.subtestName ? `${t.path}#${t.subtestName}` : t.path;
+    return `- **${label}** — ${t.reason}`;
+  }).join("\n");
+
+  const testPaths = tests.map((t) => `tests/node_compat/suite/${t.path}`);
+  const uniquePaths = [...new Set(testPaths)];
+  const readList = uniquePaths.map((p) => `- ${p}`).join("\n");
+
+  // Build combined filter for running all tests
+  const filters = tests.map((t) => testPathToFilter(t.path, t.subtestName));
+  const filterArgs = filters.join(" ");
+
+  // Truncate failure output to last ~4000 chars
+  const truncatedOutput = failureOutput.slice(-4000);
+
+  return `\
+You are working on the wasm-rquickjs project which wraps JavaScript in WebAssembly Components using QuickJS.
+
+We are trying to make a GROUP of related Node.js compatibility tests pass. These tests all exercise related functionality in the node:http module. Rather than fixing one test at a time, implement the missing feature or fix the underlying issue that blocks this entire group.
+
+## Test group: ${groupName} (${tests.length} tests)
+
+${testList}
+
+## Current failure output (truncated)
+${truncatedOutput}
+
+## Your task
+
+1. **Read ALL test files first** to understand the full API contract being tested:
+${readList}
+2. Use the librarian tool to learn about the Node.js HTTP API being tested (check Node.js v22 docs).
+3. Identify the common missing feature or bug in the skeleton code that blocks these tests.
+4. Read the current implementation:
+   - crates/wasm-rquickjs/skeleton/src/builtin/node_http.js — HTTP module JS wrapper
+   - crates/wasm-rquickjs/skeleton/src/builtin/node_http.rs — HTTP module native bridge
+5. Implement the fix. Follow the project's hybrid native+JS pattern for built-in modules.
+6. **IMPORTANT**: Do NOT modify any vendored test files (tests/node_compat/suite/*).
+7. After making changes, clean and rebuild:
+   - Run: ./cleanup-skeleton.sh
+   - Then run the batch tests: cargo test --test node_compat -- --nocapture --include-ignored ${filterArgs} 2>&1 | tee /tmp/test-output.txt
+8. Also run all ${category} tests to check for regressions:
+   cargo test --test node_compat parallel__test_${category} -- --nocapture 2>&1 | tee /tmp/test-output.txt
+9. If after analysis you determine these tests CANNOT pass (e.g., requires features fundamentally unavailable in WASM), explain why and state 'CANNOT_FIX: <reason>'. Consult the oracle tool to confirm this assessment before giving up.
+
+## Key files to check
+- crates/wasm-rquickjs/skeleton/src/builtin/ — built-in module implementations
+- crates/wasm-rquickjs/skeleton/src/builtin/mod.rs — module registration
+- tests/node_compat/common-shim/index.js — test common shim
+- tests/node_compat/config.jsonc — test configuration
+
+## Rules from AGENTS.md
+- The skeleton's Cargo.toml is stored as Cargo.toml_ — rename to Cargo.toml for building, rename back before finishing
+- After skeleton changes, run ./cleanup-skeleton.sh before running tests
+- Never modify vendored test files in tests/node_compat/suite/
+- Always update README.md if adding new APIs
+- ALL node:http outgoing HTTP requests must go through wasi:http (the native Rust NodeHttpClientRequest) — do not try to circumvent that using sockets
+- **NEVER introduce localhost side-channels.** Do NOT intercept socket writes to capture HTTP response metadata (status messages, headers, HTTP version) and pass them to the client via globalThis queues keyed by port. Do NOT check isLoopbackHostname() to selectively apply captured metadata. The wasi:http protocol has real limitations (no status message, no HTTP version, limited header control). If a test fails because it depends on features wasi:http cannot provide, mark it as skipped in config.jsonc with "skip": true and "reason": "wasi:http does not expose <feature>" — do NOT fake the behavior for localhost only.
+- When touching core request/response plumbing in node_http.js or node_http.rs, consult the oracle tool for architectural review.
+
+Respond with either:
+- 'FIXED' if all (or most) tests now pass (include what you changed)
+- 'CANNOT_FIX: <reason>' if it's fundamentally impossible
+- 'PARTIAL: <explanation>' if you made progress but couldn't fully fix it`;
+}
+
 export function buildAmpPrompt(
   category: string,
   targetTest: string,
