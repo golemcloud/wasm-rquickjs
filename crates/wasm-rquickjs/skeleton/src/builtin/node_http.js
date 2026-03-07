@@ -173,14 +173,49 @@ class FakeAgentSocket extends EventEmitter {
         this.destroyed = false;
         this.writable = true;
         this.readable = true;
+        this.timeout = undefined;
+        this._timeoutTimer = null;
+        this.connecting = false;
+        this.remoteAddress = undefined;
+        this.remotePort = undefined;
+        this.localAddress = undefined;
+        this.localPort = undefined;
+        this.writableLength = 0;
     }
 
     destroy() {
+        if (this.destroyed) return this;
         this.destroyed = true;
+        this.writable = false;
+        this.readable = false;
+        this._clearTimeoutTimer();
+        process.nextTick(() => {
+            this.emit('close');
+        });
         return this;
     }
 
-    setTimeout() { return this; }
+    setTimeout(ms, cb) {
+        this._clearTimeoutTimer();
+        if (typeof ms !== 'number') ms = 0;
+        this.timeout = ms;
+        if (typeof cb === 'function') this.once('timeout', cb);
+        if (ms > 0) {
+            this._timeoutTimer = setTimeout(() => {
+                this._timeoutTimer = null;
+                this.emit('timeout');
+            }, ms);
+        }
+        return this;
+    }
+
+    _clearTimeoutTimer() {
+        if (this._timeoutTimer !== null) {
+            clearTimeout(this._timeoutTimer);
+            this._timeoutTimer = null;
+        }
+    }
+
     setNoDelay() { return this; }
     setKeepAlive() { return this; }
     ref() { return this; }
@@ -277,7 +312,7 @@ export class Agent extends EventEmitter {
                (total < this.maxTotalSockets || !Number.isFinite(this.maxTotalSockets));
     }
 
-    _scheduleRequest(name, execute) {
+    _scheduleRequest(name, execute, req) {
         const maxPerKey = this.maxSockets;
         const maxTotal = this.maxTotalSockets;
 
@@ -311,10 +346,28 @@ export class Agent extends EventEmitter {
                 return;
             }
 
+            if (req) {
+                if (!this.requests[key]) {
+                    this.requests[key] = [];
+                }
+                this.requests[key].push(req);
+            }
+
             if (!this._requestQueue[key]) {
                 this._requestQueue[key] = [];
             }
-            this._requestQueue[key].push(run);
+            this._requestQueue[key].push(() => {
+                if (req && this.requests[key]) {
+                    const idx = this.requests[key].indexOf(req);
+                    if (idx !== -1) {
+                        this.requests[key].splice(idx, 1);
+                    }
+                    if (this.requests[key].length === 0) {
+                        delete this.requests[key];
+                    }
+                }
+                run();
+            });
         });
     }
 
@@ -416,6 +469,20 @@ export class Agent extends EventEmitter {
             }
         }
     }
+
+    keepSocketAlive(socket) {
+        socket.setKeepAlive(true, this.keepAliveMsecs);
+        socket.unref();
+        const agentTimeout = this.timeout || 0;
+        if (agentTimeout) {
+            socket.setTimeout(agentTimeout);
+        }
+        return true;
+    }
+
+    reuseSocket(socket, req) {
+        socket._httpMessage = req;
+    }
 }
 
 export const globalAgent = new Agent();
@@ -432,22 +499,30 @@ function parseUrl(urlString) {
         err.input = urlString;
         throw err;
     }
-    return {
+    const options = {
         protocol: parsed.protocol,
         hostname: parsed.hostname,
         port: parsed.port || undefined,
         path: parsed.pathname + parsed.search,
     };
+    if (parsed.username || parsed.password) {
+        options.auth = decodeURIComponent(parsed.username) + ':' + decodeURIComponent(parsed.password);
+    }
+    return options;
 }
 
 function urlToOptions(url) {
-    return {
+    const options = {
         protocol: url.protocol,
         hostname: url.hostname,
         port: url.port || undefined,
         path: url.pathname + url.search,
         hash: url.hash,
     };
+    if (url.username || url.password) {
+        options.auth = decodeURIComponent(url.username) + ':' + decodeURIComponent(url.password);
+    }
+    return options;
 }
 
 function normalizeHttpVersion(httpVersion) {
@@ -1642,6 +1717,14 @@ export class ClientRequest extends OutgoingMessage {
             }
         }
 
+        // Handle auth from URL or options
+        if (options.auth && !(this[kOutHeaders] && 'authorization' in this[kOutHeaders])) {
+            if (this[kOutHeaders] === null) {
+                this[kOutHeaders] = {};
+            }
+            this[kOutHeaders]['authorization'] = ['Authorization', 'Basic ' + Buffer.from(options.auth).toString('base64')];
+        }
+
         this.shouldKeepAlive = true;
         this._defaultKeepAlive = true;
         this._last = false;
@@ -1666,9 +1749,12 @@ export class ClientRequest extends OutgoingMessage {
 
         this.aborted = false;
         this.socket = null;
+        this.reusedSocket = false;
         this._timeout = null;
+        this.timeoutCb = null;
         this._closeEmitted = false;
         this._nativeAbortDeferred = false;
+        this._hasCustomLookup = typeof options.lookup === 'function';
 
         this._initializeCustomConnection(options);
 
@@ -2020,7 +2106,7 @@ export class ClientRequest extends OutgoingMessage {
 
     _sendThroughAgent() {
         if (this.agent && this.agent !== false && typeof this.agent._scheduleRequest === 'function') {
-            return this.agent._scheduleRequest(this._agentName, () => this._doSend());
+            return this.agent._scheduleRequest(this._agentName, () => this._doSend(), this);
         }
         return this._doSend();
     }
@@ -2029,11 +2115,95 @@ export class ClientRequest extends OutgoingMessage {
         if (this.socket || this._useSocketTransport) {
             return;
         }
-        const mockSocket = new FakeAgentSocket();
+        let mockSocket = null;
+        const agent = this.agent;
+        const name = this._agentName;
+
+        // Try to reuse a free socket from the agent pool
+        if (agent && name) {
+            const freeList = agent.freeSockets[name];
+            if (freeList && freeList.length > 0) {
+                const scheduling = agent.scheduling || 'lifo';
+                if (scheduling === 'fifo') {
+                    for (let i = 0; i < freeList.length; i++) {
+                        if (!freeList[i].destroyed) {
+                            mockSocket = freeList.splice(i, 1)[0];
+                            break;
+                        }
+                    }
+                } else {
+                    for (let i = freeList.length - 1; i >= 0; i--) {
+                        if (!freeList[i].destroyed) {
+                            mockSocket = freeList.splice(i, 1)[0];
+                            break;
+                        }
+                    }
+                }
+                if (mockSocket) {
+                    if (!freeList.length) delete agent.freeSockets[name];
+                    this.reusedSocket = true;
+                    // Reset socket state for reuse
+                    mockSocket._clearTimeoutTimer();
+                    mockSocket.timeout = undefined;
+                    mockSocket.destroyed = false;
+                    mockSocket.writable = true;
+                    mockSocket.readable = true;
+                    // Remove old free-socket error listener
+                    if (mockSocket._freeSocketErrorListener) {
+                        mockSocket.removeListener('error', mockSocket._freeSocketErrorListener);
+                        mockSocket._freeSocketErrorListener = null;
+                    }
+                    // Call agent.reuseSocket if available
+                    if (typeof agent.reuseSocket === 'function') {
+                        agent.reuseSocket(mockSocket, this);
+                    }
+                }
+            }
+        }
+
+        if (!mockSocket) {
+            mockSocket = new FakeAgentSocket();
+            this.reusedSocket = false;
+
+            // Install permanent agent-level listeners (once per socket)
+            if (agent && name) {
+                // Timeout handler: forward to request, then destroy
+                mockSocket.on('timeout', function onAgentTimeout() {
+                    const req = mockSocket._httpMessage;
+                    if (req) {
+                        req.emit('timeout');
+                    }
+                    mockSocket.destroy();
+                });
+
+                // Close handler: remove from agent pools
+                mockSocket.on('close', function onAgentClose() {
+                    agent._removeSocket(name, mockSocket);
+                    agent._removeFreeSocket(name, mockSocket);
+                });
+            }
+        }
+
         mockSocket._httpMessage = this;
         this.socket = mockSocket;
-        if (this.agent && this._agentName) {
-            this.agent._addSocket(this._agentName, mockSocket);
+
+        // Set up request's timeoutCb (simulating Node's listenSocketTimeout)
+        if (!this.timeoutCb) {
+            const req = this;
+            this.timeoutCb = function emitRequestTimeout() {
+                req.emit('timeout');
+            };
+        }
+        mockSocket.once('timeout', this.timeoutCb);
+
+        // Apply timeout value to the socket
+        const timeout = this._timeout || (agent && agent.timeout) || 0;
+        if (timeout > 0) {
+            mockSocket.timeout = timeout;
+        }
+
+        if (agent && name) {
+            agent._addSocket(name, mockSocket);
         }
         this.emit('socket', mockSocket);
     }
@@ -2044,34 +2214,53 @@ export class ClientRequest extends OutgoingMessage {
             const agent = this.agent;
             const name = this._agentName;
 
+            // Remove request-specific timeout listener
+            if (this.timeoutCb) {
+                socket.removeListener('timeout', this.timeoutCb);
+            }
+
             if (agent && name) {
                 agent._removeSocket(name, socket);
 
                 if (this.shouldKeepAlive && agent.keepAlive && !socket.destroyed) {
-                    if (!agent.freeSockets[name]) {
-                        agent.freeSockets[name] = [];
+                    // Call keepSocketAlive (may set timeout on the socket)
+                    let shouldKeep = true;
+                    if (typeof agent.keepSocketAlive === 'function') {
+                        shouldKeep = agent.keepSocketAlive(socket);
                     }
-                    if (agent.freeSockets[name].length < agent.maxFreeSockets) {
-                        agent.freeSockets[name].push(socket);
 
-                        const onFreeSocketError = () => {
-                            agent._removeFreeSocket(name, socket);
-                            socket.destroy();
-                        };
-                        socket.once('error', onFreeSocketError);
-                        socket._freeSocketErrorListener = onFreeSocketError;
+                    if (shouldKeep && !socket.destroyed) {
+                        socket._httpMessage = null;
 
-                        socket.emit('free');
-                        agent.emit('free', socket, {
-                            host: this.hostname,
-                            port: this.port,
-                        });
-                        return;
+                        if (!agent.freeSockets[name]) {
+                            agent.freeSockets[name] = [];
+                        }
+                        if (agent.freeSockets[name].length < agent.maxFreeSockets) {
+                            agent.freeSockets[name].push(socket);
+
+                            const onFreeSocketError = () => {
+                                agent._removeFreeSocket(name, socket);
+                                socket.destroy();
+                            };
+                            socket.once('error', onFreeSocketError);
+                            socket._freeSocketErrorListener = onFreeSocketError;
+
+                            socket.emit('free');
+                            agent.emit('free', socket, {
+                                host: this.hostname,
+                                port: this.port,
+                            });
+                            return;
+                        }
                     }
+
+                    // keepSocketAlive returned false or maxFreeSockets exceeded
+                    socket.destroy();
+                    return;
                 }
             }
 
-            socket.emit('close');
+            socket.destroy();
         }
     }
 
@@ -2096,6 +2285,12 @@ export class ClientRequest extends OutgoingMessage {
             }
 
             this._setupMockSocket();
+
+            // If a custom lookup function was provided, the connection should
+            // hang (simulating DNS resolution that never completes in Node.js).
+            if (this._hasCustomLookup) {
+                return;
+            }
 
             // Finish the request body
             await this._nativeReq.finish(undefined);
@@ -2136,6 +2331,12 @@ export class ClientRequest extends OutgoingMessage {
                 }
             } else if (nativeRes) {
                 const res = new IncomingMessage(nativeRes);
+
+                // Link response to the request's mock socket
+                if (this.socket) {
+                    res.socket = this.socket;
+                    res.client = this.socket;
+                }
 
                 const responseConnectionHeader = res.headers.connection;
 

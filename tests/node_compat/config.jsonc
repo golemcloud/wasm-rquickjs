@@ -2805,7 +2805,7 @@
     "parallel/test-global-domexception.js": {},
     "parallel/test-global-encoder.js": {},
     "parallel/test-http-agent-getname.js": {},
-    "parallel/test-http-autoselectfamily.js": { "skip": true, "reason": "hangs: requires autoSelectFamily DNS resolution" },
+    "parallel/test-http-autoselectfamily.js": { "skip": true, "reason": "requires dgram and dns.Resolver (UDP sockets and DNS resolution not available in WASI)" },
     "parallel/test-http-client-defaults.js": {
       "split": true,
       "subtests": {
@@ -4570,23 +4570,35 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
+    "parallel/test-http-agent-destroyed-socket.js": {},
     "parallel/test-http-agent-error-on-idle.js": {},
+    "parallel/test-http-agent-keepalive-delay.js": {
+      "skip": true,
+      "reason": "requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests"
+    },
+    "parallel/test-http-agent-keepalive.js": {
+      "skip": true,
+      "reason": "requires remote server close detection on idle keep-alive sockets and socket hang up errors; wasi:http creates independent connections per request with no shared socket lifecycle"
+    },
     "parallel/test-http-agent-no-protocol.js": {},
     "parallel/test-http-agent-null.js": {},
     "parallel/test-http-agent-remove.js": {},
+    "parallel/test-http-agent-reuse-drained-socket-only.js": {
+      "skip": true,
+      "reason": "requires net.createServer with pauseOnConnect and socket.localPort; wasi:http does not expose socket-level properties"
+    },
     "parallel/test-http-agent-scheduling.js": {
       "skip": true,
-      "reason": "requires actual TCP socket reuse with port identity tracking; wasi:http creates new connections per request"
+      "reason": "requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request"
     },
+    "parallel/test-http-agent-timeout-option.js": {},
     "parallel/test-http-agent-timeout.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
     "parallel/test-http-agent-uninitialized-with-handle.js": { "skip": true, "reason": "hangs: test relies on Agent._addSession and createConnection internals" },
@@ -4602,7 +4614,7 @@
       "reason": "requires HTTP server functionality, we only support clients"
     },
     "parallel/test-http-byteswritten.js": {},
-    "parallel/test-http-catch-uncaughtexception.js": { "skip": true, "reason": "hangs: requires uncaughtException handling in async request callbacks" },
+    "parallel/test-http-catch-uncaughtexception.js": { "skip": true, "reason": "requires process.on('uncaughtException') to catch synchronous throws from async callback contexts, which is not supported in QuickJS" },
     "parallel/test-http-chunk-extensions-limit.js": {
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients",
@@ -4680,13 +4692,13 @@
     "parallel/test-http-connect.js": { "skip": true, "reason": "[manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http" },
     "parallel/test-http-content-length-mismatch.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for content-length mismatch detection" },
     "parallel/test-http-contentLength0.js": {},
-    "parallel/test-http-createConnection.js": { "skip": true, "reason": "hangs: relies on Agent createConnection not fully implemented" },
+    "parallel/test-http-createConnection.js": { "skip": true, "reason": "requires socket transport for HTTP client via createConnection, async createConnection timing is incompatible with wasi:http" },
     "parallel/test-http-date-header.js": {},
-    "parallel/test-http-decoded-auth.js": { "skip": true, "reason": "hangs: relies on auth URL handling in client request" },
-    "parallel/test-http-default-port.js": { "skip": true, "reason": "hangs: relies on default port 80 resolution not available in WASI sandbox" },
-    "parallel/test-http-destroyed-socket-write2.js": { "skip": true, "reason": "hangs: relies on write-to-destroyed-socket behavior" },
-    "parallel/test-http-dont-set-default-headers-with-set-header.js": { "skip": true, "reason": "hangs: test uses raw TCP to verify default header suppression" },
-    "parallel/test-http-dont-set-default-headers-with-setHost.js": { "skip": true, "reason": "hangs: test uses raw TCP to verify default header suppression" },
+    "parallel/test-http-decoded-auth.js": {},
+    "parallel/test-http-default-port.js": { "skip": true, "reason": "wasi:http derives Host header from URL authority; globalAgent.defaultPort cannot suppress port in Host header" },
+    "parallel/test-http-destroyed-socket-write2.js": { "skip": true, "reason": "requires TCP-level error codes (ECONNRESET/ECONNABORTED/EPIPE) from write-to-destroyed-socket not mapped by wasi:http" },
+    "parallel/test-http-dont-set-default-headers-with-set-header.js": { "skip": true, "reason": "requires exact rawHeaders order/casing control; wasi:http normalizes headers and does not allow manual Host overrides" },
+    "parallel/test-http-dont-set-default-headers-with-setHost.js": { "skip": true, "reason": "requires exact rawHeaders order/casing control; wasi:http normalizes headers and does not allow manual Host overrides" },
     "parallel/test-http-dont-set-default-headers.js": { "skip": true, "reason": "hangs: test uses raw TCP to verify default header suppression" },
     "parallel/test-http-double-content-length.js": {},
     "parallel/test-http-dummy-characters-smuggling.js": {
@@ -5172,10 +5184,6 @@
       "skip": true,
       "reason": "[manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http"
     },
-    "parallel/test-http-agent-destroyed-socket.js": {
-      "skip": true,
-      "reason": "requires request queuing via addRequest and socket identity tracking; wasi:http creates new connections per request"
-    },
     "parallel/test-http-agent-maxsockets-respected.js": {},
     "parallel/test-http-agent-maxsockets.js": {},
     "parallel/test-http-agent-maxtotalsockets.js": {},
@@ -5385,19 +5393,6 @@
       "skip": true,
       "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
     },
-    "parallel/test-http-agent-keepalive-delay.js": {
-      "skip": true,
-      "reason": "requires createConnection with real socket keepAlive options; wasi:http does not expose socket-level options"
-    },
-    "parallel/test-http-agent-keepalive.js": {
-      "skip": true,
-      "reason": "requires actual TCP socket reuse with reusedSocket tracking; wasi:http creates new connections per request"
-    },
-    "parallel/test-http-agent-reuse-drained-socket-only.js": {
-      "skip": true,
-      "reason": "requires net.createServer with pauseOnConnect and socket.localPort; unavailable with wasi:http"
-    },
-    "parallel/test-http-agent-timeout-option.js": { "skip": true, "reason": "hangs: requires real socket with timeout/listeners tracking; lookup callback prevents connection" },
     "parallel/test-http-buffer-sanity.js": {
       "skip": true,
       "reason": "requires HTTP server functionality"
@@ -5435,7 +5430,7 @@
     "parallel/test-http-common.js": {},
     "parallel/test-http-conn-reset.js": {},
     "parallel/test-http-correct-hostname.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
-    "parallel/test-http-debug.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-http-debug.js": { "skip": true, "reason": "requires child_process.spawnSync with file path (test-http-conn-reset.js); WASM child_process only supports --eval mode" },
     "parallel/test-http-default-encoding.js": {},
     "parallel/test-http-dns-error.js": {},
     "parallel/test-http-extra-response.js": {},
