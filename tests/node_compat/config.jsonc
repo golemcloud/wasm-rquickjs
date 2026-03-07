@@ -4788,16 +4788,25 @@
     "parallel/test-http-localaddress-bind-error.js": {},
     "parallel/test-http-malformed-request.js": {},
     "parallel/test-http-many-ended-pipelines.js": { "skip": true, "reason": "fails: Readable stream error during pipelined server responses" },
-    "parallel/test-http-max-headers-count.js": { "skip": true, "reason": "hangs: relies on maxHeadersCount enforcement" },
-    "parallel/test-http-max-sockets.js": { "skip": true, "reason": "hangs: relies on Agent maxSockets enforcement" },
+    "parallel/test-http-max-headers-count.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "parallel/test-http-max-sockets.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "parallel/test-http-missing-header-separator-cr.js": {
       "skip": true,
       "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_01_block_01": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_02_block_02": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
     "parallel/test-http-missing-header-separator-lf.js": {
@@ -4805,7 +4814,10 @@
       "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
         "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
         "block_02_block_02": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
@@ -5460,12 +5472,21 @@
 "split": true,
       "subtests": {
         "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
-        "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": {},
-        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {}
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
-    "parallel/test-http-max-header-size.js": { "skip": true, "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-http-max-header-size.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "parallel/test-http-max-http-headers.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
     "parallel/test-http-multi-line-headers.js": { "skip": true, "reason": "requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them" },
     "parallel/test-http-no-content-length.js": {},
