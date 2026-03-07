@@ -215,6 +215,15 @@ export class ERR_HTTP_BODY_NOT_ALLOWED extends Error {
     }
 }
 
+export class ERR_HTTP_CONTENT_LENGTH_MISMATCH extends Error {
+    constructor(bodyLength, contentLength) {
+        super(
+            `Response body's content-length of ${bodyLength} byte(s) does not match the content-length of ${contentLength} byte(s) set in header`,
+        );
+        addCodeToMessage(this, "ERR_HTTP_CONTENT_LENGTH_MISMATCH");
+    }
+}
+
 export class ERR_HTTP_INVALID_HEADER_VALUE extends TypeError {
     constructor(x, y) {
         super(
@@ -1203,6 +1212,7 @@ export const codes = Object.freeze({
     ERR_FS_FILE_TOO_LARGE,
     ERR_FS_INVALID_SYMLINK_TYPE,
     ERR_HTTP_BODY_NOT_ALLOWED,
+    ERR_HTTP_CONTENT_LENGTH_MISMATCH,
     ERR_HTTP_HEADERS_SENT,
     ERR_HTTP_SOCKET_ASSIGNED,
     ERR_HTTP_INVALID_HEADER_VALUE,

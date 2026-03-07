@@ -3,7 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
-import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -230,6 +230,10 @@ function ServerResponse(req, options) {
     this._removedContLen = false;
     this._removedTE = false;
     this._outputSize = 0;
+
+    // strictContentLength enforcement
+    this.strictContentLength = false;
+    this._bytesWritten = 0;
 
     // OutgoingMessage-compatible properties
     this.writable = true;
@@ -466,6 +470,7 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         head += 'Date: ' + (new Date()).toUTCString() + '\r\n';
     }
 
+    let addImplicitTE = false;
     if (isNoBodyStatus) {
         // 1xx, 204, 304: no Transfer-Encoding or Content-Length
         if (this.hasHeader('transfer-encoding')) {
@@ -486,19 +491,11 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         // Neither Content-Length nor Transfer-Encoding set, body expected
         if (requestHttpVersion === '1.1') {
             this._chunked = true;
-            head += 'Transfer-Encoding: chunked\r\n';
+            addImplicitTE = true;
         }
     }
 
-    // Connection header
-    if (!this.hasHeader('connection')) {
-        if (this._keepAlive) {
-            head += 'Connection: keep-alive\r\n';
-        } else {
-            head += 'Connection: close\r\n';
-        }
-    }
-
+    // User headers first (matches Node.js ordering)
     for (const lower of Object.keys(this._headers)) {
         const name = this._headerNames[lower] || lower;
         const value = this._headers[lower];
@@ -508,6 +505,20 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
             }
         } else {
             head += name + ': ' + value + '\r\n';
+        }
+    }
+
+    // Implicit Transfer-Encoding (after user headers)
+    if (addImplicitTE) {
+        head += 'Transfer-Encoding: chunked\r\n';
+    }
+
+    // Implicit Connection header (after user headers)
+    if (!this.hasHeader('connection')) {
+        if (this._keepAlive) {
+            head += 'Connection: keep-alive\r\n';
+        } else {
+            head += 'Connection: close\r\n';
         }
     }
 
@@ -561,6 +572,14 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         return true;
     }
 
+    if (this.strictContentLength && !this._chunked && this.hasHeader('content-length')) {
+        const contentLength = parseInt(this.getHeader('content-length'), 10);
+        if (this._bytesWritten + chunk.length > contentLength) {
+            throw new ERR_HTTP_CONTENT_LENGTH_MISMATCH(this._bytesWritten + chunk.length, contentLength);
+        }
+    }
+    this._bytesWritten += chunk.length;
+
     if (this._chunked) {
         const hex = chunk.length.toString(16);
         this.socket.write(Buffer.from(hex + '\r\n'));
@@ -596,6 +615,22 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         if (typeof cb === 'function') cb();
         return this;
     }
+
+    if (this.strictContentLength && !this._chunked && this.hasHeader('content-length')) {
+        const contentLength = parseInt(this.getHeader('content-length'), 10);
+        let totalBytes = this._bytesWritten;
+        if (data !== undefined && data !== null) {
+            if (typeof data === 'string') {
+                totalBytes += Buffer.byteLength(data, encoding || 'utf8');
+            } else {
+                totalBytes += data.length;
+            }
+        }
+        if (totalBytes !== contentLength) {
+            throw new ERR_HTTP_CONTENT_LENGTH_MISMATCH(totalBytes, contentLength);
+        }
+    }
+
     this._writableEnded = true;
 
     if (!this._headersSentWire) {
@@ -1041,9 +1076,16 @@ function createConnectionParser(server, socket) {
                 const te = req.headers['transfer-encoding'];
                 let requestHasNoBody = false;
 
-                if (te && te.toLowerCase().indexOf('chunked') !== -1) {
+                if (te) {
+                    if (!_isValidChunkedTE(te)) {
+                        server.emit('clientError', new Error('HPE_INVALID_TRANSFER_ENCODING'), socket);
+                        socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
+                        socket.end();
+                        return;
+                    }
                     state.state = BODY_CHUNKED;
                     state.chunkState = 'SIZE';
+                    state.chunkExtensionSize = 0;
                     state.contentLength = 0;
                 } else if (cl !== undefined && cl !== '0') {
                     state.contentLength = parseInt(cl, 10);
@@ -1109,6 +1151,11 @@ function createConnectionParser(server, socket) {
                     socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
                     socket.end();
                     return;
+                } else if (result === 'extension-limit') {
+                    server.emit('clientError', new Error('HPE_CHUNK_EXTENSIONS_OVERFLOW'), socket);
+                    socket.write(Buffer.from('HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n'));
+                    socket.end();
+                    return;
                 }
                 continue;
             }
@@ -1122,9 +1169,27 @@ function parseChunked(state) {
     while (true) {
         if (state.chunkState === 'SIZE') {
             const idx = bufferIndexOf(state.buffer, CRLF);
-            if (idx === -1) return 'need-data';
+            if (idx === -1) {
+                // Early rejection: check if accumulated extension data
+                // already exceeds the 16KB limit before CRLF arrives
+                let semiPos = -1;
+                for (let i = 0; i < state.buffer.length; i++) {
+                    if (state.buffer[i] === 0x3b) { // ';'
+                        semiPos = i;
+                        break;
+                    }
+                }
+                if (semiPos !== -1 && state.buffer.length - semiPos - 1 > 16384) {
+                    return 'extension-limit';
+                }
+                return 'need-data';
+            }
             const sizeLine = state.buffer.slice(0, idx).toString('utf8').trim();
             const semicolonIdx = sizeLine.indexOf(';');
+            // Check chunk extension size (limit: 16384 bytes, same as Node.js)
+            if (semicolonIdx !== -1 && sizeLine.length - semicolonIdx - 1 > 16384) {
+                return 'extension-limit';
+            }
             const sizeStr = semicolonIdx !== -1 ? sizeLine.substring(0, semicolonIdx) : sizeLine;
             const size = parseInt(sizeStr, 16);
             if (isNaN(size)) return 'error';
@@ -1232,6 +1297,16 @@ function parseRequestHeaders(block) {
     }
 
     return { method, url, httpVersion, rawHeaders };
+}
+
+function _isValidChunkedTE(te) {
+    if (!te) return false;
+    const codings = te.split(',').map(function(v) {
+        const trimmed = v.trim();
+        const semi = trimmed.indexOf(';');
+        return (semi === -1 ? trimmed : trimmed.substring(0, semi)).trim().toLowerCase();
+    }).filter(Boolean);
+    return codings.length === 1 && codings[0] === 'chunked';
 }
 
 function computeKeepAlive(connectionHeader, httpVersion) {

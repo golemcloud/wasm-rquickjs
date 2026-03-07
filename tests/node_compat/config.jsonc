@@ -4616,13 +4616,11 @@
     "parallel/test-http-byteswritten.js": {},
     "parallel/test-http-catch-uncaughtexception.js": { "skip": true, "reason": "[manual] batch other-1: cannot fix" },
     "parallel/test-http-chunk-extensions-limit.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_verify_that_chunk_extensions_are_limited_in_size_when_sent_a": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_verify_that_chunk_extensions_are_limited_in_size_when_sent_i": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_02_verify_the_chunk_extensions_is_correctly_reset_after_a_chunk": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_verify_that_chunk_extensions_are_limited_in_size_when_sent_a": {},
+        "block_01_verify_that_chunk_extensions_are_limited_in_size_when_sent_i": {},
+        "block_02_verify_the_chunk_extensions_is_correctly_reset_after_a_chunk": {}
       }
     },
     "parallel/test-http-chunk-problem.js": { "skip": true, "reason": "hangs: test spawns child_process and uses fixed port allocation" },
@@ -4690,7 +4688,7 @@
     "parallel/test-http-client-with-create-connection.js": { "skip": true, "reason": "hangs: relies on Agent.createConnection returning real sockets" },
     "parallel/test-http-connect-req-res.js": { "skip": true, "reason": "[manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http" },
     "parallel/test-http-connect.js": { "skip": true, "reason": "[manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http" },
-    "parallel/test-http-content-length-mismatch.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for content-length mismatch detection" },
+    "parallel/test-http-content-length-mismatch.js": {},
     "parallel/test-http-contentLength0.js": {},
     "parallel/test-http-createConnection.js": { "skip": true, "reason": "[manual] batch other-1: cannot fix" },
     "parallel/test-http-date-header.js": {},
@@ -5038,14 +5036,12 @@
     "parallel/test-http-status-message.js": {},
     "parallel/test-http-timeout-client-warning.js": {},
     "parallel/test-http-timeout-overflow.js": {},
-    "parallel/test-http-transfer-encoding-repeated-chunked.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for transfer-encoding edge cases" },
+    "parallel/test-http-transfer-encoding-repeated-chunked.js": {},
     "parallel/test-http-transfer-encoding-smuggling.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-http-uncaught-from-request-callback.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
