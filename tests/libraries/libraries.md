@@ -40,7 +40,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 14 | TypeORM | `typeorm` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 15 | Drizzle ORM | `drizzle-orm` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 16 | Sequelize | `sequelize` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 17 | MikroORM | `@mikro-orm/core` | ⬜ | — | Data Mapper ORM with Unit of Work |
+| 17 | MikroORM | `@mikro-orm/core` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 18 | Knex | `knex` | ⬜ | — | SQL query builder |
 | 19 | pg | `pg` | ⬜ | — | PostgreSQL client for Node.js |
 | 20 | mysql2 | `mysql2` | ⬜ | — | MySQL/MariaDB client |

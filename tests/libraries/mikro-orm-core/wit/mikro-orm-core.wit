@@ -1,0 +1,5 @@
+package test:lib-mikro-orm-core;
+
+world lib-mikro-orm-core {
+  export run: func() -> string;
+}
