@@ -1,0 +1,5 @@
+package test:lib-pg;
+
+world lib-pg {
+  export run: func() -> string;
+}

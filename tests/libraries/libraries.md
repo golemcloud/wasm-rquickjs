@@ -42,7 +42,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 16 | Sequelize | `sequelize` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 17 | MikroORM | `@mikro-orm/core` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 18 | Knex | `knex` | ❌ | 2026-03-07 | Node tests pass (query/schema compilation), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 19 | pg | `pg` | ⬜ | — | PostgreSQL client for Node.js |
+| 19 | pg | `pg` | ❌ | 2026-03-07 | Node tests pass (escaping, config parsing, type parsers, object init), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 20 | mysql2 | `mysql2` | ⬜ | — | MySQL/MariaDB client |
 | 21 | better-sqlite3 | `better-sqlite3` | ⬜ | — | Synchronous SQLite3 driver (native) |
 | 22 | mssql | `mssql` | ⬜ | — | Microsoft SQL Server client |
