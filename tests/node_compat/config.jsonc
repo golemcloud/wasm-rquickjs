@@ -5566,28 +5566,26 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-http-parser-bad-ref.js": { "skip": true, "reason": "requires Node.js internal modules" },
+    "parallel/test-http-parser-bad-ref.js": {},
     "parallel/test-http-parser-lazy-loaded.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
-    "parallel/test-http-parser-memory-retention.js": { "skip": true, "reason": "requires Node.js internal modules" },
+    "parallel/test-http-parser-memory-retention.js": { "skip": true, "reason": "relies on socket.parser lifecycle internals of HTTP server/client" },
     "parallel/test-http-parser-multiple-execute.js": {},
     "parallel/test-http-parser-timeout-reset.js": { "skip": true, "reason": "requires process.binding not available in WASM" },
     "parallel/test-http-parser.js": {
-      "skip": true,
-      "reason": "requires _http_common.HTTPParser which is a Node.js internal C++ binding",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_07_block_07": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_08_block_08": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_09_block_09": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_10_block_10": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" },
-        "block_11_block_11": { "skip": true, "reason": "inherited: requires _http_common.HTTPParser which is a Node.js internal C++ binding" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_block_06": {},
+        "block_07_block_07": {},
+        "block_08_block_08": {},
+        "block_09_block_09": {},
+        "block_10_block_10": {},
+        "block_11_block_11": {}
       }
     },
     "parallel/test-http-pause-resume-one-end.js": {},
