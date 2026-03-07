@@ -1,0 +1,5 @@
+package test:lib-typeorm;
+
+world lib-typeorm {
+  export run: func() -> string;
+}
