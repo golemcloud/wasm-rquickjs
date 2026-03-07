@@ -1,0 +1,5 @@
+package test:lib-got;
+
+world lib-got {
+  export run: func() -> string;
+}

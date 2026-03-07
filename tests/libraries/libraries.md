@@ -27,7 +27,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 8 | Axios | `axios` | ✅ | 2026-03-07 | All 5 tests pass (utilities, headers, interceptors, HTTP GET, HTTP POST) |
-| 9 | Got | `got` | ⬜ | — | Human-friendly HTTP client, ESM-native |
+| 9 | Got | `got` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 10 | node-fetch | `node-fetch` | ⬜ | — | Fetch API polyfill for Node.js |
 | 11 | undici | `undici` | ⬜ | — | Official Node.js HTTP/1.1 client |
 | 12 | superagent | `superagent` | ⬜ | — | Flexible HTTP client library |
