@@ -30,7 +30,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 9 | Got | `got` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 10 | node-fetch | `node-fetch` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 11 | undici | `undici` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 12 | superagent | `superagent` | ⬜ | — | Flexible HTTP client library |
+| 12 | superagent | `superagent` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 
 ## Databases — SQL & ORMs
 
