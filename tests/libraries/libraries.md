@@ -17,7 +17,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 1 | Express | `express` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails: missing `string_decoder` default export |
 | 2 | Fastify | `fastify` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails in `node:module.createRequire` with undefined filename |
 | 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-07 | Node tests pass, but wasm wrapper compilation fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 4 | NestJS Common | `@nestjs/common` | ⬜ | — | Core decorators, pipes, guards, interceptors |
+| 4 | NestJS Common | `@nestjs/common` | ❌ | 2026-03-07 | Node tests pass, but wasm wrapper compilation fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 5 | Koa | `koa` | ⬜ | — | Lightweight middleware-based framework |
 | 6 | Hapi | `@hapi/hapi` | ⬜ | — | Configuration-centric enterprise framework |
 | 7 | Hono | `hono` | ⬜ | — | Ultra-fast multi-runtime framework |
