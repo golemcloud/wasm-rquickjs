@@ -346,6 +346,36 @@ ServerResponse.prototype.removeHeader = function removeHeader(name) {
     delete this._headerNames[lower];
 };
 
+ServerResponse.prototype.setHeaders = function setHeaders(headers) {
+    if (this.headersSent) {
+        throw new ERR_HTTP_HEADERS_SENT('set');
+    }
+    if (!(headers instanceof globalThis.Headers) && !(headers instanceof Map)) {
+        throw new ERR_INVALID_ARG_TYPE('headers', ['Headers', 'Map'], headers);
+    }
+
+    if (headers instanceof globalThis.Headers) {
+        for (const [key, value] of headers) {
+            if (key.toLowerCase() === 'set-cookie') {
+                const cookies = typeof headers.getSetCookie === 'function'
+                    ? headers.getSetCookie()
+                    : value.split(', ');
+                if (cookies.length > 0) {
+                    this.setHeader(key, cookies);
+                }
+            } else {
+                this.setHeader(key, value);
+            }
+        }
+    } else {
+        for (const [key, value] of headers) {
+            this.setHeader(key, value);
+        }
+    }
+
+    return this;
+};
+
 ServerResponse.prototype.getHeaders = function getHeaders() {
     const result = {};
     for (const lower of Object.keys(this._headers)) {

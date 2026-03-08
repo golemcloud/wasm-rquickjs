@@ -482,6 +482,7 @@ function iteratorFor(items) {
 export class Headers {
     constructor(headers) {
         this.map = {}
+        this._setCookies = []
 
         if (headers instanceof Headers) {
             headers.forEach((value, name) => {
@@ -504,12 +505,21 @@ export class Headers {
     append(name, value) {
         name = normalizeName(name)
         value = normalizeValue(value)
-        const oldValue = this.map[name]
-        this.map[name] = oldValue ? oldValue + ', ' + value : value
+        if (name === 'set-cookie') {
+            this._setCookies.push(value)
+            this.map[name] = this._setCookies.join(', ')
+        } else {
+            const oldValue = this.map[name]
+            this.map[name] = oldValue ? oldValue + ', ' + value : value
+        }
     }
 
     delete(name) {
-        delete this.map[normalizeName(name)]
+        name = normalizeName(name)
+        if (name === 'set-cookie') {
+            this._setCookies = []
+        }
+        delete this.map[name]
     }
 
     get(name) {
@@ -517,12 +527,21 @@ export class Headers {
         return this.has(name) ? this.map[name] : null
     }
 
+    getSetCookie() {
+        return this._setCookies.slice()
+    }
+
     has(name) {
         return this.map.hasOwnProperty(normalizeName(name))
     }
 
     set(name, value) {
-        this.map[normalizeName(name)] = normalizeValue(value)
+        name = normalizeName(name)
+        value = normalizeValue(value)
+        if (name === 'set-cookie') {
+            this._setCookies = [value]
+        }
+        this.map[name] = value
     }
 
     forEach(callback, thisArg) {
