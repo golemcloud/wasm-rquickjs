@@ -30,7 +30,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 9 | Got | `got` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at startup: `JavaScript error: Intl is not defined` |
 | 10 | node-fetch | `node-fetch` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'promises' in module 'node:fs'` |
 | 11 | undici | `undici` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `node:module.createRequire` gets undefined filename |
-| 12 | superagent | `superagent` | ⬜ | — | HTTP client |
+| 12 | superagent | `superagent` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
 
 ## Databases — SQL & ORMs
 
