@@ -4245,6 +4245,8 @@
     "es-module/test-esm-loader-cache-clearing.js": {},
     "es-module/test-vm-compile-function-leak.js": {},
     "es-module/test-vm-contextified-script-leak.js": {},
+    "es-module/test-esm-import-meta.mjs": {},
+    "es-module/test-esm-import-meta-resolve.mjs": { "skip": true, "reason": "requires spawn/child_process" },
 
     // === node:zlib tests ===
     "parallel/test-zlib-const.js": {},

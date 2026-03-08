@@ -246,7 +246,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                             instance.set_epoch_deadline(test_timeout_secs);
                             setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                            let guest_path = format!("/test/{}", path);
+                            let guest_path = format!("/home/node/test/{}", path);
                             let (result, stdout, stderr) = instance
                                 .invoke_and_capture_output_with_stderr(
                                     None,
@@ -353,12 +353,14 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                             let suite = path.split('/').next().unwrap_or("parallel");
                             let rewritten_path = instance
                                 .temp_dir_path()
+                                .join("home")
+                                .join("node")
                                 .join("test")
                                 .join(suite)
                                 .join(test_filename);
                             fs::write(&rewritten_path, &rewritten)?;
 
-                            let guest_path = format!("/test/{}", path);
+                            let guest_path = format!("/home/node/test/{}", path);
                             let test_future = async {
                                 let (result, stdout, stderr) = instance
                                     .invoke_and_capture_output_with_stderr(

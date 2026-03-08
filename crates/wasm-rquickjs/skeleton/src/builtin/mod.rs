@@ -467,9 +467,38 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", module::WIRE_JS).unwrap();
     writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();
     writeln!(result, "globalThis.global = globalThis;").unwrap();
+    writeln!(result, "{}", IMPORT_META_RESOLVE_JS).unwrap();
 
     #[cfg(feature = "golem")]
     writeln!(result, "{}", diagnostics_channel::GOLEM_WIRE_JS).unwrap();
 
     result
 }
+
+const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_resolve = function(baseUrl, specifier) {
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(specifier) || specifier.startsWith('data:')) return specifier;
+  if (specifier.startsWith('node:')) return specifier;
+  var NODE_BUILTINS = new Set(['fs','path','os','crypto','http','https','url','util','stream','events','buffer','querystring','string_decoder','zlib','assert','module','net','tls','child_process','timers','dns','dgram','cluster','readline','tty','v8','vm','worker_threads','perf_hooks','async_hooks','diagnostics_channel','trace_events','inspector','punycode','console','process','test','sqlite','domain','http2','repl']);
+  function normalizePath(p) {
+    var parts = p.split('/'); var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i] || parts[i] === '.') continue;
+      if (parts[i] === '..') { if (out.length > 0) out.pop(); }
+      else out.push(parts[i]);
+    }
+    return '/' + out.join('/');
+  }
+  if (specifier.startsWith('/')) {
+    var path = normalizePath(specifier);
+    return baseUrl.startsWith('file://') ? 'file://' + path : path;
+  }
+  if (specifier.startsWith('.')) {
+    var base = baseUrl;
+    if (base.startsWith('file://')) base = base.slice(7);
+    var dir = base.substring(0, base.lastIndexOf('/') + 1);
+    var path = normalizePath(dir + specifier);
+    return baseUrl.startsWith('file://') ? 'file://' + path : path;
+  }
+  if (NODE_BUILTINS.has(specifier)) return 'node:' + specifier;
+  throw new Error('Cannot resolve bare specifier "' + specifier + '" from "' + baseUrl + '"');
+};"#;

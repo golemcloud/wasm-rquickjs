@@ -1,12 +1,10 @@
 // ESM wrapper around the CJS common shim.
 // Follows the same pattern as upstream Node.js test/common/index.mjs:
 // re-exports all named bindings from the CJS shim for ESM test files.
-//
-// Note: We cannot use createRequire(import.meta.url) because import.meta.url
-// is not populated in the QuickJS runtime. Instead we use the global require()
-// with the known absolute path of the common shim in the test filesystem.
 
-const common = require('/test/common/index.js');
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const common = require('/home/node/test/common/index.js');
 
 const {
   isWindows,

@@ -4,10 +4,10 @@
 // by the Rust test harness before invoking this function.
 //
 // Expected filesystem layout:
-//   /tests/<suite>/<test-file>.js    — the vendored Node.js test (suite: parallel, sequential, es-module)
-//   /tests/common/index.js           — our common shim
+//   /home/node/test/<suite>/<test-file>.js — the vendored Node.js test (suite: parallel, sequential, es-module)
+//   /home/node/test/common/index.js       — our common shim
 //
-// The test does require('../common') which resolves naturally to /tests/common/index.js.
+// The test does require('../common') which resolves naturally to /home/node/test/common/index.js.
 
 // Drain pending microtasks/timers by yielding multiple times.
 // Many stream tests need several event loop turns to complete.
@@ -128,7 +128,7 @@ export const runTest = async (testPath) => {
         // Reset mustCall tracking for this test
         var commonMod;
         try {
-            commonMod = require('/tests/common/index.js');
+            commonMod = require('/home/node/test/common/index.js');
         } catch(e) {}
         if (commonMod && typeof commonMod._resetMustCalls === 'function') {
             commonMod._resetMustCalls();
@@ -163,7 +163,7 @@ export const runTest = async (testPath) => {
         // Verify mustCall expectations first
         var common;
         try {
-            common = require('/tests/common/index.js');
+            common = require('/home/node/test/common/index.js');
         } catch(e) {}
         var mustCallErrors = [];
         if (common && typeof common._checkMustCalls === 'function') {

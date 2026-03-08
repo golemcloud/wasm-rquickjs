@@ -1,7 +1,7 @@
 use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
 use rquickjs::function::{Args, Constructor};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver, ScriptLoader};
+use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
     Object, Promise, Value, async_with,
@@ -13,14 +13,144 @@ use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
 
+/// Resolver that passes `data:` URLs through as-is.
+struct DataUrlResolver;
+
+impl Resolver for DataUrlResolver {
+    fn resolve<'js>(&mut self, _ctx: &Ctx<'js>, _base: &str, name: &str) -> rquickjs::Result<String> {
+        if name.starts_with("data:") {
+            Ok(name.to_string())
+        } else {
+            Err(Error::new_resolving(_base, name))
+        }
+    }
+}
+
+/// Loader for `data:` URL modules (e.g. `data:text/javascript,export default 42`).
+struct DataUrlLoader;
+
+impl DataUrlLoader {
+    fn percent_decode(encoded: &str) -> Option<String> {
+        let bytes = encoded.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%' && i + 2 < bytes.len() {
+                if let (Some(hi), Some(lo)) = (
+                    FileUrlResolver::hex_val(bytes[i + 1]),
+                    FileUrlResolver::hex_val(bytes[i + 2]),
+                ) {
+                    decoded.push(hi << 4 | lo);
+                    i += 3;
+                    continue;
+                }
+            }
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+        String::from_utf8(decoded).ok()
+    }
+}
+
+impl Loader for DataUrlLoader {
+    fn load<'js>(&mut self, ctx: &Ctx<'js>, path: &str) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        let rest = path.strip_prefix("data:").ok_or_else(|| Error::new_loading(path))?;
+
+        // Find the comma separating metadata from content
+        let comma_pos = rest.find(',').ok_or_else(|| Error::new_loading(path))?;
+        let metadata = &rest[..comma_pos];
+        let raw_content = &rest[comma_pos + 1..];
+
+        // Parse metadata: e.g. "text/javascript" or "text/javascript;base64"
+        let is_base64 = metadata.ends_with(";base64");
+
+        let source = if is_base64 {
+            // Simple base64 decoder for ASCII content
+            let decoded = base64_decode(raw_content).ok_or_else(|| Error::new_loading(path))?;
+            String::from_utf8(decoded).map_err(|_| Error::new_loading(path))?
+        } else {
+            Self::percent_decode(raw_content).ok_or_else(|| Error::new_loading(path))?
+        };
+
+        let init = ImportMetaInit {
+            url: path.to_string(),
+            filename: None,
+            dirname: None,
+            include_resolve: true,
+        };
+
+        let injected = inject_import_meta_prologue(&init, &source);
+        Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
+    }
+}
+
+fn base64_decode(input: &str) -> Option<Vec<u8>> {
+    let mut buf = Vec::with_capacity(input.len() * 3 / 4);
+    let mut accum: u32 = 0;
+    let mut bits: u32 = 0;
+    for b in input.bytes() {
+        let val = match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' | b'\n' | b'\r' | b' ' => continue,
+            _ => return None,
+        };
+        accum = (accum << 6) | val as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            buf.push((accum >> bits) as u8);
+            accum &= (1 << bits) - 1;
+        }
+    }
+    Some(buf)
+}
+
 /// Resolver that strips `file://` URL prefixes so that `import('file:///path/to/mod.mjs')`
 /// resolves to the filesystem path `/path/to/mod.mjs`.
 struct FileUrlResolver;
 
+impl FileUrlResolver {
+    /// Decode a `file://` URL into a filesystem path, handling percent-encoding.
+    fn file_url_to_path(url: &str) -> Option<String> {
+        let encoded = url.strip_prefix("file://")?;
+        let bytes = encoded.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%' && i + 2 < bytes.len() {
+                if let (Some(hi), Some(lo)) = (
+                    Self::hex_val(bytes[i + 1]),
+                    Self::hex_val(bytes[i + 2]),
+                ) {
+                    decoded.push(hi << 4 | lo);
+                    i += 3;
+                    continue;
+                }
+            }
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+        String::from_utf8(decoded).ok()
+    }
+
+    fn hex_val(b: u8) -> Option<u8> {
+        match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            _ => None,
+        }
+    }
+}
+
 impl Resolver for FileUrlResolver {
     fn resolve<'js>(&mut self, _ctx: &Ctx<'js>, _base: &str, name: &str) -> rquickjs::Result<String> {
-        if let Some(path) = name.strip_prefix("file://") {
-            Ok(path.to_string())
+        if let Some(path) = Self::file_url_to_path(name) {
+            Ok(path)
         } else {
             Err(Error::new_resolving(_base, name))
         }
@@ -126,19 +256,47 @@ impl Loader for CjsCompatLoader {
 
         let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
 
+        let abs_path = ensure_absolute_path(path);
+        let std_path = std::path::Path::new(&abs_path);
+        let filename = Some(abs_path.clone());
+        let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
+        let url = path_to_file_url(path);
+
+        let init = ImportMetaInit {
+            url,
+            filename,
+            dirname,
+            include_resolve: true,
+        };
+
         // Detect CJS patterns
         let is_cjs = source.contains("module.exports")
             || source.contains("exports.")
             || (source.contains("require(") && !source.contains("import "));
 
         if !is_cjs {
-            // Treat as ESM
-            return Module::declare(ctx.clone(), path, source.as_bytes().to_vec());
+            // Treat as ESM — inject import.meta prologue (handles shebangs)
+            let injected = inject_import_meta_prologue(&init, &source);
+            return Module::declare(ctx.clone(), path, injected.as_bytes().to_vec());
         }
 
-        // Wrap CJS source in ESM-compatible wrapper
+        // Strip shebang before wrapping in IIFE (it would be invalid inside the wrapper)
+        let cjs_source = if let Some(rest) = source.strip_prefix("#!") {
+            if let Some(newline_pos) = rest.find('\n') {
+                // Replace shebang with a comment to preserve line numbers
+                format!("//{}{}", &source[2..2 + newline_pos + 1], &source[2 + newline_pos + 1..])
+            } else {
+                String::new()
+            }
+        } else {
+            source
+        };
+
+        // Wrap CJS source in ESM-compatible wrapper, with import.meta prologue before the wrapper
+        let prologue = inject_import_meta_prologue(&init, "");
         let wrapped = format!(
-            r#"var module = {{ exports: {{}} }};
+            r#"{}
+var module = {{ exports: {{}} }};
 var exports = module.exports;
 (function(module, exports) {{
 {}
@@ -147,10 +305,161 @@ var __cjs_default = module.exports;
 export default __cjs_default;
 export var __esModule = __cjs_default && __cjs_default.__esModule;
 "#,
-            source
+            prologue.trim(),
+            cjs_source
         );
 
         Module::declare(ctx.clone(), path, wrapped.as_bytes().to_vec())
+    }
+}
+
+struct ImportMetaInit {
+    url: String,
+    filename: Option<String>,
+    dirname: Option<String>,
+    include_resolve: bool,
+}
+
+/// Ensure a path is absolute. If relative, prepend `/` (WASI cwd is `/`).
+fn ensure_absolute_path(path: &str) -> String {
+    if path.starts_with('/') {
+        path.to_string()
+    } else {
+        format!("/{}", path)
+    }
+}
+
+fn path_to_file_url(path: &str) -> String {
+    let abs_path = ensure_absolute_path(path);
+    let mut url = String::from("file://");
+    for byte in abs_path.as_bytes() {
+        match byte {
+            b'%' => url.push_str("%25"),
+            b' ' => url.push_str("%20"),
+            b'#' => url.push_str("%23"),
+            b'?' => url.push_str("%3F"),
+            // Unreserved characters + path separators
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'/'
+            | b':' => url.push(*byte as char),
+            _ if *byte > 0x7F => {
+                // Non-ASCII: percent-encode each byte
+                url.push_str(&format!("%{:02X}", byte));
+            }
+            _ => {
+                // Other ASCII special chars: percent-encode
+                url.push_str(&format!("%{:02X}", byte));
+            }
+        }
+    }
+    url
+}
+
+fn escape_js_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{0008}' => out.push_str("\\b"),
+            '\u{000C}' => out.push_str("\\f"),
+            c if c < '\u{0020}' => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            '\u{2028}' => out.push_str("\\u2028"),
+            '\u{2029}' => out.push_str("\\u2029"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
+    let mut props = Vec::new();
+
+    if let Some(ref dirname) = init.dirname {
+        props.push(format!(
+            "dirname:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+            escape_js_string(dirname)
+        ));
+    }
+
+    if let Some(ref filename) = init.filename {
+        props.push(format!(
+            "filename:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+            escape_js_string(filename)
+        ));
+    }
+
+    if init.include_resolve {
+        props.push(format!(
+            "resolve:{{value:(s)=>globalThis.__wasm_rquickjs_import_meta_resolve(\"{}\",s),writable:true,enumerable:true,configurable:true}}",
+            escape_js_string(&init.url)
+        ));
+    }
+
+    props.push(format!(
+        "url:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+        escape_js_string(&init.url)
+    ));
+
+    let prologue = format!(
+        "Object.defineProperties(import.meta,{{{}}});",
+        props.join(",")
+    );
+
+    if let Some(rest) = source.strip_prefix("#!") {
+        if let Some(newline_pos) = rest.find('\n') {
+            let shebang_line = &source[..2 + newline_pos + 1];
+            let remaining = &source[2 + newline_pos + 1..];
+            format!("{}{}\n{}", shebang_line, prologue, remaining)
+        } else {
+            // Shebang with no newline — entire file is the shebang
+            format!("{}\n{}", source, prologue)
+        }
+    } else {
+        format!("{}\n{}", prologue, source)
+    }
+}
+
+struct ImportMetaLoader;
+
+impl Loader for ImportMetaLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.ends_with(".mjs") {
+            return Err(Error::new_loading(path));
+        }
+
+        let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
+
+        let abs_path = ensure_absolute_path(path);
+        let std_path = std::path::Path::new(&abs_path);
+        let filename = Some(abs_path.clone());
+        let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
+        let url = path_to_file_url(path);
+
+        let init = ImportMetaInit {
+            url,
+            filename,
+            dirname,
+            include_resolve: true,
+        };
+
+        let injected = inject_import_meta_prologue(&init, &source);
+        Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
     }
 }
 
@@ -221,20 +530,42 @@ impl JsState {
                 .with_pattern("{}.js")
                 .with_pattern("{}.mjs");
 
-            let resolver = (FileUrlResolver, builtin_resolver, NodeModulesResolver, file_resolver);
+            let resolver = (DataUrlResolver, FileUrlResolver, builtin_resolver, NodeModulesResolver, file_resolver);
 
             let mut builtin_loader = BuiltinLoader::default()
-                .with_module(crate::JS_EXPORT_MODULE_NAME, crate::JS_EXPORT_MODULE);
+                .with_module(
+                    crate::JS_EXPORT_MODULE_NAME,
+                    inject_import_meta_prologue(
+                        &ImportMetaInit {
+                            url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", crate::JS_EXPORT_MODULE_NAME),
+                            filename: None,
+                            dirname: None,
+                            include_resolve: true,
+                        },
+                        crate::JS_EXPORT_MODULE,
+                    ),
+                );
             for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
-                builtin_loader = builtin_loader.with_module(name.to_string(), (get_module)());
+                let source = (get_module)();
+                let injected = inject_import_meta_prologue(
+                    &ImportMetaInit {
+                        url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
+                        filename: None,
+                        dirname: None,
+                        include_resolve: true,
+                    },
+                    &source,
+                );
+                builtin_loader = builtin_loader.with_module(name.to_string(), injected);
             }
 
             let loader = (
                 builtin_loader,
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
+                DataUrlLoader,
                 CjsCompatLoader,
-                ScriptLoader::default().with_extension("mjs"),
+                ImportMetaLoader,
             );
 
             rt.set_loader(resolver, loader).await;
