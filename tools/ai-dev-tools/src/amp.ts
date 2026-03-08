@@ -479,6 +479,9 @@ async function runAmpGeneric(
           pushPreview(`  ${c.green}${c.bold}✓ Result: ${message.result}${c.reset}`);
           result = message.result;
         }
+        // Treat result as terminal — don't wait for iterator cleanup which may
+        // never settle, causing Node to drain the event loop and exit silently.
+        break;
       }
     }
   } catch (err) {
@@ -500,22 +503,27 @@ async function runAmpGeneric(
     }
   } finally {
     clearTimeout(timeoutId);
-  }
+    try {
+      if (!isError) {
+        logUpdate(
+          `  ${c.green}${c.bold}✓ Amp agent completed${c.reset} ${c.dim}(${elapsed(startTime)}, ${toolCount} tool calls, ${messageCount} messages)${c.reset}`,
+        );
+      } else {
+        logUpdate(
+          `  ${c.red}${c.bold}✗ Amp agent failed${c.reset} ${c.dim}(${elapsed(startTime)}, ${toolCount} tool calls)${c.reset}`,
+        );
+      }
+      logUpdate.done();
+    } catch (e) {
+      console.error("  ⚠ logUpdate error (non-fatal):", e);
+    }
 
-  if (!isError) {
-    logUpdate(
-      `  ${c.green}${c.bold}✓ Amp agent completed${c.reset} ${c.dim}(${elapsed(startTime)}, ${toolCount} tool calls, ${messageCount} messages)${c.reset}`,
-    );
-    logUpdate.done();
-  } else {
-    logUpdate(
-      `  ${c.red}${c.bold}✗ Amp agent failed${c.reset} ${c.dim}(${elapsed(startTime)}, ${toolCount} tool calls)${c.reset}`,
-    );
-    logUpdate.done();
+    try {
+      fs.writeFileSync(ampLog, logParts.join(""));
+    } catch (e) {
+      console.error("  ⚠ Failed to write amp log:", e);
+    }
   }
-
-  const output = logParts.join("");
-  fs.writeFileSync(ampLog, output);
 
   return { output: result, isError };
 }
@@ -567,6 +575,7 @@ export async function runAmpPrioritize(
   const logParts: string[] = [];
   let result = "";
   let isError = false;
+  let toolCount = 0;
   const startTime = Date.now();
 
   try {
@@ -584,6 +593,7 @@ export async function runAmpPrioritize(
           if (content.type === "text") {
             logParts.push(content.text);
           } else if (content.type === "tool_use") {
+            toolCount++;
             logParts.push(`[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`);
           }
         }
@@ -596,6 +606,7 @@ export async function runAmpPrioritize(
           logParts.push(`[result] ${message.result}\n`);
           result = message.result;
         }
+        break;
       }
     }
   } catch (err) {
@@ -606,15 +617,19 @@ export async function runAmpPrioritize(
       result = err instanceof Error ? err.message : String(err);
       logParts.push(`[error] ${result}\n`);
     }
-  }
+  } finally {
+    if (!isError) {
+      console.log(`  ${c.green}✓ Prioritization complete${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
+    } else {
+      console.log(`  ${c.red}✗ Prioritization failed${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
+    }
 
-  if (!isError) {
-    console.log(`  ${c.green}✓ Prioritization complete${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
-  } else {
-    console.log(`  ${c.red}✗ Prioritization failed${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
+    try {
+      fs.writeFileSync(ampLog, logParts.join(""));
+    } catch (e) {
+      console.error("  ⚠ Failed to write prioritize log:", e);
+    }
   }
-
-  fs.writeFileSync(ampLog, logParts.join(""));
 
   return { output: result, isError };
 }
