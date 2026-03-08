@@ -938,7 +938,18 @@ impl Loader for CjsCompatLoader {
             return Err(Error::new_loading(path));
         }
 
-        let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
+        let source = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let globals = ctx.globals();
+                let msg = format!("Cannot find module '{}'", path);
+                let error_ctor: Function = globals.get("Error")?;
+                let error_obj: Object = error_ctor.call((&msg,))?;
+                error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+                return Err(ctx.throw(error_obj.into_value()));
+            }
+            Err(_) => return Err(Error::new_loading(path)),
+        };
 
         let abs_path = ensure_absolute_path(path);
         let std_path = std::path::Path::new(&abs_path);
@@ -1128,7 +1139,18 @@ impl Loader for ImportMetaLoader {
             return Err(Error::new_loading(path));
         }
 
-        let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
+        let source = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let globals = ctx.globals();
+                let msg = format!("Cannot find module '{}'", path);
+                let error_ctor: Function = globals.get("Error")?;
+                let error_obj: Object = error_ctor.call((&msg,))?;
+                error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+                return Err(ctx.throw(error_obj.into_value()));
+            }
+            Err(_) => return Err(Error::new_loading(path)),
+        };
 
         let abs_path = ensure_absolute_path(path);
         let std_path = std::path::Path::new(&abs_path);

@@ -916,7 +916,7 @@ export async function rmdir(path, options) {
 export async function rm(path, options) {
     const recursive = options && options.recursive || false;
     const force = options && options.force || false;
-    const error = native.fs_rm(path, recursive, force);
+    const error = native.fs_rm(pathToString(path), recursive, force);
     if (error) throw createSystemError(error);
 }
 
