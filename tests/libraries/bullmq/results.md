@@ -8,33 +8,23 @@
 
 ### test-01-basic.js — QueueKeys key generation
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** BullMQ bundle initialization expects a default export from `node:string_decoder`, which is not provided by the runtime shim.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-02-backoffs.js — Backoff normalization and delay calculation
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test code runs due to `node:string_decoder` default export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-03-errors.js — Error classes and static Worker rate-limit helper
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test code runs due to `node:string_decoder` default export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-job-json.js — Job option JSON round-trip
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test code runs due to `node:string_decoder` default export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-worker-connection.js — AsyncFifoQueue FIFO behavior
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test code runs due to `node:string_decoder` default export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ## Untestable Features
 
@@ -51,7 +41,7 @@ To fully test these features, a user would need to:
 
 ## Summary
 
-- Tests passed: 0/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs / runtime gaps: `node:string_decoder` default export compatibility
-- Behavioral differences: none observed (runtime fails at module initialization)
-- Blockers: all BullMQ tests are blocked by the same startup-time `string_decoder` export error
+- Tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Missing APIs: none observed
+- Behavioral differences: none observed
+- Blockers: none — all tested BullMQ features work correctly

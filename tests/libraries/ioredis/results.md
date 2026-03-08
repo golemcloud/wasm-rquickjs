@@ -8,37 +8,31 @@
 
 ### test-01-basic.js — lazy client creation and builtin command listing
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Missing/unsupported `string_decoder` module export shape during bundle initialization.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-02-command.js — command RESP encoding and argument transformers
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test logic runs due to `string_decoder` export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-03-url-options.js — Redis URL parsing and option merging
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test logic runs due to `string_decoder` export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-pipeline.js — pipeline command queueing without network
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test logic runs due to `string_decoder` export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-define-command.js — custom Lua command registration helpers
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'string_decoder'`
-- **Root cause:** Module initialization fails before test logic runs due to `string_decoder` export mismatch.
+- **wasm-rquickjs:** ✅ PASS
 
 ## Summary
 
-- Tests passed: 0/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs / module gaps: `string_decoder` default export expected by bundled `ioredis` dependency tree
-- Behavioral differences: None observed (runtime fails at module init)
-- Blockers: All tests are blocked by startup failure before any library API execution
+- Tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Missing APIs: None
+- Behavioral differences: None
+- Blockers: None — all tests pass successfully
+
+## Previous Failures (resolved)
+
+All tests previously failed at module initialization with `Could not find export 'default' in module 'string_decoder'`. This was fixed by updating the `string_decoder` built-in module to include a proper default export.

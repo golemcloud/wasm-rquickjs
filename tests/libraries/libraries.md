@@ -14,9 +14,9 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 1 | Express | `express` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails: missing `string_decoder` default export |
+| 1 | Express | `express` | ❌ | 2026-03-08 | Requires server binding (Golem-incompatible); wasm init fails: `import.meta.url` is undefined in `createRequire()` |
 | 2 | Fastify | `fastify` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails in `node:module.createRequire` with undefined filename |
-| 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-08 | Node tests pass, but wasm init fails: missing `string_decoder` default export |
+| 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-08 | Node tests pass, but wasm init fails: missing `stream/web` default export |
 | 4 | NestJS Common | `@nestjs/common` | ❌ | 2026-03-08 | Node bundles pass; wasm module init fails: `Intl is not defined` |
 | 5 | Koa | `koa` | ❌ | 2026-03-08 | Requires server binding (Golem-incompatible); wasm module init fails in `node:module.createRequire` with undefined filename |
 | 6 | Hapi | `@hapi/hapi` | ❌ | 2026-03-08 | Requires server binding (Golem-incompatible); wasm run fails for all bundles: `JavaScript error: not a function` |
@@ -30,7 +30,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 9 | Got | `got` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at startup: `JavaScript error: Intl is not defined` |
 | 10 | node-fetch | `node-fetch` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'promises' in module 'node:fs'` |
 | 11 | undici | `undici` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `node:module.createRequire` gets undefined filename |
-| 12 | superagent | `superagent` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
+| 12 | superagent | `superagent` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `import.meta.url` is undefined in `createRequire()` |
 
 ## Databases — SQL & ORMs
 
@@ -41,9 +41,9 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 15 | Drizzle ORM | `drizzle-orm` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (query builder, placeholders, relations, entities, aggregates) |
 | 16 | Sequelize | `sequelize` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (DataTypes, Op/SQL builders, errors, Model.build, hooks) |
 | 17 | MikroORM | `@mikro-orm/core` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Error resolving module 'constants'` |
-| 18 | Knex | `knex` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
-| 19 | pg | `pg` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
-| 20 | mysql2 | `mysql2` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
+| 18 | Knex | `knex` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (SELECT, INSERT/upsert, DDL, raw SQL, builder cloning) |
+| 19 | pg | `pg` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (escape utils, connection config, type parsers, client overrides, pool/native) |
+| 20 | mysql2 | `mysql2` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `import.meta.url` is undefined in `createRequire()` |
 | 21 | better-sqlite3 | `better-sqlite3` | ❌ | 2026-03-08 | Bundled tests fail to initialize (`__filename is not defined`); native `.node` binding load path incompatible |
 | 22 | mssql | `mssql` | ⚠️ | 2026-03-08 | 4/5 wasm tests pass; `ConnectionPool.parseConnectionString(...)` fails with `cannot read property 'trim' of undefined` |
 
@@ -58,7 +58,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 25 | ioredis | `ioredis` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
+| 25 | ioredis | `ioredis` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (lazy client, RESP encoding, URL parsing, pipeline, custom Lua commands) |
 | 26 | redis | `redis` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `node:module.createRequire` receives undefined filename |
 | 27 | lru-cache | `lru-cache` | ✅ | 2026-03-08 | All 5 bundled tests pass in Node.js and wasm-rquickjs (LRU behavior, TTL, size eviction, dispose hooks, memo/fetch) |
 | 28 | cache-manager | `cache-manager` | ✅ | 2026-03-08 | All 5 bundled tests pass in Node.js and wasm-rquickjs (basic CRUD, TTL, wrap coalescing, events, multi-store ops) |
@@ -67,7 +67,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 29 | BullMQ | `bullmq` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
+| 29 | BullMQ | `bullmq` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (QueueKeys, backoffs, errors, job JSON, AsyncFifoQueue) |
 | 30 | amqplib | `amqplib` | ✅ | 2026-03-08 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (credentials, codec, frame, API args, URL credential helpers); live broker operations untested |
 | 31 | kafkajs | `kafkajs` | ⬜ | — | Apache Kafka client |
 | 32 | nats | `nats` | ⬜ | — | NATS messaging client |
