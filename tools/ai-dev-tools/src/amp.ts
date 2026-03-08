@@ -5,7 +5,7 @@ import logUpdate from "log-update";
 import { REPO_ROOT, LOG_DIR } from "./paths.js";
 import { testPathToFilter } from "./tests.js";
 
-const MAX_PREVIEW_LINES = 20;
+const MAX_PREVIEW_LINES = 30;
 
 // ANSI color helpers
 const c = {
@@ -152,6 +152,47 @@ function formatToolUse(name: string, input: Record<string, unknown>): string {
       return `${icon} ${toolName} ${c.dim}${summary}${c.reset}`;
     }
   }
+}
+
+const TOOL_RESULT_PREVIEW_LINES = 6;
+
+/** Try to extract the meaningful output from a tool result string.
+ *  Many tool results come as JSON like {"output":"...","exitCode":0}. */
+function extractToolOutput(raw: string): { text: string; exitCode?: number } {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && typeof parsed.output === "string") {
+      return { text: parsed.output, exitCode: parsed.exitCode ?? undefined };
+    }
+  } catch {
+    // Not JSON, use raw text
+  }
+  return { text: raw };
+}
+
+function formatToolResult(toolName: string, content: string, isError: boolean): string {
+  const indent = "      ";
+
+  // Collapse skill loads to a one-liner
+  if (toolName === "skill") {
+    const lineCount = content.split("\n").length;
+    return `${indent}${c.dim}◀ skill loaded (${lineCount} lines)${c.reset}`;
+  }
+
+  const { text, exitCode } = extractToolOutput(content);
+  const exitSuffix = exitCode != null && exitCode !== 0 ? ` ${c.red}(exit ${exitCode})${c.reset}` : "";
+
+  const lines = text.split("\n").filter((l) => l.length > 0);
+  if (lines.length === 0) {
+    if (isError) return `${indent}${c.red}✗ (empty error result)${c.reset}${exitSuffix}`;
+    return `${indent}${c.dim}◀ (empty result)${c.reset}${exitSuffix}`;
+  }
+
+  const shown = lines.slice(-TOOL_RESULT_PREVIEW_LINES);
+  const omitted = lines.length - shown.length;
+  const prefix = omitted > 0 ? `${indent}${c.dim}… ${omitted} more lines …${c.reset}\n` : "";
+  const formatted = shown.map((l) => `${indent}${c.dim}${truncLine(l, 100)}${c.reset}`).join("\n");
+  return `${prefix}${formatted}${exitSuffix}`;
 }
 
 export function buildBatchPrompt(
@@ -327,6 +368,8 @@ export async function runAmp(
   return runAmpGeneric(prompt, ["fix-node-compat", category.replace(/_/g, "-"), targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)], iteration, mode);
 }
 
+const AMP_TIMEOUT_MS = 45 * 60 * 1000; // 45 minutes
+
 async function runAmpGeneric(
   prompt: string,
   labels: string[],
@@ -334,7 +377,7 @@ async function runAmpGeneric(
   mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
   const ampLog = path.join(LOG_DIR, `amp-${iteration}-${Date.now()}.txt`);
-  console.log(`  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration}, mode: ${mode})${c.reset}`);
+  console.log(`  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration}, mode: ${mode}, timeout: ${AMP_TIMEOUT_MS / 60000}m)${c.reset}`);
   console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);
   console.log();
 
@@ -344,7 +387,9 @@ async function runAmpGeneric(
   let isError = false;
   let toolCount = 0;
   let messageCount = 0;
+  const toolNames = new Map<string, string>(); // tool_use_id → tool name
   const startTime = Date.now();
+  const abortController = new AbortController();
 
   function statusHeader(): string {
     const parts = [
@@ -370,9 +415,14 @@ async function runAmpGeneric(
     logUpdate(`${statusHeader()}\n${c.dim}${"─".repeat(60)}${c.reset}\n${previewLines.join("\n")}`);
   }
 
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, AMP_TIMEOUT_MS);
+
   try {
     for await (const message of execute({
       prompt,
+      signal: abortController.signal,
       options: {
         cwd: REPO_ROOT,
         dangerouslyAllowAll: true,
@@ -398,9 +448,24 @@ async function runAmpGeneric(
             }
           } else if (content.type === "tool_use") {
             toolCount++;
+            toolNames.set(content.id, content.name);
             const rawText = `[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`;
             logParts.push(rawText);
             pushPreview(`  ${formatToolUse(content.name, content.input as Record<string, unknown>)}`);
+          }
+        }
+      } else if (message.type === "user") {
+        for (const content of message.message.content) {
+          if (content.type === "tool_result") {
+            const resultText = content.content ?? "";
+            const toolName = toolNames.get(content.tool_use_id) ?? "unknown";
+            // Log the full result to the log file (truncated for very large results)
+            const logText = resultText.length > 8000
+              ? resultText.slice(0, 4000) + "\n... (truncated) ...\n" + resultText.slice(-4000)
+              : resultText;
+            logParts.push(`[tool_result ${toolName} id=${content.tool_use_id} error=${content.is_error}]\n${logText}\n`);
+            // Show a preview of the tail of the result
+            pushPreview(formatToolResult(toolName, resultText, content.is_error));
           }
         }
       } else if (message.type === "result") {
@@ -417,17 +482,24 @@ async function runAmpGeneric(
       }
     }
   } catch (err) {
-    // The amp-sdk throws if the CLI process exits with a non-zero code, even
-    // after it has already delivered a valid result message. If we captured a
-    // result (or the agent made progress via tool calls), treat the process
-    // exit as non-fatal.
-    if (result || toolCount > 0) {
+    if (abortController.signal.aborted) {
+      // Timeout reached
+      isError = true;
+      result = `TIMEOUT: Amp agent exceeded ${AMP_TIMEOUT_MS / 60000} minute limit`;
+      logParts.push(`[timeout] ${result}\n`);
+    } else if (result || toolCount > 0) {
+      // The amp-sdk throws if the CLI process exits with a non-zero code, even
+      // after it has already delivered a valid result message. If we captured a
+      // result (or the agent made progress via tool calls), treat the process
+      // exit as non-fatal.
       logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
     } else {
       isError = true;
       result = err instanceof Error ? err.message : String(err);
       logParts.push(`[error] ${result}\n`);
     }
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!isError) {
@@ -527,7 +599,7 @@ export async function runAmpPrioritize(
       }
     }
   } catch (err) {
-    if (result || toolCount > 0) {
+    if (result) {
       logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
     } else {
       isError = true;

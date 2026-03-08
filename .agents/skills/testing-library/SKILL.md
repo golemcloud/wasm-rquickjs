@@ -369,3 +369,4 @@ The `package.json` for each test directory should include Rollup and its plugins
 8. **Always use wasmtime CLI to run tests** — do NOT write Rust test harnesses in `tests/runtime/`
 9. **Always use `edit_file` to update `libraries.md`** — never overwrite the entire file
 10. **Always use Rollup for bundling** — do NOT use esbuild; Rollup matches the production Golem CLI toolchain
+11. **Always run tests with a timeout** — use `timeout 60` (or similar) when running tests both on Node.js and via wasmtime to prevent hanging on tests that wait for network/IO that will never arrive
