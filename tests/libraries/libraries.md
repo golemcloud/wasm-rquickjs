@@ -36,7 +36,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 13 | Prisma Client | `@prisma/client` | ⬜ | — | Requires `prisma generate` |
+| 13 | Prisma Client | `@prisma/client` | ❌ | 2026-03-08 | Node bundles pass (5/5), but wasm init fails: `node:module.createRequire` gets undefined filename (`import.meta.url`) |
 | 14 | TypeORM | `typeorm` | ⬜ | — | SQL ORM |
 | 15 | Drizzle ORM | `drizzle-orm` | ⬜ | — | TypeScript ORM |
 | 16 | Sequelize | `sequelize` | ⬜ | — | Promise-based ORM |

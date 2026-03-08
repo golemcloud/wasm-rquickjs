@@ -2,7 +2,7 @@
 
 **Package:** `@prisma/client`
 **Version:** `7.4.2`
-**Tested on:** 2026-03-07
+**Tested on:** 2026-03-08
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Setup Notes
@@ -13,38 +13,38 @@
 
 ### test-01-basic.js — Prisma.sql parameterized fragments
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (compile-time)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Wrapper crate compilation fails for `wasm32-wasip1` in transitive `libsqlite3-sys`; component is never produced.
+- **wasm-rquickjs:** ❌ FAIL (runtime init)
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Prisma's bundled runtime calls `node:module.createRequire(import.meta.url)`, but `import.meta.url` is undefined in the wasm-rquickjs module init path, which causes a panic before test code runs.
 
 ### test-02-validation.js — Prisma.join/raw/empty composition
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (compile-time)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` build failure blocks WASM compilation.
+- **wasm-rquickjs:** ❌ FAIL (runtime init)
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same `createRequire(import.meta.url)` initialization failure.
 
 ### test-03-advanced.js — Prisma.validator and Prisma.skip
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (compile-time)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` build failure blocks WASM compilation.
+- **wasm-rquickjs:** ❌ FAIL (runtime init)
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same `createRequire(import.meta.url)` initialization failure.
 
 ### test-04-decimal-nulls.js — Prisma.Decimal and null sentinels
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (compile-time)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` build failure blocks WASM compilation.
+- **wasm-rquickjs:** ❌ FAIL (runtime init)
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same `createRequire(import.meta.url)` initialization failure.
 
 ### test-05-errors-extension.js — Error types and defineExtension
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (compile-time)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` build failure blocks WASM compilation.
+- **wasm-rquickjs:** ❌ FAIL (runtime init)
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same `createRequire(import.meta.url)` initialization failure.
 
 ## Summary
 
 - Tests passed on Node.js: 5/5
 - Tests passed on wasm-rquickjs: 0/5
-- Missing APIs: N/A (runtime not reached)
-- Behavioral differences: N/A (runtime not reached)
-- Blockers: `cargo-component build` fails in `libsqlite3-sys` for all wrappers (`stdio.h` missing for `wasm32-wasip1`)
+- Missing APIs: `node:module.createRequire` with valid `import.meta.url` context
+- Behavioral differences: Module initialization panics before user test code executes
+- Blockers: `@prisma/client` bundle assumes Node-style `import.meta.url` for `createRequire`; wasm-rquickjs provides `undefined` there during module init
