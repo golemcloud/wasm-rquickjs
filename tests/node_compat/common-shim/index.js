@@ -110,6 +110,11 @@ function parseInlineEvalArgs(args) {
             break;
         }
 
+        // Skip known Node.js boolean flags that have no effect in WASM
+        if (arg === '--preserve-symlinks' || arg === '--preserve-symlinks-main') {
+            continue;
+        }
+
         throw new Error('Only --eval/-e, --input-type, and script files are supported in WASM child emulation');
     }
 
@@ -205,9 +210,24 @@ function runInlineEval(command, args, options) {
             var fs = require('fs');
             var pathModule = require('path');
             var Module = require('module');
-            evalSource = fs.readFileSync(parsed.scriptPath, 'utf-8');
-            scriptRequire = Module.createRequire(parsed.scriptPath);
-            if (/\.mjs$/.test(parsed.scriptPath)) {
+
+            // Resolve script path like Node.js: try exact, then .js, then dir/index.js
+            var resolvedScriptPath = parsed.scriptPath;
+            try {
+                var st = fs.statSync(resolvedScriptPath);
+                if (st.isDirectory()) {
+                    resolvedScriptPath = pathModule.join(resolvedScriptPath, 'index.js');
+                }
+            } catch (_) {
+                // File doesn't exist at exact path, try adding .js extension
+                if (fs.existsSync(resolvedScriptPath + '.js')) {
+                    resolvedScriptPath = resolvedScriptPath + '.js';
+                }
+            }
+
+            evalSource = fs.readFileSync(resolvedScriptPath, 'utf-8');
+            scriptRequire = Module.createRequire(resolvedScriptPath);
+            if (/\.mjs$/.test(resolvedScriptPath)) {
                 parsed.inputType = 'module';
             }
         }
