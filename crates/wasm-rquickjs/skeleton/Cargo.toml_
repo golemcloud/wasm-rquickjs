@@ -85,5 +85,11 @@ rusqlite = { version = "0.38", default-features = false, features = ["bundled", 
 # Golem
 golem-rust = { version = "1.7", default-features = false, optional = true }
 
+# Patch libsqlite3-sys to fix wasm32-wasi cross-compilation with session/preupdate_hook features.
+# Upstream buildtime_bindgen produces incomplete bindings when cross-compiling to wasm32-wasip1.
+# This fork uses pre-built session-enabled bindings instead.
+[patch.crates-io]
+libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
+
 [package.metadata.component.bindings]
 ownership = "owning"

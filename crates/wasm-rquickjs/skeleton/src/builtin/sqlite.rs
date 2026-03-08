@@ -12,11 +12,7 @@ use rusqlite::types::ValueRef;
 const MAX_SAFE_INTEGER: i64 = 9007199254740991; // 2^53 - 1
 const MIN_SAFE_INTEGER: i64 = -9007199254740991;
 
-// Declare sqlite3_errstr ourselves because libsqlite3-sys's bindgen omits it
-// when targeting wasm32-wasip1. The symbol exists in the bundled C library.
-extern "C" {
-    fn sqlite3_errstr(errcode: std::ffi::c_int) -> *const std::ffi::c_char;
-}
+use rusqlite::ffi::sqlite3_errstr;
 
 struct ConnectionTable {
     connections: HashMap<u32, rusqlite::Connection>,

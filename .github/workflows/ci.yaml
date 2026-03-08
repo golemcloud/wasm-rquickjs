@@ -14,12 +14,16 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  WASI_SDK_VERSION: "25"
+  WASI_SDK_PATH: /opt/wasi-sdk
 
 jobs:
   build:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
       - uses: useblacksmith/rust-cache@v3
         with:
           prefix-key: v1-rust
@@ -33,6 +37,10 @@ jobs:
       - uses: cargo-bins/cargo-binstall@main
       - name: Install cargo-component
         run: cargo binstall --force --locked cargo-component@0.21.1
+      - name: Install WASI SDK
+        run: |
+          curl -sSfL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz | sudo tar xz -C /opt
+          sudo mv /opt/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux /opt/wasi-sdk
       - name: Check formatting
         run: cargo fmt -- --check
       - name: Clippy
@@ -44,6 +52,8 @@ jobs:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: true
       - uses: useblacksmith/rust-cache@v3
         with:
           prefix-key: v1-rust
@@ -57,6 +67,10 @@ jobs:
       - uses: cargo-bins/cargo-binstall@main
       - name: Install cargo-component
         run: cargo binstall --force --locked cargo-component@0.21.1
+      - name: Install WASI SDK
+        run: |
+          curl -sSfL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz | sudo tar xz -C /opt
+          sudo mv /opt/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux /opt/wasi-sdk
       - name: Tests
         run: cargo test -- --nocapture --test-threads=1 --report-time
       - name: Publish Test Report

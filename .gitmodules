@@ -1,0 +1,3 @@
+[submodule "vendor/rusqlite"]
+	path = vendor/rusqlite
+	url = https://github.com/golemcloud/rusqlite.git
