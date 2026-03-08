@@ -6578,7 +6578,7 @@
     "es-module/test-esm-type-field-errors.js": {},
     "es-module/test-esm-undefined-cjs-global-like-variables.js": { "skip": true, "reason": "[manual] This test requires three fundamental features our runtime intentionally does not implement:" },
     "es-module/test-esm-unknown-extension.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-esm-url-extname.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-url-extname.js": { "skip": true, "reason": "[manual] The test requires `node:internal/modules/esm/get_format`, a Node.js internal module (accessed via `--expose-internals` flag). Per project policy, we only implement the public Node.js API —..." },
     "es-module/test-esm-windows.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-loaders-hidden-from-users.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-cached-tla.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
