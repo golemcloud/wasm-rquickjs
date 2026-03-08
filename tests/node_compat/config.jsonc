@@ -4246,7 +4246,7 @@
     "es-module/test-vm-compile-function-leak.js": {},
     "es-module/test-vm-contextified-script-leak.js": {},
     "es-module/test-esm-import-meta.mjs": {},
-    "es-module/test-esm-import-meta-resolve.mjs": { "skip": true, "reason": "requires spawn/child_process" },
+    "es-module/test-esm-import-meta-resolve.mjs": { "skip": true, "reason": "[manual] The test uses `spawn` from `child_process` and `spawnPromisified` (lines 61-119) to launch real Node.js child processes with CLI flags (`--input-type=module`, `--eval`, `--import`). Child ..." },
 
     // === node:zlib tests ===
     "parallel/test-zlib-const.js": {},
