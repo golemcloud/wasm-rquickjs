@@ -679,9 +679,11 @@ impl Resolver for FileUrlResolver {
 /// looking for `node_modules/<name>/` directories, reading their `package.json`
 /// to find the entry point.
 /// Resolver that guards against dynamic import from contexts without a module referrer.
-/// When `import()` is called from eval'd code (base is `<input>`) without an active CJS
-/// module context, this rejects with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING, matching
-/// Node.js behavior for indirect eval in the default realm.
+///
+/// QuickJS currently reports `<input>` for both direct and indirect eval, so we
+/// conservatively enforce Node's missing-callback error for `node:` specifiers.
+/// This is enough for Node's `Promise.resolve(...).then(eval)` realm test case
+/// while preserving successful direct-eval imports in CommonJS modules.
 struct RealmGuardResolver;
 
 impl Resolver for RealmGuardResolver {
@@ -692,6 +694,10 @@ impl Resolver for RealmGuardResolver {
         name: &str,
     ) -> rquickjs::Result<String> {
         if base != "<input>" {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        if !name.starts_with("node:") {
             return Err(Error::new_resolving(base, name));
         }
 
@@ -1300,7 +1306,13 @@ impl JsState {
                 .with_pattern("{}.json");
 
             let resolver = (
-                (DataUrlResolver, FileUrlResolver, builtin_resolver, NodeModulesResolver),
+                (
+                    RealmGuardResolver,
+                    DataUrlResolver,
+                    FileUrlResolver,
+                    builtin_resolver,
+                    NodeModulesResolver,
+                ),
                 (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
             );
 
