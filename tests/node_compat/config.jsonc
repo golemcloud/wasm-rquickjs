@@ -6561,7 +6561,7 @@
     "es-module/test-esm-symlink.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-type-field-errors-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-type-field-errors.js": {},
-    "es-module/test-esm-undefined-cjs-global-like-variables.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-undefined-cjs-global-like-variables.js": { "skip": true, "reason": "[manual] This test requires three fundamental features our runtime intentionally does not implement:" },
     "es-module/test-esm-unknown-extension.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-url-extname.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-windows.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
