@@ -58,7 +58,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 25 | ioredis | `ioredis` | ⬜ | — | Robust Redis client with cluster/sentinel support |
+| 25 | ioredis | `ioredis` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
 | 26 | redis | `redis` | ⬜ | — | Official Node Redis client (v4+) |
 | 27 | lru-cache | `lru-cache` | ⬜ | — | High-performance in-process LRU cache |
 | 28 | cache-manager | `cache-manager` | ⬜ | — | Flexible multi-store caching |

@@ -1,0 +1,5 @@
+package test:lib-ioredis;
+
+world lib-ioredis {
+  export run: func() -> string;
+}
