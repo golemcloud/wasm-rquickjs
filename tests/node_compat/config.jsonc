@@ -6537,7 +6537,7 @@
     "es-module/test-esm-import-attributes-errors.js": {},
     "es-module/test-esm-import-attributes-validation.js": { "skip": true, "reason": "[manual] The test requires `internal/modules/esm/assert`, a Node.js internal module (gated behind `--expose-internals`). Per project rules, only public Node.js APIs are in scope. Updated the skip r..." },
     "es-module/test-esm-invalid-data-urls.js": {},
-    "es-module/test-esm-invalid-pjson.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-invalid-pjson.js": {},
     "es-module/test-esm-loader-modulemap.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",

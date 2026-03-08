@@ -785,7 +785,7 @@ const mainModule = {
     children: [],
 };
 
-function resolveFromNodeModules(id, parentDir) {
+function resolveFromNodeModules(id, parentDir, parentFilename) {
     var dirs = _nodeModulePaths(parentDir);
     for (var i = 0; i < dirs.length; i++) {
         var candidate = pathModule.join(dirs[i], id);
@@ -810,7 +810,16 @@ function resolveFromNodeModules(id, parentDir) {
                         if (content !== null) return { filename: mainCandidates[m], content: content };
                     }
                 }
-            } catch (e) { /* invalid JSON, skip */ }
+            } catch (e) {
+                var fromPart = parentFilename || parentDir;
+                var pkgErr = new Error(
+                    'Invalid package config ' + pkgJsonPath +
+                    ' while importing "' + id + '" from ' + fromPart + '.' +
+                    (e.message ? ' ' + e.message : '')
+                );
+                pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
+                throw pkgErr;
+            }
         }
 
         // Try as directory: index.js / index.json
@@ -832,7 +841,8 @@ function resolveFromNodeModules(id, parentDir) {
     return null;
 }
 
-function makeRequire(parentDir, parentModule) {
+function makeRequire(parentDir, parentModule, parentFilenameOverride) {
+    var parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
     function localRequire(id) {
         if (typeof id !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
@@ -862,7 +872,7 @@ function makeRequire(parentDir, parentModule) {
         }
 
         // node_modules resolution for bare specifiers
-        var nmResolved = resolveFromNodeModules(id, parentDir);
+        var nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
         if (nmResolved) {
             var mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
             return mod.exports;
@@ -885,7 +895,7 @@ function makeRequire(parentDir, parentModule) {
             return resolved.filename;
         }
         // node_modules resolution for bare specifiers
-        var nmResolved = resolveFromNodeModules(id, parentDir);
+        var nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
         if (nmResolved) {
             return nmResolved.filename;
         }
@@ -940,7 +950,7 @@ export function createRequire(filename) {
         filepath = filename;
     }
     var dir = pathModule.dirname(filepath);
-    return makeRequire(dir, null);
+    return makeRequire(dir, null, filepath);
 }
 
 export { builtinModuleNames as builtinModules };

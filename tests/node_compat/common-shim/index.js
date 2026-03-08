@@ -36,7 +36,23 @@ function replaceEnv(targetEnv, sourceEnv) {
 }
 
 function formatSpawnError(err) {
-    var text = (err && err.stack) ? String(err.stack) : String(err);
+    var text = '';
+    if (err && typeof err === 'object') {
+        var name = err.name || 'Error';
+        if (err.code && typeof err.code === 'string') {
+            text += name + ' [' + err.code + ']: ' + (err.message || '');
+        } else {
+            text += name + ': ' + (err.message || '');
+        }
+        if (err.stack) {
+            text += '\n' + String(err.stack);
+        }
+        if (err.code && typeof err.code === 'string') {
+            text += ' {\n  code: \'' + err.code + '\'\n}';
+        }
+    } else {
+        text = String(err);
+    }
     if (!text.endsWith('\n')) {
         text += '\n';
     }
