@@ -2,7 +2,7 @@
 
 **Package:** `hono`
 **Version:** `4.10.5`
-**Tested on:** 2026-03-07
+**Tested on:** 2026-03-08
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -10,32 +10,28 @@
 ### test-01-basic.js — Basic routing and path parameter extraction
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Following the required workflow (`default = ["http", "sqlite"]`), `cargo-component build` fails in `libsqlite3-sys` for `wasm32-wasip1`, so no component is produced.
+- **Error:** `JavaScript error: not a function`
+- **Root cause:** Runtime failure in `__wasm_rquickjs_builtin/http` during Hono response serialization (`text`/`json` path).
 
 ### test-02-cookies.js — Cookie parse/serialize and signed-cookie verification
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-03-jwt.js — JWT sign/verify/decode (HS256)
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-html-cors.js — HTML escaping and CORS middleware headers
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: cannot read property 'headers' of null`
+- **Root cause:** Runtime failure in `__wasm_rquickjs_builtin/http` header handling used by Hono CORS/response path.
 
 ### test-05-validator.js — Validator, `HTTPException`, and secure headers middleware
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
+- **Root cause:** Runtime failure in `__wasm_rquickjs_builtin/http` while constructing headers during error/response handling.
 
 ## Golem Compatibility
 
@@ -43,11 +39,14 @@ Hono supports server adapters (`app.fire()` / runtime-specific `serve`) but can 
 
 ## Summary
 
-- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs (blocked at wrapper compile step)
-- Missing APIs: Not measurable because wrapper compilation failed before runtime execution
-- Behavioral differences: Not measurable because wrapper compilation failed before runtime execution
+- Tests passed: 5/5 on Node.js, 2/5 on wasm-rquickjs
+- Missing APIs: None observed for tested crypto/cookie/JWT surfaces
+- Behavioral differences:
+  - Response construction paths used by Hono's routing/middleware hit runtime errors in `__wasm_rquickjs_builtin/http`
 - Blockers:
-  - Required wrapper feature set `default = ["http", "sqlite"]` fails to compile in this environment due to `libsqlite3-sys` on `wasm32-wasip1`
+  - `test-01-basic`: `JavaScript error: not a function`
+  - `test-04-html-cors`: `JavaScript error: cannot read property 'headers' of null`
+  - `test-05-validator`: `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
 
 ## Execution Notes
 
@@ -56,4 +55,4 @@ Hono supports server adapters (`app.fire()` / runtime-specific `serve`) but can 
   2. Cargo feature patch to `default = ["http", "sqlite"]`
   3. `cargo-component build`
   4. `wasmtime run --invoke 'run()'`
-- All five wrappers failed at `cargo-component build` with the same `libsqlite3-sys` compile error, so no `wasmtime run` invocation was possible.
+- All wrappers compiled successfully in this run; failures are runtime errors for 3/5 tests.
