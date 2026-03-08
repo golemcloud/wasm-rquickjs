@@ -1,0 +1,5 @@
+package test:lib-lru-cache;
+
+world lib-lru-cache {
+  export run: func() -> string;
+}
