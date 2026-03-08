@@ -45,7 +45,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 19 | pg | `pg` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
 | 20 | mysql2 | `mysql2` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
 | 21 | better-sqlite3 | `better-sqlite3` | ❌ | 2026-03-08 | Bundled tests fail to initialize (`__filename is not defined`); native `.node` binding load path incompatible |
-| 22 | mssql | `mssql` | ⬜ | — | MS SQL Server client |
+| 22 | mssql | `mssql` | ⚠️ | 2026-03-08 | 4/5 wasm tests pass; `ConnectionPool.parseConnectionString(...)` fails with `cannot read property 'trim' of undefined` |
 
 ## Databases — NoSQL
 

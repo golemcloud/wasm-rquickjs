@@ -9,33 +9,25 @@
 
 ### test-01-basic.js — type inference and constants
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper build failed)
-- **Error:** `error: failed to run custom build command for libsqlite3-sys v0.36.0`
-- **Root cause:** Generated wrapper crate fails to compile for `wasm32-wasip1`; `libsqlite3-sys` compilation fails with `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-02-validation.js — table metadata helpers
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper build failed)
-- **Error:** `error: failed to run custom build command for libsqlite3-sys v0.36.0`
-- **Root cause:** Generated wrapper crate fails to compile for `wasm32-wasip1`; `libsqlite3-sys` compilation fails with `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-03-advanced.js — connection string parsing and pool object init
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper build failed)
-- **Error:** `error: failed to run custom build command for libsqlite3-sys v0.36.0`
-- **Root cause:** Generated wrapper crate fails to compile for `wasm32-wasip1`; `libsqlite3-sys` compilation fails with `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `JavaScript error: cannot read property 'trim' of undefined`
+- **Root cause:** Behavioral difference while executing `mssql`'s connection-string parsing path (`_parseConnectionString`) in wasm-rquickjs.
 
 ### test-04-request-params.js — request parameter APIs and template expansion
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper build failed)
-- **Error:** `error: failed to run custom build command for libsqlite3-sys v0.36.0`
-- **Root cause:** Generated wrapper crate fails to compile for `wasm32-wasip1`; `libsqlite3-sys` compilation fails with `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-shared-state.js — type map, Promise override, value handlers
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper build failed)
-- **Error:** `error: failed to run custom build command for libsqlite3-sys v0.36.0`
-- **Root cause:** Generated wrapper crate fails to compile for `wasm32-wasip1`; `libsqlite3-sys` compilation fails with `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`.
+- **wasm-rquickjs:** ✅ PASS
 
 ## Untestable Features
 
@@ -54,11 +46,12 @@ To fully test these features, a user would need to:
 ## Summary
 
 - Tests passed in Node.js: 5/5
-- Tests passed in wasm-rquickjs: 0/5
-- Missing APIs: N/A (runtime execution was not reached)
-- Behavioral differences: N/A (runtime execution was not reached)
+- Tests passed in wasm-rquickjs: 4/5
+- Missing APIs: None identified in these offline tests
+- Behavioral differences:
+  - `ConnectionPool.parseConnectionString(...)` fails in wasm-rquickjs with `JavaScript error: cannot read property 'trim' of undefined`
 - Blockers:
-  - Every generated wrapper crate failed during `cargo-component build` before `wasmtime run`.
-  - Exact build failure: `error: failed to run custom build command for libsqlite3-sys v0.36.0` with `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found` while targeting `wasm32-wasip1`.
+  - No compile-time blockers in this run; all wrapper crates built successfully.
+  - One runtime blocker remains in the connection-string parser path used by `test-03-advanced.js`.
 
-`mssql` offline API surface covered by these tests works in Node.js, but wasm-rquickjs compatibility could not be validated due to wrapper compilation failure.
+`mssql` shows partial compatibility in wasm-rquickjs for offline, non-network API surface (types, table helpers, request parameter APIs, map/value handlers), with one parser-path runtime failure.
