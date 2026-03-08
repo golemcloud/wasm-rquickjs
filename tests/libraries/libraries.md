@@ -27,7 +27,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 8 | Axios | `axios` | ✅ | 2026-03-07 | All 5 tests pass (utilities, headers, interceptors, HTTP GET, HTTP POST) |
-| 9 | Got | `got` | ⬜ | — | HTTP client |
+| 9 | Got | `got` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at startup: `JavaScript error: Intl is not defined` |
 | 10 | node-fetch | `node-fetch` | ⬜ | — | Fetch API polyfill |
 | 11 | undici | `undici` | ⬜ | — | HTTP/1.1 client |
 | 12 | superagent | `superagent` | ⬜ | — | HTTP client |
