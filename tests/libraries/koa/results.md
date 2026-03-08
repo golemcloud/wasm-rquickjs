@@ -2,7 +2,7 @@
 
 **Package:** `koa`
 **Version:** `3.1.2`
-**Tested on:** 2026-03-07
+**Tested on:** 2026-03-08
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -10,32 +10,32 @@
 ### test-01-basic.js — Basic middleware callback response
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Following the required workflow (`default = ["http", "sqlite"]`), `cargo-component build` fails in `libsqlite3-sys` for `wasm32-wasip1`, so the component is not produced.
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Module initialization fails at `createRequire (node:module:837:120)` from the bundled script (`bundle/script_module:20:33`), so the exported `run()` function is never invoked.
 
 ### test-02-error-handling.js — `ctx.throw` status/message handling
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
 
 ### test-03-request-parsing.js — Proxy-aware request parsing and subdomain handling
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
 
 ### test-04-response-helpers.js — Response headers, vary, attachment, and body metadata
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
 
 ### test-05-middleware-order.js — Middleware onion order and `ctx.state` propagation
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
+- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
 
 ## Golem Compatibility
 
@@ -46,11 +46,11 @@ its standard way in Golem applications.
 
 ## Summary
 
-- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs (blocked at wrapper compile step)
-- Missing APIs: Not measurable because wrapper compilation failed before runtime execution
-- Behavioral differences: Not measurable because wrapper compilation failed before runtime execution
+- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs (all fail during module initialization)
+- Missing APIs: `node:module.createRequire` compatibility around filename/import-meta handling during bundled module bootstrap
+- Behavioral differences: Not measurable because initialization fails before `run()` execution
 - Blockers:
-  - Required wrapper feature set `default = ["http", "sqlite"]` fails to compile in this environment due `libsqlite3-sys` on `wasm32-wasip1`
+  - wasm module initialization aborts at `node:module.createRequire` (`filename` is `undefined`) for every Koa bundle
   - Koa primary usage model requires server binding (`app.listen`), which is incompatible with Golem's execution model
 
 ## Execution Notes
@@ -60,4 +60,4 @@ its standard way in Golem applications.
   2. Cargo feature patch to `default = ["http", "sqlite"]`
   3. `cargo-component build`
   4. `wasmtime run --invoke 'run()'`
-- All five wrappers failed with the same `libsqlite3-sys` compile error, so no `wasmtime run` invocation was possible.
+- All five wrappers compiled, but every `wasmtime run` failed during module initialization with the same `node:module.createRequire` error.
