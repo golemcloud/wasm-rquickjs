@@ -1,7 +1,6 @@
 import {
     get_args,
     get_env,
-    next_tick,
     write_stdout,
     write_stderr,
     hrtime_ns,
@@ -285,12 +284,56 @@ process.cwd = function cwd() {
     return "/";
 };
 
+// nextTick queue: callbacks are batched and drained via a triple-deferred
+// Promise chain.  This gives nextTick the right priority in QuickJS's
+// single job queue:
+//   QuickJS jobs (promise reactions, import resolution) > nextTick > spawned tasks (timers)
+// Triple-deferring ensures the drain runs after import() resolution
+// (DynamicImportJob + 1 PromiseReaction = 2 jobs) but before spawned
+// tasks like setTimeout(fn, 0).
+var __nextTickQueue = [];
+var __nextTickDrainScheduled = false;
+
+function __drainNextTickQueue() {
+    __nextTickDrainScheduled = false;
+    while (__nextTickQueue.length > 0) {
+        var entry = __nextTickQueue.shift();
+        try {
+            entry.callback.apply(undefined, entry.args);
+        } catch (e) {
+            // Emit 'uncaughtException' if there are listeners (matching Node.js
+            // behaviour for exceptions thrown in nextTick callbacks). Otherwise
+            // print the error to avoid silent swallowing.
+            if (process.listenerCount('uncaughtException') > 0) {
+                process.emit('uncaughtException', e);
+            } else if (typeof console !== 'undefined') {
+                console.error(e);
+            }
+        }
+    }
+}
+
 process.nextTick = function processNextTick(callback, ...args) {
     if (typeof callback !== 'function') {
         throw _makeTypeError('ERR_INVALID_ARG_TYPE',
             'The "callback" argument must be of type function.' + _invalidArgTypeHelper(callback));
     }
-    next_tick(callback, args);
+    __nextTickQueue.push({ callback, args });
+    if (!__nextTickDrainScheduled) {
+        __nextTickDrainScheduled = true;
+        // Use enough deferral levels to fire after import() resolution +
+        // await resumption in QuickJS (which may involve multiple
+        // intermediate PromiseReaction jobs).
+        Promise.resolve().then(() => {
+            Promise.resolve().then(() => {
+                Promise.resolve().then(() => {
+                    Promise.resolve().then(() => {
+                        Promise.resolve().then(__drainNextTickQueue);
+                    });
+                });
+            });
+        });
+    }
 };
 
 var _umask = 0o022;

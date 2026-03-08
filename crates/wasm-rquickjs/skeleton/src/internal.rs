@@ -927,13 +927,14 @@ impl Resolver for NodeModulesResolver {
     }
 }
 
-/// Loader that wraps CJS `.js` files in ESM-compatible wrappers when loaded via `import()`.
+/// Loader that wraps CJS `.js` and `.cjs` files in ESM-compatible wrappers when loaded via `import()`.
 /// This enables ESM modules to import CJS packages from `node_modules`.
 struct CjsCompatLoader;
 
 impl Loader for CjsCompatLoader {
     fn load<'js>(&mut self, ctx: &Ctx<'js>, path: &str) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        if !path.ends_with(".js") {
+        let is_cjs_ext = path.ends_with(".cjs");
+        if !path.ends_with(".js") && !is_cjs_ext {
             return Err(Error::new_loading(path));
         }
 
@@ -952,8 +953,9 @@ impl Loader for CjsCompatLoader {
             include_resolve: true,
         };
 
-        // Detect CJS patterns
-        let is_cjs = source.contains("module.exports")
+        // .cjs files are always CommonJS; for .js files, detect CJS patterns
+        let is_cjs = is_cjs_ext
+            || source.contains("module.exports")
             || source.contains("exports.")
             || (source.contains("require(") && !source.contains("import "));
 

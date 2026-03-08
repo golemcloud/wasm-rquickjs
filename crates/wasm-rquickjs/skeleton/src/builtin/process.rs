@@ -1,8 +1,7 @@
 // Native functions for the process implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use rquickjs::function::Args;
-    use rquickjs::{Ctx, Function, Value};
+    use rquickjs::Ctx;
     use std::collections::HashMap;
     use std::io::Write;
     use std::time::Instant;
@@ -41,20 +40,6 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn get_env() -> HashMap<String, String> {
         std::env::vars().collect()
-    }
-
-    #[rquickjs::function]
-    pub fn next_tick<'js>(ctx: Ctx<'js>, function: Function<'js>, args: Vec<Value<'js>>) {
-        // `Args::defer` appends two internal arguments (`this` + `function`).
-        // Reserve those slots up front to avoid stack-backed overflow when
-        // users pass exactly 4 nextTick arguments.
-        let mut js_args = Args::new(ctx, args.len() + 2);
-        js_args
-            .push_args(args)
-            .expect("Failed to set args for nextTick");
-        js_args
-            .defer(function)
-            .expect("Failed to defer nextTick callback");
     }
 
     #[rquickjs::function]
