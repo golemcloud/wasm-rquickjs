@@ -2,7 +2,7 @@
 
 **Package:** `@hapi/hapi`
 **Version:** `21.4.7`
-**Tested on:** 2026-03-07
+**Tested on:** 2026-03-08
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -10,32 +10,32 @@
 ### test-01-basic.js — Basic route registration and inject request
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Following the required workflow (`default = ["http", "sqlite"]`), `cargo-component build` fails in `libsqlite3-sys` for `wasm32-wasip1`, so the component is not produced.
+- **Error:** `JavaScript error: not a function` (panic at `src/internal.rs:521:41`, then `wasm trap: wasm 'unreachable' instruction executed`)
+- **Root cause:** The bundled Hapi module fails at runtime during JS export invocation in wasm-rquickjs (`Heavy` path in `bundle/script_module`), before the test logic can execute.
 
 ### test-02-auth.js — Auth strategy and protected route execution
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: not a function` (panic at `src/internal.rs:521:41`, then `wasm trap: wasm 'unreachable' instruction executed`)
+- **Root cause:** Same runtime initialization failure in bundled Hapi path before test execution.
 
 ### test-03-method-cache.js — `server.method` caching and memoization
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: not a function` (panic at `src/internal.rs:521:41`, then `wasm trap: wasm 'unreachable' instruction executed`)
+- **Root cause:** Same runtime initialization failure in bundled Hapi path before test execution.
 
 ### test-04-plugin-decorate.js — Plugin registration, expose, and toolkit decoration
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: not a function` (panic at `src/internal.rs:521:41`, then `wasm trap: wasm 'unreachable' instruction executed`)
+- **Root cause:** Same runtime initialization failure in bundled Hapi path before test execution.
 
 ### test-05-routing-introspection.js — Route lookup/match/table introspection
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same `libsqlite3-sys` wrapper compile failure before runtime execution.
+- **Error:** `JavaScript error: not a function` (panic at `src/internal.rs:521:41`, then `wasm trap: wasm 'unreachable' instruction executed`)
+- **Root cause:** Same runtime initialization failure in bundled Hapi path before test execution.
 
 ## Golem Compatibility
 
@@ -46,11 +46,11 @@ its standard way in Golem applications.
 
 ## Summary
 
-- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs (blocked at wrapper compile step)
-- Missing APIs: Not measurable because wrapper compilation failed before runtime execution
-- Behavioral differences: Not measurable because wrapper compilation failed before runtime execution
+- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs (all fail during runtime initialization)
+- Missing APIs: Not directly exposed; failure is a JS runtime incompatibility (`JavaScript error: not a function`) in bundled Hapi initialization
+- Behavioral differences: Hapi bundle initializes successfully on Node.js but traps in wasm-rquickjs before request/inject logic runs
 - Blockers:
-  - Required wrapper feature set `default = ["http", "sqlite"]` fails to compile in this environment due `libsqlite3-sys` on `wasm32-wasip1`
+  - Runtime failure for every bundle invocation: `JavaScript error: not a function` in `bundle/script_module` (`Heavy` frame), causing panic and wasm trap
   - Hapi primary usage model requires server binding (`app.listen`), which is incompatible with Golem's execution model
 
 ## Execution Notes
@@ -60,4 +60,4 @@ its standard way in Golem applications.
   2. Cargo feature patch to `default = ["http", "sqlite"]`
   3. `cargo-component build`
   4. `wasmtime run --invoke 'run()'`
-- All five wrappers failed with the same `libsqlite3-sys` compile error, so no `wasmtime run` invocation was possible.
+- All five wrappers compiled successfully; each `wasmtime run` failed with the same runtime panic (`JavaScript error: not a function`) and trapped with `wasm 'unreachable'`.
