@@ -6543,7 +6543,10 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_are_stored_in_the_map": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_are_stored_in_the_map": {
+          "skip": true,
+          "reason": "[manual] This test requires `--expose-internals` and imports four Node.js **internal** modules (`internal/modules/esm/loader`, `internal/modules/esm/module_map`, `internal/modules/esm/module_job`, ..."
+        },
         "block_01_values_as_url_argument": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_02_values_or_the_kasserttype_symbol_as_type_argument": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_03_loadcache_set_should_only_accept_modulejob_values_as_job_arg": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
