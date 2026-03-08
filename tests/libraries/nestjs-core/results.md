@@ -2,49 +2,48 @@
 
 **Package:** `@nestjs/core`
 **Version:** `11.1.16`
-**Tested on:** 2026-03-07
+**Tested on:** 2026-03-08
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
 
 ### test-01-basic.js — createApplicationContext resolves a basic injectable service
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper compile step)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Following the required workflow (`default = ["http", "sqlite"]`), `cargo-component build` fails when compiling `libsqlite3-sys` for `wasm32-wasip1` in this environment, so the component is never produced for runtime execution.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `Failed to evaluate module initialization: JavaScript error: Could not find export 'default' in module 'string_decoder'`
+- **Root cause:** The bundled NestJS dependency graph imports a default export from `node:string_decoder`, but the runtime's `node:string_decoder` module does not provide that default export shape.
 
 ### test-02-providers.js — value and factory providers resolve correctly with token injection
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper compile step)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same compile-time failure in `libsqlite3-sys` before the WASM component can be generated.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `Failed to evaluate module initialization: JavaScript error: Could not find export 'default' in module 'string_decoder'`
+- **Root cause:** Same missing `node:string_decoder` default export during module initialization.
 
 ### test-03-lifecycle.js — module/application lifecycle hooks run during init and close
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper compile step)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same compile-time failure in `libsqlite3-sys` before the WASM component can be generated.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `Failed to evaluate module initialization: JavaScript error: Could not find export 'default' in module 'string_decoder'`
+- **Root cause:** Same missing `node:string_decoder` default export during module initialization.
 
 ### test-04-reflector.js — Reflector reads metadata from SetMetadata and createDecorator
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper compile step)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same compile-time failure in `libsqlite3-sys` before the WASM component can be generated.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `Failed to evaluate module initialization: JavaScript error: Could not find export 'default' in module 'string_decoder'`
+- **Root cause:** Same missing `node:string_decoder` default export during module initialization.
 
 ### test-05-modules.js — imported module exports are available to consumer module providers
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (wrapper compile step)
-- **Error:** `libsqlite3-sys@0.36.0: sqlite3/sqlite3.c:15244:10: fatal error: 'stdio.h' file not found`
-- **Root cause:** Same compile-time failure in `libsqlite3-sys` before the WASM component can be generated.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `Failed to evaluate module initialization: JavaScript error: Could not find export 'default' in module 'string_decoder'`
+- **Root cause:** Same missing `node:string_decoder` default export during module initialization.
 
 ## Summary
 
-- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs (blocked at wrapper compile step)
-- Missing APIs: Not determined (runtime execution did not start)
-- Behavioral differences: Not measurable (WASM components were not produced)
+- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs
+- Missing APIs: `node:string_decoder` default export compatibility
+- Behavioral differences: Runtime fails during module initialization before invoking `run()`
 - Blockers:
-  - Required wrapper feature set `default = ["http", "sqlite"]` fails to compile in this environment due `libsqlite3-sys` on `wasm32-wasip1`
-  - `wasmtime run` cannot be executed because no `.wasm` artifacts are generated
+  - Runtime cannot initialize bundle due missing default export in `node:string_decoder`
 
 ## Execution Notes
 
@@ -52,5 +51,5 @@
   1. `generate-wrapper-crate`
   2. Cargo feature patch to `default = ["http", "sqlite"]`
   3. `cargo-component build`
-  4. `wasmtime run` (attempted, but skipped because step 3 failed)
-- All five wrappers failed with the same `libsqlite3-sys` compile error.
+  4. `wasmtime run`
+- All five wrappers compiled successfully and failed with the same runtime initialization error in `string_decoder`.

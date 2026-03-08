@@ -16,36 +16,36 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 1 | Express | `express` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails: missing `string_decoder` default export |
 | 2 | Fastify | `fastify` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails in `node:module.createRequire` with undefined filename |
-| 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-07 | Node tests pass, but wasm wrapper compilation fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 4 | NestJS Common | `@nestjs/common` | ❌ | 2026-03-07 | Node tests pass, but wasm wrapper compilation fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 5 | Koa | `koa` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 6 | Hapi | `@hapi/hapi` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 7 | Hono | `hono` | ❌ | 2026-03-07 | Node tests pass for non-server APIs, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
+| 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-08 | Node tests pass, but wasm init fails: missing `string_decoder` default export |
+| 4 | NestJS Common | `@nestjs/common` | ⬜ | — | Complex multi-module runtime |
+| 5 | Koa | `koa` | ⬜ | — | Requires server binding (Golem-incompatible) |
+| 6 | Hapi | `@hapi/hapi` | ⬜ | — | Requires server binding (Golem-incompatible) |
+| 7 | Hono | `hono` | ⬜ | — | Non-server APIs may work |
 
 ## HTTP Clients
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 8 | Axios | `axios` | ✅ | 2026-03-07 | All 5 tests pass (utilities, headers, interceptors, HTTP GET, HTTP POST) |
-| 9 | Got | `got` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 10 | node-fetch | `node-fetch` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 11 | undici | `undici` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 12 | superagent | `superagent` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
+| 9 | Got | `got` | ⬜ | — | HTTP client |
+| 10 | node-fetch | `node-fetch` | ⬜ | — | Fetch API polyfill |
+| 11 | undici | `undici` | ⬜ | — | HTTP/1.1 client |
+| 12 | superagent | `superagent` | ⬜ | — | HTTP client |
 
 ## Databases — SQL & ORMs
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 13 | Prisma Client | `@prisma/client` | ❌ | 2026-03-07 | Node tests pass after `prisma generate`, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 14 | TypeORM | `typeorm` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 15 | Drizzle ORM | `drizzle-orm` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 16 | Sequelize | `sequelize` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 17 | MikroORM | `@mikro-orm/core` | ❌ | 2026-03-07 | Node tests pass, but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 18 | Knex | `knex` | ❌ | 2026-03-07 | Node tests pass (query/schema compilation), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 19 | pg | `pg` | ❌ | 2026-03-07 | Node tests pass (escaping, config parsing, type parsers, object init), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
-| 20 | mysql2 | `mysql2` | ❌ | 2026-03-07 | Node tests pass (escaping/constants/query factory/pool init), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
+| 13 | Prisma Client | `@prisma/client` | ⬜ | — | Requires `prisma generate` |
+| 14 | TypeORM | `typeorm` | ⬜ | — | SQL ORM |
+| 15 | Drizzle ORM | `drizzle-orm` | ⬜ | — | TypeScript ORM |
+| 16 | Sequelize | `sequelize` | ⬜ | — | Promise-based ORM |
+| 17 | MikroORM | `@mikro-orm/core` | ⬜ | — | TypeScript ORM |
+| 18 | Knex | `knex` | ⬜ | — | SQL query builder |
+| 19 | pg | `pg` | ⬜ | — | PostgreSQL client |
+| 20 | mysql2 | `mysql2` | ⬜ | — | MySQL client |
 | 21 | better-sqlite3 | `better-sqlite3` | ❌ | 2026-03-08 | Bundled tests fail to initialize (`__filename is not defined`); native `.node` binding load path incompatible |
-| 22 | mssql | `mssql` | ❌ | 2026-03-08 | Node offline tests pass (types/table/config/request APIs), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
+| 22 | mssql | `mssql` | ⬜ | — | MS SQL Server client |
 
 ## Databases — NoSQL
 
