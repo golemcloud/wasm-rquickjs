@@ -400,6 +400,87 @@ function stripV8OptimizationIntrinsics(source) {
         .replace(/eval\(\s*(['"])%OptimizeFunctionOnNextCall\([^'"\\\r\n]*\)\1\s*\)\s*;?/g, 'undefined;');
 }
 
+function _iaSkipStr(s, i) {
+    var q = s.charCodeAt(i);
+    i++;
+    while (i < s.length) {
+        if (s.charCodeAt(i) === 0x5C) { i += 2; }
+        else if (s.charCodeAt(i) === q) { return i + 1; }
+        else { i++; }
+    }
+    return i;
+}
+
+function _iaSkipTpl(s, i) {
+    i++;
+    while (i < s.length) {
+        var c = s.charCodeAt(i);
+        if (c === 0x5C) { i += 2; }
+        else if (c === 0x60) { return i + 1; }
+        else if (c === 0x24 && i + 1 < s.length && s.charCodeAt(i + 1) === 0x7B) {
+            i += 2;
+            var d = 1;
+            while (i < s.length && d > 0) {
+                c = s.charCodeAt(i);
+                if (c === 0x27 || c === 0x22) { i = _iaSkipStr(s, i); }
+                else if (c === 0x60) { i = _iaSkipTpl(s, i); }
+                else if (c === 0x7B || c === 0x28 || c === 0x5B) { d++; i++; }
+                else if (c === 0x7D || c === 0x29 || c === 0x5D) { d--; i++; }
+                else { i++; }
+            }
+        } else { i++; }
+    }
+    return i;
+}
+
+function stripImportAttributes(source) {
+    var len = source.length;
+    var out = [];
+    var i = 0;
+    while (i < len) {
+        var ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            var s = i; i = _iaSkipStr(source, i); out.push(source.substring(s, i)); continue;
+        }
+        if (ch === 0x60) {
+            var s = i; i = _iaSkipTpl(source, i); out.push(source.substring(s, i)); continue;
+        }
+        if (ch === 0x2F && i + 1 < len) {
+            var nc = source.charCodeAt(i + 1);
+            if (nc === 0x2F) { var s = i; while (i < len && source.charCodeAt(i) !== 0x0A) i++; out.push(source.substring(s, i)); continue; }
+            if (nc === 0x2A) { var s = i; i += 2; while (i + 1 < len && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++; if (i + 1 < len) i += 2; out.push(source.substring(s, i)); continue; }
+        }
+        if (ch === 0x69 && i + 7 <= len && source.substring(i, i + 7) === 'import(' &&
+            (i === 0 || !((ch = source.charCodeAt(i - 1)) >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch >= 97 && ch <= 122 || ch === 95 || ch === 36))) {
+            i += 7;
+            var depth = 1, commaPos = -1, argStart = i;
+            while (i < len && depth > 0) {
+                ch = source.charCodeAt(i);
+                if (ch === 0x27 || ch === 0x22) { i = _iaSkipStr(source, i); }
+                else if (ch === 0x60) { i = _iaSkipTpl(source, i); }
+                else if (ch === 0x2F && i + 1 < len && source.charCodeAt(i + 1) === 0x2F) { while (i < len && source.charCodeAt(i) !== 0x0A) i++; }
+                else if (ch === 0x2F && i + 1 < len && source.charCodeAt(i + 1) === 0x2A) { i += 2; while (i + 1 < len && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++; if (i + 1 < len) i += 2; }
+                else if (ch === 0x28 || ch === 0x5B || ch === 0x7B) { depth++; i++; }
+                else if (ch === 0x29 || ch === 0x5D || ch === 0x7D) { depth--; i++; }
+                else if (ch === 0x2C && depth === 1 && commaPos === -1) { commaPos = i; i++; }
+                else { i++; }
+            }
+            if (commaPos > -1) {
+                out.push('import(');
+                out.push(source.substring(argStart, commaPos));
+                out.push(')');
+            } else {
+                out.push('import(');
+                out.push(source.substring(argStart, i));
+            }
+            continue;
+        }
+        out.push(source[i]);
+        i++;
+    }
+    return out.join('');
+}
+
 function hasExecArgvFlag(flag) {
     var processObject = globalThis.process;
     if (!processObject || !Array.isArray(processObject.execArgv)) {
@@ -589,6 +670,7 @@ function compileCjs(filename, source) {
 
     source = transpileTypeScriptModule(filename, source);
     source = stripV8OptimizationIntrinsics(source);
+    source = stripImportAttributes(source);
 
     var cjsLineOffsets = getCjsLineOffsetRegistry();
     cjsLineOffsets[filename] = 2;

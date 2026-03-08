@@ -50,6 +50,226 @@ impl DataUrlLoader {
         }
         String::from_utf8(decoded).ok()
     }
+
+    fn js_string_escape(s: &str) -> String {
+        let mut result = String::with_capacity(s.len());
+        for ch in s.chars() {
+            match ch {
+                '\'' => result.push_str("\\'"),
+                '\\' => result.push_str("\\\\"),
+                '\n' => result.push_str("\\n"),
+                '\r' => result.push_str("\\r"),
+                '\t' => result.push_str("\\t"),
+                '\0' => result.push_str("\\0"),
+                _ => result.push(ch),
+            }
+        }
+        result
+    }
+
+    fn is_valid_json(s: &str) -> bool {
+        let s = s.trim();
+        if s.is_empty() {
+            return false;
+        }
+        let bytes = s.as_bytes();
+        let (ok, pos) = Self::skip_json_value(bytes, 0);
+        if !ok {
+            return false;
+        }
+        // Valid if we consumed the entire input
+        let end = Self::skip_whitespace(bytes, pos);
+        end == bytes.len()
+    }
+
+    fn skip_whitespace(bytes: &[u8], mut i: usize) -> usize {
+        while i < bytes.len() && matches!(bytes[i], b' ' | b'\t' | b'\n' | b'\r') {
+            i += 1;
+        }
+        i
+    }
+
+    fn skip_json_value(bytes: &[u8], i: usize) -> (bool, usize) {
+        let i = Self::skip_whitespace(bytes, i);
+        if i >= bytes.len() {
+            return (false, i);
+        }
+        match bytes[i] {
+            b'"' => Self::skip_json_string(bytes, i),
+            b'{' => Self::skip_json_object(bytes, i),
+            b'[' => Self::skip_json_array(bytes, i),
+            b't' => Self::skip_literal(bytes, i, b"true"),
+            b'f' => Self::skip_literal(bytes, i, b"false"),
+            b'n' => Self::skip_literal(bytes, i, b"null"),
+            b'-' | b'0'..=b'9' => Self::skip_json_number(bytes, i),
+            _ => (false, i),
+        }
+    }
+
+    fn skip_json_string(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        if i >= bytes.len() || bytes[i] != b'"' {
+            return (false, i);
+        }
+        i += 1;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' => {
+                    i += 1;
+                    if i >= bytes.len() {
+                        return (false, i);
+                    }
+                    if bytes[i] == b'u' {
+                        i += 1;
+                        for _ in 0..4 {
+                            if i >= bytes.len() || !bytes[i].is_ascii_hexdigit() {
+                                return (false, i);
+                            }
+                            i += 1;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                b'"' => return (true, i + 1),
+                _ => i += 1,
+            }
+        }
+        (false, i) // unterminated string
+    }
+
+    fn skip_json_object(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        i += 1; // skip '{'
+        i = Self::skip_whitespace(bytes, i);
+        if i < bytes.len() && bytes[i] == b'}' {
+            return (true, i + 1);
+        }
+        loop {
+            i = Self::skip_whitespace(bytes, i);
+            let (ok, next) = Self::skip_json_string(bytes, i);
+            if !ok {
+                return (false, next);
+            }
+            i = Self::skip_whitespace(bytes, next);
+            if i >= bytes.len() || bytes[i] != b':' {
+                return (false, i);
+            }
+            i += 1;
+            let (ok, next) = Self::skip_json_value(bytes, i);
+            if !ok {
+                return (false, next);
+            }
+            i = Self::skip_whitespace(bytes, next);
+            if i >= bytes.len() {
+                return (false, i);
+            }
+            if bytes[i] == b'}' {
+                return (true, i + 1);
+            }
+            if bytes[i] != b',' {
+                return (false, i);
+            }
+            i += 1;
+        }
+    }
+
+    fn skip_json_array(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        i += 1; // skip '['
+        i = Self::skip_whitespace(bytes, i);
+        if i < bytes.len() && bytes[i] == b']' {
+            return (true, i + 1);
+        }
+        loop {
+            let (ok, next) = Self::skip_json_value(bytes, i);
+            if !ok {
+                return (false, next);
+            }
+            i = Self::skip_whitespace(bytes, next);
+            if i >= bytes.len() {
+                return (false, i);
+            }
+            if bytes[i] == b']' {
+                return (true, i + 1);
+            }
+            if bytes[i] != b',' {
+                return (false, i);
+            }
+            i += 1;
+        }
+    }
+
+    fn skip_literal(bytes: &[u8], i: usize, expected: &[u8]) -> (bool, usize) {
+        if i + expected.len() <= bytes.len() && &bytes[i..i + expected.len()] == expected {
+            (true, i + expected.len())
+        } else {
+            (false, i)
+        }
+    }
+
+    fn skip_json_number(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        if i < bytes.len() && bytes[i] == b'-' {
+            i += 1;
+        }
+        if i >= bytes.len() || !bytes[i].is_ascii_digit() {
+            return (false, i);
+        }
+        if bytes[i] == b'0' {
+            i += 1;
+        } else {
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+        }
+        if i < bytes.len() && bytes[i] == b'.' {
+            i += 1;
+            if i >= bytes.len() || !bytes[i].is_ascii_digit() {
+                return (false, i);
+            }
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+        }
+        if i < bytes.len() && (bytes[i] == b'e' || bytes[i] == b'E') {
+            i += 1;
+            if i < bytes.len() && (bytes[i] == b'+' || bytes[i] == b'-') {
+                i += 1;
+            }
+            if i >= bytes.len() || !bytes[i].is_ascii_digit() {
+                return (false, i);
+            }
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+        }
+        (true, i)
+    }
+
+    fn make_json_error_module(source: &str) -> String {
+        let bytes = source.as_bytes();
+        let msg = if bytes.is_empty() {
+            "Unexpected end of JSON input".to_string()
+        } else if bytes[0] == b'"' {
+            let (ok, pos) = Self::skip_json_string(bytes, 0);
+            if !ok {
+                format!("Unterminated string in JSON at position {}", pos)
+            } else {
+                let (_, pos) = Self::skip_json_value(bytes, 0);
+                if pos >= bytes.len() {
+                    "Unexpected end of JSON input".to_string()
+                } else {
+                    format!("Unexpected token {} in JSON at position {}", bytes[pos] as char, pos)
+                }
+            }
+        } else {
+            let (_, pos) = Self::skip_json_value(bytes, 0);
+            if pos >= bytes.len() {
+                "Unexpected end of JSON input".to_string()
+            } else {
+                format!("Unexpected token {} in JSON at position {}", bytes[pos] as char, pos)
+            }
+        };
+        let escaped_msg = Self::js_string_escape(&msg);
+        format!("await Promise.reject(new SyntaxError('{escaped_msg}'));\n")
+    }
 }
 
 impl Loader for DataUrlLoader {
@@ -72,15 +292,34 @@ impl Loader for DataUrlLoader {
             Self::percent_decode(raw_content).ok_or_else(|| Error::new_loading(path))?
         };
 
-        let init = ImportMetaInit {
-            url: path.to_string(),
-            filename: None,
-            dirname: None,
-            include_resolve: true,
-        };
+        // Extract base MIME type (before any parameters)
+        let base_mime = metadata.split(';').next().unwrap_or(metadata).trim();
 
-        let injected = inject_import_meta_prologue(&init, &source);
-        Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
+        if base_mime == "application/json" {
+            // Validate JSON by attempting a simple parse check.
+            // For valid JSON: embed directly as a JS literal.
+            // For invalid JSON: throw a SyntaxError with V8-compatible message.
+            let json_valid = Self::is_valid_json(&source);
+            let module_source = if json_valid {
+                let escaped = Self::js_string_escape(&source);
+                format!("export default JSON.parse('{escaped}');\n")
+            } else {
+                Self::make_json_error_module(&source)
+            };
+            Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
+        } else if base_mime == "text/javascript" || base_mime == "application/javascript" {
+            let init = ImportMetaInit {
+                url: path.to_string(),
+                filename: None,
+                dirname: None,
+                include_resolve: true,
+            };
+            let injected = inject_import_meta_prologue(&init, &source);
+            Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
+        } else {
+            let module_source = "await Promise.reject(Object.assign(new TypeError('Unknown module format'), {code: 'ERR_UNKNOWN_MODULE_FORMAT'}));\n";
+            Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
+        }
     }
 }
 

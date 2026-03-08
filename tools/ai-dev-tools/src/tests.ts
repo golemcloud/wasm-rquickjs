@@ -168,8 +168,9 @@ export async function runCategoryTests(category: string, options?: RunOptions): 
   const logfile = path.join(LOG_DIR, `run-${Date.now()}.txt`);
   console.log(`  Running ${category} tests...`);
   const filters = categoryTestFilters(category);
+  // Multiple filters must go after `--` (cargo test only accepts one TESTNAME before --)
   const { ok, output } = await run(
-    ["cargo", "test", "--test", "node_compat", ...filters, "--", "--nocapture"],
+    ["cargo", "test", "--test", "node_compat", "--", "--nocapture", ...filters],
     logfile,
     options,
   );
