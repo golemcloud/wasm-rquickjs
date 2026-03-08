@@ -1143,8 +1143,44 @@ impl Loader for ImportMetaLoader {
             include_resolve: true,
         };
 
+        // Check if there's a cached compilation error for this module.
+        // When a module fails to compile (e.g. SyntaxError), we cache the
+        // error so subsequent imports throw the exact same error object,
+        // matching Node.js/V8 behavior (ES spec §16.2.1.5.2).
+        let globals = ctx.globals();
+        if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache") {
+            if let Ok(cached_error) = cache.get::<_, Value>(path) {
+                if !cached_error.is_undefined() {
+                    return Err(ctx.throw(cached_error));
+                }
+            }
+        }
+
         let injected = inject_import_meta_prologue(&init, &source);
-        Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
+        match Module::declare(ctx.clone(), path, injected.as_bytes().to_vec()) {
+            Ok(module) => Ok(module),
+            Err(Error::Exception) => {
+                let exception = ctx.catch();
+
+                let cache: Object = match globals.get::<_, Value>("__esm_error_cache") {
+                    Ok(v) if v.is_object() => v.into_object().unwrap(),
+                    _ => {
+                        let obj =
+                            Object::new(ctx.clone()).map_err(|_| Error::new_loading(path))?;
+                        globals
+                            .set("__esm_error_cache", obj.clone())
+                            .map_err(|_| Error::new_loading(path))?;
+                        obj
+                    }
+                };
+                cache
+                    .set(path, exception.clone())
+                    .map_err(|_| Error::new_loading(path))?;
+
+                Err(ctx.throw(exception))
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
