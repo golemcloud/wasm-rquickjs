@@ -51,7 +51,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 23 | Mongoose | `mongoose` | ⬜ | — | MongoDB ODM |
+| 23 | Mongoose | `mongoose` | ✅ | 2026-03-08 | 5/5 bundled tests pass in Node and wasm-rquickjs for offline schema/model/document APIs; live MongoDB operations untested |
 | 24 | mongodb | `mongodb` | ⬜ | — | Official MongoDB Node.js driver |
 
 ## Caching & Redis
