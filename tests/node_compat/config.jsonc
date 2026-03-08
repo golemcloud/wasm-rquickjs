@@ -6571,7 +6571,7 @@
     "es-module/test-esm-preserve-symlinks.js": { "skip": true, "reason": "[manual] The test requires `child_process.spawn()` to launch a new Node.js process with `--preserve-symlinks` CLI flag and verify its exit code. Spawning OS processes is fundamentally impossible in..." },
     "es-module/test-esm-repl-imports.js": { "skip": true, "reason": "[manual] The test requires `child_process.spawn` to launch a Node.js REPL subprocess (`node --interactive`), send commands via stdin, and verify the exit code. Process spawning is fundamentally imp..." },
     "es-module/test-esm-repl.js": { "skip": true, "reason": "[manual] The test uses `child_process.spawn(process.execPath, ['--interactive'])` to launch a Node.js REPL subprocess, send ESM import commands via stdin, and verify the exit code. Process spawning..." },
-    "es-module/test-esm-symlink-main.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-symlink-main.js": { "skip": true, "reason": "[manual] The test requires `child_process.spawn()` to launch a new Node.js subprocess with `--preserve-symlinks` flag and verify its exit code. Process spawning is fundamentally impossible in a Web..." },
     "es-module/test-esm-symlink-type.js": {},
     "es-module/test-esm-symlink.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-type-field-errors-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
