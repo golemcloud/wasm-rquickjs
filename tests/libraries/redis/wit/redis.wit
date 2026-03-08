@@ -1,0 +1,5 @@
+package test:lib-redis;
+
+world lib-redis {
+  export run: func() -> string;
+}
