@@ -419,8 +419,9 @@ async function runAmpGeneric(
   } catch (err) {
     // The amp-sdk throws if the CLI process exits with a non-zero code, even
     // after it has already delivered a valid result message. If we captured a
-    // result, treat the process exit as non-fatal.
-    if (result) {
+    // result (or the agent made progress via tool calls), treat the process
+    // exit as non-fatal.
+    if (result || toolCount > 0) {
       logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
     } else {
       isError = true;
@@ -526,7 +527,7 @@ export async function runAmpPrioritize(
       }
     }
   } catch (err) {
-    if (result) {
+    if (result || toolCount > 0) {
       logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
     } else {
       isError = true;

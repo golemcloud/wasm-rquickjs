@@ -45,7 +45,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 19 | pg | `pg` | ❌ | 2026-03-07 | Node tests pass (escaping, config parsing, type parsers, object init), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 20 | mysql2 | `mysql2` | ❌ | 2026-03-07 | Node tests pass (escaping/constants/query factory/pool init), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 | 21 | better-sqlite3 | `better-sqlite3` | ❌ | 2026-03-08 | Bundled tests fail to initialize (`__filename is not defined`); native `.node` binding load path incompatible |
-| 22 | mssql | `mssql` | ⬜ | — | Microsoft SQL Server client |
+| 22 | mssql | `mssql` | ❌ | 2026-03-08 | Node offline tests pass (types/table/config/request APIs), but required wasm wrapper build fails in `libsqlite3-sys` (`stdio.h` missing for wasm32-wasip1) |
 
 ## Databases — NoSQL
 
