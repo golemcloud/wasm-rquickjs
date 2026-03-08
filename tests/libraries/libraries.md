@@ -39,7 +39,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 13 | Prisma Client | `@prisma/client` | ❌ | 2026-03-08 | Node bundles pass (5/5), but wasm init fails: `node:module.createRequire` gets undefined filename (`import.meta.url`) |
 | 14 | TypeORM | `typeorm` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `node:module.createRequire` gets undefined filename |
 | 15 | Drizzle ORM | `drizzle-orm` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (query builder, placeholders, relations, entities, aggregates) |
-| 16 | Sequelize | `sequelize` | ⬜ | — | Promise-based ORM |
+| 16 | Sequelize | `sequelize` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (DataTypes, Op/SQL builders, errors, Model.build, hooks) |
 | 17 | MikroORM | `@mikro-orm/core` | ⬜ | — | TypeScript ORM |
 | 18 | Knex | `knex` | ⬜ | — | SQL query builder |
 | 19 | pg | `pg` | ⬜ | — | PostgreSQL client |
