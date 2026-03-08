@@ -68,7 +68,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 29 | BullMQ | `bullmq` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
-| 30 | amqplib | `amqplib` | ⬜ | — | AMQP 0-9-1 (RabbitMQ) client |
+| 30 | amqplib | `amqplib` | ✅ | 2026-03-08 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (credentials, codec, frame, API args, URL credential helpers); live broker operations untested |
 | 31 | kafkajs | `kafkajs` | ⬜ | — | Apache Kafka client |
 | 32 | nats | `nats` | ⬜ | — | NATS messaging client |
 | 33 | mqtt | `mqtt` | ⬜ | — | MQTT client for IoT/messaging |
