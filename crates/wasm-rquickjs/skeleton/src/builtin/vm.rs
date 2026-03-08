@@ -19,6 +19,18 @@ pub mod native_module {
     ) -> rquickjs::Result<Value<'js>> {
         super::eval_in_new_context_impl(ctx, &code, &sandbox_keys, &sandbox_values)
     }
+
+    /// Evaluate JavaScript code with a specified filename.
+    /// This ensures that `import()` inside the eval'd code uses the given
+    /// filename as the module referrer for resolution.
+    #[rquickjs::function]
+    pub fn eval_with_filename<'js>(
+        ctx: Ctx<'js>,
+        code: String,
+        filename: String,
+    ) -> rquickjs::Result<Value<'js>> {
+        super::eval_with_filename_impl(ctx, &code, &filename)
+    }
 }
 
 fn eval_in_new_context_impl<'js>(
@@ -102,6 +114,38 @@ fn eval_in_new_context_impl<'js>(
             }
         }
     }
+}
+
+fn eval_with_filename_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    code: &str,
+    filename: &str,
+) -> rquickjs::Result<rquickjs::Value<'js>> {
+    use std::ffi::CString;
+
+    let src = CString::new(code).map_err(|_| rquickjs::Error::Unknown)?;
+    let fname = CString::new(filename).map_err(|_| rquickjs::Error::Unknown)?;
+    let temp_key = c"__wasm_rquickjs_eval_tmp";
+
+    unsafe {
+        let val = qjs::JS_Eval(
+            ctx.as_raw().as_ptr(),
+            src.as_ptr(),
+            code.len() as _,
+            fname.as_ptr(),
+            qjs::JS_EVAL_TYPE_GLOBAL as i32,
+        );
+        if qjs::JS_IsException(val) {
+            return Err(rquickjs::Error::Exception);
+        }
+        let global = qjs::JS_GetGlobalObject(ctx.as_raw().as_ptr());
+        qjs::JS_SetPropertyStr(ctx.as_raw().as_ptr(), global, temp_key.as_ptr(), val);
+        qjs::JS_FreeValue(ctx.as_raw().as_ptr(), global);
+    }
+    let globals = ctx.globals();
+    let result: Value = globals.get("__wasm_rquickjs_eval_tmp")?;
+    globals.remove("__wasm_rquickjs_eval_tmp")?;
+    Ok(result)
 }
 
 /// Minimal JSON string quoting for error messages.

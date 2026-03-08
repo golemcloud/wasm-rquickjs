@@ -678,6 +678,171 @@ impl Resolver for FileUrlResolver {
 /// Resolver that handles bare specifier imports by walking up the directory tree
 /// looking for `node_modules/<name>/` directories, reading their `package.json`
 /// to find the entry point.
+/// Resolver that guards against dynamic import from contexts without a module referrer.
+/// When `import()` is called from eval'd code (base is `<input>`) without an active CJS
+/// module context, this rejects with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING, matching
+/// Node.js behavior for indirect eval in the default realm.
+struct RealmGuardResolver;
+
+impl Resolver for RealmGuardResolver {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if base != "<input>" {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let globals = ctx.globals();
+        let current_module: Value = globals
+            .get("__wasm_rquickjs_current_module")
+            .unwrap_or_else(|_| Value::new_undefined(ctx.clone()));
+
+        if !current_module.is_undefined() && !current_module.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let eval_script: Value = globals
+            .get("__wasm_rquickjs_current_eval_script_name")
+            .unwrap_or_else(|_| Value::new_undefined(ctx.clone()));
+        if !eval_script.is_undefined() && !eval_script.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let type_error_ctor: Function = globals.get("TypeError")?;
+        let error_obj: Object =
+            type_error_ctor.call(("A dynamic import callback was not specified.",))?;
+        error_obj.set("code", "ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING")?;
+        Err(ctx.throw(error_obj.into_value()))
+    }
+}
+
+/// Resolver that handles relative path imports from eval'd CJS code.
+/// When base is `<input>` (from eval) and there's a CJS module context,
+/// resolves relative paths against the module's directory.
+struct CjsEvalResolver;
+
+impl CjsEvalResolver {
+    fn normalize_path(path: &std::path::Path) -> String {
+        use std::path::Component;
+        let mut parts: Vec<String> = Vec::new();
+        let is_absolute = path.has_root();
+
+        for component in path.components() {
+            match component {
+                Component::RootDir | Component::Prefix(_) => {}
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    parts.pop();
+                }
+                Component::Normal(part) => {
+                    parts.push(part.to_string_lossy().into_owned());
+                }
+            }
+        }
+
+        if is_absolute {
+            format!("/{}", parts.join("/"))
+        } else {
+            parts.join("/")
+        }
+    }
+}
+
+impl Resolver for CjsEvalResolver {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if base != "<input>" {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        if !name.starts_with("./") && !name.starts_with("../") {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let globals = ctx.globals();
+        let import_dir: Value = globals
+            .get("__wasm_rquickjs_cjs_import_dir")
+            .unwrap_or_else(|_| Value::new_undefined(ctx.clone()));
+
+        if import_dir.is_undefined() || import_dir.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let dir_str: String = import_dir
+            .get::<String>()
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let module_dir = std::path::Path::new(&dir_str);
+        let resolved = module_dir.join(name);
+        let normalized = Self::normalize_path(&resolved);
+
+        let candidates = [
+            normalized.clone(),
+            format!("{}.js", normalized),
+            format!("{}.mjs", normalized),
+        ];
+
+        for candidate in &candidates {
+            if std::path::Path::new(candidate).is_file() {
+                return Ok(candidate.clone());
+            }
+        }
+
+        Err(Error::new_resolving(base, name))
+    }
+}
+
+/// Resolver that provides Node.js-style error codes for failed module resolution.
+/// This should be the LAST resolver in the chain, catching everything that
+/// preceding resolvers couldn't handle.
+struct NodeModuleErrorResolver;
+
+impl Resolver for NodeModuleErrorResolver {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        _base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        let globals = ctx.globals();
+
+        if name.starts_with("node:") {
+            let msg = format!("No such built-in module: {}", name);
+            let type_error_ctor: Function = globals.get("TypeError")?;
+            let error_obj: Object = type_error_ctor.call((&msg,))?;
+            error_obj.set("code", "ERR_UNKNOWN_BUILTIN_MODULE")?;
+            return Err(ctx.throw(error_obj.into_value()));
+        }
+
+        if let Some(scheme_end) = name.find("://") {
+            let scheme = &name[..scheme_end];
+            if scheme != "file" && scheme != "data" {
+                let msg = format!(
+                    "Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol '{}:'",
+                    scheme
+                );
+                let error_ctor: Function = globals.get("Error")?;
+                let error_obj: Object = error_ctor.call((&msg,))?;
+                error_obj.set("code", "ERR_UNSUPPORTED_ESM_URL_SCHEME")?;
+                return Err(ctx.throw(error_obj.into_value()));
+            }
+        }
+
+        let msg = format!("Cannot find module '{}'", name);
+        let error_ctor: Function = globals.get("Error")?;
+        let error_obj: Object = error_ctor.call((&msg,))?;
+        error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+        Err(ctx.throw(error_obj.into_value()))
+    }
+}
+
 struct NodeModulesResolver;
 
 impl NodeModulesResolver {
@@ -1048,7 +1213,10 @@ impl JsState {
                 .with_pattern("{}.js")
                 .with_pattern("{}.mjs");
 
-            let resolver = (DataUrlResolver, FileUrlResolver, builtin_resolver, NodeModulesResolver, file_resolver);
+            let resolver = (
+                (DataUrlResolver, FileUrlResolver, builtin_resolver, NodeModulesResolver),
+                (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
+            );
 
             let mut builtin_loader = BuiltinLoader::default()
                 .with_module(

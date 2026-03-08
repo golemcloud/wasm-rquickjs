@@ -6531,7 +6531,7 @@
     "es-module/test-esm-dynamic-import-attribute.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-dynamic-import-commonjs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-dynamic-import-mutating-fs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-esm-dynamic-import.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-dynamic-import.js": { "skip": true, "reason": "QuickJS cannot distinguish indirect eval from realm record to produce ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING" },
     "es-module/test-esm-encoded-path-native.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-error-cache.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-import-attributes-errors.js": {},

@@ -59,6 +59,7 @@ import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstr
 import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal/streams/add-abort-signal';
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
+import { eval_with_filename as _evalWithFilename } from '__wasm_rquickjs_builtin/vm_native';
 
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
@@ -686,7 +687,7 @@ function compileCjs(filename, source) {
     cjsLineOffsets[filename] = 2;
 
     var wrappedSource = wrap(source + '\n//# sourceURL=' + filename + '\n');
-    return (0, eval)(wrappedSource);
+    return _evalWithFilename(wrappedSource, filename);
 }
 
 function loadModule(resolvedFilename, source, parentModule) {
@@ -754,6 +755,8 @@ function loadModule(resolvedFilename, source, parentModule) {
             filename: resolvedFilename,
             source: source
         };
+        var previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
+        globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
         try {
             compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
         } catch (err) {
@@ -761,6 +764,9 @@ function loadModule(resolvedFilename, source, parentModule) {
             throw err;
         } finally {
             globalThis.__wasm_rquickjs_current_module = previousModuleContext;
+            if (previousCjsImportDir !== undefined) {
+                globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
+            }
         }
     }
 
