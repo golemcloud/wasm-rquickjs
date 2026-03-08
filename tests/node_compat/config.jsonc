@@ -6525,7 +6525,7 @@
     "es-module/test-disable-require-module-with-detection.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-assertionless-json-import.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-cjs-builtins.js": {},
-    "es-module/test-esm-cjs-exports.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-cjs-exports.js": { "skip": true, "reason": "[manual] This test requires Node.js's native ESM-CJS interop, which cannot be replicated in WASM/QuickJS. Specifically:" },
     "es-module/test-esm-cjs-main.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-data-urls.js": {},
     "es-module/test-esm-dynamic-import-attribute.js": {},
