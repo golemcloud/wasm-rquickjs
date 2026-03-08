@@ -61,7 +61,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 25 | ioredis | `ioredis` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'string_decoder'` |
 | 26 | redis | `redis` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `node:module.createRequire` receives undefined filename |
 | 27 | lru-cache | `lru-cache` | ✅ | 2026-03-08 | All 5 bundled tests pass in Node.js and wasm-rquickjs (LRU behavior, TTL, size eviction, dispose hooks, memo/fetch) |
-| 28 | cache-manager | `cache-manager` | ⬜ | — | Flexible multi-store caching |
+| 28 | cache-manager | `cache-manager` | ✅ | 2026-03-08 | All 5 bundled tests pass in Node.js and wasm-rquickjs (basic CRUD, TTL, wrap coalescing, events, multi-store ops) |
 
 ## Message Queues & Async Processing
 
