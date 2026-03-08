@@ -6574,7 +6574,7 @@
     "es-module/test-esm-symlink-main.js": { "skip": true, "reason": "[manual] The test requires `child_process.spawn()` to launch a new Node.js subprocess with `--preserve-symlinks` flag and verify its exit code. Process spawning is fundamentally impossible in a Web..." },
     "es-module/test-esm-symlink-type.js": {},
     "es-module/test-esm-symlink.js": { "skip": true, "reason": "[manual] The test requires `child_process.spawn()` to launch a child Node.js process that loads ESM modules through symlinks and verifies the exit code. Process spawning is fundamentally impossible..." },
-    "es-module/test-esm-type-field-errors-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-type-field-errors-2.js": {},
     "es-module/test-esm-type-field-errors.js": {},
     "es-module/test-esm-undefined-cjs-global-like-variables.js": { "skip": true, "reason": "[manual] This test requires three fundamental features our runtime intentionally does not implement:" },
     "es-module/test-esm-unknown-extension.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },

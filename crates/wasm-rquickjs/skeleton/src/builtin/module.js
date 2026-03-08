@@ -324,6 +324,26 @@ function findLongestRegisteredExtension(filename) {
     return '.js';
 }
 
+function getPackageScopeType(filename) {
+    var dir = pathModule.dirname(filename);
+    while (true) {
+        var pkgPath = pathModule.join(dir, 'package.json');
+        var pkgContent = tryReadFile(pkgPath);
+        if (pkgContent !== null) {
+            try {
+                var pkg = JSON.parse(pkgContent);
+                return pkg.type || 'commonjs';
+            } catch (e) {
+                return 'commonjs';
+            }
+        }
+        var parent = pathModule.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    return 'commonjs';
+}
+
 function resolveFilename(id, parentDir) {
     var candidate;
     if (pathModule.isAbsolute(id)) {
@@ -740,6 +760,15 @@ function loadModule(resolvedFilename, source, parentModule) {
             throw err;
         }
     } else {
+        if (resolvedFilename.endsWith('.mjs') ||
+            (resolvedFilename.endsWith('.js') && getPackageScopeType(resolvedFilename) === 'module')) {
+            delete moduleCache[resolvedFilename];
+            var esmErr = new Error(
+                "require() of ES Module " + resolvedFilename + " not supported."
+            );
+            esmErr.code = 'ERR_REQUIRE_ESM';
+            throw esmErr;
+        }
         var dirname = pathModule.dirname(resolvedFilename);
         var childRequire = makeRequire(dirname, mod);
         var compiledFn;
