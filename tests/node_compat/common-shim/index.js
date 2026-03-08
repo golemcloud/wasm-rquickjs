@@ -125,6 +125,47 @@ function parseInlineEvalArgs(args) {
     return parsed;
 }
 
+function getFileExtension(filePath) {
+    var lastDot = String(filePath).lastIndexOf('.');
+    var lastSlash = Math.max(String(filePath).lastIndexOf('/'), String(filePath).lastIndexOf('\\'));
+    if (lastDot > lastSlash + 1) {
+        return String(filePath).slice(lastDot);
+    }
+    return '';
+}
+
+var _knownExtensions = { '.js': 1, '.mjs': 1, '.cjs': 1, '.json': 1, '.node': 1, '.wasm': 1 };
+
+function isKnownFileExtension(ext) {
+    return _knownExtensions.hasOwnProperty(ext);
+}
+
+function isInModuleTypePackage(filePath) {
+    var fs = require('fs');
+    var pathMod = require('path');
+    var dir = pathMod.dirname(String(filePath));
+    var prev = '';
+    while (dir !== prev) {
+        var pkgPath = pathMod.join(dir, 'package.json');
+        try {
+            var content = fs.readFileSync(pkgPath, 'utf-8');
+            var pkg = JSON.parse(content);
+            return pkg.type === 'module';
+        } catch (_) {}
+        prev = dir;
+        dir = pathMod.dirname(dir);
+    }
+    return false;
+}
+
+function throwUnknownFileExtension(ext, filePath) {
+    var err = new TypeError(
+        'Unknown file extension "' + ext + '" for ' + filePath
+    );
+    err.code = 'ERR_UNKNOWN_FILE_EXTENSION';
+    throw err;
+}
+
 function transpileModuleEvalToCommonJs(source) {
     var transformed = String(source);
 
@@ -225,6 +266,12 @@ function runInlineEval(command, args, options) {
                 }
             }
 
+            // Check for unknown extension in "type": "module" package scope
+            var scriptExt = getFileExtension(resolvedScriptPath);
+            if (scriptExt && !isKnownFileExtension(scriptExt) && isInModuleTypePackage(resolvedScriptPath)) {
+                throwUnknownFileExtension(scriptExt, resolvedScriptPath);
+            }
+
             evalSource = fs.readFileSync(resolvedScriptPath, 'utf-8');
             scriptRequire = Module.createRequire(resolvedScriptPath);
             if (/\.mjs$/.test(resolvedScriptPath)) {
@@ -234,6 +281,23 @@ function runInlineEval(command, args, options) {
 
         if (parsed.inputType === 'module') {
             evalSource = transpileModuleEvalToCommonJs(evalSource);
+
+            // Wrap require to check for unknown extensions (ESM extension checking)
+            var _origRequire = scriptRequire;
+            var _pathModule = require('path');
+            var _callerDir = parsed.scriptPath ? _pathModule.dirname(parsed.scriptPath) : process.cwd();
+            scriptRequire = function esmWrappedRequire(specifier) {
+                if (typeof specifier === 'string' && (specifier.charAt(0) === '.' || specifier.charAt(0) === '/')) {
+                    var resolved = _pathModule.resolve(_callerDir, specifier);
+                    var reqExt = getFileExtension(resolved);
+                    if (reqExt && !isKnownFileExtension(reqExt) && isInModuleTypePackage(resolved)) {
+                        throwUnknownFileExtension(reqExt, resolved);
+                    }
+                }
+                return _origRequire(specifier);
+            };
+            if (_origRequire.resolve) { scriptRequire.resolve = _origRequire.resolve; }
+            if (_origRequire.cache) { scriptRequire.cache = _origRequire.cache; }
         } else if (parsed.inputType !== 'commonjs') {
             throw new Error('Unsupported --input-type value: ' + parsed.inputType);
         }
