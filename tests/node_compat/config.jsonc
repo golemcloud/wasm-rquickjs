@@ -6559,7 +6559,10 @@
           "skip": true,
           "reason": "[manual] This test requires `--expose-internals` and imports four Node.js **internal** modules (`internal/modules/esm/loader`, `internal/modules/esm/module_map`, `internal/modules/esm/module_job`, ..."
         },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_04_block_04": {
+          "skip": true,
+          "reason": "[manual] This test requires `--expose-internals` and imports four Node.js **internal** modules (`internal/modules/esm/loader`, `internal/modules/esm/module_map`, `internal/modules/esm/module_job`, ..."
+        }
       }
     },
     "es-module/test-esm-loader-search.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
