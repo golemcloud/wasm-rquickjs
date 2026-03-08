@@ -1146,6 +1146,31 @@ impl Loader for ImportMetaLoader {
     }
 }
 
+/// Loader that handles `.json` files imported via `import()` with `type: 'json'`.
+/// Wraps JSON content in a synthetic ESM module with a default export.
+struct JsonFileLoader;
+
+impl Loader for JsonFileLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.ends_with(".json") {
+            return Err(Error::new_loading(path));
+        }
+
+        let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
+        let module_source = if DataUrlLoader::is_valid_json(&source) {
+            let escaped = DataUrlLoader::js_string_escape(&source);
+            format!("export default JSON.parse('{escaped}');\n")
+        } else {
+            DataUrlLoader::make_json_error_module(&source)
+        };
+        Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
+    }
+}
+
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
@@ -1211,7 +1236,8 @@ impl JsState {
             let file_resolver = FileResolver::default()
                 .with_path("/")
                 .with_pattern("{}.js")
-                .with_pattern("{}.mjs");
+                .with_pattern("{}.mjs")
+                .with_pattern("{}.json");
 
             let resolver = (
                 (DataUrlResolver, FileUrlResolver, builtin_resolver, NodeModulesResolver),
@@ -1250,6 +1276,7 @@ impl JsState {
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
                 DataUrlLoader,
+                JsonFileLoader,
                 CjsCompatLoader,
                 ImportMetaLoader,
             );

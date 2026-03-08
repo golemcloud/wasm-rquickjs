@@ -527,6 +527,8 @@ globalThis.__wasm_rquickjs_validate_import_attrs = function(specifier, options) 
       }
     } else if (specifier.endsWith('.json')) {
       format = 'json';
+    } else if (specifier.endsWith('.js') || specifier.endsWith('.mjs') || specifier.endsWith('.cjs')) {
+      format = 'module';
     }
   }
 
