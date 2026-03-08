@@ -29,7 +29,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 8 | Axios | `axios` | ✅ | 2026-03-07 | All 5 tests pass (utilities, headers, interceptors, HTTP GET, HTTP POST) |
 | 9 | Got | `got` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at startup: `JavaScript error: Intl is not defined` |
 | 10 | node-fetch | `node-fetch` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'promises' in module 'node:fs'` |
-| 11 | undici | `undici` | ⬜ | — | HTTP/1.1 client |
+| 11 | undici | `undici` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `node:module.createRequire` gets undefined filename |
 | 12 | superagent | `superagent` | ⬜ | — | HTTP client |
 
 ## Databases — SQL & ORMs
