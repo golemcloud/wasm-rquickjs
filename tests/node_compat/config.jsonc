@@ -7183,7 +7183,7 @@
     "parallel/test-eslint-prefer-util-format-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-eslint-require-common-first.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-eslint-required-modules.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-esm-loader-hooks-inspect-brk.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-esm-loader-hooks-inspect-brk.js": {},
     "parallel/test-esm-loader-hooks-inspect-wait.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-eval-disallow-code-generation-from-strings.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-event-capture-rejections.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
