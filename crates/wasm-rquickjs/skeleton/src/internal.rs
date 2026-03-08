@@ -308,6 +308,13 @@ impl Loader for DataUrlLoader {
             };
             Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
         } else if base_mime == "text/javascript" || base_mime == "application/javascript" {
+            // Check for static import attributes (e.g., `import "spec" with { type: "json" }`)
+            // QuickJS doesn't support import attributes syntax, so we preprocess:
+            // - If `with { ... }` is found and attributes are invalid, generate an error module
+            // - If valid, strip the `with { ... }` clause
+            // - `assert { ... }` is left as-is (QuickJS will throw SyntaxError, as expected)
+            let source = process_static_import_attrs(&source, path);
+
             let init = ImportMetaInit {
                 url: path.to_string(),
                 filename: None,
@@ -348,6 +355,276 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
         }
     }
     Some(buf)
+}
+
+/// Process static import attributes in JavaScript module source code.
+///
+/// Handles patterns like `import "specifier" with { type: "json" }`.
+/// - If `with { ... }` is found and attributes are invalid, returns an error module source.
+/// - If valid, strips the `with { ... }` clause so QuickJS can parse it.
+/// - `assert { ... }` is left unchanged (QuickJS will throw SyntaxError).
+fn process_static_import_attrs(source: &str, module_path: &str) -> String {
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut result = String::with_capacity(len);
+    let mut i = 0;
+
+    while i < len {
+        // Look for 'import' keyword
+        if bytes[i] == b'i'
+            && i + 6 <= len
+            && &source[i..i + 6] == "import"
+            && (i == 0 || !is_id_char(bytes[i - 1]))
+            && (i + 6 >= len || !is_id_char(bytes[i + 6]) || bytes[i + 6] == b'"' || bytes[i + 6] == b'\'')
+        {
+            let import_start = i;
+            i += 6;
+
+            // Skip whitespace
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+
+            // Check for string literal (bare import: import "spec")
+            if i < len && (bytes[i] == b'"' || bytes[i] == b'\'') {
+                let quote = bytes[i];
+                i += 1;
+                let spec_start = i;
+                while i < len && bytes[i] != quote {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                let spec_end = i;
+                if i < len {
+                    i += 1; // skip closing quote
+                }
+                let specifier = &source[spec_start..spec_end];
+
+                // Skip whitespace
+                let after_spec = i;
+                while i < len && bytes[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+
+                // Check for 'with' keyword (not 'with(' which is a with-statement)
+                if i + 4 <= len
+                    && &source[i..i + 4] == "with"
+                    && (i + 4 >= len || !is_id_char(bytes[i + 4]) || bytes[i + 4] == b'{')
+                {
+                    let with_start = i;
+                    i += 4;
+                    while i < len && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i < len && bytes[i] == b'{' {
+                        i += 1;
+                        let attrs_start = i;
+                        let mut depth = 1u32;
+                        while i < len && depth > 0 {
+                            match bytes[i] {
+                                b'{' => depth += 1,
+                                b'}' => depth -= 1,
+                                b'"' | b'\'' => {
+                                    let q = bytes[i];
+                                    i += 1;
+                                    while i < len && bytes[i] != q {
+                                        if bytes[i] == b'\\' {
+                                            i += 1;
+                                        }
+                                        i += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                            i += 1;
+                        }
+                        let attrs_content = &source[attrs_start..if i > 0 { i - 1 } else { i }];
+
+                        // Parse the type value from attributes
+                        let type_value = extract_attr_type_value(attrs_content);
+                        let format = determine_data_url_format(specifier);
+
+                        // Validate
+                        if let Some(error_module) =
+                            validate_static_import_attrs(type_value.as_deref(), format, specifier, module_path)
+                        {
+                            return error_module;
+                        }
+
+                        // Valid: strip the with clause, keep everything else
+                        result.push_str(&source[import_start..after_spec]);
+                        // Skip any remaining content after the with block
+                        // and append the rest of the source
+                        while i < len && bytes[i].is_ascii_whitespace() {
+                            i += 1;
+                        }
+                        result.push_str(&source[i..]);
+                        return result;
+                    } else {
+                        // 'with' not followed by '{', not import attrs
+                        i = with_start;
+                        result.push_str(&source[import_start..i]);
+                        continue;
+                    }
+                }
+                // No 'with' keyword, output as-is
+                result.push_str(&source[import_start..i]);
+                continue;
+            }
+
+            // Not a bare import string - check for named/namespace imports with 'from'
+            // For now, scan for 'from' followed by a string and then 'with'
+            // Skip complex patterns and output as-is
+            result.push_str(&source[import_start..i]);
+            continue;
+        }
+
+        result.push(bytes[i] as char);
+        i += 1;
+    }
+
+    result
+}
+
+fn is_id_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$'
+}
+
+/// Extract the value of the `type` key from a simple attributes string like `type:"json"`.
+fn extract_attr_type_value(attrs: &str) -> Option<String> {
+    // Look for `type` key followed by `:` and a string value
+    let bytes = attrs.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        // Skip whitespace
+        while i < len && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') {
+            i += 1;
+        }
+        if i >= len {
+            break;
+        }
+
+        // Read key (identifier or quoted string)
+        let key_start = i;
+        if bytes[i] == b'"' || bytes[i] == b'\'' {
+            let q = bytes[i];
+            i += 1;
+            while i < len && bytes[i] != q {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+        } else {
+            while i < len && is_id_char(bytes[i]) {
+                i += 1;
+            }
+        }
+        let key = attrs[key_start..i].trim_matches(|c: char| c == '"' || c == '\'');
+
+        // Skip whitespace and colon
+        while i < len && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i < len && bytes[i] == b':' {
+            i += 1;
+        }
+        while i < len && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+
+        // Read value (string)
+        if i < len && (bytes[i] == b'"' || bytes[i] == b'\'') {
+            let q = bytes[i];
+            i += 1;
+            let val_start = i;
+            while i < len && bytes[i] != q {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            let val = &attrs[val_start..i];
+            if i < len {
+                i += 1;
+            }
+
+            if key == "type" {
+                return Some(val.to_string());
+            }
+        } else {
+            // Skip non-string values
+            while i < len && bytes[i] != b',' && bytes[i] != b'}' {
+                i += 1;
+            }
+        }
+    }
+    None
+}
+
+/// Determine module format from a data URL specifier.
+fn determine_data_url_format(specifier: &str) -> Option<&'static str> {
+    if let Some(rest) = specifier.strip_prefix("data:") {
+        if let Some(comma_pos) = rest.find(',') {
+            let metadata = &rest[..comma_pos];
+            let base_mime = metadata.split(';').next().unwrap_or(metadata).trim();
+            return match base_mime {
+                "application/json" => Some("json"),
+                "text/javascript" | "application/javascript" => Some("module"),
+                "text/css" => Some("css"),
+                _ => None,
+            };
+        }
+    } else if specifier.ends_with(".json") {
+        return Some("json");
+    }
+    None
+}
+
+/// Validate static import attributes. Returns Some(error_module_source) if invalid, None if valid.
+fn validate_static_import_attrs(
+    type_value: Option<&str>,
+    format: Option<&str>,
+    specifier: &str,
+    module_path: &str,
+) -> Option<String> {
+    if let Some(tv) = type_value {
+        match tv {
+            "json" => {
+                if format == Some("module") {
+                    return Some(format!(
+                        "await Promise.reject(Object.assign(new TypeError('Cannot use import attributes to change the type of a JavaScript module'), {{code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE'}}));\n"
+                    ));
+                }
+            }
+            "css" => {
+                // CSS is a recognized type, let loader handle it
+            }
+            other => {
+                let escaped_type = DataUrlLoader::js_string_escape(other);
+                return Some(format!(
+                    "await Promise.reject(Object.assign(new TypeError('Import attribute type \"{escaped_type}\" is not supported'), {{code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED'}}));\n"
+                ));
+            }
+        }
+    }
+
+    // Check for missing required attributes (JSON without type: "json")
+    if format == Some("json") && type_value != Some("json") {
+        let escaped = DataUrlLoader::js_string_escape(specifier);
+        return Some(format!(
+            "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
+        ));
+    }
+
+    None
 }
 
 /// Resolver that strips `file://` URL prefixes so that `import('file:///path/to/mod.mjs')`

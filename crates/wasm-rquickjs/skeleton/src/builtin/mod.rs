@@ -468,6 +468,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();
     writeln!(result, "globalThis.global = globalThis;").unwrap();
     writeln!(result, "{}", IMPORT_META_RESOLVE_JS).unwrap();
+    writeln!(result, "{}", IMPORT_ATTRS_VALIDATE_JS).unwrap();
 
     #[cfg(feature = "golem")]
     writeln!(result, "{}", diagnostics_channel::GOLEM_WIRE_JS).unwrap();
@@ -502,3 +503,77 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
   if (NODE_BUILTINS.has(specifier)) return 'node:' + specifier;
   throw new Error('Cannot resolve bare specifier "' + specifier + '" from "' + baseUrl + '"');
 };"#;
+
+const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
+globalThis.__wasm_rquickjs_validate_import_attrs = function(specifier, options) {
+  var attrs = null;
+  if (options != null && typeof options === 'object') {
+    var w = options['with'];
+    if (w != null && typeof w === 'object') {
+      attrs = w;
+    }
+  }
+
+  var format = null;
+  if (typeof specifier === 'string') {
+    if (specifier.startsWith('data:')) {
+      var rest = specifier.substring(5);
+      var ci = rest.indexOf(',');
+      if (ci >= 0) {
+        var meta = rest.substring(0, ci).split(';')[0].trim();
+        if (meta === 'application/json') format = 'json';
+        else if (meta === 'text/javascript' || meta === 'application/javascript') format = 'module';
+        else if (meta === 'text/css') format = 'css';
+      }
+    } else if (specifier.endsWith('.json')) {
+      format = 'json';
+    }
+  }
+
+  if (attrs) {
+    var typeValue;
+    var keys = Object.keys(attrs);
+    for (var k = 0; k < keys.length; k++) {
+      if (keys[k] === 'type') typeValue = attrs.type;
+    }
+    if (typeValue !== undefined) {
+      if (typeValue === 'json') {
+        if (format === 'module') {
+          return Promise.reject(Object.assign(
+            new TypeError('Cannot use import attributes to change the type of a JavaScript module'),
+            { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' }
+          ));
+        }
+      } else if (typeValue !== 'css') {
+        return Promise.reject(Object.assign(
+          new TypeError('Import attribute type "' + typeValue + '" is not supported'),
+          { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+        ));
+      }
+    }
+  }
+
+  if (format === 'json') {
+    if (!attrs || attrs.type !== 'json') {
+      return Promise.reject(Object.assign(
+        new TypeError('Module "' + specifier + '" needs an import attribute of "type: json"'),
+        { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' }
+      ));
+    }
+  }
+
+  if (attrs) {
+    var keys2 = Object.keys(attrs);
+    for (var j = 0; j < keys2.length; j++) {
+      if (keys2[j] !== 'type') {
+        return Promise.reject(Object.assign(
+          new TypeError('Import attribute "' + keys2[j] + '" is not supported'),
+          { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+        ));
+      }
+    }
+  }
+
+  return false;
+};
+"#;

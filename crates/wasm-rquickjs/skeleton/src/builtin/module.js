@@ -466,12 +466,22 @@ function stripImportAttributes(source) {
                 else { i++; }
             }
             if (commaPos > -1) {
-                out.push('import(');
-                out.push(source.substring(argStart, commaPos));
-                out.push(')');
+                var firstArg = source.substring(argStart, commaPos);
+                var secondArg = source.substring(commaPos + 1, i - 1);
+                out.push('(globalThis.__wasm_rquickjs_validate_import_attrs(');
+                out.push(firstArg);
+                out.push(',');
+                out.push(secondArg);
+                out.push(') || import(');
+                out.push(firstArg);
+                out.push('))');
             } else {
-                out.push('import(');
-                out.push(source.substring(argStart, i));
+                var spec = source.substring(argStart, i - 1);
+                out.push('(globalThis.__wasm_rquickjs_validate_import_attrs(');
+                out.push(spec);
+                out.push(') || import(');
+                out.push(spec);
+                out.push('))');
             }
             continue;
         }
