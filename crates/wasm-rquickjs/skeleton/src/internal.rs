@@ -317,7 +317,9 @@ impl Loader for DataUrlLoader {
             let injected = inject_import_meta_prologue(&init, &source);
             Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
         } else {
-            let module_source = "await Promise.reject(Object.assign(new TypeError('Unknown module format'), {code: 'ERR_UNKNOWN_MODULE_FORMAT'}));\n";
+            let escaped_mime = Self::js_string_escape(base_mime);
+            let escaped_path = Self::js_string_escape(path);
+            let module_source = format!("await Promise.reject(Object.assign(new TypeError('Unknown module format: {escaped_mime} for URL {escaped_path}'), {{code: 'ERR_UNKNOWN_MODULE_FORMAT'}}));\n");
             Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
         }
     }
