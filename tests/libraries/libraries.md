@@ -17,7 +17,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 1 | Express | `express` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails: missing `string_decoder` default export |
 | 2 | Fastify | `fastify` | ❌ | 2026-03-07 | Requires server binding (Golem-incompatible); wasm init fails in `node:module.createRequire` with undefined filename |
 | 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-08 | Node tests pass, but wasm init fails: missing `string_decoder` default export |
-| 4 | NestJS Common | `@nestjs/common` | ⬜ | — | Complex multi-module runtime |
+| 4 | NestJS Common | `@nestjs/common` | ❌ | 2026-03-08 | Node bundles pass; wasm module init fails: `Intl is not defined` |
 | 5 | Koa | `koa` | ⬜ | — | Requires server binding (Golem-incompatible) |
 | 6 | Hapi | `@hapi/hapi` | ⬜ | — | Requires server binding (Golem-incompatible) |
 | 7 | Hono | `hono` | ⬜ | — | Non-server APIs may work |
