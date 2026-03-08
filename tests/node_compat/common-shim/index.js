@@ -47,6 +47,7 @@ function parseInlineEvalArgs(args) {
     var parsed = {
         inputType: 'commonjs',
         evalCode: null,
+        scriptPath: null,
         printResult: false,
         scriptArgs: [],
     };
@@ -85,11 +86,19 @@ function parseInlineEvalArgs(args) {
             break;
         }
 
-        throw new Error('Only --eval/-e and --input-type are supported in WASM child emulation');
+        if (arg.charAt(0) !== '-') {
+            parsed.scriptPath = arg;
+            parsed.scriptArgs = args.slice(i + 1).map(function(value) {
+                return String(value);
+            });
+            break;
+        }
+
+        throw new Error('Only --eval/-e, --input-type, and script files are supported in WASM child emulation');
     }
 
-    if (parsed.evalCode === null) {
-        throw new Error('WASM child emulation currently requires --eval/-e');
+    if (parsed.evalCode === null && parsed.scriptPath === null) {
+        throw new Error('WASM child emulation requires --eval/-e or a script file path');
     }
 
     return parsed;
@@ -108,7 +117,14 @@ function transpileModuleEvalToCommonJs(source) {
     );
     transformed = transformed.replace(
         /^\s*import\s+\{([^}]+)\}\s+from\s+(['"][^'"]+['"])\s*;?\s*$/gm,
-        'const {$1} = require($2);'
+        function(match, bindings, moduleSpec) {
+            var fixed = bindings.replace(/\b(\w+)\s+as\s+(\w+)\b/g, '$1: $2');
+            return 'const {' + fixed + '} = require(' + moduleSpec + ');';
+        }
+    );
+    transformed = transformed.replace(
+        /^\s*import\s+(['"][^'"]+['"])\s*;?\s*$/gm,
+        'require($1);'
     );
 
     if (/^\s*(import|export)\s+/m.test(transformed)) {
@@ -167,6 +183,19 @@ function runInlineEval(command, args, options) {
         globalThis.__wasm_rquickjs_url_warned_invalid_hostname = false;
 
         var evalSource = parsed.evalCode;
+        var scriptRequire = require;
+
+        if (parsed.scriptPath) {
+            var fs = require('fs');
+            var pathModule = require('path');
+            var Module = require('module');
+            evalSource = fs.readFileSync(parsed.scriptPath, 'utf-8');
+            scriptRequire = Module.createRequire(parsed.scriptPath);
+            if (/\.mjs$/.test(parsed.scriptPath)) {
+                parsed.inputType = 'module';
+            }
+        }
+
         if (parsed.inputType === 'module') {
             evalSource = transpileModuleEvalToCommonJs(evalSource);
         } else if (parsed.inputType !== 'commonjs') {
@@ -174,14 +203,15 @@ function runInlineEval(command, args, options) {
         }
 
         var moduleObject = { exports: {} };
-        var evalFn = new Function('require', 'module', 'exports', evalSource + '\n//# sourceURL=[eval]\n');
+        var sourceTag = parsed.scriptPath || '[eval]';
+        var evalFn = new Function('require', 'module', 'exports', evalSource + '\n//# sourceURL=' + sourceTag + '\n');
         // Clear module context to prevent source inspection from reading the wrong source
         var savedModuleContext = globalThis.__wasm_rquickjs_current_module;
         globalThis.__wasm_rquickjs_current_module = undefined;
-        globalThis.__wasm_rquickjs_current_eval_script_name = '[eval]';
+        globalThis.__wasm_rquickjs_current_eval_script_name = sourceTag;
         var result;
         try {
-            result = evalFn(require, moduleObject, moduleObject.exports);
+            result = evalFn(scriptRequire, moduleObject, moduleObject.exports);
         } finally {
             globalThis.__wasm_rquickjs_current_module = savedModuleContext;
             if (hadEvalScriptName) {

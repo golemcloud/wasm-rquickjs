@@ -6524,7 +6524,7 @@
     "es-module/test-cjs-prototype-pollution.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-disable-require-module-with-detection.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-assertionless-json-import.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-esm-cjs-builtins.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-cjs-builtins.js": {},
     "es-module/test-esm-cjs-exports.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-cjs-main.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-data-urls.js": {},
