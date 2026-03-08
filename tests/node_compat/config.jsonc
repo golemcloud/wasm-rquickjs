@@ -6566,7 +6566,7 @@
       }
     },
     "es-module/test-esm-loader-search.js": { "skip": true, "reason": "[manual] The test requires `internal/modules/esm/resolve` (a Node.js internal module, gated behind `--expose-internals`). Per project rules, we only implement the public Node.js API — internal modu..." },
-    "es-module/test-esm-long-path-win.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-esm-long-path-win.js": {},
     "es-module/test-esm-preserve-symlinks-main.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-preserve-symlinks.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-repl-imports.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
