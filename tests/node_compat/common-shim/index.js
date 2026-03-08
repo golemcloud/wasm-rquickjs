@@ -453,8 +453,9 @@ var common = {
     // Port allocation (for network tests — will mostly be skipped)
     get PORT() { return 12346; },
 
-    // Memory check
-    get enoughTestMem() { return true; },
+    // Memory check — WASM modules have limited memory (typically 256MB max),
+    // so we cannot allocate ~536MB buffers that enoughTestMem-guarded tests need.
+    get enoughTestMem() { return false; },
 
     // Inspection helpers
     invalidArgTypeHelper: function(input) {

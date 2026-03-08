@@ -2805,7 +2805,7 @@
     "parallel/test-global-domexception.js": {},
     "parallel/test-global-encoder.js": {},
     "parallel/test-http-agent-getname.js": {},
-    "parallel/test-http-autoselectfamily.js": { "skip": true, "reason": "[manual] batch other-1: cannot fix" },
+    "parallel/test-http-autoselectfamily.js": { "skip": true, "reason": "times out after 120s" },
     "parallel/test-http-client-defaults.js": {
       "split": true,
       "subtests": {
@@ -2815,9 +2815,9 @@
       }
     },
     "parallel/test-http-methods.js": {},
-    "parallel/test-https-autoselectfamily.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
-    "parallel/test-http2-client-upload-reject.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
-    "parallel/test-http2-request-response-proto.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
+    "parallel/test-https-autoselectfamily.js": { "skip": true, "reason": "times out after 120s" },
+    "parallel/test-http2-client-upload-reject.js": {},
+    "parallel/test-http2-request-response-proto.js": {},
     "parallel/test-instanceof.js": {},
     "parallel/test-microtask-queue-integration.js": {},
     "parallel/test-module-cache.js": {},
@@ -4014,8 +4014,8 @@
       "skip": true,
       "reason": "[manual] The test's sub-tests 1-4 use `http.get()` and `http.request()` to connect to a local HTTP server that intentionally never responds. In the WASM architecture, these client requests go throu..."
     },
-    "parallel/test-http2-compat-client-upload-reject.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
-    "parallel/test-https-set-timeout-server.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
+    "parallel/test-http2-compat-client-upload-reject.js": {},
+    "parallel/test-https-set-timeout-server.js": {},
     "parallel/test-messagechannel.js": {},
     "parallel/test-performance-measure-detail.js": {},
     "parallel/test-performance-measure.js": {},
@@ -4207,7 +4207,7 @@
     "sequential/test-net-server-listen-ipv6-link-local.js": {},
     "sequential/test-require-cache-without-stat.js": {},
     "sequential/test-stream2-fs.js": {},
-    "sequential/test-https-server-keep-alive-timeout.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
+    "sequential/test-https-server-keep-alive-timeout.js": {},
     "sequential/test-buffer-creation-regression.js": {
       "skip": true,
       "reason": "QuickJS error message casing mismatch prevents graceful skip; WASM cannot allocate 4GB ArrayBuffer anyway"
@@ -5259,7 +5259,7 @@
     "parallel/test-http2-client-data-end.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-http2-client-stream-destroy-before-connect.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-http2-client-unescaped-path.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
-    "parallel/test-http2-client-upload.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
+    "parallel/test-http2-client-upload.js": {},
     "parallel/test-http2-compat-serverresponse-destroy.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-http2-create-client-connect.js": {
       "skip": true,
@@ -5424,9 +5424,9 @@
     "parallel/test-http-client-readable.js": {},
     "parallel/test-http-client-reject-chunked-with-content-length.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes and expects specific parser errors" },
     "parallel/test-http-client-reject-cr-no-lf.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes and expects specific parser errors" },
-    "parallel/test-http-client-req-error-dont-double-fire.js": { "skip": true, "reason": "requires common/internet and common/dns test helpers with custom lookup" },
+    "parallel/test-http-client-req-error-dont-double-fire.js": {},
     "parallel/test-http-client-timeout-on-connect.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
-    "parallel/test-http-client-timeout-option-with-agent.js": { "skip": true, "reason": "hangs: requires real socket with timeout/listeners tracking; lookup callback prevents connection" },
+    "parallel/test-http-client-timeout-option-with-agent.js": {},
     "parallel/test-http-client-timeout-option.js": { "skip": true, "reason": "hangs: relies on socket timeout event firing; wasi:http client has no real socket timeouts" },
     "parallel/test-http-client-unescaped-path.js": {},
     "parallel/test-http-common.js": {},
@@ -5445,10 +5445,10 @@
     "parallel/test-http-insecure-parser-per-stream.js": {
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_an_invalid_header": { "skip": true, "reason": "requires createConnection/duplexPair transport which is not supported" },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "skip": true, "reason": "requires createConnection/duplexPair transport which is not supported" },
-        "block_02_test_3_the_client_sends_an_invalid_header": { "skip": true, "reason": "requires HTTP server functionality" },
-        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "skip": true, "reason": "requires HTTP server functionality" },
+        "block_00_test_1_the_server_sends_an_invalid_header": {},
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_02_test_3_the_client_sends_an_invalid_header": {},
+        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {},
         "block_04_test_5_invalid_argument_type": {}
       }
     },
@@ -5457,30 +5457,19 @@
     "parallel/test-http-invalidheaderfield2.js": {},
     "parallel/test-http-localaddress.js": { "skip": true, "reason": "requires common/net test helper not available" },
     "parallel/test-http-max-header-size-per-stream.js": {
-      "skip": true,
-      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
-"split": true,
+      "split": true,
       "subtests": {
         "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": {},
+        "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {}
       }
     },
     "parallel/test-http-max-header-size.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "parallel/test-http-max-http-headers.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
     "parallel/test-http-multi-line-headers.js": { "skip": true, "reason": "requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them" },
     "parallel/test-http-no-content-length.js": {},
-    "parallel/test-http-outgoing-buffer.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
+    "parallel/test-http-outgoing-buffer.js": {},
     "parallel/test-http-outgoing-destroy.js": {},
     "parallel/test-http-outgoing-internal-headernames-getter.js": {
       "split": true,
@@ -5491,22 +5480,11 @@
     },
     "parallel/test-http-outgoing-internal-headernames-setter.js": {},
     "parallel/test-http-outgoing-internal-headers.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules (--expose-internals)",
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
-        },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
-        },
-        "block_02_block_02": {
-          "skip": true,
-          "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
-        }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-http-outgoing-message-inheritance.js": {},
@@ -5531,26 +5509,12 @@
       }
     },
     "parallel/test-http-outgoing-renderHeaders.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules (--expose-internals)",
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
-        },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
-        },
-        "block_02_block_02": {
-          "skip": true,
-          "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
-        },
-        "block_03_block_03": {
-          "skip": true,
-          "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
-        }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
     "parallel/test-http-outgoing-settimeout.js": {
@@ -6152,7 +6116,7 @@
     "parallel/test-http2-request-remove-connect-listener.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-http2-res-corked.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-http2-res-writable-properties.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
-    "parallel/test-http2-reset-flood.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
+    "parallel/test-http2-reset-flood.js": {},
     "parallel/test-http2-respond-errors.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-http2-respond-file-204.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-http2-respond-file-304.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
@@ -6443,18 +6407,10 @@
     "parallel/test-https-host-headers.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-hwm.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-insecure-parse-per-stream.js": {
-      "skip": true,
-      "reason": "requires TLS/HTTPS which is not supported in WASM",
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_an_invalid_header": {
-          "skip": true,
-          "reason": "[manual] http2/https not implemented"
-        },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {
-          "skip": true,
-          "reason": "[manual] http2/https not implemented"
-        },
+        "block_00_test_1_the_server_sends_an_invalid_header": {},
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
         "block_02_test_3_the_client_sends_an_invalid_header": {
           "skip": true,
           "reason": "[manual] http2/https not implemented"
@@ -6463,28 +6419,17 @@
           "skip": true,
           "reason": "[manual] http2/https not implemented"
         },
-        "block_04_test_5_invalid_argument_type": {
-          "skip": true,
-          "reason": "[manual] http2/https not implemented"
-        }
+        "block_04_test_5_invalid_argument_type": {}
       }
     },
     "parallel/test-https-keep-alive-drop-requests.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-localaddress-bind-error.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-localaddress.js": { "skip": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-max-header-size-per-stream.js": {
-      "skip": true,
-      "reason": "requires TLS/HTTPS which is not supported in WASM",
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {
-          "skip": true,
-          "reason": "[manual] http2/https not implemented"
-        },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {
-          "skip": true,
-          "reason": "[manual] http2/https not implemented"
-        },
+        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
         "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": {
           "skip": true,
           "reason": "[manual] http2/https not implemented"
@@ -9380,9 +9325,9 @@
         "block_05_block_05": {}
       }
     },
-    "parallel/test-string-decoder-end.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-string-decoder-fuzz.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-string-decoder.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-string-decoder-end.js": {},
+    "parallel/test-string-decoder-fuzz.js": {},
+    "parallel/test-string-decoder.js": {},
     "parallel/test-stringbytes-external.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",

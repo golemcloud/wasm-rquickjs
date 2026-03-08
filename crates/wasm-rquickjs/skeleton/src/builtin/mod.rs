@@ -150,6 +150,7 @@ pub fn add_module_resolvers(
         .with_module("stream/consumers")
         .with_module("stream/web")
         .with_module("web-streams-polyfill")
+        .with_module("__wasm_rquickjs_builtin/string_decoder_native")
         .with_module("node:string_decoder")
         .with_module("string_decoder")
         .with_module("node:timers")
@@ -294,6 +295,10 @@ pub fn module_loader() -> (
         .with_module(
             "__wasm_rquickjs_builtin/sqlite_native",
             sqlite::js_native_module,
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/string_decoder_native",
+            string_decoder::js_native_module,
         );
 
     #[cfg(feature = "golem")]

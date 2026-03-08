@@ -11,6 +11,7 @@ import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, ERR_UNKNOWN_ENCODING, ERR_BUFFE
 import { Blob as _BlobImport, File as _FileImport } from "__wasm_rquickjs_builtin/http_blob"
 import { inspect as utilInspect } from "__wasm_rquickjs_builtin/internal/util/inspect"
 import { ALL_PROPERTIES, ONLY_ENUMERABLE, getOwnNonIndexProperties } from "__wasm_rquickjs_builtin/internal/binding/util"
+import { utf8_decode as nativeUtf8Decode } from '__wasm_rquickjs_builtin/string_decoder_native'
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom')
 
@@ -1285,78 +1286,8 @@ function utf8Slice (buf, start, end) {
     if (end - start > K_STRING_MAX_LENGTH) {
         throw new ERR_STRING_TOO_LONG(K_STRING_MAX_LENGTH)
     }
-    const res = []
-
-    let i = start
-    while (i < end) {
-        const firstByte = buf[i]
-        let codePoint = null
-        let bytesPerSequence = (firstByte > 0xEF)
-            ? 4
-            : (firstByte > 0xDF)
-                ? 3
-                : (firstByte > 0xBF)
-                    ? 2
-                    : 1
-
-        if (i + bytesPerSequence <= end) {
-            let secondByte, thirdByte, fourthByte, tempCodePoint
-
-            switch (bytesPerSequence) {
-                case 1:
-                    if (firstByte < 0x80) {
-                        codePoint = firstByte
-                    }
-                    break
-                case 2:
-                    secondByte = buf[i + 1]
-                    if ((secondByte & 0xC0) === 0x80) {
-                        tempCodePoint = (firstByte & 0x1F) << 0x6 | (secondByte & 0x3F)
-                        if (tempCodePoint > 0x7F) {
-                            codePoint = tempCodePoint
-                        }
-                    }
-                    break
-                case 3:
-                    secondByte = buf[i + 1]
-                    thirdByte = buf[i + 2]
-                    if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80) {
-                        tempCodePoint = (firstByte & 0xF) << 0xC | (secondByte & 0x3F) << 0x6 | (thirdByte & 0x3F)
-                        if (tempCodePoint > 0x7FF && (tempCodePoint < 0xD800 || tempCodePoint > 0xDFFF)) {
-                            codePoint = tempCodePoint
-                        }
-                    }
-                    break
-                case 4:
-                    secondByte = buf[i + 1]
-                    thirdByte = buf[i + 2]
-                    fourthByte = buf[i + 3]
-                    if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80 && (fourthByte & 0xC0) === 0x80) {
-                        tempCodePoint = (firstByte & 0xF) << 0x12 | (secondByte & 0x3F) << 0xC | (thirdByte & 0x3F) << 0x6 | (fourthByte & 0x3F)
-                        if (tempCodePoint > 0xFFFF && tempCodePoint < 0x110000) {
-                            codePoint = tempCodePoint
-                        }
-                    }
-            }
-        }
-
-        if (codePoint === null) {
-            // we did not generate a valid codePoint so insert a
-            // replacement char (U+FFFD) and advance only 1 byte
-            codePoint = 0xFFFD
-            bytesPerSequence = 1
-        } else if (codePoint > 0xFFFF) {
-            // encode to utf16 (surrogate pair dance)
-            codePoint -= 0x10000
-            res.push(codePoint >>> 10 & 0x3FF | 0xD800)
-            codePoint = 0xDC00 | codePoint & 0x3FF
-        }
-
-        res.push(codePoint)
-        i += bytesPerSequence
-    }
-
-    return decodeCodePointsArray(res)
+    var u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+    return nativeUtf8Decode(u8, start, end)
 }
 
 // Based on http://stackoverflow.com/a/22747272/680742, the browser with
