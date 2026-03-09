@@ -6619,7 +6619,10 @@
           "skip": true,
           "reason": "[manual] amp batch made no code changes"
         },
-        "block_02_c_mjs_a_mjs_b_cjs_c_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_02_c_mjs_a_mjs_b_cjs_c_mjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
     "es-module/test-require-module-cycle-esm-cjs-esm.js": {
@@ -6627,10 +6630,22 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_require_a_cjs_a_mjs_b_cjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_require_b_cjs_b_cjs_a_mjs_b_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_a_mjs_b_cjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_b_cjs_a_mjs_b_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_require_a_cjs_a_mjs_b_cjs_a_mjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_01_require_b_cjs_b_cjs_a_mjs_b_cjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_02_a_mjs_b_cjs_a_mjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_03_b_cjs_a_mjs_b_cjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
     "es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js": {
@@ -6638,10 +6653,22 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_a_mjs_b_mjs_c_cjs_z_mjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_b_mjs_c_cjs_z_mjs_a_mjs_b_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_c_cjs_z_mjs_a_mjs_b_mjs_c_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_z_mjs_a_mjs_b_mjs_c_cjs_z_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_a_mjs_b_mjs_c_cjs_z_mjs_a_mjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_01_b_mjs_c_cjs_z_mjs_a_mjs_b_mjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_02_c_cjs_z_mjs_a_mjs_b_mjs_c_cjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_03_z_mjs_a_mjs_b_mjs_c_cjs_z_mjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
     "es-module/test-require-module-cycle-esm-esm-cjs-esm.js": {
@@ -6649,7 +6676,10 @@
       "reason": "QuickJS module system does not support ESM-CJS interop cycle detection",
       "split": true,
       "subtests": {
-        "block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
         "block_01_b_mjs_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
         "block_02_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
         "block_03_d_mjs_c_mjs_d_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" }
