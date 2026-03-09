@@ -1,0 +1,5 @@
+package test:lib-ajv;
+
+world lib-ajv {
+  export run: func() -> string;
+}
