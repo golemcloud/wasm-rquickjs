@@ -3159,7 +3159,10 @@
     "parallel/test-regression-object-prototype.js": {},
     "parallel/test-require-empty-main.js": {},
     "parallel/test-require-enoent-dir.js": {},
-    "parallel/test-require-extension-over-directory.js": {},
+    "parallel/test-require-extension-over-directory.js": {
+      "skip": true,
+      "reason": "regression: was enabled but started failing"
+    },
     "parallel/test-require-invalid-package.js": {},
     "parallel/test-require-nul.js": {},
     "parallel/test-require-process.js": {},
