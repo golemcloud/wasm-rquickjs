@@ -11130,15 +11130,42 @@
           "skip": true,
           "reason": "[manual] amp batch made no code changes"
         },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_07_block_07": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_08_block_08": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_09_block_09": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_10_block_10": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_02_block_02": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_03_block_03": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_04_block_04": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_05_block_05": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_06_block_06": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_07_block_07": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_08_block_08": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_09_block_09": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_10_block_10": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
     "sequential/test-next-tick-error-spin.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
