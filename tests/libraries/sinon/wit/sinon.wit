@@ -1,0 +1,5 @@
+package test:lib-sinon;
+
+world lib-sinon {
+  export run: func() -> string;
+}
