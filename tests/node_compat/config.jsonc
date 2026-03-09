@@ -6631,29 +6631,27 @@
     },
     "es-module/test-require-module-cycle-esm-esm-cjs-esm.js": {
       "skip": true,
-      "reason": "newly discovered, not yet evaluated",
+      "reason": "QuickJS module system does not support ESM-CJS interop cycle detection",
       "split": true,
       "subtests": {
-        "block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_b_mjs_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_d_mjs_c_mjs_d_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_01_b_mjs_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_02_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_03_d_mjs_c_mjs_d_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" }
       }
     },
-    "es-module/test-require-module-default-extension.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-default-extension.js": {},
     "es-module/test-require-module-defined-esmodule.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_require_esm_should_allow_the_user_override": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_require_esm_should_allow_the_user_override": {},
+        "block_01_block_01": {}
       }
     },
-    "es-module/test-require-module-detect-entry-point-aou.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-detect-entry-point.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-dont-detect-cjs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-dynamic-import-1.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-detect-entry-point-aou.js": {},
+    "es-module/test-require-module-detect-entry-point.js": {},
+    "es-module/test-require-module-dont-detect-cjs.js": {},
+    "es-module/test-require-module-dynamic-import-1.js": { "skip": true, "reason": "requires CJS named export analysis (cjs-module-lexer) for ESM import of CJS modules" },
     "es-module/test-require-module-dynamic-import-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-dynamic-import-3.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-dynamic-import-4.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },

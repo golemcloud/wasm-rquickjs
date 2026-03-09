@@ -59,7 +59,7 @@ import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstr
 import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal/streams/add-abort-signal';
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
-import { eval_with_filename as _evalWithFilename } from '__wasm_rquickjs_builtin/vm_native';
+import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
 
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
@@ -684,6 +684,52 @@ function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
     err[arrowMessageSymbol] = arrowMessage;
 }
 
+// Create a wrapper around an ESM namespace that adds __esModule: true
+// while still passing isModuleNamespaceObject checks.
+function wrapEsmNamespace(ns) {
+    if (!ns || typeof ns !== 'object') return ns;
+    if (!Object.hasOwn(ns, 'default') || Object.hasOwn(ns, '__esModule')) return ns;
+    // Try to add __esModule directly to the namespace
+    try {
+        Object.defineProperty(ns, '__esModule', {
+            value: true,
+            writable: false,
+            configurable: false,
+            enumerable: false,
+        });
+        return ns;
+    } catch (_) {}
+    // Namespace is sealed — create a plain wrapper that looks like a module namespace
+    var wrapped = Object.create(null);
+    Object.defineProperty(wrapped, Symbol.toStringTag, { value: 'Module' });
+    var keys = Object.keys(ns);
+    for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        Object.defineProperty(wrapped, k, {
+            get: (function(key) { return function() { return ns[key]; }; })(k),
+            enumerable: true,
+            configurable: false,
+        });
+    }
+    Object.defineProperty(wrapped, '__esModule', {
+        value: true,
+        writable: false,
+        configurable: false,
+        enumerable: false,
+    });
+    return wrapped;
+}
+
+// Normalize QuickJS SyntaxError messages for ESM keywords to match Node.js/V8 format.
+// QuickJS: "unsupported keyword: export" → Node.js: "Unexpected token 'export'"
+function normalizeEsmSyntaxError(err) {
+    if (!err || typeof err.message !== 'string') return;
+    var m = err.message.match(/^unsupported keyword: (\w+)$/);
+    if (m) {
+        err.message = "Unexpected token '" + m[1] + "'";
+    }
+}
+
 var wrapper = [
     '(function (exports, require, module, __filename, __dirname) { ',
     '\n});'
@@ -760,8 +806,9 @@ function loadModule(resolvedFilename, source, parentModule) {
             throw err;
         }
     } else {
-        if (resolvedFilename.endsWith('.mjs') ||
-            (resolvedFilename.endsWith('.js') && getPackageScopeType(resolvedFilename) === 'module')) {
+        var isEsm = resolvedFilename.endsWith('.mjs') ||
+            (resolvedFilename.endsWith('.js') && getPackageScopeType(resolvedFilename) === 'module');
+        if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
             delete moduleCache[resolvedFilename];
             var esmErr = new Error(
                 "require() of ES Module " + resolvedFilename + " not supported."
@@ -769,32 +816,63 @@ function loadModule(resolvedFilename, source, parentModule) {
             esmErr.code = 'ERR_REQUIRE_ESM';
             throw esmErr;
         }
-        var dirname = pathModule.dirname(resolvedFilename);
-        var childRequire = makeRequire(dirname, mod);
-        var compiledFn;
-        try {
-            compiledFn = compileCjs(resolvedFilename, source);
-        } catch (err) {
-            delete moduleCache[resolvedFilename];
-            maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
-            throw err;
-        }
-        var previousModuleContext = globalThis.__wasm_rquickjs_current_module;
-        globalThis.__wasm_rquickjs_current_module = {
-            filename: resolvedFilename,
-            source: source
-        };
-        var previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
-        globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
-        try {
-            compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
-        } catch (err) {
-            maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
-            throw err;
-        } finally {
-            globalThis.__wasm_rquickjs_current_module = previousModuleContext;
-            if (previousCjsImportDir !== undefined) {
-                globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
+        if (isEsm) {
+            try {
+                mod.exports = wrapEsmNamespace(_requireEsm(resolvedFilename));
+            } catch (err) {
+                delete moduleCache[resolvedFilename];
+                throw err;
+            }
+        } else {
+            var dirname = pathModule.dirname(resolvedFilename);
+            var childRequire = makeRequire(dirname, mod);
+            var compiledFn;
+            var cjsSyntaxError = null;
+            try {
+                compiledFn = compileCjs(resolvedFilename, source);
+            } catch (err) {
+                // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
+                if (err && err.name === 'SyntaxError') {
+                    normalizeEsmSyntaxError(err);
+                }
+                // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
+                if (!resolvedFilename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
+                    cjsSyntaxError = err;
+                } else {
+                    delete moduleCache[resolvedFilename];
+                    maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+                    throw err;
+                }
+            }
+            if (cjsSyntaxError) {
+                // SyntaxError in a .js file — try loading as ESM (entry point detection)
+                try {
+                    mod.exports = wrapEsmNamespace(_requireEsm(resolvedFilename));
+                } catch (esmErr) {
+                    // ESM loading also failed — throw the original CJS SyntaxError
+                    delete moduleCache[resolvedFilename];
+                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, resolvedFilename, source);
+                    throw cjsSyntaxError;
+                }
+            } else if (compiledFn) {
+                var previousModuleContext = globalThis.__wasm_rquickjs_current_module;
+                globalThis.__wasm_rquickjs_current_module = {
+                    filename: resolvedFilename,
+                    source: source
+                };
+                var previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
+                globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
+                try {
+                    compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
+                } catch (err) {
+                    maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+                    throw err;
+                } finally {
+                    globalThis.__wasm_rquickjs_current_module = previousModuleContext;
+                    if (previousCjsImportDir !== undefined) {
+                        globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
+                    }
+                }
             }
         }
     }

@@ -718,6 +718,20 @@ var common = {
         return views;
     },
 
+    // require(esm) support — validates module namespace
+    expectRequiredModule: function(mod, expectation, checkESModule) {
+        if (checkESModule === undefined) checkESModule = true;
+        var assert = require('assert');
+        var types = require('util/types');
+        var clone = Object.assign({}, mod);
+        if (Object.prototype.hasOwnProperty.call(mod, 'default') && checkESModule) {
+            assert.strictEqual(mod.__esModule, true);
+            delete clone.__esModule;
+        }
+        assert(types.isModuleNamespaceObject(mod), 'Expected module namespace object but got: ' + Object.prototype.toString.call(mod));
+        assert.deepStrictEqual(clone, Object.assign({}, expectation));
+    },
+
     // Inside directory with unusual characters
     get isInsideDirWithUnusualChars() { return false; },
 

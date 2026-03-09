@@ -31,6 +31,17 @@ pub mod native_module {
     ) -> rquickjs::Result<Value<'js>> {
         super::eval_with_filename_impl(ctx, &code, &filename)
     }
+
+    /// Load an ES module by filename and return its namespace object.
+    /// This implements `require()` of ES modules (Node.js --experimental-require-module).
+    /// The module goes through the normal ESM resolver/loader chain.
+    #[rquickjs::function]
+    pub fn require_esm<'js>(
+        ctx: Ctx<'js>,
+        filename: String,
+    ) -> rquickjs::Result<Value<'js>> {
+        super::require_esm_impl(ctx, &filename)
+    }
 }
 
 fn eval_in_new_context_impl<'js>(
@@ -113,6 +124,74 @@ fn eval_in_new_context_impl<'js>(
                 Err(rquickjs::Error::Unknown)
             }
         }
+    }
+}
+
+fn require_esm_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    filename: &str,
+) -> rquickjs::Result<rquickjs::Value<'js>> {
+    use std::ffi::CString;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_key_str = format!("__wasm_rquickjs_require_esm_{}", id);
+    let wrapper_name = format!("<require-esm-{}>", id);
+
+    // Build a file:// URL for the target module so it goes through
+    // the FileUrlResolver → ImportMetaLoader chain.
+    let file_url = if filename.starts_with("file://") {
+        filename.to_string()
+    } else if filename.starts_with('/') {
+        format!("file://{}", filename)
+    } else {
+        format!("file:///{}", filename)
+    };
+
+    // Escape the URL for use inside a JS string literal
+    let escaped_url = file_url
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+
+    // Create a wrapper module that imports the target and stores the namespace
+    // in a global variable. After evaluation, we read and clean up the global.
+    let code = format!(
+        "import * as __ns from \"{}\"; globalThis.{} = __ns;\n",
+        escaped_url, temp_key_str
+    );
+
+    let src = CString::new(code.as_str()).map_err(|_| rquickjs::Error::Unknown)?;
+    let fname = CString::new(wrapper_name.as_str()).map_err(|_| rquickjs::Error::Unknown)?;
+
+    unsafe {
+        let val = qjs::JS_Eval(
+            ctx.as_raw().as_ptr(),
+            src.as_ptr(),
+            code.len() as _,
+            fname.as_ptr(),
+            qjs::JS_EVAL_TYPE_MODULE as i32,
+        );
+        if qjs::JS_IsException(val) {
+            return Err(rquickjs::Error::Exception);
+        }
+        // Free the return value (Promise from module evaluation)
+        qjs::JS_FreeValue(ctx.as_raw().as_ptr(), val);
+    }
+
+    // Read the namespace from globalThis and clean up
+    let globals = ctx.globals();
+    let ns: Value = globals.get(temp_key_str.as_str())?;
+
+    // Clean up the global property
+    globals.remove(temp_key_str.as_str())?;
+
+    if ns.is_undefined() {
+        // Module didn't store the namespace - evaluation may have failed silently
+        Err(rquickjs::Error::Unknown)
+    } else {
+        Ok(ns)
     }
 }
 
