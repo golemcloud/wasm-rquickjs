@@ -6519,8 +6519,8 @@
 
     // === newly discovered tests (not yet evaluated) ===
     "es-module/test-cjs-esm-warn.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-cjs-legacyMainResolve-permission.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-cjs-legacyMainResolve.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-cjs-legacyMainResolve-permission.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
+    "es-module/test-cjs-legacyMainResolve.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
     "es-module/test-cjs-prototype-pollution.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-disable-require-module-with-detection.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-assertionless-json-import.js": { "skip": true, "reason": "[manual] This test requires Node.js `--experimental-loader` custom ESM loader hooks to allow JSON imports without `{ with: { type: 'json' } }`. Without that loader, Node.js itself rejects assertion..." },
@@ -6580,7 +6580,7 @@
     "es-module/test-esm-unknown-extension.js": {},
     "es-module/test-esm-url-extname.js": { "skip": true, "reason": "[manual] The test requires `node:internal/modules/esm/get_format`, a Node.js internal module (accessed via `--expose-internals` flag). Per project policy, we only implement the public Node.js API —..." },
     "es-module/test-esm-windows.js": {},
-    "es-module/test-loaders-hidden-from-users.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-loaders-hidden-from-users.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
     "es-module/test-require-module-cached-tla.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-conditional-exports-module.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-conditional-exports.js": {
