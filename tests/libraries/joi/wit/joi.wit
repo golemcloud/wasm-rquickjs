@@ -1,0 +1,5 @@
+package test:lib-joi;
+
+world lib-joi {
+  export run: func() -> string;
+}
