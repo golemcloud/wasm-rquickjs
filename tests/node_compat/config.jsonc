@@ -8269,7 +8269,10 @@
           "skip": true,
           "reason": "[manual] amp batch made no code changes"
         },
-        "block_01_node_prefixed_require_calls_bypass_the_require_cache": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_01_node_prefixed_require_calls_bypass_the_require_cache": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
     "parallel/test-require-resolve-opts-paths-relative.js": {
@@ -8277,9 +8280,18 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_parent_directory_paths_work_as_intended": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_current_directory_paths_work_as_intended": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_sub_directory_paths_work_as_intended": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_parent_directory_paths_work_as_intended": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_01_current_directory_paths_work_as_intended": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_02_sub_directory_paths_work_as_intended": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
     "parallel/test-require-resolve.js": {
@@ -8287,12 +8299,18 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_require_resolve_paths": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_test_require_resolve_paths": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_01_block_01": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        }
       }
     },
-    "parallel/test-require-symlink.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-require-unicode.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-require-symlink.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "parallel/test-require-unicode.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "parallel/test-resource-usage.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-runner-assert.js": {
       "split": true,
@@ -11104,8 +11122,14 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
+        "block_01_block_01": {
+          "skip": true,
+          "reason": "[manual] amp batch made no code changes"
+        },
         "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
