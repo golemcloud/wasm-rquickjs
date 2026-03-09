@@ -1,0 +1,5 @@
+package test:lib-graphql-subscriptions;
+
+world lib-graphql-subscriptions {
+  export run: func() -> string;
+}

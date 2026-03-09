@@ -145,7 +145,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 70 | graphql | `graphql` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (graphqlSync execution, validation, AST transforms, introspection, custom scalar behavior) |
 | 71 | Apollo Server | `@apollo/server` | ❌ | 2026-03-09 | 5/5 offline APIs pass in wasm, but standard usage requires HTTP server binding (Golem-incompatible) |
-| 72 | graphql-subscriptions | `graphql-subscriptions` | ⬜ | — | PubSub for GraphQL subscriptions |
+| 72 | graphql-subscriptions | `graphql-subscriptions` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (PubSub delivery, unsubscribe, async iterators, iterator close, withFilter) |
 
 ## gRPC & Serialization
 
