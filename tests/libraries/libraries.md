@@ -114,7 +114,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 53 | Zod | `zod` | ✅ | 2026-03-07 | All 5 tests pass; pure JS, fully compatible |
 | 54 | Joi | `joi` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (object/conditional/alternatives/binary validation) |
 | 55 | class-validator | `class-validator` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (standalone validators, class-style sync/async constraints, whitelist/groups, validateOrReject) |
-| 56 | class-transformer | `class-transformer` | ⬜ | — | Serialization/deserialization of TS classes |
+| 56 | class-transformer | `class-transformer` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (plain/instance transforms, Expose/Exclude, nested Type/Date, groups/version, clone+serialize) |
 | 57 | Ajv | `ajv` | ⬜ | — | JSON Schema validator |
 | 58 | Yup | `yup` | ⬜ | — | Schema builder for runtime validation |
 

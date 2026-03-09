@@ -1,0 +1,5 @@
+package test:lib-class-transformer;
+
+world lib-class-transformer {
+  export run: func() -> string;
+}
