@@ -6693,10 +6693,7 @@
           "skip": true,
           "reason": "[manual] amp batch made no code changes"
         },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
     "es-module/test-require-module.js": {
@@ -6704,33 +6701,15 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_named_exports": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_01_test_esm_that_import_esm": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_02_test_esm_that_import_cjs": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_03_test_esm_that_require_cjs": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_04_also_test_default_export": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_05_test_data_import": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_00_test_named_exports": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_01_test_esm_that_import_esm": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_02_test_esm_that_import_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_03_test_esm_that_require_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_04_also_test_default_export": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_05_test_data_import": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "es-module/test-require-node-modules-warning.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-require-node-modules-warning.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-vm-compile-function-lineoffset.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-vm-main-context-default-loader.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-vm-source-text-module-leak.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -8244,13 +8223,10 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-require-delete-array-iterator.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "parallel/test-require-delete-array-iterator.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-require-dot.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-require-exceptions.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-require-extensions-main.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
