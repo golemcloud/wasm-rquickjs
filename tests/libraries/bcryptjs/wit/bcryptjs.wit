@@ -1,0 +1,5 @@
+package test:lib-bcryptjs;
+
+world lib-bcryptjs {
+  export run: func() -> string;
+}
