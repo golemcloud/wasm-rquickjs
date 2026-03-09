@@ -90,7 +90,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 39 | OpenAI SDK | `openai` | ⚠️ | 2026-03-09 | 3/5 wasm tests pass; constructor/env/toFile helpers work, but request/retry flows fail in wasm HTTP path with `cannot read property 'Symbol.iterator' of undefined`; live API calls require credentials |
 | 40 | Anthropic SDK | `@anthropic-ai/sdk` | ⚠️ | 2026-03-09 | 4/5 wasm tests pass; constructor/URL/request-builder/error/helper paths work, but `messages.create()` fails in wasm HTTP path with `cannot read property 'Symbol.iterator' of undefined`; live API calls require credentials |
 | 41 | Vercel AI SDK | `ai` | ✅ | 2026-03-09 | All 5 bundled offline utility/message-processing tests pass in Node.js and wasm-rquickjs |
-| 42 | MCP SDK | `@modelcontextprotocol/sdk` | ⬜ | — | Model Context Protocol for LLM tool-use |
+| 42 | MCP SDK | `@modelcontextprotocol/sdk` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (in-memory client/server flows, tools, resources/prompts, stdio utilities, URI/error helpers) |
 
 ## Authentication & Security
 
