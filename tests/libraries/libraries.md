@@ -71,7 +71,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 30 | amqplib | `amqplib` | ✅ | 2026-03-08 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (credentials, codec, frame, API args, URL credential helpers); live broker operations untested |
 | 31 | kafkajs | `kafkajs` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (exports/constants, client factories/validation, disconnected producer errors, partitioners, codec registry); live broker operations untested |
 | 32 | nats | `nats` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'stream/web'` |
-| 33 | mqtt | `mqtt` | ⬜ | — | MQTT client for IoT/messaging |
+| 33 | mqtt | `mqtt` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (connect/options parsing, validation helpers, Store, message-id providers, ReasonCodes/events); live broker flows untested |
 
 ## Workflow Engines & Reactive
 
