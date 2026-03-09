@@ -1,0 +1,5 @@
+package test:lib-supertest;
+
+world lib-supertest {
+  export run: func() -> string;
+}

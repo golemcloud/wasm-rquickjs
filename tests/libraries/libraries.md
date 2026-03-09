@@ -133,7 +133,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 62 | Jest | `jest` | ❌ | 2026-03-09 | Node source tests pass (5/5), but Rollup bundling fails on native `@unrs/resolver-binding-*.node`; cannot run in wasm-rquickjs workflow |
 | 63 | Vitest | `vitest` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs abort at init: `cannot wstd::runtime::block_on inside an existing block_on!` |
 | 64 | Mocha | `mocha` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs fail at init: `navigator is not defined` |
-| 65 | Supertest | `supertest` | ⬜ | — | HTTP integration testing |
+| 65 | Supertest | `supertest` | ❌ | 2026-03-09 | Offline assertion/cookie helper tests pass in Node.js and wasm-rquickjs (5/5), but standard `request(app)` usage requires server binding/listening (Golem-incompatible) |
 | 66 | Sinon | `sinon` | ⬜ | — | Test spies, stubs, and mocks |
 | 67 | Chai | `chai` | ⬜ | — | Assertion library |
 | 68 | nock | `nock` | ⬜ | — | HTTP mocking |
