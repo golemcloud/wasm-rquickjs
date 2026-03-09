@@ -6521,10 +6521,10 @@
     "sequential/test-net-listen-shared-ports.js": { "skip": true, "reason": "requires cluster" },
 
     // === newly discovered tests (not yet evaluated) ===
-    "es-module/test-cjs-esm-warn.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-cjs-esm-warn.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-cjs-legacyMainResolve-permission.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
     "es-module/test-cjs-legacyMainResolve.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
-    "es-module/test-cjs-prototype-pollution.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-cjs-prototype-pollution.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-disable-require-module-with-detection.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-esm-assertionless-json-import.js": { "skip": true, "reason": "[manual] This test requires Node.js `--experimental-loader` custom ESM loader hooks to allow JSON imports without `{ with: { type: 'json' } }`. Without that loader, Node.js itself rejects assertion..." },
     "es-module/test-esm-cjs-builtins.js": {},
@@ -6584,41 +6584,26 @@
     "es-module/test-esm-url-extname.js": { "skip": true, "reason": "[manual] The test requires `node:internal/modules/esm/get_format`, a Node.js internal module (accessed via `--expose-internals` flag). Per project policy, we only implement the public Node.js API —..." },
     "es-module/test-esm-windows.js": {},
     "es-module/test-loaders-hidden-from-users.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
-    "es-module/test-require-module-cached-tla.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "es-module/test-require-module-conditional-exports-module.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-require-module-cached-tla.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-conditional-exports-module.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-conditional-exports.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_if_only_require_exports_are_defined_return_require_exports": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_01_if_both_are_defined_require_is_used": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_02_if_import_and_default_are_defined_default_is_used": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_00_if_only_require_exports_are_defined_return_require_exports": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_01_if_both_are_defined_require_is_used": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_02_if_import_and_default_are_defined_default_is_used": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "es-module/test-require-module-cycle-cjs-esm-esm.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-require-module-cycle-cjs-esm-esm.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-cycle-esm-cjs-esm-esm.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_a_mjs_b_cjs_c_mjs_a_mjs": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_01_b_cjs_c_mjs_a_mjs_b_cjs": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
+        "block_00_a_mjs_b_cjs_c_mjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_01_b_cjs_c_mjs_a_mjs_b_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_02_c_mjs_a_mjs_b_cjs_c_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
