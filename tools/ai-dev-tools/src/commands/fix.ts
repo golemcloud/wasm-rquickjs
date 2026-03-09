@@ -174,11 +174,12 @@ export async function fixCommand(category: string): Promise<void> {
     console.error("\n⚠ UNCAUGHT EXCEPTION:", err);
     process.exit(1);
   });
+  let cleanExit = false;
   process.on("beforeExit", (code) => {
-    console.error(`\n⚠ beforeExit (code=${code}) — event loop drained unexpectedly`);
+    if (!cleanExit) console.error(`\n⚠ beforeExit (code=${code}) — event loop drained unexpectedly`);
   });
   process.on("exit", (code) => {
-    console.error(`\n⚠ exit (code=${code})`);
+    if (!cleanExit) console.error(`\n⚠ exit (code=${code})`);
   });
   for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(sig, () => {
@@ -566,6 +567,7 @@ export async function fixCommand(category: string): Promise<void> {
   }
 
   cleanupStop();
+  cleanExit = true;
   console.log();
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(`  Done! Category '${category}' processing complete.`);
