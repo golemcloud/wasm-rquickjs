@@ -3161,7 +3161,7 @@
     "parallel/test-require-enoent-dir.js": {},
     "parallel/test-require-extension-over-directory.js": {
       "skip": true,
-      "reason": "[manual] amp batch made no code changes"
+      "reason": "regression: was enabled but started failing"
     },
     "parallel/test-require-invalid-package.js": {},
     "parallel/test-require-nul.js": {},
@@ -8251,24 +8251,21 @@
       }
     },
     "parallel/test-require-delete-array-iterator.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "parallel/test-require-dot.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "parallel/test-require-exceptions.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "parallel/test-require-extensions-main.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "parallel/test-require-extensions-same-filename-as-dir-trailing-slash.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "parallel/test-require-extensions-same-filename-as-dir.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "parallel/test-require-dot.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-require-exceptions.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-require-extensions-main.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-require-extensions-same-filename-as-dir-trailing-slash.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-require-extensions-same-filename-as-dir.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-require-invalid-main-no-exports.js": {},
-    "parallel/test-require-json.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "parallel/test-require-long-path.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "parallel/test-require-mjs.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "parallel/test-require-json.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-require-long-path.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-require-mjs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-require-node-prefix.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_all_kinds_of_specifiers_should_work_without_issue": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
+        "block_00_all_kinds_of_specifiers_should_work_without_issue": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_01_node_prefixed_require_calls_bypass_the_require_cache": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
