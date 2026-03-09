@@ -1,0 +1,5 @@
+package test:lib-helmet;
+
+world lib-helmet {
+  export run: func() -> string;
+}

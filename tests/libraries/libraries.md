@@ -102,7 +102,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 46 | passport-local | `passport-local` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (constructor/options, success/fail/error paths, query/custom fields, passReqToCallback) |
 | 47 | bcrypt | `bcrypt` | ❌ | 2026-03-09 | Bundled tests fail to initialize (`ERR_MODULE_NOT_FOUND: mock-aws-s3`); native `.node` binding/bootstrap path incompatible |
 | 48 | bcryptjs | `bcryptjs` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (sync/async hashing, getRounds/getSalt, truncation, validation) |
-| 49 | helmet | `helmet` | ⬜ | — | Security HTTP headers middleware |
+| 49 | helmet | `helmet` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (default headers, option validation, dynamic CSP, custom toggles, standalone middleware factories) |
 | 50 | cors | `cors` | ⬜ | — | CORS middleware |
 | 51 | express-rate-limit | `express-rate-limit` | ⬜ | — | Rate limiting middleware for Express |
 | 52 | NestJS Throttler | `@nestjs/throttler` | ⬜ | — | Rate limiting for NestJS |
