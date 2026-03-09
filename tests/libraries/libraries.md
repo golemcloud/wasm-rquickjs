@@ -98,7 +98,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 43 | jsonwebtoken | `jsonwebtoken` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (HS sign/verify, decode, claims/time validation, callback APIs) |
 | 44 | passport | `passport` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (strategy registration, authenticate flows, serialize/deserialize, auth info transforms, initialize helpers) |
-| 45 | passport-jwt | `passport-jwt` | ⬜ | — | Passport strategy for JWT auth |
+| 45 | passport-jwt | `passport-jwt` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (extractors, strategy validation, authenticate success/failure paths) |
 | 46 | passport-local | `passport-local` | ⬜ | — | Username/password authentication strategy |
 | 47 | bcrypt | `bcrypt` | ⬜ | — | Password hashing (native) |
 | 48 | bcryptjs | `bcryptjs` | ⬜ | — | Pure-JS bcrypt (no native deps) |
