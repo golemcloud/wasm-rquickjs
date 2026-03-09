@@ -130,7 +130,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 62 | Jest | `jest` | ⬜ | — | Most popular test runner |
+| 62 | Jest | `jest` | ❌ | 2026-03-09 | Node source tests pass (5/5), but Rollup bundling fails on native `@unrs/resolver-binding-*.node`; cannot run in wasm-rquickjs workflow |
 | 63 | Vitest | `vitest` | ⬜ | — | Vite-native test runner |
 | 64 | Mocha | `mocha` | ⬜ | — | Flexible test framework |
 | 65 | Supertest | `supertest` | ⬜ | — | HTTP integration testing |
