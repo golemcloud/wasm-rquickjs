@@ -124,7 +124,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 59 | Pino | `pino` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (basic JSON logging, child bindings, redaction/serializers, multistream, level changes) |
 | 60 | Winston | `winston` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (custom transport, format pipeline, child metadata, custom levels, profiler/errors) |
-| 61 | Morgan | `morgan` | ⬜ | — | HTTP request logger middleware for Express |
+| 61 | Morgan | `morgan` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs fail at init: `depd` `callSiteLocation` throws `not a function` |
 
 ## Testing
 

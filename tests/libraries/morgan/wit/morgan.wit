@@ -1,0 +1,5 @@
+package test:lib-morgan;
+
+world lib-morgan {
+  export run: func() -> string;
+}
