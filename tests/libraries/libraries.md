@@ -122,7 +122,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 59 | Pino | `pino` | ⬜ | — | Extremely fast JSON logger |
+| 59 | Pino | `pino` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (basic JSON logging, child bindings, redaction/serializers, multistream, level changes) |
 | 60 | Winston | `winston` | ⬜ | — | Versatile logger with transports |
 | 61 | Morgan | `morgan` | ⬜ | — | HTTP request logger middleware for Express |
 

@@ -1,0 +1,5 @@
+package test:lib-pino;
+
+world lib-pino {
+  export run: func() -> string;
+}
