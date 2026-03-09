@@ -86,7 +86,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 36 | LangChain.js | `langchain` | ⚠️ | 2026-03-09 | 4/5 wasm tests pass; offline message/tool/store/agent APIs work, but `initChatModel` missing-provider error path differs (`cannot read property 'split' of undefined`) |
 | 37 | LangChain Core | `@langchain/core` | ✅ | 2026-03-09 | All 5 tests pass (messages, prompts/runnables, output parsers, tools, cache/math) |
-| 38 | LangGraph.js | `@langchain/langgraph` | ⬜ | — | Stateful agent graphs (agentic workflows) |
+| 38 | LangGraph.js | `@langchain/langgraph` | ✅ | 2026-03-09 | All 5 bundled offline tests pass (annotations/reducers, Send routing, messages reducer, MemorySaver checkpoints, Command/errors) |
 | 39 | OpenAI SDK | `openai` | ⬜ | — | Official OpenAI TypeScript/Node.js SDK |
 | 40 | Anthropic SDK | `@anthropic-ai/sdk` | ⬜ | — | Official Anthropic (Claude) SDK |
 | 41 | Vercel AI SDK | `ai` | ⬜ | — | Unified AI SDK with streaming |

@@ -1,0 +1,5 @@
+package test:lib-langchain-langgraph;
+
+world lib-langchain-langgraph {
+  export run: func() -> string;
+}
