@@ -1,0 +1,5 @@
+package test:lib-class-validator;
+
+world lib-class-validator {
+  export run: func() -> string;
+}
