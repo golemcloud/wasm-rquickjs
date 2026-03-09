@@ -1,0 +1,5 @@
+package test:lib-cors;
+
+world lib-cors {
+  export run: func() -> string;
+}
