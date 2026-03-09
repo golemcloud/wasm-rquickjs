@@ -2,7 +2,7 @@
 
 **Package:** `express`
 **Version:** `5.1.0`
-**Tested on:** 2026-03-08
+**Tested on:** 2026-03-09
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -10,32 +10,28 @@
 ### test-01-basic.js — App settings, middleware chain, and basic route response
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined` at `createRequire (node:module:837:120)`
-- **Root cause:** Rollup's CJS-to-ESM interop emits `createRequire(import.meta.url)`, but `import.meta.url` is `undefined` in the wasm-rquickjs runtime.
+- **Error:** `JavaScript error: not a function` at `callSiteLocation (bundle/script_module:1356:17)` → `depd (bundle/script_module:1193:32)` → `requireLayer` → `requireRouter` → `requireApplication` → `requireExpress$1`
+- **Root cause:** The `depd` library calls a function that is `not a function` in the wasm-rquickjs runtime. The `createRequire` issue is fixed, but initialization now fails deeper in Express's dependency chain.
 
 ### test-02-router.js — Router mounting, param middleware, and query parsing
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** Same `createRequire(import.meta.url)` failure — `import.meta.url` is `undefined`.
-- **Root cause:** Same module-initialization failure before test logic executes.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ### test-03-errors.js — Error propagation to Express error middleware
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** Same `createRequire(import.meta.url)` failure — `import.meta.url` is `undefined`.
-- **Root cause:** Same module-initialization failure before route handling starts.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ### test-04-response-helpers.js — `res.append`, `res.cookie`, `res.location`, `res.type`
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** Same `createRequire(import.meta.url)` failure — `import.meta.url` is `undefined`.
-- **Root cause:** Same module-initialization failure before response helpers execute.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ### test-05-body-parser.js — `express.json()` body parsing and JSON response
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** Same `createRequire(import.meta.url)` failure — `import.meta.url` is `undefined`.
-- **Root cause:** Same module-initialization failure before middleware stack executes.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ## Golem Compatibility
 
@@ -47,10 +43,9 @@ its standard way in Golem applications.
 ## Summary
 
 - Tests passed: 0/5 in wasm-rquickjs (5/5 on Node.js)
-- **Previous blocker (fixed):** `string_decoder` missing default export — this is now resolved.
-- **New blocker:** `import.meta.url` is `undefined` in the wasm-rquickjs runtime. Rollup's `@rollup/plugin-commonjs` emits `createRequire(import.meta.url)` for CJS dependencies that use `require()` for Node.js built-in modules (e.g., `node:zlib`). The runtime's `node:module` `createRequire` rejects `undefined` as the filename argument, causing initialization to fail before any Express test logic runs.
-- Behavioral differences: Not measurable due to module initialization failure.
+- Previous blockers (`string_decoder` missing default export, `createRequire(import.meta.url)` failure) are **fixed**
+- **Current blocker:** The `depd` library (Express dependency) calls `callSiteLocation` which invokes a function that is `not a function` in the wasm-rquickjs runtime. This causes initialization to fail before any Express test logic runs.
+- Behavioral differences: Not measurable due to initialization failure.
 - Blockers:
-  - Runtime initialization fails before any Express test logic runs
-  - `import.meta.url` must be defined (or `createRequire` must accept `undefined`) for Rollup-bundled CJS code to work
+  - `depd` library relies on V8-specific stack trace APIs or similar functionality not available in QuickJS
   - Express primary usage model requires server binding (`app.listen`), which is incompatible with Golem's execution model

@@ -2,45 +2,42 @@
 
 **Package:** `typeorm`
 **Version:** `0.3.28`
-**Tested on:** 2026-03-08
+**Tested on:** 2026-03-09
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
 
 ### test-01-basic.js — EntitySchema captures table/column/index definitions
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (runtime initialization)
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** The bundled module calls `node:module.createRequire(...)` with an undefined filename during module initialization, causing the component to panic before `run()` executes.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `JavaScript error: The "path" argument must be of type string. Received undefined` at `ERR_INVALID_ARG_TYPE` → `validateString` → `dirname (node:path:1040:20)` → `resolve (bundle/script_module:5870:32)` → `appRootPath$1`
+- **Root cause:** The `createRequire` issue is fixed. The `app-root-path` library passes `undefined` to `path.dirname`, which throws because the runtime correctly validates the argument type.
 
 ### test-02-validation.js — Decorator validation and metadata registration
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (runtime initialization)
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same `node:module.createRequire(...)` undefined filename failure during module initialization.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** Same `app-root-path` / `path.dirname(undefined)` failure as test-01.
 
 ### test-03-advanced.js — Find operators and instance checks
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (runtime initialization)
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same `node:module.createRequire(...)` undefined filename failure during module initialization.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** Same `app-root-path` / `path.dirname(undefined)` failure as test-01.
 
 ### test-04-naming-strategy.js — DefaultNamingStrategy output stability
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (runtime initialization)
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same `node:module.createRequire(...)` undefined filename failure during module initialization.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** Same `app-root-path` / `path.dirname(undefined)` failure as test-01.
 
 ### test-05-find-options.js — FindOptionsUtils option-shape detection
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL (runtime initialization)
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same `node:module.createRequire(...)` undefined filename failure during module initialization.
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** Same `app-root-path` / `path.dirname(undefined)` failure as test-01.
 
 ## Summary
 
 - Tests passed on Node.js: 5/5
 - Tests passed on wasm-rquickjs: 0/5
-- Missing APIs: `node:module.createRequire` compatibility gap for this bundled usage pattern (`filename` argument resolution)
+- Previous blocker (`createRequire(import.meta.url)` failure) is **fixed**
+- **Current blocker:** The `app-root-path` library passes `undefined` to `path.dirname`, likely because it cannot resolve a filesystem root in the WASM environment.
 - Behavioral differences: N/A (runtime execution not reached)
-- Blockers: All bundles panic during initialization in `createRequire` before exported `run()` can be invoked.
+- Blockers: All bundles fail during initialization when `app-root-path` calls `path.dirname(undefined)`.

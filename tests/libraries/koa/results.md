@@ -2,7 +2,7 @@
 
 **Package:** `koa`
 **Version:** `3.1.2`
-**Tested on:** 2026-03-08
+**Tested on:** 2026-03-09
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -10,32 +10,28 @@
 ### test-01-basic.js — Basic middleware callback response
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Module initialization fails at `createRequire (node:module:837:120)` from the bundled script (`bundle/script_module:20:33`), so the exported `run()` function is never invoked.
+- **Error:** `JavaScript error: not a function` at `callSiteLocation (bundle/script_module:937:17)` → `depd (bundle/script_module:774:32)` → `requireHttpErrors$1` → `requireApplication`
+- **Root cause:** The `createRequire` issue is fixed. The `depd` library (Koa dependency) calls a function that is `not a function` in the wasm-rquickjs runtime — same issue as Express.
 
 ### test-02-error-handling.js — `ctx.throw` status/message handling
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ### test-03-request-parsing.js — Proxy-aware request parsing and subdomain handling
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ### test-04-response-helpers.js — Response headers, vary, attachment, and body metadata
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ### test-05-middleware-order.js — Middleware onion order and `ctx.state` propagation
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received undefined`
-- **Root cause:** Same initialization failure in `node:module.createRequire` before runtime test execution.
+- **Error:** Same `depd` / `not a function` failure as test-01.
 
 ## Golem Compatibility
 
@@ -46,11 +42,12 @@ its standard way in Golem applications.
 
 ## Summary
 
-- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs (all fail during module initialization)
-- Missing APIs: `node:module.createRequire` compatibility around filename/import-meta handling during bundled module bootstrap
-- Behavioral differences: Not measurable because initialization fails before `run()` execution
+- Tests passed: 5/5 on Node.js, 0/5 on wasm-rquickjs
+- Previous blocker (`createRequire(import.meta.url)` failure) is **fixed**
+- **Current blocker:** The `depd` library (shared dependency with Express) calls `callSiteLocation` which invokes a function that is `not a function` in the wasm-rquickjs runtime.
+- Behavioral differences: Not measurable due to initialization failure.
 - Blockers:
-  - wasm module initialization aborts at `node:module.createRequire` (`filename` is `undefined`) for every Koa bundle
+  - `depd` library relies on V8-specific stack trace APIs or similar functionality not available in QuickJS
   - Koa primary usage model requires server binding (`app.listen`), which is incompatible with Golem's execution model
 
 ## Execution Notes
