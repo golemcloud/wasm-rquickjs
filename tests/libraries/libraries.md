@@ -131,7 +131,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 62 | Jest | `jest` | ❌ | 2026-03-09 | Node source tests pass (5/5), but Rollup bundling fails on native `@unrs/resolver-binding-*.node`; cannot run in wasm-rquickjs workflow |
-| 63 | Vitest | `vitest` | ⬜ | — | Vite-native test runner |
+| 63 | Vitest | `vitest` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs abort at init: `cannot wstd::runtime::block_on inside an existing block_on!` |
 | 64 | Mocha | `mocha` | ⬜ | — | Flexible test framework |
 | 65 | Supertest | `supertest` | ⬜ | — | HTTP integration testing |
 | 66 | Sinon | `sinon` | ⬜ | — | Test spies, stubs, and mocks |
