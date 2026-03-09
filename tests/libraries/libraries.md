@@ -137,7 +137,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 66 | Sinon | `sinon` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs abort at init: `cannot wstd::runtime::block_on inside an existing block_on!` |
 | 67 | Chai | `chai` | ✅ | 2026-03-09 | All 5 bundled assertion tests pass in Node.js and wasm-rquickjs (assert/expect/should, deep/nested, throws, subset/keys) |
 | 68 | nock | `nock` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs fail in `node:http` request setup: `JavaScript error: cannot read property 'bind' of undefined` |
-| 69 | ts-jest | `ts-jest` | ⬜ | — | TypeScript preprocessor for Jest |
+| 69 | ts-jest | `ts-jest` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs fail at init: `JavaScript error: Cannot find module 'inspector'` |
 
 ## GraphQL
 
