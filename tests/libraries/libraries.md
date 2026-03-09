@@ -69,7 +69,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 29 | BullMQ | `bullmq` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (QueueKeys, backoffs, errors, job JSON, AsyncFifoQueue) |
 | 30 | amqplib | `amqplib` | ✅ | 2026-03-08 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (credentials, codec, frame, API args, URL credential helpers); live broker operations untested |
-| 31 | kafkajs | `kafkajs` | ⬜ | — | Apache Kafka client |
+| 31 | kafkajs | `kafkajs` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (exports/constants, client factories/validation, disconnected producer errors, partitioners, codec registry); live broker operations untested |
 | 32 | nats | `nats` | ⬜ | — | NATS messaging client |
 | 33 | mqtt | `mqtt` | ⬜ | — | MQTT client for IoT/messaging |
 

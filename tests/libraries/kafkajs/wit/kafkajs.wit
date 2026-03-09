@@ -1,0 +1,5 @@
+package test:lib-kafkajs;
+
+world lib-kafkajs {
+  export run: func() -> string;
+}
