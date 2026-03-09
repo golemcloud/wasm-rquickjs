@@ -78,7 +78,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 34 | Temporal SDK | `@temporalio/client` | ⚠️ | 2026-03-09 | 4/5 tests pass; offline APIs work, but connection/client path fails in wasm: `tls is not supported in WebAssembly environment` |
-| 35 | RxJS | `rxjs` | ⬜ | — | Reactive Extensions for JS |
+| 35 | RxJS | `rxjs` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (core operators, Subject variants, error handling, combinations, virtual-time schedulers) |
 
 ## AI / LLM Frameworks
 
