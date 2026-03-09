@@ -6680,18 +6680,9 @@
           "skip": true,
           "reason": "[manual] amp batch made no code changes"
         },
-        "block_01_b_mjs_c_mjs_d_mjs_c_mjs": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_02_c_mjs_d_mjs_c_mjs": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_03_d_mjs_c_mjs_d_mjs": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_01_b_mjs_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_02_c_mjs_d_mjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_03_d_mjs_c_mjs_d_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" }
       }
     },
     "es-module/test-require-module-default-extension.js": {},
@@ -6705,7 +6696,7 @@
     "es-module/test-require-module-detect-entry-point-aou.js": {},
     "es-module/test-require-module-detect-entry-point.js": {},
     "es-module/test-require-module-dont-detect-cjs.js": {},
-    "es-module/test-require-module-dynamic-import-1.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-require-module-dynamic-import-1.js": { "skip": true, "reason": "requires CJS named export analysis (cjs-module-lexer) for ESM import of CJS modules" },
     "es-module/test-require-module-dynamic-import-2.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "es-module/test-require-module-dynamic-import-3.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "es-module/test-require-module-dynamic-import-4.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
