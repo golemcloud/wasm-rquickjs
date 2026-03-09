@@ -1,0 +1,5 @@
+package test:lib-chai;
+
+world lib-chai {
+  export run: func() -> string;
+}
