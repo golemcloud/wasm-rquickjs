@@ -116,7 +116,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 55 | class-validator | `class-validator` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (standalone validators, class-style sync/async constraints, whitelist/groups, validateOrReject) |
 | 56 | class-transformer | `class-transformer` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (plain/instance transforms, Expose/Exclude, nested Type/Date, groups/version, clone+serialize) |
 | 57 | Ajv | `ajv` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (core validation, $ref schemas, mutation options, custom formats/keywords, async validation) |
-| 58 | Yup | `yup` | ⬜ | — | Schema builder for runtime validation |
+| 58 | Yup | `yup` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (coercion/defaults, aggregated errors, conditional refs, array+tuple validation, custom method/locale/reach) |
 
 ## Logging
 
