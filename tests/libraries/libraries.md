@@ -105,7 +105,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 49 | helmet | `helmet` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (default headers, option validation, dynamic CSP, custom toggles, standalone middleware factories) |
 | 50 | cors | `cors` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (simple requests, preflight defaults, dynamic origin, custom preflight options, options delegate) |
 | 51 | express-rate-limit | `express-rate-limit` | ❌ | 2026-03-09 | 5/5 offline middleware/store tests pass in Node.js and wasm-rquickjs, but standard usage requires an Express server pipeline (Golem-incompatible) |
-| 52 | NestJS Throttler | `@nestjs/throttler` | ⬜ | — | Rate limiting for NestJS |
+| 52 | NestJS Throttler | `@nestjs/throttler` | ❌ | 2026-03-09 | Node.js 5/5 pass, but wasm-rquickjs fails module init (`stream/web` default export missing); primary usage depends on NestJS server pipeline |
 
 ## Validation
 

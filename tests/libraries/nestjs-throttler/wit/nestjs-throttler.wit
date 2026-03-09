@@ -1,0 +1,5 @@
+package test:lib-nestjs-throttler;
+
+world lib-nestjs-throttler {
+  export run: func() -> string;
+}
