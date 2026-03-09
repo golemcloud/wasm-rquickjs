@@ -100,7 +100,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 44 | passport | `passport` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (strategy registration, authenticate flows, serialize/deserialize, auth info transforms, initialize helpers) |
 | 45 | passport-jwt | `passport-jwt` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (extractors, strategy validation, authenticate success/failure paths) |
 | 46 | passport-local | `passport-local` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (constructor/options, success/fail/error paths, query/custom fields, passReqToCallback) |
-| 47 | bcrypt | `bcrypt` | ⬜ | — | Password hashing (native) |
+| 47 | bcrypt | `bcrypt` | ❌ | 2026-03-09 | Bundled tests fail to initialize (`ERR_MODULE_NOT_FOUND: mock-aws-s3`); native `.node` binding/bootstrap path incompatible |
 | 48 | bcryptjs | `bcryptjs` | ⬜ | — | Pure-JS bcrypt (no native deps) |
 | 49 | helmet | `helmet` | ⬜ | — | Security HTTP headers middleware |
 | 50 | cors | `cors` | ⬜ | — | CORS middleware |
