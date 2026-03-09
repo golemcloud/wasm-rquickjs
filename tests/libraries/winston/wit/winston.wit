@@ -1,0 +1,5 @@
+package test:lib-winston;
+
+world lib-winston {
+  export run: func() -> string;
+}
