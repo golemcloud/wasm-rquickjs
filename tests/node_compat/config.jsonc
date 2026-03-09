@@ -6662,37 +6662,28 @@
     "es-module/test-require-module-preload.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "es-module/test-require-module-retry-import-errored.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "es-module/test-require-module-retry-import-evaluating.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "es-module/test-require-module-synchronous-rejection-handling.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "es-module/test-require-module-tla-retry-import-2.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "es-module/test-require-module-tla-retry-import.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "es-module/test-require-module-tla-retry-require.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-require-module-synchronous-rejection-handling.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-tla-retry-import-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-tla-retry-import.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-tla-retry-require.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-tla.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "es-module/test-require-module-transpiled.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "es-module/test-require-module-twice.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
-    "es-module/test-require-module-warning.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "es-module/test-require-module-transpiled.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-twice.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-warning.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-with-detection.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
+        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
