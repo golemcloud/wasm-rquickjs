@@ -143,7 +143,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 70 | graphql | `graphql` | ⬜ | — | GraphQL JS reference implementation |
+| 70 | graphql | `graphql` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (graphqlSync execution, validation, AST transforms, introspection, custom scalar behavior) |
 | 71 | Apollo Server | `@apollo/server` | ⬜ | — | GraphQL server |
 | 72 | graphql-subscriptions | `graphql-subscriptions` | ⬜ | — | PubSub for GraphQL subscriptions |
 
