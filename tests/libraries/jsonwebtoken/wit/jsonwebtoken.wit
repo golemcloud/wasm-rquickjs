@@ -1,0 +1,5 @@
+package test:lib-jsonwebtoken;
+
+world lib-jsonwebtoken {
+  export run: func() -> string;
+}

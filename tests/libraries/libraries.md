@@ -96,7 +96,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 43 | jsonwebtoken | `jsonwebtoken` | ⬜ | — | JWT signing and verification |
+| 43 | jsonwebtoken | `jsonwebtoken` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (HS sign/verify, decode, claims/time validation, callback APIs) |
 | 44 | passport | `passport` | ⬜ | — | Authentication middleware |
 | 45 | passport-jwt | `passport-jwt` | ⬜ | — | Passport strategy for JWT auth |
 | 46 | passport-local | `passport-local` | ⬜ | — | Username/password authentication strategy |
