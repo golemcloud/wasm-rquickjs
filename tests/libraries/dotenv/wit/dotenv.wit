@@ -1,0 +1,5 @@
+package test:lib-dotenv;
+
+world lib-dotenv {
+  export run: func() -> string;
+}
