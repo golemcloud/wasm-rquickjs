@@ -207,7 +207,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 93 | lodash | `lodash` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (chaining, deep paths, collections, clone/merge, template/curry/memoize) |
-| 94 | uuid | `uuid` | ⬜ | — | RFC-compliant UUID generation |
+| 94 | uuid | `uuid` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (v3/v5 deterministic hashes, v1/v6/v7 generation, parse/stringify, buffer APIs) |
 | 95 | date-fns | `date-fns` | ⬜ | — | Modern functional date utility library |
 | 96 | dayjs | `dayjs` | ⬜ | — | Lightweight Moment.js alternative |
 | 97 | semver | `semver` | ⬜ | — | Semantic versioning parsing |
