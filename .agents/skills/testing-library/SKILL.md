@@ -281,6 +281,14 @@ Create a detailed results file:
 - Blockers: <list of issues preventing the library from working>
 ```
 
+### Clean up the `tmp` directory
+
+After all tests are complete (whether they passed or failed), remove the temporary build artifacts:
+
+```bash
+rm -rf tmp/lib-test-<package-name>-*
+```
+
 ### Update `tests/libraries/libraries.md`
 
 **⚠️ Use `edit_file` to update ONLY the specific library's row.** Never overwrite the entire file — it contains ~100 library entries that would be lost.

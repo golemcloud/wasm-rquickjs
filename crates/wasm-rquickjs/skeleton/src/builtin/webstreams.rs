@@ -2,7 +2,9 @@
 pub const WEBSTREAMS_JS: &str = include_str!("web-streams-polyfill-4.1.0.js");
 
 // Re-export for aliases
-pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/streams';"#;
+pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/streams';
+import * as _all from '__wasm_rquickjs_builtin/streams';
+export default _all;"#;
 
 // JS code wiring the web streams module into the global context
 pub const WIRE_JS: &str = r#"

@@ -3402,6 +3402,17 @@ export async function openAsBlob(path, options) {
 // Expose the symbol for structuredClone integration
 export { _kFileBackedBlob };
 
+// Named re-export so `import { promises } from 'node:fs'` works.
+// We cannot call getPromises() at module evaluation time because `require` is
+// not yet available, so we export a proxy object that lazily delegates.
+export const promises = new Proxy({}, {
+    get(_, prop) { return getPromises()[prop]; },
+    set(_, prop, value) { getPromises()[prop] = value; return true; },
+    has(_, prop) { return prop in getPromises(); },
+    ownKeys() { return Reflect.ownKeys(getPromises()); },
+    getOwnPropertyDescriptor(_, prop) { return Object.getOwnPropertyDescriptor(getPromises(), prop); },
+});
+
 // --- Default export ---
 
 const _default = {
