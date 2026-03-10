@@ -1,0 +1,5 @@
+package test:lib-convict;
+
+world lib-convict {
+  export run: func() -> string;
+}
