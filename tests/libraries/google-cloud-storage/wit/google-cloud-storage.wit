@@ -1,0 +1,5 @@
+package test:lib-google-cloud-storage;
+
+world lib-google-cloud-storage {
+  export run: func() -> string;
+}
