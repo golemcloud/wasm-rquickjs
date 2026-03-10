@@ -1,0 +1,46 @@
+
+thread '<unnamed>' (1) panicked at src/internal.rs:1615:21:
+Exception during call of run:
+JavaScript error: Intl is not defined
+Stack:
+    at buildDateParts (bundle/script_module:616:29)
+    at LocalizedTime (bundle/script_module:577:38)
+    at findNextDateIgnoringWeekday (bundle/script_module:688:36)
+    at matchNext (bundle/script_module:739:23)
+    at getNextMatch (bundle/script_module:799:30)
+    at getDelay (bundle/script_module:358:47)
+    at start (bundle/script_module:305:40)
+    at start (bundle/script_module:930:26)
+    at run (bundle/script_module:1432:8)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: failed to run main module `tmp/lib-test-node-cron-03/target/wasm32-wasip1/debug/lib_node_cron.wasm`
+
+Caused by:
+    0: error while executing at wasm backtrace:
+           0: 0xed4b9a - lib_node_cron.wasm!abort
+           1: 0xecb745 - lib_node_cron.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8
+           2: 0xec389f - lib_node_cron.wasm!std::process::abort::h52a756c95aa1ed34
+           3: 0xec391b - lib_node_cron.wasm!__rustc[4425a7e20b4c8619]::__rust_abort
+           4: 0xec36cf - lib_node_cron.wasm!__rustc[4425a7e20b4c8619]::__rust_start_panic
+           5: 0xec36f2 - lib_node_cron.wasm!__rustc[4425a7e20b4c8619]::rust_panic
+           6: 0xecdaec - lib_node_cron.wasm!std::panicking::panic_with_hook::h046cb6b5bb1ae87d
+           7: 0xecbc14 - lib_node_cron.wasm!std::panicking::panic_handler::{{closure}}::h8c2da803f45c255c
+           8: 0xec3a0a - lib_node_cron.wasm!std::sys::backtrace::__rust_end_short_backtrace::h4575429eed93cb20
+           9: 0xec39fe - lib_node_cron.wasm!__rustc[4425a7e20b4c8619]::rust_begin_unwind
+          10: 0xee620c - lib_node_cron.wasm!core::panicking::panic_fmt::h45db92ad3ae804a3
+          11: 0x5d8b91 - lib_node_cron.wasm!lib_node_cron::internal::call_js_export_internal::{{closure}}::{{closure}}::{{closure}}::h41d7cbe6a52503cb
+          12: 0x579747 - lib_node_cron.wasm!<core::pin::Pin<P> as core::future::future::Future>::poll::h825256a7f8f4a697
+          13: 0x58165b - lib_node_cron.wasm!<rquickjs_core::context::async::future::WithFuture<F,R> as core::future::future::Future>::poll::hf5702621ca47410a
+          14: 0x5d58c0 - lib_node_cron.wasm!lib_node_cron::internal::call_js_export_internal::{{closure}}::h53dc49ee32f1e20c
+          15: 0x5d5626 - lib_node_cron.wasm!lib_node_cron::internal::call_js_export::{{closure}}::h193d6d808535bf23
+          16: 0x14f4c6 - lib_node_cron.wasm!<lib_node_cron::Component as lib_node_cron::bindings::Guest>::run::{{closure}}::hf4f5610880fe29ea
+          17: 0x45a560 - lib_node_cron.wasm!<futures_concurrency::future::join::tuple::Join2<A,B> as core::future::future::Future>::poll::hbe06128557e1b172
+          18: 0x5d7990 - lib_node_cron.wasm!lib_node_cron::internal::async_exported_function::{{closure}}::h92bb522a8ea6f94a
+          19:  0x3a7ca - lib_node_cron.wasm!wstd::runtime::block_on::block_on::h966f55308355e45b
+          20: 0x5d7712 - lib_node_cron.wasm!lib_node_cron::internal::async_exported_function::hc788a572d532de30
+          21: 0x3899c7 - lib_node_cron.wasm!<lib_node_cron::Component as lib_node_cron::bindings::Guest>::run::hde85ce7c0a98dec3
+          22: 0x3814be - lib_node_cron.wasm!lib_node_cron::bindings::_export_run_cabi::h1b4b5c56757263d0
+          23: 0x389a10 - lib_node_cron.wasm!run
+       note: using the `WASMTIME_BACKTRACE_DETAILS=1` environment variable may show more debugging information
+    1: wasm trap: wasm `unreachable` instruction executed
