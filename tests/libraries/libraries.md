@@ -199,7 +199,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 90 | compression | `compression` | ❌ | 2026-03-10 | All 5 bundled offline middleware tests pass in Node.js and wasm-rquickjs, but standard usage requires an Express/HTTP server middleware pipeline (Golem-incompatible) |
-| 91 | multer | `multer` | ⬜ | — | Multipart/form-data handling (file uploads) |
+| 91 | multer | `multer` | ❌ | 2026-03-10 | Node bundles pass (5/5), but wasm runs fail in multipart stream pipeline (`TypeError: not a function`); disk storage test also fails with `ENOENT` creating writable dir |
 | 92 | form-data | `form-data` | ✅ | 2026-03-07 | All 5 tests pass (basic, buffer, length, boundary, multipart format) |
 
 ## Utility Libraries
