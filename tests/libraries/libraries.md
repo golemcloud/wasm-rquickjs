@@ -212,7 +212,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 96 | dayjs | `dayjs` | ⚠️ | 2026-03-10 | 4/5 bundled tests pass; core/date parsing/formatting plugins work, but timezone conversion (`utc().tz(...)`) returns unconverted time in wasm |
 | 97 | semver | `semver` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (parsing/validation, ranges, comparison/inc, range algebra, coerce/sort/class APIs) |
 | 98 | async | `async` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (collections, control flow, queues, retry/timeout, memoize/reflect) |
-| 99 | yargs | `yargs` | ⬜ | — | CLI argument parsing |
+| 99 | yargs | `yargs` | ❌ | 2026-03-10 | 5/5 Node bundles pass, but all wasm runs fail at startup: `JavaScript error: not a function` at `bundle/script_module:468` (`new Intl.Segmenter()` in `string-width`) |
 | 100 | Ramda | `ramda` | ⬜ | — | Functional programming utility library |
 
 ---
