@@ -1,0 +1,47 @@
+
+thread '<unnamed>' (1) panicked at src/internal.rs:1615:21:
+Exception during call of run:
+JavaScript error: Intl is not defined
+Stack:
+    at systemLocale (bundle/script_module:1127:27)
+    at create (bundle/script_module:1411:66)
+    at fromObject (bundle/script_module:1431:27)
+    at fromObject (bundle/script_module:6463:36)
+    at parseDataToDateTime (bundle/script_module:5887:35)
+    at fromISO (bundle/script_module:6567:33)
+    at CronDate (bundle/script_module:8340:53)
+    at CronExpression (bundle/script_module:9350:43)
+    at parse (bundle/script_module:9978:21)
+    at run (bundle/script_module:10430:50)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: failed to run main module `tmp/lib-test-cron-parser-04/target/wasm32-wasip1/debug/lib_cron_parser.wasm`
+
+Caused by:
+    0: error while executing at wasm backtrace:
+           0: 0xed4bb1 - lib_cron_parser.wasm!abort
+           1: 0xecb75c - lib_cron_parser.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8
+           2: 0xec38b6 - lib_cron_parser.wasm!std::process::abort::h52a756c95aa1ed34
+           3: 0xec3932 - lib_cron_parser.wasm!__rustc[4425a7e20b4c8619]::__rust_abort
+           4: 0xec36e6 - lib_cron_parser.wasm!__rustc[4425a7e20b4c8619]::__rust_start_panic
+           5: 0xec3709 - lib_cron_parser.wasm!__rustc[4425a7e20b4c8619]::rust_panic
+           6: 0xecdb03 - lib_cron_parser.wasm!std::panicking::panic_with_hook::h046cb6b5bb1ae87d
+           7: 0xecbc2b - lib_cron_parser.wasm!std::panicking::panic_handler::{{closure}}::h8c2da803f45c255c
+           8: 0xec3a21 - lib_cron_parser.wasm!std::sys::backtrace::__rust_end_short_backtrace::h4575429eed93cb20
+           9: 0xec3a15 - lib_cron_parser.wasm!__rustc[4425a7e20b4c8619]::rust_begin_unwind
+          10: 0xee6223 - lib_cron_parser.wasm!core::panicking::panic_fmt::h45db92ad3ae804a3
+          11: 0x20e4f3 - lib_cron_parser.wasm!lib_cron_parser::internal::call_js_export_internal::{{closure}}::{{closure}}::{{closure}}::hdcc44624ccce596d
+          12: 0x2ec589 - lib_cron_parser.wasm!<core::pin::Pin<P> as core::future::future::Future>::poll::h80075cdb9bb3800c
+          13: 0x44a781 - lib_cron_parser.wasm!<rquickjs_core::context::async::future::WithFuture<F,R> as core::future::future::Future>::poll::hf5aac5429386e1e9
+          14: 0x20b222 - lib_cron_parser.wasm!lib_cron_parser::internal::call_js_export_internal::{{closure}}::hf9d14d610b2f7517
+          15: 0x20af88 - lib_cron_parser.wasm!lib_cron_parser::internal::call_js_export::{{closure}}::ha6b4de8cffabd8ca
+          16: 0x104d83 - lib_cron_parser.wasm!<lib_cron_parser::Component as lib_cron_parser::bindings::Guest>::run::{{closure}}::h6d886db8c5f574ea
+          17: 0x3a218e - lib_cron_parser.wasm!<futures_concurrency::future::join::tuple::Join2<A,B> as core::future::future::Future>::poll::ha717eeae2250e5b4
+          18: 0x20d2f2 - lib_cron_parser.wasm!lib_cron_parser::internal::async_exported_function::{{closure}}::hadeb959eb20eb47f
+          19: 0x39e927 - lib_cron_parser.wasm!wstd::runtime::block_on::block_on::hc6260161c9480760
+          20: 0x20d074 - lib_cron_parser.wasm!lib_cron_parser::internal::async_exported_function::h779ecdfc53ced802
+          21:  0x6de30 - lib_cron_parser.wasm!<lib_cron_parser::Component as lib_cron_parser::bindings::Guest>::run::h9c2d5647f57c35bc
+          22: 0x42b188 - lib_cron_parser.wasm!lib_cron_parser::bindings::_export_run_cabi::h80659d6b34262da7
+          23:  0x6de79 - lib_cron_parser.wasm!run
+       note: using the `WASMTIME_BACKTRACE_DETAILS=1` environment variable may show more debugging information
+    1: wasm trap: wasm `unreachable` instruction executed
