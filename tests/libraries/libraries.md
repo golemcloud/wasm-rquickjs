@@ -170,7 +170,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 80 | node-cron | `node-cron` | ⚠️ | 2026-03-10 | 5/5 Node bundles pass; 1/5 wasm tests pass (`validate`), but task/scheduler paths fail: `Intl is not defined` |
 | 81 | cron-parser | `cron-parser` | ❌ | 2026-03-10 | 5/5 Node bundles pass, but 0/5 wasm runs fail at parse startup: `Intl is not defined` (Luxon dependency) |
-| 82 | NestJS Schedule | `@nestjs/schedule` | ⬜ | — | Cron/schedule decorator module for NestJS |
+| 82 | NestJS Schedule | `@nestjs/schedule` | ❌ | 2026-03-10 | 5/5 Node bundles pass, but 0/5 wasm runs fail during Nest bootstrap: `Intl is not defined` |
 
 ## Email
 

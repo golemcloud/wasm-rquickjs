@@ -1,0 +1,5 @@
+package test:lib-nestjs-schedule;
+
+world lib-nestjs-schedule {
+  export run: func() -> string;
+}
