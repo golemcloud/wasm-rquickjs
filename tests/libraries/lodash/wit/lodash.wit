@@ -1,0 +1,5 @@
+package test:lib-lodash;
+
+world lib-lodash {
+  export run: func() -> string;
+}
