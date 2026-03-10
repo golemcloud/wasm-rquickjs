@@ -1,0 +1,653 @@
+import { intl_dtf_resolve_fields, intl_validate_timezone, intl_collator_compare } from "__wasm_rquickjs_builtin/intl_native";
+
+const MONTH_NAMES_LONG = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+const MONTH_NAMES_SHORT = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+const MONTH_NAMES_NARROW = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+
+const WEEKDAY_NAMES_LONG = [
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+];
+const WEEKDAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAY_NAMES_NARROW = ["S", "M", "T", "W", "T", "F", "S"];
+
+const ERA_NAMES_LONG = { positive: "Anno Domini", negative: "Before Christ" };
+const ERA_NAMES_SHORT = { positive: "AD", negative: "BC" };
+const ERA_NAMES_NARROW = { positive: "A", negative: "B" };
+
+const CURRENCY_SYMBOLS = {
+    USD: "$", EUR: "€", GBP: "£", JPY: "¥", CNY: "¥",
+    KRW: "₩", INR: "₹", RUB: "₽", BRL: "R$", ZAR: "R",
+    TRY: "₺", PLN: "zł", THB: "฿", IDR: "Rp", MYR: "RM",
+    PHP: "₱", VND: "₫", SEK: "kr", NOK: "kr", DKK: "kr",
+    CHF: "CHF", CAD: "CA$", AUD: "A$", NZD: "NZ$", MXN: "MX$",
+    SGD: "S$", HKD: "HK$", TWD: "NT$", ARS: "ARS", CLP: "CLP",
+    COP: "COP", PEN: "PEN", ILS: "₪", AED: "AED", SAR: "SAR",
+    EGP: "EGP", NGN: "₦", KES: "KES", UAH: "₴", CZK: "Kč",
+    HUF: "Ft", RON: "lei", BGN: "лв",
+};
+
+function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+}
+
+function toTimestamp(date) {
+    if (date === undefined) return Date.now();
+    if (typeof date === "number") return date;
+    if (date instanceof Date) return date.getTime();
+    throw new TypeError("Invalid date");
+}
+
+// ─── DateTimeFormat ────────────────────────────────────────────────────────────
+
+function resolveDateStyleOptions(dateStyle) {
+    switch (dateStyle) {
+        case "full":
+            return { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+        case "long":
+            return { year: "numeric", month: "long", day: "numeric" };
+        case "medium":
+            return { year: "numeric", month: "short", day: "numeric" };
+        case "short":
+            return { year: "2-digit", month: "numeric", day: "numeric" };
+        default:
+            return {};
+    }
+}
+
+function resolveTimeStyleOptions(timeStyle) {
+    switch (timeStyle) {
+        case "full":
+            return { hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "long" };
+        case "long":
+            return { hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short" };
+        case "medium":
+            return { hour: "numeric", minute: "2-digit", second: "2-digit" };
+        case "short":
+            return { hour: "numeric", minute: "2-digit" };
+        default:
+            return {};
+    }
+}
+
+function formatMonthValue(month, style) {
+    switch (style) {
+        case "2-digit": return pad2(month);
+        case "long": return MONTH_NAMES_LONG[month - 1];
+        case "short": return MONTH_NAMES_SHORT[month - 1];
+        case "narrow": return MONTH_NAMES_NARROW[month - 1];
+        case "numeric":
+        default:
+            return String(month);
+    }
+}
+
+function formatWeekdayValue(chroneWeekday, style) {
+    // chrono weekday: 1=Mon..7=Sun; arrays: 0=Sun,1=Mon..6=Sat
+    const dow = chroneWeekday === 7 ? 0 : chroneWeekday;
+    switch (style) {
+        case "long": return WEEKDAY_NAMES_LONG[dow];
+        case "short": return WEEKDAY_NAMES_SHORT[dow];
+        case "narrow": return WEEKDAY_NAMES_NARROW[dow];
+        default: return WEEKDAY_NAMES_LONG[dow];
+    }
+}
+
+function formatEraValue(year, style) {
+    const key = year > 0 ? "positive" : "negative";
+    switch (style) {
+        case "long": return ERA_NAMES_LONG[key];
+        case "short": return ERA_NAMES_SHORT[key];
+        case "narrow": return ERA_NAMES_NARROW[key];
+        default: return ERA_NAMES_SHORT[key];
+    }
+}
+
+function convertHour(hour24, hour12Flag, hourCycle) {
+    if (hourCycle === "h12" || (hour12Flag === true && !hourCycle)) {
+        const period = hour24 < 12 ? "AM" : "PM";
+        let h = hour24 % 12;
+        if (h === 0) h = 12;
+        return { hour: h, dayPeriod: period };
+    }
+    if (hourCycle === "h11") {
+        const period = hour24 < 12 ? "AM" : "PM";
+        const h = hour24 % 12;
+        return { hour: h, dayPeriod: period };
+    }
+    if (hourCycle === "h24") {
+        const h = hour24 === 0 ? 24 : hour24;
+        return { hour: h, dayPeriod: null };
+    }
+    // h23 or default (no hour12)
+    if (hour12Flag === false || hourCycle === "h23" || (!hour12Flag && !hourCycle)) {
+        return { hour: hour24, dayPeriod: null };
+    }
+    // Default: hour12 = true for en-US
+    const period = hour24 < 12 ? "AM" : "PM";
+    let h = hour24 % 12;
+    if (h === 0) h = 12;
+    return { hour: h, dayPeriod: period };
+}
+
+class DateTimeFormat {
+    #timeZone;
+    #hour12;
+    #hourCycle;
+    #dateStyle;
+    #timeStyle;
+    #fieldOpts;
+
+    constructor(locales, options) {
+        const opts = options || {};
+        const tz = opts.timeZone || "UTC";
+        if (!intl_validate_timezone(tz)) {
+            throw new RangeError("Invalid time zone specified: " + tz);
+        }
+        this.#timeZone = tz;
+        this.#hour12 = opts.hour12;
+        this.#hourCycle = opts.hourCycle;
+        this.#dateStyle = opts.dateStyle;
+        this.#timeStyle = opts.timeStyle;
+
+        if (this.#dateStyle || this.#timeStyle) {
+            this.#fieldOpts = {
+                ...resolveDateStyleOptions(this.#dateStyle),
+                ...resolveTimeStyleOptions(this.#timeStyle),
+            };
+        } else {
+            this.#fieldOpts = {};
+            for (const k of ["year", "month", "day", "hour", "minute", "second",
+                "weekday", "era", "timeZoneName"]) {
+                if (opts[k] !== undefined) this.#fieldOpts[k] = opts[k];
+            }
+            // If no date/time fields specified at all, default to date-only
+            if (Object.keys(this.#fieldOpts).length === 0) {
+                this.#fieldOpts = { year: "numeric", month: "numeric", day: "numeric" };
+            }
+        }
+
+        // Determine hour12 default for en-US when hour is present
+        if (this.#fieldOpts.hour !== undefined && this.#hour12 === undefined && !this.#hourCycle) {
+            this.#hour12 = true;
+        }
+    }
+
+    #resolve(date) {
+        const ts = toTimestamp(date);
+        const [year, month, day, hour, minute, second, weekday, utcOffsetMinutes, error] =
+            intl_dtf_resolve_fields(ts, this.#timeZone);
+        if (error !== undefined) {
+            throw new RangeError(error);
+        }
+        return { year, month, day, hour, minute, second, weekday, utcOffsetMinutes };
+    }
+
+    formatToParts(date) {
+        const r = this.#resolve(date);
+        const fo = this.#fieldOpts;
+        const parts = [];
+        let needDateTimeSep = false;
+        const hasDateFields = fo.weekday || fo.era || fo.year || fo.month || fo.day;
+        const hasTimeFields = fo.hour || fo.minute || fo.second;
+
+        // Weekday
+        if (fo.weekday) {
+            parts.push({ type: "weekday", value: formatWeekdayValue(r.weekday, fo.weekday) });
+            parts.push({ type: "literal", value: ", " });
+        }
+
+        // Month
+        if (fo.month) {
+            const monthStr = formatMonthValue(r.month, fo.month);
+            const isNumericMonth = fo.month === "numeric" || fo.month === "2-digit";
+
+            if (isNumericMonth) {
+                // Numeric date: M/D/YYYY
+                parts.push({ type: "month", value: monthStr });
+                if (fo.day) {
+                    parts.push({ type: "literal", value: "/" });
+                    const dayStr = fo.day === "2-digit" ? pad2(r.day) : String(r.day);
+                    parts.push({ type: "day", value: dayStr });
+                }
+                if (fo.year) {
+                    parts.push({ type: "literal", value: "/" });
+                    const yearStr = fo.year === "2-digit"
+                        ? String(r.year).slice(-2)
+                        : String(r.year);
+                    parts.push({ type: "year", value: yearStr });
+                }
+            } else {
+                // Text month: Month D, YYYY
+                parts.push({ type: "month", value: monthStr });
+                if (fo.day) {
+                    parts.push({ type: "literal", value: " " });
+                    const dayStr = fo.day === "2-digit" ? pad2(r.day) : String(r.day);
+                    parts.push({ type: "day", value: dayStr });
+                }
+                if (fo.year) {
+                    parts.push({ type: "literal", value: ", " });
+                    const yearStr = fo.year === "2-digit"
+                        ? String(r.year).slice(-2)
+                        : String(r.year);
+                    parts.push({ type: "year", value: yearStr });
+                }
+            }
+            needDateTimeSep = true;
+        } else {
+            // No month, but maybe year and/or day
+            if (fo.year) {
+                const yearStr = fo.year === "2-digit"
+                    ? String(r.year).slice(-2)
+                    : String(r.year);
+                parts.push({ type: "year", value: yearStr });
+                needDateTimeSep = true;
+            }
+            if (fo.day) {
+                if (parts.length > 0) parts.push({ type: "literal", value: " " });
+                const dayStr = fo.day === "2-digit" ? pad2(r.day) : String(r.day);
+                parts.push({ type: "day", value: dayStr });
+                needDateTimeSep = true;
+            }
+        }
+
+        // Era
+        if (fo.era) {
+            parts.push({ type: "literal", value: " " });
+            parts.push({ type: "era", value: formatEraValue(r.year, fo.era) });
+        }
+
+        // Separator between date and time
+        if (needDateTimeSep && hasTimeFields) {
+            parts.push({ type: "literal", value: ", " });
+        }
+
+        // Time fields
+        if (fo.hour) {
+            const { hour, dayPeriod } = convertHour(r.hour, this.#hour12, this.#hourCycle);
+            const hourStr = fo.hour === "2-digit" ? pad2(hour) : String(hour);
+            parts.push({ type: "hour", value: hourStr });
+
+            if (fo.minute) {
+                parts.push({ type: "literal", value: ":" });
+                parts.push({ type: "minute", value: pad2(r.minute) });
+            }
+            if (fo.second) {
+                parts.push({ type: "literal", value: ":" });
+                parts.push({ type: "second", value: pad2(r.second) });
+            }
+
+            if (dayPeriod) {
+                parts.push({ type: "literal", value: " " });
+                parts.push({ type: "dayPeriod", value: dayPeriod });
+            }
+        }
+
+        // TimeZoneName
+        if (fo.timeZoneName) {
+            parts.push({ type: "literal", value: " " });
+            const tzDisplay = fo.timeZoneName === "long"
+                ? this.#timeZone.replace(/_/g, " ")
+                : this.#timeZone;
+            parts.push({ type: "timeZoneName", value: tzDisplay });
+        }
+
+        return parts;
+    }
+
+    format(date) {
+        return this.formatToParts(date).map(p => p.value).join("");
+    }
+
+    resolvedOptions() {
+        const ro = {
+            locale: "en-US",
+            calendar: "gregory",
+            numberingSystem: "latn",
+            timeZone: this.#timeZone,
+        };
+        if (this.#dateStyle) ro.dateStyle = this.#dateStyle;
+        if (this.#timeStyle) ro.timeStyle = this.#timeStyle;
+        const fo = this.#fieldOpts;
+        for (const k of ["year", "month", "day", "hour", "minute", "second",
+            "weekday", "era", "timeZoneName"]) {
+            if (fo[k] !== undefined) ro[k] = fo[k];
+        }
+        if (fo.hour !== undefined) {
+            if (this.#hourCycle) {
+                ro.hourCycle = this.#hourCycle;
+                ro.hour12 = this.#hourCycle === "h12" || this.#hourCycle === "h11";
+            } else if (this.#hour12 !== undefined) {
+                ro.hour12 = this.#hour12;
+                ro.hourCycle = this.#hour12 ? "h12" : "h23";
+            } else {
+                ro.hour12 = true;
+                ro.hourCycle = "h12";
+            }
+        }
+        return ro;
+    }
+
+    static supportedLocalesOf() {
+        return ["en-US"];
+    }
+}
+
+// ─── NumberFormat ───────────────────────────────────────────────────────────────
+
+function groupIntegerPart(intStr) {
+    const parts = [];
+    let i = intStr.length;
+    while (i > 0) {
+        const start = Math.max(0, i - 3);
+        parts.unshift(intStr.slice(start, i));
+        i = start;
+    }
+    return parts;
+}
+
+function formatDecimalNumber(absVal, minInt, minFrac, maxFrac, useGrouping) {
+    let fixed = absVal.toFixed(maxFrac);
+    let [intPart, fracPart] = fixed.split(".");
+
+    // minimumIntegerDigits
+    while (intPart.length < minInt) {
+        intPart = "0" + intPart;
+    }
+
+    // Trim trailing zeros down to minimumFractionDigits
+    if (fracPart) {
+        while (fracPart.length > minFrac && fracPart.endsWith("0")) {
+            fracPart = fracPart.slice(0, -1);
+        }
+    }
+
+    const intGroups = useGrouping ? groupIntegerPart(intPart) : [intPart];
+
+    return { intGroups, fracPart: fracPart || "" };
+}
+
+class NumberFormat {
+    #style;
+    #currency;
+    #currencyDisplay;
+    #minimumIntegerDigits;
+    #minimumFractionDigits;
+    #maximumFractionDigits;
+    #useGrouping;
+    #notation;
+    #signDisplay;
+
+    constructor(locales, options) {
+        const opts = options || {};
+        this.#style = opts.style || "decimal";
+        this.#currency = opts.currency;
+        this.#currencyDisplay = opts.currencyDisplay || "symbol";
+        this.#minimumIntegerDigits = opts.minimumIntegerDigits || 1;
+        this.#notation = opts.notation || "standard";
+        this.#signDisplay = opts.signDisplay || "auto";
+
+        if (this.#style === "currency" && !this.#currency) {
+            throw new TypeError("Currency code is required with currency style");
+        }
+
+        if (this.#style === "currency") {
+            const isJPY = this.#currency && this.#currency.toUpperCase() === "JPY";
+            this.#minimumFractionDigits = opts.minimumFractionDigits !== undefined
+                ? opts.minimumFractionDigits
+                : (isJPY ? 0 : 2);
+            this.#maximumFractionDigits = opts.maximumFractionDigits !== undefined
+                ? opts.maximumFractionDigits
+                : (isJPY ? 0 : 2);
+        } else if (this.#style === "percent") {
+            this.#minimumFractionDigits = opts.minimumFractionDigits !== undefined
+                ? opts.minimumFractionDigits : 0;
+            this.#maximumFractionDigits = opts.maximumFractionDigits !== undefined
+                ? opts.maximumFractionDigits : 0;
+        } else {
+            this.#minimumFractionDigits = opts.minimumFractionDigits !== undefined
+                ? opts.minimumFractionDigits : 0;
+            this.#maximumFractionDigits = opts.maximumFractionDigits !== undefined
+                ? opts.maximumFractionDigits : 3;
+        }
+
+        this.#useGrouping = opts.useGrouping !== undefined ? opts.useGrouping : true;
+    }
+
+    formatToParts(number) {
+        const parts = [];
+        let val = Number(number);
+        const isNeg = val < 0;
+        const showSign = this.#signDisplay === "always" || this.#signDisplay === "exceptZero";
+
+        if (isNeg) {
+            parts.push({ type: "minusSign", value: "-" });
+            val = -val;
+        } else if (showSign && (val > 0 || (this.#signDisplay === "always" && val === 0))) {
+            if (this.#signDisplay === "always" || val > 0) {
+                parts.push({ type: "plusSign", value: "+" });
+            }
+        }
+
+        if (this.#style === "percent") {
+            val = val * 100;
+        }
+
+        const { intGroups, fracPart } = formatDecimalNumber(
+            val,
+            this.#minimumIntegerDigits,
+            this.#minimumFractionDigits,
+            this.#maximumFractionDigits,
+            this.#useGrouping
+        );
+
+        if (this.#style === "currency") {
+            const code = this.#currency.toUpperCase();
+            let sym;
+            if (this.#currencyDisplay === "code") {
+                sym = code;
+            } else if (this.#currencyDisplay === "name") {
+                sym = code;
+            } else {
+                sym = CURRENCY_SYMBOLS[code] || code;
+            }
+            parts.push({ type: "currency", value: sym });
+        }
+
+        for (let i = 0; i < intGroups.length; i++) {
+            if (i > 0) {
+                parts.push({ type: "group", value: "," });
+            }
+            parts.push({ type: "integer", value: intGroups[i] });
+        }
+
+        if (fracPart.length > 0) {
+            parts.push({ type: "decimal", value: "." });
+            parts.push({ type: "fraction", value: fracPart });
+        }
+
+        if (this.#style === "percent") {
+            parts.push({ type: "percentSign", value: "%" });
+        }
+
+        return parts;
+    }
+
+    format(number) {
+        return this.formatToParts(number).map(p => p.value).join("");
+    }
+
+    resolvedOptions() {
+        const ro = {
+            locale: "en-US",
+            numberingSystem: "latn",
+            style: this.#style,
+            minimumIntegerDigits: this.#minimumIntegerDigits,
+            minimumFractionDigits: this.#minimumFractionDigits,
+            maximumFractionDigits: this.#maximumFractionDigits,
+            useGrouping: this.#useGrouping,
+            notation: this.#notation,
+            signDisplay: this.#signDisplay,
+        };
+        if (this.#style === "currency") {
+            ro.currency = this.#currency.toUpperCase();
+            ro.currencyDisplay = this.#currencyDisplay;
+        }
+        return ro;
+    }
+
+    static supportedLocalesOf() {
+        return ["en-US"];
+    }
+}
+
+// ─── Collator ──────────────────────────────────────────────────────────────────
+
+class Collator {
+    #sensitivity;
+    #numeric;
+    #ignorePunctuation;
+    #usage;
+    #caseFirst;
+    #collation;
+
+    constructor(locales, options) {
+        const opts = options || {};
+        this.#sensitivity = opts.sensitivity || "variant";
+        this.#numeric = !!opts.numeric;
+        this.#ignorePunctuation = !!opts.ignorePunctuation;
+        this.#usage = opts.usage || "sort";
+        this.#caseFirst = opts.caseFirst || "false";
+        this.#collation = opts.collation || "default";
+    }
+
+    compare(a, b) {
+        return intl_collator_compare(
+            String(a),
+            String(b),
+            this.#sensitivity,
+            this.#numeric,
+            this.#ignorePunctuation
+        );
+    }
+
+    resolvedOptions() {
+        return {
+            locale: "en-US",
+            usage: this.#usage,
+            sensitivity: this.#sensitivity,
+            ignorePunctuation: this.#ignorePunctuation,
+            collation: this.#collation,
+            numeric: this.#numeric,
+            caseFirst: this.#caseFirst,
+        };
+    }
+
+    static supportedLocalesOf() {
+        return ["en-US"];
+    }
+}
+
+// ─── PluralRules ───────────────────────────────────────────────────────────────
+
+class PluralRules {
+    #type;
+    #minimumIntegerDigits;
+    #minimumFractionDigits;
+    #maximumFractionDigits;
+
+    constructor(locales, options) {
+        const opts = options || {};
+        this.#type = opts.type || "cardinal";
+        this.#minimumIntegerDigits = opts.minimumIntegerDigits || 1;
+        this.#minimumFractionDigits = opts.minimumFractionDigits !== undefined
+            ? opts.minimumFractionDigits : 0;
+        this.#maximumFractionDigits = opts.maximumFractionDigits !== undefined
+            ? opts.maximumFractionDigits : 3;
+    }
+
+    select(n) {
+        const val = Number(n);
+        if (this.#type === "ordinal") {
+            const abs = Math.abs(val);
+            const mod10 = abs % 10;
+            const mod100 = abs % 100;
+            if (mod10 === 1 && mod100 !== 11) return "one";
+            if (mod10 === 2 && mod100 !== 12) return "two";
+            if (mod10 === 3 && mod100 !== 13) return "few";
+            return "other";
+        }
+        // cardinal
+        return val === 1 ? "one" : "other";
+    }
+
+    selectRange(_start, _end) {
+        return "other";
+    }
+
+    resolvedOptions() {
+        return {
+            locale: "en-US",
+            type: this.#type,
+            minimumIntegerDigits: this.#minimumIntegerDigits,
+            minimumFractionDigits: this.#minimumFractionDigits,
+            maximumFractionDigits: this.#maximumFractionDigits,
+            pluralCategories: this.#type === "ordinal"
+                ? ["few", "one", "other", "two"]
+                : ["one", "other"],
+        };
+    }
+
+    static supportedLocalesOf() {
+        return ["en-US"];
+    }
+}
+
+// ─── Static helpers ────────────────────────────────────────────────────────────
+
+function getCanonicalLocales(locales) {
+    if (locales === undefined || locales === null) return [];
+    const list = Array.isArray(locales) ? locales : [locales];
+    if (list.length === 0) return [];
+    return ["en-US"];
+}
+
+function supportedValuesOf(key) {
+    switch (key) {
+        case "calendar": return ["gregory"];
+        case "collation": return ["default"];
+        case "currency": return ["USD", "EUR", "GBP", "JPY", "CNY"];
+        case "numberingSystem": return ["latn"];
+        case "timeZone": return ["UTC"];
+        case "unit": return [];
+        default:
+            throw new RangeError("Invalid key: " + key);
+    }
+}
+
+// ─── Intl object ───────────────────────────────────────────────────────────────
+
+const Intl = {
+    DateTimeFormat,
+    NumberFormat,
+    Collator,
+    PluralRules,
+    getCanonicalLocales,
+    supportedValuesOf,
+
+    // Stubs for unsupported APIs
+    RelativeTimeFormat: undefined,
+    ListFormat: undefined,
+    Locale: undefined,
+    Segmenter: undefined,
+    DisplayNames: undefined,
+    DurationFormat: undefined,
+};
+
+export { Intl };
+export default Intl;

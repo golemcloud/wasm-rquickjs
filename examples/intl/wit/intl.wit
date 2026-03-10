@@ -1,0 +1,8 @@
+package quickjs:intl;
+
+world intl {
+  export test1: func() -> bool;
+  export test2: func() -> bool;
+  export test3: func() -> bool;
+  export test4: func() -> bool;
+}

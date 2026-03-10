@@ -326,6 +326,19 @@ Implemented by https://github.com/MattiasBuelens/web-streams-polyfill
 - `MessageChannel`
 - `MessagePort`
 
+#### Intl (Internationalization)
+
+Minimal en-US implementation for library compatibility. All locale inputs are accepted but resolved to `en-US`.
+
+- `Intl.DateTimeFormat` — `format()`, `formatToParts()`, `resolvedOptions()`, `supportedLocalesOf()`
+- `Intl.NumberFormat` — `format()`, `formatToParts()`, `resolvedOptions()`, `supportedLocalesOf()`
+- `Intl.Collator` — `compare()`, `resolvedOptions()`, `supportedLocalesOf()`
+- `Intl.PluralRules` — `select()`, `selectRange()`, `resolvedOptions()`, `supportedLocalesOf()`
+- `Intl.getCanonicalLocales()`
+- `Intl.supportedValuesOf()`
+
+When the `timezone` feature is enabled (default), `DateTimeFormat` supports all ~590 IANA timezones via `chrono-tz`.
+
 #### Structured Clone
 
 Implemented by https://github.com/ungap/structured-clone

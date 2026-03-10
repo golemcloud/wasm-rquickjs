@@ -30,6 +30,7 @@ mod events;
 mod http2;
 mod https;
 mod ieee754;
+mod intl;
 mod internal;
 mod internal_binding_util;
 mod module;
@@ -99,6 +100,8 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/streams")
         .with_module("__wasm_rquickjs_builtin/encoding_native")
         .with_module("__wasm_rquickjs_builtin/encoding")
+        .with_module("__wasm_rquickjs_builtin/intl_native")
+        .with_module("__wasm_rquickjs_builtin/intl")
         .with_module("node:util")
         .with_module("util")
         .with_module("__wasm_rquickjs_builtin/fs_native")
@@ -259,6 +262,10 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/encoding_native",
             encoding::js_native_module,
         )
+        .with_module(
+            "__wasm_rquickjs_builtin/intl_native",
+            intl::js_native_module,
+        )
         .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
         .with_module("__wasm_rquickjs_builtin/os_native", os::js_native_module)
         .with_module(
@@ -322,6 +329,7 @@ pub fn module_loader() -> (
         .with_module("stream/web", webstreams::REEXPORT_JS)
         .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)
         .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
+        .with_module("__wasm_rquickjs_builtin/intl", intl::INTL_JS)
         .with_module("node:util", util::UTIL_JS)
         .with_module("util", util::REEXPORT_JS)
         .with_module("base64-js", base64::BASE64_JS)
@@ -460,6 +468,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", http::WIRE_JS).unwrap();
     writeln!(result, "{}", webstreams::WIRE_JS).unwrap();
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
+    writeln!(result, "{}", intl::WIRE_JS).unwrap();
     writeln!(result, "{}", url::WIRE_JS).unwrap();
     writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
     writeln!(result, "{}", process::WIRE_JS).unwrap();

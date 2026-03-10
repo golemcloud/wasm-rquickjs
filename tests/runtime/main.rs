@@ -27,6 +27,7 @@ mod export_from_inner_package;
 mod fetch;
 mod fs;
 mod imports;
+mod intl;
 mod node_http;
 mod os;
 mod path;

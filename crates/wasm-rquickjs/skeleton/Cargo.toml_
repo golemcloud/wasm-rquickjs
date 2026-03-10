@@ -14,10 +14,11 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [features]
-default = ["http", "logging"]
+default = ["http", "logging", "timezone"]
 http = ["dep:golem-wasi-http"]
 logging = ["dep:wasi-logging"]
 sqlite = ["dep:rusqlite"]
+timezone = ["dep:chrono-tz"]
 golem = ["logging", "http", "dep:golem-rust"]
 
 [dependencies]
@@ -72,6 +73,8 @@ crc32fast = "1"
 wasi = "=0.14.1+wasi-0.2.3"
 wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
 wstd = "=0.5.4"
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+chrono-tz = { version = "0.10", default-features = false, optional = true }
 
 # HTTP
 golem-wasi-http = { version = "0.1.0", features = ["async"], optional = true }

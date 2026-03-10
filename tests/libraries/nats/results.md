@@ -2,39 +2,33 @@
 
 **Package:** `nats`
 **Version:** `2.29.3`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-10
 
 ## Test Results
 
 ### test-01-basic.js — basic codecs, inbox generation, and NUID creation
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
-- **Root cause:** Runtime module export mismatch for `stream/web` (library initialization fails before test code runs)
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-02-headers.js — header canonicalization and wire encode/decode
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
-- **Root cause:** Runtime module export mismatch for `stream/web` (library initialization fails before test code runs)
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-03-auth.js — authenticator helpers and nkey signatures
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
-- **Root cause:** Runtime module export mismatch for `stream/web` (library initialization fails before test code runs)
+- **Error:** `Error converting from js 'object' into type 'string'` at `TextEncoder.encode()`
+- **Root cause:** `TextEncoder.encode()` receives an object instead of a string from NATS auth token building; the runtime's `TextEncoder` does not coerce non-string input to string as the Web spec requires.
 
 ### test-04-utils-errors.js — utility timing helpers, backoff, and NatsError handling
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
-- **Root cause:** Runtime module export mismatch for `stream/web` (library initialization fails before test code runs)
+- **Error:** `AssertionError: false == true`
+- **Root cause:** An assertion failure in test logic for a utility/error check.
 
 ### test-05-consumer-opts.js — consumer option builder and public enum constants
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
-- **Root cause:** Runtime module export mismatch for `stream/web` (library initialization fails before test code runs)
+- **wasm-rquickjs:** ✅ PASS
 
 ## Untestable Features
 
@@ -52,7 +46,8 @@ To fully test this library, a user would need to:
 
 ## Summary
 
-- Tests passed: 0/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs: `stream/web` default export compatibility at module initialization
-- Behavioral differences: Not reached (runtime fails during module init)
-- Blockers: `nats` cannot initialize in current runtime due to `stream/web` export mismatch
+- Tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
+- **Previous blocker (fixed):** `stream/web` missing default export — this is now resolved; all 5 tests get past initialization
+- Remaining failures:
+  - test-03: `TextEncoder.encode()` doesn't coerce non-string input per Web spec
+  - test-04: Assertion failure in utility/error test logic

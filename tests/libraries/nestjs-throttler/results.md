@@ -2,38 +2,38 @@
 
 **Package:** `@nestjs/throttler`
 **Version:** `6.5.0`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-10
 
 ## Test Results
 
 ### test-01-basic.js — Time helpers and `ThrottlerException`
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
-- **Root cause:** Transitive NestJS dependencies expect a default export from `stream/web`; wasm-rquickjs Node compatibility does not provide this export shape.
+- **Error:** `JavaScript error: Intl is not defined`
+- **Root cause:** Transitive NestJS dependencies (`ConsoleLogger`) require `Intl.DateTimeFormat`; QuickJS does not include the `Intl` API.
 
 ### test-02-decorators.js — `Throttle`/`SkipThrottle` metadata decorators
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
+- **Error:** `JavaScript error: Intl is not defined`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
 ### test-03-module-config.js — `ThrottlerModule.forRoot` dynamic module structure
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
+- **Error:** `JavaScript error: Intl is not defined`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
 ### test-04-storage.js — `ThrottlerStorageService.increment` and block windows
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
+- **Error:** `JavaScript error: Intl is not defined`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
 ### test-05-tokens.js — DI token and decorator helper exports
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Could not find export 'default' in module 'stream/web'`
+- **Error:** `JavaScript error: Intl is not defined`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
 ## Golem Compatibility
@@ -43,6 +43,7 @@
 ## Summary
 
 - Tests passed: 0/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs: `stream/web` default export compatibility expected by transitive NestJS dependencies
+- **Previous blocker (fixed):** `stream/web` missing default export — this is now resolved
+- **Current blocker:** `Intl is not defined` — QuickJS does not include the `Intl` API, required by transitive NestJS `ConsoleLogger` dependency
 - Behavioral differences: Not reached; initialization fails before test code runs
 - Blockers: Runtime module initialization failure plus server-centric execution model mismatch for primary use case

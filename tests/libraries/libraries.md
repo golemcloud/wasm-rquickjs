@@ -16,7 +16,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 1 | Express | `express` | ❌ | 2026-03-09 | Requires server binding (Golem-incompatible); wasm init fails: `depd` library calls `not a function` in `callSiteLocation` |
 | 2 | Fastify | `fastify` | ❌ | 2026-03-09 | Requires server binding (Golem-incompatible); wasm run fails: `ServerResponse has an already assigned socket` (`ERR_HTTP_SOCKET_ASSIGNED`) |
-| 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-08 | Node tests pass, but wasm init fails: missing `stream/web` default export |
+| 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-10 | Node tests pass, but wasm init fails: `Intl is not defined` (NestJS ConsoleLogger requires Intl.DateTimeFormat) |
 | 4 | NestJS Common | `@nestjs/common` | ❌ | 2026-03-08 | Node bundles pass; wasm module init fails: `Intl is not defined` |
 | 5 | Koa | `koa` | ❌ | 2026-03-09 | Requires server binding (Golem-incompatible); wasm init fails: `depd` library calls `not a function` in `callSiteLocation` |
 | 6 | Hapi | `@hapi/hapi` | ❌ | 2026-03-08 | Requires server binding (Golem-incompatible); wasm run fails for all bundles: `JavaScript error: not a function` |
@@ -28,7 +28,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 8 | Axios | `axios` | ✅ | 2026-03-07 | All 5 tests pass (utilities, headers, interceptors, HTTP GET, HTTP POST) |
 | 9 | Got | `got` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at startup: `JavaScript error: Intl is not defined` |
-| 10 | node-fetch | `node-fetch` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'promises' in module 'node:fs'` |
+| 10 | node-fetch | `node-fetch` | ❌ | 2026-03-10 | Node bundles pass (5/5), but all wasm runs crash with QuickJS stack overflow during deeply recursive module init |
 | 11 | undici | `undici` | ⚠️ | 2026-03-09 | 4/5 wasm tests pass (Headers, Request, Response, errors); test-01 fetch of data: URI fails (`status` of undefined) |
 | 12 | superagent | `superagent` | ✅ | 2026-03-09 | All 5 tests pass (request builder, query params, auth/timeout/retry, plugins, agent defaults) |
 
@@ -70,7 +70,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 29 | BullMQ | `bullmq` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (QueueKeys, backoffs, errors, job JSON, AsyncFifoQueue) |
 | 30 | amqplib | `amqplib` | ✅ | 2026-03-08 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (credentials, codec, frame, API args, URL credential helpers); live broker operations untested |
 | 31 | kafkajs | `kafkajs` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (exports/constants, client factories/validation, disconnected producer errors, partitioners, codec registry); live broker operations untested |
-| 32 | nats | `nats` | ❌ | 2026-03-09 | Node bundles pass (5/5), but all wasm runs fail at init: `Could not find export 'default' in module 'stream/web'` |
+| 32 | nats | `nats` | ⚠️ | 2026-03-10 | 3/5 wasm tests pass (codecs, headers, consumer opts); auth test fails (`TextEncoder.encode` non-string coercion), utils test has assertion failure |
 | 33 | mqtt | `mqtt` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (connect/options parsing, validation helpers, Store, message-id providers, ReasonCodes/events); live broker flows untested |
 
 ## Workflow Engines & Reactive
@@ -105,7 +105,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 49 | helmet | `helmet` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (default headers, option validation, dynamic CSP, custom toggles, standalone middleware factories) |
 | 50 | cors | `cors` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (simple requests, preflight defaults, dynamic origin, custom preflight options, options delegate) |
 | 51 | express-rate-limit | `express-rate-limit` | ❌ | 2026-03-09 | 5/5 offline middleware/store tests pass in Node.js and wasm-rquickjs, but standard usage requires an Express server pipeline (Golem-incompatible) |
-| 52 | NestJS Throttler | `@nestjs/throttler` | ❌ | 2026-03-09 | Node.js 5/5 pass, but wasm-rquickjs fails module init (`stream/web` default export missing); primary usage depends on NestJS server pipeline |
+| 52 | NestJS Throttler | `@nestjs/throttler` | ❌ | 2026-03-10 | Node.js 5/5 pass, but wasm-rquickjs fails module init (`Intl is not defined`); primary usage depends on NestJS server pipeline |
 
 ## Validation
 
