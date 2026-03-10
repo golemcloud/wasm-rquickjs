@@ -1,0 +1,1 @@
+"PASS: middleware registration works for root and custom namespaces"

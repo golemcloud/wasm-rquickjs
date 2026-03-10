@@ -1,0 +1,1 @@
+"PASS: socket.io server options and setters work without binding"

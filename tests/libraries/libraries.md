@@ -160,7 +160,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 77 | socket.io | `socket.io` | ⬜ | — | Real-time bidirectional event-based communication |
+| 77 | socket.io | `socket.io` | ❌ | 2026-03-10 | Offline APIs pass (5/5), but primary usage requires server binding/listening (Golem-incompatible) |
 | 78 | ws | `ws` | ⬜ | — | Lightweight WebSocket implementation |
 | 79 | socket.io-client | `socket.io-client` | ⬜ | — | Client-side Socket.io |
 
