@@ -1,0 +1,40 @@
+
+thread '<unnamed>' (1) panicked at src/internal.rs:1380:37:
+Failed to finish built-in wiring:
+JavaScript error: require is not defined
+Stack:
+    at getPromises (node:fs:25:9)
+    at <anonymous> (node:fs:3406:25)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: failed to run main module `tmp/lib-test-protobufjs-01/target/wasm32-wasip1/debug/lib_protobufjs.wasm`
+
+Caused by:
+    0: error while executing at wasm backtrace:
+           0: 0xed4bb2 - lib_protobufjs.wasm!abort
+           1: 0xecb75d - lib_protobufjs.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8
+           2: 0xec38b7 - lib_protobufjs.wasm!std::process::abort::h52a756c95aa1ed34
+           3: 0xec3933 - lib_protobufjs.wasm!__rustc[4425a7e20b4c8619]::__rust_abort
+           4: 0xec36e7 - lib_protobufjs.wasm!__rustc[4425a7e20b4c8619]::__rust_start_panic
+           5: 0xec370a - lib_protobufjs.wasm!__rustc[4425a7e20b4c8619]::rust_panic
+           6: 0xecdb04 - lib_protobufjs.wasm!std::panicking::panic_with_hook::h046cb6b5bb1ae87d
+           7: 0xecbc2c - lib_protobufjs.wasm!std::panicking::panic_handler::{{closure}}::h8c2da803f45c255c
+           8: 0xec3a22 - lib_protobufjs.wasm!std::sys::backtrace::__rust_end_short_backtrace::h4575429eed93cb20
+           9: 0xec3a16 - lib_protobufjs.wasm!__rustc[4425a7e20b4c8619]::rust_begin_unwind
+          10: 0xee6224 - lib_protobufjs.wasm!core::panicking::panic_fmt::h45db92ad3ae804a3
+          11:  0xbfa09 - lib_protobufjs.wasm!lib_protobufjs::internal::JsState::new::{{closure}}::{{closure}}::{{closure}}::{{closure}}::hf4fb009c281ee092
+          12: 0x392d69 - lib_protobufjs.wasm!core::result::Result<T,E>::unwrap_or_else::h6342a91bf1364968
+          13:  0xbee8f - lib_protobufjs.wasm!lib_protobufjs::internal::JsState::new::{{closure}}::{{closure}}::{{closure}}::h9fb33dc015dca646
+          14: 0x60790f - lib_protobufjs.wasm!<core::pin::Pin<P> as core::future::future::Future>::poll::hd067ab329ebae299
+          15:  0xa8fa5 - lib_protobufjs.wasm!<rquickjs_core::context::async::future::WithFuture<F,R> as core::future::future::Future>::poll::h8558fede4e0a2bcf
+          16:  0xbe1cb - lib_protobufjs.wasm!lib_protobufjs::internal::JsState::new::{{closure}}::h9388432583b7fde6
+          17:  0x6f6cf - lib_protobufjs.wasm!wstd::runtime::block_on::block_on::h5e2c55b5dd575cb3
+          18: 0x4a1f15 - lib_protobufjs.wasm!lib_protobufjs::internal::JsState::new::h65240b0d577368da
+          19: 0x4a1da8 - lib_protobufjs.wasm!lib_protobufjs::internal::get_js_state::h0c05736f84cb6027
+          20:  0xbafd0 - lib_protobufjs.wasm!lib_protobufjs::internal::async_exported_function::hb6f3a34cbe9edc1d
+          21: 0x596e46 - lib_protobufjs.wasm!<lib_protobufjs::Component as lib_protobufjs::bindings::Guest>::run::hbecd12e455f91e51
+          22:  0x26215 - lib_protobufjs.wasm!lib_protobufjs::bindings::_export_run_cabi::ha9b7be2bc083b7bc
+          23: 0x59749b - lib_protobufjs.wasm!run
+       note: using the `WASMTIME_BACKTRACE_DETAILS=1` environment variable may show more debugging information
+    1: wasm trap: wasm `unreachable` instruction executed
+WASM test 01 FAIL (exit 134)
