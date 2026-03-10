@@ -182,7 +182,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 84 | AWS SDK v3 | `@aws-sdk/client-s3` | ⬜ | — | Modular AWS SDK v3 (S3, DynamoDB, SES, etc.) |
+| 84 | AWS SDK v3 | `@aws-sdk/client-s3` | ⚠️ | 2026-03-10 | 5/5 bundled offline tests pass in Node.js and wasm-rquickjs; live S3 API calls require AWS credentials and network |
 | 85 | Google Cloud Storage | `@google-cloud/storage` | ⬜ | — | GCS client |
 
 ## Configuration & Environment
