@@ -1,0 +1,5 @@
+package test:lib-socket-io-client;
+
+world lib-socket-io-client {
+  export run: func() -> string;
+}

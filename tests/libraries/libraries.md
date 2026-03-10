@@ -162,7 +162,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 77 | socket.io | `socket.io` | ❌ | 2026-03-10 | Offline APIs pass (5/5), but primary usage requires server binding/listening (Golem-incompatible) |
 | 78 | ws | `ws` | ✅ | 2026-03-10 | All 5 bundled offline API tests pass in Node.js and wasm-rquickjs (parsers/frame encode-decode/noServer mode); live socket and listen-based flows were not exercised |
-| 79 | socket.io-client | `socket.io-client` | ⬜ | — | Client-side Socket.io |
+| 79 | socket.io-client | `socket.io-client` | ⚠️ | 2026-03-10 | All 5 bundled offline API tests pass in Node.js and wasm-rquickjs (manager/socket options, buffering, listeners, cache); live connect/ACK/reconnect flows require a running Socket.IO server |
 
 ## Scheduling & Cron
 
