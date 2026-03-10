@@ -211,7 +211,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 95 | date-fns | `date-fns` | ⚠️ | 2026-03-10 | 4/5 bundled tests pass in Node.js and wasm-rquickjs; `intlFormatDistance` fails in wasm with `JavaScript error: not a function` |
 | 96 | dayjs | `dayjs` | ⚠️ | 2026-03-10 | 4/5 bundled tests pass; core/date parsing/formatting plugins work, but timezone conversion (`utc().tz(...)`) returns unconverted time in wasm |
 | 97 | semver | `semver` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (parsing/validation, ranges, comparison/inc, range algebra, coerce/sort/class APIs) |
-| 98 | async | `async` | ⬜ | — | Async control flow utilities (parallel, series, queue) |
+| 98 | async | `async` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (collections, control flow, queues, retry/timeout, memoize/reflect) |
 | 99 | yargs | `yargs` | ⬜ | — | CLI argument parsing |
 | 100 | Ramda | `ramda` | ⬜ | — | Functional programming utility library |
 
