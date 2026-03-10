@@ -1,0 +1,5 @@
+package test:lib-grpc-proto-loader;
+
+world lib-grpc-proto-loader {
+  export run: func() -> string;
+}

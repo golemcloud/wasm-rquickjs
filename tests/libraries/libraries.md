@@ -152,7 +152,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 73 | gRPC JS | `@grpc/grpc-js` | ✅ | 2026-03-10 | All 5 bundled offline API tests pass in Node.js and wasm-rquickjs (metadata, enums, credentials, experimental helpers); live RPC/server flows untested |
-| 74 | Proto Loader | `@grpc/proto-loader` | ⬜ | — | Load .proto files at runtime |
+| 74 | Proto Loader | `@grpc/proto-loader` | ⚠️ | 2026-03-10 | 5/5 bundled tests pass for descriptor/object APIs in Node.js and wasm-rquickjs, but bundled `load`/`loadSync` file-loading path is unavailable |
 | 75 | protobufjs | `protobufjs` | ⬜ | — | Protocol Buffers for JS |
 | 76 | msgpackr | `msgpackr` | ⬜ | — | Fast MessagePack serialization |
 
