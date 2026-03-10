@@ -190,7 +190,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 86 | dotenv | `dotenv` | ⚠️ | 2026-03-10 | 4/5 tests pass; `parse`/`populate` work, but `config()` fails in wasm with `ENOENT` when opening `.env` via `node:fs` |
-| 87 | NestJS Config | `@nestjs/config` | ⬜ | — | Configuration module backed by dotenv |
+| 87 | NestJS Config | `@nestjs/config` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (ConfigService get/getOrThrow/set, registerAs/getConfigToken/asProvider, ConfigModule+ConditionalModule) |
 | 88 | convict | `convict` | ⬜ | — | Schema-based configuration loading |
 | 89 | envalid | `envalid` | ⬜ | — | Validate and coerce environment variables |
 
