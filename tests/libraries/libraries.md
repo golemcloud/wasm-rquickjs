@@ -176,7 +176,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 83 | Nodemailer | `nodemailer` | ⬜ | — | De-facto standard for sending email |
+| 83 | Nodemailer | `nodemailer` | ✅ | 2026-03-10 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (json transport, stream transport, address normalization, attachments) |
 
 ## Cloud & Infrastructure SDKs
 
