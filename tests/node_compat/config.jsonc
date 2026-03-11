@@ -4064,10 +4064,7 @@
     "parallel/test-exception-handler.js": {},
     "parallel/test-file-write-stream.js": {},
     "parallel/test-file-write-stream2.js": {},
-    "parallel/test-file-write-stream3.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-file-write-stream3.js": {},
     "parallel/test-file-write-stream4.js": {},
     "parallel/test-handle-wrap-close-abort.js": {},
     "parallel/test-http-agent-close.js": {},

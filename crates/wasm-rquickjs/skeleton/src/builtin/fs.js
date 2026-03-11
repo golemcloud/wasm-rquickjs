@@ -2995,10 +2995,8 @@ export function WriteStream(path, options) {
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
-        if (this.start < 0) {
-            const err = new RangeError(`The value of "start" is out of range. It must be >= 0. Received ${this.start}`);
-            err.code = 'ERR_OUT_OF_RANGE';
-            throw err;
+        if (this.start < 0 || this.start > Number.MAX_SAFE_INTEGER) {
+            throw new ERR_OUT_OF_RANGE('start', `>= 0 && <= ${Number.MAX_SAFE_INTEGER}`, this.start);
         }
         this.pos = this.start;
     }
