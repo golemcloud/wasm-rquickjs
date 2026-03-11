@@ -2555,7 +2555,54 @@ Object.defineProperties(_Blob.prototype, {
 })
 
 export const Blob = _Blob
-export const File = _FileImport
+
+const _File = class File extends _Blob {
+    #name = ''
+    #lastModified = 0
+
+    constructor(fileBits, fileName, options = {}) {
+        if (arguments.length < 2) {
+            throw new TypeError(`Failed to construct 'File': 2 arguments required, but only ${arguments.length} present.`)
+        }
+        super(fileBits, options)
+
+        if (options === null) options = {}
+
+        const lastModified = options.lastModified === undefined ? Date.now() : Number(options.lastModified)
+        if (!Number.isNaN(lastModified)) {
+            this.#lastModified = lastModified
+        }
+
+        this.#name = String(fileName)
+    }
+
+    get name() {
+        return this.#name
+    }
+
+    get lastModified() {
+        return this.#lastModified
+    }
+}
+
+Object.defineProperty(_File.prototype, Symbol.toStringTag, {
+    value: 'File',
+    writable: false,
+    enumerable: false,
+    configurable: true,
+})
+
+Object.defineProperties(_File.prototype, {
+    name: { enumerable: true },
+    lastModified: { enumerable: true },
+})
+
+_File.prototype[_inspectCustom] = function(depth, options, inspect) {
+    if (depth < 0) return '[File]'
+    return `File { size: ${this.size}, type: '${this.type}', name: '${this.name}', lastModified: ${this.lastModified} }`
+}
+
+export const File = _File
 
 export function resolveObjectURL(url) {
     if (typeof url !== 'string') return undefined

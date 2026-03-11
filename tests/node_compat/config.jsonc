@@ -7250,26 +7250,51 @@
     "parallel/test-exception-handler2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-experimental-shared-value-conveyor.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-file.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": {},
+        "block_00_block_00": {},
+        "block_01_block_01": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": {},
-        "block_04_block_04": {},
+        "block_03_block_03": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
+        "block_04_block_04": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_06_block_06": {},
+        "block_06_block_06": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "block_07_block_07": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_08_block_08": {},
-        "block_09_block_09": {},
+        "block_08_block_08": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
+        "block_09_block_09": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "block_10_block_10": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_11_block_11": {},
+        "block_11_block_11": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "block_12_block_12": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_13_block_13": {},
+        "block_13_block_13": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
         "block_14_block_14": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_15_block_15": {}
+        "block_15_block_15": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        }
       }
     },
     "parallel/test-filehandle-readablestream.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
