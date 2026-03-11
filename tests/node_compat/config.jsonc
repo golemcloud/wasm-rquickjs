@@ -1325,7 +1325,7 @@
         "block_01_block_01": {},
         "block_02_test_read_only_file_descriptor": {
           "skip": true,
-          "reason": "regression: was enabled but started failing"
+          "reason": "[manual] amp fix attempt failed verification"
         },
         "block_03_test_with_an_abortsignal": {
           "skip": true,
