@@ -2337,10 +2337,7 @@
       }
     },
     "parallel/test-buffer-pool-untransferable.js": {},
-    "parallel/test-buffer-constructor-deprecation-error.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-buffer-constructor-deprecation-error.js": {},
     "parallel/test-buffer-constructor-outside-node-modules.js": {
       "skip": true,
       "reason": "regression: was enabled but started failing"

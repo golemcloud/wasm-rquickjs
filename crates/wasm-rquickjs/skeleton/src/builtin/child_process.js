@@ -601,11 +601,21 @@ function runInline(command, args, options) {
             globalThis.__wasm_rquickjs_current_module = undefined;
             globalThis.__wasm_rquickjs_current_eval_script_name = '[eval]';
 
+            // Pre-parse buffer probe so the emitWarning interceptor can
+            // suppress DEP0005 for node_modules call sites during execution.
+            var inlineSource = invocationArgs.length >= 2 ? String(invocationArgs[1]) : '';
+            inlineBufferProbe = parseBufferConstructorProbe(inlineSource);
+
+            // Each emulated child process gets its own Buffer deprecation state.
+            var oldBufferDepWarned = globalThis.__wasm_rquickjs_buffer_dep0005_warned;
+            globalThis.__wasm_rquickjs_buffer_dep0005_warned = false;
+
             var inlineResult;
             try {
                 inlineResult = executeInlineSource(runtimeRequire, invocationArgs);
             } finally {
                 globalThis.__wasm_rquickjs_current_module = savedModuleContext;
+                globalThis.__wasm_rquickjs_buffer_dep0005_warned = oldBufferDepWarned;
                 if (hadEvalScriptName) {
                     globalThis.__wasm_rquickjs_current_eval_script_name = oldEvalScriptName;
                 } else {
@@ -613,16 +623,7 @@ function runInline(command, args, options) {
                 }
             }
 
-            inlineBufferProbe = inlineResult.bufferProbe;
             process.argv = [String(command)].concat(inlineResult.evalArgv);
-
-            if (inlineBufferProbe && !isNodeModulesPath(inlineBufferProbe.callSiteFilename)) {
-                capturedStderr += formatWarningForStderr({
-                    name: 'DeprecationWarning',
-                    code: 'DEP0005',
-                    message: BUFFER_CONSTRUCTOR_DEPRECATION,
-                });
-            }
         } else {
             var scriptPath = invocationArgs[0];
             if (!path.isAbsolute(scriptPath)) {

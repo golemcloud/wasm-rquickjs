@@ -86,6 +86,37 @@ function installErrorStackShimForNonConfigurablePrototype() {
         const errorInstance = Reflect.construct(NativeError, arguments, NativeError);
         materializeOwnStack(errorInstance);
 
+        // Error.prepareStackTrace support (V8 compat).
+        // Replace the materialized .stack data property with a lazy getter that
+        // checks Error.prepareStackTrace on first access, then materializes the
+        // result as a plain data property so subsequent reads have no overhead.
+        const rawStack = errorInstance.stack;
+        Object.defineProperty(errorInstance, "stack", {
+            get() {
+                const prepareStackTrace = globalThis.Error && globalThis.Error.prepareStackTrace;
+                const result = typeof prepareStackTrace === "function"
+                    ? prepareStackTrace(errorInstance, [])
+                    : rawStack;
+                Object.defineProperty(errorInstance, "stack", {
+                    value: result,
+                    writable: true,
+                    configurable: true,
+                    enumerable: false,
+                });
+                return result;
+            },
+            set(value) {
+                Object.defineProperty(errorInstance, "stack", {
+                    value,
+                    writable: true,
+                    configurable: true,
+                    enumerable: false,
+                });
+            },
+            configurable: true,
+            enumerable: false,
+        });
+
         const targetPrototype = (ctorTarget && ctorTarget.prototype) || ErrorShimPrototype;
         if (Object.getPrototypeOf(errorInstance) !== targetPrototype) {
             Object.setPrototypeOf(errorInstance, targetPrototype);

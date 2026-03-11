@@ -167,6 +167,18 @@ function allocFromPool (size) {
  */
 
 export function Buffer (arg, encodingOrOffset, length) {
+    if (!globalThis.__wasm_rquickjs_buffer_dep0005_warned) {
+        globalThis.__wasm_rquickjs_buffer_dep0005_warned = true
+        if (typeof globalThis.process !== 'undefined' && typeof globalThis.process.emitWarning === 'function') {
+            globalThis.process.emitWarning(
+                'Buffer() is deprecated due to security and usability issues. ' +
+                'Please use the Buffer.alloc(), Buffer.allocUnsafe(), or ' +
+                'Buffer.from() methods instead.',
+                'DeprecationWarning',
+                'DEP0005'
+            )
+        }
+    }
     // Common case.
     if (typeof arg === 'number') {
         if (typeof encodingOrOffset === 'string') {
