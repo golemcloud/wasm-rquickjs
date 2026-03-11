@@ -1659,16 +1659,6 @@ function formatError(
         const reconstructedHeader = Error.prototype.toString.call(err);
         if (typeof reconstructedHeader === "string" && reconstructedHeader.length !== 0) {
             stack = `${reconstructedHeader}\n${stack}`;
-            try {
-                Object.defineProperty(err, "stack", {
-                    value: stack,
-                    writable: true,
-                    configurable: true,
-                    enumerable: false,
-                });
-            } catch {
-                // Best effort: keep formatting stable even if stack is not writable.
-            }
         } else if (constructor !== null) {
             const hasOwnName = Object.prototype.hasOwnProperty.call(err, "name");
             const normalizedName = typeof name === "string" ? name : String(name);
@@ -1687,16 +1677,6 @@ function formatError(
 
     if (typeof stack === "string" && stack.endsWith("\n")) {
         stack = stack.replace(/\n+$/, "");
-        try {
-            Object.defineProperty(err, "stack", {
-                value: stack,
-                writable: true,
-                configurable: true,
-                enumerable: false,
-            });
-        } catch {
-            // Best effort: keep util.inspect output stable.
-        }
     }
 
     let collapsedManualStack = false;

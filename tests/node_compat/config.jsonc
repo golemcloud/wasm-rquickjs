@@ -165,10 +165,7 @@
     "parallel/test-assert-if-error.js": {
       "split": true,
       "subtests": {
-        "test_00_test_that_assert_iferror_has_the_correct_stack_trace_of_both": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "test_00_test_that_assert_iferror_has_the_correct_stack_trace_of_both": {},
         "test_01_general_iferror_tests": {},
         "test_02_should_not_throw": {},
         "test_03_https_github_com_nodejs_node_v0_x_archive_issues_2893": {}
