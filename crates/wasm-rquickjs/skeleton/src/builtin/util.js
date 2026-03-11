@@ -2066,6 +2066,20 @@ import { TextEncoder as _TextEncoder, TextDecoder as _TextDecoder } from '__wasm
 export const TextEncoder = _TextEncoder;
 export const TextDecoder = _TextDecoder;
 
+export async function aborted(signal, resource) {
+    if (!(signal instanceof AbortSignal)) {
+        throw new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
+    }
+    if (resource === null || resource === undefined ||
+        (typeof resource !== 'object' && typeof resource !== 'function')) {
+        throw new ERR_INVALID_ARG_TYPE('resource', 'Object', resource);
+    }
+    if (signal.aborted) return;
+    const { promise, resolve } = Promise.withResolvers();
+    signal.addEventListener('abort', resolve, { once: true });
+    return promise;
+}
+
 export { inspect, format, formatWithOptions, stripVTControlCharacters };
 
 export default {
@@ -2108,5 +2122,6 @@ export default {
      types,
      TextEncoder,
      TextDecoder,
-     stripVTControlCharacters
+     stripVTControlCharacters,
+     aborted
  }

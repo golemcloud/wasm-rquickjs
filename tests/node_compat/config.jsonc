@@ -2045,11 +2045,9 @@
       }
     },
     "parallel/test-aborted-util.js": {
-      "skip": true,
-      "reason": "requires --expose-internals and internal/abort_controller",
       "split": true,
       "subtests": {
-        "test_00_aborted_works_when_provided_a_resource": { "skip": true, "reason": "inherited: requires --expose-internals and internal/abort_controller" },
+        "test_00_aborted_works_when_provided_a_resource": {},
         "test_01_aborted_with_gc_cleanup": { "skip": true, "reason": "inherited: requires --expose-internals and internal/abort_controller" },
         "test_02_fails_with_error_if_not_provided_abortsignal": { "skip": true, "reason": "inherited: requires --expose-internals and internal/abort_controller" },
         "test_03_fails_if_not_provided_a_resource": { "skip": true, "reason": "inherited: requires --expose-internals and internal/abort_controller" },
