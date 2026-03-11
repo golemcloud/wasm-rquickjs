@@ -125,10 +125,7 @@
         "test_19_additional_tests": {},
         "test_20_having_the_same_number_of_owned_properties_the_same_set_of_k": {},
         "test_21_prototype_check": {},
-        "test_22_check_extra_properties_on_errors": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "test_22_check_extra_properties_on_errors": {},
         "test_23_check_proxies": {
           "skip": true,
           "reason": "regression: was enabled but started failing"
