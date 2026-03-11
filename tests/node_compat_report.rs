@@ -131,7 +131,7 @@ impl SharedRunner {
             .instantiate_async(&mut store, &self.component)
             .await?;
 
-        let guest_path = format!("/test/{}", test_rel_path);
+        let guest_path = format!("/home/node/test/{}", test_rel_path);
 
         let func = instance
             .get_func(&mut store, "run-test")
@@ -201,7 +201,7 @@ impl SharedRunner {
         // Write the rewritten file
         let test_filename = test_rel_path.rsplit('/').next().unwrap_or(test_rel_path);
         let suite = test_rel_path.split('/').next().unwrap_or("parallel");
-        let rewritten_path = temp_dir.path().join("test").join(suite).join(test_filename);
+        let rewritten_path = temp_dir.path().join("home").join("node").join("test").join(suite).join(test_filename);
         fs::write(&rewritten_path, &rewritten)?;
 
         // Create store with fresh WASI context
@@ -226,7 +226,7 @@ impl SharedRunner {
             .instantiate_async(&mut store, &self.component)
             .await?;
 
-        let guest_path = format!("/test/{}", test_rel_path);
+        let guest_path = format!("/home/node/test/{}", test_rel_path);
         let func = instance
             .get_func(&mut store, "run-test")
             .ok_or_else(|| anyhow::anyhow!("Function run-test not found"))?;
