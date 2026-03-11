@@ -6708,7 +6708,7 @@
     "es-module/test-wasm-memory-out-of-bound.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-wasm-simple.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-wasm-web-api.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-abortcontroller-internal.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-abortcontroller-internal.js": { "skip": true, "reason": "[manual] The test requires `internal/event_target` (a Node.js internal module accessed via `--expose-internals`). The test itself explicitly states it \"depend[s] on Node.js internal APIs\" and is \"n..." },
     "parallel/test-accessor-properties.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
