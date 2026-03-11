@@ -1045,6 +1045,7 @@ export function writeFileSync(path, data, options) {
     const flush = options ? options.flush : undefined;
     validateFlush(flush);
     const encoding = options && options.encoding && options.encoding !== '' ? normalizeEncoding(options.encoding) : null;
+    const flag = options && options.flag !== undefined ? options.flag : 'w';
 
     if (typeof path === 'number') {
         // fd-based write
@@ -1055,6 +1056,21 @@ export function writeFileSync(path, data, options) {
             const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
             const result = native.fs_write_buffer(path, dataArray, 0, dataArray.length, null);
             if (result.error) throw createSystemError(result.error);
+        }
+    } else if (flag !== 'w') {
+        // Non-default flag: use openSync + writeSync + closeSync to honour the flag
+        const fd = openSync(path, flag, options && options.mode !== undefined ? options.mode : 0o666);
+        try {
+            if (typeof data === 'string') {
+                const enc = encoding || 'utf8';
+                const buf = getBuffer().from(data, enc);
+                writeSync(fd, buf, 0, buf.length);
+            } else {
+                const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
+                writeSync(fd, dataArray, 0, dataArray.length);
+            }
+        } finally {
+            closeSync(fd);
         }
     } else if (encoding) {
         const error = native.write_file_with_encoding(pathToString(path), encoding, data);

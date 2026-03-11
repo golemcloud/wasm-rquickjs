@@ -762,10 +762,7 @@
       "skip": true,
       "reason": "regression: was enabled but started failing"
     },
-    "parallel/test-fs-read-stream-pos.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-read-stream-pos.js": {},
     "parallel/test-fs-read-stream-resume.js": {},
     "parallel/test-fs-read-stream-throw-type-error.js": {},
     "parallel/test-fs-read-stream.js": {
