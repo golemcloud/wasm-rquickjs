@@ -610,6 +610,7 @@ process._runExitHandlers = function _runExitHandlers(code) {
         if (code !== undefined) {
             process.exitCode = code;
         }
+        process.emit('beforeExit', process.exitCode || 0);
         process.emit('exit', process.exitCode || 0);
     }
 };
