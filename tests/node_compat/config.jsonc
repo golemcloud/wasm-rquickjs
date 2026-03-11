@@ -90,10 +90,7 @@
     "parallel/test-assert-deep-with-error.js": {
       "split": true,
       "subtests": {
-        "test_00_handle_error_causes": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "test_00_handle_error_causes": {},
         "test_01_handle_undefined_causes": {
           "skip": true,
           "reason": "regression: was enabled but started failing"
