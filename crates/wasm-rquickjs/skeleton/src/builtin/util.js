@@ -2116,6 +2116,22 @@ export function aborted(signal, resource) {
     });
 }
 
+const TRANSFERABLE_ABORT_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
+
+export function transferableAbortController() {
+    const ac = new AbortController();
+    ac.signal[TRANSFERABLE_ABORT_SIGNAL] = true;
+    return ac;
+}
+
+export function transferableAbortSignal(signal) {
+    if (!(signal instanceof AbortSignal)) {
+        throw new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
+    }
+    signal[TRANSFERABLE_ABORT_SIGNAL] = true;
+    return signal;
+}
+
 export { inspect, format, formatWithOptions, stripVTControlCharacters };
 
 export default {
@@ -2159,5 +2175,7 @@ export default {
      TextEncoder,
      TextDecoder,
      stripVTControlCharacters,
-     aborted
- }
+     aborted,
+     transferableAbortController,
+     transferableAbortSignal
+     }

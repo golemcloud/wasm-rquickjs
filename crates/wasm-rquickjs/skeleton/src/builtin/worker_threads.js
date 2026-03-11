@@ -72,12 +72,41 @@ function cloneMessagePayload(value, transferList) {
         return value;
     }
 
+    // Handle transferable AbortSignals before passing to structuredClone
+    const TRANSFERABLE_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
+    const signalMap = new Map();
+    const remainingTransfers = [];
+
+    for (const item of transferList) {
+        if (item instanceof AbortSignal && item[TRANSFERABLE_SIGNAL] === true) {
+            if (item.aborted) {
+                signalMap.set(item, AbortSignal.abort(item.reason));
+            } else {
+                const ac = new AbortController();
+                item.addEventListener('abort', () => {
+                    ac.abort(item.reason);
+                }, { once: true });
+                signalMap.set(item, ac.signal);
+            }
+        } else {
+            remainingTransfers.push(item);
+        }
+    }
+
+    if (signalMap.size > 0 && signalMap.has(value)) {
+        value = signalMap.get(value);
+    }
+
+    if (remainingTransfers.length === 0) {
+        return value;
+    }
+
     if (typeof structuredClone === 'function') {
-        return structuredClone(value, { transfer: transferList });
+        return structuredClone(value, { transfer: remainingTransfers });
     }
 
     if (typeof ArrayBuffer === 'function' && typeof ArrayBuffer.prototype.transfer === 'function') {
-        for (const transferItem of transferList) {
+        for (const transferItem of remainingTransfers) {
             if (transferItem instanceof ArrayBuffer) {
                 ArrayBuffer.prototype.transfer.call(transferItem);
             }

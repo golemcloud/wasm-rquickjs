@@ -2055,11 +2055,9 @@
       }
     },
     "parallel/test-abortsignal-cloneable.js": {
-      "skip": true,
-      "reason": "requires transferableAbortController and MessageChannel",
       "split": true,
       "subtests": {
-        "test_00_can_create_a_transferable_abort_controller": { "skip": true, "reason": "inherited: requires transferableAbortController and MessageChannel" },
+        "test_00_can_create_a_transferable_abort_controller": {},
         "test_01_can_create_a_transferable_abort_signal": { "skip": true, "reason": "inherited: requires transferableAbortController and MessageChannel" },
         "test_02_a_cloned_abortsignal_does_not_keep_the_event_loop_open": { "skip": true, "reason": "inherited: requires transferableAbortController and MessageChannel" }
       }
