@@ -2808,7 +2808,7 @@ ReadStream.prototype._construct = function(callback) {
         this.emit('ready');
         return;
     }
-    if (typeof this.open === 'function' && this.open !== ReadStream.prototype.open) {
+    if (typeof this.open === 'function' && this.open !== _openReadFs) {
         this.open();
         const onOpen = function() { self.removeListener('error', onError); callback(); };
         const onError = function() { self.removeListener('open', onOpen); callback(); };
@@ -2843,6 +2843,8 @@ ReadStream.prototype.open = function() {
         }
     });
 };
+
+const _openReadFs = ReadStream.prototype.open;
 
 ReadStream.prototype._read = function(n) {
     if (this.destroyed || this._readableState.errored) return;
@@ -3030,7 +3032,7 @@ WriteStream.prototype._construct = function(callback) {
         this.emit('ready');
         return;
     }
-    if (typeof this.open === 'function' && this.open !== WriteStream.prototype.open) {
+    if (typeof this.open === 'function' && this.open !== _openWriteFs) {
         this.open();
         const onOpen = function() { self.removeListener('error', onError); callback(); };
         const onError = function() { self.removeListener('open', onOpen); callback(); };
@@ -3065,6 +3067,8 @@ WriteStream.prototype.open = function() {
         }
     });
 };
+
+const _openWriteFs = WriteStream.prototype.open;
 
 WriteStream.prototype._write = function(chunk, encoding, cb) {
     const self = this;
