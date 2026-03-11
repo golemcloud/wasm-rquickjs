@@ -428,6 +428,46 @@ function runTest(parsed, parentSuite) {
         // Run beforeEach hooks
         runHookList(beforeEachFns);
 
+        // Handle done callback pattern (fn.length >= 2)
+        if (fn.length >= 2) {
+            const donePromise = new Promise(function (resolve, reject) {
+                const done = function (err) {
+                    if (err) reject(err);
+                    else resolve();
+                };
+                try {
+                    fn.call(ctx, ctx, done);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+            const asyncResult = donePromise.then(function () {
+                cleanup();
+                runHookList(afterEachFns);
+                restoreModuleContext();
+                if (isTodo) {
+                    return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
+                }
+                return { status: 'pass', name: name };
+            }, function (e) {
+                cleanup();
+                runHookListSafe(afterEachFns);
+                restoreModuleContext();
+                if (e instanceof SkipError) {
+                    return { status: 'skip', name: name, message: e.message };
+                }
+                if (e instanceof TodoError) {
+                    return { status: 'todo', name: name, message: e.message };
+                }
+                if (isTodo) {
+                    return { status: 'todo', name: name, message: typeof options.todo === 'string' ? options.todo : '' };
+                }
+                return { status: 'fail', name: name, error: e };
+            });
+            isAsync = true;
+            return { status: 'async', name: name, promise: asyncResult };
+        }
+
         // Run the test function with ctx as both `this` and first argument
         const result = fn.call(ctx, ctx);
 

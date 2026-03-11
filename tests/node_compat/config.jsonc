@@ -789,10 +789,7 @@
     "parallel/test-fs-readdir.js": {},
     "parallel/test-fs-readdir-buffer.js": {},
     "parallel/test-fs-readdir-pipe.js": {},
-    "parallel/test-fs-readdir-recursive.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readdir-recursive.js": {},
     "parallel/test-fs-readdir-stack-overflow.js": {},
     "parallel/test-fs-readdir-types-symlinks.js": {},
     "parallel/test-fs-readdir-types.js": {},
