@@ -8,6 +8,23 @@ import {
 const MKDIR_MODE_MASK = 0o7777;
 const kIoMaxLength = 2 ** 31 - 1;
 
+// Expose fstat on the internal fs binding so tests can monkeypatch it
+// (e.g. test-fs-promises-readfile.js replaces fstat to simulate zero-size files).
+const _fsBinding = globalThis.__wasm_rquickjs_internal_fs_binding ||
+    (globalThis.__wasm_rquickjs_internal_fs_binding = {});
+if (typeof _fsBinding.fstat !== 'function') {
+    _fsBinding.fstat = function fstat(fd) {
+        const result = native.fs_fstat(fd);
+        if (result.error) throw createSystemError(result.error);
+        const s = result.stat;
+        return [
+            s.dev || 0, s.mode || 0, s.nlink || 0, s.uid || 0,
+            s.gid || 0, s.rdev || 0, s.blksize || 0, s.ino || 0,
+            s.size || 0,
+        ];
+    };
+}
+
 let _Buffer = null;
 function getBuffer() {
     if (!_Buffer) {
@@ -533,9 +550,16 @@ export class FileHandle {
             }
         }
 
-        const statResult = native.fs_fstat(this._fd);
-        if (statResult.error) throw createSystemError(statResult.error);
-        const size = statResult.stat?.size;
+        const binding = globalThis.__wasm_rquickjs_internal_fs_binding;
+        let size;
+        if (binding && typeof binding.fstat === 'function') {
+            const statData = await binding.fstat(this._fd);
+            size = Array.isArray(statData) ? statData[8] : 0;
+        } else {
+            const statResult = native.fs_fstat(this._fd);
+            if (statResult.error) throw createSystemError(statResult.error);
+            size = statResult.stat?.size;
+        }
         if (typeof size === 'number' && size > kIoMaxLength) {
             throw new ERR_FS_FILE_TOO_LARGE(size);
         }

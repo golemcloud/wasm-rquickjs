@@ -700,10 +700,7 @@
     "parallel/test-fs-promises-file-handle-writeFile.js": {},
     "parallel/test-fs-promises-readfile-empty.js": {},
     "parallel/test-fs-promises-readfile-with-fd.js": {},
-    "parallel/test-fs-promises-readfile.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-promises-readfile.js": {},
     "parallel/test-fs-promises-watch.js": {},
     "parallel/test-fs-promises-write-optional-params.js": {},
     "parallel/test-fs-promises-writefile-typedarray.js": {},
