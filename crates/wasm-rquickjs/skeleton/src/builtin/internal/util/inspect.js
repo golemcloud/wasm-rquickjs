@@ -1484,7 +1484,7 @@ function formatTypedArray(
     const maxLength = Math.min(Math.max(0, ctx.maxArrayLength), length);
     const remaining = length - maxLength;
     const output = new Array(maxLength);
-    const elementFormatter = value.length > 0 && typeof value[0] === "number"
+    const elementFormatter = length > 0 && typeof value[0] === "number"
         ? formatNumber
         : formatBigInt;
     for (let i = 0; i < maxLength; ++i) {
