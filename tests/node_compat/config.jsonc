@@ -791,10 +791,7 @@
         "block_00_readfile_and_readfilesync_should_fail_if_the_file_is_too_big": {},
         "block_01_block_01": {},
         "block_02_block_02": {},
-        "block_03_block_03": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        }
+        "block_03_block_03": {}
       }
     },
     "parallel/test-fs-readfile-empty.js": {},
