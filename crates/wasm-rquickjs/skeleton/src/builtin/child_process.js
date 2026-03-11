@@ -1239,9 +1239,9 @@ export function fork(modulePath, args, options) {
     return child;
 }
 
-export function spawn(command, args, options) {
-    throw createNotSupportedError('spawn');
-}
+// spawn is not supported in WASM — exported as undefined so that feature-detection
+// patterns like `lazySpawn()` in upstream Node.js tests correctly detect its absence.
+export const spawn = undefined;
 
 // Synchronous process creation functions
 export function execFileSync(file, args, options) {

@@ -2051,7 +2051,7 @@
         "test_01_aborted_with_gc_cleanup": {},
         "test_02_fails_with_error_if_not_provided_abortsignal": {},
         "test_03_fails_if_not_provided_a_resource": {},
-        "test_04_does_not_hang_forever": { "skip": true, "reason": "inherited: requires --expose-internals and internal/abort_controller" }
+        "test_04_does_not_hang_forever": {}
       }
     },
     "parallel/test-abortsignal-cloneable.js": {
