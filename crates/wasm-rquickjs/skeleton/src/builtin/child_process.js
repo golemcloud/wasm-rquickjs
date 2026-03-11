@@ -481,6 +481,8 @@ function runInline(command, args, options) {
     var oldCjsLineOffsets = globalThis.__wasm_rquickjs_cjs_line_offsets;
     var stdinData = options && typeof options.__wasmStdinData === 'string' ? options.__wasmStdinData : null;
     var oldFsPromisesReadFile = null;
+    var oldFsReadFile = null;
+    var oldFsReadFileSync = null;
 
     var capturedStdout = '';
     var capturedStderr = '';
@@ -576,6 +578,66 @@ function runInline(command, args, options) {
                 }
             } catch (_) {
                 oldFsPromisesReadFile = null;
+            }
+
+            try {
+                var fsSync = runtimeRequire('node:fs');
+                if (fsSync && typeof fsSync.readFileSync === 'function') {
+                    oldFsReadFileSync = fsSync.readFileSync;
+                    fsSync.readFileSync = function readFileSyncWithMockedStdin(targetPath, readOptions) {
+                        if (targetPath === '/dev/stdin') {
+                            var mockStdinBuffer = Buffer.from(stdinData);
+                            var readEncoding = null;
+
+                            if (typeof readOptions === 'string') {
+                                readEncoding = String(readOptions);
+                            } else if (readOptions && typeof readOptions === 'object' && readOptions.encoding !== undefined && readOptions.encoding !== null) {
+                                readEncoding = String(readOptions.encoding);
+                            }
+
+                            if (readEncoding && readEncoding !== 'buffer') {
+                                return mockStdinBuffer.toString(readEncoding);
+                            }
+
+                            return mockStdinBuffer;
+                        }
+
+                        return oldFsReadFileSync.call(this, targetPath, readOptions);
+                    };
+                }
+
+                if (fsSync && typeof fsSync.readFile === 'function') {
+                    oldFsReadFile = fsSync.readFile;
+                    fsSync.readFile = function readFileWithMockedStdin(targetPath, optionsOrCallback, callback) {
+                        if (targetPath === '/dev/stdin') {
+                            var cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+                            var readOptions = typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
+                            var mockStdinBuffer = Buffer.from(stdinData);
+                            var readEncoding = null;
+
+                            if (typeof readOptions === 'string') {
+                                readEncoding = String(readOptions);
+                            } else if (readOptions && typeof readOptions === 'object' && readOptions.encoding !== undefined && readOptions.encoding !== null) {
+                                readEncoding = String(readOptions.encoding);
+                            }
+
+                            var result = mockStdinBuffer;
+                            if (readEncoding && readEncoding !== 'buffer') {
+                                result = mockStdinBuffer.toString(readEncoding);
+                            }
+
+                            if (typeof cb === 'function') {
+                                cb(null, result);
+                            }
+                            return;
+                        }
+
+                        return oldFsReadFile.call(this, targetPath, optionsOrCallback, callback);
+                    };
+                }
+            } catch (_) {
+                oldFsReadFile = null;
+                oldFsReadFileSync = null;
             }
         }
 
@@ -685,6 +747,22 @@ function runInline(command, args, options) {
                 var fsPromisesToRestore = moduleExports.require('node:fs/promises');
                 if (fsPromisesToRestore) {
                     fsPromisesToRestore.readFile = oldFsPromisesReadFile;
+                }
+            } catch (_) {
+                // ignore restore failures in WASM test emulation
+            }
+        }
+
+        if (oldFsReadFile !== null || oldFsReadFileSync !== null) {
+            try {
+                var fsSyncToRestore = moduleExports.require('node:fs');
+                if (fsSyncToRestore) {
+                    if (oldFsReadFile !== null) {
+                        fsSyncToRestore.readFile = oldFsReadFile;
+                    }
+                    if (oldFsReadFileSync !== null) {
+                        fsSyncToRestore.readFileSync = oldFsReadFileSync;
+                    }
                 }
             } catch (_) {
                 // ignore restore failures in WASM test emulation
@@ -940,6 +1018,21 @@ function runExecCommand(command, options) {
     var tokens = splitCommandTokens(expanded);
     if (!tokens || tokens.length === 0) {
         return unsupportedSpawnSyncResult('exec(empty command)');
+    }
+
+    // Handle stdin redirection: command ... < filename
+    for (var ri = 1; ri < tokens.length; ri++) {
+        if (tokens[ri] === '<' && ri + 1 < tokens.length) {
+            var stdinFile = tokens[ri + 1];
+            try {
+                var fsForRedirect = moduleExports.require('node:fs');
+                resolvedOptions.__wasmStdinData = fsForRedirect.readFileSync(stdinFile, 'utf8');
+            } catch (_) {
+                // ignore if file cannot be read
+            }
+            tokens.splice(ri, 2);
+            break;
+        }
     }
 
     return spawnSync(tokens[0], tokens.slice(1), resolvedOptions);

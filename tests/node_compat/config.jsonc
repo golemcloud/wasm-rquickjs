@@ -813,10 +813,7 @@
       }
     },
     "parallel/test-fs-readfile-pipe-large.js": {},
-    "parallel/test-fs-readfile-pipe.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readfile-pipe.js": {},
     "parallel/test-fs-readfile-unlink.js": {},
     "parallel/test-fs-readfile-zero-byte-liar.js": {},
     "parallel/test-fs-readfilesync-enoent.js": {},
