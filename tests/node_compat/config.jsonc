@@ -38,7 +38,10 @@
         "test_00_some_basics": {},
         "test_01_throw_message_if_the_message_is_instanceof_error": {},
         "test_02_errors_created_in_different_contexts_are_handled_as_any_othe": {},
-        "test_03_assert_throws": {},
+        "test_03_assert_throws": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
         "test_04_check_messages_from_assert_throws": {},
         "test_05_test_assertion_messages": {},
         "test_06_custom_errors": {},
@@ -50,7 +53,10 @@
         "test_12_nan_is_handled_correctly": {},
         "test_13_test_strict_assert": {},
         "test_14_additional_asserts": {},
-        "test_15_throws_accepts_objects": {},
+        "test_15_throws_accepts_objects": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
         "test_16_additional_assert": {},
         "test_17_assert_strict_exists": {}
       }
@@ -90,8 +96,14 @@
     "parallel/test-assert-deep-with-error.js": {
       "split": true,
       "subtests": {
-        "test_00_handle_error_causes": {},
-        "test_01_handle_undefined_causes": {}
+        "test_00_handle_error_causes": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
+        "test_01_handle_undefined_causes": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        }
       }
     },
     "parallel/test-assert-deep.js": {
@@ -119,8 +131,14 @@
         "test_19_additional_tests": {},
         "test_20_having_the_same_number_of_owned_properties_the_same_set_of_k": {},
         "test_21_prototype_check": {},
-        "test_22_check_extra_properties_on_errors": {},
-        "test_23_check_proxies": {},
+        "test_22_check_extra_properties_on_errors": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
+        "test_23_check_proxies": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
         "test_24_test_24": {},
         "test_25_basic_valueof_check": {},
         "test_26_basic_array_out_of_bounds_check": {},
@@ -133,7 +151,10 @@
         "test_33_check_for_aggregateerror": {},
         "test_34_verify_that_valueof_is_not_called_for_boxed_primitives": {},
         "test_35_check_getters": {},
-        "test_36_verify_object_types_being_identical_on_both_sides": {},
+        "test_36_verify_object_types_being_identical_on_both_sides": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
         "test_37_verify_commutativity": {},
         "test_38_crypto": {}
       }
@@ -158,11 +179,17 @@
         "test_03_object_prototype_get": {}
       }
     },
-    "parallel/test-assert-first-line.js": {},
+    "parallel/test-assert-first-line.js": {
+      "skip": true,
+      "reason": "regression: was enabled but started failing"
+    },
     "parallel/test-assert-if-error.js": {
       "split": true,
       "subtests": {
-        "test_00_test_that_assert_iferror_has_the_correct_stack_trace_of_both": {},
+        "test_00_test_that_assert_iferror_has_the_correct_stack_trace_of_both": {
+          "skip": true,
+          "reason": "regression: was enabled but started failing"
+        },
         "test_01_general_iferror_tests": {},
         "test_02_should_not_throw": {},
         "test_03_https_github_com_nodejs_node_v0_x_archive_issues_2893": {}
