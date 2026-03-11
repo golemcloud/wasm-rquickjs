@@ -737,10 +737,10 @@ export function Stats(devOrObj, mode, nlink, uid, gid, rdev, blksize, ino, size,
     this.mtimeMs = statObj.mtimeMs;
     this.ctimeMs = statObj.ctimeMs;
     this.birthtimeMs = statObj.birthtimeMs;
-    this.atime = new Date(statObj.atimeMs);
-    this.mtime = new Date(statObj.mtimeMs);
-    this.ctime = new Date(statObj.ctimeMs);
-    this.birthtime = new Date(statObj.birthtimeMs);
+    this.atime = new Date(typeof statObj.atimeMs === 'bigint' ? Number(statObj.atimeMs) : statObj.atimeMs);
+    this.mtime = new Date(typeof statObj.mtimeMs === 'bigint' ? Number(statObj.mtimeMs) : statObj.mtimeMs);
+    this.ctime = new Date(typeof statObj.ctimeMs === 'bigint' ? Number(statObj.ctimeMs) : statObj.ctimeMs);
+    this.birthtime = new Date(typeof statObj.birthtimeMs === 'bigint' ? Number(statObj.birthtimeMs) : statObj.birthtimeMs);
     this._isFile = statObj.isFile;
     this._isDirectory = statObj.isDirectory;
     this._isSymlink = statObj.isSymlink;
