@@ -4213,7 +4213,7 @@
     "sequential/test-https-server-keep-alive-timeout.js": {},
     "sequential/test-buffer-creation-regression.js": {
       "skip": true,
-      "reason": "QuickJS error message casing mismatch prevents graceful skip; WASM cannot allocate 4GB ArrayBuffer anyway"
+      "reason": "[manual] amp fix attempt failed verification"
     },
     "sequential/test-child-process-emfile.js": {
       "skip": true,
