@@ -1327,10 +1327,7 @@
           "skip": true,
           "reason": "[manual] amp fix attempt failed verification"
         },
-        "block_03_test_with_an_abortsignal": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        }
+        "block_03_test_with_an_abortsignal": {}
       }
     },
     "parallel/test-fs-writestream-open-write.js": {},
