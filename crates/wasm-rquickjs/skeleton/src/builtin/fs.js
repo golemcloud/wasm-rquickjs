@@ -2819,12 +2819,24 @@ ReadStream.prototype._construct = function(callback) {
         return;
     }
     if (typeof this.open === 'function' && this.open !== _openReadFs) {
-        this.open();
-        const onOpen = function() { self.removeListener('error', onError); callback(); };
-        const onError = function() { self.removeListener('open', onOpen); callback(); };
+        // Backwards compat for monkey patching open().
+        // Use an emit shim so errors go through the stream infrastructure
+        // (via callback(err)) and are emitted exactly once by emitErrorNT.
+        const orgEmit = this.emit;
         const self = this;
-        this.once('open', onOpen);
-        this.once('error', onError);
+        this.emit = function() {
+            if (arguments[0] === 'open') {
+                self.emit = orgEmit;
+                callback();
+                orgEmit.apply(self, arguments);
+            } else if (arguments[0] === 'error') {
+                self.emit = orgEmit;
+                callback(arguments[1]);
+            } else {
+                orgEmit.apply(self, arguments);
+            }
+        };
+        this.open();
         return;
     }
     const self = this;
@@ -3043,12 +3055,21 @@ WriteStream.prototype._construct = function(callback) {
         return;
     }
     if (typeof this.open === 'function' && this.open !== _openWriteFs) {
-        this.open();
-        const onOpen = function() { self.removeListener('error', onError); callback(); };
-        const onError = function() { self.removeListener('open', onOpen); callback(); };
+        const orgEmit = this.emit;
         const self = this;
-        this.once('open', onOpen);
-        this.once('error', onError);
+        this.emit = function() {
+            if (arguments[0] === 'open') {
+                self.emit = orgEmit;
+                callback();
+                orgEmit.apply(self, arguments);
+            } else if (arguments[0] === 'error') {
+                self.emit = orgEmit;
+                callback(arguments[1]);
+            } else {
+                orgEmit.apply(self, arguments);
+            }
+        };
+        this.open();
         return;
     }
     const self = this;

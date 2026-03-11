@@ -947,10 +947,7 @@
         "block_01_synchronous_bigint": { "skip": true, "reason": "inherited: requires fs.statfs/statfsSync" }
       }
     },
-    "parallel/test-fs-stream-construct-compat-error-read.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-stream-construct-compat-error-read.js": {},
     "parallel/test-fs-stream-construct-compat-error-write.js": {},
     "parallel/test-fs-stream-construct-compat-graceful-fs.js": {
       "split": true,
