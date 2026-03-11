@@ -158,10 +158,7 @@
         "test_03_object_prototype_get": {}
       }
     },
-    "parallel/test-assert-first-line.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-assert-first-line.js": {},
     "parallel/test-assert-if-error.js": {
       "split": true,
       "subtests": {

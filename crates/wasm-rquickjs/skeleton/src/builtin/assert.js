@@ -730,6 +730,38 @@ function findMatchingParenEnd(source, openParenIndex) {
     return -1;
 }
 
+function utf8CharByteSize(code) {
+    if (code <= 0x7F) return 1;
+    if (code <= 0x7FF) return 2;
+    if (code >= 0xD800 && code <= 0xDBFF) return 4;
+    return 3;
+}
+
+function utf8ByteLength(str) {
+    var bytes = 0;
+    for (var i = 0; i < str.length; i++) {
+        var code = str.charCodeAt(i);
+        var size = utf8CharByteSize(code);
+        bytes += size;
+        if (size === 4) i++;
+    }
+    return bytes;
+}
+
+function byteOffsetToCharOffset(str, byteOffset) {
+    var bytes = 0;
+    for (var i = 0; i < str.length; i++) {
+        if (bytes >= byteOffset) {
+            return i;
+        }
+        var code = str.charCodeAt(i);
+        var size = utf8CharByteSize(code);
+        bytes += size;
+        if (size === 4) i++;
+    }
+    return str.length;
+}
+
 function extractCallExpression(sourceLines, lineNumber, columnNumber) {
     if (!Array.isArray(sourceLines) || sourceLines.length === 0) {
         return '';
@@ -755,7 +787,13 @@ function extractCallExpression(sourceLines, lineNumber, columnNumber) {
 
     var index = 0;
     if (sourceLine.length > 0) {
-        index = Math.max(0, Math.min(sourceLine.length - 1, Math.max(1, columnNumber) - 1));
+        var byteCol = Math.max(0, columnNumber - 1);
+        var lineByteLen = utf8ByteLength(sourceLine);
+        if (byteCol >= lineByteLen) {
+            byteCol = Math.max(0, byteCol - 62);
+        }
+        var charColumn = byteOffsetToCharOffset(sourceLine, byteCol);
+        index = Math.max(0, Math.min(sourceLine.length - 1, charColumn));
     }
 
     var beforeIndex = sourceSnippet.lastIndexOf('(', index);
