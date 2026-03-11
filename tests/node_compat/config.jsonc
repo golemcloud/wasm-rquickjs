@@ -795,10 +795,7 @@
     },
     "parallel/test-fs-readdir-stack-overflow.js": {},
     "parallel/test-fs-readdir-types-symlinks.js": {},
-    "parallel/test-fs-readdir-types.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readdir-types.js": {},
     "parallel/test-fs-readdir-ucs2.js": {},
     "parallel/test-fs-readfile.js": {
       "split": true,

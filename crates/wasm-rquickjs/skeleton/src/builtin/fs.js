@@ -2113,14 +2113,81 @@ export function readdir(path, optionsOrCallback, callback) {
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const cb = callback;
     validateCallback(cb);
-    queueMicrotask(() => {
-        try {
-            const result = readdirSync(path, opts);
-            cb(null, result);
-        } catch (err) {
-            cb(err);
+    const withFileTypes = opts.withFileTypes || false;
+    const recursive = opts.recursive || false;
+    const pathStr = pathToString(path);
+
+    const req = {
+        oncomplete: (err, result) => {
+            if (err) {
+                cb(err);
+                return;
+            }
+            try {
+                if (withFileTypes) {
+                    const names = result[0];
+                    const types = result[1];
+                    const dirents = names.map((name, index) => new Dirent(name, types[index], path));
+                    if (recursive) {
+                        const all = [...dirents];
+                        let pending = 0;
+                        let finished = false;
+                        const tryFinish = () => {
+                            if (finished && pending === 0) cb(null, all);
+                        };
+                        for (const dirent of dirents) {
+                            if (dirent.isDirectory()) {
+                                pending++;
+                                readdir(path + '/' + dirent.name, { withFileTypes: true, recursive: true }, (subErr, subEntries) => {
+                                    pending--;
+                                    if (!subErr && subEntries) all.push(...subEntries);
+                                    tryFinish();
+                                });
+                            }
+                        }
+                        finished = true;
+                        tryFinish();
+                    } else {
+                        cb(null, dirents);
+                    }
+                } else {
+                    if (recursive) {
+                        const all = [...result];
+                        let pending = 0;
+                        let finished = false;
+                        const tryFinish = () => {
+                            if (finished && pending === 0) cb(null, all);
+                        };
+                        for (const entry of result) {
+                            const subPath = path + '/' + entry;
+                            try {
+                                const st = native.fs_stat(subPath);
+                                if (!st.error && st.stat.isDirectory) {
+                                    pending++;
+                                    readdir(subPath, { recursive: true }, (subErr, subEntries) => {
+                                        pending--;
+                                        if (!subErr && subEntries) all.push(...subEntries.map(e => entry + '/' + e));
+                                        tryFinish();
+                                    });
+                                }
+                            } catch {}
+                        }
+                        finished = true;
+                        tryFinish();
+                    } else {
+                        if (opts.encoding === 'buffer') {
+                            cb(null, result.map(e => getBuffer().from(e)));
+                        } else {
+                            cb(null, result);
+                        }
+                    }
+                }
+            } catch (e) {
+                cb(e);
+            }
         }
-    });
+    };
+    internalFsBinding.readdir(pathStr, opts.encoding, withFileTypes, req);
 }
 
 export function access(path, modeOrCallback, callback) {
