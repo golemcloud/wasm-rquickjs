@@ -8,6 +8,11 @@ var { inspect } = require('util');
 var noop = function() {};
 var _mustCallChecks = [];
 
+// Set process.cwd() to /home/node — the Node.js source-root equivalent in
+// our VFS layout.  Many vendored tests use relative paths like
+// './test/parallel/...' which must resolve against this directory.
+process.cwd = function cwd() { return '/home/node'; };
+
 function copyEnv(env) {
     var copy = {};
     var keys = Object.keys(env || {});

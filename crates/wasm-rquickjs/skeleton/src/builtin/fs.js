@@ -1394,7 +1394,7 @@ function realpathSyncImpl(path, options, useNative) {
     validatePath(path);
     const opts = getOptions(options, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
-    const pathString = pathToString(path);
+    const pathString = getPathModule().resolve(pathToString(path));
 
     if (!useNative) {
         const lstatResult = native.fs_lstat(pathString);
