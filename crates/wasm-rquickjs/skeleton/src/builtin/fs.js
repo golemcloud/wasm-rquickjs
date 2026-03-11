@@ -1653,9 +1653,38 @@ export function readFile(path, optionsOrCallback, callback) {
     }
     const opts = optionsOrCallback || {};
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding');
-    const cb = callback;
-    validateCallback(cb);
+    const signal = opts.signal;
+    if (signal != null && (signal === null || typeof signal !== 'object' || !('aborted' in signal))) {
+        throw new ERR_INVALID_ARG_TYPE('options.signal', 'AbortSignal', signal);
+    }
+    const rawCb = callback;
+    validateCallback(rawCb);
+    let called = false;
+    const cb = function() {
+        if (called) return;
+        called = true;
+        rawCb.apply(this, arguments);
+    };
+    if (signal && signal.aborted) {
+        const e = new DOMException('The operation was aborted', 'AbortError');
+        e.name = 'AbortError';
+        queueMicrotask(() => cb(e));
+        return;
+    }
+    if (signal) {
+        signal.addEventListener('abort', function onAbort() {
+            const e = new DOMException('The operation was aborted', 'AbortError');
+            e.name = 'AbortError';
+            cb(e);
+        }, { once: true });
+    }
     queueMicrotask(() => {
+        if (signal && signal.aborted) {
+            const e = new DOMException('The operation was aborted', 'AbortError');
+            e.name = 'AbortError';
+            cb(e);
+            return;
+        }
         try {
             const result = readFileSync(path, opts);
             cb(null, result);
