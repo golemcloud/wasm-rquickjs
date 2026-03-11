@@ -14,6 +14,11 @@ pub const WIRE_JS: &str = r#"
             if (typeof globalThis.__wasm_rquickjs_pre_gc === 'function') {
                 globalThis.__wasm_rquickjs_pre_gc();
             }
-            __wasm_rquickjs_gc();
+            // Defer the actual cycle-detecting GC to run after the current
+            // JS execution completes.  QuickJS's JS_RunGC has a known issue
+            // where running it while async function generator states are on
+            // the call stack can cause use-after-free of closure variables.
+            // Observable cleanup (pre_gc hooks) still runs synchronously.
+            globalThis.setTimeout(__wasm_rquickjs_gc, 0);
         };
     "#;

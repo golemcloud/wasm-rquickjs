@@ -2066,18 +2066,54 @@ import { TextEncoder as _TextEncoder, TextDecoder as _TextDecoder } from '__wasm
 export const TextEncoder = _TextEncoder;
 export const TextDecoder = _TextDecoder;
 
-export async function aborted(signal, resource) {
+// Track resources registered via util.aborted().  Each entry keeps a strong
+// reference (to survive ref-counting) and stores the signal + listener so the
+// pre-gc hook can proactively remove the listener when the resource has no
+// external references.  This mimics Node.js's kWeakHandler behavior.
+const _abortedResources = new Map();
+
+function _preGcAbortedCleanup() {
+    for (const [listener, entry] of _abortedResources) {
+        // Release the strong reference.  With ref-counting, if no other code
+        // holds the resource, the WeakRef becomes dead immediately.
+        entry.strong = null;
+        if (entry.weak.deref() === undefined) {
+            // Resource already freed — remove the abort listener so the
+            // promise stays forever-pending (Node.js kWeakHandler semantics).
+            entry.signal.removeEventListener('abort', listener);
+            _abortedResources.delete(listener);
+        }
+    }
+}
+
+// Chain into the existing pre-gc hook
+const _previousPreGc = globalThis.__wasm_rquickjs_pre_gc;
+globalThis.__wasm_rquickjs_pre_gc = function () {
+    if (typeof _previousPreGc === 'function') {
+        _previousPreGc();
+    }
+    _preGcAbortedCleanup();
+};
+
+export function aborted(signal, resource) {
     if (!(signal instanceof AbortSignal)) {
-        throw new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
+        return Promise.reject(new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal));
     }
     if (resource === null || resource === undefined ||
         (typeof resource !== 'object' && typeof resource !== 'function')) {
-        throw new ERR_INVALID_ARG_TYPE('resource', 'Object', resource);
+        return Promise.reject(new ERR_INVALID_ARG_TYPE('resource', 'Object', resource));
     }
-    if (signal.aborted) return;
-    const { promise, resolve } = Promise.withResolvers();
-    signal.addEventListener('abort', resolve, { once: true });
-    return promise;
+    if (signal.aborted) return Promise.resolve();
+    const weakResource = new WeakRef(resource);
+    const entry = { strong: resource, weak: weakResource, signal: signal };
+    return new Promise(function (resolve) {
+        function onAbort() {
+            _abortedResources.delete(onAbort);
+            resolve();
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+        _abortedResources.set(onAbort, entry);
+    });
 }
 
 export { inspect, format, formatWithOptions, stripVTControlCharacters };
