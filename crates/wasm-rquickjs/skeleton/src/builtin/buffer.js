@@ -2568,7 +2568,15 @@ const _File = class File extends _Blob {
 
         if (options === null) options = {}
 
-        const lastModified = options.lastModified === undefined ? Date.now() : Number(options.lastModified)
+        let lastModified
+        if (options.lastModified === undefined) {
+            lastModified = Date.now()
+        } else {
+            if (typeof options.lastModified === 'bigint') {
+                throw new TypeError('Cannot convert a BigInt value to a number')
+            }
+            lastModified = +options.lastModified
+        }
         if (!Number.isNaN(lastModified)) {
             this.#lastModified = lastModified
         }

@@ -7262,7 +7262,7 @@
         "block_07_block_07": {},
         "block_08_block_08": {},
         "block_09_block_09": {},
-        "block_10_block_10": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_10_block_10": {},
         "block_11_block_11": {
           "skip": true,
           "reason": "newly discovered, not yet evaluated"
