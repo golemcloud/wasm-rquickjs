@@ -55,7 +55,7 @@ function escapeControlCharacter(char) {
         case '\\r':
             return '\\\\r';
         default:
-            return '\\\\x' + char.charCodeAt(0).toString(16).padStart(2, '0');
+            return '\\\\u' + char.charCodeAt(0).toString(16).padStart(4, '0');
     }
 }
 

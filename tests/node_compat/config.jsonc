@@ -50,10 +50,7 @@
         "test_12_nan_is_handled_correctly": {},
         "test_13_test_strict_assert": {},
         "test_14_additional_asserts": {},
-        "test_15_throws_accepts_objects": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "test_15_throws_accepts_objects": {},
         "test_16_additional_assert": {},
         "test_17_assert_strict_exists": {}
       }
