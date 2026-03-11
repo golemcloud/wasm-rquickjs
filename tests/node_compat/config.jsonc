@@ -7267,10 +7267,7 @@
         "block_12_block_12": {},
         "block_13_block_13": {},
         "block_14_block_14": {},
-        "block_15_block_15": {
-          "skip": true,
-          "reason": "newly discovered, not yet evaluated"
-        }
+        "block_15_block_15": {}
       }
     },
     "parallel/test-filehandle-readablestream.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
