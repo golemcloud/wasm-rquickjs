@@ -467,6 +467,15 @@ function validateUid(id, name) {
     validateInteger(id, name, -1, 4294967295);
 }
 
+function validateLen(len) {
+    if (typeof len !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('len', 'number', len);
+    }
+    if (!Number.isInteger(len)) {
+        throw new ERR_OUT_OF_RANGE('len', 'an integer', len);
+    }
+}
+
 function validateCopyFileMode(mode) {
     if (mode === undefined || mode === null) {
         return 0;
@@ -1234,7 +1243,12 @@ export function writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding
 }
 
 export function ftruncateSync(fd, len) {
-    len = len !== undefined ? len : 0;
+    validateFd(fd);
+    if (len === undefined) {
+        len = 0;
+    } else {
+        validateLen(len);
+    }
     const error = native.fs_ftruncate(fd, len);
     if (error) {
         throw createSystemError(error);
@@ -1399,7 +1413,11 @@ export function truncateSync(path, len) {
         return ftruncateSync(path, len);
     }
     validatePath(path);
-    len = len !== undefined ? len : 0;
+    if (len === undefined) {
+        len = 0;
+    } else {
+        validateLen(len);
+    }
     const error = native.fs_truncate(path, len);
     if (error) {
         throw createSystemError(error);
@@ -2009,12 +2027,16 @@ export function fstat(fd, optionsOrCallback, callback) {
 }
 
 export function ftruncate(fd, lenOrCallback, callback) {
+    validateFd(fd);
     let len = 0;
     let cb;
     if (typeof lenOrCallback === 'function') {
         cb = lenOrCallback;
     } else {
-        len = lenOrCallback;
+        if (lenOrCallback !== undefined) {
+            validateLen(lenOrCallback);
+        }
+        len = lenOrCallback !== undefined ? lenOrCallback : 0;
         cb = callback;
     }
     validateCallback(cb);
@@ -2157,7 +2179,10 @@ export function truncate(path, lenOrCallback, callback) {
     if (typeof lenOrCallback === 'function') {
         cb = lenOrCallback;
     } else {
-        len = lenOrCallback;
+        if (lenOrCallback !== undefined) {
+            validateLen(lenOrCallback);
+        }
+        len = lenOrCallback !== undefined ? lenOrCallback : 0;
         cb = callback;
     }
     validateCallback(cb);

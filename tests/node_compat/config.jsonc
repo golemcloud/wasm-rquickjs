@@ -1028,8 +1028,6 @@
       "reason": "assert.throws error mismatch: thrown error does not match expected ERR_INVALID_ARG_TYPE pattern"
     },
     "parallel/test-fs-truncate.js": {
-      "skip": true,
-      "reason": "assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -1039,8 +1037,8 @@
         "block_04_block_04": {},
         "block_05_block_05": {},
         "block_06_block_06": {},
-        "block_07_block_07": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
-        "block_08_block_08": { "skip": true, "reason": "inherited: assert.throws fails: truncate with invalid args calls callback instead of throwing ERR_INVALID_ARG_TYPE" },
+        "block_07_block_07": {},
+        "block_08_block_08": {},
         "block_09_block_09": {}
       }
     },
