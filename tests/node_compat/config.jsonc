@@ -811,10 +811,7 @@
     "parallel/test-fs-readfile-unlink.js": {},
     "parallel/test-fs-readfile-zero-byte-liar.js": {},
     "parallel/test-fs-readfilesync-enoent.js": {},
-    "parallel/test-fs-readfilesync-pipe-large.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-readfilesync-pipe-large.js": {},
     "parallel/test-fs-readlink-type-check.js": {},
     "parallel/test-fs-readSync-optional-params.js": {},
     "parallel/test-fs-readv-promises.js": {},
