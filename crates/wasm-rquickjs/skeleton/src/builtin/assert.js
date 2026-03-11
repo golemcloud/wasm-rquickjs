@@ -19,6 +19,25 @@ function isError(e) {
         (e !== null && typeof e === 'object' && Object.prototype.toString.call(e) === '[object Error]');
 }
 
+function copyError(source) {
+    const target = Object.assign(
+        { __proto__: Object.getPrototypeOf(source) },
+        source,
+    );
+    Object.defineProperty(target, 'message', {
+        value: source.message,
+    });
+    delete target.stack;
+    if (Object.prototype.hasOwnProperty.call(source, 'cause')) {
+        let cause = source.cause;
+        if (isError(cause)) {
+            cause = copyError(cause);
+        }
+        Object.defineProperty(target, 'cause', { value: cause });
+    }
+    return target;
+}
+
 const ESCAPE_SEQUENCES_REGEXP = /[\x00-\x09\x0B\x0C\x0E-\x1F]/g;
 
 function escapeControlCharacter(char) {
@@ -889,6 +908,17 @@ class AssertionError extends Error {
         var actual = options.actual;
         var expected = options.expected;
         var operator = options.operator || 'fail';
+
+        // Prevent the error stack from being visible by duplicating the error
+        // in a very close way to the original in case both sides are actually
+        // instances of Error.
+        if (typeof actual === 'object' && actual !== null &&
+            typeof expected === 'object' && expected !== null &&
+            'stack' in actual && actual instanceof Error &&
+            'stack' in expected && expected instanceof Error) {
+            actual = copyError(actual);
+            expected = copyError(expected);
+        }
 
         try {
         if (operator === 'deepEqual') {

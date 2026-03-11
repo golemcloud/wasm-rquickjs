@@ -38,10 +38,7 @@
         "test_00_some_basics": {},
         "test_01_throw_message_if_the_message_is_instanceof_error": {},
         "test_02_errors_created_in_different_contexts_are_handled_as_any_othe": {},
-        "test_03_assert_throws": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "test_03_assert_throws": {},
         "test_04_check_messages_from_assert_throws": {},
         "test_05_test_assertion_messages": {},
         "test_06_custom_errors": {},
