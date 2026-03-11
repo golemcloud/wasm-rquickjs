@@ -654,10 +654,7 @@
     "parallel/test-fs-open.js": {},
     "parallel/test-fs-open-flags.js": {},
     "parallel/test-fs-open-mode-mask.js": {},
-    "parallel/test-fs-open-no-close.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-open-no-close.js": {},
     "parallel/test-fs-open-numeric-flags.js": {},
     "parallel/test-fs-opendir.js": {
       "split": true,
