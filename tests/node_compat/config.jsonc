@@ -1243,10 +1243,7 @@
       "skip": true,
       "reason": "assert.throws fails: fs.write with undefined fd calls callback instead of throwing ERR_INVALID_ARG_TYPE"
     },
-    "parallel/test-fs-write-optional-params.js": {
-      "skip": true,
-      "reason": "requires ERR_OUT_OF_RANGE and ERR_INVALID_ARG_TYPE validation"
-    },
+    "parallel/test-fs-write-optional-params.js": {},
     "parallel/test-fs-write-reuse-callback.js": {},
     "parallel/test-fs-write-sigxfsz.js": {
       "skip": true,

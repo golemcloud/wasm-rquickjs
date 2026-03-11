@@ -1994,37 +1994,115 @@ export function write(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, po
                 cb(err, 0, bufferOrString);
             }
         });
-    } else {
-        if (typeof offsetOrPosition === 'function') {
-            cb = offsetOrPosition;
-            offsetOrPosition = 0;
-            lengthOrEncoding = bufferOrString.byteLength;
-            positionOrCallback = null;
-        } else if (typeof lengthOrEncoding === 'function') {
+        return;
+    }
+
+    // Buffer write - validate buffer type synchronously
+    if (!ArrayBuffer.isView(bufferOrString)) {
+        const err = new TypeError('The "buffer" argument must be of type string or an instance of Buffer or Uint8Array. Received ' + describeType(bufferOrString));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    let offset, length, position;
+
+    if (typeof offsetOrPosition === 'function') {
+        // fs.write(fd, buffer, callback)
+        cb = offsetOrPosition;
+        offset = 0;
+        length = bufferOrString.byteLength;
+        position = null;
+    } else if (offsetOrPosition != null && typeof offsetOrPosition === 'object') {
+        // fs.write(fd, buffer, options, callback)
+        const options = offsetOrPosition;
+        cb = typeof lengthOrEncoding === 'function' ? lengthOrEncoding : (positionOrCallback || callback);
+
+        const rawOffset = options.offset;
+        if (rawOffset !== undefined && rawOffset !== null) {
+            if (typeof rawOffset !== 'number') {
+                const err = new TypeError(`The "offset" argument must be of type number. Received ${describeType(rawOffset)}`);
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+            offset = rawOffset;
+        } else {
+            offset = 0;
+        }
+
+        const rawLength = options.length;
+        if (rawLength !== undefined && rawLength !== null) {
+            length = rawLength;
+        } else {
+            length = bufferOrString.byteLength - offset;
+        }
+
+        position = options.position !== undefined ? options.position : null;
+    } else if (typeof offsetOrPosition === 'number') {
+        // fs.write(fd, buffer, offset[, length[, position]], callback)
+        offset = offsetOrPosition;
+        if (typeof lengthOrEncoding === 'function') {
             cb = lengthOrEncoding;
-            lengthOrEncoding = bufferOrString.byteLength - (offsetOrPosition || 0);
-            positionOrCallback = null;
+            length = bufferOrString.byteLength - (offset || 0);
+            position = null;
         } else if (typeof positionOrCallback === 'function') {
             cb = positionOrCallback;
-            positionOrCallback = null;
+            length = lengthOrEncoding !== undefined ? lengthOrEncoding : bufferOrString.byteLength - (offset || 0);
+            position = null;
+        } else {
+            cb = callback;
+            length = lengthOrEncoding !== undefined ? lengthOrEncoding : bufferOrString.byteLength - (offset || 0);
+            position = positionOrCallback !== undefined ? positionOrCallback : null;
+        }
+    } else if (offsetOrPosition === null || offsetOrPosition === undefined) {
+        // Null/undefined third arg - use defaults
+        if (typeof lengthOrEncoding === 'function') {
+            cb = lengthOrEncoding;
+        } else if (typeof positionOrCallback === 'function') {
+            cb = positionOrCallback;
         } else {
             cb = callback;
         }
-        if (typeof offsetOrPosition === 'number' && isNaN(offsetOrPosition)) {
-            const rangeErr = new RangeError('The value of "offset" is out of range. It must be an integer. Received NaN');
-            rangeErr.code = 'ERR_OUT_OF_RANGE';
-            throw rangeErr;
-        }
-        validateCallback(cb);
-        queueMicrotask(() => {
-            try {
-                const written = writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, positionOrCallback);
-                cb(null, written, bufferOrString);
-            } catch (err) {
-                cb(err, 0, bufferOrString);
-            }
-        });
+        offset = 0;
+        length = bufferOrString.byteLength;
+        position = null;
+    } else {
+        // Invalid type for options/offset (boolean, string, symbol, etc.)
+        const err = new TypeError(`The "options" argument must be of type object. Received ${describeType(offsetOrPosition)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
     }
+
+    // Validate offset
+    validateInteger(offset, 'offset', 0);
+    if (offset > bufferOrString.byteLength) {
+        const err = new RangeError(`The value of "offset" is out of range. It must be <= ${bufferOrString.byteLength}. Received ${offset}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+
+    // Validate length
+    if (typeof length === 'number') {
+        if (length < 0) {
+            const err = new RangeError(`The value of "length" is out of range. It must be >= 0. Received ${length}`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+        if (offset + length > bufferOrString.byteLength) {
+            const err = new RangeError(`The value of "length" is out of range. It must be <= ${bufferOrString.byteLength - offset}. Received ${length}`);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
+    }
+
+    validateCallback(cb);
+    queueMicrotask(() => {
+        try {
+            const written = writeSync(fd, bufferOrString, offset, length, position);
+            cb(null, written, bufferOrString);
+        } catch (err) {
+            cb(err, 0, bufferOrString);
+        }
+    });
 }
 
 export function stat(path, optionsOrCallback, callback) {
