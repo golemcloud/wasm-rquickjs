@@ -1297,10 +1297,7 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-fs-write-stream-patch-open.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-write-stream-patch-open.js": {},
     "parallel/test-fs-write-stream-throw-type-error.js": {},
     "parallel/test-fs-write-stream.js": {
       "split": true,
