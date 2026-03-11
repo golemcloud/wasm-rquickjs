@@ -34,11 +34,19 @@ class DOMException extends Error {
 // Import the _eventTrusted symbol from events module.
 import { _eventTrusted } from 'node:events';
 
-const signalState = new WeakMap();
+// Use a Symbol for private state instead of WeakMap.
+// QuickJS's WeakMap implementation prevents keys from being garbage collected,
+// so we store signal/controller state as non-enumerable Symbol properties.
+const _signalState = Symbol('AbortSignal.state');
 const INTERNAL_TOKEN = Symbol('AbortSignal.internal');
 
+// Strong reference set: keeps timeout signals alive as long as they have
+// active event listeners. Signals without listeners are released during gc()
+// so they can be collected.
+const timeoutSignalStrongRefs = new Set();
+
 function getSignalState(signal) {
-    const state = signalState.get(signal);
+    const state = signal[_signalState];
     if (!state) {
         throw new TypeError('Illegal invocation');
     }
@@ -49,9 +57,36 @@ function createAbortSignal() {
     return new AbortSignal(INTERNAL_TOKEN);
 }
 
+function setupTimeoutTimer(weakSignal, milliseconds) {
+    const timeoutId = setTimeout(() => {
+        const s = weakSignal.deref();
+        if (s) {
+            timeoutSignalStrongRefs.delete(s);
+            abortSignal(s, new DOMException('The operation timed out.', 'TimeoutError'));
+        }
+    }, milliseconds);
+    if (timeoutId && typeof timeoutId.unref === 'function') {
+        timeoutId.unref();
+    }
+}
+
+// Called before native GC runs. Releases timeout signals that have no active
+// listeners so QuickJS's reference-counting GC can collect them.
+function _preGcCleanup() {
+    for (const signal of timeoutSignalStrongRefs) {
+        const hasListeners = Object.values(signal._listeners).some(arr => arr.length > 0);
+        if (!hasListeners) {
+            timeoutSignalStrongRefs.delete(signal);
+        }
+    }
+}
+
+// Export for use by the gc wiring
+globalThis.__wasm_rquickjs_pre_gc = _preGcCleanup;
+
 // Abort a signal: mark as aborted, set reason, dispatch trusted abort event.
 function abortSignal(signal, reason) {
-    const state = signalState.get(signal);
+    const state = signal[_signalState];
     if (!state || state.aborted) return;
     state.aborted = true;
     state.reason = reason;
@@ -69,10 +104,15 @@ class AbortSignal {
             throw err;
         }
         this._listeners = Object.create(null);
-        signalState.set(this, {
-            aborted: false,
-            reason: undefined,
-            onabort: null,
+        Object.defineProperty(this, _signalState, {
+            value: {
+                aborted: false,
+                reason: undefined,
+                onabort: null,
+            },
+            writable: false,
+            enumerable: false,
+            configurable: false,
         });
     }
 
@@ -94,7 +134,7 @@ class AbortSignal {
 
     static abort(reason) {
         const signal = createAbortSignal();
-        const state = signalState.get(signal);
+        const state = signal[_signalState];
         state.aborted = true;
         state.reason = reason !== undefined
             ? reason
@@ -104,12 +144,11 @@ class AbortSignal {
 
     static timeout(milliseconds) {
         const signal = createAbortSignal();
-        const timeoutId = setTimeout(() => {
-            abortSignal(signal, new DOMException('The operation timed out.', 'TimeoutError'));
-        }, milliseconds);
-        if (timeoutId && typeof timeoutId.unref === 'function') {
-            timeoutId.unref();
-        }
+        signal[_signalState].isTimeout = true;
+        // Add to strong refs set so the signal survives QuickJS's ref-counting.
+        // The pre-GC hook will release it if it has no active listeners.
+        timeoutSignalStrongRefs.add(signal);
+        setupTimeoutTimer(new WeakRef(signal), milliseconds);
         return signal;
     }
 
@@ -118,7 +157,7 @@ class AbortSignal {
             throw new TypeError('signals must be an iterable');
         }
         const signal = createAbortSignal();
-        const state = signalState.get(signal);
+        const state = signal[_signalState];
         for (const s of signals) {
             if (s.aborted) {
                 state.aborted = true;
@@ -211,10 +250,10 @@ class AbortSignal {
     }
 }
 
-const controllerState = new WeakMap();
+const _controllerState = Symbol('AbortController.state');
 
 function getControllerState(controller) {
-    const state = controllerState.get(controller);
+    const state = controller[_controllerState];
     if (!state) {
         throw new TypeError('Illegal invocation');
     }
@@ -224,8 +263,13 @@ function getControllerState(controller) {
 // AbortController implementation
 class AbortController {
     constructor() {
-        controllerState.set(this, {
-            signal: createAbortSignal(),
+        Object.defineProperty(this, _controllerState, {
+            value: {
+                signal: createAbortSignal(),
+            },
+            writable: false,
+            enumerable: false,
+            configurable: false,
         });
     }
 
@@ -249,7 +293,7 @@ const customInspect = Symbol.for('nodejs.util.inspect.custom');
 
 AbortSignal.prototype[customInspect] = function(depth, opts) {
     if (depth < 0) return 'AbortSignal';
-    const state = signalState.get(this);
+    const state = this[_signalState];
     if (!state) return 'AbortSignal';
     if (depth === 0) {
         return `[AbortSignal]`;
@@ -259,7 +303,7 @@ AbortSignal.prototype[customInspect] = function(depth, opts) {
 
 AbortController.prototype[customInspect] = function(depth, opts) {
     if (depth !== null && depth < 0) return 'AbortController';
-    const signal = controllerState.get(this)?.signal;
+    const signal = this[_controllerState]?.signal;
     if (!signal) return 'AbortController';
     const nextDepth = depth === null ? null : depth - 1;
     const signalStr = (nextDepth !== null && nextDepth < 0) ? '[AbortSignal]' : signal[customInspect](nextDepth, opts);
