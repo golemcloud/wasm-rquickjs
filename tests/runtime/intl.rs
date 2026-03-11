@@ -44,3 +44,21 @@ async fn intl_test4(#[tagged_as("intl")] compiled: &CompiledTest) -> anyhow::Res
     assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn intl_test5(#[tagged_as("intl")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test5", &[]).await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn intl_test6(#[tagged_as("intl")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test6", &[]).await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}

@@ -1,4 +1,4 @@
-import { intl_dtf_resolve_fields, intl_validate_timezone, intl_collator_compare } from "__wasm_rquickjs_builtin/intl_native";
+import { intl_dtf_resolve_fields, intl_validate_timezone, intl_collator_compare, intl_segment } from "__wasm_rquickjs_builtin/intl_native";
 
 const MONTH_NAMES_LONG = [
     "January", "February", "March", "April", "May", "June",
@@ -608,6 +608,192 @@ class PluralRules {
     }
 }
 
+// ─── ListFormat ────────────────────────────────────────────────────────────────
+
+const LIST_PATTERNS = {
+    conjunction: {
+        long:   { middle: ", ", end: ", and ", pair: " and " },
+        short:  { middle: ", ", end: ", & ", pair: " & " },
+        narrow: { middle: ", ", end: ", ", pair: ", " },
+    },
+    disjunction: {
+        long:   { middle: ", ", end: ", or ", pair: " or " },
+        short:  { middle: ", ", end: ", or ", pair: " or " },
+        narrow: { middle: ", ", end: ", or ", pair: " or " },
+    },
+    unit: {
+        long:   { middle: ", ", end: ", ", pair: ", " },
+        short:  { middle: ", ", end: ", ", pair: ", " },
+        narrow: { middle: " ", end: " ", pair: " " },
+    },
+};
+
+class ListFormat {
+    #type;
+    #style;
+    #patterns;
+
+    constructor(locales, options) {
+        if (!(this instanceof ListFormat)) {
+            throw new TypeError("Constructor Intl.ListFormat requires 'new'");
+        }
+        const opts = options || {};
+        this.#type = opts.type || "conjunction";
+        this.#style = opts.style || "long";
+
+        if (!["conjunction", "disjunction", "unit"].includes(this.#type)) {
+            throw new RangeError("Invalid type: " + this.#type);
+        }
+        if (!["long", "short", "narrow"].includes(this.#style)) {
+            throw new RangeError("Invalid style: " + this.#style);
+        }
+
+        this.#patterns = LIST_PATTERNS[this.#type][this.#style];
+    }
+
+    format(list) {
+        const items = Array.from(list).map(item => {
+            if (typeof item !== "string" && typeof item !== "number" && typeof item !== "bigint" && typeof item !== "boolean") {
+                if (item === undefined || item === null) {
+                    throw new TypeError("Invalid list item");
+                }
+            }
+            return String(item);
+        });
+        return this.formatToParts(items).map(p => p.value).join("");
+    }
+
+    formatToParts(list) {
+        const items = Array.from(list).map(item => String(item));
+        const parts = [];
+
+        if (items.length === 0) return parts;
+        if (items.length === 1) {
+            parts.push({ type: "element", value: items[0] });
+            return parts;
+        }
+        if (items.length === 2) {
+            parts.push({ type: "element", value: items[0] });
+            parts.push({ type: "literal", value: this.#patterns.pair });
+            parts.push({ type: "element", value: items[1] });
+            return parts;
+        }
+
+        // 3+ items
+        parts.push({ type: "element", value: items[0] });
+        for (let i = 1; i < items.length - 1; i++) {
+            parts.push({ type: "literal", value: this.#patterns.middle });
+            parts.push({ type: "element", value: items[i] });
+        }
+        parts.push({ type: "literal", value: this.#patterns.end });
+        parts.push({ type: "element", value: items[items.length - 1] });
+
+        return parts;
+    }
+
+    resolvedOptions() {
+        return { locale: "en-US", type: this.#type, style: this.#style };
+    }
+
+    static supportedLocalesOf() {
+        return ["en-US"];
+    }
+}
+
+Object.defineProperty(ListFormat.prototype, Symbol.toStringTag, {
+    value: "Intl.ListFormat", writable: false, enumerable: false, configurable: true
+});
+
+// ─── Segmenter ─────────────────────────────────────────────────────────────────
+
+class Segmenter {
+    #granularity;
+
+    constructor(locales, options) {
+        if (!(this instanceof Segmenter)) {
+            throw new TypeError("Constructor Intl.Segmenter requires 'new'");
+        }
+        const opts = options || {};
+        this.#granularity = opts.granularity || "grapheme";
+
+        if (!["grapheme", "word", "sentence"].includes(this.#granularity)) {
+            throw new RangeError("Invalid granularity: " + this.#granularity);
+        }
+    }
+
+    segment(string) {
+        const str = String(string);
+        const granularity = this.#granularity;
+        // Call native segmentation — returns JSON array of [utf16_index, segment, isWordLike]
+        const rawSegments = JSON.parse(intl_segment(str, granularity));
+        return new Segments(str, rawSegments, granularity);
+    }
+
+    resolvedOptions() {
+        return { locale: "en-US", granularity: this.#granularity };
+    }
+
+    static supportedLocalesOf() {
+        return ["en-US"];
+    }
+}
+
+Object.defineProperty(Segmenter.prototype, Symbol.toStringTag, {
+    value: "Intl.Segmenter", writable: false, enumerable: false, configurable: true
+});
+
+class Segments {
+    #string;
+    #segments;
+    #granularity;
+
+    constructor(string, segments, granularity) {
+        this.#string = string;
+        this.#segments = segments;
+        this.#granularity = granularity;
+    }
+
+    containing(index) {
+        const n = Math.trunc(Number(index));
+        if (n < 0 || n >= this.#string.length) return undefined;
+
+        // Find the segment containing this UTF-16 code unit index
+        for (let i = 0; i < this.#segments.length; i++) {
+            const [segStart, segStr] = this.#segments[i];
+            const segEnd = segStart + segStr.length;  // length in UTF-16 code units
+            if (n >= segStart && n < segEnd) {
+                const result = { segment: segStr, index: segStart, input: this.#string };
+                if (this.#granularity === "word") {
+                    result.isWordLike = this.#segments[i][2];
+                }
+                return result;
+            }
+        }
+        return undefined;
+    }
+
+    [Symbol.iterator]() {
+        const segments = this.#segments;
+        const string = this.#string;
+        const granularity = this.#granularity;
+        let i = 0;
+        return {
+            next() {
+                if (i >= segments.length) {
+                    return { value: undefined, done: true };
+                }
+                const [segStart, segStr, isWordLike] = segments[i++];
+                const result = { segment: segStr, index: segStart, input: string };
+                if (granularity === "word") {
+                    result.isWordLike = isWordLike;
+                }
+                return { value: result, done: false };
+            },
+            [Symbol.iterator]() { return this; }
+        };
+    }
+}
+
 // ─── Static helpers ────────────────────────────────────────────────────────────
 
 function getCanonicalLocales(locales) {
@@ -637,14 +823,14 @@ const Intl = {
     NumberFormat,
     Collator,
     PluralRules,
+    ListFormat,
+    Segmenter,
     getCanonicalLocales,
     supportedValuesOf,
 
     // Stubs for unsupported APIs
     RelativeTimeFormat: undefined,
-    ListFormat: undefined,
     Locale: undefined,
-    Segmenter: undefined,
     DisplayNames: undefined,
     DurationFormat: undefined,
 };

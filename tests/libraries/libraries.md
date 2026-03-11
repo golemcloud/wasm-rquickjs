@@ -16,8 +16,8 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 1 | Express | `express` | ❌ | 2026-03-09 | Requires server binding (Golem-incompatible); wasm init fails: `depd` library calls `not a function` in `callSiteLocation` |
 | 2 | Fastify | `fastify` | ❌ | 2026-03-09 | Requires server binding (Golem-incompatible); wasm run fails: `ServerResponse has an already assigned socket` (`ERR_HTTP_SOCKET_ASSIGNED`) |
-| 3 | NestJS Core | `@nestjs/core` | ❌ | 2026-03-10 | Node tests pass, but wasm init fails: `Intl is not defined` (NestJS ConsoleLogger requires Intl.DateTimeFormat) |
-| 4 | NestJS Common | `@nestjs/common` | ❌ | 2026-03-08 | Node bundles pass; wasm module init fails: `Intl is not defined` |
+| 3 | NestJS Core | `@nestjs/core` | ✅ | 2026-03-11 | All 5 bundled tests pass in Node.js and wasm-rquickjs (service injection, providers, lifecycle hooks, reflector, module imports) |
+| 4 | NestJS Common | `@nestjs/common` | ✅ | 2026-03-11 | All 5 bundled tests pass in Node.js and wasm-rquickjs (decorators, exceptions, pipes, validation, module builder/Logger) |
 | 5 | Koa | `koa` | ❌ | 2026-03-09 | Requires server binding (Golem-incompatible); wasm init fails: `depd` library calls `not a function` in `callSiteLocation` |
 | 6 | Hapi | `@hapi/hapi` | ❌ | 2026-03-08 | Requires server binding (Golem-incompatible); wasm run fails for all bundles: `JavaScript error: not a function` |
 | 7 | Hono | `hono` | ⚠️ | 2026-03-08 | 2/5 wasm tests pass (cookies, JWT); response/header paths fail (`not a function`, `headers` null/iterator errors) |
@@ -27,7 +27,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 8 | Axios | `axios` | ✅ | 2026-03-07 | All 5 tests pass (utilities, headers, interceptors, HTTP GET, HTTP POST) |
-| 9 | Got | `got` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at startup: `JavaScript error: Intl is not defined` |
+| 9 | Got | `got` | ❌ | 2026-03-11 | Node bundles pass (5/5), but all wasm runs fail at init: `node:tls` stub throws `tls is not supported in WebAssembly environment` |
 | 10 | node-fetch | `node-fetch` | ❌ | 2026-03-10 | Node bundles pass (5/5), but all wasm runs crash with QuickJS stack overflow during deeply recursive module init |
 | 11 | undici | `undici` | ⚠️ | 2026-03-09 | 4/5 wasm tests pass (Headers, Request, Response, errors); test-01 fetch of data: URI fails (`status` of undefined) |
 | 12 | superagent | `superagent` | ✅ | 2026-03-09 | All 5 tests pass (request builder, query params, auth/timeout/retry, plugins, agent defaults) |
@@ -105,7 +105,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 49 | helmet | `helmet` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (default headers, option validation, dynamic CSP, custom toggles, standalone middleware factories) |
 | 50 | cors | `cors` | ✅ | 2026-03-09 | All 5 bundled tests pass in Node.js and wasm-rquickjs (simple requests, preflight defaults, dynamic origin, custom preflight options, options delegate) |
 | 51 | express-rate-limit | `express-rate-limit` | ❌ | 2026-03-09 | 5/5 offline middleware/store tests pass in Node.js and wasm-rquickjs, but standard usage requires an Express server pipeline (Golem-incompatible) |
-| 52 | NestJS Throttler | `@nestjs/throttler` | ❌ | 2026-03-10 | Node.js 5/5 pass, but wasm-rquickjs fails module init (`Intl is not defined`); primary usage depends on NestJS server pipeline |
+| 52 | NestJS Throttler | `@nestjs/throttler` | ✅ | 2026-03-11 | All 5 bundled tests pass in Node.js and wasm-rquickjs (helpers, decorators, module config, storage, tokens) |
 
 ## Validation
 
@@ -168,9 +168,9 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 80 | node-cron | `node-cron` | ⚠️ | 2026-03-10 | 5/5 Node bundles pass; 1/5 wasm tests pass (`validate`), but task/scheduler paths fail: `Intl is not defined` |
-| 81 | cron-parser | `cron-parser` | ❌ | 2026-03-10 | 5/5 Node bundles pass, but 0/5 wasm runs fail at parse startup: `Intl is not defined` (Luxon dependency) |
-| 82 | NestJS Schedule | `@nestjs/schedule` | ❌ | 2026-03-10 | 5/5 Node bundles pass, but 0/5 wasm runs fail during Nest bootstrap: `Intl is not defined` |
+| 80 | node-cron | `node-cron` | ✅ | 2026-03-11 | All 5 bundled tests pass in Node.js and wasm-rquickjs (exports, validation, lifecycle, execute, events) |
+| 81 | cron-parser | `cron-parser` | ⚠️ | 2026-03-11 | 4/5 wasm tests pass (basic, validation, advanced, hash); test-05 fails with `ENOENT` writing temp file via `node:fs` |
+| 82 | NestJS Schedule | `@nestjs/schedule` | ⚠️ | 2026-03-11 | 4/5 wasm tests pass (decorators, CronExpression, module config, errors); test-04 registry fails: `DateTimeFormat` must be called with `new` (Intl bug) |
 
 ## Email
 
@@ -212,7 +212,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 96 | dayjs | `dayjs` | ⚠️ | 2026-03-10 | 4/5 bundled tests pass; core/date parsing/formatting plugins work, but timezone conversion (`utc().tz(...)`) returns unconverted time in wasm |
 | 97 | semver | `semver` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (parsing/validation, ranges, comparison/inc, range algebra, coerce/sort/class APIs) |
 | 98 | async | `async` | ✅ | 2026-03-10 | All 5 bundled tests pass in Node.js and wasm-rquickjs (collections, control flow, queues, retry/timeout, memoize/reflect) |
-| 99 | yargs | `yargs` | ❌ | 2026-03-10 | 5/5 Node bundles pass, but all wasm runs fail at startup: `JavaScript error: not a function` at `bundle/script_module:468` (`new Intl.Segmenter()` in `string-width`) |
+| 99 | yargs | `yargs` | ✅ | 2026-03-11 | All 5 bundled tests pass in Node.js and wasm-rquickjs (basic options, validation, commands, parser config, middleware/coerce) |
 | 100 | Ramda | `ramda` | ⚠️ | 2026-03-10 | 4/5 bundled tests pass; `ascendNatural("en", ...)` sort order differs in wasm (`item-10` before `item-2`) |
 
 ---

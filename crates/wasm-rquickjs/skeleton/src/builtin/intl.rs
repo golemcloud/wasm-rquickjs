@@ -41,6 +41,15 @@ pub mod native_module {
     ) -> i32 {
         super::collator_compare_impl(&a, &b, &sensitivity, numeric, ignore_punctuation)
     }
+
+    // Returns a JSON-encoded array of segments: [[utf16_start, segment_str, is_word_like], ...]
+    // granularity: "grapheme" | "word" | "sentence"
+    // For "grapheme" and "sentence", is_word_like is always false.
+    // For "word", is_word_like indicates whether the segment is word-like (letters/numbers).
+    #[rquickjs::function]
+    pub fn intl_segment(text: String, granularity: String) -> String {
+        super::segment_impl(&text, &granularity)
+    }
 }
 
 struct DtfResolved {
@@ -181,6 +190,82 @@ fn extract_leading_number(s: &str) -> Option<(f64, String)> {
     }
     let num_str = &s[..num_end];
     num_str.parse::<f64>().ok().map(|v| (v, s[num_end..].to_string()))
+}
+
+fn segment_impl(text: &str, granularity: &str) -> String {
+    use unicode_segmentation::UnicodeSegmentation;
+
+    // Build segments with byte offsets, then convert to UTF-16 offsets for JS
+    let mut result = String::from("[");
+    let mut first = true;
+
+    match granularity {
+        "grapheme" => {
+            let mut utf16_offset: usize = 0;
+            for grapheme in text.graphemes(true) {
+                if !first {
+                    result.push(',');
+                }
+                first = false;
+                let escaped = json_escape(grapheme);
+                result.push_str(&format!("[{},\"{}\",false]", utf16_offset, escaped));
+                utf16_offset += grapheme.encode_utf16().count();
+            }
+        }
+        "word" => {
+            let mut utf16_offset: usize = 0;
+            for (_, segment) in text.split_word_bound_indices() {
+                if !first {
+                    result.push(',');
+                }
+                first = false;
+                // A segment is "word-like" if it contains at least one alphanumeric character
+                let is_word_like = segment.chars().any(|c| c.is_alphanumeric());
+                let escaped = json_escape(segment);
+                result.push_str(&format!(
+                    "[{},\"{}\",{}]",
+                    utf16_offset, escaped, is_word_like
+                ));
+                utf16_offset += segment.encode_utf16().count();
+            }
+        }
+        "sentence" => {
+            let mut utf16_offset: usize = 0;
+            for (_, sentence) in text.split_sentence_bound_indices() {
+                if !first {
+                    result.push(',');
+                }
+                first = false;
+                let escaped = json_escape(sentence);
+                result.push_str(&format!("[{},\"{}\",false]", utf16_offset, escaped));
+                utf16_offset += sentence.encode_utf16().count();
+            }
+        }
+        _ => {
+            // Unknown granularity, return empty
+        }
+    }
+
+    result.push(']');
+    result
+}
+
+fn json_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                escaped.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            _ => escaped.push(c),
+        }
+    }
+    escaped
 }
 
 pub const INTL_JS: &str = include_str!("intl.js");

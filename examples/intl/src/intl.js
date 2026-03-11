@@ -236,6 +236,16 @@ export function test4() {
             return false;
         }
 
+        // ListFormat and Segmenter should be defined
+        if (typeof Intl.ListFormat !== "function") {
+            console.log("FAIL: ListFormat should be a function");
+            return false;
+        }
+        if (typeof Intl.Segmenter !== "function") {
+            console.log("FAIL: Segmenter should be a function");
+            return false;
+        }
+
         // Stubs should be undefined
         if (Intl.RelativeTimeFormat !== undefined) {
             console.log("FAIL: RelativeTimeFormat should be undefined");
@@ -246,6 +256,175 @@ export function test4() {
         return true;
     } catch (e) {
         console.log("test4 FAILED:", e.message, e.stack);
+        return false;
+    }
+}
+
+// test5: ListFormat
+export function test5() {
+    try {
+        // Basic conjunction
+        const lf = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
+        const r1 = lf.format(['Alice', 'Bob', 'Carol']);
+        console.log("Conjunction:", r1);
+        if (r1 !== "Alice, Bob, and Carol") {
+            console.log("FAIL: expected 'Alice, Bob, and Carol', got", r1);
+            return false;
+        }
+
+        // Disjunction
+        const lfOr = new Intl.ListFormat('en', { style: 'long', type: 'disjunction' });
+        const r2 = lfOr.format(['Alice', 'Bob']);
+        console.log("Disjunction:", r2);
+        if (r2 !== "Alice or Bob") {
+            console.log("FAIL: expected 'Alice or Bob', got", r2);
+            return false;
+        }
+
+        // Empty and single item
+        if (lf.format([]) !== "") {
+            console.log("FAIL: empty list should format to ''");
+            return false;
+        }
+        if (lf.format(['Alice']) !== "Alice") {
+            console.log("FAIL: single item should format to 'Alice'");
+            return false;
+        }
+
+        // formatToParts
+        const parts = lf.formatToParts(['A', 'B', 'C']);
+        console.log("Parts:", JSON.stringify(parts));
+        const types = parts.map(p => p.type);
+        if (types.filter(t => t === "element").length !== 3) {
+            console.log("FAIL: expected 3 element parts");
+            return false;
+        }
+        if (types.filter(t => t === "literal").length !== 2) {
+            console.log("FAIL: expected 2 literal parts");
+            return false;
+        }
+
+        // resolvedOptions
+        const ro = lf.resolvedOptions();
+        if (ro.type !== "conjunction" || ro.style !== "long") {
+            console.log("FAIL: resolvedOptions mismatch");
+            return false;
+        }
+
+        // Must be called with new
+        try {
+            Intl.ListFormat('en');
+            console.log("FAIL: should throw without new");
+            return false;
+        } catch (e) {
+            if (!e.message.includes("new")) {
+                console.log("FAIL: wrong error without new:", e.message);
+                return false;
+            }
+        }
+
+        console.log("test5 PASSED");
+        return true;
+    } catch (e) {
+        console.log("test5 FAILED:", e.message, e.stack);
+        return false;
+    }
+}
+
+// test6: Segmenter
+export function test6() {
+    try {
+        // Grapheme segmentation
+        const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+        const segments = [...seg.segment('Hello')];
+        console.log("Graphemes:", JSON.stringify(segments.map(s => s.segment)));
+        if (segments.length !== 5) {
+            console.log("FAIL: expected 5 graphemes, got", segments.length);
+            return false;
+        }
+        if (segments[0].segment !== 'H' || segments[0].index !== 0) {
+            console.log("FAIL: first grapheme should be 'H' at index 0");
+            return false;
+        }
+        if (segments[4].segment !== 'o' || segments[4].index !== 4) {
+            console.log("FAIL: last grapheme should be 'o' at index 4");
+            return false;
+        }
+
+        // Word segmentation
+        const wordSeg = new Intl.Segmenter('en', { granularity: 'word' });
+        const words = [...wordSeg.segment('Hello, World!')];
+        console.log("Words:", JSON.stringify(words.map(s => ({ seg: s.segment, wl: s.isWordLike }))));
+        // Should have word-like segments
+        const wordLike = words.filter(s => s.isWordLike);
+        if (wordLike.length < 2) {
+            console.log("FAIL: expected at least 2 word-like segments");
+            return false;
+        }
+        if (wordLike[0].segment !== 'Hello') {
+            console.log("FAIL: first word should be 'Hello', got", wordLike[0].segment);
+            return false;
+        }
+
+        // Sentence segmentation
+        const sentSeg = new Intl.Segmenter('en', { granularity: 'sentence' });
+        const sentences = [...sentSeg.segment('Hello. World!')];
+        console.log("Sentences:", JSON.stringify(sentences.map(s => s.segment)));
+        if (sentences.length < 2) {
+            console.log("FAIL: expected at least 2 sentences, got", sentences.length);
+            return false;
+        }
+
+        // containing()
+        const segs = wordSeg.segment('Hello, World!');
+        const c0 = segs.containing(0);
+        console.log("Containing(0):", JSON.stringify(c0));
+        if (!c0 || c0.segment !== 'Hello') {
+            console.log("FAIL: containing(0) should return 'Hello'");
+            return false;
+        }
+        if (c0.input !== 'Hello, World!') {
+            console.log("FAIL: input should be original string");
+            return false;
+        }
+
+        // containing() out of range
+        if (segs.containing(99) !== undefined) {
+            console.log("FAIL: containing(99) should return undefined");
+            return false;
+        }
+
+        // resolvedOptions
+        const ro = seg.resolvedOptions();
+        if (ro.granularity !== "grapheme") {
+            console.log("FAIL: resolvedOptions granularity mismatch");
+            return false;
+        }
+
+        // Must be called with new
+        try {
+            Intl.Segmenter('en');
+            console.log("FAIL: should throw without new");
+            return false;
+        } catch (e) {
+            if (!e.message.includes("new")) {
+                console.log("FAIL: wrong error without new:", e.message);
+                return false;
+            }
+        }
+
+        // Default granularity (used by string-width/yargs)
+        const defaultSeg = new Intl.Segmenter();
+        const defSegs = [...defaultSeg.segment('abc')];
+        if (defSegs.length !== 3) {
+            console.log("FAIL: default segmenter should produce 3 graphemes");
+            return false;
+        }
+
+        console.log("test6 PASSED");
+        return true;
+    } catch (e) {
+        console.log("test6 FAILED:", e.message, e.stack);
         return false;
     }
 }
