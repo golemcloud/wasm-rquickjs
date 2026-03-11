@@ -835,10 +835,7 @@
       }
     },
     "parallel/test-fs-ready-event-stream.js": {},
-    "parallel/test-fs-realpath-buffer-encoding.js": {
-      "skip": true,
-      "reason": "realpath returns EIO on WASI-mounted paths"
-    },
+    "parallel/test-fs-realpath-buffer-encoding.js": {},
     "parallel/test-fs-realpath-native.js": {},
     "parallel/test-fs-realpath-on-substed-drive.js": {},
     "parallel/test-fs-realpath-pipe.js": {

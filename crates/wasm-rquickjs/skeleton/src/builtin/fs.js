@@ -1421,6 +1421,9 @@ function realpathSyncImpl(path, options, useNative) {
     if (encoding === 'buffer') {
         return getBuffer().from(result.result);
     }
+    if (encoding && encoding !== 'utf8' && encoding !== 'utf-8') {
+        return getBuffer().from(result.result).toString(encoding);
+    }
     return result.result;
 }
 
