@@ -7,7 +7,9 @@ const inspectDiffOptions = {
     compact: false,
     sorted: true,
     getters: true,
-    customInspect: false
+    customInspect: false,
+    showHidden: false,
+    showProxy: false,
 };
 
 function inspectForDiff(value) {

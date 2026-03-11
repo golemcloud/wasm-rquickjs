@@ -126,10 +126,7 @@
         "test_20_having_the_same_number_of_owned_properties_the_same_set_of_k": {},
         "test_21_prototype_check": {},
         "test_22_check_extra_properties_on_errors": {},
-        "test_23_check_proxies": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "test_23_check_proxies": {},
         "test_24_test_24": {},
         "test_25_basic_valueof_check": {},
         "test_26_basic_array_out_of_bounds_check": {},
