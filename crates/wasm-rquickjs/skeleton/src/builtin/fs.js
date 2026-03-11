@@ -2,9 +2,12 @@ import * as native from '__wasm_rquickjs_builtin/fs_native';
 import {
     ERR_DIR_CLOSED,
     ERR_DIR_CONCURRENT_OPERATION,
+    ERR_FS_FILE_TOO_LARGE,
     ERR_INVALID_ARG_TYPE,
     ERR_OUT_OF_RANGE,
 } from '__wasm_rquickjs_builtin/internal/errors';
+
+const kIoMaxLength = 2 ** 31 - 1;
 
 let _Buffer = null;
 function getBuffer() {
@@ -1012,6 +1015,13 @@ export function readFileSync(path, options) {
     // Use openSync so readFile errors match Node's syscall/path metadata exactly.
     const fd = openSync(path, flag);
     try {
+        const statResult = native.fs_fstat(fd);
+        if (!statResult.error) {
+            const size = statResult.stat?.size;
+            if (typeof size === 'number' && size > kIoMaxLength) {
+                throw new ERR_FS_FILE_TOO_LARGE(size);
+            }
+        }
         const chunks = [];
         let totalLength = 0;
         const buf = new Uint8Array(8192);
