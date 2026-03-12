@@ -999,7 +999,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_getdirents": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
+        "block_01_getdirents": {},
         "block_02_block_02": {
           "skip": true,
           "reason": "requires Node.js internal modules not available in WASM"
