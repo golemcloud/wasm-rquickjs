@@ -1193,19 +1193,67 @@ export async function* watch(filename, options = {}) {
         throw new AbortError(signal.reason);
     }
 
-    // WASI does not provide native file watching support, so we only keep
-    // the async iterator alive until it is explicitly aborted.
-    if (!signal) {
-        throw new Error('watch is not supported in WASI');
+    // Use the polling-based FSWatcher from the sync fs module and wrap it
+    // as an async iterable.
+    const fs = globalThis.require('node:fs');
+    const watcher = fs.watch(filename, { recursive, encoding, persistent });
+
+    const queue = [];
+    let waiting = null;
+    let done = false;
+    let closeError = null;
+
+    function finish(err) {
+        if (done) return;
+        done = true;
+        closeError = err || null;
+        watcher.close();
+        if (waiting) {
+            const w = waiting;
+            waiting = null;
+            if (closeError) w.reject(closeError);
+            else w.resolve(null);
+        }
     }
 
-    yield await new Promise((resolve, reject) => {
-        const onAbort = () => {
-            signal.removeEventListener('abort', onAbort);
-            reject(new AbortError(signal.reason));
-        };
-        signal.addEventListener('abort', onAbort, { once: true });
+    watcher.on('change', (eventType, fn) => {
+        const event = { eventType, filename: fn };
+        if (waiting) {
+            const w = waiting;
+            waiting = null;
+            w.resolve(event);
+        } else {
+            queue.push(event);
+        }
     });
+
+    watcher.on('error', (err) => finish(err));
+
+    if (signal) {
+        signal.addEventListener('abort', () => finish(new AbortError(signal.reason)), { once: true });
+    }
+
+    try {
+        while (!done) {
+            let event;
+            if (queue.length > 0) {
+                event = queue.shift();
+            } else {
+                event = await new Promise((resolve, reject) => {
+                    if (done) {
+                        if (closeError) reject(closeError);
+                        else resolve(null);
+                        return;
+                    }
+                    waiting = { resolve, reject };
+                });
+            }
+            if (event === null) break;
+            yield event;
+        }
+    } finally {
+        finish();
+    }
 }
 
 export async function statfs(path, options) {

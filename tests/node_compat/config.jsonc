@@ -1050,10 +1050,7 @@
     "parallel/test-fs-watch-recursive-assert-leaks.js": {},
     "parallel/test-fs-watch-recursive-delete.js": {},
     "parallel/test-fs-watch-recursive-linux-parallel-remove.js": {},
-    "parallel/test-fs-watch-recursive-promise.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-recursive-promise.js": {},
     "parallel/test-fs-watch-recursive-symlink.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
