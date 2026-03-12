@@ -74,6 +74,14 @@ pub mod native_module {
         let state = get_js_state();
         state.unrefed_timers.borrow_mut().remove(&timeout_id);
     }
+
+    #[rquickjs::function]
+    pub fn ref_timer_count() -> usize {
+        let state = get_js_state();
+        let total = state.abort_handles.borrow().len();
+        let unrefed = state.unrefed_timers.borrow().len();
+        total.saturating_sub(unrefed)
+    }
 }
 
 // JS functions for the console implementation
@@ -88,6 +96,7 @@ pub const WIRE_JS: &str = r#"
         globalThis.clearTimeout = __wasm_rquickjs_timeout.clearTimeout;
         globalThis.clearInterval = __wasm_rquickjs_timeout.clearInterval;
         globalThis.clearImmediate = __wasm_rquickjs_timeout.clearImmediate;
+        globalThis.__wasm_rquickjs_ref_timer_count = __wasm_rquickjs_timeout.getRefTimerCount;
     "#;
 
 async fn scheduled_task(

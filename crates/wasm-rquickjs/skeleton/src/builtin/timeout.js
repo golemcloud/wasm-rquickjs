@@ -104,3 +104,7 @@ export function clearTimeout(id) {
 
 export const clearInterval = clearTimeout;
 export const clearImmediate = clearTimeout;
+
+export function getRefTimerCount() {
+    return timeoutNative.ref_timer_count();
+}
