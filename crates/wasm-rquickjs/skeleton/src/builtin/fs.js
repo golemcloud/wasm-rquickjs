@@ -571,16 +571,17 @@ function validatePath(path, propName) {
     }
     if (getBuffer() && path instanceof getBuffer()) return;
     if (path instanceof URL) {
-        if (path.protocol !== 'file:') {
-            const err = new TypeError(`The URL must be of scheme file`);
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
-        }
-        const urlStr = path.toString();
-        if (urlStr.indexOf('\u0000') !== -1 || urlStr.indexOf('%00') !== -1) {
-            const err = new TypeError(`The argument '${propName || 'path'}' must be a string, Uint8Array, or URL without null bytes. Received ${path.toString()}`);
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
+        // Delegate to fileURLToPath for proper validation - it throws
+        // ERR_INVALID_URL_SCHEME, ERR_INVALID_FILE_URL_HOST, ERR_INVALID_FILE_URL_PATH
+        // matching Node.js behavior.
+        const urlModule = globalThis.require ? globalThis.require('node:url') : null;
+        if (urlModule && typeof urlModule.fileURLToPath === 'function') {
+            const converted = urlModule.fileURLToPath(path);
+            if (converted.indexOf('\u0000') !== -1) {
+                const err = new TypeError(`The argument '${propName || 'path'}' must be a string, Uint8Array, or URL without null bytes. Received ${JSON.stringify(converted)}`);
+                err.code = 'ERR_INVALID_ARG_VALUE';
+                throw err;
+            }
         }
         return;
     }
@@ -602,7 +603,13 @@ function validateMkdtempPrefix(prefix) {
 }
 
 function pathToString(path) {
-    if (typeof path === 'string') return path;
+    if (typeof path === 'string') {
+        if (path.length > 0 && path.charAt(0) !== '/') {
+            const pathMod = globalThis.require ? globalThis.require('path') : null;
+            if (pathMod) return pathMod.resolve(path);
+        }
+        return path;
+    }
     if (getBuffer() && path instanceof getBuffer()) return path.toString();
     if (path instanceof Uint8Array) {
         const BufferCtor = getBuffer();

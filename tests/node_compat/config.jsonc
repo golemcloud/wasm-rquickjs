@@ -1109,10 +1109,7 @@
       "skip": true,
       "reason": "requires fs.watchFile which is not supported in WASI"
     },
-    "parallel/test-fs-whatwg-url.js": {
-      "skip": true,
-      "reason": "requires fixtures module"
-    },
+    "parallel/test-fs-whatwg-url.js": {},
     "parallel/test-fs-write.js": {
       "skip": true,
       "reason": "requires child_process.exec and process.on('exit')",
