@@ -1090,7 +1090,10 @@
           "skip": true,
           "reason": "[manual] amp made no code changes"
         },
-        "block_04_block_04": {}
+        "block_04_block_04": {
+          "skip": true,
+          "reason": "[manual] amp made no code changes"
+        }
       }
     },
     "parallel/test-fs-write-buffer.js": {
