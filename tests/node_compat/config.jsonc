@@ -1108,7 +1108,7 @@
     "parallel/test-fs-write-file-sync.js": {
       "split": true,
       "subtests": {
-        "block_00_test_writefilesync": { "skip": true, "reason": "inherited: requires process.umask() and child_process" },
+        "block_00_test_writefilesync": {},
         "block_01_test_appendfilesync": { "skip": true, "reason": "inherited: requires process.umask() and child_process" },
         "block_02_test_writefilesync_with_file_descriptor": {},
         "block_03_test_writefilesync_with_flags": {},
