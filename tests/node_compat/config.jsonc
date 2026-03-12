@@ -1047,10 +1047,7 @@
     "parallel/test-fs-watch-recursive-add-file-with-url.js": {},
     "parallel/test-fs-watch-recursive-add-file.js": {},
     "parallel/test-fs-watch-recursive-add-folder.js": {},
-    "parallel/test-fs-watch-recursive-assert-leaks.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-recursive-assert-leaks.js": {},
     "parallel/test-fs-watch-recursive-delete.js": {},
     "parallel/test-fs-watch-recursive-linux-parallel-remove.js": {},
     "parallel/test-fs-watch-recursive-promise.js": {

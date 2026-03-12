@@ -2912,6 +2912,7 @@ export class FSWatcher {
         this._encoding = encoding || null;
         this._snapshot = _snapshotDir(this._watchPath, this._recursive);
         _activeWatchers.add(this);
+        if (globalThis.__wasm_rquickjs_active_handles) globalThis.__wasm_rquickjs_active_handles.add(this);
         this._timer = globalThis.setInterval(() => {
             if (this._closed) return;
             const current = _snapshotDir(this._watchPath, this._recursive);
@@ -2975,6 +2976,7 @@ export class FSWatcher {
         if (this._closed) return;
         this._closed = true;
         _activeWatchers.delete(this);
+        if (globalThis.__wasm_rquickjs_active_handles) globalThis.__wasm_rquickjs_active_handles.delete(this);
         if (this._timer !== null) {
             globalThis.clearInterval(this._timer);
             this._timer = null;
@@ -3021,6 +3023,7 @@ export class StatWatcher {
     start(filename, interval) {
         this._filename = filename;
         this._prev = _tryStat(filename);
+        if (globalThis.__wasm_rquickjs_active_handles) globalThis.__wasm_rquickjs_active_handles.add(this);
         this._timer = globalThis.setInterval(() => {
             const curr = _tryStat(filename);
             if (curr.mtimeMs !== this._prev.mtimeMs ||
@@ -3054,6 +3057,7 @@ export class StatWatcher {
             globalThis.clearInterval(this._timer);
             this._timer = null;
         }
+        if (globalThis.__wasm_rquickjs_active_handles) globalThis.__wasm_rquickjs_active_handles.delete(this);
     }
 
     ref() {

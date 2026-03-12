@@ -587,6 +587,20 @@ process.exit = function exit(code) {
 };
 
 process._exiting = false;
+
+// Active handle tracking for process._getActiveHandles() / process._getActiveRequests()
+if (!globalThis.__wasm_rquickjs_active_handles) {
+    globalThis.__wasm_rquickjs_active_handles = new Set();
+}
+
+process._getActiveHandles = function _getActiveHandles() {
+    return Array.from(globalThis.__wasm_rquickjs_active_handles);
+};
+
+process._getActiveRequests = function _getActiveRequests() {
+    return [];
+};
+
 process.channel = undefined;
 process.connected = false;
 process.debugPort = 9229;
@@ -696,6 +710,8 @@ export var initgroups = process.initgroups;
 export var dlopen = process.dlopen;
 export var binding = process.binding;
 export var _linkedBinding = process._linkedBinding;
+export var _getActiveHandles = process._getActiveHandles;
+export var _getActiveRequests = process._getActiveRequests;
 export var constrainedMemory = process.constrainedMemory;
 export var availableMemory = process.availableMemory;
 export var setUncaughtExceptionCaptureCallback = process.setUncaughtExceptionCaptureCallback;
