@@ -2864,7 +2864,12 @@ function _notifyFSWatchers(fullPath, eventType) {
     for (const watcher of _activeWatchers) {
         if (watcher._closed) continue;
         const base = watcher._watchPath;
-        if (fullPath.startsWith(base + '/')) {
+        if (watcher._isFile) {
+            if (fullPath === base) {
+                const pathModule = getPathModule();
+                watcher.emit('change', eventType, watcher._encodeFilename(pathModule.basename(base)));
+            }
+        } else if (fullPath.startsWith(base + '/')) {
             const rel = fullPath.slice(base.length + 1);
             if (!watcher._recursive && rel.includes('/')) continue;
             watcher.emit('change', eventType, watcher._encodeFilename(rel));
@@ -2903,38 +2908,60 @@ export class FSWatcher {
         this._closed = false;
         this._watchPath = null;
         this._recursive = false;
+        this._isFile = false;
         this._snapshot = null;
+        this._fileMtime = null;
     }
 
-    _start(filename, recursive, encoding) {
+    _start(filename, recursive, encoding, isFile) {
         this._watchPath = pathToString(filename);
         this._recursive = recursive;
         this._encoding = encoding || null;
-        this._snapshot = _snapshotDir(this._watchPath, this._recursive);
+        this._isFile = !!isFile;
         _activeWatchers.add(this);
         if (globalThis.__wasm_rquickjs_active_handles) globalThis.__wasm_rquickjs_active_handles.add(this);
-        this._timer = globalThis.setInterval(() => {
-            if (this._closed) return;
-            const current = _snapshotDir(this._watchPath, this._recursive);
-            const base = this._watchPath;
-            for (const [entry] of this._snapshot) {
-                if (!current.has(entry)) {
-                    const rel = entry.slice(base.length + 1);
-                    this.emit('change', 'rename', this._encodeFilename(rel));
+
+        if (this._isFile) {
+            const st = native.fs_stat(this._watchPath);
+            this._fileMtime = (!st.error && st.stat.mtimeMs) || 0;
+            this._timer = globalThis.setInterval(() => {
+                if (this._closed) return;
+                const st = native.fs_stat(this._watchPath);
+                if (st.error) {
+                    this.emit('change', 'rename', this._encodeFilename(getPathModule().basename(this._watchPath)));
+                    return;
                 }
-            }
-            for (const [entry, mtime] of current) {
-                const oldMtime = this._snapshot.get(entry);
-                if (oldMtime === undefined) {
-                    const rel = entry.slice(base.length + 1);
-                    this.emit('change', 'rename', this._encodeFilename(rel));
-                } else if (mtime !== oldMtime) {
-                    const rel = entry.slice(base.length + 1);
-                    this.emit('change', 'change', this._encodeFilename(rel));
+                const currentMtime = st.stat.mtimeMs || 0;
+                if (currentMtime !== this._fileMtime) {
+                    this._fileMtime = currentMtime;
+                    this.emit('change', 'change', this._encodeFilename(getPathModule().basename(this._watchPath)));
                 }
-            }
-            this._snapshot = current;
-        }, 200);
+            }, 200);
+        } else {
+            this._snapshot = _snapshotDir(this._watchPath, this._recursive);
+            this._timer = globalThis.setInterval(() => {
+                if (this._closed) return;
+                const current = _snapshotDir(this._watchPath, this._recursive);
+                const base = this._watchPath;
+                for (const [entry] of this._snapshot) {
+                    if (!current.has(entry)) {
+                        const rel = entry.slice(base.length + 1);
+                        this.emit('change', 'rename', this._encodeFilename(rel));
+                    }
+                }
+                for (const [entry, mtime] of current) {
+                    const oldMtime = this._snapshot.get(entry);
+                    if (oldMtime === undefined) {
+                        const rel = entry.slice(base.length + 1);
+                        this.emit('change', 'rename', this._encodeFilename(rel));
+                    } else if (mtime !== oldMtime) {
+                        const rel = entry.slice(base.length + 1);
+                        this.emit('change', 'change', this._encodeFilename(rel));
+                    }
+                }
+                this._snapshot = current;
+            }, 200);
+        }
     }
 
     _encodeFilename(filename) {
@@ -3093,9 +3120,10 @@ export function watch(filename, optionsOrListener, listener) {
         throw err;
     }
 
+    const isFile = !statResult.stat.isDirectory;
     const watcher = new FSWatcher();
     if (listener) watcher.on('change', listener);
-    watcher._start(filename, !!opts.recursive, opts.encoding);
+    watcher._start(filename, !!opts.recursive, opts.encoding, isFile);
 
     if (opts.persistent === false) {
         watcher.unref();
