@@ -1044,10 +1044,7 @@
     "parallel/test-fs-watch-file-enoent-after-deletion.js": {},
     "parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js": {},
     "parallel/test-fs-watch-recursive-add-file-to-new-folder.js": {},
-    "parallel/test-fs-watch-recursive-add-file-with-url.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-recursive-add-file-with-url.js": {},
     "parallel/test-fs-watch-recursive-add-file.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
