@@ -1037,7 +1037,7 @@
     "parallel/test-fs-watch-enoent.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires fs.watch which is not supported in WASI" },
+        "block_00_block_00": {},
         "block_01_block_01": {}
       }
     },

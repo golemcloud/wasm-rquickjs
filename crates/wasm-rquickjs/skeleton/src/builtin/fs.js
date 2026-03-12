@@ -3076,6 +3076,16 @@ export function watch(filename, optionsOrListener, listener) {
     const opts = getOptions(optionsOrListener, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     if (listener !== undefined) validateCallback(listener);
+
+    const resolvedPath = pathToString(filename);
+    const statResult = native.fs_stat(resolvedPath);
+    if (statResult.error) {
+        statResult.error.syscall = 'watch';
+        const err = createSystemError(statResult.error);
+        err.filename = resolvedPath;
+        throw err;
+    }
+
     const watcher = new FSWatcher();
     if (listener) watcher.on('change', listener);
     watcher._start(filename, !!opts.recursive, opts.encoding);
