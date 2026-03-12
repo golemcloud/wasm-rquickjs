@@ -1748,7 +1748,8 @@ export function mkdtempSync(prefix, options) {
 export function opendirSync(path, options) {
     validatePath(path);
     validateOpendirOptions(options);
-    const entries = readdirSync(path, { withFileTypes: true });
+    const recursive = options && options.recursive ? true : false;
+    const entries = readdirSync(path, { withFileTypes: true, recursive });
     return new Dir(path, entries);
 }
 
