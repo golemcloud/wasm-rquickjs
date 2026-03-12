@@ -2027,6 +2027,7 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
 }
 
 export function write(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, positionOrCallback, callback) {
+    validateFd(fd);
     let cb;
     if (typeof bufferOrString === 'string') {
         if (typeof offsetOrPosition === 'function') {

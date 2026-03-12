@@ -1198,10 +1198,7 @@
       }
     },
     "parallel/test-fs-write-negativeoffset.js": {},
-    "parallel/test-fs-write-no-fd.js": {
-      "skip": true,
-      "reason": "assert.throws fails: fs.write with undefined fd calls callback instead of throwing ERR_INVALID_ARG_TYPE"
-    },
+    "parallel/test-fs-write-no-fd.js": {},
     "parallel/test-fs-write-optional-params.js": {},
     "parallel/test-fs-write-reuse-callback.js": {},
     "parallel/test-fs-write-sigxfsz.js": {
