@@ -10952,10 +10952,7 @@
         "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_block_02": {},
-        "block_03_block_03": {
-          "skip": true,
-          "reason": "newly discovered, not yet evaluated"
-        },
+        "block_03_block_03": {},
         "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_05_this_test_asserts_that_the_buffer_size_option_is_respected": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_06_block_06": {
