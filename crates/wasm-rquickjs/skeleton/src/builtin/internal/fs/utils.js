@@ -127,8 +127,31 @@ export function validateRmOptionsSync(path, options, expectDir) {
     return options;
 }
 
+export function validateOffsetLengthRead(offset, length, bufferLength) {
+    if (offset < 0) {
+        throw new ERR_OUT_OF_RANGE('offset', '>= 0', offset);
+    }
+    if (length < 0) {
+        throw new ERR_OUT_OF_RANGE('length', '>= 0', length);
+    }
+    if (offset + length > bufferLength) {
+        throw new ERR_OUT_OF_RANGE('length', `<= ${bufferLength - offset}`, length);
+    }
+}
+
+export function validateOffsetLengthWrite(offset, length, byteLength) {
+    if (offset > byteLength) {
+        throw new ERR_OUT_OF_RANGE('offset', `<= ${byteLength}`, offset);
+    }
+    if (length > byteLength - offset) {
+        throw new ERR_OUT_OF_RANGE('length', `<= ${byteLength - offset}`, length);
+    }
+}
+
 export default {
     stringToFlags,
     validateRmdirOptions,
     validateRmOptionsSync,
+    validateOffsetLengthRead,
+    validateOffsetLengthWrite,
 };

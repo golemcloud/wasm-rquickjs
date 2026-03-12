@@ -986,15 +986,13 @@
     "parallel/test-fs-truncate-sync.js": {},
     "parallel/test-fs-unlink-type-check.js": {},
     "parallel/test-fs-util-validateoffsetlength.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules not available in WASM",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
+        "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_block_02": {},
-        "block_03_rangeerror_when_offset_bytelength": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_04_rangeerror_when_bytelength_kiomaxlength_and_length_bytelengt": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
+        "block_03_rangeerror_when_offset_bytelength": {},
+        "block_04_rangeerror_when_bytelength_kiomaxlength_and_length_bytelengt": {}
       }
     },
     "parallel/test-fs-utils-get-dirents.js": {
