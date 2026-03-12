@@ -3803,6 +3803,24 @@ export const promises = new Proxy({}, {
     getOwnPropertyDescriptor(_, prop) { return Object.getOwnPropertyDescriptor(getPromises(), prop); },
 });
 
+// --- Internal helpers ---
+
+function _toUnixTimestamp(time, name = 'time') {
+    if (typeof time === 'string' && +time == time) {
+        return +time;
+    }
+    if (Number.isFinite(time)) {
+        if (time < 0) {
+            return Date.now() / 1000;
+        }
+        return time;
+    }
+    if (time instanceof Date) {
+        return time.getTime() / 1000;
+    }
+    throw new ERR_INVALID_ARG_TYPE(name, ['Date', 'Time in seconds'], time);
+}
+
 // --- Default export ---
 
 const _default = {
@@ -3907,6 +3925,7 @@ const _default = {
     writev,
     cp,
     openAsBlob,
+    _toUnixTimestamp,
 };
 
 export default _default;

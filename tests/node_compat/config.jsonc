@@ -965,10 +965,7 @@
       "skip": true,
       "reason": "requires child_process which is not available in WASM"
     },
-    "parallel/test-fs-timestamp-parsing-error.js": {
-      "skip": true,
-      "reason": "assert.throws error mismatch: thrown error does not match expected ERR_INVALID_ARG_TYPE pattern"
-    },
+    "parallel/test-fs-timestamp-parsing-error.js": {},
     "parallel/test-fs-truncate.js": {
       "split": true,
       "subtests": {
