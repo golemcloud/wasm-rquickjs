@@ -10959,10 +10959,7 @@
         },
         "block_03_not_block_the_event_loop": {},
         "block_04_https_github_com_joyent_node_issues_6690": {},
-        "block_05_block_05": {
-          "skip": true,
-          "reason": "newly discovered, not yet evaluated"
-        }
+        "block_05_block_05": {}
       }
     },
     "sequential/test-gc-http-client-onerror.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
