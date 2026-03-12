@@ -957,10 +957,7 @@
     "parallel/test-fs-symlink-dir-junction.js": {},
     "parallel/test-fs-symlink-longpath.js": {},
     "parallel/test-fs-symlink.js": {},
-    "parallel/test-fs-sync-fd-leak.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules not available in WASM"
-    },
+    "parallel/test-fs-sync-fd-leak.js": {},
     "parallel/test-fs-syncwritestream.js": {
       "skip": true,
       "reason": "requires child_process which is not available in WASM"

@@ -1098,38 +1098,21 @@ export function writeFileSync(path, data, options) {
             const result = native.fs_write_buffer(path, dataArray, 0, dataArray.length, null);
             if (result.error) throw createSystemError(result.error);
         }
-    } else if (flag !== 'w') {
-        // Non-default flag: use openSync + writeSync + closeSync to honour the flag
-        const fd = openSync(path, flag, options && options.mode !== undefined ? options.mode : 0o666);
+    } else {
+        // Path-based write: use openSync + writeSync + closeSync through the
+        // exports object so that monkey-patching these functions works.
+        const fd = _default.openSync(path, flag, options && options.mode !== undefined ? options.mode : 0o666);
         try {
             if (typeof data === 'string') {
                 const enc = encoding || 'utf8';
                 const buf = getBuffer().from(data, enc);
-                writeSync(fd, buf, 0, buf.length);
+                _default.writeSync(fd, buf, 0, buf.length);
             } else {
                 const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-                writeSync(fd, dataArray, 0, dataArray.length);
+                _default.writeSync(fd, dataArray, 0, dataArray.length);
             }
         } finally {
-            closeSync(fd);
-        }
-    } else if (encoding) {
-        const error = native.write_file_with_encoding(pathToString(path), encoding, data);
-        if (error !== undefined) {
-            throw new Error(error);
-        }
-    } else {
-        if (typeof data === 'string') {
-            const error = native.write_file_with_encoding(pathToString(path), "utf8", data);
-            if (error !== undefined) {
-                throw new Error(error);
-            }
-        } else {
-            const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-            const error = native.write_file(pathToString(path), dataArray);
-            if (error !== undefined) {
-                throw new Error(error);
-            }
+            _default.closeSync(fd);
         }
     }
     if (flush === true) {
@@ -1159,25 +1142,9 @@ export function appendFileSync(path, data, options) {
     validateAppendFileData(data);
     const flush = options ? options.flush : undefined;
     validateFlush(flush);
-    let error;
-    if (typeof path === 'number') {
-        if (typeof data === 'string') {
-            const result = native.fs_write_string(path, data, null);
-            error = result.error;
-        } else {
-            const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-            const result = native.fs_write_buffer(path, dataArray, 0, dataArray.length, null);
-            error = result.error;
-        }
-    } else if (typeof data === 'string') {
-        error = native.fs_append_file_string(path, data);
-    } else {
-        const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-        error = native.fs_append_file(path, dataArray);
-    }
-    if (error) {
-        throw createSystemError(error);
-    }
+    // appendFileSync is writeFileSync with flag 'a'
+    const mergedOptions = Object.assign({}, options || {}, { flag: (options && options.flag) || 'a', flush: undefined });
+    writeFileSync(path, data, mergedOptions);
     if (flush === true) {
         if (typeof path === 'number') {
             fsyncSync(path);
