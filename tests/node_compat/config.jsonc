@@ -1054,10 +1054,7 @@
     "parallel/test-fs-watch-recursive-symlink.js": {},
     "parallel/test-fs-watch-recursive-sync-write.js": {},
     "parallel/test-fs-watch-recursive-update-file.js": {},
-    "parallel/test-fs-watch-recursive-validate.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-recursive-validate.js": {},
     "parallel/test-fs-watch-recursive-watch-file.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"

@@ -3080,6 +3080,9 @@ export function watch(filename, optionsOrListener, listener) {
     const opts = getOptions(optionsOrListener, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     if (listener !== undefined) validateCallback(listener);
+    if (opts.recursive != null && typeof opts.recursive !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.recursive', 'boolean', opts.recursive);
+    }
 
     const resolvedPath = pathToString(filename);
     const statResult = native.fs_stat(resolvedPath);
