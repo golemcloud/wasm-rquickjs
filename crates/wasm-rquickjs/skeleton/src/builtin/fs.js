@@ -1171,9 +1171,13 @@ export function openSync(path, flags, mode) {
     flags = flagsToNumber(flags !== undefined ? flags : 'r');
     mode = validateMode(mode, 'mode', 0o666);
     mode = mode & ~process.umask();
-    const result = native.fs_open(pathToString(path), flags, mode);
+    const fullPath = pathToString(path);
+    const result = native.fs_open(fullPath, flags, mode);
     if (result.error) {
         throw createSystemError(result.error);
+    }
+    if (flags & O_CREAT) {
+        _notifyFSWatchers(fullPath, 'rename');
     }
     return result.fd;
 }
@@ -1659,10 +1663,12 @@ export function lutimesSync(path, atime, mtime) {
 
 export function unlinkSync(path) {
     validatePath(path);
-    const error = native.unlink(pathToString(path));
+    const fullPath = pathToString(path);
+    const error = native.unlink(fullPath);
     if (error) {
         throw createSystemError(error);
     }
+    _notifyFSWatchers(fullPath, 'rename');
 }
 
 export function renameSync(oldPath, newPath) {
@@ -2848,6 +2854,23 @@ export function opendir(path, optionsOrCallback, callback) {
 }
 
 // --- FSWatcher (polling-based, since WASI has no native inotify/kqueue) ---
+// Synchronous notification registry: mutating fs operations notify active watchers
+// immediately, so changes that happen and reverse within a single event loop tick
+// are still detected (polling alone would miss them).
+const _activeWatchers = new Set();
+
+function _notifyFSWatchers(fullPath, eventType) {
+    if (_activeWatchers.size === 0) return;
+    for (const watcher of _activeWatchers) {
+        if (watcher._closed) continue;
+        const base = watcher._watchPath;
+        if (fullPath.startsWith(base + '/')) {
+            const rel = fullPath.slice(base.length + 1);
+            if (!watcher._recursive && rel.includes('/')) continue;
+            watcher.emit('change', eventType, watcher._encodeFilename(rel));
+        }
+    }
+}
 
 function _scanDir(dir, entries, recursive) {
     const result = native.fs_readdir(dir, false);
@@ -2883,10 +2906,12 @@ export class FSWatcher {
         this._snapshot = null;
     }
 
-    _start(filename, recursive) {
+    _start(filename, recursive, encoding) {
         this._watchPath = pathToString(filename);
         this._recursive = recursive;
+        this._encoding = encoding || null;
         this._snapshot = _snapshotDir(this._watchPath, this._recursive);
+        _activeWatchers.add(this);
         this._timer = globalThis.setInterval(() => {
             if (this._closed) return;
             const current = _snapshotDir(this._watchPath, this._recursive);
@@ -2894,21 +2919,29 @@ export class FSWatcher {
             for (const [entry] of this._snapshot) {
                 if (!current.has(entry)) {
                     const rel = entry.slice(base.length + 1);
-                    this.emit('change', 'rename', rel);
+                    this.emit('change', 'rename', this._encodeFilename(rel));
                 }
             }
             for (const [entry, mtime] of current) {
                 const oldMtime = this._snapshot.get(entry);
                 if (oldMtime === undefined) {
                     const rel = entry.slice(base.length + 1);
-                    this.emit('change', 'rename', rel);
+                    this.emit('change', 'rename', this._encodeFilename(rel));
                 } else if (mtime !== oldMtime) {
                     const rel = entry.slice(base.length + 1);
-                    this.emit('change', 'change', rel);
+                    this.emit('change', 'change', this._encodeFilename(rel));
                 }
             }
             this._snapshot = current;
         }, 200);
+    }
+
+    _encodeFilename(filename) {
+        if (filename === null) return null;
+        const enc = this._encoding;
+        if (!enc || enc === 'utf8' || enc === 'utf-8') return filename;
+        if (enc === 'buffer') return Buffer.from(filename, 'utf8');
+        return Buffer.from(filename, 'utf8').toString(enc);
     }
 
     on(event, listener) {
@@ -2941,6 +2974,7 @@ export class FSWatcher {
     close() {
         if (this._closed) return;
         this._closed = true;
+        _activeWatchers.delete(this);
         if (this._timer !== null) {
             globalThis.clearInterval(this._timer);
             this._timer = null;
@@ -3044,7 +3078,7 @@ export function watch(filename, optionsOrListener, listener) {
     if (listener !== undefined) validateCallback(listener);
     const watcher = new FSWatcher();
     if (listener) watcher.on('change', listener);
-    watcher._start(filename, !!opts.recursive);
+    watcher._start(filename, !!opts.recursive, opts.encoding);
 
     if (opts.persistent === false) {
         watcher.unref();
