@@ -1255,10 +1255,7 @@
       }
     },
     "parallel/test-fs-write-sync.js": {},
-    "parallel/test-fs-write-sync-optional-params.js": {
-      "skip": true,
-      "reason": "requires ERR_INVALID_ARG_TYPE and ERR_OUT_OF_RANGE validation"
-    },
+    "parallel/test-fs-write-sync-optional-params.js": {},
     "parallel/test-fs-writefile-with-fd.js": {
       "split": true,
       "subtests": {

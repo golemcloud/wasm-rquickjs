@@ -287,6 +287,37 @@ function validateOffsetLengthRead(offset, length, bufferLength) {
     }
 }
 
+function validateInt32(value, name, min) {
+    if (typeof value !== 'number') {
+        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(value)}`);
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    if (!Number.isInteger(value)) {
+        const err = new RangeError(`The value of "${name}" is out of range. It must be an integer. Received ${value}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    if (min !== undefined && value < min) {
+        const err = new RangeError(`The value of "${name}" is out of range. It must be >= ${min}. Received ${value}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+}
+
+function validateOffsetLengthWrite(offset, length, byteLength) {
+    if (offset > byteLength) {
+        const err = new RangeError(`The value of "offset" is out of range. It must be <= ${byteLength}. Received ${offset}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    if (length > byteLength - offset) {
+        const err = new RangeError(`The value of "length" is out of range. It must be <= ${byteLength - offset}. Received ${length}`);
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+}
+
 function validateReadPosition(position, length) {
     if (position === null || position === undefined || position === -1 || position === -1n) {
         return null;
@@ -1243,6 +1274,8 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
 }
 
 export function writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, position) {
+    validateFd(fd);
+
     if (typeof bufferOrString === 'string') {
         const pos = offsetOrPosition !== undefined ? offsetOrPosition : null;
         const result = native.fs_write_string(fd, bufferOrString, pos);
@@ -1250,22 +1283,48 @@ export function writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding
             throw createSystemError(result.error);
         }
         return result.bytesWritten;
-    } else {
-        if (!ArrayBuffer.isView(bufferOrString)) {
-            const err = new TypeError('The "buffer" argument must be of type string or an instance of Buffer or Uint8Array. Received ' + describeType(bufferOrString));
-            err.code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
-        const offset = offsetOrPosition || 0;
-        const length = lengthOrEncoding !== undefined ? lengthOrEncoding : bufferOrString.byteLength - offset;
-        const pos = position !== undefined ? position : null;
-        const dataArray = new Uint8Array(bufferOrString.buffer || bufferOrString, bufferOrString.byteOffset || 0, bufferOrString.byteLength || bufferOrString.length);
-        const result = native.fs_write_buffer(fd, dataArray, offset, length, pos);
-        if (result.error) {
-            throw createSystemError(result.error);
-        }
-        return result.bytesWritten;
     }
+
+    if (!ArrayBuffer.isView(bufferOrString)) {
+        const err = new TypeError('The "buffer" argument must be of type string or an instance of Buffer or Uint8Array. Received ' + describeType(bufferOrString));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
+    let offset, length, pos;
+
+    if (typeof offsetOrPosition === 'object') {
+        const opts = offsetOrPosition ?? {};
+        offset = opts.offset;
+        length = opts.length;
+        position = opts.position;
+
+        if (offset == null) {
+            offset = 0;
+        } else {
+            validateInt32(offset, 'offset', 0);
+        }
+
+        if (typeof length !== 'number') {
+            length = bufferOrString.byteLength - offset;
+        }
+        validateInt32(length, 'length', 0);
+
+        pos = position !== undefined ? position : null;
+    } else {
+        offset = offsetOrPosition || 0;
+        length = lengthOrEncoding !== undefined ? lengthOrEncoding : bufferOrString.byteLength - offset;
+        pos = position !== undefined ? position : null;
+    }
+
+    validateOffsetLengthWrite(offset, length, bufferOrString.byteLength);
+
+    const dataArray = new Uint8Array(bufferOrString.buffer || bufferOrString, bufferOrString.byteOffset || 0, bufferOrString.byteLength || bufferOrString.length);
+    const result = native.fs_write_buffer(fd, dataArray, offset, length, pos);
+    if (result.error) {
+        throw createSystemError(result.error);
+    }
+    return result.bytesWritten;
 }
 
 export function ftruncateSync(fd, len) {
