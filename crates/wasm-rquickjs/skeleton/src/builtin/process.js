@@ -368,12 +368,23 @@ process.chdir = function chdir(directory) {
         throw _makeTypeError('ERR_INVALID_ARG_TYPE',
             'The "directory" argument must be of type string.' + _invalidArgTypeHelper(directory));
     }
-    var err2 = new Error("ENOENT: no such file or directory, chdir '" + process.cwd() + "' -> '" + directory + "'");
-    err2.code = 'ENOENT';
-    err2.syscall = 'chdir';
-    err2.path = process.cwd();
-    err2.dest = directory;
-    throw err2;
+    // Resolve relative paths against current cwd
+    var resolved = directory;
+    if (resolved.charAt(0) !== '/') {
+        var cwd = process.cwd();
+        resolved = cwd + (cwd === '/' ? '' : '/') + resolved;
+    }
+    // Normalize . and ..
+    var parts = resolved.split('/');
+    var normalized = [];
+    for (var i = 0; i < parts.length; i++) {
+        if (parts[i] === '' || parts[i] === '.') continue;
+        if (parts[i] === '..') { normalized.pop(); continue; }
+        normalized.push(parts[i]);
+    }
+    resolved = '/' + normalized.join('/');
+    // Update cwd
+    process.cwd = function cwd() { return resolved; };
 };
 
 process.setuid = function setuid(id) {

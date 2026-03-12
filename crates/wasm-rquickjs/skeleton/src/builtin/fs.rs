@@ -210,42 +210,101 @@ fn apply_emulated_symlink_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>) {
     stat_obj.set("isSymlink", true).unwrap();
 }
 
-/// Resolve emulated symlinks in a path. For each component of the path, if
-/// the accumulated prefix is an emulated symlink, replace it with the target.
-/// This makes file operations transparent through emulated symlinks.
+/// Resolve emulated symlinks in a path by walking each component and following
+/// symlink chains. Returns an ELOOP error if too many symlinks are followed.
 #[cfg(not(unix))]
-fn resolve_emulated_symlinks(path: &str) -> String {
-    let symlinks = EMULATED_SYMLINKS.lock().unwrap();
-    if symlinks.is_empty() {
-        return path.to_string();
+fn resolve_emulated_symlinks_checked(path: &str) -> std::io::Result<String> {
+    if EMULATED_SYMLINKS.lock().unwrap().is_empty() {
+        return Ok(path.to_string());
     }
 
-    // Find the longest symlink prefix that matches
-    let mut best_prefix_len = 0;
-    let mut best_target: Option<&str> = None;
+    const MAX_SYMLINK_FOLLOWS: usize = 40;
+    let mut symlink_count = 0;
 
-    for (symlink_path, target) in symlinks.iter() {
-        let sp_len = symlink_path.len();
-        if sp_len > best_prefix_len {
-            if path == symlink_path.as_str() {
-                best_prefix_len = sp_len;
-                best_target = Some(target.as_str());
-            } else if path.len() > sp_len
-                && path.starts_with(symlink_path.as_str())
-                && path.as_bytes()[sp_len] == b'/'
-            {
-                best_prefix_len = sp_len;
-                best_target = Some(target.as_str());
+    // Build absolute path
+    let abs_path = if path.starts_with('/') {
+        path.to_string()
+    } else if let Ok(cwd) = std::env::current_dir() {
+        format!("{}/{}", cwd.to_string_lossy(), path)
+    } else {
+        path.to_string()
+    };
+
+    // Split into segments to process
+    let mut todo: Vec<String> = abs_path
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+    let mut resolved: Vec<String> = Vec::new();
+    let mut i = 0;
+
+    while i < todo.len() {
+        let seg = todo[i].clone();
+
+        if seg == "." {
+            i += 1;
+            continue;
+        }
+
+        if seg == ".." {
+            resolved.pop();
+            i += 1;
+            continue;
+        }
+
+        resolved.push(seg);
+        let current = format!("/{}", resolved.join("/"));
+
+        if let Some(target) = get_emulated_symlink_target(&current) {
+            symlink_count += 1;
+            if symlink_count > MAX_SYMLINK_FOLLOWS {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "too many levels of symbolic links",
+                ));
             }
+
+            // Remove the symlink component
+            resolved.pop();
+
+            // Collect remaining segments after the symlink
+            let remaining: Vec<String> = todo[i + 1..].to_vec();
+
+            // Parse target into segments
+            let target_segments: Vec<String> = target
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect();
+
+            if target.starts_with('/') {
+                // Absolute target: clear resolved, restart from root
+                resolved.clear();
+                todo = target_segments;
+                todo.extend(remaining);
+            } else {
+                // Relative target: prepend to remaining
+                todo = target_segments;
+                todo.extend(remaining);
+            }
+            i = 0;
+        } else {
+            i += 1;
         }
     }
 
-    if let Some(target) = best_target {
-        let suffix = &path[best_prefix_len..];
-        format!("{target}{suffix}")
+    if resolved.is_empty() {
+        Ok("/".to_string())
     } else {
-        path.to_string()
+        Ok(format!("/{}", resolved.join("/")))
     }
+}
+
+/// Resolve emulated symlinks in a path. Falls back to the original path on error.
+#[cfg(not(unix))]
+fn resolve_emulated_symlinks(path: &str) -> String {
+    resolve_emulated_symlinks_checked(path).unwrap_or_else(|_| path.to_string())
 }
 
 fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
@@ -256,6 +315,11 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
         std::io::ErrorKind::InvalidInput => ("EINVAL", -22, "invalid argument"),
         _ => {
             let err_text = err.to_string().to_lowercase();
+            if err_text.contains("too many levels of symbolic links")
+                || err_text.contains("eloop")
+            {
+                return ("ELOOP", -40, "too many levels of symbolic links");
+            }
             if err_text.contains("file exists") {
                 return ("EEXIST", -17, "file already exists");
             }
@@ -484,6 +548,7 @@ pub mod native_module {
 
     // --- Existing functions (unchanged) ---
 
+    #[cfg(unix)]
     fn normalize_existing_path_for_realpath(path: &Path) -> std::io::Result<String> {
         let absolute_path = if path.is_absolute() {
             path.to_path_buf()
@@ -1149,13 +1214,34 @@ pub mod native_module {
         }
 
         #[cfg(not(unix))]
-        if let Some(target) = super::get_emulated_symlink_target(&path) {
-            match normalize_existing_path_for_realpath(Path::new(&target)) {
-                Ok(normalized) => {
-                    result.set("result", normalized).unwrap();
-                    return result;
+        {
+            // Use chain-resolving emulated symlink resolution
+            match super::resolve_emulated_symlinks_checked(&path) {
+                Ok(resolved_path) => {
+                    // Verify the final resolved path exists
+                    match std::fs::symlink_metadata(&resolved_path) {
+                        Ok(_) => {
+                            result.set("result", resolved_path).unwrap();
+                            return result;
+                        }
+                        Err(err) => {
+                            result
+                                .set(
+                                    "error",
+                                    super::make_fs_error(
+                                        &ctx,
+                                        &err,
+                                        "realpath",
+                                        Some(&path),
+                                    ),
+                                )
+                                .unwrap();
+                            return result;
+                        }
+                    }
                 }
                 Err(err) => {
+                    // ELOOP or other resolution error
                     result
                         .set(
                             "error",
@@ -1167,59 +1253,63 @@ pub mod native_module {
             }
         }
 
-        let path_obj = Path::new(&path);
-        let metadata = match std::fs::symlink_metadata(path_obj) {
-            Ok(metadata) => metadata,
-            Err(err) => {
-                result
-                    .set(
-                        "error",
-                        super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
-                    )
-                    .unwrap();
-                return result;
-            }
-        };
+        #[cfg(unix)]
+        {
+            let path_obj = Path::new(&path);
+            let metadata = match std::fs::symlink_metadata(path_obj) {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    result
+                        .set(
+                            "error",
+                            super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
+                        )
+                        .unwrap();
+                    return result;
+                }
+            };
 
-        match std::fs::canonicalize(path_obj) {
-            Ok(resolved) => {
-                result
-                    .set("result", resolved.to_string_lossy().to_string())
-                    .unwrap();
-            }
-            Err(err) => {
-                if !metadata.file_type().is_symlink() {
-                    match normalize_existing_path_for_realpath(path_obj) {
-                        Ok(normalized) => {
-                            result.set("result", normalized).unwrap();
-                            return result;
-                        }
-                        Err(normalization_err) => {
-                            result
-                                .set(
-                                    "error",
-                                    super::make_fs_error(
-                                        &ctx,
-                                        &normalization_err,
-                                        "realpath",
-                                        Some(&path),
-                                    ),
-                                )
-                                .unwrap();
-                            return result;
+            match std::fs::canonicalize(path_obj) {
+                Ok(resolved) => {
+                    result
+                        .set("result", resolved.to_string_lossy().to_string())
+                        .unwrap();
+                    return result;
+                }
+                Err(err) => {
+                    if !metadata.file_type().is_symlink() {
+                        match normalize_existing_path_for_realpath(path_obj) {
+                            Ok(normalized) => {
+                                result.set("result", normalized).unwrap();
+                                return result;
+                            }
+                            Err(normalization_err) => {
+                                result
+                                    .set(
+                                        "error",
+                                        super::make_fs_error(
+                                            &ctx,
+                                            &normalization_err,
+                                            "realpath",
+                                            Some(&path),
+                                        ),
+                                    )
+                                    .unwrap();
+                                return result;
+                            }
                         }
                     }
-                }
 
-                result
-                    .set(
-                        "error",
-                        super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
-                    )
-                    .unwrap();
+                    result
+                        .set(
+                            "error",
+                            super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
+                        )
+                        .unwrap();
+                    return result;
+                }
             }
         }
-        result
     }
 
     #[rquickjs::function]

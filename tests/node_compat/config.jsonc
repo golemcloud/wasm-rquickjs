@@ -839,10 +839,7 @@
     "parallel/test-fs-realpath-native.js": {},
     "parallel/test-fs-realpath-on-substed-drive.js": {},
     "parallel/test-fs-realpath-pipe.js": {},
-    "parallel/test-fs-realpath.js": {
-      "skip": true,
-      "reason": "requires worker_threads which is not available in WASM"
-    },
+    "parallel/test-fs-realpath.js": {},
     "parallel/test-fs-rename-type-check.js": {},
     "parallel/test-fs-rm.js": {
       "skip": true,
