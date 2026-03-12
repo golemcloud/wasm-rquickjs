@@ -1013,7 +1013,7 @@
       "split": true,
       "subtests": {
         "block_00_utimes_only_error_cases": {},
-        "block_01_futimes_only_error_cases": { "skip": true, "reason": "inherited: symlink returns EIO in WASI filesystem" }
+        "block_01_futimes_only_error_cases": {}
       }
     },
     "parallel/test-fs-utimes-y2K38.js": {},
