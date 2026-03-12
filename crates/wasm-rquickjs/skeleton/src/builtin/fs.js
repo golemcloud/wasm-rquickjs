@@ -2944,6 +2944,20 @@ export function ReadStream(path, options) {
 
     this.bytesRead = 0;
     this._fs = opts.fs || _default;
+
+    if (opts.fs) {
+        const fsRequired = ['open', 'close', 'read'];
+        for (const fn of fsRequired) {
+            if (typeof this._fs[fn] !== 'function') {
+                const err = new TypeError(
+                    `The "options.fs.${fn}" property must be of type function. Received ${describeType(this._fs[fn])}`
+                );
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+        }
+    }
+
     this._fileHandleTransferRef = false;
 
     if (this._fileHandle && opts.fs) {
@@ -3189,6 +3203,27 @@ export function WriteStream(path, options) {
     validateFlush(opts.flush);
     opts.decodeStrings = true;
     this._fs = opts.fs || _default;
+
+    if (opts.fs) {
+        const fsRequired = ['open', 'close', 'write'];
+        for (const fn of fsRequired) {
+            if (typeof this._fs[fn] !== 'function') {
+                const err = new TypeError(
+                    `The "options.fs.${fn}" property must be of type function. Received ${describeType(this._fs[fn])}`
+                );
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+        }
+        if (this._fs.writev !== undefined && this._fs.writev !== null && typeof this._fs.writev !== 'function') {
+            const err = new TypeError(
+                `The "options.fs.writev" property must be of type function. Received ${describeType(this._fs.writev)}`
+            );
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+    }
+
     this._fileHandleTransferRef = false;
 
     _Writable.call(this, opts);

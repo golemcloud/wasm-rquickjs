@@ -937,8 +937,6 @@
     },
     "parallel/test-fs-stream-double-close.js": {},
     "parallel/test-fs-stream-fs-options.js": {
-      "skip": true,
-      "reason": "requires validation of custom fs option methods",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
