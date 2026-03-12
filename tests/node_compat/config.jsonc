@@ -10955,10 +10955,7 @@
         "block_03_block_03": {},
         "block_04_block_04": {},
         "block_05_this_test_asserts_that_the_buffer_size_option_is_respected": {},
-        "block_06_block_06": {
-          "skip": true,
-          "reason": "newly discovered, not yet evaluated"
-        }
+        "block_06_block_06": {}
       }
     },
     "sequential/test-fs-readdir-recursive.js": {
