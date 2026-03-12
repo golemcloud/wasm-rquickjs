@@ -5080,7 +5080,7 @@
         "block_05_block_05": {},
         "block_06_block_06": {},
         "block_07_block_07": {},
-        "block_08_block_08": { "skip": true, "reason": "HTTP server does not support piping incoming request body through TransformStream to response" },
+        "block_08_block_08": {},
         "block_09_block_09": {},
         "block_10_block_10": {},
         "block_11_block_11": {},
@@ -10037,7 +10037,7 @@
         "block_05_block_05": {}
       }
     },
-    "parallel/test-webstreams-clone-unref.js": { "skip": true, "reason": "structuredClone does not support transferring web streams" },
+    "parallel/test-webstreams-clone-unref.js": {},
     "parallel/test-webstreams-finished.js": {
       "split": true,
       "subtests": {

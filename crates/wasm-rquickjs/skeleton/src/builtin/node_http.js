@@ -2124,6 +2124,14 @@ export class ClientRequest extends OutgoingMessage {
     async _flushLoop() {
         if (this.destroyed || this.aborted) return;
 
+        // Don't start the native request until end() has been called.
+        // Starting early would lock headers before _applyDefaultBodyHeaders
+        // has a chance to set Content-Length, and can cause Rust borrow
+        // conflicts when end() later tries to modify headers.
+        if (!this._nativeStarted && !this._writableEnded) {
+            return;
+        }
+
         // Start native request on first flush (locks headers)
         if (!this._nativeStarted) {
             await this._nativeReq.start();
