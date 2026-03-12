@@ -2882,6 +2882,15 @@ export function ReadStream(path, options) {
         _readStreamProtoInited = true;
     }
 
+    if (opts.fd != null && typeof opts.fd !== 'number' &&
+        !(typeof opts.fd === 'object' && typeof opts.fd.fd === 'number')) {
+        const err = new TypeError(
+            'The "options.fd" property must be of type number or an instance of FileHandle. Received ' + describeType(opts.fd)
+        );
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
     this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd
             : (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd.fd
             : null;
@@ -2890,6 +2899,10 @@ export function ReadStream(path, options) {
     this.path = (this.fd != null && (path == null || path === undefined)) ? undefined : path;
     this.flags = opts.flags || 'r';
     this.mode = opts.mode || 0o666;
+
+    if (this.path !== undefined) {
+        validatePath(this.path);
+    }
 
     if (opts.highWaterMark === undefined) opts.highWaterMark = 64 * 1024;
     opts.autoDestroy = opts.autoClose !== undefined ? opts.autoClose : true;
@@ -3172,6 +3185,15 @@ export function WriteStream(path, options) {
         _writeStreamProtoInited = true;
     }
 
+    if (opts.fd != null && typeof opts.fd !== 'number' &&
+        !(typeof opts.fd === 'object' && typeof opts.fd.fd === 'number')) {
+        const err = new TypeError(
+            'The "options.fd" property must be of type number or an instance of FileHandle. Received ' + describeType(opts.fd)
+        );
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+
     this.fd = (opts.fd !== undefined && typeof opts.fd === 'number') ? opts.fd
             : (opts.fd !== undefined && opts.fd !== null && typeof opts.fd === 'object' && typeof opts.fd.fd === 'number') ? opts.fd.fd
             : null;
@@ -3179,6 +3201,10 @@ export function WriteStream(path, options) {
     this.path = (this.fd != null && (path == null || path === undefined)) ? undefined : path;
     this.flags = opts.flags || 'w';
     this.mode = opts.mode || 0o666;
+
+    if (this.path !== undefined) {
+        validatePath(this.path);
+    }
 
     opts.autoDestroy = opts.autoClose !== undefined ? opts.autoClose : true;
     opts.emitClose = opts.emitClose !== undefined ? opts.emitClose : true;

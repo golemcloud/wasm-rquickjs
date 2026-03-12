@@ -945,8 +945,6 @@
       }
     },
     "parallel/test-fs-stream-options.js": {
-      "skip": true,
-      "reason": "requires validation of fd type and path type in stream constructors",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
