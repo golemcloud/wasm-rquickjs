@@ -1096,10 +1096,7 @@
       "reason": "requires fs.watch which is not supported in WASI"
     },
     "parallel/test-fs-watch-recursive-sync-write.js": {},
-    "parallel/test-fs-watch-recursive-update-file.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-watch-recursive-update-file.js": {},
     "parallel/test-fs-watch-recursive-validate.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"

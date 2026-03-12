@@ -2869,18 +2869,20 @@ function _scanDir(dir, entries, recursive) {
     for (let i = 0; i < result.entries.length; i++) {
         const name = result.entries[i];
         const fullPath = dir + '/' + name;
-        entries.add(fullPath);
-        if (recursive) {
-            const st = native.fs_stat(fullPath);
-            if (!st.error && st.stat.isDirectory) {
+        const st = native.fs_stat(fullPath);
+        if (!st.error) {
+            entries.set(fullPath, st.stat.mtimeMs || 0);
+            if (recursive && st.stat.isDirectory) {
                 _scanDir(fullPath, entries, true);
             }
+        } else {
+            entries.set(fullPath, 0);
         }
     }
 }
 
 function _snapshotDir(dir, recursive) {
-    const entries = new Set();
+    const entries = new Map();
     _scanDir(dir, entries, recursive);
     return entries;
 }
@@ -2903,16 +2905,20 @@ export class FSWatcher {
             if (this._closed) return;
             const current = _snapshotDir(this._watchPath, this._recursive);
             const base = this._watchPath;
-            for (const entry of this._snapshot) {
+            for (const [entry] of this._snapshot) {
                 if (!current.has(entry)) {
                     const rel = entry.slice(base.length + 1);
                     this.emit('change', 'rename', rel);
                 }
             }
-            for (const entry of current) {
-                if (!this._snapshot.has(entry)) {
+            for (const [entry, mtime] of current) {
+                const oldMtime = this._snapshot.get(entry);
+                if (oldMtime === undefined) {
                     const rel = entry.slice(base.length + 1);
                     this.emit('change', 'rename', rel);
+                } else if (mtime !== oldMtime) {
+                    const rel = entry.slice(base.length + 1);
+                    this.emit('change', 'change', rel);
                 }
             }
             this._snapshot = current;
