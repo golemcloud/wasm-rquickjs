@@ -1134,7 +1134,7 @@
     "parallel/test-fs-write-reuse-callback.js": {},
     "parallel/test-fs-write-sigxfsz.js": {
       "skip": true,
-      "reason": "requires child_process which is not available in WASM"
+      "reason": "[manual] amp made no code changes"
     },
     "parallel/test-fs-write-stream-autoclose-option.js": {},
     "parallel/test-fs-write-stream-change-open.js": {},
