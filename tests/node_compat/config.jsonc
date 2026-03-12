@@ -11015,7 +11015,7 @@
         "block_05_fs_promises_readdir_recursive_withfiletypes": {}
       }
     },
-    "sequential/test-fs-stat-sync-overflow.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "sequential/test-fs-stat-sync-overflow.js": {},
     "sequential/test-fs-watch.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",

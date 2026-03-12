@@ -1345,9 +1345,52 @@ export function fork(modulePath, args, options) {
     return child;
 }
 
-// spawn is not supported in WASM — exported as undefined so that feature-detection
-// patterns like `lazySpawn()` in upstream Node.js tests correctly detect its absence.
-export const spawn = undefined;
+// spawn emulation — runs the target script inline (like fork/spawnSync) but
+// delivers results asynchronously through EventEmitter streams.
+export function spawn(command, args, options) {
+    var child = new EventEmitter();
+    child.pid = 1;
+    child.connected = false;
+    child.killed = false;
+    child.exitCode = null;
+    child.signalCode = null;
+    child.stdout = createForkReadable();
+    child.stderr = createForkReadable();
+    child.stdin = null;
+    child.spawnfile = String(command);
+    child.spawnargs = [String(command)].concat((args || []).map(function(a) { return String(a); }));
+    child.kill = function kill() {
+        child.killed = true;
+        return false;
+    };
+
+    setTimeout(function runSpawnInWasm() {
+        var spawnOpts = {};
+        if (options && typeof options === 'object') {
+            if (typeof options.cwd === 'string') {
+                spawnOpts.cwd = options.cwd;
+            }
+            if (options.env) {
+                spawnOpts.env = options.env;
+            }
+        }
+        spawnOpts.encoding = 'buffer';
+
+        var result = spawnSync(String(command), args || [], spawnOpts);
+        var exitCode = typeof result.status === 'number' ? result.status : 1;
+        child.exitCode = exitCode;
+        child.signalCode = result.signal || null;
+
+        child.stdout._emitData(result.stdout);
+        child.stderr._emitData(result.stderr);
+        child.stdout.emit('end');
+        child.stderr.emit('end');
+        child.emit('exit', exitCode, child.signalCode);
+        child.emit('close', exitCode, child.signalCode);
+    }, 0);
+
+    return child;
+}
 
 // Synchronous process creation functions
 export function execFileSync(file, args, options) {
