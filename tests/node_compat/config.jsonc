@@ -1004,10 +1004,7 @@
         "block_03_block_03": {},
         "block_04_block_04": {},
         "block_05_getdirent": {},
-        "block_06_block_06": {
-          "skip": true,
-          "reason": "requires Node.js internal modules not available in WASM"
-        },
+        "block_06_block_06": {},
         "block_07_block_07": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_08_block_08": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
       }
