@@ -1085,10 +1085,7 @@
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"
     },
-    "parallel/test-fs-watch-recursive-delete.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-watch-recursive-delete.js": {},
     "parallel/test-fs-watch-recursive-linux-parallel-remove.js": {},
     "parallel/test-fs-watch-recursive-promise.js": {
       "skip": true,

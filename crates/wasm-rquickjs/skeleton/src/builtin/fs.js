@@ -2861,12 +2861,64 @@ export function opendir(path, optionsOrCallback, callback) {
     });
 }
 
-// --- Stubs for unsupported operations ---
+// --- FSWatcher (polling-based, since WASI has no native inotify/kqueue) ---
+
+function _scanDir(dir, entries, recursive) {
+    const result = native.fs_readdir(dir, false);
+    if (result.error || result.stackOverflow) return;
+    for (let i = 0; i < result.entries.length; i++) {
+        const name = result.entries[i];
+        const fullPath = dir + '/' + name;
+        entries.add(fullPath);
+        if (recursive) {
+            const st = native.fs_stat(fullPath);
+            if (!st.error && st.stat.isDirectory) {
+                _scanDir(fullPath, entries, true);
+            }
+        }
+    }
+}
+
+function _snapshotDir(dir, recursive) {
+    const entries = new Set();
+    _scanDir(dir, entries, recursive);
+    return entries;
+}
 
 export class FSWatcher {
     constructor() {
         this._listeners = {};
+        this._timer = null;
+        this._closed = false;
+        this._watchPath = null;
+        this._recursive = false;
+        this._snapshot = null;
     }
+
+    _start(filename, recursive) {
+        this._watchPath = pathToString(filename);
+        this._recursive = recursive;
+        this._snapshot = _snapshotDir(this._watchPath, this._recursive);
+        this._timer = globalThis.setInterval(() => {
+            if (this._closed) return;
+            const current = _snapshotDir(this._watchPath, this._recursive);
+            const base = this._watchPath;
+            for (const entry of this._snapshot) {
+                if (!current.has(entry)) {
+                    const rel = entry.slice(base.length + 1);
+                    this.emit('change', 'rename', rel);
+                }
+            }
+            for (const entry of current) {
+                if (!this._snapshot.has(entry)) {
+                    const rel = entry.slice(base.length + 1);
+                    this.emit('change', 'rename', rel);
+                }
+            }
+            this._snapshot = current;
+        }, 200);
+    }
+
     on(event, listener) {
         if (!this._listeners[event]) this._listeners[event] = [];
         this._listeners[event].push(listener);
@@ -2877,10 +2929,21 @@ export class FSWatcher {
         for (const l of listeners) l(...args);
     }
     close() {
+        this._closed = true;
+        if (this._timer !== null) {
+            globalThis.clearInterval(this._timer);
+            this._timer = null;
+        }
         this.emit('close');
     }
-    ref() { return this; }
-    unref() { return this; }
+    ref() {
+        if (this._timer && typeof this._timer.ref === 'function') this._timer.ref();
+        return this;
+    }
+    unref() {
+        if (this._timer && typeof this._timer.unref === 'function') this._timer.unref();
+        return this;
+    }
 }
 
 const _statWatchers = new Map();
@@ -2970,6 +3033,7 @@ export function watch(filename, optionsOrListener, listener) {
     if (listener !== undefined) validateCallback(listener);
     const watcher = new FSWatcher();
     if (listener) watcher.on('change', listener);
+    watcher._start(filename, !!opts.recursive);
     return watcher;
 }
 

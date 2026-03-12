@@ -762,6 +762,18 @@ var common = {
     _resetMustCalls: function() {
         _mustCallChecks = [];
     },
+    _allMustCallsSatisfied: function() {
+        for (var i = 0; i < _mustCallChecks.length; i++) {
+            var check = _mustCallChecks[i];
+            var actual = check.getActual();
+            if (check.minimum !== undefined) {
+                if (actual < check.minimum) return false;
+            } else {
+                if (actual !== check.expected) return false;
+            }
+        }
+        return true;
+    },
 };
 
 function applyNetFlagsAndDefaults() {
