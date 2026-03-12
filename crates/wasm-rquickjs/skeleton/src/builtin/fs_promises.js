@@ -812,6 +812,7 @@ export async function open(path, flags, mode) {
     validatePath(path);
     flags = flagsToNumber(flags !== undefined ? flags : 'r');
     mode = validateMode(mode, 'mode', 0o666);
+    mode = mode & ~process.umask();
     const result = native.fs_open(pathToString(path), flags, mode);
     if (result.error) throw createSystemError(result.error);
     return new FileHandle(result.fd, path);

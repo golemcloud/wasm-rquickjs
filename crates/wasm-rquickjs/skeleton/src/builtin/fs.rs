@@ -838,7 +838,7 @@ pub mod native_module {
     // --- New functions ---
 
     #[rquickjs::function]
-    pub fn fs_open(ctx: Ctx<'_>, path: String, flags: i32, _mode: i32) -> Object<'_> {
+    pub fn fs_open(ctx: Ctx<'_>, path: String, flags: i32, mode: i32) -> Object<'_> {
         use std::fs::OpenOptions;
         use std::io::{Seek, SeekFrom};
 
@@ -853,11 +853,12 @@ pub mod native_module {
 
         let read = flags & 2 != 0 || flags & 1 == 0; // O_RDWR or O_RDONLY
         let write = flags & 1 != 0 || flags & 2 != 0; // O_WRONLY or O_RDWR
+        let creating = flags & 64 != 0; // O_CREAT
 
         opts.read(read);
         opts.write(write);
 
-        if flags & 64 != 0 {
+        if creating {
             opts.create(true); // O_CREAT
         }
         if flags & 128 != 0 {
@@ -880,7 +881,12 @@ pub mod native_module {
                 #[cfg(not(unix))]
                 {
                     super::remember_fd_path(fd, &path);
-                    if let Some(mode_override) = super::get_mode_override_for_path(&path) {
+                    if creating {
+                        super::set_mode_override_for_path(&path, mode as u32);
+                        super::set_mode_override_for_fd(fd, mode as u32);
+                    } else if let Some(mode_override) =
+                        super::get_mode_override_for_path(&path)
+                    {
                         super::set_mode_override_for_fd(fd, mode_override);
                     }
                 }
