@@ -1113,7 +1113,10 @@
         "block_02_test_writefilesync_with_file_descriptor": {},
         "block_03_test_writefilesync_with_flags": {},
         "block_04_test_writefilesync_with_no_flags": {},
-        "block_05_test_writefilesync_with_an_invalid_input": { "skip": true, "reason": "inherited: requires process.umask() and child_process" }
+        "block_05_test_writefilesync_with_an_invalid_input": {
+          "skip": true,
+          "reason": "[manual] amp made no code changes"
+        }
       }
     },
     "parallel/test-fs-write-file-typedarrays.js": {},
