@@ -2906,11 +2906,27 @@ export class FSWatcher {
         this._listeners[event].push(listener);
         return this;
     }
+    once(event, listener) {
+        const wrapped = (...args) => {
+            this.removeListener(event, wrapped);
+            listener(...args);
+        };
+        return this.on(event, wrapped);
+    }
+    removeListener(event, listener) {
+        const list = this._listeners[event];
+        if (list) {
+            const idx = list.indexOf(listener);
+            if (idx !== -1) list.splice(idx, 1);
+        }
+        return this;
+    }
     emit(event, ...args) {
-        const listeners = this._listeners[event] || [];
+        const listeners = this._listeners[event] ? this._listeners[event].slice() : [];
         for (const l of listeners) l(...args);
     }
     close() {
+        if (this._closed) return;
         this._closed = true;
         if (this._timer !== null) {
             globalThis.clearInterval(this._timer);
@@ -3016,6 +3032,15 @@ export function watch(filename, optionsOrListener, listener) {
     const watcher = new FSWatcher();
     if (listener) watcher.on('change', listener);
     watcher._start(filename, !!opts.recursive);
+
+    if (opts.signal) {
+        if (opts.signal.aborted) {
+            globalThis.queueMicrotask(() => watcher.close());
+        } else {
+            opts.signal.addEventListener('abort', () => watcher.close(), { once: true });
+        }
+    }
+
     return watcher;
 }
 
