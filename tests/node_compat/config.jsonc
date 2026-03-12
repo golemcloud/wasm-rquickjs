@@ -1152,7 +1152,7 @@
         "block_00_test_writefilesync": { "skip": true, "reason": "inherited: requires process.umask() and child_process" },
         "block_01_test_appendfilesync": { "skip": true, "reason": "inherited: requires process.umask() and child_process" },
         "block_02_test_writefilesync_with_file_descriptor": {},
-        "block_03_test_writefilesync_with_flags": { "skip": true, "reason": "inherited: requires process.umask() and child_process" },
+        "block_03_test_writefilesync_with_flags": {},
         "block_04_test_writefilesync_with_no_flags": { "skip": true, "reason": "inherited: requires process.umask() and child_process" },
         "block_05_test_writefilesync_with_an_invalid_input": { "skip": true, "reason": "inherited: requires process.umask() and child_process" }
       }
