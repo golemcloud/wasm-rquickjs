@@ -1025,10 +1025,7 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-fs-watch-close-when-destroyed.js": {
-      "skip": true,
-      "reason": "requires fs.watch which is not supported in WASI"
-    },
+    "parallel/test-fs-watch-close-when-destroyed.js": {},
     "parallel/test-fs-watch-encoding.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI",

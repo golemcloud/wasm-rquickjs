@@ -2916,6 +2916,9 @@ export class FSWatcher {
         this._listeners[event].push(listener);
         return this;
     }
+    addListener(event, listener) {
+        return this.on(event, listener);
+    }
     once(event, listener) {
         const wrapped = (...args) => {
             this.removeListener(event, wrapped);
@@ -3042,6 +3045,10 @@ export function watch(filename, optionsOrListener, listener) {
     const watcher = new FSWatcher();
     if (listener) watcher.on('change', listener);
     watcher._start(filename, !!opts.recursive);
+
+    if (opts.persistent === false) {
+        watcher.unref();
+    }
 
     if (opts.signal) {
         if (opts.signal.aborted) {
