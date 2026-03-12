@@ -5061,24 +5061,12 @@
         "block_11_block_11": {},
         "block_12_block_12": {},
         "block_13_block_13": {},
-        "block_14_block_14": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
-        "block_15_block_15": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "block_14_block_14": {},
+        "block_15_block_15": {},
         "block_16_block_16": {},
         "block_17_block_17": {},
-        "block_18_block_18": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
-        "block_19_block_19": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        }
+        "block_18_block_18": {},
+        "block_19_block_19": {}
       }
     },
     "parallel/test-webstreams-pipeline.js": {
@@ -10075,16 +10063,14 @@
     },
     "parallel/test-webstreams-clone-unref.js": { "skip": true, "reason": "structuredClone does not support transferring web streams" },
     "parallel/test-webstreams-finished.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
         "block_06_block_06": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_07_block_07": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "block_08_block_08": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
