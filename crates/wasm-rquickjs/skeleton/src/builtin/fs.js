@@ -3041,7 +3041,7 @@ function _tryStat(filename) {
 
 export class StatWatcher {
     constructor() {
-        this._listeners = [];
+        this._eventListeners = {};
         this._timer = null;
         this._prev = null;
         this._filename = null;
@@ -3060,23 +3060,46 @@ export class StatWatcher {
                 curr.mode !== this._prev.mode) {
                 const prev = this._prev;
                 this._prev = curr;
-                for (const l of this._listeners) l(curr, prev);
+                this.emit('change', curr, prev);
             }
         }, interval);
     }
 
-    addListener(listener) {
-        this._listeners.push(listener);
+    on(event, listener) {
+        if (!this._eventListeners[event]) this._eventListeners[event] = [];
+        this._eventListeners[event].push(listener);
+        return this;
     }
 
-    removeListener(listener) {
-        const idx = this._listeners.indexOf(listener);
-        if (idx !== -1) this._listeners.splice(idx, 1);
+    addListener(event, listener) {
+        return this.on(event, listener);
+    }
+
+    once(event, listener) {
+        const wrapped = (...args) => {
+            this.removeListener(event, wrapped);
+            listener(...args);
+        };
+        return this.on(event, wrapped);
+    }
+
+    removeListener(event, listener) {
+        const list = this._eventListeners[event];
+        if (list) {
+            const idx = list.indexOf(listener);
+            if (idx !== -1) list.splice(idx, 1);
+        }
+        return this;
+    }
+
+    emit(event, ...args) {
+        const listeners = this._eventListeners[event] ? this._eventListeners[event].slice() : [];
+        for (const l of listeners) l(...args);
     }
 
     listenerCount(eventName) {
-        if (eventName === 'change') return this._listeners.length;
-        return 0;
+        const list = this._eventListeners[eventName];
+        return list ? list.length : 0;
     }
 
     stop() {
@@ -3085,6 +3108,7 @@ export class StatWatcher {
             this._timer = null;
         }
         if (globalThis.__wasm_rquickjs_active_handles) globalThis.__wasm_rquickjs_active_handles.delete(this);
+        process.nextTick(() => this.emit('stop'));
     }
 
     ref() {
@@ -3161,7 +3185,7 @@ export function watchFile(filename, optionsOrListener, listener) {
         watcher.start(filename, interval);
         _statWatchers.set(filename, watcher);
     }
-    watcher.addListener(listener);
+    watcher.addListener('change', listener);
     return watcher;
 }
 
@@ -3172,12 +3196,12 @@ export function unwatchFile(filename, listener) {
     if (!watcher) return;
 
     if (typeof listener === 'function') {
-        watcher.removeListener(listener);
+        watcher.removeListener('change', listener);
     } else {
-        watcher._listeners.length = 0;
+        watcher._eventListeners['change'] = [];
     }
 
-    if (watcher.listenerCount() === 0) {
+    if (watcher.listenerCount('change') === 0) {
         watcher.stop();
         _statWatchers.delete(filename);
     }
