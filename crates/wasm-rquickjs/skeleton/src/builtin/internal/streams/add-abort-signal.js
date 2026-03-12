@@ -3,6 +3,7 @@
 // deno-lint-ignore-file
 
 import { AbortError, ERR_INVALID_ARG_TYPE } from "__wasm_rquickjs_builtin/internal/errors";
+import { isNodeStream, isWebStream } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 
 // This method is inlined here for readable-stream
@@ -17,14 +18,10 @@ const validateAbortSignal = (signal, name) => {
     }
 };
 
-function isStream(obj) {
-    return !!(obj && typeof obj.pipe === "function");
-}
-
 function addAbortSignal(signal, stream) {
     validateAbortSignal(signal, "signal");
-    if (!isStream(stream)) {
-        throw new ERR_INVALID_ARG_TYPE("stream", "stream.Stream", stream);
+    if (!isNodeStream(stream) && !isWebStream(stream)) {
+        throw new ERR_INVALID_ARG_TYPE("stream", ["ReadableStream", "WritableStream", "Stream"], stream);
     }
     return addAbortSignalNoValidate(signal, stream);
 }
@@ -32,9 +29,16 @@ function addAbortSignalNoValidate(signal, stream) {
     if (typeof signal !== "object" || !("aborted" in signal)) {
         return stream;
     }
-    const onAbort = () => {
-        stream.destroy(new AbortError(signal.reason));
-    };
+    const onAbort = isNodeStream(stream)
+        ? () => {
+            stream.destroy(new AbortError(undefined, { cause: signal.reason }));
+        }
+        : () => {
+            const controller = stream._readableStreamController || stream._writableStreamController;
+            if (controller && typeof controller.error === 'function') {
+                controller.error(new AbortError(undefined, { cause: signal.reason }));
+            }
+        };
     if (signal.aborted) {
         onAbort();
     } else {

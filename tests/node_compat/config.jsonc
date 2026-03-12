@@ -5047,18 +5047,9 @@
     "parallel/test-webstreams-compose.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
-        "block_02_block_02": {
-          "skip": true,
-          "reason": "regression: was enabled but started failing"
-        },
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
         "block_03_block_03": {
           "skip": true,
           "reason": "regression: was enabled but started failing"
@@ -10102,19 +10093,17 @@
     "parallel/test-webstream-readable-from.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webstream-readablestream-pipeto.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webstreams-abort-controller.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {}
       }
     },
-    "parallel/test-webstreams-clone-unref.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-webstreams-clone-unref.js": { "skip": true, "reason": "structuredClone does not support transferring web streams" },
     "parallel/test-webstreams-finished.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",

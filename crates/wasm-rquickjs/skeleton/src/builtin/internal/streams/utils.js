@@ -48,6 +48,38 @@ function isNodeStream(obj) {
     );
 }
 
+function isReadableStream(obj) {
+    return !!(
+        obj &&
+        !isNodeStream(obj) &&
+        typeof obj.pipeThrough === 'function' &&
+        typeof obj.getReader === 'function' &&
+        typeof obj.cancel === 'function'
+    );
+}
+
+function isWritableStream(obj) {
+    return !!(
+        obj &&
+        !isNodeStream(obj) &&
+        typeof obj.getWriter === 'function' &&
+        typeof obj.abort === 'function'
+    );
+}
+
+function isTransformStream(obj) {
+    return !!(
+        obj &&
+        !isNodeStream(obj) &&
+        typeof obj.readable === 'object' &&
+        typeof obj.writable === 'object'
+    );
+}
+
+function isWebStream(obj) {
+    return isReadableStream(obj) || isWritableStream(obj) || isTransformStream(obj);
+}
+
 function isIterable(obj, isAsync) {
     if (obj == null) return false;
     if (isAsync === true) return typeof obj[Symbol.asyncIterator] === "function";
@@ -235,11 +267,15 @@ export default {
     isIterable,
     isReadable,
     isReadableNodeStream,
+    isReadableStream,
     isReadableEnded,
     isReadableFinished,
     isNodeStream,
+    isTransformStream,
+    isWebStream,
     isWritable,
     isWritableNodeStream,
+    isWritableStream,
     isWritableEnded,
     isWritableFinished,
     isServerRequest,
@@ -259,12 +295,16 @@ export {
     isReadableEnded,
     isReadableFinished,
     isReadableNodeStream,
+    isReadableStream,
     isServerRequest,
     isServerResponse,
+    isTransformStream,
+    isWebStream,
     isWritable,
     isWritableEnded,
     isWritableFinished,
     isWritableNodeStream,
+    isWritableStream,
     kIsDisturbed,
     willEmitClose,
 };

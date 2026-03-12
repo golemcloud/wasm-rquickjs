@@ -2,7 +2,14 @@
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 // deno-lint-ignore-file
 
-import { isIterable, isNodeStream, isReadableNodeStream } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import {
+    isIterable,
+    isNodeStream,
+    isReadableNodeStream,
+    isReadableStream,
+    isTransformStream,
+    isWebStream,
+} from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { once } from "__wasm_rquickjs_builtin/internal/util";
 import { validateAbortSignal, validateFunction } from "__wasm_rquickjs_builtin/internal/validators";
 import {
@@ -86,6 +93,31 @@ function makeAsyncIterable(val) {
 
 async function* fromReadable(val) {
     yield* Readable.prototype[Symbol.asyncIterator].call(val);
+}
+
+async function pumpToWeb(readable, writable, finish, { end }) {
+    if (isTransformStream(writable)) {
+        writable = writable.writable;
+    }
+    const writer = writable.getWriter();
+    try {
+        for await (const chunk of readable) {
+            await writer.ready;
+            writer.write(chunk).catch(() => {});
+        }
+        await writer.ready;
+        if (end) {
+            await writer.close();
+        }
+        finish();
+    } catch (err) {
+        try {
+            await writer.abort(err);
+            finish(err);
+        } catch (err2) {
+            finish(err2);
+        }
+    }
 }
 
 async function pump(iterable, writable, finish, opts) {
@@ -245,13 +277,17 @@ function pipelineImpl(streams, callback, opts) {
                         ret,
                     );
                 }
-            } else if (isIterable(stream) || isReadableNodeStream(stream)) {
+            } else if (isIterable(stream) || isReadableNodeStream(stream) || isTransformStream(stream)) {
                 ret = stream;
             } else {
                 ret = Duplex.from(stream);
             }
         } else if (typeof stream === "function") {
-            ret = makeAsyncIterable(ret);
+            if (isTransformStream(ret)) {
+                ret = makeAsyncIterable(ret?.readable);
+            } else {
+                ret = makeAsyncIterable(ret);
+            }
             ret = stream(ret, { signal });
 
             if (reading) {
@@ -276,15 +312,27 @@ function pipelineImpl(streams, callback, opts) {
                 // second use.
                 const then = ret?.then;
                 if (typeof then === "function") {
+                    finishCount++;
                     then.call(ret, (val) => {
                         value = val;
-                        pt.end(val);
+                        if (val != null) {
+                            pt.write(val);
+                        }
+                        if (end) {
+                            pt.end();
+                        }
+                        nextTick(finish);
                     }, (err) => {
                         pt.destroy(err);
+                        nextTick(finish, err);
                     });
                 } else if (isIterable(ret, true)) {
                     finishCount++;
-                    pump(ret, pt, finish);
+                    pump(ret, pt, finish, { end });
+                } else if (isReadableStream(ret) || isTransformStream(ret)) {
+                    const toRead = ret.readable || ret;
+                    finishCount++;
+                    pump(toRead, pt, finish, { end });
                 } else {
                     throw new ERR_INVALID_RETURN_VALUE(
                         "AsyncIterable or Promise",
@@ -301,18 +349,37 @@ function pipelineImpl(streams, callback, opts) {
         } else if (isNodeStream(stream)) {
             if (isReadableNodeStream(ret)) {
                 ret.pipe(stream, { end });
-
-                // Compat. Before node v10.12.0 stdio used to throw an error so
-                // pipe() did/does not end() stdio destinations.
-                // Now they allow it but "secretly" don't close the underlying fd.
-                // if (stream === stdio.stdout || stream === stdio.stderr) {
-                //     ret.on("end", () => stream.end());
-                // }
-            } else {
-                ret = makeAsyncIterable(ret);
-
+            } else if (isTransformStream(ret) || isReadableStream(ret)) {
+                const toRead = ret.readable || ret;
+                finishCount++;
+                pump(toRead, stream, finish, { end });
+            } else if (isIterable(ret)) {
                 finishCount++;
                 pump(ret, stream, finish, { end });
+            } else {
+                throw new ERR_INVALID_ARG_TYPE(
+                    "val",
+                    ["Readable", "Iterable", "AsyncIterable", "ReadableStream", "TransformStream"],
+                    ret,
+                );
+            }
+            ret = stream;
+        } else if (isWebStream(stream)) {
+            if (isReadableNodeStream(ret)) {
+                finishCount++;
+                pumpToWeb(makeAsyncIterable(ret), stream, finish, { end });
+            } else if (isReadableStream(ret) || isIterable(ret)) {
+                finishCount++;
+                pumpToWeb(ret, stream, finish, { end });
+            } else if (isTransformStream(ret)) {
+                finishCount++;
+                pumpToWeb(ret.readable, stream, finish, { end });
+            } else {
+                throw new ERR_INVALID_ARG_TYPE(
+                    "val",
+                    ["Readable", "Iterable", "AsyncIterable", "ReadableStream", "TransformStream"],
+                    ret,
+                );
             }
             ret = stream;
         } else {

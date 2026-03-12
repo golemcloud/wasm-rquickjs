@@ -10,7 +10,9 @@ import {
 import {
     isNodeStream,
     isReadableNodeStream,
+    isReadableStream,
     isWritableNodeStream,
+    isWritableStream,
     isClosed,
     isWritableFinished,
     isReadableFinished,
@@ -54,6 +56,10 @@ export function eos(stream, options, callback) {
     validateAbortSignal(options.signal, "options.signal");
 
     callback = once(callback);
+
+    if (isReadableStream(stream) || isWritableStream(stream)) {
+        return eosWeb(stream, options, callback);
+    }
 
     if (!isNodeStream(stream)) {
         throw new ERR_INVALID_ARG_TYPE(
@@ -201,6 +207,58 @@ export function eos(stream, options, callback) {
     }
 
     return cleanup;
+}
+
+function eosWeb(stream, options, callback) {
+    let isAborted = false;
+    let abort = nop;
+
+    if (options.signal) {
+        abort = () => {
+            isAborted = true;
+            callback.call(stream, new AbortError());
+        };
+        if (options.signal.aborted) {
+            nextTick(abort);
+        } else {
+            const originalCallback = callback;
+            options.signal.addEventListener('abort', abort);
+            callback = once((...args) => {
+                options.signal.removeEventListener('abort', abort);
+                originalCallback.apply(stream, args);
+            });
+        }
+    }
+
+    const resolverFn = (...args) => {
+        if (!isAborted) {
+            nextTick(() => callback.apply(stream, args));
+        }
+    };
+
+    const currentState = stream._state;
+    if (currentState === 'closed') {
+        nextTick(resolverFn);
+    } else if (currentState === 'errored') {
+        nextTick(() => resolverFn(stream._storedError));
+    } else {
+        let internalState = currentState;
+        Object.defineProperty(stream, '_state', {
+            get() { return internalState; },
+            set(val) {
+                internalState = val;
+                if (val === 'closed') {
+                    resolverFn();
+                } else if (val === 'errored') {
+                    nextTick(() => resolverFn(stream._storedError));
+                }
+            },
+            configurable: true,
+            enumerable: true,
+        });
+    }
+
+    return nop;
 }
 
 export default eos;
