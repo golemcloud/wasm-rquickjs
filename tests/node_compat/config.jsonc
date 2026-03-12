@@ -1061,7 +1061,7 @@
     "parallel/test-fs-watch-stop-sync.js": {},
     "parallel/test-fs-watchfile-bigint.js": {
       "skip": true,
-      "reason": "requires fs.watch/fs.watchFile which is not supported in WASI"
+      "reason": "[manual] amp fix caused regressions"
     },
     "parallel/test-fs-watchfile-ref-unref.js": {},
     "parallel/test-fs-watchfile.js": {
