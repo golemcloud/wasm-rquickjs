@@ -193,6 +193,19 @@ fn remove_emulated_symlink(path: &str) {
 }
 
 #[cfg(not(unix))]
+fn remove_emulated_symlinks_under(dir: &str) {
+    let prefix = if dir.ends_with('/') {
+        dir.to_string()
+    } else {
+        format!("{dir}/")
+    };
+    EMULATED_SYMLINKS
+        .lock()
+        .unwrap()
+        .retain(|k, _| !k.starts_with(&prefix));
+}
+
+#[cfg(not(unix))]
 fn move_emulated_symlink(old_path: &str, new_path: &str) {
     let target = EMULATED_SYMLINKS.lock().unwrap().remove(old_path);
     if let Some(target) = target {
@@ -1605,7 +1618,10 @@ pub mod native_module {
                     match result {
                         Ok(_) => {
                             #[cfg(not(unix))]
-                            super::remove_mode_override_for_path(&path);
+                            {
+                                super::remove_mode_override_for_path(&path);
+                                super::remove_emulated_symlinks_under(&path);
+                            }
                             None
                         }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
@@ -1614,7 +1630,10 @@ pub mod native_module {
                     match std::fs::remove_file(&path) {
                         Ok(_) => {
                             #[cfg(not(unix))]
-                            super::remove_mode_override_for_path(&path);
+                            {
+                                super::remove_mode_override_for_path(&path);
+                                super::remove_emulated_symlink(&path);
+                            }
                             None
                         }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
@@ -1625,7 +1644,7 @@ pub mod native_module {
                 if force && err.kind() == std::io::ErrorKind::NotFound {
                     None
                 } else {
-                    Some(super::make_fs_error(&ctx, &err, "rm", Some(&path)))
+                    Some(super::make_fs_error(&ctx, &err, "lstat", Some(&path)))
                 }
             }
         }

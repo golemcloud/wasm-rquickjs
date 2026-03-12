@@ -1639,6 +1639,7 @@ export function rmdirSync(path, options) {
 
 export function rmSync(path, options) {
     validatePath(path);
+    path = pathToString(path);
     const recursive = options && options.recursive || false;
     const force = options && options.force || false;
     const error = native.fs_rm(path, recursive, force);
