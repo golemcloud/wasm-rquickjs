@@ -838,10 +838,7 @@
     "parallel/test-fs-realpath-buffer-encoding.js": {},
     "parallel/test-fs-realpath-native.js": {},
     "parallel/test-fs-realpath-on-substed-drive.js": {},
-    "parallel/test-fs-realpath-pipe.js": {
-      "skip": true,
-      "reason": "requires child_process which is not available in WASM"
-    },
+    "parallel/test-fs-realpath-pipe.js": {},
     "parallel/test-fs-realpath.js": {
       "skip": true,
       "reason": "requires worker_threads which is not available in WASM"

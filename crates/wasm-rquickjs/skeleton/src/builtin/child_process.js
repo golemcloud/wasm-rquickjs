@@ -475,6 +475,8 @@ function runInline(command, args, options) {
     var oldStdoutWrite = process.stdout && process.stdout.write;
     var oldStderrWrite = process.stderr && process.stderr.write;
     var oldEmitWarning = process.emitWarning;
+    var oldExit = process.exit;
+    var firstExitCode = null;
     var hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
     var oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
     var hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
@@ -498,6 +500,14 @@ function runInline(command, args, options) {
         };
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
+        globalThis.__wasm_rquickjs_sync_callbacks = true;
+
+        process.exit = function exit(code) {
+            if (firstExitCode === null) {
+                firstExitCode = code !== undefined ? code : 0;
+            }
+            return oldExit.call(this, code);
+        };
 
         if (hasFipsStartupFlag(execArgv)) {
             throw new Error(FIPS_STARTUP_ERROR);
@@ -717,7 +727,7 @@ function runInline(command, args, options) {
         }
     } catch (err) {
         if (err && err.__isProcessExit) {
-            status = typeof err.code === 'number' ? err.code : 0;
+            status = firstExitCode !== null ? firstExitCode : (typeof err.code === 'number' ? err.code : 0);
         } else {
             status = 1;
             capturedStderr += formatErrorForStderr(err);
@@ -734,6 +744,7 @@ function runInline(command, args, options) {
         }
         replaceEnv(process.env, oldEnv);
         process.emitWarning = oldEmitWarning;
+        process.exit = oldExit;
 
         if (process.stdout && typeof oldStdoutWrite === 'function') {
             process.stdout.write = oldStdoutWrite;
@@ -780,6 +791,8 @@ function runInline(command, args, options) {
         } else {
             delete globalThis.__wasm_rquickjs_cjs_line_offsets;
         }
+
+        delete globalThis.__wasm_rquickjs_sync_callbacks;
     }
 
     return buildOutputResult(capturedStdout, capturedStderr, status, encoding);

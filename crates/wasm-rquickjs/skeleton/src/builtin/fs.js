@@ -2340,14 +2340,24 @@ export function realpath(path, optionsOrCallback, callback) {
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
     const cb = callback;
     validateCallback(cb);
-    queueMicrotask(() => {
+    if (globalThis.__wasm_rquickjs_sync_callbacks) {
         try {
             const result = realpathSync(path, opts);
             cb(null, result);
         } catch (err) {
+            if (err && err.__isProcessExit) throw err;
             cb(err);
         }
-    });
+    } else {
+        queueMicrotask(() => {
+            try {
+                const result = realpathSync(path, opts);
+                cb(null, result);
+            } catch (err) {
+                cb(err);
+            }
+        });
+    }
 }
 
 function realpathNative(path, optionsOrCallback, callback) {

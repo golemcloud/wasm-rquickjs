@@ -361,6 +361,10 @@ fn make_badf_error<'js>(ctx: &rquickjs::Ctx<'js>, syscall: &str) -> rquickjs::Ob
     obj
 }
 
+fn is_dev_stdio_path(path: &str) -> bool {
+    matches!(path, "/dev/stdin" | "/dev/stdout" | "/dev/stderr")
+}
+
 fn stdio_stat_obj<'js>(ctx: &rquickjs::Ctx<'js>) -> rquickjs::Object<'js> {
     let obj = rquickjs::Object::new(ctx.clone()).unwrap();
     obj.set("dev", 0_f64).unwrap();
@@ -935,6 +939,12 @@ pub mod native_module {
     pub fn fs_stat(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
 
+        if super::is_dev_stdio_path(&path) {
+            let stat = super::stdio_stat_obj(&ctx);
+            result.set("stat", stat).unwrap();
+            return result;
+        }
+
         #[cfg(not(unix))]
         let fs_path = super::resolve_emulated_symlinks(&path);
         #[cfg(unix)]
@@ -966,6 +976,12 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_lstat(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
+
+        if super::is_dev_stdio_path(&path) {
+            let stat = super::stdio_stat_obj(&ctx);
+            result.set("stat", stat).unwrap();
+            return result;
+        }
 
         // For lstat: if the path itself is an emulated symlink, use the
         // original path (we'll mark it as symlink below). Otherwise resolve
@@ -1126,6 +1142,11 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn fs_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
+
+        if super::is_dev_stdio_path(&path) {
+            result.set("result", path).unwrap();
+            return result;
+        }
 
         #[cfg(not(unix))]
         if let Some(target) = super::get_emulated_symlink_target(&path) {
