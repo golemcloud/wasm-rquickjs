@@ -904,12 +904,10 @@
       }
     },
     "parallel/test-fs-statfs.js": {
-      "skip": true,
-      "reason": "requires fs.statfs/statfsSync",
       "split": true,
       "subtests": {
-        "block_00_synchronous": { "skip": true, "reason": "inherited: requires fs.statfs/statfsSync" },
-        "block_01_synchronous_bigint": { "skip": true, "reason": "inherited: requires fs.statfs/statfsSync" }
+        "block_00_synchronous": {},
+        "block_01_synchronous_bigint": {}
       }
     },
     "parallel/test-fs-stream-construct-compat-error-read.js": {},

@@ -1333,6 +1333,38 @@ export function fstatSync(fd, options) {
     return (options && options.bigint) ? s._toBigInt() : s;
 }
 
+function makeStatFsResult(bigint) {
+    if (bigint) {
+        return {
+            type: BigInt(0),
+            bsize: BigInt(4096),
+            blocks: BigInt(0),
+            bfree: BigInt(0),
+            bavail: BigInt(0),
+            files: BigInt(0),
+            ffree: BigInt(0),
+        };
+    }
+    return {
+        type: 0,
+        bsize: 4096,
+        blocks: 0,
+        bfree: 0,
+        bavail: 0,
+        files: 0,
+        ffree: 0,
+    };
+}
+
+export function statfsSync(path, options) {
+    validatePath(path);
+    const result = native.fs_stat(pathToString(path));
+    if (result.error) {
+        throw createSystemError(result.error);
+    }
+    return makeStatFsResult(options && options.bigint);
+}
+
 export function readdirSync(path, options) {
     validatePath(path);
     const opts = getOptions(options, {});
@@ -2155,6 +2187,24 @@ export function lstat(path, optionsOrCallback, callback) {
     queueMicrotask(() => {
         try {
             const result = lstatSync(path, optionsOrCallback);
+            cb(null, result);
+        } catch (err) {
+            cb(err);
+        }
+    });
+}
+
+export function statfs(path, optionsOrCallback, callback) {
+    validatePath(path);
+    if (typeof optionsOrCallback === 'function') {
+        callback = optionsOrCallback;
+        optionsOrCallback = {};
+    }
+    const cb = callback;
+    validateCallback(cb);
+    queueMicrotask(() => {
+        try {
+            const result = statfsSync(path, optionsOrCallback);
             cb(null, result);
         } catch (err) {
             cb(err);
@@ -3718,6 +3768,7 @@ const _default = {
     statSync,
     lstatSync,
     fstatSync,
+    statfsSync,
     readdirSync,
     accessSync,
     existsSync,
@@ -3757,6 +3808,7 @@ const _default = {
     stat,
     lstat,
     fstat,
+    statfs,
     ftruncate,
     fsync,
     fdatasync,
