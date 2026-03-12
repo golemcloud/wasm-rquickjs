@@ -1074,7 +1074,10 @@
       "reason": "requires child_process.exec and process.on('exit')",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires child_process.exec and process.on('exit')" },
+        "block_00_block_00": {
+          "skip": true,
+          "reason": "[manual] amp made no code changes"
+        },
         "block_01_block_01": {},
         "block_02_block_02": {},
         "block_03_block_03": {},
