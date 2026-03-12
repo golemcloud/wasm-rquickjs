@@ -1,5 +1,9 @@
 import { constants as fsConstants } from "node:fs";
-import { ERR_INVALID_ARG_VALUE } from "__wasm_rquickjs_builtin/internal/errors";
+import {
+    ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
+    ERR_OUT_OF_RANGE,
+} from "__wasm_rquickjs_builtin/internal/errors";
 
 const {
     O_APPEND = 0,
@@ -49,6 +53,75 @@ export function stringToFlags(flags, name = "flags") {
     }
 }
 
+const defaultRmOptions = {
+    recursive: false,
+    force: false,
+    retryDelay: 100,
+    maxRetries: 0,
+};
+
+function validateObject(value, name) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        throw new ERR_INVALID_ARG_TYPE(name, 'object', value);
+    }
+}
+
+function validateBoolean(value, name) {
+    if (typeof value !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE(name, 'boolean', value);
+    }
+}
+
+function validateInt32(value, name, min = -2147483648, max = 2147483647) {
+    if (typeof value !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE(name, 'number', value);
+    }
+    if (!Number.isInteger(value)) {
+        throw new ERR_OUT_OF_RANGE(name, 'an integer', value);
+    }
+    if (value < min || value > max) {
+        throw new ERR_OUT_OF_RANGE(name, `>= ${min} && <= ${max}`, value);
+    }
+}
+
+function validateRmdirOptions(options, defaults = defaultRmOptions) {
+    if (options === undefined) {
+        return defaults;
+    }
+    validateObject(options, 'options');
+    options = { ...defaults, ...options };
+    validateBoolean(options.recursive, 'options.recursive');
+    validateInt32(options.retryDelay, 'options.retryDelay', 0);
+    validateInt32(options.maxRetries, 'options.maxRetries', 0);
+    return options;
+}
+
+export function validateRmOptionsSync(path, options, expectDir) {
+    const fs = require('node:fs');
+    options = validateRmdirOptions(options, defaultRmOptions);
+    validateBoolean(options.force, 'options.force');
+
+    if (!options.force || expectDir || !options.recursive) {
+        const isDirectory = fs
+            .lstatSync(path, { throwIfNoEntry: !options.force })?.isDirectory();
+
+        if (expectDir && !isDirectory) {
+            return false;
+        }
+
+        if (isDirectory && !options.recursive) {
+            const err = new Error(`EISDIR: is a directory, rm '${path}'`);
+            err.code = 'EISDIR';
+            err.syscall = 'rm';
+            err.path = path;
+            throw err;
+        }
+    }
+
+    return options;
+}
+
 export default {
     stringToFlags,
+    validateRmOptionsSync,
 };
