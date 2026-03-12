@@ -958,10 +958,7 @@
     "parallel/test-fs-symlink-longpath.js": {},
     "parallel/test-fs-symlink.js": {},
     "parallel/test-fs-sync-fd-leak.js": {},
-    "parallel/test-fs-syncwritestream.js": {
-      "skip": true,
-      "reason": "requires child_process which is not available in WASM"
-    },
+    "parallel/test-fs-syncwritestream.js": {},
     "parallel/test-fs-timestamp-parsing-error.js": {},
     "parallel/test-fs-truncate.js": {
       "split": true,
