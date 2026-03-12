@@ -1066,7 +1066,7 @@
     "parallel/test-fs-watchfile-ref-unref.js": {},
     "parallel/test-fs-watchfile.js": {
       "skip": true,
-      "reason": "requires fs.watchFile which is not supported in WASI"
+      "reason": "[manual] amp made no code changes"
     },
     "parallel/test-fs-whatwg-url.js": {},
     "parallel/test-fs-write.js": {
