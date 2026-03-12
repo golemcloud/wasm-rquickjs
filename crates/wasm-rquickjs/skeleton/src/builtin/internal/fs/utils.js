@@ -60,6 +60,12 @@ const defaultRmOptions = {
     maxRetries: 0,
 };
 
+const defaultRmdirOptions = {
+    retryDelay: 100,
+    maxRetries: 0,
+    recursive: false,
+};
+
 function validateObject(value, name) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
         throw new ERR_INVALID_ARG_TYPE(name, 'object', value);
@@ -84,7 +90,7 @@ function validateInt32(value, name, min = -2147483648, max = 2147483647) {
     }
 }
 
-function validateRmdirOptions(options, defaults = defaultRmOptions) {
+export function validateRmdirOptions(options, defaults = defaultRmdirOptions) {
     if (options === undefined) {
         return defaults;
     }
@@ -123,5 +129,6 @@ export function validateRmOptionsSync(path, options, expectDir) {
 
 export default {
     stringToFlags,
+    validateRmdirOptions,
     validateRmOptionsSync,
 };
