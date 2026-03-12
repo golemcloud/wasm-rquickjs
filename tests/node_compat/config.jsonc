@@ -996,17 +996,27 @@
       }
     },
     "parallel/test-fs-utils-get-dirents.js": {
-      "skip": true,
-      "reason": "requires Node.js internal modules not available in WASM",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
+        "block_00_block_00": {},
         "block_01_getdirents": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_02_block_02": {},
-        "block_03_block_03": {},
-        "block_04_block_04": {},
+        "block_02_block_02": {
+          "skip": true,
+          "reason": "requires Node.js internal modules not available in WASM"
+        },
+        "block_03_block_03": {
+          "skip": true,
+          "reason": "requires Node.js internal modules not available in WASM"
+        },
+        "block_04_block_04": {
+          "skip": true,
+          "reason": "requires Node.js internal modules not available in WASM"
+        },
         "block_05_getdirent": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
-        "block_06_block_06": {},
+        "block_06_block_06": {
+          "skip": true,
+          "reason": "requires Node.js internal modules not available in WASM"
+        },
         "block_07_block_07": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" },
         "block_08_block_08": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
       }
