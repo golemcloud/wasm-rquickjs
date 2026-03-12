@@ -10955,7 +10955,10 @@
           "skip": true,
           "reason": "[manual] amp made no code changes"
         },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_02_block_02": {
+          "skip": true,
+          "reason": "[manual] amp made no code changes"
+        },
         "block_03_not_block_the_event_loop": {},
         "block_04_https_github_com_joyent_node_issues_6690": {},
         "block_05_block_05": {}
