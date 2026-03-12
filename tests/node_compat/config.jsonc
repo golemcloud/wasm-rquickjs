@@ -856,7 +856,7 @@
         "block_00_test_the_asynchronous_version": {},
         "block_01_test_the_synchronous_version": {},
         "block_02_test_input_validation": {},
-        "block_03_rimraf_see_35566": { "skip": true, "reason": "inherited: requires Node.js internal modules not available in WASM" }
+        "block_03_rimraf_see_35566": {}
       }
     },
     "parallel/test-fs-rmdir-recursive-sync-warns-not-found.js": {},

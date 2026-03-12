@@ -1617,11 +1617,29 @@ export function mkdirSync(path, options) {
     return undefined;
 }
 
+function _rimrafSync(dirPath) {
+    const entries = readdirSync(dirPath, { withFileTypes: true });
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const entryPath = dirPath + '/' + entry.name;
+        if (entry.isDirectory()) {
+            _rimrafSync(entryPath);
+        } else {
+            unlinkSync(entryPath);
+        }
+    }
+    _default.rmdirSync(dirPath);
+}
+
 export function rmdirSync(path, options) {
     validatePath(path);
     if (options && options.recursive) {
+        path = pathToString(path);
         const st = native.fs_stat(path);
-        if (!st.error && !st.stat.isDirectory) {
+        if (st.error) {
+            throw createSystemError(st.error);
+        }
+        if (!st.stat.isDirectory) {
             const err = new Error(`ENOTDIR: not a directory, rmdir '${path}'`);
             err.code = 'ENOTDIR';
             err.errno = -20;
@@ -1629,8 +1647,7 @@ export function rmdirSync(path, options) {
             err.path = path;
             throw err;
         }
-        const error = native.fs_rm(path, true, false);
-        if (error) throw createSystemError(error);
+        _rimrafSync(path);
     } else {
         const error = native.fs_rmdir(path);
         if (error) throw createSystemError(error);
