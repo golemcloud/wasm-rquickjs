@@ -1060,10 +1060,7 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-fs-watch-file-enoent-after-deletion.js": {
-      "skip": true,
-      "reason": "regression: was enabled but started failing"
-    },
+    "parallel/test-fs-watch-file-enoent-after-deletion.js": {},
     "parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js": {
       "skip": true,
       "reason": "requires fs.watch which is not supported in WASI"

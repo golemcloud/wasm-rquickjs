@@ -2883,11 +2883,80 @@ export class FSWatcher {
     unref() { return this; }
 }
 
+const _statWatchers = new Map();
+
+function _zeroStat() {
+    return new Stats({
+        dev: 0, mode: 0, nlink: 0, uid: 0, gid: 0, rdev: 0,
+        blksize: 0, ino: 0, size: 0, blocks: 0,
+        atimeMs: 0, mtimeMs: 0, ctimeMs: 0, birthtimeMs: 0,
+        isFile: false, isDirectory: false, isSymlink: false,
+    });
+}
+
+function _tryStat(filename) {
+    const result = native.fs_stat(pathToString(filename));
+    if (result.error) {
+        return _zeroStat();
+    }
+    return new Stats(result.stat);
+}
+
 export class StatWatcher {
-    constructor() {}
-    ref() { return this; }
-    unref() { return this; }
-    stop() {}
+    constructor() {
+        this._listeners = [];
+        this._timer = null;
+        this._prev = null;
+        this._filename = null;
+    }
+
+    start(filename, interval) {
+        this._filename = filename;
+        this._prev = _tryStat(filename);
+        this._timer = globalThis.setInterval(() => {
+            const curr = _tryStat(filename);
+            if (curr.mtimeMs !== this._prev.mtimeMs ||
+                curr.size !== this._prev.size ||
+                curr.ino !== this._prev.ino ||
+                curr.nlink !== this._prev.nlink ||
+                curr.mode !== this._prev.mode) {
+                const prev = this._prev;
+                this._prev = curr;
+                for (const l of this._listeners) l(curr, prev);
+            }
+        }, interval);
+    }
+
+    addListener(listener) {
+        this._listeners.push(listener);
+    }
+
+    removeListener(listener) {
+        const idx = this._listeners.indexOf(listener);
+        if (idx !== -1) this._listeners.splice(idx, 1);
+    }
+
+    listenerCount(eventName) {
+        if (eventName === 'change') return this._listeners.length;
+        return 0;
+    }
+
+    stop() {
+        if (this._timer !== null) {
+            globalThis.clearInterval(this._timer);
+            this._timer = null;
+        }
+    }
+
+    ref() {
+        if (this._timer) this._timer.ref();
+        return this;
+    }
+
+    unref() {
+        if (this._timer) this._timer.unref();
+        return this;
+    }
 }
 
 export function watch(filename, optionsOrListener, listener) {
@@ -2906,13 +2975,45 @@ export function watch(filename, optionsOrListener, listener) {
 
 export function watchFile(filename, optionsOrListener, listener) {
     validatePath(filename, 'filename');
-    const watcher = new StatWatcher();
+    filename = pathToString(filename);
+
+    if (typeof optionsOrListener === 'function') {
+        listener = optionsOrListener;
+        optionsOrListener = {};
+    }
+    if (typeof listener !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('listener', 'Function', listener);
+    }
+
+    const options = optionsOrListener || {};
+    const interval = options.interval || 5007;
+
+    let watcher = _statWatchers.get(filename);
+    if (!watcher) {
+        watcher = new StatWatcher();
+        watcher.start(filename, interval);
+        _statWatchers.set(filename, watcher);
+    }
+    watcher.addListener(listener);
     return watcher;
 }
 
 export function unwatchFile(filename, listener) {
     validatePath(filename, 'filename');
-    // no-op
+    filename = pathToString(filename);
+    const watcher = _statWatchers.get(filename);
+    if (!watcher) return;
+
+    if (typeof listener === 'function') {
+        watcher.removeListener(listener);
+    } else {
+        watcher._listeners.length = 0;
+    }
+
+    if (watcher.listenerCount() === 0) {
+        watcher.stop();
+        _statWatchers.delete(filename);
+    }
 }
 
 // --- ReadStream / WriteStream ---
