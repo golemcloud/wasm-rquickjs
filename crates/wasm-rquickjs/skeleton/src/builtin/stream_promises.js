@@ -1,7 +1,7 @@
 // Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 
-import { isIterable, isNodeStream } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isIterable, isNodeStream, isWebStream } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { pipelineImpl as pl } from "__wasm_rquickjs_builtin/internal/streams/pipeline";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import { validateBoolean } from "__wasm_rquickjs_builtin/internal/validators";
@@ -13,7 +13,8 @@ function pipeline(...streams) {
         const lastArg = streams[streams.length - 1];
         if (
             lastArg && typeof lastArg === "object" &&
-            !isNodeStream(lastArg) && !isIterable(lastArg)
+            !isNodeStream(lastArg) && !isIterable(lastArg) &&
+            !isWebStream(lastArg)
         ) {
             const options = streams.pop();
             signal = options.signal;
