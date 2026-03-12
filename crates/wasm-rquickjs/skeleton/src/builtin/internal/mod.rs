@@ -6,6 +6,7 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("internal/http")
         .with_module("__wasm_rquickjs_builtin/internal/errors")
         .with_module("__wasm_rquickjs_builtin/internal/fs/utils")
+        .with_module("__wasm_rquickjs_builtin/internal/fs/shared")
         .with_module("__wasm_rquickjs_builtin/internal/normalize_encoding")
         .with_module("__wasm_rquickjs_builtin/internal/url")
         .with_module("__wasm_rquickjs_builtin/internal/util")
@@ -49,6 +50,10 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/fs/utils",
             include_str!("fs/utils.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/fs/shared",
+            include_str!("fs/shared.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/normalize_encoding",

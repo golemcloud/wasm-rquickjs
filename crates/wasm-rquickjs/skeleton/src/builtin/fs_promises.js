@@ -4,14 +4,29 @@ import {
     AbortError,
     ERR_FS_FILE_TOO_LARGE,
 } from '__wasm_rquickjs_builtin/internal/errors';
+import {
+    getInternalFsBinding,
+    describeType,
+    createSystemError,
+    validateInteger,
+    validateMode,
+    parseMkdirOptions as _parseMkdirOptions,
+    formatEmptyBufferValue,
+    throwEmptyReadBufferError,
+    validateUid,
+    validateFlush,
+    validateAbortSignal,
+    validateAppendFileData,
+    validateMkdtempPrefix as _validateMkdtempPrefix,
+    makeAbortError,
+} from '__wasm_rquickjs_builtin/internal/fs/shared';
 
 const MKDIR_MODE_MASK = 0o7777;
 const kIoMaxLength = 2 ** 31 - 1;
 
 // Expose fstat on the internal fs binding so tests can monkeypatch it
 // (e.g. test-fs-promises-readfile.js replaces fstat to simulate zero-size files).
-const _fsBinding = globalThis.__wasm_rquickjs_internal_fs_binding ||
-    (globalThis.__wasm_rquickjs_internal_fs_binding = {});
+const _fsBinding = getInternalFsBinding();
 if (typeof _fsBinding.fstat !== 'function') {
     _fsBinding.fstat = function fstat(fd) {
         const result = native.fs_fstat(fd);
@@ -83,30 +98,6 @@ export let constants = { F_OK, R_OK, W_OK, X_OK };
 
 // --- Helpers ---
 
-function describeType(value) {
-    if (value === null) return 'null';
-    if (value === undefined) return 'undefined';
-    if (typeof value === 'object') {
-        if (value.constructor && value.constructor.name) {
-            return 'an instance of ' + value.constructor.name;
-        }
-        return 'type object';
-    }
-    if (typeof value === 'function') return 'function ' + (value.name || '');
-    return 'type ' + typeof value + ' (' + String(value) + ')';
-}
-
-function formatEmptyBufferValue(buffer) {
-    const ctorName = buffer && buffer.constructor && buffer.constructor.name ? buffer.constructor.name : 'Uint8Array';
-    return `${ctorName}(0) []`;
-}
-
-function throwEmptyReadBufferError(buffer) {
-    const err = new TypeError(`The argument 'buffer' is empty and cannot be written. Received ${formatEmptyBufferValue(buffer)}`);
-    err.code = 'ERR_INVALID_ARG_VALUE';
-    throw err;
-}
-
 function flagsToNumber(flags) {
     if (typeof flags === 'number') {
         validateInteger(flags, 'flags', -2147483648, 2147483647);
@@ -136,34 +127,6 @@ function makeEBADF(syscall) {
     err.code = 'EBADF';
     err.errno = -9;
     err.syscall = syscall;
-    return err;
-}
-
-function getSystemErrorDescription(message) {
-    if (typeof message !== 'string' || message.length === 0) {
-        return 'unknown error';
-    }
-    const parsedMessage = /^\s*[A-Z0-9_]+:\s*([^,]+),/.exec(message);
-    if (parsedMessage && parsedMessage[1]) {
-        return parsedMessage[1];
-    }
-    return message;
-}
-
-function createSystemError(errObj) {
-    if (!errObj) return null;
-    let msg = typeof errObj.message === 'string' ? errObj.message : 'unknown error';
-    if (errObj.code && errObj.syscall) {
-        msg = errObj.code + ': ' + getSystemErrorDescription(errObj.message) + ', ' + errObj.syscall;
-        if (errObj.path !== undefined) msg += " '" + errObj.path + "'";
-        if (errObj.dest !== undefined) msg += " -> '" + errObj.dest + "'";
-    }
-    const err = new Error(msg);
-    err.code = errObj.code;
-    err.errno = errObj.errno;
-    err.syscall = errObj.syscall;
-    if (errObj.path !== undefined) err.path = errObj.path;
-    if (errObj.dest !== undefined) err.dest = errObj.dest;
     return err;
 }
 
@@ -211,74 +174,8 @@ async function truncateFileHandle(fileHandle, len) {
     if (error) throw createSystemError(error);
 }
 
-function validateInteger(value, name, min, max) {
-    if (typeof value !== 'number' || !Number.isInteger(value)) {
-        const err = new RangeError(`The value of "${name}" is out of range. It must be an integer. Received ${String(value)}`);
-        err.code = 'ERR_OUT_OF_RANGE';
-        throw err;
-    }
-    if (min !== undefined && max !== undefined && (value < min || value > max)) {
-        const err = new RangeError(`The value of "${name}" is out of range. It must be >= ${min} && <= ${max}. Received ${value}`);
-        err.code = 'ERR_OUT_OF_RANGE';
-        throw err;
-    }
-}
-
-function validateUid(id, name) {
-    if (typeof id !== 'number') {
-        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(id)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-    validateInteger(id, name, -1, 4294967295);
-}
-
-function validateMode(mode, name, def) {
-    mode = mode ?? def;
-    if (typeof mode === 'string') {
-        if (!/^[0-7]+$/.test(mode)) {
-            const err = new TypeError(`The argument '${name}' must be a 32-bit unsigned integer or an octal string. Received '${mode}'`);
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
-        }
-        return parseInt(mode, 8);
-    }
-    if (typeof mode !== 'number') {
-        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(mode)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-    validateInteger(mode, name, 0, 4294967295);
-    return mode;
-}
-
 function parseMkdirOptions(options) {
-    let recursive = false;
-    let mode = 0o777;
-
-    if (typeof options === 'number' || typeof options === 'string') {
-        mode = options;
-    } else if (options && typeof options === 'object') {
-        if (options.recursive !== undefined) {
-            recursive = options.recursive;
-            if (typeof recursive !== 'boolean') {
-                const err = new TypeError(
-                    'The "options.recursive" property must be of type boolean. Received ' +
-                    describeType(recursive)
-                );
-                err.code = 'ERR_INVALID_ARG_TYPE';
-                throw err;
-            }
-        }
-        if (options.mode !== undefined) {
-            mode = options.mode;
-        }
-    }
-
-    return {
-        recursive,
-        mode: validateMode(mode, 'mode', 0o777) & MKDIR_MODE_MASK,
-    };
+    return _parseMkdirOptions(options, MKDIR_MODE_MASK);
 }
 
 function validatePath(path, propName) {
@@ -311,15 +208,7 @@ function validatePath(path, propName) {
 }
 
 function validateMkdtempPrefix(prefix) {
-    if (prefix instanceof Uint8Array) {
-        if (prefix.includes(0)) {
-            const err = new TypeError(`The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received ${describeType(prefix)}`);
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
-        }
-        return;
-    }
-    validatePath(prefix, 'prefix');
+    return _validateMkdtempPrefix(prefix, getBuffer, validatePath);
 }
 
 function pathToString(path) {
@@ -360,32 +249,6 @@ function getFirstCreatedPath(pathString, recursive) {
     }
 
     return pathModule.toNamespacedPath(firstCreatedPath);
-}
-
-function validateFlush(flush) {
-    if (flush !== undefined && flush !== null && typeof flush !== 'boolean') {
-        const err = new TypeError('The "flush" argument must be of type boolean. Received ' + describeType(flush));
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-}
-
-function validateAbortSignal(signal, name = 'options.signal') {
-    if (signal !== undefined && (signal === null || typeof signal !== 'object' || !('aborted' in signal))) {
-        const err = new TypeError(`The "${name}" argument must be an instance of AbortSignal. Received ${describeType(signal)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-}
-
-function validateAppendFileData(data) {
-    if (typeof data === 'string' || ArrayBuffer.isView(data)) {
-        return;
-    }
-
-    const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ' + describeType(data));
-    err.code = 'ERR_INVALID_ARG_TYPE';
-    throw err;
 }
 
 // --- FileHandle class ---
@@ -536,21 +399,17 @@ export class FileHandle {
         const signal = typeof options === 'object' && options ? options.signal : undefined;
         validateAbortSignal(signal, 'options.signal');
         if (signal && signal.aborted) {
-            const e = new DOMException('The operation was aborted', 'AbortError');
-            e.name = 'AbortError';
-            throw e;
+            throw makeAbortError();
         }
         // Yield before starting to allow abort signals from nextTick to fire
         if (signal) {
             await new Promise(r => setTimeout(r, 0));
             if (signal.aborted) {
-                const e = new DOMException('The operation was aborted', 'AbortError');
-                e.name = 'AbortError';
-                throw e;
+                throw makeAbortError();
             }
         }
 
-        const binding = globalThis.__wasm_rquickjs_internal_fs_binding;
+        const binding = getInternalFsBinding();
         let size;
         if (binding && typeof binding.fstat === 'function') {
             const statData = await binding.fstat(this._fd);
@@ -569,9 +428,7 @@ export class FileHandle {
         let totalSize = 0;
         while (true) {
             if (signal && signal.aborted) {
-                const e = new DOMException('The operation was aborted', 'AbortError');
-                e.name = 'AbortError';
-                throw e;
+                throw makeAbortError();
             }
             const result = native.fs_read(this._fd, 16384, null);
             if (result.error) throw createSystemError(result.error);
@@ -583,7 +440,7 @@ export class FileHandle {
             if (signal) {
                 await new Promise(r => setTimeout(r, 0));
             } else {
-                await new Promise(r => r());
+                await Promise.resolve();
             }
         }
         const combined = new Uint8Array(totalSize);
@@ -743,18 +600,14 @@ export class FileHandle {
         const flush = typeof options === 'object' && options ? options.flush : undefined;
         if (flush !== undefined && flush !== null) validateFlush(flush);
         if (signal && signal.aborted) {
-            const e = new DOMException('The operation was aborted', 'AbortError');
-            e.name = 'AbortError';
-            throw e;
+            throw makeAbortError();
         }
 
         // Yield to allow pending abort signals (e.g. from process.nextTick) to fire
         if (signal) {
             await new Promise(resolve => setTimeout(resolve, 0));
             if (signal.aborted) {
-                const e = new DOMException('The operation was aborted', 'AbortError');
-                e.name = 'AbortError';
-                throw e;
+                throw makeAbortError();
             }
         }
 
@@ -771,9 +624,7 @@ export class FileHandle {
         } else if (data != null && typeof data !== 'symbol' && (typeof data[Symbol.asyncIterator] === 'function' || typeof data[Symbol.iterator] === 'function')) {
             for await (const chunk of data) {
                 if (signal && signal.aborted) {
-                    const e = new DOMException('The operation was aborted', 'AbortError');
-                    e.name = 'AbortError';
-                    throw e;
+                    throw makeAbortError();
                 }
                 let buf;
                 if (typeof chunk === 'string') {
@@ -843,9 +694,7 @@ export async function writeFile(path, data, options) {
     const signal = typeof options === 'object' && options ? options.signal : undefined;
     validateAbortSignal(signal, 'options.signal');
     if (signal && signal.aborted) {
-        const e = new DOMException('The operation was aborted', 'AbortError');
-        e.name = 'AbortError';
-        throw e;
+        throw makeAbortError();
     }
 
     // Validate data type early - reject null, undefined, numbers, booleans, symbols, etc.

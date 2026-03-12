@@ -6,6 +6,23 @@ import {
     ERR_INVALID_ARG_TYPE,
     ERR_OUT_OF_RANGE,
 } from '__wasm_rquickjs_builtin/internal/errors';
+import {
+    getInternalFsBinding,
+    describeType,
+    getSystemErrorDescription,
+    createSystemError,
+    validateInteger,
+    validateMode,
+    parseMkdirOptions as _parseMkdirOptions,
+    formatEmptyBufferValue,
+    throwEmptyReadBufferError,
+    validateUid,
+    validateFlush,
+    validateAbortSignal,
+    validateAppendFileData,
+    validateMkdtempPrefix as _validateMkdtempPrefix,
+    makeAbortError,
+} from '__wasm_rquickjs_builtin/internal/fs/shared';
 
 const kIoMaxLength = 2 ** 31 - 1;
 
@@ -167,53 +184,11 @@ function flagsToNumber(flags) {
     }
 }
 
-function getSystemErrorDescription(message) {
-    if (typeof message !== 'string' || message.length === 0) {
-        return 'unknown error';
-    }
-    const parsedMessage = /^\s*[A-Z0-9_]+:\s*([^,]+),/.exec(message);
-    if (parsedMessage && parsedMessage[1]) {
-        return parsedMessage[1];
-    }
-    return message;
-}
-
-function createSystemError(errObj) {
-    if (!errObj) return null;
-    let msg = typeof errObj.message === 'string' ? errObj.message : 'unknown error';
-    if (errObj.code && errObj.syscall) {
-        msg = errObj.code + ': ' + getSystemErrorDescription(errObj.message) + ', ' + errObj.syscall;
-        if (errObj.path !== undefined) msg += " '" + errObj.path + "'";
-        if (errObj.dest !== undefined) msg += " -> '" + errObj.dest + "'";
-    }
-    const err = new Error(msg);
-    err.code = errObj.code;
-    err.errno = errObj.errno;
-    err.syscall = errObj.syscall;
-    if (errObj.path !== undefined) err.path = errObj.path;
-    if (errObj.dest !== undefined) err.dest = errObj.dest;
-    return err;
-}
-
 function getOptions(options, defaultOptions) {
     if (options === null || options === undefined) return defaultOptions;
     if (typeof options === 'string') return { ...defaultOptions, encoding: options };
     if (typeof options === 'object') return { ...defaultOptions, ...options };
     return defaultOptions;
-}
-
-function describeType(value) {
-    if (value === null) return 'null';
-    if (value === undefined) return 'undefined';
-    if (typeof value === 'function') return 'function ' + (value.name || '');
-    if (typeof value === 'object') {
-        if (value.constructor && value.constructor.name) {
-            return 'an instance of ' + value.constructor.name;
-        }
-        return value + '';
-    }
-    if (typeof value === 'string') return "type string ('" + value + "')";
-    return 'type ' + typeof value + ' (' + String(value) + ')';
 }
 
 function retainFileHandleForTransfer(fileHandle) {
@@ -243,29 +218,6 @@ function releaseFileHandleForTransfer(fileHandle) {
         fileHandle[FILE_HANDLE_IN_USE_SYMBOL] = false;
     } else {
         fileHandle[FILE_HANDLE_IN_USE_COUNT_SYMBOL] = current - 1;
-    }
-}
-
-function validateInteger(value, name, min, max) {
-    if (typeof value !== 'number' || !Number.isInteger(value)) {
-        const err = new RangeError(`The value of "${name}" is out of range. It must be an integer. Received ${String(value)}`);
-        err.code = 'ERR_OUT_OF_RANGE';
-        throw err;
-    }
-    if (min !== undefined && max !== undefined && (value < min || value > max)) {
-        const err = new RangeError(`The value of "${name}" is out of range. It must be >= ${min} && <= ${max}. Received ${value}`);
-        err.code = 'ERR_OUT_OF_RANGE';
-        throw err;
-    }
-    if (min !== undefined && value < min) {
-        const err = new RangeError(`The value of "${name}" is out of range. It must be >= ${min}. Received ${value}`);
-        err.code = 'ERR_OUT_OF_RANGE';
-        throw err;
-    }
-    if (max !== undefined && value > max) {
-        const err = new RangeError(`The value of "${name}" is out of range. It must be <= ${max}. Received ${value}`);
-        err.code = 'ERR_OUT_OF_RANGE';
-        throw err;
     }
 }
 
@@ -364,28 +316,9 @@ function validateBuffer(buffer, name) {
     }
 }
 
-function formatEmptyBufferValue(buffer) {
-    const ctorName = buffer && buffer.constructor && buffer.constructor.name ? buffer.constructor.name : 'Uint8Array';
-    return `${ctorName}(0) []`;
-}
-
-function throwEmptyReadBufferError(buffer) {
-    const err = new TypeError(`The argument 'buffer' is empty and cannot be written. Received ${formatEmptyBufferValue(buffer)}`);
-    err.code = 'ERR_INVALID_ARG_VALUE';
-    throw err;
-}
-
 function validateCallback(cb) {
     if (typeof cb !== 'function') {
         throw new ERR_INVALID_ARG_TYPE('callback', 'function', cb);
-    }
-}
-
-function validateFlush(flush) {
-    if (flush !== undefined && flush !== null && typeof flush !== 'boolean') {
-        const err = new TypeError('The "flush" argument must be of type boolean. Received ' + describeType(flush));
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
     }
 }
 
@@ -408,62 +341,8 @@ function validateOpendirOptions(options) {
     }
 }
 
-function validateAppendFileData(data) {
-    if (typeof data === 'string' || ArrayBuffer.isView(data)) {
-        return;
-    }
-
-    const err = new TypeError('The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ' + describeType(data));
-    err.code = 'ERR_INVALID_ARG_TYPE';
-    throw err;
-}
-
-function validateMode(mode, name, def) {
-    mode = mode ?? def;
-    if (typeof mode === 'string') {
-        if (!/^[0-7]+$/.test(mode)) {
-            const err = new TypeError(`The argument '${name}' must be a 32-bit unsigned integer or an octal string. Received '${mode}'`);
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
-        }
-        return parseInt(mode, 8);
-    }
-    if (typeof mode !== 'number') {
-        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(mode)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-    validateInteger(mode, name, 0, 4294967295);
-    return mode;
-}
-
 function parseMkdirOptions(options) {
-    let recursive = false;
-    let mode = 0o777;
-
-    if (typeof options === 'number' || typeof options === 'string') {
-        mode = options;
-    } else if (options && typeof options === 'object') {
-        if (options.recursive !== undefined) {
-            recursive = options.recursive;
-            if (typeof recursive !== 'boolean') {
-                const err = new TypeError(
-                    'The "options.recursive" property must be of type boolean. Received ' +
-                    describeType(recursive)
-                );
-                err.code = 'ERR_INVALID_ARG_TYPE';
-                throw err;
-            }
-        }
-        if (options.mode !== undefined) {
-            mode = options.mode;
-        }
-    }
-
-    return {
-        recursive,
-        mode: validateMode(mode, 'mode', 0o777) & MKDIR_MODE_MASK,
-    };
+    return _parseMkdirOptions(options, MKDIR_MODE_MASK);
 }
 
 function pathExists(pathString) {
@@ -492,15 +371,6 @@ function getFirstCreatedPath(pathString, recursive) {
     return pathModule.toNamespacedPath(firstCreatedPath);
 }
 
-function validateUid(id, name) {
-    if (typeof id !== 'number') {
-        const err = new TypeError(`The "${name}" argument must be of type number. Received ${describeType(id)}`);
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-    validateInteger(id, name, -1, 4294967295);
-}
-
 function validateLen(len) {
     if (typeof len !== 'number') {
         throw new ERR_INVALID_ARG_TYPE('len', 'number', len);
@@ -523,17 +393,6 @@ function validateCopyFileMode(mode) {
     return mode;
 }
 
-function getCopyFileErrorDescription(errorObj) {
-    if (!errorObj || typeof errorObj.message !== 'string') {
-        return 'unknown error';
-    }
-    const parsedMessage = /^\s*[A-Z0-9_]+:\s*([^,]+),/.exec(errorObj.message);
-    if (parsedMessage && parsedMessage[1]) {
-        return parsedMessage[1];
-    }
-    return errorObj.message;
-}
-
 function createCopyFileError(code, errno, description, src, dest) {
     const err = new Error(`${code}: ${description}, copyfile '${src}' -> '${dest}'`);
     err.code = code;
@@ -554,7 +413,7 @@ function createCopyFileErrorFromNative(errorObj, src, dest) {
     return createCopyFileError(
         errorObj.code,
         errorObj.errno,
-        getCopyFileErrorDescription(errorObj),
+        getSystemErrorDescription(errorObj.message),
         src,
         dest,
     );
@@ -591,15 +450,7 @@ function validatePath(path, propName) {
 }
 
 function validateMkdtempPrefix(prefix) {
-    if (prefix instanceof Uint8Array) {
-        if (prefix.includes(0)) {
-            const err = new TypeError(`The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received ${describeType(prefix)}`);
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
-        }
-        return;
-    }
-    validatePath(prefix, 'prefix');
+    return _validateMkdtempPrefix(prefix, getBuffer, validatePath);
 }
 
 function pathToString(path) {
@@ -725,7 +576,7 @@ function readDirViaNativeBinding(path, withFileTypes) {
     return [names, types];
 }
 
-const internalFsBinding = globalThis.__wasm_rquickjs_internal_fs_binding || {};
+const internalFsBinding = getInternalFsBinding();
 internalFsBinding.readdir = function readdir(path, encoding, withFileTypes, req) {
     const runReaddir = () => readDirViaNativeBinding(path, !!withFileTypes);
 
@@ -742,7 +593,7 @@ internalFsBinding.readdir = function readdir(path, encoding, withFileTypes, req)
 
     return runReaddir();
 };
-globalThis.__wasm_rquickjs_internal_fs_binding = internalFsBinding;
+// internalFsBinding is already on globalThis via getInternalFsBinding()
 
 // --- Stats class ---
 
