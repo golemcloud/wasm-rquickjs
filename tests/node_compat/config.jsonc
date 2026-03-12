@@ -10943,8 +10943,6 @@
     },
     "sequential/test-fs-stat-sync-overflow.js": {},
     "sequential/test-fs-watch.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": {
@@ -10960,8 +10958,14 @@
           "reason": "[manual] amp made no code changes"
         },
         "block_03_not_block_the_event_loop": {},
-        "block_04_https_github_com_joyent_node_issues_6690": {},
-        "block_05_block_05": {}
+        "block_04_https_github_com_joyent_node_issues_6690": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        },
+        "block_05_block_05": {
+          "skip": true,
+          "reason": "newly discovered, not yet evaluated"
+        }
       }
     },
     "sequential/test-gc-http-client-onerror.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
