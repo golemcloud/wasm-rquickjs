@@ -1010,11 +1010,9 @@
       }
     },
     "parallel/test-fs-utimes.js": {
-      "skip": true,
-      "reason": "symlink returns EIO in WASI filesystem",
       "split": true,
       "subtests": {
-        "block_00_utimes_only_error_cases": { "skip": true, "reason": "inherited: symlink returns EIO in WASI filesystem" },
+        "block_00_utimes_only_error_cases": {},
         "block_01_futimes_only_error_cases": { "skip": true, "reason": "inherited: symlink returns EIO in WASI filesystem" }
       }
     },

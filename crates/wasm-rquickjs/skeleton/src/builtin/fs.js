@@ -1623,13 +1623,14 @@ export function utimesSync(path, atime, mtime) {
     validatePath(path);
     const atimeSecs = (atime instanceof Date) ? atime.getTime() / 1000 : Number(atime);
     const mtimeSecs = (mtime instanceof Date) ? mtime.getTime() / 1000 : Number(mtime);
-    const error = native.fs_utimes(path, atimeSecs, mtimeSecs);
+    const error = native.fs_utimes(pathToString(path), atimeSecs, mtimeSecs);
     if (error) {
         throw createSystemError(error);
     }
 }
 
 export function futimesSync(fd, atime, mtime) {
+    validateFd(fd);
     const atimeSecs = (atime instanceof Date) ? atime.getTime() / 1000 : Number(atime);
     const mtimeSecs = (mtime instanceof Date) ? mtime.getTime() / 1000 : Number(mtime);
     const error = native.fs_futimes(fd, atimeSecs, mtimeSecs);
@@ -1639,7 +1640,13 @@ export function futimesSync(fd, atime, mtime) {
 }
 
 export function lutimesSync(path, atime, mtime) {
-    utimesSync(path, atime, mtime);
+    validatePath(path);
+    const atimeSecs = (atime instanceof Date) ? atime.getTime() / 1000 : Number(atime);
+    const mtimeSecs = (mtime instanceof Date) ? mtime.getTime() / 1000 : Number(mtime);
+    const error = native.fs_lutimes(pathToString(path), atimeSecs, mtimeSecs);
+    if (error) {
+        throw createSystemError(error);
+    }
 }
 
 export function unlinkSync(path) {
@@ -2678,6 +2685,7 @@ export function utimes(path, atime, mtime, callback) {
 }
 
 export function futimes(fd, atime, mtime, callback) {
+    validateFd(fd);
     validateCallback(callback);
     queueMicrotask(() => {
         try {
@@ -2690,6 +2698,7 @@ export function futimes(fd, atime, mtime, callback) {
 }
 
 export function lutimes(path, atime, mtime, callback) {
+    validatePath(path);
     validateCallback(callback);
     queueMicrotask(() => {
         try {

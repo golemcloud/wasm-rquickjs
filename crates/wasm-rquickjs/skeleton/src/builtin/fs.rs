@@ -34,6 +34,113 @@ fn set_file_times(file: &std::fs::File, atime_secs: f64, mtime_secs: f64) -> std
     file.set_times(times)
 }
 
+fn secs_to_wasi_timestamp(
+    secs: f64,
+) -> std::io::Result<wasi::filesystem::types::NewTimestamp> {
+    if !secs.is_finite() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "timestamp must be a finite number",
+        ));
+    }
+    if secs < 0.0 {
+        // WASI datetime uses u64 for seconds, can't represent pre-epoch timestamps.
+        // Return ENOSYS (raw 52 on WASI) so tests that accept unsupported operations pass.
+        return Err(std::io::Error::from_raw_os_error(52));
+    }
+    let seconds = secs.floor() as u64;
+    let nanoseconds = ((secs - secs.floor()) * 1_000_000_000.0) as u32;
+    Ok(wasi::filesystem::types::NewTimestamp::Timestamp(
+        wasi::clocks::wall_clock::Datetime {
+            seconds,
+            nanoseconds,
+        },
+    ))
+}
+
+fn wasi_fs_error_to_io(e: &wasi::filesystem::types::ErrorCode) -> std::io::Error {
+    use wasi::filesystem::types::ErrorCode;
+    match e {
+        ErrorCode::NoEntry => std::io::Error::new(std::io::ErrorKind::NotFound, e.to_string()),
+        ErrorCode::Access => {
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
+        }
+        ErrorCode::NotPermitted => {
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
+        }
+        ErrorCode::Exist => {
+            std::io::Error::new(std::io::ErrorKind::AlreadyExists, e.to_string())
+        }
+        ErrorCode::BadDescriptor => {
+            std::io::Error::from_raw_os_error(8) // EBADF on WASI
+        }
+        ErrorCode::Invalid => {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+        }
+        _ => std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+    }
+}
+
+fn set_path_times(
+    path: &str,
+    atime_secs: f64,
+    mtime_secs: f64,
+    follow_symlinks: bool,
+) -> std::io::Result<()> {
+    let atime = secs_to_wasi_timestamp(atime_secs)?;
+    let mtime = secs_to_wasi_timestamp(mtime_secs)?;
+
+    let path_flags = if follow_symlinks {
+        wasi::filesystem::types::PathFlags::SYMLINK_FOLLOW
+    } else {
+        wasi::filesystem::types::PathFlags::empty()
+    };
+
+    let dirs = wasi::filesystem::preopens::get_directories();
+
+    // Find the best matching preopened directory (longest prefix)
+    let mut best_match: Option<(usize, String)> = None;
+    let mut best_prefix_len: usize = 0;
+
+    for (i, (_, dir_path)) in dirs.iter().enumerate() {
+        let normalized = dir_path.trim_end_matches('/');
+        if normalized == "/" || normalized.is_empty() {
+            let relative = path.trim_start_matches('/').to_string();
+            let prefix_len = if normalized == "/" { 1 } else { 0 };
+            if prefix_len >= best_prefix_len {
+                best_prefix_len = prefix_len;
+                best_match = Some((i, relative));
+            }
+        } else if path == normalized {
+            let prefix_len = normalized.len();
+            if prefix_len >= best_prefix_len {
+                best_prefix_len = prefix_len;
+                best_match = Some((i, ".".to_string()));
+            }
+        } else if path.starts_with(normalized)
+            && path.as_bytes().get(normalized.len()) == Some(&b'/')
+        {
+            let prefix_len = normalized.len();
+            if prefix_len >= best_prefix_len {
+                best_prefix_len = prefix_len;
+                best_match = Some((i, path[normalized.len() + 1..].to_string()));
+            }
+        }
+    }
+
+    if let Some((idx, relative)) = best_match {
+        dirs[idx]
+            .0
+            .set_times_at(path_flags, &relative, atime, mtime)
+            .map_err(|e| wasi_fs_error_to_io(&e))
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no matching preopened directory",
+        ))
+    }
+}
+
 struct FdTable {
     files: HashMap<i32, std::fs::File>,
     next_fd: i32,
@@ -1529,12 +1636,22 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
-        match std::fs::OpenOptions::new().read(true).open(&path) {
-            Ok(file) => match super::set_file_times(&file, atime_secs, mtime_secs) {
-                Ok(_) => None,
-                Err(err) => Some(super::make_fs_error(&ctx, &err, "utime", Some(&path))),
-            },
+        match super::set_path_times(&path, atime_secs, mtime_secs, true) {
+            Ok(_) => None,
             Err(err) => Some(super::make_fs_error(&ctx, &err, "utime", Some(&path))),
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn fs_lutimes(
+        ctx: Ctx<'_>,
+        path: String,
+        atime_secs: f64,
+        mtime_secs: f64,
+    ) -> Option<Object<'_>> {
+        match super::set_path_times(&path, atime_secs, mtime_secs, false) {
+            Ok(_) => None,
+            Err(err) => Some(super::make_fs_error(&ctx, &err, "lutime", Some(&path))),
         }
     }
 
