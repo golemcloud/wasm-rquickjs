@@ -1395,6 +1395,7 @@ export function copyFileSync(src, dest, mode) {
     if (error) {
         throw createCopyFileErrorFromNative(error, srcPath, destPath);
     }
+    _notifyFSWatchers(destPath, 'rename');
 }
 
 export function linkSync(existingPath, newPath) {
@@ -1531,6 +1532,8 @@ export function renameSync(oldPath, newPath) {
     if (error) {
         throw createSystemError(error);
     }
+    _notifyFSWatchers(oldPathString, 'rename');
+    _notifyFSWatchers(newPathString, 'rename');
 }
 
 export function mkdirSync(path, options) {
@@ -1543,6 +1546,7 @@ export function mkdirSync(path, options) {
     if (error) {
         throw createSystemError(error);
     }
+    _notifyFSWatchers(pathString, 'rename');
     if (recursive) return firstCreatedPath;
     return undefined;
 }
@@ -1579,8 +1583,10 @@ export function rmdirSync(path, options) {
         }
         _rimrafSync(path);
     } else {
-        const error = native.fs_rmdir(path);
+        const pathString = pathToString(path);
+        const error = native.fs_rmdir(pathString);
         if (error) throw createSystemError(error);
+        _notifyFSWatchers(pathString, 'rename');
     }
 }
 
@@ -1593,6 +1599,7 @@ export function rmSync(path, options) {
     if (error) {
         throw createSystemError(error);
     }
+    _notifyFSWatchers(path, 'rename');
 }
 
 export function mkdtempSync(prefix, options) {

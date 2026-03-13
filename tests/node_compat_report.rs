@@ -465,6 +465,48 @@ fn classify_test(filename: &str) -> &str {
         "stream"
     } else if name.starts_with("sqlite") {
         "sqlite"
+    } else if name.starts_with("whatwg") {
+        "whatwg"
+    } else if name.starts_with("webcrypto") {
+        "webcrypto"
+    } else if name.starts_with("permission") {
+        "permission"
+    } else if name.starts_with("promise") || name.starts_with("promises") {
+        "promises"
+    } else if name.starts_with("global") {
+        "global"
+    } else if name.starts_with("compile") {
+        "compile"
+    } else if name.starts_with("cli") {
+        "cli"
+    } else if name.starts_with("stdin") || name.starts_with("stdout") || name.starts_with("stdio") {
+        "stdio"
+    } else if name.starts_with("signal") {
+        "signal"
+    } else if name.starts_with("errors") || name.starts_with("error") {
+        "errors"
+    } else if name.starts_with("pipe") || name.starts_with("socket") || name.starts_with("listen") || name.starts_with("tcp") {
+        "net"
+    } else if name.starts_with("webstream") || name.starts_with("webstreams") {
+        "webstreams"
+    } else if name.starts_with("snapshot") {
+        "snapshot"
+    } else if name.starts_with("eslint") {
+        "eslint"
+    } else if name.starts_with("internal") {
+        "internal"
+    } else if name.starts_with("heap") {
+        "heap"
+    } else if name.starts_with("node") {
+        "node"
+    } else if name.starts_with("inspect") {
+        "inspector"
+    } else if name.starts_with("shadow-realm") {
+        "shadow_realm"
+    } else if name.starts_with("btoa") || name.starts_with("atob") {
+        "encoding"
+    } else if name.starts_with("common") {
+        "common"
     } else {
         "other"
     }

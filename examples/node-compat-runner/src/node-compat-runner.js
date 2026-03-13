@@ -18,9 +18,13 @@ function drainAsync() {
     for (var i = 0; i < 50; i++) {
         p = p.then(function() { return new Promise(function(r) { setTimeout(r, 0); }); });
     }
-    // Then: 10 longer ticks for setTimeout-based tests (e.g., 100ms timers)
-    for (var j = 0; j < 10; j++) {
-        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 50); }); });
+    // Then: 25 longer ticks for setTimeout-based tests.
+    // Tests use common.platformTimeout() which multiplies by 3, so a 500ms
+    // timeout becomes 1500ms.  We need enough drain time to cover those
+    // delays plus watcher polling intervals (~200ms) and margin.
+    // 25 × 100ms = 2500ms total, covering platformTimeout(500) + poll + slack.
+    for (var j = 0; j < 25; j++) {
+        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 100); }); });
     }
     // Final: 20 quick ticks for any remaining activity after timers
     for (var k = 0; k < 20; k++) {
