@@ -20,8 +20,7 @@ use wasmtime::component::Val;
 #[path = "common/mod.rs"]
 mod common;
 
-struct HttpPreparedComponent(Arc<PreparedComponent>);
-struct HttpSqlitePreparedComponent(Arc<PreparedComponent>);
+struct FullPreparedComponent(Arc<PreparedComponent>);
 
 fn compile_node_compat_with_features(
     feature_combination: common::FeatureCombination,
@@ -32,22 +31,11 @@ fn compile_node_compat_with_features(
     Arc::new(PreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"))
 }
 
-fn requires_sqlite(path: &str) -> bool {
-    path.contains("sqlite")
-}
-
 #[test_dep]
-fn prepare_node_compat_http() -> Arc<HttpPreparedComponent> {
-    Arc::new(HttpPreparedComponent(compile_node_compat_with_features(
-        common::FeatureCombination::HttpOnly,
+fn prepare_node_compat_full() -> Arc<FullPreparedComponent> {
+    Arc::new(FullPreparedComponent(compile_node_compat_with_features(
+        common::FeatureCombination::Full,
     )))
-}
-
-#[test_dep]
-fn prepare_node_compat_http_sqlite() -> Arc<HttpSqlitePreparedComponent> {
-    Arc::new(HttpSqlitePreparedComponent(
-        compile_node_compat_with_features(common::FeatureCombination::HttpAndSqlite),
-    ))
 }
 
 // --- Config loading ---
@@ -211,16 +199,11 @@ fn handle_test_result(
 fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
     let entries = load_config("tests/node_compat/config.jsonc").expect("Failed to load config");
 
+    let dependency_name = "arc_fullpreparedcomponent".to_string();
+
     for entry in entries {
         let path = entry.path.clone();
         let file_test_name = path.replace('/', "__").replace(['.', '-'], "_");
-        let test_requires_sqlite = requires_sqlite(&path);
-        let dependency_name = if test_requires_sqlite {
-            "arc_httpsqlitepreparedcomponent"
-        } else {
-            "arc_httppreparedcomponent"
-        }
-        .to_string();
 
         let test_timeout_secs = entry.timeout_secs;
 
@@ -236,21 +219,12 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 props,
                 Some(vec![dependency_name.clone()]),
                 move |deps| {
-                    let prepared = if test_requires_sqlite {
-                        let prepared: Arc<Arc<HttpSqlitePreparedComponent>> = deps
-                            .get("arc_httpsqlitepreparedcomponent")
-                            .expect("HttpSqlitePreparedComponent dependency not found")
-                            .downcast::<Arc<HttpSqlitePreparedComponent>>()
-                            .expect("HttpSqlitePreparedComponent type mismatch");
-                        prepared.as_ref().as_ref().0.clone()
-                    } else {
-                        let prepared: Arc<Arc<HttpPreparedComponent>> = deps
-                            .get("arc_httppreparedcomponent")
-                            .expect("HttpPreparedComponent dependency not found")
-                            .downcast::<Arc<HttpPreparedComponent>>()
-                            .expect("HttpPreparedComponent type mismatch");
-                        prepared.as_ref().as_ref().0.clone()
-                    };
+                    let prepared: Arc<Arc<FullPreparedComponent>> = deps
+                        .get("arc_fullpreparedcomponent")
+                        .expect("FullPreparedComponent dependency not found")
+                        .downcast::<Arc<FullPreparedComponent>>()
+                        .expect("FullPreparedComponent type mismatch");
+                    let prepared = prepared.as_ref().as_ref().0.clone();
                     let path = path.clone();
                     Box::pin(async move {
                         let test_future = async {
@@ -326,21 +300,12 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     props,
                     Some(vec![dependency_name.clone()]),
                     move |deps| {
-                        let prepared = if test_requires_sqlite {
-                            let prepared: Arc<Arc<HttpSqlitePreparedComponent>> = deps
-                                .get("arc_httpsqlitepreparedcomponent")
-                                .expect("HttpSqlitePreparedComponent dependency not found")
-                                .downcast::<Arc<HttpSqlitePreparedComponent>>()
-                                .expect("HttpSqlitePreparedComponent type mismatch");
-                            prepared.as_ref().as_ref().0.clone()
-                        } else {
-                            let prepared: Arc<Arc<HttpPreparedComponent>> = deps
-                                .get("arc_httppreparedcomponent")
-                                .expect("HttpPreparedComponent dependency not found")
-                                .downcast::<Arc<HttpPreparedComponent>>()
-                                .expect("HttpPreparedComponent type mismatch");
-                            prepared.as_ref().as_ref().0.clone()
-                        };
+                        let prepared: Arc<Arc<FullPreparedComponent>> = deps
+                            .get("arc_fullpreparedcomponent")
+                            .expect("FullPreparedComponent dependency not found")
+                            .downcast::<Arc<FullPreparedComponent>>()
+                            .expect("FullPreparedComponent type mismatch");
+                        let prepared = prepared.as_ref().as_ref().0.clone();
                         let path = path.clone();
                         let source = source.clone();
                         let discovery_clone = discovery_clone.clone();

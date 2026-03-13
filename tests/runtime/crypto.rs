@@ -1,4 +1,4 @@
-use crate::common::{CompiledTest, invoke_and_capture_output};
+use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
 use test_r::{test, test_dep};
@@ -7,7 +7,8 @@ use wasmtime::component::Val;
 #[test_dep(tagged_as = "crypto")]
 fn compiled_crypto() -> CompiledTest {
     let path = Utf8Path::new("examples/crypto");
-    CompiledTest::new(path, false).expect("Failed to compile crypto")
+    CompiledTest::new_with_features(path, false, FeatureCombination::Full)
+        .expect("Failed to compile crypto")
 }
 
 #[test]

@@ -576,8 +576,43 @@ fn metadata_to_obj<'js>(
     obj
 }
 
+#[cfg(feature = "encoding")]
+fn read_file_with_encoding_impl(path: &str, encoding: &str) -> rquickjs::prelude::List<(Option<String>, Option<String>)> {
+    use rquickjs::prelude::List;
+    let path = std::path::Path::new(path);
+    match std::fs::read(path) {
+        Ok(bytes) => match encoding_rs::Encoding::for_label(encoding.as_bytes()) {
+            Some(enc) => {
+                let (decoded, _) = enc.decode_with_bom_removal(&bytes);
+                List((Some(decoded.into_owned()), None))
+            }
+            None => List((None, Some(format!("Unsupported encoding: {encoding}")))),
+        },
+        Err(err) => List((None, Some(format!("Failed to read file {path:?}: {err}")))),
+    }
+}
+
+#[cfg(not(feature = "encoding"))]
+fn read_file_with_encoding_impl(path: &str, encoding: &str) -> rquickjs::prelude::List<(Option<String>, Option<String>)> {
+    use rquickjs::prelude::List;
+    let path_obj = std::path::Path::new(path);
+    let label = encoding.trim().to_ascii_lowercase();
+    if !matches!(label.as_str(), "utf-8" | "utf8" | "unicode-1-1-utf-8") {
+        return List((None, Some(format!(
+            "Encoding \"{encoding}\" is not supported (encoding feature is not enabled, only UTF-8 is available)"
+        ))));
+    }
+    match std::fs::read(path_obj) {
+        Ok(bytes) => {
+            List((Some(String::from_utf8_lossy(&bytes).into_owned()), None))
+        }
+        Err(err) => List((None, Some(format!("Failed to read file {path_obj:?}: {err}")))),
+    }
+}
+
 #[rquickjs::module(rename_vars = "camelCase")]
 pub mod native_module {
+    #[cfg(feature = "encoding")]
     use encoding_rs::Encoding;
     use rquickjs::prelude::List;
     use rquickjs::{Array, Ctx, Object, TypedArray, Value};
@@ -607,21 +642,7 @@ pub mod native_module {
         path: String,
         encoding: String,
     ) -> List<(Option<String>, Option<String>)> {
-        let path = Path::new(&path);
-        match std::fs::read(path) {
-            Ok(bytes) => match Encoding::for_label(encoding.as_bytes()) {
-                Some(encoding) => {
-                    let (decoded, _) = encoding.decode_with_bom_removal(&bytes);
-                    let decoded_string = decoded.into_owned();
-                    List((Some(decoded_string), None))
-                }
-                None => List((None, Some(format!("Unsupported encoding: {encoding}")))),
-            },
-            Err(err) => {
-                let error_message = format!("Failed to read file {path:?}: {err}");
-                List((None, Some(error_message)))
-            }
-        }
+        super::read_file_with_encoding_impl(&path, &encoding)
     }
 
     #[rquickjs::function]

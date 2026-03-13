@@ -136,6 +136,7 @@ fn zlib_decompress_sync_impl(
 
 // ===== Brotli one-shot impl =====
 
+#[cfg(feature = "brotli")]
 fn brotli_compress_sync_impl(data: &[u8], params_json: &str) -> Option<Vec<u8>> {
     let quality = parse_brotli_quality(params_json);
     let lgwin = parse_brotli_lgwin(params_json);
@@ -151,6 +152,7 @@ fn brotli_compress_sync_impl(data: &[u8], params_json: &str) -> Option<Vec<u8>> 
     Some(output)
 }
 
+#[cfg(feature = "brotli")]
 fn brotli_decompress_sync_impl(data: &[u8]) -> Option<Vec<u8>> {
     let mut output = Vec::new();
     let mut reader = Cursor::new(data);
@@ -175,12 +177,24 @@ fn parse_json_i32(params_json: &str, key: &str, default: i32) -> i32 {
     default
 }
 
+#[cfg(feature = "brotli")]
 fn parse_brotli_quality(params_json: &str) -> i32 {
     parse_json_i32(params_json, "\"quality\"", 11)
 }
 
+#[cfg(feature = "brotli")]
 fn parse_brotli_lgwin(params_json: &str) -> i32 {
     parse_json_i32(params_json, "\"lgwin\"", 22)
+}
+
+#[cfg(not(feature = "brotli"))]
+fn brotli_compress_sync_impl(_data: &[u8], _params_json: &str) -> Option<Vec<u8>> {
+    None
+}
+
+#[cfg(not(feature = "brotli"))]
+fn brotli_decompress_sync_impl(_data: &[u8]) -> Option<Vec<u8>> {
+    None
 }
 
 // ===== CRC32 impl =====
@@ -815,11 +829,13 @@ fn zlib_stream_bytes_written_impl(id: u32) -> u32 {
 // ===== Brotli streaming =====
 // Brotli streaming buffers all data and compresses/decompresses on finish.
 
+#[cfg(feature = "brotli")]
 struct BrotliStream {
     kind: BrotliStreamKind,
     bytes_written: u32,
 }
 
+#[cfg(feature = "brotli")]
 enum BrotliStreamKind {
     Compress {
         compressor: Option<brotli::CompressorWriter<Vec<u8>>>,
@@ -833,9 +849,11 @@ enum BrotliStreamKind {
     },
 }
 
+#[cfg(feature = "brotli")]
 static BROTLI_STREAMS: LazyLock<Mutex<HashMap<u32, BrotliStream>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+#[cfg(feature = "brotli")]
 fn brotli_stream_new_impl(mode: u8, params_json: &str) -> Option<u32> {
     let kind = match mode {
         0 => {
@@ -868,6 +886,7 @@ fn brotli_stream_new_impl(mode: u8, params_json: &str) -> Option<u32> {
     Some(id)
 }
 
+#[cfg(feature = "brotli")]
 fn brotli_stream_push_impl(id: u32, data: &[u8], flush: u8) -> Option<Vec<u8>> {
     let mut streams = BROTLI_STREAMS.lock().unwrap();
     let stream = streams.get_mut(&id)?;
@@ -925,6 +944,7 @@ fn brotli_stream_push_impl(id: u32, data: &[u8], flush: u8) -> Option<Vec<u8>> {
     }
 }
 
+#[cfg(feature = "brotli")]
 fn brotli_stream_pull_impl(id: u32, max_bytes: u32) -> Option<Vec<u8>> {
     let mut streams = BROTLI_STREAMS.lock().unwrap();
     let stream = streams.get_mut(&id)?;
@@ -940,10 +960,12 @@ fn brotli_stream_pull_impl(id: u32, max_bytes: u32) -> Option<Vec<u8>> {
     }
 }
 
+#[cfg(feature = "brotli")]
 fn brotli_stream_close_impl(id: u32) -> bool {
     BROTLI_STREAMS.lock().unwrap().remove(&id).is_some()
 }
 
+#[cfg(feature = "brotli")]
 fn brotli_stream_bytes_written_impl(id: u32) -> u32 {
     BROTLI_STREAMS
         .lock()
@@ -951,6 +973,31 @@ fn brotli_stream_bytes_written_impl(id: u32) -> u32 {
         .get(&id)
         .map(|s| s.bytes_written)
         .unwrap_or(0)
+}
+
+#[cfg(not(feature = "brotli"))]
+fn brotli_stream_new_impl(_mode: u8, _params_json: &str) -> Option<u32> {
+    None
+}
+
+#[cfg(not(feature = "brotli"))]
+fn brotli_stream_push_impl(_id: u32, _data: &[u8], _flush: u8) -> Option<Vec<u8>> {
+    None
+}
+
+#[cfg(not(feature = "brotli"))]
+fn brotli_stream_pull_impl(_id: u32, _max_bytes: u32) -> Option<Vec<u8>> {
+    None
+}
+
+#[cfg(not(feature = "brotli"))]
+fn brotli_stream_close_impl(_id: u32) -> bool {
+    false
+}
+
+#[cfg(not(feature = "brotli"))]
+fn brotli_stream_bytes_written_impl(_id: u32) -> u32 {
+    0
 }
 
 // ===== Native module =====

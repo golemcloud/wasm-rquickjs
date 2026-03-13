@@ -180,25 +180,23 @@ pub fn collect_example_paths() -> anyhow::Result<Vec<Utf8PathBuf>> {
 #[derive(Copy, Clone)]
 pub enum FeatureCombination {
     None,
-    LogOnly,
-    HttpOnly,
-    HttpAndSqlite,
-    Default,
+    Lite,
+    Normal,
+    Full,
     Golem,
 }
 
 impl FeatureCombination {
     pub fn all() -> Vec<FeatureCombination> {
-        vec![Self::None, Self::LogOnly, Self::HttpOnly, Self::Default]
+        vec![Self::None, Self::Lite, Self::Normal, Self::Full]
     }
 
     pub fn label(&self) -> &str {
         match self {
             Self::None => "none",
-            Self::LogOnly => "log",
-            Self::HttpOnly => "http",
-            Self::HttpAndSqlite => "http-sqlite",
-            Self::Default => "default",
+            Self::Lite => "lite",
+            Self::Normal => "normal",
+            Self::Full => "full",
             Self::Golem => "golem",
         }
     }
@@ -206,14 +204,13 @@ impl FeatureCombination {
     pub fn cargo_args(&self) -> Vec<&'static str> {
         match self {
             FeatureCombination::None => vec!["--no-default-features"],
-            FeatureCombination::LogOnly => {
-                vec!["--no-default-features", "--features", "logging"]
+            FeatureCombination::Lite => {
+                vec!["--no-default-features", "--features", "lite"]
             }
-            FeatureCombination::HttpOnly => vec!["--no-default-features", "--features", "http"],
-            FeatureCombination::HttpAndSqlite => {
-                vec!["--no-default-features", "--features", "http,sqlite"]
+            FeatureCombination::Normal => vec![],
+            FeatureCombination::Full => {
+                vec!["--no-default-features", "--features", "full"]
             }
-            FeatureCombination::Default => vec![],
             FeatureCombination::Golem => vec!["--features", "golem"],
         }
     }
@@ -664,7 +661,7 @@ pub struct CompiledTest {
 
 impl CompiledTest {
     pub fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
-        Self::new_with_features(path, use_shared_target, FeatureCombination::HttpOnly)
+        Self::new_with_features(path, use_shared_target, FeatureCombination::Normal)
     }
 
     pub fn new_with_features(

@@ -16,12 +16,12 @@ mod encoding;
 mod fs;
 mod gc;
 
-#[cfg(feature = "http")]
+#[cfg(feature = "fetch")]
 mod http;
 
-#[cfg(not(feature = "http"))]
+#[cfg(not(feature = "fetch"))]
 mod http_disabled;
-#[cfg(not(feature = "http"))]
+#[cfg(not(feature = "fetch"))]
 mod http {
     pub use super::http_disabled::*;
 }
@@ -37,12 +37,12 @@ mod module;
 mod net;
 mod socket_helpers;
 
-#[cfg(feature = "http")]
+#[cfg(feature = "node-http")]
 mod node_http;
 
-#[cfg(not(feature = "http"))]
+#[cfg(not(feature = "node-http"))]
 mod node_http_disabled;
-#[cfg(not(feature = "http"))]
+#[cfg(not(feature = "node-http"))]
 mod node_http {
     pub use super::node_http_disabled::*;
 }
@@ -67,10 +67,28 @@ mod url;
 mod util;
 mod v8;
 mod vm;
+#[cfg(feature = "crypto")]
 mod web_crypto;
+
+#[cfg(not(feature = "crypto"))]
+mod web_crypto_lite;
+#[cfg(not(feature = "crypto"))]
+mod web_crypto {
+    pub use super::web_crypto_lite::*;
+}
+
 mod webstreams;
 mod worker_threads;
+
+#[cfg(feature = "zlib")]
 mod zlib;
+
+#[cfg(not(feature = "zlib"))]
+mod zlib_disabled;
+#[cfg(not(feature = "zlib"))]
+mod zlib {
+    pub use super::zlib_disabled::*;
+}
 
 #[cfg(feature = "sqlite")]
 mod sqlite;

@@ -299,7 +299,7 @@ impl TestResult {
 fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     let path = Utf8Path::new("examples/node-compat-runner");
     let name = "node-compat-runner";
-    let feature_combination_label = "http-sqlite";
+    let feature_combination_label = "full";
     let wrapper_crate_root = Utf8Path::new("tmp")
         .join(name)
         .join(feature_combination_label);
@@ -333,7 +333,7 @@ fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         .arg("build")
         .arg("--target-dir")
         .arg(&shared_target)
-        .args(["--no-default-features", "--features", "http,sqlite"])
+        .args(["--no-default-features", "--features", "full"])
         .current_dir(&wrapper_crate_root)
         .status()?;
 
