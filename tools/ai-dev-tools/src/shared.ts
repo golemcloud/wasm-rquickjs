@@ -83,11 +83,11 @@ export function extractFailingTests(output: string): FailingTest[] {
   const results: FailingTest[] = [];
 
   for (const [testPath, opts] of Object.entries(config.tests)) {
-    if (opts.skip) continue;
+    if (opts.skip || opts.impossible) continue;
 
     if (opts.split && opts.subtests) {
       for (const [subtestName, subOpts] of Object.entries(opts.subtests)) {
-        if (subOpts.skip) continue;
+        if (subOpts.skip || subOpts.impossible) continue;
         const filter = testPathToFilter(testPath, subtestName);
         if (failingFilters.has(filter)) {
           results.push({ path: testPath, subtestName });

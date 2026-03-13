@@ -591,36 +591,59 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         "=== Running {total_tests} tests ({total_public} public API, {total_internals} internals) ===\n"
     );
 
-    // Load config.jsonc to find tests explicitly skipped with a reason
-    let config_skipped: BTreeMap<String, String> = {
-        let config_content =
-            fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
-        let config_json_str = strip_jsonc_comments(&config_content);
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
-            val.get("tests")
-                .and_then(|v| v.as_object())
-                .map(|obj| {
-                    obj.iter()
-                        .filter_map(|(key, entry)| {
-                            let skip = entry.get("skip")?.as_bool()?;
-                            if skip {
-                                let reason = entry
-                                    .get("reason")
-                                    .and_then(|r| r.as_str())
-                                    .unwrap_or("skipped in config.jsonc")
-                                    .to_string();
-                                Some((key.clone(), reason))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
+    // Load config.jsonc to find tests explicitly skipped or impossible
+    let config_content_for_flags =
+        fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
+    let config_json_str_for_flags = strip_jsonc_comments(&config_content_for_flags);
+    let config_tests_obj: Option<serde_json::Map<String, serde_json::Value>> =
+        serde_json::from_str::<serde_json::Value>(&config_json_str_for_flags)
+            .ok()
+            .and_then(|v| v.get("tests")?.as_object().cloned());
+
+    let config_skipped: BTreeMap<String, String> = config_tests_obj
+        .as_ref()
+        .map(|obj| {
+            obj.iter()
+                .filter_map(|(key, entry)| {
+                    let skip = entry.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if skip {
+                        let reason = entry
+                            .get("reason")
+                            .and_then(|r| r.as_str())
+                            .unwrap_or("skipped in config.jsonc")
+                            .to_string();
+                        Some((key.clone(), reason))
+                    } else {
+                        None
+                    }
                 })
-                .unwrap_or_default()
-        } else {
-            BTreeMap::new()
-        }
-    };
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let config_impossible: BTreeMap<String, String> = config_tests_obj
+        .as_ref()
+        .map(|obj| {
+            obj.iter()
+                .filter_map(|(key, entry)| {
+                    let impossible = entry
+                        .get("impossible")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if impossible {
+                        let reason = entry
+                            .get("reason")
+                            .and_then(|r| r.as_str())
+                            .unwrap_or("impossible in config.jsonc")
+                            .to_string();
+                        Some((key.clone(), reason))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     // Load full config to detect split entries
     let config_split_entries: BTreeMap<String, Vec<String>> = {
@@ -650,9 +673,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         }
     };
 
-    // Also include config-skipped tests that weren't found in the suite directory scan
+    // Also include config-skipped/impossible tests that weren't found in the suite directory scan
     // (e.g. .mjs files) so they still appear in the report
-    for path in config_skipped.keys() {
+    for path in config_skipped.keys().chain(config_impossible.keys()) {
         if !test_files.contains(path) {
             let suite_file = format!("tests/node_compat/suite/{path}");
             if std::path::Path::new(&suite_file).exists() {
@@ -672,10 +695,12 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut pass_count = 0usize;
     let mut fail_count = 0usize;
     let mut skip_count = 0usize;
+    let mut impossible_count = 0usize;
     let mut error_count = 0usize;
     let mut internals_pass = 0usize;
     let mut internals_fail = 0usize;
     let mut internals_skip = 0usize;
+    let mut internals_impossible = 0usize;
     let mut internals_error = 0usize;
 
     // Track skipped tests that actually pass (should be unskipped)
@@ -688,6 +713,22 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         let filename = test_path.rsplit('/').next().unwrap_or(test_path);
         let is_internal = internals_tests.contains(test_path);
         let tag = if is_internal { " [internal]" } else { "" };
+
+        // Impossible tests are never executed
+        if let Some(reason) = config_impossible.get(test_path) {
+            println!(
+                "[{:>4}/{total_tests}] IMPOSSIBLE {filename}{tag} ({reason})",
+                progress
+            );
+            let result = TestResult::Skip(format!("impossible: {reason}"));
+            if is_internal {
+                internals_impossible += 1;
+            } else {
+                impossible_count += 1;
+            }
+            results.insert(test_path.clone(), result);
+            continue;
+        }
 
         let skip_reason = config_skipped.get(test_path).cloned();
 
@@ -888,6 +929,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         skip_count as f64 / total_public as f64 * 100.0
     ));
     report.push_str(&format!(
+        "| 🚫 IMPOSSIBLE | {impossible_count} | {:.1}% |\n",
+        impossible_count as f64 / total_public as f64 * 100.0
+    ));
+    report.push_str(&format!(
         "| ❌ FAIL | {fail_count} | {:.1}% |\n",
         fail_count as f64 / total_public as f64 * 100.0
     ));
@@ -902,6 +947,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     // All tests summary (public + internals combined)
     let all_pass = pass_count + internals_pass;
     let all_skip = skip_count + internals_skip;
+    let all_impossible = impossible_count + internals_impossible;
     let all_fail = fail_count + internals_fail;
     let all_error = error_count + internals_error;
 
@@ -919,6 +965,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     report.push_str(&format!(
         "| ⏭️ SKIP | {all_skip} | {:.1}% |\n",
         all_skip as f64 / total_tests as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| 🚫 IMPOSSIBLE | {all_impossible} | {:.1}% |\n",
+        all_impossible as f64 / total_tests as f64 * 100.0
     ));
     report.push_str(&format!(
         "| ❌ FAIL | {all_fail} | {:.1}% |\n",
@@ -1280,27 +1330,31 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     println!("  (Public API Tests Only)");
     println!("============================================");
     println!(
-        "  ✅ PASS:  {pass_count:>5} ({:.1}%)",
+        "  ✅ PASS:       {pass_count:>5} ({:.1}%)",
         pass_count as f64 / total_public as f64 * 100.0
     );
     println!(
-        "  ⏭️  SKIP:  {skip_count:>5} ({:.1}%)",
+        "  ⏭️  SKIP:       {skip_count:>5} ({:.1}%)",
         skip_count as f64 / total_public as f64 * 100.0
     );
     println!(
-        "  ❌ FAIL:  {fail_count:>5} ({:.1}%)",
+        "  🚫 IMPOSSIBLE: {impossible_count:>5} ({:.1}%)",
+        impossible_count as f64 / total_public as f64 * 100.0
+    );
+    println!(
+        "  ❌ FAIL:       {fail_count:>5} ({:.1}%)",
         fail_count as f64 / total_public as f64 * 100.0
     );
     println!(
-        "  💥 ERROR: {error_count:>5} ({:.1}%)",
+        "  💥 ERROR:      {error_count:>5} ({:.1}%)",
         error_count as f64 / total_public as f64 * 100.0
     );
     println!("  ─────────────────────────────────");
-    println!("  Total:    {total_public:>5}");
+    println!("  Total:         {total_public:>5}");
     println!("  ─────────────────────────────────");
     println!("  All (incl. internals):");
     println!(
-        "    PASS: {all_pass}, SKIP: {all_skip}, FAIL: {all_fail}, ERROR: {all_error}, Total: {total_tests}"
+        "    PASS: {all_pass}, SKIP: {all_skip}, IMPOSSIBLE: {all_impossible}, FAIL: {all_fail}, ERROR: {all_error}, Total: {total_tests}"
     );
     println!("  Runtime:  {:.0}s", total_elapsed.as_secs_f64());
     println!("============================================\n");

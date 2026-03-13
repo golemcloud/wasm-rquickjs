@@ -56,6 +56,7 @@ struct SubtestEntry {
     name: String,
     index: usize,
     skip: bool,
+    impossible: bool,
     #[allow(dead_code)]
     reason: Option<String>,
 }
@@ -66,6 +67,7 @@ const DEFAULT_TEST_TIMEOUT_SECS: u64 = 120;
 struct TestEntry {
     path: String,
     skip: bool,
+    impossible: bool,
     #[allow(dead_code)]
     reason: Option<String>,
     split: bool,
@@ -86,6 +88,10 @@ fn load_config(path: &str) -> anyhow::Result<Vec<TestEntry>> {
     let mut tests = Vec::new();
     for (path, opts) in tests_obj {
         let skip = opts.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
+        let impossible = opts
+            .get("impossible")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let reason = opts
             .get("reason")
             .and_then(|v| v.as_str())
@@ -103,6 +109,10 @@ fn load_config(path: &str) -> anyhow::Result<Vec<TestEntry>> {
                     .get("skip")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
+                let sub_impossible = subtest_opts
+                    .get("impossible")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 let sub_reason = subtest_opts
                     .get("reason")
                     .and_then(|v| v.as_str())
@@ -112,6 +122,7 @@ fn load_config(path: &str) -> anyhow::Result<Vec<TestEntry>> {
                     name: subtest_name.clone(),
                     index,
                     skip: sub_skip,
+                    impossible: sub_impossible,
                     reason: sub_reason,
                 });
             }
@@ -120,6 +131,7 @@ fn load_config(path: &str) -> anyhow::Result<Vec<TestEntry>> {
         tests.push(TestEntry {
             path: path.clone(),
             skip,
+            impossible,
             reason,
             split,
             timeout_secs,
@@ -215,7 +227,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
         if !entry.split || entry.subtests.is_empty() {
             // Non-split: one Rust test per file (unchanged behavior)
             let props = TestProperties {
-                is_ignored: entry.skip,
+                is_ignored: entry.skip || entry.impossible,
                 ..TestProperties::unit_test()
             };
 
@@ -294,7 +306,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
             for subtest in &entry.subtests {
                 let test_name = format!("{}__{}", file_test_name, subtest.name);
-                let is_ignored = entry.skip || subtest.skip;
+                let is_ignored = entry.skip || entry.impossible || subtest.skip || subtest.impossible;
                 let props = TestProperties {
                     is_ignored,
                     ..TestProperties::unit_test()

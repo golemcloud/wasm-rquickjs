@@ -4,11 +4,13 @@ import * as jsonc from "jsonc-parser";
 
 export interface SubtestEntry {
   skip?: boolean;
+  impossible?: boolean;
   reason?: string;
 }
 
 export interface TestEntry {
   skip?: boolean;
+  impossible?: boolean;
   reason?: string;
   split?: boolean;
   subtests?: Record<string, SubtestEntry>;
@@ -76,6 +78,23 @@ export function addTestToConfigSkipped(
   console.log(`  Added "${testPath}" as skipped to config.jsonc`);
 }
 
+export function addTestToConfigImpossible(
+  testPath: string,
+  category: string,
+  reason: string,
+): void {
+  const categoryPrefix = `parallel/test-${category}`;
+  const newValue: TestEntry = { impossible: true, reason: clipReason(reason) };
+
+  editConfig((content) => {
+    return applyModify(content, ["tests", testPath], newValue, {
+      getInsertionIndex: insertionIndexForPrefix(categoryPrefix),
+    });
+  });
+
+  console.log(`  Added "${testPath}" as impossible to config.jsonc`);
+}
+
 export function addTestsToConfigSkippedBatch(
   testPaths: string[],
   category: string,
@@ -107,9 +126,10 @@ export function enableTestInConfig(testPath: string): void {
     const entry = parsed.tests?.[testPath];
 
     if (entry?.split && entry?.subtests) {
-      // Split entry: remove skip/reason but preserve split and subtests
+      // Split entry: remove skip/impossible/reason but preserve split and subtests
       let result = content;
       result = applyModify(result, ["tests", testPath, "skip"], undefined);
+      result = applyModify(result, ["tests", testPath, "impossible"], undefined);
       result = applyModify(result, ["tests", testPath, "reason"], undefined);
       // Also clear skip on all subtests
       for (const subtestName of Object.keys(entry.subtests)) {

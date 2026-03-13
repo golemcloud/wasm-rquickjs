@@ -117,7 +117,8 @@ export function getAllVendoredTests(): string[] {
   return files.sort();
 }
 
-/** Return skipped tests for a category from config.jsonc. */
+/** Return skipped tests for a category from config.jsonc.
+ *  Excludes impossible tests (they can never pass and should not be retried). */
 export function getSkippedTests(category: string): SkippedTest[] {
   const data = loadConfig();
   const tests = data.tests ?? {};
@@ -125,10 +126,14 @@ export function getSkippedTests(category: string): SkippedTest[] {
 
   for (const [testPath, opts] of Object.entries(tests).sort()) {
     if (!matchesCategory(testPath, category)) continue;
+    // Impossible tests are never fixable — skip them entirely
+    if (opts.impossible) continue;
 
     if (opts.split && opts.subtests) {
       // Split entry: iterate subtests
       for (const [subtestName, subOpts] of Object.entries(opts.subtests)) {
+        // Skip impossible subtests
+        if (subOpts.impossible) continue;
         if (opts.skip || subOpts.skip) {
           const reason = subOpts.reason ?? opts.reason ?? "no reason given";
           if (!reason.startsWith(MANUAL_SKIP_PREFIX)) {
@@ -239,11 +244,13 @@ export async function runSpecificTests(
 export interface TestCounts {
   /** Enabled (non-skipped) test cases — matches cargo test "passed" count. */
   enabled: number;
-  /** Skipped test cases eligible for automated fixing (excludes manual-skip). */
+  /** Skipped test cases eligible for automated fixing (excludes manual-skip and impossible). */
   fixableSkipped: number;
   /** Skipped test cases marked as manual (MANUAL_SKIP_PREFIX). */
   manualSkipped: number;
-  /** Total test cases (enabled + fixableSkipped + manualSkipped). Should match cargo "passed + ignored". */
+  /** Test cases marked as impossible (can never pass). */
+  impossible: number;
+  /** Total test cases (enabled + fixableSkipped + manualSkipped + impossible). Should match cargo "passed + ignored". */
   total: number;
 }
 
@@ -254,13 +261,25 @@ export function getTestCounts(category: string): TestCounts {
   let enabled = 0;
   let fixableSkipped = 0;
   let manualSkipped = 0;
+  let impossible = 0;
 
   for (const [testPath, opts] of Object.entries(tests)) {
     if (!matchesCategory(testPath, category)) continue;
 
+    if (opts.impossible) {
+      if (opts.split && opts.subtests) {
+        impossible += Object.keys(opts.subtests).length;
+      } else {
+        impossible++;
+      }
+      continue;
+    }
+
     if (opts.split && opts.subtests) {
       for (const [, subOpts] of Object.entries(opts.subtests)) {
-        if (!opts.skip && !subOpts.skip) {
+        if (subOpts.impossible) {
+          impossible++;
+        } else if (!opts.skip && !subOpts.skip) {
           enabled++;
         } else {
           const reason = subOpts.reason ?? opts.reason ?? "";
@@ -283,7 +302,7 @@ export function getTestCounts(category: string): TestCounts {
     }
   }
 
-  return { enabled, fixableSkipped, manualSkipped, total: enabled + fixableSkipped + manualSkipped };
+  return { enabled, fixableSkipped, manualSkipped, impossible, total: enabled + fixableSkipped + manualSkipped + impossible };
 }
 
 /** Return the count of enabled (non-skipped) tests/subtests for a category. */
