@@ -145,6 +145,10 @@ The `tests/node_compat/` directory contains vendored Node.js test files used to 
 
 Load the `fixing-node-compat-test` skill for the full workflow when making a test pass.
 
+### ⚠️ Keeping `node_compat` and `node_compat_report` in sync
+
+The `tests/node_compat.rs` test harness and the `tests/node_compat_report.rs` report generator are **two separate runners** with independent Host types, linker setups, and WASI context configurations. **Whenever you change the WASI context, linker setup, or Host configuration in `tests/common/mod.rs` (used by `node_compat`), you MUST apply the same change to `tests/node_compat_report.rs`** — otherwise the two runners will produce different results.
+
 ## Built-in Module Architecture
 
 ### Hybrid Native + JS Pattern

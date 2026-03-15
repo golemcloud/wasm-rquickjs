@@ -1307,10 +1307,7 @@
       "reason": "requires timers.enroll which is not implemented"
     },
     "parallel/test-timers-reset-process-domain-on-throw.js": {},
-    "parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js": {
-      "skip": true,
-      "reason": "requires net.createServer and socket operations"
-    },
+    "parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js": {},
     "parallel/test-timers-to-primitive.js": {
       "split": true,
       "subtests": {
@@ -1353,10 +1350,7 @@
     "parallel/test-timers-unref-throw-then-ref.js": {},
     "parallel/test-timers-unrefd-interval-still-fires.js": {},
     "parallel/test-timers-unrefed-in-beforeexit.js": {},
-    "parallel/test-timers-unrefed-in-callback.js": {
-      "skip": true,
-      "reason": "requires timer.unref() and process.on('exit')"
-    },
+    "parallel/test-timers-unrefed-in-callback.js": {},
     "parallel/test-timers-promises.js": {},
     "parallel/test-timers-promises-scheduler.js": {
       "skip": true,
@@ -2828,7 +2822,7 @@
     "parallel/test-net-connect-memleak.js": { "skip": true, "reason": "requires process.memoryUsage()" },
     "parallel/test-net-connect-no-arg.js": {},
     "parallel/test-net-connect-nodelay.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-connect-options-allowhalfopen.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-connect-options-allowhalfopen.js": {},
     "parallel/test-net-connect-options-fd.js": { "skip": true, "reason": "requires fd option for socket connection" },
     "parallel/test-net-connect-options-invalid.js": {},
     "parallel/test-net-connect-options-ipv6.js": { "skip": true, "reason": "requires DNS lookup for IPv6" },
@@ -2845,23 +2839,23 @@
       }
     },
     "parallel/test-net-connect-paused-connection.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-connect-reset-after-destroy.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-connect-reset-before-connected.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-connect-reset-until-connected.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-connect-reset-after-destroy.js": {},
+    "parallel/test-net-connect-reset-before-connected.js": {},
+    "parallel/test-net-connect-reset-until-connected.js": {},
     "parallel/test-net-connect-reset.js": {},
     "parallel/test-net-deprecated-setsimultaneousaccepts.js": {},
-    "parallel/test-net-dns-custom-lookup.js": { "skip": true, "reason": "requires custom DNS lookup" },
-    "parallel/test-net-dns-error.js": { "skip": true, "reason": "requires DNS lookup" },
-    "parallel/test-net-dns-lookup-skip.js": { "skip": true, "reason": "requires DNS lookup" },
-    "parallel/test-net-dns-lookup.js": { "skip": true, "reason": "requires DNS lookup" },
+    "parallel/test-net-dns-custom-lookup.js": {},
+    "parallel/test-net-dns-error.js": {},
+    "parallel/test-net-dns-lookup-skip.js": {},
+    "parallel/test-net-dns-lookup.js": {},
     "parallel/test-net-during-close.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-eaddrinuse.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-end-close.js": { "skip": true, "reason": "requires internalBinding('uv') and internalBinding('stream_wrap')" },
     "parallel/test-net-end-destroyed.js": {},
     "parallel/test-net-end-without-connect.js": {},
     "parallel/test-net-error-twice.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-keepalive.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-large-string.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-keepalive.js": {},
+    "parallel/test-net-large-string.js": {},
     "parallel/test-net-listen-after-destroying-stdin.js": { "skip": true, "reason": "requires process.stdin" },
     "parallel/test-net-listen-close-server-callback-is-not-function.js": {},
     "parallel/test-net-listen-error.js": {},
@@ -2873,7 +2867,7 @@
     "parallel/test-net-listen-ipv6only.js": { "skip": true, "reason": "requires IPv6 dual-stack and DNS resolution" },
     "parallel/test-net-listen-twice.js": { "skip": true, "reason": "requires cluster" },
     "parallel/test-net-listening.js": {},
-    "parallel/test-net-local-address-port.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-local-address-port.js": {},
     "parallel/test-net-localerror.js": { "skip": true, "reason": "requires DNS lookup" },
     "parallel/test-net-normalize-args.js": {
       "skip": true,
@@ -2886,7 +2880,7 @@
     },
     "parallel/test-net-onread-static-buffer.js": { "skip": true, "reason": "requires onread option with buffer/callback" },
     "parallel/test-net-options-lookup.js": {},
-    "parallel/test-net-pause-resume-connecting.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-pause-resume-connecting.js": {},
     "parallel/test-net-perf_hooks.js": {
       "skip": true,
       "reason": "requires perf_hooks.PerformanceObserver with net detail",
@@ -2896,7 +2890,7 @@
         "block_01_block_01": { "skip": true, "reason": "inherited: requires perf_hooks.PerformanceObserver with net detail" }
       }
     },
-    "parallel/test-net-persistent-keepalive.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-persistent-keepalive.js": {},
     "parallel/test-net-persistent-nodelay.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-persistent-ref-unref.js": { "skip": true, "reason": "requires internalBinding('tcp_wrap')" },
     "parallel/test-net-pingpong.js": {},
@@ -2907,13 +2901,11 @@
     "parallel/test-net-reuseport.js": { "skip": true, "reason": "requires reusePort option and cluster" },
     "parallel/test-net-server-blocklist.js": { "skip": true, "reason": "requires net.BlockList" },
     "parallel/test-net-server-call-listen-multiple-times.js": {
-      "skip": true,
-      "reason": "net.js TCP implementation incomplete - needs event handling and API fixes",
       "split": true,
       "subtests": {
-        "block_00_first_test_check_that_after_error_event_you_can_listen_right": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" },
-        "block_01_second_test_check_that_second_listen_call_throws_an_error": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" },
-        "block_02_check_that_after_the_close_call_you_can_run_listen_method_ju": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" }
+        "block_00_first_test_check_that_after_error_event_you_can_listen_right": {},
+        "block_01_second_test_check_that_second_listen_call_throws_an_error": {},
+        "block_02_check_that_after_the_close_call_you_can_run_listen_method_ju": {}
       }
     },
     "parallel/test-net-server-capture-rejection.js": { "skip": true, "reason": "requires captureRejections option" },
@@ -2947,7 +2939,7 @@
       "reason": "missing ERR_INVALID_ARG_TYPE validation for listen options",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: missing ERR_INVALID_ARG_TYPE validation for listen options" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: missing ERR_INVALID_ARG_TYPE validation for listen options" },
         "block_02_block_02": { "skip": true, "reason": "inherited: missing ERR_INVALID_ARG_TYPE validation for listen options" }
       }
@@ -2963,15 +2955,15 @@
         "block_05_test_should_emit_error_events_when_listening_fails": {}
       }
     },
-    "parallel/test-net-server-listen-remove-callback.js": { "skip": true, "reason": "requires Unix domain sockets (IPC path)" },
-    "parallel/test-net-server-max-connections-close-makes-more-available.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-server-max-connections.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-server-listen-remove-callback.js": {},
+    "parallel/test-net-server-max-connections-close-makes-more-available.js": {},
+    "parallel/test-net-server-max-connections.js": {},
     "parallel/test-net-server-nodelay.js": {},
     "parallel/test-net-server-options.js": {},
-    "parallel/test-net-server-pause-on-connect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-server-pause-on-connect.js": {},
     "parallel/test-net-server-reset.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-server-simultaneous-accepts-produce-warning-once.js": {},
-    "parallel/test-net-server-try-ports.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-server-try-ports.js": {},
     "parallel/test-net-server-unref-persistent.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-server-unref.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-settimeout.js": {},
@@ -2982,38 +2974,36 @@
     "parallel/test-net-socket-connect-without-cb.js": {},
     "parallel/test-net-socket-connecting.js": {},
     "parallel/test-net-socket-constructor.js": { "skip": true, "reason": "requires cluster" },
-    "parallel/test-net-socket-destroy-send.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-socket-destroy-send.js": {},
     "parallel/test-net-socket-destroy-twice.js": {},
-    "parallel/test-net-socket-end-before-connect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-socket-end-before-connect.js": {},
     "parallel/test-net-socket-end-callback.js": {},
-    "parallel/test-net-socket-local-address.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-socket-local-address.js": {},
     "parallel/test-net-socket-no-halfopen-enforcer.js": {},
     "parallel/test-net-socket-ready-without-cb.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-socket-reset-send.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-socket-reset-twice.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-socket-reset-send.js": {},
+    "parallel/test-net-socket-reset-twice.js": {},
     "parallel/test-net-socket-setnodelay.js": {},
-    "parallel/test-net-socket-timeout-unref.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-socket-timeout-unref.js": {},
     "parallel/test-net-socket-timeout.js": {},
     "parallel/test-net-socket-write-after-close.js": {
-      "skip": true,
-      "reason": "net.js TCP implementation incomplete - needs event handling and API fixes",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-net-socket-write-error.js": {},
     "parallel/test-net-stream.js": {},
-    "parallel/test-net-sync-cork.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-throttle.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-sync-cork.js": {},
+    "parallel/test-net-throttle.js": {},
     "parallel/test-net-timeout-no-handle.js": {},
     "parallel/test-net-writable.js": {},
     "parallel/test-net-write-after-close.js": {},
-    "parallel/test-net-write-after-end-nt.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-write-after-end-nt.js": {},
     "parallel/test-net-write-arguments.js": {},
-    "parallel/test-net-write-cb-on-destroy-before-connect.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
-    "parallel/test-net-write-connect-write.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-write-cb-on-destroy-before-connect.js": {},
+    "parallel/test-net-write-connect-write.js": {},
     "parallel/test-net-write-fully-async-buffer.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-write-fully-async-hex-string.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-net-write-slow.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
@@ -4383,11 +4373,9 @@
     "parallel/test-dgram-bind.js": {},
     "parallel/test-dgram-bind-default-address.js": {},
     "parallel/test-dgram-address.js": {
-      "skip": true,
-      "reason": "WASI runtime returns access-denied (EACCES) when binding to 127.0.0.1; wasmtime sandbox permissions issue",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: WASI runtime returns access-denied (EACCES) when binding to 127.0.0.1; wasmtime sandbox permissions issue" },
+        "block_00_block_00": {},
         "block_01_block_01": {}
       }
     },
@@ -4422,10 +4410,7 @@
     "parallel/test-dgram-implicit-bind.js": {},
     "parallel/test-dgram-udp4.js": {},
     "parallel/test-dgram-bytes-length.js": {},
-    "parallel/test-dgram-listen-after-bind.js": {
-      "skip": true,
-      "reason": "WASI async bind may not complete within the 100ms timeout race in this test; binding is asynchronous in WASI"
-    },
+    "parallel/test-dgram-listen-after-bind.js": {},
     "parallel/test-dgram-close-in-listening.js": {},
     "parallel/test-dgram-connect-send-default-host.js": {},
     "parallel/test-dgram-connect-send-callback-buffer.js": {},
@@ -4455,10 +4440,7 @@
     "parallel/test-dgram-multicast-setTTL.js": {},
     "parallel/test-dgram-oob-buffer.js": {},
     "parallel/test-dgram-send-queue-info.js": {},
-    "parallel/test-dgram-error-message-address.js": {
-      "skip": true,
-      "reason": "WASI runtime maps binding to non-local IPs as access-denied (EACCES) instead of EADDRNOTAVAIL"
-    },
+    "parallel/test-dgram-error-message-address.js": {},
     "parallel/test-dgram-bind-error-repeat.js": {},
     "parallel/test-dgram-blocklist.js": {
       "split": true,
@@ -4475,7 +4457,7 @@
     "parallel/test-async-hooks-http-parser-destroy.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-cluster-ipc-throw.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-cluster-worker-disconnect-on-error.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-diagnostic-channel-http-request-created.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-diagnostic-channel-http-request-created.js": {},
     "parallel/test-diagnostic-channel-http-response-created.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-diagnostics-channel-http-server-start.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
     "parallel/test-domain-http-server.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
@@ -4489,10 +4471,7 @@
     "parallel/test-http-aborted.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] amp fix caused regressions"
-        },
+        "block_00_block_00": {},
         "block_01_block_01": {}
       }
     },
@@ -4578,7 +4557,7 @@
     "parallel/test-http-client-abort2.js": {},
     "parallel/test-http-client-agent-abort-close-event.js": {},
     "parallel/test-http-client-agent-end-close-event.js": { "skip": true, "reason": "hangs: relies on Agent connection lifecycle not fully implemented" },
-    "parallel/test-http-client-close-event.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
+    "parallel/test-http-client-close-event.js": {},
     "parallel/test-http-client-close-with-default-agent.js": {},
     "parallel/test-http-client-default-headers-exist.js": { "skip": true, "reason": "[manual] amp fix attempt failed verification" },
     "parallel/test-http-client-encoding.js": {},
@@ -4590,22 +4569,20 @@
     "parallel/test-http-client-keep-alive-hint.js": {},
     "parallel/test-http-client-keep-alive-release-before-finish.js": { "skip": true, "reason": "hangs: requires keep-alive socket reuse and res.connection.end()" },
     "parallel/test-http-client-pipe-end.js": { "skip": true, "reason": "hangs: relies on keep-alive connection piping" },
-    "parallel/test-http-client-race-2.js": { "skip": true, "reason": "requires server.listen(0) which fails in WASM environment" },
-    "parallel/test-http-client-race.js": { "skip": true, "reason": "requires server.listen(0) which fails in WASM environment" },
-    "parallel/test-http-client-reject-unexpected-agent.js": { "skip": true, "reason": "requires server.listen(0) which fails in WASM environment" },
+    "parallel/test-http-client-race-2.js": {},
+    "parallel/test-http-client-race.js": {},
+    "parallel/test-http-client-reject-unexpected-agent.js": {},
     "parallel/test-http-client-request-options.js": {},
     "parallel/test-http-client-res-destroyed.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "parallel/test-http-client-response-domain.js": { "skip": true, "reason": "hangs: requires domain module integration with HTTP client" },
     "parallel/test-http-client-response-timeout.js": {},
-    "parallel/test-http-client-set-timeout-after-end.js": { "skip": true, "reason": "hangs: relies on ClientRequest.setTimeout not fully implemented" },
+    "parallel/test-http-client-set-timeout-after-end.js": {},
     "parallel/test-http-client-set-timeout.js": { "skip": true, "reason": "hangs: relies on ClientRequest.setTimeout not fully implemented" },
     "parallel/test-http-client-timeout-agent.js": { "skip": true, "reason": "hangs: relies on Agent timeout behavior not fully implemented" },
     "parallel/test-http-client-timeout-connect-listener.js": {},
@@ -4634,7 +4611,7 @@
       "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: requires HTTP server functionality, we only support clients" }
       }
     },
@@ -4685,10 +4662,10 @@
     "parallel/test-http-header-owstext.js": {},
     "parallel/test-http-header-read.js": {},
     "parallel/test-http-hex-write.js": {},
-    "parallel/test-http-highwatermark.js": { "skip": true, "reason": "hangs: relies on socket highWaterMark / backpressure behavior" },
+    "parallel/test-http-highwatermark.js": {},
     "parallel/test-http-host-header-ipv6-fail.js": { "skip": true, "reason": "hangs: relies on IPv6 connection failure behavior" },
     "parallel/test-http-host-headers.js": {},
-    "parallel/test-http-incoming-message-options.js": { "skip": true, "reason": "hangs: requires net.createConnection with custom readableHighWaterMark" },
+    "parallel/test-http-incoming-message-options.js": {},
     "parallel/test-http-information-processing.js": { "skip": true, "reason": "hangs: 1xx informational responses not supported via wasi:http" },
     "parallel/test-http-insecure-parser.js": {},
     "parallel/test-http-invalid-te.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for invalid transfer-encoding" },
@@ -4779,22 +4756,13 @@
     "parallel/test-http-parser-freed-before-upgrade.js": { "skip": true, "reason": "hangs: relies on HTTP parser lifecycle internals" },
     "parallel/test-http-pause-no-dump.js": {},
     "parallel/test-http-pause.js": { "skip": true, "reason": "hangs: relies on response pause/resume backpressure" },
-    "parallel/test-http-pipeline-assertionerror-finish.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
-    },
+    "parallel/test-http-pipeline-assertionerror-finish.js": {},
     "parallel/test-http-pipeline-flood.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes for pipeline flooding" },
     "parallel/test-http-pipeline-socket-parser-typeerror.js": {},
-    "parallel/test-http-proxy.js": {
-      "skip": true,
-      "reason": "[manual] amp fix caused regressions"
-    },
+    "parallel/test-http-proxy.js": {},
     "parallel/test-http-raw-headers.js": { "skip": true, "reason": "hangs: test uses raw TCP to verify header case preservation" },
     "parallel/test-http-readable-data-event.js": {},
-    "parallel/test-http-remove-connection-header-persists-connection.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients"
-    },
+    "parallel/test-http-remove-connection-header-persists-connection.js": {},
     "parallel/test-http-remove-header-stays-removed.js": { "skip": true, "reason": "hangs: test uses raw TCP for header removal verification" },
     "parallel/test-http-req-close-robust-from-tampering.js": { "skip": true, "reason": "hangs: relies on close event tampering edge case" },
     "parallel/test-http-request-arguments.js": {},
@@ -4907,22 +4875,11 @@
     "parallel/test-http-server-multiheaders.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "parallel/test-http-server-multiheaders2.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "parallel/test-http-server-non-utf8-header.js": {
-      "skip": true,
-      "reason": "requires HTTP server functionality, we only support clients",
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM"
-        },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM"
-        },
-        "block_02_block_02": {
-          "skip": true,
-          "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM"
-        }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "parallel/test-http-server-options-incoming-message.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
@@ -4984,26 +4941,12 @@
     "parallel/test-http-write-callbacks.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "parallel/test-http-write-empty-string.js": {},
     "parallel/test-http-write-head-2.js": {
-      "skip": true,
-      "reason": "tests server-side HTTP behavior which requires TCP listen, not available in WASI",
       "split": true,
       "subtests": {
-        "block_00_block_00": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_01_block_01": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_02_block_02": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        },
-        "block_03_block_03": {
-          "skip": true,
-          "reason": "[manual] amp batch made no code changes"
-        }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
     "parallel/test-http-write-head.js": {
@@ -5016,7 +4959,7 @@
     "parallel/test-https-connecting-to-http.js": { "impossible": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-socket-options.js": { "impossible": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-pipe-file-to-http.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
-    "parallel/test-pipe-outgoing-message-data-emitted-after-ended.js": { "skip": true, "reason": "requires HTTP server functionality, we only support clients" },
+    "parallel/test-pipe-outgoing-message-data-emitted-after-ended.js": {},
     "parallel/test-stream-destroy.js": {
       "split": true,
       "subtests": {
@@ -5114,16 +5057,13 @@
     "parallel/test-process-warning.js": {},
 
     // Tests using ../common/countdown (HTTP server tests - skipped)
-    "parallel/test-http-after-connect.js": {
-      "skip": true,
-      "reason": "[manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http"
-    },
+    "parallel/test-http-after-connect.js": {},
     "parallel/test-http-agent-maxsockets-respected.js": {},
     "parallel/test-http-agent-maxsockets.js": {},
     "parallel/test-http-agent-maxtotalsockets.js": {},
     "parallel/test-http-agent.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
     "parallel/test-http-allow-req-after-204-res.js": {},
-    "parallel/test-http-client-abort.js": { "skip": true, "reason": "[manual] amp fix caused regressions" },
+    "parallel/test-http-client-abort.js": {},
     "parallel/test-http-client-agent.js": {},
     "parallel/test-http-client-check-http-token.js": {},
     "parallel/test-http-client-parse-error.js": { "skip": true, "reason": "hangs: test sends raw TCP bytes and expects specific parser errors" },
@@ -5132,7 +5072,7 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-end-throw-socket-handling.js": { "skip": true, "reason": "throws in end handler; requires uncaughtException to catch across 10 parallel requests" },
+    "parallel/test-http-end-throw-socket-handling.js": {},
     "parallel/test-http-exceptions.js": { "skip": true, "reason": "hangs: relies on uncaughtException handling in request callbacks" },
     "parallel/test-http-get-pipeline-problem.js": {},
     "parallel/test-http-incoming-pipelined-socket-destroy.js": {},
@@ -5150,10 +5090,7 @@
       "skip": true,
       "reason": "[manual] wasmtime's `wasi:http` implementation strips `host` and `proxy-authorization` headers from HTTP responses (treating them as forbidden/hop-by-hop headers). The test asserts all 17 \"norepeat..."
     },
-    "parallel/test-http-response-splitting.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-http-response-splitting.js": {},
     "parallel/test-http-response-status-message.js": {
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
@@ -5164,14 +5101,8 @@
       "skip": true,
       "reason": "[manual] amp fix attempt failed verification"
     },
-    "parallel/test-http-status-code.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
-    "parallel/test-http-status-reason-invalid-chars.js": {
-      "skip": true,
-      "reason": "[manual] amp fix attempt failed verification"
-    },
+    "parallel/test-http-status-code.js": {},
+    "parallel/test-http-status-reason-invalid-chars.js": {},
     "parallel/test-http-timeout.js": {},
     "parallel/test-http-upgrade-client.js": {
       "skip": true,
@@ -5327,10 +5258,7 @@
       "skip": true,
       "reason": "[manual] requires --expose-internals (Node.js internal APIs)"
     },
-    "parallel/test-http-buffer-sanity.js": {
-      "skip": true,
-      "reason": "[manual] batch other-1: cannot fix"
-    },
+    "parallel/test-http-buffer-sanity.js": {},
     "parallel/test-http-client-abort3.js": {
       "split": true,
       "subtests": {
@@ -5497,10 +5425,7 @@
     "parallel/test-http-server-close-destroy-timeout.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "parallel/test-http-server-connections-checking-leak.js": {},
     "parallel/test-http-server-keepalive-req-gc.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
-    "parallel/test-http-server-method.query.js": {
-      "skip": true,
-      "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM"
-    },
+    "parallel/test-http-server-method.query.js": {},
     "parallel/test-http-server-multiple-client-error.js": {},
     "parallel/test-http-server-options-highwatermark.js": {
       "skip": true,
@@ -5529,9 +5454,9 @@
       "skip": true,
       "reason": "[manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http"
     },
-    "parallel/test-http-upgrade-server.js": { "skip": true, "reason": "[manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http" },
+    "parallel/test-http-upgrade-server.js": {},
     "parallel/test-http-url.parse-auth-with-header-in-request.js": {},
-    "parallel/test-http-url.parse-auth.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "parallel/test-http-url.parse-auth.js": {},
     "parallel/test-http-url.parse-basic.js": {},
     "parallel/test-http-url.parse-https.request.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
     "parallel/test-http-url.parse-only-support-http-https-protocol.js": {},
@@ -6401,7 +6326,7 @@
     "sequential/test-http-server-request-timeout-upgrade.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "sequential/test-https-connect-localport.js": { "impossible": true, "reason": "[manual] http2/https not implemented" },
     "sequential/test-net-connect-local-error.js": {},
-    "sequential/test-net-localport.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "sequential/test-net-localport.js": {},
     "sequential/test-net-reconnect-error.js": {},
     "sequential/test-net-response-size.js": { "skip": true, "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "sequential/test-net-server-address.js": {
@@ -6415,23 +6340,21 @@
       }
     },
     "sequential/test-net-server-bind.js": {
-      "skip": true,
-      "reason": "net.js TCP implementation incomplete - needs event handling and API fixes",
       "split": true,
       "subtests": {
-        "block_00_with_only_a_callback_server_should_get_a_port_assigned_by_th": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" },
-        "block_01_no_callback_to_listen_assume_we_can_bind_in_100_ms": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" },
-        "block_02_callback_to_listen": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" },
-        "block_03_backlog_argument": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" },
-        "block_04_backlog_argument_without_host_argument": { "skip": true, "reason": "inherited: net.js TCP implementation incomplete - needs event handling and API fixes" }
+        "block_00_with_only_a_callback_server_should_get_a_port_assigned_by_th": {},
+        "block_01_no_callback_to_listen_assume_we_can_bind_in_100_ms": {},
+        "block_02_callback_to_listen": {},
+        "block_03_backlog_argument": {},
+        "block_04_backlog_argument_without_host_argument": {}
       }
     },
     "parallel/test-net-listen-close-server.js": {},
     "sequential/test-http-econnrefused.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "sequential/test-http-keep-alive-large-write.js": { "skip": true, "reason": "requires HTTP server functionality" },
+    "sequential/test-http-keep-alive-large-write.js": {},
     "sequential/test-http-keepalive-maxsockets.js": { "skip": true, "reason": "requires HTTP server functionality" },
-    "sequential/test-http-server-keep-alive-timeout-slow-client-headers.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
-    "sequential/test-http-server-keep-alive-timeout-slow-server.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
+    "sequential/test-http-server-keep-alive-timeout-slow-client-headers.js": {},
+    "sequential/test-http-server-keep-alive-timeout-slow-server.js": {},
     "sequential/test-http-server-request-timeouts-mixed.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "sequential/test-http2-large-file.js": { "impossible": true, "reason": "[manual] http2/https not implemented" },
     "sequential/test-http2-max-session-memory.js": { "impossible": true, "reason": "[manual] http2/https not implemented" },
@@ -6449,8 +6372,8 @@
     "es-module/test-cjs-esm-warn.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-cjs-legacyMainResolve-permission.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
     "es-module/test-cjs-legacyMainResolve.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
-    "es-module/test-cjs-prototype-pollution.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-disable-require-module-with-detection.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-cjs-prototype-pollution.js": {},
+    "es-module/test-disable-require-module-with-detection.js": {},
     "es-module/test-esm-assertionless-json-import.js": { "skip": true, "reason": "[manual] This test requires Node.js `--experimental-loader` custom ESM loader hooks to allow JSON imports without `{ with: { type: 'json' } }`. Without that loader, Node.js itself rejects assertion..." },
     "es-module/test-esm-cjs-builtins.js": {},
     "es-module/test-esm-cjs-exports.js": { "skip": true, "reason": "[manual] This test requires Node.js's native ESM-CJS interop, which cannot be replicated in WASM/QuickJS. Specifically:" },
@@ -6521,7 +6444,7 @@
         "block_02_if_import_and_default_are_defined_default_is_used": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "es-module/test-require-module-cycle-cjs-esm-esm.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-cycle-cjs-esm-esm.js": {},
     "es-module/test-require-module-cycle-esm-cjs-esm-esm.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
@@ -6578,12 +6501,12 @@
     "es-module/test-require-module-dont-detect-cjs.js": {},
     "es-module/test-require-module-dynamic-import-1.js": { "skip": true, "reason": "requires CJS named export analysis (cjs-module-lexer) for ESM import of CJS modules" },
     "es-module/test-require-module-dynamic-import-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-dynamic-import-3.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-dynamic-import-4.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-dynamic-import-3.js": {},
+    "es-module/test-require-module-dynamic-import-4.js": {},
     "es-module/test-require-module-error-catching.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-feature-detect.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-implicit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-implicit.js": {},
     "es-module/test-require-module-preload.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-retry-import-errored.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-retry-import-evaluating.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -6600,7 +6523,7 @@
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "es-module/test-require-module-transpiled.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-transpiled.js": {},
     "es-module/test-require-module-twice.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-warning.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-with-detection.js": {
@@ -6617,12 +6540,12 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_named_exports": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_esm_that_import_esm": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_test_named_exports": {},
+        "block_01_test_esm_that_import_esm": {},
         "block_02_test_esm_that_import_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_test_esm_that_require_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_03_test_esm_that_require_cjs": {},
         "block_04_also_test_default_export": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_test_data_import": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_05_test_data_import": {}
       }
     },
     "es-module/test-require-node-modules-warning.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -6714,7 +6637,7 @@
     },
     "parallel/test-c-ares.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-cli-bad-options.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-cli-eval-event.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-cli-eval-event.js": {},
     "parallel/test-cli-node-options-disallowed.js": {},
     "parallel/test-cli-node-options-docs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-cli-node-options.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -6963,7 +6886,7 @@
     "parallel/test-domain-crypto.js": {},
     "parallel/test-domain-dep0097.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-domain-load-after-set-uncaught-exception-capture.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-domain-nested-throw.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-domain-nested-throw.js": {},
     "parallel/test-domain-no-error-handler-abort-on-uncaught-0.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-domain-no-error-handler-abort-on-uncaught-1.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-domain-no-error-handler-abort-on-uncaught-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -7295,7 +7218,7 @@
     "parallel/test-inspector-runtime-evaluate-with-timeout.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-inspector-scriptparsed-context.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-inspector-stop-profile-after-done.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-inspector-stops-no-file.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-inspector-stops-no-file.js": {},
     "parallel/test-inspector-stress-http.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-inspector-strip-types.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-inspector-tracing-domain.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -7417,7 +7340,7 @@
     "parallel/test-intl-v8BreakIterator.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-intl.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-js-stream-call-properties.js": {},
-    "parallel/test-kill-segfault-freebsd.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-kill-segfault-freebsd.js": {},
     "parallel/test-listen-fd-cluster.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-listen-fd-detached-inherit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-listen-fd-detached.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -7648,7 +7571,7 @@
       "subtests": {
         "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_02_block_02": {},
         "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
@@ -7820,12 +7743,12 @@
         "block_05_block_05": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-process-argv-0.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-process-argv-0.js": {},
     "parallel/test-process-assert.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-process-binding-internalbinding-allowlist.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-process-binding-util.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-process-binding.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-process-chdir.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-process-chdir.js": {},
     "parallel/test-process-constants-noatime.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-process-env-allowed-flags-are-documented.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-process-env-allowed-flags.js": {
@@ -7874,7 +7797,7 @@
     "parallel/test-process-redirect-warnings-env.js": {},
     "parallel/test-process-redirect-warnings.js": {},
     "parallel/test-process-ref-unref.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-process-remove-all-signal-listeners.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-process-remove-all-signal-listeners.js": {},
     "parallel/test-process-title-cli.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-process-uncaught-exception-monitor.js": {
       "skip": true,
@@ -8108,7 +8031,7 @@
     "parallel/test-repl-sigint.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-repl-stdin-push-null.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-repl-strict-mode-previews.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-repl-syntax-error-handling.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-repl-syntax-error-handling.js": {},
     "parallel/test-repl-tab-complete-nested-repls.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-repl-tab-complete.js": {
       "skip": true,
@@ -8475,7 +8398,7 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_test_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_test_00": {},
         "test_01_test_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_02_same_checks_using_node_options_if_it_is_supported": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
@@ -8758,8 +8681,8 @@
     "parallel/test-snapshot-worker.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-socket-address.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-socket-options-invalid.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-socket-write-after-fin-error.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-socket-write-after-fin.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-socket-write-after-fin-error.js": {},
+    "parallel/test-socket-write-after-fin.js": {},
     "parallel/test-socket-writes-before-passed-to-tls-socket.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-socketaddress.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-source-map-api.js": {
@@ -8859,22 +8782,22 @@
         "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-stdin-child-proc.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stdin-child-proc.js": {},
     "parallel/test-stdin-from-file-spawn.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stdin-from-file.js": {},
     "parallel/test-stdin-pipe-large.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stdin-pipe-resume.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stdin-script-child-option.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-stdin-script-child.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-stdio-closed.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stdin-script-child.js": {},
+    "parallel/test-stdio-closed.js": {},
     "parallel/test-stdio-pipe-access.js": {},
-    "parallel/test-stdio-pipe-redirect.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stdio-pipe-redirect.js": {},
     "parallel/test-stdio-undestroy.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-stdout-cannot-be-closed-child-process-pipe.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stdout-cannot-be-closed-child-process-pipe.js": {},
     "parallel/test-stdout-close-catch.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stdout-close-unref.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stdout-pipeline-destroy.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-stdout-stderr-reading.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stdout-stderr-reading.js": {},
     "parallel/test-stdout-to-file.js": {},
     "parallel/test-strace-openat-openssl.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-stream-add-abort-signal.js": {
@@ -9032,10 +8955,7 @@
         "block_04_block_04": {},
         "block_05_block_05": {},
         "block_06_block_06": {},
-        "block_07_block_07": {
-          "skip": true,
-          "reason": "[manual] amp fix caused regressions"
-        },
+        "block_07_block_07": {},
         "block_08_block_08": {
           "skip": true,
           "reason": "[manual] **Block_08 requires streaming/full-duplex HTTP request bodies**, which is architecturally incompatible with the current wasi:http implementation."
@@ -9339,7 +9259,7 @@
     "parallel/test-tls-cert-ext-encoding.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-cert-regression.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-check-server-identity.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-tls-cipher-list.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-tls-cipher-list.js": {},
     "parallel/test-tls-cli-max-version-1.2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-cli-max-version-1.3.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tls-cli-min-max-conflict.js": {},
@@ -9561,35 +9481,35 @@
     "parallel/test-trace-atomics-wait.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-env-stack.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-env.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-all.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-trace-events-all.js": {},
     "parallel/test-trace-events-api-worker-disabled.js": {},
     "parallel/test-trace-events-api.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-async-hooks-dynamic.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-async-hooks-worker.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-async-hooks.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-binding.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-trace-events-async-hooks.js": {},
+    "parallel/test-trace-events-binding.js": {},
     "parallel/test-trace-events-bootstrap.js": {},
     "parallel/test-trace-events-category-used.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-console.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-dynamic-enable-workers-disabled.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-dynamic-enable.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-environment.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-file-pattern.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-trace-events-file-pattern.js": {},
     "parallel/test-trace-events-fs-async.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-fs-sync.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-events-get-category-enabled-buffer.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-http.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-metadata.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-trace-events-http.js": {},
+    "parallel/test-trace-events-metadata.js": {},
     "parallel/test-trace-events-net-abstract-socket.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-net.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-none.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-process-exit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-trace-events-net.js": {},
+    "parallel/test-trace-events-none.js": {},
+    "parallel/test-trace-events-process-exit.js": {},
     "parallel/test-trace-events-promises.js": {},
     "parallel/test-trace-events-threadpool.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-v8.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-trace-events-v8.js": {},
     "parallel/test-trace-events-vm.js": {},
-    "parallel/test-trace-events-worker-metadata-with-name.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-trace-events-worker-metadata.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-trace-events-worker-metadata-with-name.js": {},
+    "parallel/test-trace-events-worker-metadata.js": {},
     "parallel/test-trace-exit-stack-limit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-trace-exit.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-tracing-no-crash.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9816,8 +9736,8 @@
     "parallel/test-vm-strict-assign.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-strict-mode.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-symbols.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-vm-syntax-error-message.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-vm-syntax-error-stderr.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-vm-syntax-error-message.js": {},
+    "parallel/test-vm-syntax-error-stderr.js": {},
     "parallel/test-vm-timeout-escape-promise-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-timeout-escape-promise-module.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-vm-timeout-escape-promise.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -10014,7 +9934,7 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_disabled_without_experimental_webstorage": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_00_disabled_without_experimental_webstorage": {},
         "test_01_emits_a_warning_when_used": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_02_storage_instances_cannot_be_created_in_userland": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
         "test_03_sessionstorage_is_not_persisted": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
@@ -10977,13 +10897,11 @@
       }
     },
     "sequential/test-init.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {}
       }
     },
     "sequential/test-inspector-port-cluster.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -11056,7 +10974,7 @@
     },
     "sequential/test-single-executable-application-use-code-cache.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-single-executable-application.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "sequential/test-stream2-stderr-sync.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "sequential/test-stream2-stderr-sync.js": {},
     "sequential/test-timers-block-eventloop.js": {},
     "sequential/test-timers-set-interval-excludes-callback-duration.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "sequential/test-tls-connect.js": {

@@ -115,6 +115,8 @@ impl SharedRunner {
             .arg("test")
             .env("TEST_KEY", "TEST_VALUE")
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
+            .inherit_network()
+            .allow_ip_name_lookup(true)
             .build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
@@ -217,6 +219,8 @@ impl SharedRunner {
             .arg("test")
             .env("TEST_KEY", "TEST_VALUE")
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
+            .inherit_network()
+            .allow_ip_name_lookup(true)
             .build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
@@ -299,7 +303,7 @@ impl TestResult {
 fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     let path = Utf8Path::new("examples/node-compat-runner");
     let name = "node-compat-runner";
-    let feature_combination_label = "full";
+    let feature_combination_label = "full-no-logging";
     let wrapper_crate_root = Utf8Path::new("tmp")
         .join(name)
         .join(feature_combination_label);
@@ -333,7 +337,7 @@ fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         .arg("build")
         .arg("--target-dir")
         .arg(&shared_target)
-        .args(["--no-default-features", "--features", "full"])
+        .args(["--no-default-features", "--features", "full-no-logging"])
         .current_dir(&wrapper_crate_root)
         .status()?;
 

@@ -20,6 +20,7 @@ default = ["normal"]
 lite = ["fetch"]
 normal = ["lite", "node-http", "crypto", "zlib", "logging", "encoding"]
 full = ["normal", "crypto-full", "brotli", "sqlite", "timezone"]
+full-no-logging = ["lite", "node-http", "crypto", "zlib", "encoding", "crypto-full", "brotli", "sqlite", "timezone"]
 
 # Individual capabilities
 fetch = ["dep:golem-wasi-http"]

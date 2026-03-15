@@ -250,6 +250,17 @@ impl PreparedComponent {
         )?;
         wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
 
+        // Mock wasi:logging/logging (required by the full feature)
+        {
+            let mut logging = linker.instance("wasi:logging/logging")?;
+            logging.func_wrap(
+                "log",
+                |_ctx: StoreContextMut<'_, Host>,
+                 (_level, _context, _message): (LogLevel, String, String)|
+                 -> Result<(), anyhow::Error> { Ok(()) },
+            )?;
+        }
+
         let component = Component::from_file(&engine, wasm_path)?;
 
         Ok(Self {

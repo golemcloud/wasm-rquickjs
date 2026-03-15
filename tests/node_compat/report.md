@@ -1,6 +1,6 @@
 # Node.js v22 Compatibility Report
 
-Generated: 2026-03-12 | Runtime: 12561s | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-03-15 | Runtime: 54574s | Engine: wasm-rquickjs (QuickJS)
 
 ## Summary (Public API Tests)
 
@@ -8,10 +8,11 @@ Tests that rely on Node.js internals (`--expose-internals`, `internalBinding`, `
 
 | Result | Count | Percentage |
 |--------|-------|------------|
-| ✅ PASS | 1075 | 31.5% |
-| ⏭️ SKIP | 1846 | 54.1% |
-| ❌ FAIL | 475 | 13.9% |
-| 💥 ERROR | 17 | 0.5% |
+| ✅ PASS | 1296 | 38.0% |
+| ⏭️ SKIP | 1383 | 40.5% |
+| 🚫 IMPOSSIBLE | 409 | 12.0% |
+| ❌ FAIL | 251 | 7.4% |
+| 💥 ERROR | 74 | 2.2% |
 | **Total** | **3413** | **100%** |
 
 ### All Tests (Public + Internals)
@@ -20,10 +21,11 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 | Result | Count | Percentage |
 |--------|-------|------------|
-| ✅ PASS | 1126 | 30.1% |
-| ⏭️ SKIP | 2111 | 56.5% |
-| ❌ FAIL | 481 | 12.9% |
-| 💥 ERROR | 17 | 0.5% |
+| ✅ PASS | 1347 | 36.1% |
+| ⏭️ SKIP | 1611 | 43.1% |
+| 🚫 IMPOSSIBLE | 446 | 11.9% |
+| ❌ FAIL | 256 | 6.9% |
+| 💥 ERROR | 75 | 2.0% |
 | **Total** | **3735** | **100%** |
 
 ## Results by Module
@@ -35,43 +37,62 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | async_hooks | 36 | 4 | 11 | 0 | 21 | 11.1% |
 | blob | 2 | 2 | 0 | 0 | 0 | 100.0% |
 | buffer | 189 | 179 | 0 | 8 | 2 | 94.7% |
-| child_process | 215 | 40 | 75 | 27 | 73 | 18.6% |
-| cluster | 85 | 0 | 4 | 0 | 81 | 0.0% |
+| child_process | 114 | 16 | 12 | 3 | 83 | 14.0% |
+| cli | 33 | 12 | 11 | 0 | 10 | 36.4% |
+| cluster | 85 | 0 | 3 | 1 | 81 | 0.0% |
+| common | 11 | 1 | 7 | 0 | 3 | 9.1% |
+| compile | 15 | 0 | 0 | 0 | 15 | 0.0% |
 | console | 32 | 31 | 1 | 0 | 0 | 96.9% |
 | crypto | 238 | 210 | 16 | 5 | 7 | 88.2% |
-| dgram | 107 | 15 | 73 | 0 | 19 | 14.0% |
+| dgram | 107 | 21 | 25 | 45 | 16 | 19.6% |
 | diagnostics_channel | 34 | 19 | 4 | 0 | 11 | 55.9% |
-| dns | 33 | 3 | 23 | 0 | 7 | 9.1% |
+| dns | 33 | 2 | 18 | 6 | 7 | 6.1% |
 | domain | 63 | 27 | 15 | 0 | 21 | 42.9% |
+| encoding | 1 | 1 | 0 | 0 | 0 | 100.0% |
+| errors | 2 | 0 | 0 | 0 | 2 | 0.0% |
+| eslint | 22 | 0 | 0 | 0 | 22 | 0.0% |
 | events | 67 | 62 | 3 | 0 | 2 | 92.5% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 100.0% |
-| fs | 459 | 403 | 17 | 12 | 27 | 87.8% |
-| http | 891 | 83 | 326 | 0 | 482 | 9.3% |
-| inspector | 85 | 1 | 0 | 0 | 84 | 1.2% |
-| module | 190 | 83 | 43 | 2 | 62 | 43.7% |
-| net | 204 | 44 | 88 | 0 | 72 | 21.6% |
+| fs | 454 | 409 | 6 | 12 | 27 | 90.1% |
+| global | 9 | 2 | 0 | 0 | 7 | 22.2% |
+| heap | 24 | 0 | 5 | 0 | 19 | 0.0% |
+| http | 821 | 275 | 66 | 24 | 456 | 33.5% |
+| inspector | 89 | 1 | 0 | 0 | 88 | 1.1% |
+| internal | 1 | 0 | 0 | 0 | 1 | 0.0% |
+| module | 190 | 79 | 43 | 2 | 66 | 41.6% |
+| net | 225 | 148 | 13 | 13 | 51 | 65.8% |
+| node | 1 | 0 | 0 | 0 | 1 | 0.0% |
 | os | 5 | 5 | 0 | 0 | 0 | 100.0% |
-| other | 877 | 190 | 253 | 4 | 430 | 21.7% |
+| other | 310 | 72 | 86 | 3 | 149 | 23.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 100.0% |
 | perf_hooks | 42 | 3 | 27 | 0 | 12 | 7.1% |
-| process | 97 | 45 | 10 | 2 | 40 | 46.4% |
+| permission | 70 | 5 | 20 | 0 | 45 | 7.1% |
+| process | 93 | 40 | 10 | 2 | 41 | 43.0% |
+| promises | 23 | 1 | 1 | 0 | 21 | 4.3% |
 | querystring | 15 | 15 | 0 | 0 | 0 | 100.0% |
 | readline | 23 | 0 | 9 | 0 | 14 | 0.0% |
-| repl | 78 | 1 | 13 | 0 | 64 | 1.3% |
+| repl | 73 | 1 | 6 | 2 | 64 | 1.4% |
+| shadow_realm | 12 | 0 | 3 | 0 | 9 | 0.0% |
+| signal | 4 | 1 | 0 | 0 | 3 | 25.0% |
+| snapshot | 78 | 0 | 48 | 0 | 30 | 0.0% |
 | sqlite | 43 | 37 | 6 | 0 | 0 | 86.0% |
-| stream | 820 | 737 | 77 | 0 | 6 | 89.9% |
+| stdio | 23 | 14 | 1 | 0 | 8 | 60.9% |
+| stream | 820 | 751 | 57 | 6 | 6 | 91.6% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 100.0% |
 | test_runner | 166 | 72 | 74 | 2 | 18 | 43.4% |
-| timers | 64 | 33 | 15 | 2 | 14 | 51.6% |
-| tls | 205 | 4 | 18 | 0 | 183 | 2.0% |
+| timers | 64 | 35 | 15 | 2 | 12 | 54.7% |
+| tls | 205 | 4 | 17 | 1 | 183 | 2.0% |
 | trace_events | 30 | 15 | 0 | 0 | 15 | 50.0% |
 | tty | 3 | 0 | 0 | 0 | 3 | 0.0% |
 | url | 32 | 32 | 0 | 0 | 0 | 100.0% |
 | util | 53 | 46 | 6 | 0 | 1 | 86.8% |
 | v8 | 34 | 15 | 7 | 0 | 12 | 44.1% |
 | vm | 127 | 25 | 26 | 9 | 67 | 19.7% |
+| webcrypto | 67 | 3 | 42 | 0 | 22 | 4.5% |
+| webstreams | 71 | 69 | 0 | 0 | 2 | 97.2% |
+| whatwg | 75 | 13 | 21 | 1 | 40 | 17.3% |
 | worker_threads | 195 | 19 | 118 | 7 | 51 | 9.7% |
-| zlib | 67 | 56 | 11 | 0 | 0 | 83.6% |
+| zlib | 67 | 57 | 10 | 0 | 0 | 85.1% |
 
 ## Passing Tests
 
@@ -91,10 +112,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `es-module/test-esm-invalid-pjson.js`
 - `es-module/test-esm-loader-cache-clearing.js`
 - `es-module/test-esm-preserve-symlinks-main.js`
-- `es-module/test-esm-preserve-symlinks.js`
-- `es-module/test-esm-symlink-main.js`
 - `es-module/test-esm-symlink-type.js`
-- `es-module/test-esm-symlink.js`
 - `es-module/test-esm-type-field-errors-2.js`
 - `es-module/test-esm-type-field-errors.js`
 - `es-module/test-esm-unknown-extension.js`
@@ -443,7 +461,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-buffer-zero-fill-cli.js`
 - `parallel/test-buffer-zero-fill-reset.js`
 - `parallel/test-buffer-zero-fill.js`
-- `parallel/test-child-process-can-write-to-stdout.js`
 - `parallel/test-child-process-exec-maxbuf.js#block_00_default_value`
 - `parallel/test-child-process-exec-maxbuf.js#block_01_default_value`
 - `parallel/test-child-process-exec-maxbuf.js#block_02_block_02`
@@ -454,35 +471,13 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-child-process-exec-maxbuf.js#block_07_block_07`
 - `parallel/test-child-process-exec-maxbuf.js#block_10_block_10`
 - `parallel/test-child-process-exec-timeout-not-expired.js`
-- `parallel/test-child-process-execfile-maxbuf.js#block_00_default_value`
-- `parallel/test-child-process-execfile-maxbuf.js#block_01_default_value`
-- `parallel/test-child-process-execfile-maxbuf.js#block_02_block_02`
-- `parallel/test-child-process-execfile-maxbuf.js#block_03_block_03`
-- `parallel/test-child-process-execfile-maxbuf.js#block_04_block_04`
-- `parallel/test-child-process-execfile-maxbuf.js#block_05_block_05`
-- `parallel/test-child-process-execfile.js#block_00_block_00`
-- `parallel/test-child-process-execfile.js#block_01_block_01`
-- `parallel/test-child-process-execfile.js#block_03_block_03`
-- `parallel/test-child-process-execfile.js#block_04_block_04`
-- `parallel/test-child-process-execfile.js#block_06_block_06`
-- `parallel/test-child-process-execfilesync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works`
-- `parallel/test-child-process-exit-code.js`
 - `parallel/test-child-process-fork-and-spawn.js`
-- `parallel/test-child-process-fork-exec-argv.js`
 - `parallel/test-child-process-fork-no-shell.js`
 - `parallel/test-child-process-fork-ref.js`
 - `parallel/test-child-process-fork3.js`
-- `parallel/test-child-process-kill.js`
-- `parallel/test-child-process-no-deprecation.js`
 - `parallel/test-child-process-send-after-close.js`
-- `parallel/test-child-process-set-blocking.js`
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works`
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_03_default_maxbuffer_size_is_1024_1024`
-- `parallel/test-child-process-stdin-ipc.js`
-- `parallel/test-child-process-stdout-flush-exit.js`
-- `parallel/test-child-process-stdout-flush.js`
-- `parallel/test-child-process-stdout-ipc.js`
 - `parallel/test-child-process-uid-gid.js`
+- `parallel/test-cli-eval-event.js`
 - `parallel/test-cli-eval.js`
 - `parallel/test-cli-eval.js#block_00_assert_that_module_loading_works`
 - `parallel/test-cli-eval.js#block_01_regression_test_for_https_github_com_nodejs_node_issues_3574`
@@ -736,20 +731,27 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-delayed-require.js`
 - `parallel/test-destroy-socket-in-lookup.js`
 - `parallel/test-dgram-abort-closed.js`
+- `parallel/test-dgram-address.js`
+- `parallel/test-dgram-address.js#block_00_block_00`
 - `parallel/test-dgram-address.js#block_01_block_01`
-- `parallel/test-dgram-bind-error-repeat.js`
-- `parallel/test-dgram-bytes-length.js`
+- `parallel/test-dgram-bind-default-address.js`
+- `parallel/test-dgram-bind.js`
+- `parallel/test-dgram-createSocket-type.js`
+- `parallel/test-dgram-createSocket-type.js#block_00_ensure_buffer_sizes_can_be_set`
 - `parallel/test-dgram-createSocket-type.js#block_01_block_01`
 - `parallel/test-dgram-deprecation-error.js`
+- `parallel/test-dgram-error-message-address.js`
+- `parallel/test-dgram-listen-after-bind.js`
+- `parallel/test-dgram-multicast-set-interface.js#block_04_block_04`
 - `parallel/test-dgram-multicast-set-interface.js#block_05_block_05`
 - `parallel/test-dgram-multicast-set-interface.js#block_06_block_06`
 - `parallel/test-dgram-multicast-set-interface.js#block_07_block_07`
 - `parallel/test-dgram-ref.js`
 - `parallel/test-dgram-send-invalid-msg-type.js`
 - `parallel/test-dgram-sendto.js`
-- `parallel/test-dgram-unref.js`
-- `parallel/test-dgram-unref.js#block_00_block_00`
+- `parallel/test-dgram-setTTL.js`
 - `parallel/test-dgram-unref.js#block_01_block_01`
+- `parallel/test-diagnostic-channel-http-request-created.js`
 - `parallel/test-diagnostics-channel-has-subscribers.js`
 - `parallel/test-diagnostics-channel-object-channel-pub-sub.js`
 - `parallel/test-diagnostics-channel-pub-sub.js`
@@ -769,7 +771,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-diagnostics-channel-tracing-channel-sync-error.js`
 - `parallel/test-diagnostics-channel-tracing-channel-sync-run-stores.js`
 - `parallel/test-diagnostics-channel-tracing-channel-sync.js`
-- `parallel/test-dns-perf_hooks.js`
 - `parallel/test-dns-promises-exists.js`
 - `parallel/test-dns-setlocaladdress.js#block_00_verifies_that_setlocaladdress_succeeds_with_ipv4_and_ipv6_ad`
 - `parallel/test-domain-add-remove.js`
@@ -998,7 +999,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-fs-promises-write-optional-params.js`
 - `parallel/test-fs-promises-writefile-typedarray.js`
 - `parallel/test-fs-promises-writefile-with-fd.js`
-- `parallel/test-fs-promises-writefile.js`
 - `parallel/test-fs-promises.js`
 - `parallel/test-fs-promises.js#block_00_block_00`
 - `parallel/test-fs-promises.js#block_01_block_01`
@@ -1051,6 +1051,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-fs-read-zero-length.js`
 - `parallel/test-fs-read.js`
 - `parallel/test-fs-readSync-optional-params.js`
+- `parallel/test-fs-readdir-recursive.js`
 - `parallel/test-fs-readdir-stack-overflow.js`
 - `parallel/test-fs-readdir.js`
 - `parallel/test-fs-readfile-empty.js`
@@ -1166,11 +1167,17 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-fs-watch-encoding.js#block_01_block_01`
 - `parallel/test-fs-watch-encoding.js#block_02_block_02`
 - `parallel/test-fs-watch-file-enoent-after-deletion.js`
+- `parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js`
+- `parallel/test-fs-watch-recursive-add-file-to-new-folder.js`
 - `parallel/test-fs-watch-recursive-add-file-with-url.js`
+- `parallel/test-fs-watch-recursive-add-file.js`
 - `parallel/test-fs-watch-recursive-add-folder.js`
 - `parallel/test-fs-watch-recursive-assert-leaks.js`
+- `parallel/test-fs-watch-recursive-delete.js`
 - `parallel/test-fs-watch-recursive-promise.js`
 - `parallel/test-fs-watch-recursive-symlink.js`
+- `parallel/test-fs-watch-recursive-sync-write.js`
+- `parallel/test-fs-watch-recursive-update-file.js`
 - `parallel/test-fs-watch-recursive-validate.js`
 - `parallel/test-fs-watch-recursive-watch-file.js`
 - `parallel/test-fs-watch-ref-unref.js`
@@ -1255,41 +1262,147 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-fs-writev.js#block_03_block_03`
 - `parallel/test-global-domexception.js`
 - `parallel/test-global-encoder.js`
+- `parallel/test-http-1.0-keep-alive.js`
+- `parallel/test-http-1.0.js`
+- `parallel/test-http-1.0.js#block_00_block_00`
+- `parallel/test-http-1.0.js#block_01_block_01`
+- `parallel/test-http-1.0.js#block_02_block_02`
+- `parallel/test-http-abort-before-end.js`
+- `parallel/test-http-abort-stream-end.js`
+- `parallel/test-http-aborted.js`
+- `parallel/test-http-aborted.js#block_00_block_00`
+- `parallel/test-http-aborted.js#block_01_block_01`
 - `parallel/test-http-addrequest-localaddress.js`
+- `parallel/test-http-after-connect.js`
+- `parallel/test-http-agent-error-on-idle.js`
 - `parallel/test-http-agent-false.js`
 - `parallel/test-http-agent-getname.js`
+- `parallel/test-http-agent-maxsockets-respected.js`
+- `parallel/test-http-agent-maxsockets.js`
+- `parallel/test-http-agent-maxtotalsockets.js`
+- `parallel/test-http-agent-no-protocol.js`
+- `parallel/test-http-agent-null.js`
+- `parallel/test-http-agent-remove.js`
 - `parallel/test-http-agent-timeout-option.js`
+- `parallel/test-http-agent-timeout.js`
+- `parallel/test-http-agent-timeout.js#block_00_block_00`
+- `parallel/test-http-agent-timeout.js#block_01_block_01`
+- `parallel/test-http-agent-timeout.js#block_02_block_02`
+- `parallel/test-http-agent-timeout.js#block_03_block_03`
+- `parallel/test-http-allow-content-length-304.js`
+- `parallel/test-http-allow-req-after-204-res.js`
+- `parallel/test-http-bind-twice.js`
+- `parallel/test-http-buffer-sanity.js`
+- `parallel/test-http-byteswritten.js`
+- `parallel/test-http-chunk-extensions-limit.js`
+- `parallel/test-http-chunk-extensions-limit.js#block_00_verify_that_chunk_extensions_are_limited_in_size_when_sent_a`
+- `parallel/test-http-chunk-extensions-limit.js#block_01_verify_that_chunk_extensions_are_limited_in_size_when_sent_i`
+- `parallel/test-http-chunk-extensions-limit.js#block_02_verify_the_chunk_extensions_is_correctly_reset_after_a_chunk`
+- `parallel/test-http-chunked.js`
+- `parallel/test-http-client-abort-destroy.js`
+- `parallel/test-http-client-abort-destroy.js#block_00_block_00`
+- `parallel/test-http-client-abort-destroy.js#block_01_block_01`
+- `parallel/test-http-client-abort-destroy.js#block_02_block_02`
+- `parallel/test-http-client-abort-destroy.js#block_03_block_03`
+- `parallel/test-http-client-abort-destroy.js#block_04_block_04`
+- `parallel/test-http-client-abort-destroy.js#block_05_block_05`
+- `parallel/test-http-client-abort-event.js`
+- `parallel/test-http-client-abort-no-agent.js`
+- `parallel/test-http-client-abort-response-event.js`
+- `parallel/test-http-client-abort.js`
+- `parallel/test-http-client-abort2.js`
 - `parallel/test-http-client-abort3.js`
 - `parallel/test-http-client-abort3.js#block_00_block_00`
 - `parallel/test-http-client-abort3.js#block_01_block_01`
+- `parallel/test-http-client-agent-abort-close-event.js`
+- `parallel/test-http-client-agent.js`
+- `parallel/test-http-client-check-http-token.js`
+- `parallel/test-http-client-close-event.js`
+- `parallel/test-http-client-close-with-default-agent.js`
 - `parallel/test-http-client-defaults.js`
 - `parallel/test-http-client-defaults.js#block_00_block_00`
 - `parallel/test-http-client-defaults.js#block_01_block_01`
 - `parallel/test-http-client-defaults.js#block_02_block_02`
+- `parallel/test-http-client-encoding.js`
+- `parallel/test-http-client-get-url.js`
 - `parallel/test-http-client-headers-host-array.js`
+- `parallel/test-http-client-input-function.js`
 - `parallel/test-http-client-insecure-http-parser-error.js`
 - `parallel/test-http-client-invalid-path.js`
+- `parallel/test-http-client-keep-alive-hint.js`
+- `parallel/test-http-client-race-2.js`
+- `parallel/test-http-client-race.js`
 - `parallel/test-http-client-read-in-error.js`
 - `parallel/test-http-client-readable.js`
+- `parallel/test-http-client-reject-unexpected-agent.js`
+- `parallel/test-http-client-request-options.js`
+- `parallel/test-http-client-res-destroyed.js`
+- `parallel/test-http-client-res-destroyed.js#block_00_block_00`
+- `parallel/test-http-client-res-destroyed.js#block_01_block_01`
+- `parallel/test-http-client-set-timeout-after-end.js`
+- `parallel/test-http-client-timeout-connect-listener.js`
 - `parallel/test-http-client-timeout-option-with-agent.js`
 - `parallel/test-http-client-unescaped-path.js`
+- `parallel/test-http-client-upload-buf.js`
+- `parallel/test-http-client-upload.js`
 - `parallel/test-http-common.js`
+- `parallel/test-http-conn-reset.js`
+- `parallel/test-http-content-length-mismatch.js`
+- `parallel/test-http-contentLength0.js`
+- `parallel/test-http-date-header.js`
+- `parallel/test-http-decoded-auth.js`
+- `parallel/test-http-default-encoding.js`
 - `parallel/test-http-dns-error.js`
+- `parallel/test-http-dummy-characters-smuggling.js#block_00_block_00`
+- `parallel/test-http-early-hints.js#block_02_block_02`
+- `parallel/test-http-early-hints.js#block_05_block_05`
+- `parallel/test-http-end-throw-socket-handling.js`
+- `parallel/test-http-eof-on-connect.js`
+- `parallel/test-http-extra-response.js`
+- `parallel/test-http-flush-response-headers.js`
+- `parallel/test-http-get-pipeline-problem.js`
+- `parallel/test-http-head-request.js`
+- `parallel/test-http-head-response-has-no-body-end-implicit-headers.js`
+- `parallel/test-http-head-response-has-no-body-end.js`
+- `parallel/test-http-head-response-has-no-body.js`
+- `parallel/test-http-head-throw-on-response-body-write.js`
+- `parallel/test-http-head-throw-on-response-body-write.js#block_00_block_00`
+- `parallel/test-http-head-throw-on-response-body-write.js#block_01_block_01`
+- `parallel/test-http-head-throw-on-response-body-write.js#block_02_block_02`
+- `parallel/test-http-header-obstext.js`
+- `parallel/test-http-header-owstext.js`
+- `parallel/test-http-header-read.js`
 - `parallel/test-http-header-validators.js`
+- `parallel/test-http-hex-write.js`
+- `parallel/test-http-highwatermark.js`
+- `parallel/test-http-host-headers.js`
 - `parallel/test-http-hostname-typechecking.js`
 - `parallel/test-http-incoming-matchKnownFields.js`
 - `parallel/test-http-incoming-message-connection-setter.js`
 - `parallel/test-http-incoming-message-destroy.js`
+- `parallel/test-http-incoming-message-options.js`
+- `parallel/test-http-incoming-pipelined-socket-destroy.js`
 - `parallel/test-http-insecure-parser-per-stream.js#block_00_test_1_the_server_sends_an_invalid_header`
 - `parallel/test-http-insecure-parser-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`
 - `parallel/test-http-insecure-parser-per-stream.js#block_04_test_5_invalid_argument_type`
 - `parallel/test-http-invalid-path-chars.js`
 - `parallel/test-http-invalid-urls.js`
+- `parallel/test-http-invalidheaderfield.js`
 - `parallel/test-http-invalidheaderfield2.js`
+- `parallel/test-http-keep-alive-pipeline-max-requests.js`
+- `parallel/test-http-listening.js`
+- `parallel/test-http-localaddress-bind-error.js`
+- `parallel/test-http-malformed-request.js`
 - `parallel/test-http-max-header-size-per-stream.js#block_00_test_1_the_server_sends_larger_headers_than_what_would_other`
 - `parallel/test-http-max-header-size-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`
 - `parallel/test-http-methods.js`
+- `parallel/test-http-no-content-length.js`
 - `parallel/test-http-outgoing-destroy.js`
+- `parallel/test-http-outgoing-destroyed.js#block_02_block_02`
+- `parallel/test-http-outgoing-end-types.js`
+- `parallel/test-http-outgoing-finish-writable.js`
+- `parallel/test-http-outgoing-finish.js`
+- `parallel/test-http-outgoing-finished.js`
 - `parallel/test-http-outgoing-internal-headernames-getter.js`
 - `parallel/test-http-outgoing-internal-headernames-getter.js#block_00_block_00`
 - `parallel/test-http-outgoing-internal-headernames-getter.js#block_01_block_01`
@@ -1299,13 +1412,17 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-outgoing-properties.js#block_00_block_00`
 - `parallel/test-http-outgoing-properties.js#block_01_block_01`
 - `parallel/test-http-outgoing-properties.js#block_03_block_03`
+- `parallel/test-http-outgoing-properties.js#block_04_block_04`
 - `parallel/test-http-outgoing-proto.js`
 - `parallel/test-http-outgoing-proto.js#block_00_write`
 - `parallel/test-http-outgoing-proto.js#block_01_block_01`
 - `parallel/test-http-outgoing-settimeout.js`
 - `parallel/test-http-outgoing-settimeout.js#block_00_block_00`
 - `parallel/test-http-outgoing-settimeout.js#block_01_block_01`
+- `parallel/test-http-outgoing-writableFinished.js`
+- `parallel/test-http-outgoing-write-types.js`
 - `parallel/test-http-parser-bad-ref.js`
+- `parallel/test-http-parser-free.js`
 - `parallel/test-http-parser.js`
 - `parallel/test-http-parser.js#block_00_block_00`
 - `parallel/test-http-parser.js#block_01_block_01`
@@ -1319,7 +1436,59 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-parser.js#block_09_block_09`
 - `parallel/test-http-parser.js#block_10_block_10`
 - `parallel/test-http-parser.js#block_11_block_11`
+- `parallel/test-http-pause-resume-one-end.js`
+- `parallel/test-http-pipe-fs.js`
+- `parallel/test-http-pipeline-assertionerror-finish.js`
+- `parallel/test-http-pipeline-socket-parser-typeerror.js`
+- `parallel/test-http-proxy.js`
+- `parallel/test-http-readable-data-event.js`
+- `parallel/test-http-remove-connection-header-persists-connection.js`
+- `parallel/test-http-req-res-close.js#block_02_see_https_github_com_nodejs_node_pull_33035_issuecomment_751`
+- `parallel/test-http-request-arguments.js`
+- `parallel/test-http-request-dont-override-options.js`
+- `parallel/test-http-request-end-twice.js`
+- `parallel/test-http-request-end.js`
+- `parallel/test-http-request-host-header.js#block_01_block_01`
 - `parallel/test-http-request-invalid-method-error.js`
+- `parallel/test-http-request-join-authorization-headers.js`
+- `parallel/test-http-request-join-authorization-headers.js#block_00_block_00`
+- `parallel/test-http-request-join-authorization-headers.js#block_01_block_01`
+- `parallel/test-http-request-join-authorization-headers.js#block_02_block_02`
+- `parallel/test-http-request-large-payload.js`
+- `parallel/test-http-request-method-delete-payload.js`
+- `parallel/test-http-request-methods.js`
+- `parallel/test-http-request-smuggling-content-length.js`
+- `parallel/test-http-res-write-end-dont-take-array.js`
+- `parallel/test-http-response-add-header-after-sent.js`
+- `parallel/test-http-response-close.js`
+- `parallel/test-http-response-close.js#block_00_block_00`
+- `parallel/test-http-response-close.js#block_01_block_01`
+- `parallel/test-http-response-close.js#block_02_block_02`
+- `parallel/test-http-response-cork.js`
+- `parallel/test-http-response-readable.js`
+- `parallel/test-http-response-remove-header-after-sent.js`
+- `parallel/test-http-response-setheaders.js`
+- `parallel/test-http-response-setheaders.js#block_00_block_00`
+- `parallel/test-http-response-setheaders.js#block_01_block_01`
+- `parallel/test-http-response-setheaders.js#block_02_block_02`
+- `parallel/test-http-response-setheaders.js#block_03_block_03`
+- `parallel/test-http-response-setheaders.js#block_04_block_04`
+- `parallel/test-http-response-setheaders.js#block_05_block_05`
+- `parallel/test-http-response-setheaders.js#block_06_block_06`
+- `parallel/test-http-response-splitting.js`
+- `parallel/test-http-response-statuscode.js`
+- `parallel/test-http-response-writehead-returns-this.js`
+- `parallel/test-http-server-delete-parser.js`
+- `parallel/test-http-server-keep-alive-defaults.js`
+- `parallel/test-http-server-keep-alive-max-requests-null.js`
+- `parallel/test-http-server-keep-alive-timeout.js`
+- `parallel/test-http-server-method.query.js`
+- `parallel/test-http-server-multiple-client-error.js`
+- `parallel/test-http-server-non-utf8-header.js`
+- `parallel/test-http-server-non-utf8-header.js#block_00_block_00`
+- `parallel/test-http-server-non-utf8-header.js#block_01_block_01`
+- `parallel/test-http-server-non-utf8-header.js#block_02_block_02`
+- `parallel/test-http-server-reject-cr-no-lf.js`
 - `parallel/test-http-server-response-standalone.js`
 - `parallel/test-http-server-timeouts-validation.js`
 - `parallel/test-http-server-timeouts-validation.js#block_00_block_00`
@@ -1329,7 +1498,34 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-server-timeouts-validation.js#block_04_block_04`
 - `parallel/test-http-server-timeouts-validation.js#block_05_block_05`
 - `parallel/test-http-server-timeouts-validation.js#block_06_block_06`
+- `parallel/test-http-server-unconsume-consume.js`
+- `parallel/test-http-server-unconsume.js`
+- `parallel/test-http-server-write-end-after-end.js`
+- `parallel/test-http-set-cookies.js`
+- `parallel/test-http-status-code.js`
+- `parallel/test-http-status-message.js`
+- `parallel/test-http-status-reason-invalid-chars.js`
+- `parallel/test-http-timeout-client-warning.js`
+- `parallel/test-http-timeout-overflow.js`
+- `parallel/test-http-timeout.js`
+- `parallel/test-http-transfer-encoding-smuggling.js`
+- `parallel/test-http-transfer-encoding-smuggling.js#block_00_block_00`
+- `parallel/test-http-transfer-encoding-smuggling.js#block_01_block_01`
+- `parallel/test-http-upgrade-server.js`
+- `parallel/test-http-url.parse-auth-with-header-in-request.js`
+- `parallel/test-http-url.parse-auth.js`
+- `parallel/test-http-url.parse-basic.js`
 - `parallel/test-http-url.parse-only-support-http-https-protocol.js`
+- `parallel/test-http-url.parse-path.js`
+- `parallel/test-http-url.parse-post.js`
+- `parallel/test-http-url.parse-search.js`
+- `parallel/test-http-write-empty-string.js`
+- `parallel/test-http-write-head-2.js`
+- `parallel/test-http-write-head-2.js#block_00_block_00`
+- `parallel/test-http-write-head-2.js#block_01_block_01`
+- `parallel/test-http-write-head-2.js#block_02_block_02`
+- `parallel/test-http-write-head-2.js#block_03_block_03`
+- `parallel/test-http-zerolengthbuffer.js`
 - `parallel/test-http2-client-upload-reject.js`
 - `parallel/test-http2-client-upload.js`
 - `parallel/test-http2-request-response-proto.js`
@@ -1356,7 +1552,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-module-isBuiltin.js`
 - `parallel/test-module-loading-deprecated.js`
 - `parallel/test-module-loading-error.js`
-- `parallel/test-module-main-extension-lookup.js`
 - `parallel/test-module-main-fail.js`
 - `parallel/test-module-main-preserve-symlinks-fail.js`
 - `parallel/test-module-multi-extensions.js`
@@ -1381,41 +1576,128 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-module-version.js`
 - `parallel/test-module-wrap.js`
 - `parallel/test-net-access-byteswritten.js`
+- `parallel/test-net-after-close.js`
+- `parallel/test-net-allow-half-open.js`
+- `parallel/test-net-allow-half-open.js#block_00_block_00`
+- `parallel/test-net-allow-half-open.js#block_01_block_01`
 - `parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js`
 - `parallel/test-net-autoselectfamily-attempt-timeout-default-value.js`
+- `parallel/test-net-autoselectfamily-commandline-option.js`
+- `parallel/test-net-autoselectfamily-default.js`
+- `parallel/test-net-autoselectfamily-default.js#block_00_test_that_ipv4_is_reached_by_default_if_ipv6_is_not_reachabl`
+- `parallel/test-net-autoselectfamily-default.js#block_01_test_that_ipv4_is_not_reached_by_default_if_ipv6_is_not_reac`
 - `parallel/test-net-autoselectfamily-ipv4first.js`
+- `parallel/test-net-autoselectfamily.js#block_00_test_that_ipv4_is_reached_if_ipv6_is_not_reachable`
 - `parallel/test-net-autoselectfamily.js#block_02_test_that_when_all_errors_are_returned_when_no_connections_s`
+- `parallel/test-net-autoselectfamily.js#block_03_test_that_the_option_can_be_disabled`
 - `parallel/test-net-better-error-messages-listen-path.js`
 - `parallel/test-net-better-error-messages-listen.js`
 - `parallel/test-net-better-error-messages-path.js`
 - `parallel/test-net-better-error-messages-path.js#block_00_block_00`
 - `parallel/test-net-better-error-messages-path.js#block_01_block_01`
 - `parallel/test-net-better-error-messages-port-hostname.js`
-- `parallel/test-net-blocklist.js`
+- `parallel/test-net-binary.js`
+- `parallel/test-net-bind-twice.js`
 - `parallel/test-net-blocklist.js#block_00_connect_without_calling_dns_lookup`
 - `parallel/test-net-blocklist.js#block_01_connect_with_single_ip_returned_by_dns_lookup`
 - `parallel/test-net-blocklist.js#block_02_connect_with_autoselectfamily_and_single_ip`
-- `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips`
+- `parallel/test-net-buffersize.js`
+- `parallel/test-net-bytes-stats.js`
+- `parallel/test-net-bytes-written-large.js#block_00_block_00`
+- `parallel/test-net-can-reset-timeout.js`
+- `parallel/test-net-client-bind-twice.js`
+- `parallel/test-net-connect-abort-controller.js`
 - `parallel/test-net-connect-after-destroy.js`
+- `parallel/test-net-connect-buffer.js`
+- `parallel/test-net-connect-buffer2.js`
+- `parallel/test-net-connect-call-socket-connect.js`
 - `parallel/test-net-connect-destroy.js`
+- `parallel/test-net-connect-immediate-destroy.js`
 - `parallel/test-net-connect-immediate-finish.js`
+- `parallel/test-net-connect-keepalive.js`
 - `parallel/test-net-connect-no-arg.js`
+- `parallel/test-net-connect-options-allowhalfopen.js`
 - `parallel/test-net-connect-options-invalid.js`
+- `parallel/test-net-connect-options-path.js`
+- `parallel/test-net-connect-reset-after-destroy.js`
+- `parallel/test-net-connect-reset-before-connected.js`
+- `parallel/test-net-connect-reset-until-connected.js`
 - `parallel/test-net-deprecated-setsimultaneousaccepts.js`
+- `parallel/test-net-dns-custom-lookup.js`
+- `parallel/test-net-dns-error.js`
+- `parallel/test-net-dns-lookup-skip.js`
+- `parallel/test-net-dns-lookup.js`
+- `parallel/test-net-end-destroyed.js`
 - `parallel/test-net-end-without-connect.js`
 - `parallel/test-net-isip.js`
 - `parallel/test-net-isipv4.js`
 - `parallel/test-net-isipv6.js`
+- `parallel/test-net-keepalive.js`
+- `parallel/test-net-large-string.js`
+- `parallel/test-net-listen-close-server-callback-is-not-function.js`
+- `parallel/test-net-listen-close-server.js`
 - `parallel/test-net-listen-error.js`
+- `parallel/test-net-listen-invalid-port.js`
+- `parallel/test-net-listening.js`
+- `parallel/test-net-local-address-port.js`
 - `parallel/test-net-options-lookup.js`
+- `parallel/test-net-pause-resume-connecting.js`
+- `parallel/test-net-persistent-keepalive.js`
 - `parallel/test-net-pipe-connect-errors.js`
+- `parallel/test-net-reconnect.js`
+- `parallel/test-net-remote-address-port.js`
+- `parallel/test-net-remote-address.js`
+- `parallel/test-net-server-call-listen-multiple-times.js`
+- `parallel/test-net-server-call-listen-multiple-times.js#block_00_first_test_check_that_after_error_event_you_can_listen_right`
+- `parallel/test-net-server-call-listen-multiple-times.js#block_01_second_test_check_that_second_listen_call_throws_an_error`
+- `parallel/test-net-server-call-listen-multiple-times.js#block_02_check_that_after_the_close_call_you_can_run_listen_method_ju`
+- `parallel/test-net-server-close.js`
+- `parallel/test-net-server-listen-options.js#block_00_block_00`
+- `parallel/test-net-server-listen-path.js`
+- `parallel/test-net-server-listen-path.js#block_00_test_listen_path`
+- `parallel/test-net-server-listen-path.js#block_01_test_listen_path`
+- `parallel/test-net-server-listen-path.js#block_02_test_listen_path_cb`
+- `parallel/test-net-server-listen-path.js#block_03_test_listen_path_cb`
+- `parallel/test-net-server-listen-path.js#block_04_test_pipe_chmod`
+- `parallel/test-net-server-listen-path.js#block_05_test_should_emit_error_events_when_listening_fails`
+- `parallel/test-net-server-listen-remove-callback.js`
+- `parallel/test-net-server-max-connections-close-makes-more-available.js`
+- `parallel/test-net-server-max-connections.js`
 - `parallel/test-net-server-options.js`
+- `parallel/test-net-server-pause-on-connect.js`
 - `parallel/test-net-server-simultaneous-accepts-produce-warning-once.js`
+- `parallel/test-net-server-try-ports.js`
+- `parallel/test-net-settimeout.js`
+- `parallel/test-net-socket-byteswritten.js`
+- `parallel/test-net-socket-close-after-end.js`
 - `parallel/test-net-socket-connect-invalid-autoselectfamily.js`
 - `parallel/test-net-socket-connect-invalid-autoselectfamilyattempttimeout.js`
+- `parallel/test-net-socket-connect-without-cb.js`
+- `parallel/test-net-socket-connecting.js`
+- `parallel/test-net-socket-destroy-send.js`
+- `parallel/test-net-socket-destroy-twice.js`
+- `parallel/test-net-socket-end-before-connect.js`
+- `parallel/test-net-socket-end-callback.js`
+- `parallel/test-net-socket-local-address.js`
 - `parallel/test-net-socket-no-halfopen-enforcer.js`
+- `parallel/test-net-socket-reset-send.js`
+- `parallel/test-net-socket-reset-twice.js`
+- `parallel/test-net-socket-timeout-unref.js`
+- `parallel/test-net-socket-timeout.js`
+- `parallel/test-net-socket-write-after-close.js`
+- `parallel/test-net-socket-write-after-close.js#block_00_block_00`
+- `parallel/test-net-socket-write-after-close.js#block_01_block_01`
+- `parallel/test-net-socket-write-error.js`
+- `parallel/test-net-stream.js`
+- `parallel/test-net-sync-cork.js`
+- `parallel/test-net-throttle.js`
 - `parallel/test-net-timeout-no-handle.js`
+- `parallel/test-net-writable.js`
+- `parallel/test-net-write-after-close.js`
+- `parallel/test-net-write-after-end-nt.js`
 - `parallel/test-net-write-arguments.js`
+- `parallel/test-net-write-cb-on-destroy-before-connect.js`
+- `parallel/test-net-write-connect-write.js`
 - `parallel/test-next-tick-doesnt-hang.js`
 - `parallel/test-next-tick-domain.js`
 - `parallel/test-next-tick-fixed-queue-regression.js`
@@ -1455,7 +1737,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-permission-fs-read.js#block_02_block_02`
 - `parallel/test-permission-fs-require.js#block_00_block_00`
 - `parallel/test-permission-fs-require.js#block_02_block_02`
+- `parallel/test-pipe-address.js`
+- `parallel/test-pipe-outgoing-message-data-emitted-after-ended.js`
 - `parallel/test-pipe-return-val.js`
+- `parallel/test-pipe-stream.js`
 - `parallel/test-process-abort.js`
 - `parallel/test-process-argv-0.js`
 - `parallel/test-process-available-memory.js`
@@ -1475,11 +1760,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-process-env-windows-error-reset.js`
 - `parallel/test-process-env-windows-error-reset.js#block_00_block_00`
 - `parallel/test-process-env-windows-error-reset.js#block_01_block_01`
-- `parallel/test-process-env.js`
-- `parallel/test-process-env.js#block_00_block_00`
-- `parallel/test-process-env.js#block_01_block_01`
-- `parallel/test-process-env.js#block_02_https_github_com_nodejs_node_issues_45380`
-- `parallel/test-process-env.js#block_03_https_github_com_nodejs_node_issues_32920`
 - `parallel/test-process-exception-capture-errors.js`
 - `parallel/test-process-exit-from-before-exit.js`
 - `parallel/test-process-exit-handler.js`
@@ -1605,6 +1885,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-set-incoming-message-header.js#block_00_headers_setter_function_set_a_header_correctly`
 - `parallel/test-set-incoming-message-header.js#block_01_trailers_setter_function_set_a_header_correctly`
 - `parallel/test-signal-handler-remove-on-exit.js`
+- `parallel/test-socket-write-after-fin-error.js`
+- `parallel/test-socket-write-after-fin.js`
 - `parallel/test-source-map-enable.js`
 - `parallel/test-source-map-enable.js#block_00_outputs_source_maps_when_event_loop_is_drained_with_no_async`
 - `parallel/test-source-map-enable.js#block_01_outputs_source_maps_when_process_kill_process_pid_sigint_exi`
@@ -1689,6 +1971,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-auto-destroy.js#block_04_block_04`
 - `parallel/test-stream-await-drain-writers-in-synchronously-recursion-write.js`
 - `parallel/test-stream-backpressure.js`
+- `parallel/test-stream-base-typechecking.js`
 - `parallel/test-stream-big-packet.js`
 - `parallel/test-stream-big-push.js`
 - `parallel/test-stream-catch-rejections.js`
@@ -1758,6 +2041,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-destroy-event-order.js`
 - `parallel/test-stream-destroy.js#block_01_block_01`
 - `parallel/test-stream-destroy.js#block_03_block_03`
+- `parallel/test-stream-destroy.js#block_05_block_05`
 - `parallel/test-stream-drop-take.js#block_00_block_00`
 - `parallel/test-stream-drop-take.js#block_02_block_02`
 - `parallel/test-stream-drop-take.js#block_03_block_03`
@@ -1878,10 +2162,12 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-finished.js#block_30_block_30`
 - `parallel/test-stream-finished.js#block_31_block_31`
 - `parallel/test-stream-finished.js#block_32_block_32`
+- `parallel/test-stream-finished.js#block_33_block_33`
 - `parallel/test-stream-finished.js#block_35_block_35`
 - `parallel/test-stream-finished.js#block_36_block_36`
 - `parallel/test-stream-finished.js#block_37_block_37`
 - `parallel/test-stream-finished.js#block_38_block_38`
+- `parallel/test-stream-finished.js#block_39_block_39`
 - `parallel/test-stream-finished.js#block_40_block_40`
 - `parallel/test-stream-flatMap.js`
 - `parallel/test-stream-flatMap.js#block_00_block_00`
@@ -1966,6 +2252,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-pipeline.js#block_02_block_02`
 - `parallel/test-stream-pipeline.js#block_03_block_03`
 - `parallel/test-stream-pipeline.js#block_04_block_04`
+- `parallel/test-stream-pipeline.js#block_05_block_05`
+- `parallel/test-stream-pipeline.js#block_07_block_07`
 - `parallel/test-stream-pipeline.js#block_09_block_09`
 - `parallel/test-stream-pipeline.js#block_10_block_10`
 - `parallel/test-stream-pipeline.js#block_11_block_11`
@@ -1974,6 +2262,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-pipeline.js#block_14_block_14`
 - `parallel/test-stream-pipeline.js#block_15_block_15`
 - `parallel/test-stream-pipeline.js#block_16_block_16`
+- `parallel/test-stream-pipeline.js#block_17_block_17`
 - `parallel/test-stream-pipeline.js#block_18_block_18`
 - `parallel/test-stream-pipeline.js#block_19_block_19`
 - `parallel/test-stream-pipeline.js#block_20_block_20`
@@ -2001,15 +2290,19 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-pipeline.js#block_42_block_42`
 - `parallel/test-stream-pipeline.js#block_43_block_43`
 - `parallel/test-stream-pipeline.js#block_44_block_44`
+- `parallel/test-stream-pipeline.js#block_45_block_45`
 - `parallel/test-stream-pipeline.js#block_46_block_46`
 - `parallel/test-stream-pipeline.js#block_47_block_47`
 - `parallel/test-stream-pipeline.js#block_48_block_48`
+- `parallel/test-stream-pipeline.js#block_49_block_49`
 - `parallel/test-stream-pipeline.js#block_50_block_50`
 - `parallel/test-stream-pipeline.js#block_51_block_51`
 - `parallel/test-stream-pipeline.js#block_52_block_52`
 - `parallel/test-stream-pipeline.js#block_53_block_53`
 - `parallel/test-stream-pipeline.js#block_54_block_54`
+- `parallel/test-stream-pipeline.js#block_55_block_55`
 - `parallel/test-stream-pipeline.js#block_56_block_56`
+- `parallel/test-stream-pipeline.js#block_57_block_57`
 - `parallel/test-stream-pipeline.js#block_58_block_58`
 - `parallel/test-stream-pipeline.js#block_59_block_59`
 - `parallel/test-stream-pipeline.js#block_60_block_60`
@@ -2054,6 +2347,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-readable-async-iterators.js#block_02_block_02`
 - `parallel/test-stream-readable-async-iterators.js#block_03_block_03`
 - `parallel/test-stream-readable-async-iterators.js#block_04_asynciterator_non_destroying_iterator`
+- `parallel/test-stream-readable-async-iterators.js#block_06_block_06`
 - `parallel/test-stream-readable-constructor-set-methods.js`
 - `parallel/test-stream-readable-data.js`
 - `parallel/test-stream-readable-default-encoding.js`
@@ -2177,6 +2471,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-toArray.js#block_03_block_03`
 - `parallel/test-stream-toArray.js#block_04_block_04`
 - `parallel/test-stream-toArray.js#block_05_block_05`
+- `parallel/test-stream-toWeb-allows-server-response.js`
 - `parallel/test-stream-transform-callback-twice.js`
 - `parallel/test-stream-transform-constructor-set-methods.js`
 - `parallel/test-stream-transform-destroy.js`
@@ -2383,6 +2678,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream2-unpipe-drain.js`
 - `parallel/test-stream2-unpipe-leak.js`
 - `parallel/test-stream2-writable.js#block_00_block_00`
+- `parallel/test-stream2-writable.js#block_01_block_01`
 - `parallel/test-stream2-writable.js#block_02_block_02`
 - `parallel/test-stream2-writable.js#block_03_block_03`
 - `parallel/test-stream2-writable.js#block_04_block_04`
@@ -2434,6 +2730,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-timers-reset-process-domain-on-throw.js`
 - `parallel/test-timers-same-timeout-wrong-list-deleted.js`
 - `parallel/test-timers-setimmediate-infinite-loop.js`
+- `parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js`
 - `parallel/test-timers-this.js`
 - `parallel/test-timers-throw-when-cb-not-function.js`
 - `parallel/test-timers-timeout-with-non-integer.js`
@@ -2448,6 +2745,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-timers-unref.js#block_02_see_https_github_com_nodejs_node_v0_x_archive_issues_4261`
 - `parallel/test-timers-unrefd-interval-still-fires.js`
 - `parallel/test-timers-unrefed-in-beforeexit.js`
+- `parallel/test-timers-unrefed-in-callback.js`
 - `parallel/test-timers-zero-timeout.js#block_00_https_github_com_joyent_node_issues_2079_zero_timeout_drops_`
 - `parallel/test-tls-cipher-list.js`
 - `parallel/test-tls-cli-min-max-conflict.js`
@@ -2642,6 +2940,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-webstreams-finished.js#block_17_block_17`
 - `parallel/test-webstreams-finished.js#block_18_block_18`
 - `parallel/test-webstreams-finished.js#block_19_block_19`
+- `parallel/test-webstreams-pipeline.js`
 - `parallel/test-webstreams-pipeline.js#block_00_block_00`
 - `parallel/test-webstreams-pipeline.js#block_01_block_01`
 - `parallel/test-webstreams-pipeline.js#block_02_block_02`
@@ -2649,6 +2948,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-webstreams-pipeline.js#block_04_block_04`
 - `parallel/test-webstreams-pipeline.js#block_05_block_05`
 - `parallel/test-webstreams-pipeline.js#block_06_block_06`
+- `parallel/test-webstreams-pipeline.js#block_07_block_07`
+- `parallel/test-webstreams-pipeline.js#block_08_block_08`
 - `parallel/test-webstreams-pipeline.js#block_09_block_09`
 - `parallel/test-webstreams-pipeline.js#block_10_block_10`
 - `parallel/test-webstreams-pipeline.js#block_11_block_11`
@@ -2689,6 +2990,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-worker-workerdata-messageport.js#block_00_block_00`
 - `parallel/test-worker-workerdata-messageport.js#block_01_block_01`
 - `parallel/test-worker-workerdata-messageport.js#block_04_block_04`
+- `parallel/test-zlib-brotli-16GB.js`
 - `parallel/test-zlib-brotli-flush.js`
 - `parallel/test-zlib-brotli-from-brotli.js`
 - `parallel/test-zlib-brotli-from-string.js`
@@ -2767,17 +3069,31 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `sequential/test-fs-watch.js#block_03_not_block_the_event_loop`
 - `sequential/test-fs-watch.js#block_04_https_github_com_joyent_node_issues_6690`
 - `sequential/test-fs-watch.js#block_05_block_05`
+- `sequential/test-http-keep-alive-large-write.js`
+- `sequential/test-http-server-keep-alive-timeout-slow-client-headers.js`
+- `sequential/test-http-server-keep-alive-timeout-slow-server.js`
 - `sequential/test-init.js`
 - `sequential/test-init.js#block_00_block_00`
 - `sequential/test-init.js#block_01_block_01`
 - `sequential/test-init.js#block_02_block_02`
 - `sequential/test-net-better-error-messages-port.js`
+- `sequential/test-net-connect-econnrefused.js`
 - `sequential/test-net-connect-handle-econnrefused.js`
 - `sequential/test-net-connect-local-error.js`
+- `sequential/test-net-localport.js`
+- `sequential/test-net-reconnect-error.js`
+- `sequential/test-net-server-address.js`
+- `sequential/test-net-server-address.js#block_00_test_on_ipv4_server`
 - `sequential/test-net-server-address.js#block_01_test_on_ipv6_server`
 - `sequential/test-net-server-address.js#block_02_test_without_hostname_or_ip`
 - `sequential/test-net-server-address.js#block_03_test_without_hostname_or_port`
 - `sequential/test-net-server-address.js#block_04_test_without_hostname_but_with_a_false_y_port`
+- `sequential/test-net-server-bind.js`
+- `sequential/test-net-server-bind.js#block_00_with_only_a_callback_server_should_get_a_port_assigned_by_th`
+- `sequential/test-net-server-bind.js#block_01_no_callback_to_listen_assume_we_can_bind_in_100_ms`
+- `sequential/test-net-server-bind.js#block_02_callback_to_listen`
+- `sequential/test-net-server-bind.js#block_03_backlog_argument`
+- `sequential/test-net-server-bind.js#block_04_backlog_argument_without_host_argument`
 - `sequential/test-net-server-listen-ipv6-link-local.js`
 - `sequential/test-process-warnings.js`
 - `sequential/test-require-cache-without-stat.js`
@@ -2807,88 +3123,48 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### child_process
 
-- `parallel/test-child-process-constructor.js#block_00_block_00`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-constructor.js#block_01_block_01`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-constructor.js#block_02_block_02`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-constructor.js#block_03_block_03`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-cwd.js#block_00_assume_does_not_exist_doesn_t_exist_expect_exitcode_1_and_er`: Expected values to be strictly equal: + actual - expected  + 'number' - 'undefined'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'number' - 'undefined'      at testCwd...
-- `parallel/test-child-process-cwd.js#block_01_block_01`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-child-process-cwd.js:73:10)     at loadModule (node:module:866:32)     at loca...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: DOMException...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: Error: boom ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: 'boom', -   ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_03_block_03`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-exec-abortcontroller-promisified.js:25:1...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_04_block_04`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-exec-abortcontroller-promisified.js:28:1...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_05_block_05`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   name: 'AbortError' ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_06_block_06`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: Error: boom ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_07_block_07`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: 'boom', -   ...
 - `parallel/test-child-process-exec-cwd.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-child-process-ex...
 - `parallel/test-child-process-exec-maxbuf.js`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-exec-maxbuf.js:122:3)     at loadModule (node:module:866:32)     at localRequire (node:module...
 - `parallel/test-child-process-exec-maxbuf.js#block_08_block_08`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-exec-maxbuf.js:61:3)     at loadModule (node:module:866:32)     at localRequire (node:module:...
 - `parallel/test-child-process-exec-maxbuf.js#block_09_block_09`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-exec-maxbuf.js:63:3)     at loadModule (node:module:866:32)     at localRequire (node:module:...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   name: 'AbortError' ...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   name: 'AbortError' ...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_02_block_02`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-execFile-promisified-abortController.js:...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_03_block_03`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-execFile-promisified-abortController.js:...
-- `parallel/test-child-process-execfile-maxbuf.js#block_06_block_06`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-execfile-maxbuf.js:38:3)     at loadModule (node:module:866:32)     at localRequire (node:mod...
-- `parallel/test-child-process-execfile-maxbuf.js#block_07_block_07`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-execfile-maxbuf.js:40:3)     at loadModule (node:module:866:32)     at localRequire (node:mod...
-- `parallel/test-child-process-execfile.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-child-process-ex...
-- `parallel/test-child-process-execfile.js#block_05_block_05`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-execfile.js:28:10)     at loadModule (no...
-- `parallel/test-child-process-execfile.js#block_07_verify_the_execfile_stdout_is_the_same_as_execfilesync`: Command failed: echo foo bar      at execFileSync (node:child_process:1412:112)     at <anonymous> (/home/node/test/parallel/test-child-process-execfile.js:39:45)     at forEach (native)     at <anony...
-- `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-child-process-execfilesync-maxbuf.js:20:10)     at loadModule (node:module:866...
-- `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-child-process-execfilesync-maxbuf.js:26:10)     at loadModule (node:module:866...
-- `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^  AssertionError: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^    ...
-- `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works`: execSync is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at execSync (node:child_process:1431:11)     at <anonymous> (/home/node/test/parallel...
-- `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^  AssertionError: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^    ...
-- `parallel/test-child-process-execsync-maxbuf.js#block_03_default_maxbuffer_size_is_1024_1024`: execSync is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at execSync (node:child_process:1431:11)     at <anonymous> (/home/node/test/parallel...
-- `parallel/test-child-process-fork-args.js#block_00_and_be_of_type_string`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-fork-args.js:25:12)     at forEach (nati...
-- `parallel/test-child-process-fork-args.js#block_01_correctly_if_args_is_undefined_or_null`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TYPE', -   name: 'TypeError'   }  AssertionError: Expect...
-- `parallel/test-child-process-fork-args.js#block_02_ensure_that_the_third_argument_should_be_type_of_object_if_p`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-fork-args.js:30:7)     at forEach (nativ...
 - `parallel/test-child-process-fork-close.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-fork-...
 - `parallel/test-child-process-fork-net-server.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-fork-...
 - `parallel/test-child-process-fork-net-socket.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-fork-...
 - `parallel/test-child-process-fork-ref2.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-fork-...
 - `parallel/test-child-process-internal.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-inter...
 - `parallel/test-child-process-ipc-next-tick.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-ipc-n...
-- `parallel/test-child-process-promisified.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_03_block_03`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_04_block_04`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - '42\n'      at <anonymous> (/home/node/test/parallel/test-child-process-promisifie...
-- `parallel/test-child-process-promisified.js#block_05_block_05`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - '42\n'      at <anonymous> (/home/node/test/parallel/test-child-process-promisifie...
 - `parallel/test-child-process-send-cb.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-send-...
 - `parallel/test-child-process-send-utf8.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-child-process-send-...
-- `parallel/test-child-process-server-close.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home/node/test/parallel/test-child-proc...
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`: maxBuffer should error AssertionError: maxBuffer should error     at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync-maxbuf.js:22:13)     at loadModule (node:module:866:32)     at l...
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`: maxBuffer should error AssertionError: maxBuffer should error     at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync-maxbuf.js:29:13)     at loadModule (node:module:866:32)     at l...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_00_block_00`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_01_block_01`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_02_block_02`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_03_block_03`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_04_block_04`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_05_block_05`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_06_block_06`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_07_block_07`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_08_block_08`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync.js#block_00_block_00`: Expected values to be strictly equal:  null !== 0  AssertionError: Expected values to be strictly equal:  null !== 0      at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync.js:34:20...
-- `parallel/test-child-process-spawnsync.js#block_01_block_01`: Expected values to be strictly equal:  null !== 0  AssertionError: Expected values to be strictly equal:  null !== 0      at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync.js:34:20...
-- `parallel/test-child-process-stdio.js#block_00_test_stdio_piping`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-child-process-stdio.js:45:3)     at loadModule (node:module:86...
-- `parallel/test-child-process-stdio.js#block_01_test_stdio_ignoring`: Expected values to be strictly equal: + actual - expected  + EventEmitter { +   _captureRejections: false, +   _emitData: [Function: emitData], +   _encoding: null, +   _events: [Object: null prototyp...
-- `parallel/test-child-process-stdio.js#block_02_asset_options_invariance`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-child-process-stdio.js:45:3)     at loadModule (node:module:86...
-- `parallel/test-child-process-stdio.js#block_03_test_stdout_buffering`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-child-process-stdio.js:58:3)     at loadModule (node:module:86...
-- `sequential/test-child-process-execsync.js#block_00_block_00`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_01_block_01`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_02_block_02`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_03_block_03`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_04_see_https_github_com_nodejs_node_v0_x_archive_issues_7824`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_05_see_https_github_com_nodejs_node_v0_x_archive_issues_7966`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_06_verify_the_execfilesync_behavior_when_the_child_exits_with_a`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
+
+### cli
+
+- `parallel/test-cli-permission-deny-fs.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
+- `parallel/test-cli-permission-deny-fs.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
+- `parallel/test-cli-permission-deny-fs.js#block_02_block_02`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
+- `parallel/test-cli-permission-deny-fs.js#block_03_block_03`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
+- `parallel/test-cli-permission-deny-fs.js#block_04_block_04`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
+- `parallel/test-cli-permission-deny-fs.js#block_05_block_05`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
+- `parallel/test-cli-permission-deny-fs.js#block_06_block_06`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
+- `parallel/test-cli-permission-deny-fs.js#block_07_block_07`: The input did not match the regular expression /resource: '.*?[\\/](?:etc\|passwd)'/. Input:  "Error: ENOENT: no such file or directory, open '/etc/passwd'\n" +   '    at createSystemError (__wasm_rqui...
+- `parallel/test-cli-permission-multiple-allow.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
+- `parallel/test-cli-permission-multiple-allow.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
+- `parallel/test-cli-permission-multiple-allow.js#block_02_block_02`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
 
 ### cluster
 
 - `parallel/test-cluster-bind-twice.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-cluster-bind-twice....
-- `parallel/test-cluster-dgram-2.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at primary (/home/node/test/parallel/test-cluster-dgram-2.js:45:3...
 - `parallel/test-cluster-primary-error.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-cluster-primary-err...
 - `parallel/test-cluster-uncaught-exception.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-cluster-uncaught-ex...
+
+### common
+
+- `parallel/test-common-countdown.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at Countdown (/home/node/test/common/countdown.js:13:39)     at <...
+- `parallel/test-common-gc.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-common-gc.js:7:27) ...
+- `parallel/test-common-gc.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-common-gc.js:7:27) ...
+- `parallel/test-common.js#block_00_test_for_leaked_global_detection`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:44:15)     at loadModule (node:module:866:32)     at localRequire (n...
+- `parallel/test-common.js#block_01_test_for_disabling_leaked_global_detection`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:46:15)     at loadModule (node:module:866:32)     at localRequire (n...
+- `parallel/test-common.js#block_02_test_tmpdir`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:38:15)     at loadModule (node:module:866:32)     at localRequire (n...
+- `parallel/test-common.js#block_03_must_be_last_since_it_uses_process_on_uncaughtexception`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:38:15)     at loadModule (node:module:866:32)     at localRequire (n...
 
 ### console
 
@@ -2915,36 +3191,15 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### dgram
 
-- `parallel/test-dgram-address.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Unexpected error on udp4 socket. Error: bind EACCES 127.0.0.1     at <anonymous> (/home/node/test/parallel/test-dgram-ad...
-- `parallel/test-dgram-bind-default-address.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-bind-default-...
-- `parallel/test-dgram-bind.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-bind.js:29:31...
-- `parallel/test-dgram-blocklist.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-blocklist.js:...
-- `parallel/test-dgram-blocklist.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-blocklist.js:...
-- `parallel/test-dgram-blocklist.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-blocklist.js:...
-- `parallel/test-dgram-blocklist.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-blocklist.js:...
 - `parallel/test-dgram-close-in-listening.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-close-in-list...
 - `parallel/test-dgram-close-is-not-callback.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-close-is-not-...
 - `parallel/test-dgram-close-signal.js#block_00_block_00`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dgram-close-signal.js:10:5)     at loadModule (node:mo...
 - `parallel/test-dgram-close-signal.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-close-signal....
 - `parallel/test-dgram-close-signal.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-close-signal....
-- `parallel/test-dgram-connect-send-callback-buffer-length.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-se...
-- `parallel/test-dgram-connect-send-callback-buffer.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-se...
-- `parallel/test-dgram-connect-send-callback-multi-buffer.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-send-...
-- `parallel/test-dgram-connect-send-default-host.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-send-...
-- `parallel/test-dgram-connect-send-empty-array.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-send-...
-- `parallel/test-dgram-connect-send-empty-buffer.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-send-...
-- `parallel/test-dgram-connect-send-empty-packet.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-send-...
-- `parallel/test-dgram-connect-send-multi-buffer-copy.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-se...
-- `parallel/test-dgram-connect-send-multi-string-array.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect-send-...
-- `parallel/test-dgram-connect.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-connect.js:10...
-- `parallel/test-dgram-createSocket-type.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-createSocket-...
-- `parallel/test-dgram-createSocket-type.js#block_00_ensure_buffer_sizes_can_be_set`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-createSocket-...
 - `parallel/test-dgram-custom-lookup.js`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup.js:45:44)     at forEach (native) ...
 - `parallel/test-dgram-custom-lookup.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup...
 - `parallel/test-dgram-custom-lookup.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup...
 - `parallel/test-dgram-custom-lookup.js#block_02_block_02`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup.js:20:44)     at forEach (native) ...
-- `parallel/test-dgram-exclusive-implicit-bind.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-exclusive-imp...
-- `parallel/test-dgram-implicit-bind.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-implicit-bind...
 - `parallel/test-dgram-membership.js#block_00_addmembership_on_closed_socket_should_throw`: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addMembership ENOSYS', -   code: 'ERR_SOCK...
 - `parallel/test-dgram-membership.js#block_01_dropmembership_on_closed_socket_should_throw`: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropMembership ENOSYS', -   code: 'ERR_SOC...
 - `parallel/test-dgram-membership.js#block_02_addmembership_with_no_argument_should_throw`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addMembership ENOSYS', +   name: 'Error' -   code: 'ERR_MISSING_ARGS', -   message: /^T...
@@ -2957,37 +3212,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-dgram-membership.js#block_09_dropsourcespecificmembership_with_invalid_sourceaddress_shou`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropSourceSpecificMembership ENOSYS' -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'Th...
 - `parallel/test-dgram-membership.js#block_10_dropsourcespecificmembership_with_invalid_groupaddress_shoul`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropSourceSpecificMembership ENOSYS' -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'Th...
 - `parallel/test-dgram-membership.js#block_11_dropsourcespecificmembership_with_invalid_udp_should_throw`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropSourceSpecificMembership ENOSYS' -   code: 'EINVAL', -   message: 'dropSourceSpecif...
-- `parallel/test-dgram-msgsize.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-msgsize.js:31...
 - `parallel/test-dgram-multicast-loopback.js#block_00_block_00`: The input did not match the regular expression /^Error: setMulticastLoopback EBADF$/. Input:  'Error: setMulticastLoopback ENOSYS'  AssertionError: The input did not match the regular expression /^Err...
-- `parallel/test-dgram-multicast-loopback.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-loo...
-- `parallel/test-dgram-multicast-set-interface.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-set...
-- `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-set...
-- `parallel/test-dgram-multicast-set-interface.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-set...
-- `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-set...
-- `parallel/test-dgram-multicast-set-interface.js#block_03_block_03`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-set...
-- `parallel/test-dgram-multicast-set-interface.js#block_04_block_04`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-set...
-- `parallel/test-dgram-multicast-setTTL.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-multicast-set...
+- `parallel/test-dgram-multicast-set-interface.js#block_01_block_01`: Unhandled promise rejection: AssertionError: The input did not match the regular expression /Not running/. Input:  'Error: setMulticastInterface ENOSYS'      at <anonymous> (/home/node/test/parallel/t...
 - `parallel/test-dgram-oob-buffer.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-oob-buffer.js...
-- `parallel/test-dgram-send-address-types.js`: mustCall verification failed: mustCall: expected exactly 4 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-addre...
-- `parallel/test-dgram-send-bad-arguments.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-bad-argu...
-- `parallel/test-dgram-send-callback-buffer-empty-address.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-callb...
-- `parallel/test-dgram-send-callback-buffer-length-empty-address.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-callb...
-- `parallel/test-dgram-send-callback-buffer-length.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-callb...
-- `parallel/test-dgram-send-callback-buffer.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-callb...
-- `parallel/test-dgram-send-callback-multi-buffer-empty-address.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-callb...
-- `parallel/test-dgram-send-callback-multi-buffer.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-callback...
-- `parallel/test-dgram-send-callback-recursive.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-callback...
-- `parallel/test-dgram-send-default-host.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-default-...
-- `parallel/test-dgram-send-empty-array.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-empty-ar...
-- `parallel/test-dgram-send-empty-buffer.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-empty-bu...
-- `parallel/test-dgram-send-empty-packet.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-empty-pa...
-- `parallel/test-dgram-send-multi-buffer-copy.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-multi-bu...
-- `parallel/test-dgram-send-multi-string-array.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-multi-st...
-- `parallel/test-dgram-send-queue-info.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-send-queue-in...
 - `parallel/test-dgram-setBroadcast.js#block_00_block_00`: The input did not match the regular expression /^Error: setBroadcast EBADF$/. Input:  'Error: setBroadcast ENOSYS'  AssertionError: The input did not match the regular expression /^Error: setBroadcast...
-- `parallel/test-dgram-setBroadcast.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-setBroadcast....
-- `parallel/test-dgram-setTTL.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-setTTL.js:8:3...
-- `parallel/test-dgram-udp4.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-udp4.js:29:29...
 
 ### diagnostics_channel
 
@@ -2998,12 +3226,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### dns
 
-- `parallel/test-dns-cancel-reverse-lookup.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dns-cancel-reverse-...
-- `parallel/test-dns-channel-cancel-promise.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dns-channel-cancel-...
-- `parallel/test-dns-channel-cancel.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dns-channel-cancel....
-- `parallel/test-dns-multi-channel.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dns-multi-channel.j...
-- `parallel/test-dns-resolveany-bad-ancount.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dns-resolveany-bad-...
-- `parallel/test-dns-resolveany.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dns-resolveany.js:3...
+- `parallel/test-dns-perf_hooks.js`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-dns-perf_hooks.js:32:22)     at emit (...
 - `parallel/test-dns-setlocaladdress.js`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-dns-setlocaladdress.js:19:10)     at loadModule (node:module:8...
 - `parallel/test-dns-setlocaladdress.js#block_01_verify_that_setlocaladdress_throws_if_called_with_an_invalid`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-dns-setlocaladdress.js:14:10)     at loadModule (node:module:8...
 - `parallel/test-dns-setservers-type-check.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'servers must be an array', -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The "servers" argument must be a...
@@ -3049,332 +3272,69 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 ### fs
 
 - `parallel/test-fs-read-stream-file-handle.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-fs-read-stream-file...
-- `parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js`: watcher Object was not closed AssertionError: watcher Object was not closed     at <anonymous> (/home/node/test/parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js:56:10)     at wrapper...
-- `parallel/test-fs-watch-recursive-add-file-to-new-folder.js`: watcher Object was not closed AssertionError: watcher Object was not closed     at <anonymous> (/home/node/test/parallel/test-fs-watch-recursive-add-file-to-new-folder.js:52:10)     at wrapper (node:e...
-- `parallel/test-fs-watch-recursive-add-file.js`: watcher Object was not closed AssertionError: watcher Object was not closed     at <anonymous> (/home/node/test/parallel/test-fs-watch-recursive-add-file.js:47:10)     at wrapper (node:events:181:35) ...
-- `parallel/test-fs-watch-recursive-delete.js`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-fs-wat...
-- `parallel/test-fs-watch-recursive-sync-write.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at doWatch (/home/node/test/parallel/test-fs-watch-recursive-sync...
-- `parallel/test-fs-watch-recursive-update-file.js`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-fs-wat...
 - `parallel/test-fs-write-file-sync.js`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-fs-write-file-sync.js:134:7)     at loadModule (node:module:866:32)     at loc...
 - `parallel/test-fs-write-file-sync.js#block_05_test_writefilesync_with_an_invalid_input`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-fs-write-file-sync.js:70:7)     at loadModule (node:module:866:32)     at loca...
-- `parallel/test-fs-write.js#block_00_block_00`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_01_block_01`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_02_block_02`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_03_block_03`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_04_block_04`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
 - `parallel/test-fs-writefile-with-fd.js#block_02_test_read_only_file_descriptor`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-fs-writefile-wit...
 - `sequential/test-fs-watch.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/sequential/test-fs-watch.js:62:40...
 - `sequential/test-fs-watch.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/sequential/test-fs-watch.js:66:48...
 
+### heap
+
+- `parallel/test-heapdump-async-hooks-init-promise.js`: mustCall verification failed: mustCall: expected exactly 8 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-heapdump-async-hook...
+- `sequential/test-heapdump.js#block_00_block_00`: v8.writeHeapSnapshot is not supported in WASM environment     at writeHeapSnapshot (node:v8:104:15)     at <anonymous> (/home/node/test/sequential/test-heapdump.js:19:3)     at loadModule (node:module...
+- `sequential/test-heapdump.js#block_01_block_01`: v8.writeHeapSnapshot is not supported in WASM environment     at writeHeapSnapshot (node:v8:104:15)     at <anonymous> (/home/node/test/sequential/test-heapdump.js:21:20)     at loadModule (node:modul...
+- `sequential/test-heapdump.js#block_02_block_02`: Expected values to be strictly equal: + actual - expected  + undefined - 'EISDIR'  AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - 'EISDIR'      at <anonymous>...
+- `sequential/test-heapdump.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'v8.writeHeapSnapshot is not supported in WASM environment', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TY...
+
 ### http
 
-- `parallel/test-http-1.0-keep-alive.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at check (/home/node/test/parallel/test-http-1.0-keep-aliv...
-- `parallel/test-http-1.0.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/test/parallel/test-http-1.0.js:36:10) ...
-- `parallel/test-http-1.0.js#block_00_block_00`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/test/parallel/test-http-1.0.js:36:10) ...
-- `parallel/test-http-1.0.js#block_01_block_01`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/test/parallel/test-http-1.0.js:36:10) ...
-- `parallel/test-http-1.0.js#block_02_block_02`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/test/parallel/test-http-1.0.js:36:10) ...
-- `parallel/test-http-abort-before-end.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-abort-stream-end.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-aborted.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-aborted.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-aborted.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-http-agent-close.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-agent-close.js...
-- `parallel/test-http-agent-destroyed-socket.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-error-on-idle.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-maxsockets-respected.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-maxsockets.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-maxtotalsockets.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at start (/home/node/te...
-- `parallel/test-http-agent-no-protocol.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-null.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-remove.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-timeout.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-timeout.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-timeout.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-timeout.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-agent-timeout.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-allow-content-length-304.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-allow-req-after-204-res.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-bind-twice.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-byteswritten.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-chunk-extensions-limit.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-chunk-e...
-- `parallel/test-http-chunk-extensions-limit.js#block_00_verify_that_chunk_extensions_are_limited_in_size_when_sent_a`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-chunk-e...
-- `parallel/test-http-chunk-extensions-limit.js#block_01_verify_that_chunk_extensions_are_limited_in_size_when_sent_i`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-chunk-e...
-- `parallel/test-http-chunk-extensions-limit.js#block_02_verify_the_chunk_extensions_is_correctly_reset_after_a_chunk`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-chunk-e...
-- `parallel/test-http-chunked-304.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/tes...
-- `parallel/test-http-chunked-smuggling.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-chunked.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-destroy.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-destroy.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-destroy.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-destroy.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-destroy.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-destroy.js#block_04_block_04`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-destroy.js#block_05_block_05`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-event.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-no-agent.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort-response-event.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-abort2.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-aborted-event.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-aborted-event.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-aborted-event.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-agent-abort-close-event.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-agent.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-check-http-token.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-close-with-default-agent.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-encoding.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-get-url.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-input-function.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-keep-alive-hint.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-http-agent-destroyed-socket.js`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-agent-destroye...
+- `parallel/test-http-chunked-304.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-chunked-304.js...
+- `parallel/test-http-chunked-smuggling.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-chunked-smuggl...
+- `parallel/test-http-client-aborted-event.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-client-aborted...
+- `parallel/test-http-client-aborted-event.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-client-aborted...
+- `parallel/test-http-client-aborted-event.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-client-aborted...
 - `parallel/test-http-client-req-error-dont-double-fire.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-client-req-err...
-- `parallel/test-http-client-request-options.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-res-destroyed.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-res-destroyed.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-response-timeout.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-timeout-connect-listener.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-upload-buf.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-client-upload.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-conn-reset.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-content-length-mismatch.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at shouldThrowOnMoreByt...
-- `parallel/test-http-contentLength0.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-content...
-- `parallel/test-http-date-header.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-date-he...
-- `parallel/test-http-decoded-auth.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-decoded...
-- `parallel/test-http-default-encoding.js`: Expected values to be strictly equal: + actual - expected  + '' - 'This is a unicode text: سلام'  AssertionError: Expected values to be strictly equal: + actual - expected  + '' - 'This is a unico...
-- `parallel/test-http-double-content-length.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-dummy-characters-smuggling.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-dummy-characters-smuggling.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-early-hints.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-early-hints.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-early-hints.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-early-hints.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-early-hints.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-early-hints.js#block_04_block_04`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-early-hints.js#block_05_block_05`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-eof-on-connect.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-eof-on-...
-- `parallel/test-http-extra-response.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-flush-response-headers.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-flush-r...
+- `parallel/test-http-client-response-timeout.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-client-respons...
+- `parallel/test-http-double-content-length.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-double-content...
+- `parallel/test-http-early-hints.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
+- `parallel/test-http-early-hints.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
+- `parallel/test-http-early-hints.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
+- `parallel/test-http-early-hints.js#block_03_block_03`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
+- `parallel/test-http-early-hints.js#block_04_block_04`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
 - `parallel/test-http-generic-streams.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
 - `parallel/test-http-generic-streams.js#block_00_test_1_simple_http_test_no_keep_alive`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
 - `parallel/test-http-generic-streams.js#block_01_test_2_keep_alive_for_2_requests`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
 - `parallel/test-http-generic-streams.js#block_02_test_3_connection_close_request_response_with_chunked`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
 - `parallel/test-http-generic-streams.js#block_03_the_same_as_test_3_but_with_content_length_headers`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
 - `parallel/test-http-generic-streams.js#block_04_test_5_the_client_sends_garbage`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
-- `parallel/test-http-get-pipeline-problem.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-head-request.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/tes...
-- `parallel/test-http-head-response-has-no-body-end-implicit-headers.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-head-response-has-no-body-end.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-head-response-has-no-body.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-head-throw-on-response-body-write.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-head-throw-on-response-body-write.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-head-throw-on-response-body-write.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-head-throw-on-response-body-write.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-header-obstext.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-header-owstext.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at check (/home/node/te...
-- `parallel/test-http-header-read.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-header-...
-- `parallel/test-http-hex-write.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-host-headers.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at testHttp (/home/node/test/parallel/test-http-host-heade...
-- `parallel/test-http-incoming-pipelined-socket-destroy.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-http-insecure-parser-per-stream.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-insecure-parse...
 - `parallel/test-http-insecure-parser-per-stream.js#block_02_test_3_the_client_sends_an_invalid_header`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-insecure-parse...
 - `parallel/test-http-insecure-parser-per-stream.js#block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-insecure-parse...
-- `parallel/test-http-insecure-parser.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-invalidheaderfield.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-invalid...
-- `parallel/test-http-keep-alive-pipeline-max-requests.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-listening.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-localaddress-bind-error.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-malformed-request.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-http-insecure-parser.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-insecure-parse...
 - `parallel/test-http-max-header-size-per-stream.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-max-header-siz...
 - `parallel/test-http-max-header-size-per-stream.js#block_02_test_3_the_client_sends_larger_headers_than_what_would_other`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-max-header-siz...
 - `parallel/test-http-max-header-size-per-stream.js#block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-max-header-siz...
-- `parallel/test-http-missing-header-separator-cr.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-missing-header-separator-cr.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-missing-header-separator-cr.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-missing-header-separator-lf.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-missing-header-separator-lf.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-missing-header-separator-lf.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-no-content-length.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-destroyed.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-destroyed.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-destroyed.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-destroyed.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-end-types.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-finish-writable.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-finish.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-outgoin...
-- `parallel/test-http-outgoing-finished.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-outgoin...
-- `parallel/test-http-outgoing-message-capture-rejection.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-message-capture-rejection.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-properties.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-properties.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-properties.js#block_04_block_04`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-writableFinished.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-outgoing-write-types.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-parser-finish-error.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-parser-free.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-http-parser-finish-error.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-parser-finish-...
 - `parallel/test-http-parser-multiple-execute.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-parser-multipl...
-- `parallel/test-http-pause-no-dump.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-pause-resume-one-end.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-pipe-fs.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-pipeline-socket-parser-typeerror.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-pipelin...
-- `parallel/test-http-readable-data-event.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-readabl...
-- `parallel/test-http-req-res-close.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-req-res-close.js#block_00_after_res`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-req-res-close.js#block_01_req_should_emit_close_after_res`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-req-res-close.js#block_02_see_https_github_com_nodejs_node_pull_33035_issuecomment_751`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-arguments.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-dont-override-options.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-end-twice.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-request...
-- `parallel/test-http-request-end.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-request...
-- `parallel/test-http-request-host-header.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-host-header.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-host-header.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-join-authorization-headers.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-join-authorization-headers.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-join-authorization-headers.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-join-authorization-headers.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-large-payload.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-request...
-- `parallel/test-http-request-method-delete-payload.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-methods.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-request-smuggling-content-length.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-res-write-end-dont-take-array.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-add-header-after-sent.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-respons...
-- `parallel/test-http-response-close.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-close.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-close.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-close.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-cork.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-respons...
-- `parallel/test-http-response-multi-content-length.js#block_00_test_adding_an_extra_content_length_header_using_setheader`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/tes...
-- `parallel/test-http-response-multi-content-length.js#block_01_test_adding_an_extra_content_length_header_using_writehead`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at test (/home/node/tes...
-- `parallel/test-http-response-readable.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-respons...
-- `parallel/test-http-response-remove-header-after-sent.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-respons...
-- `parallel/test-http-response-setheaders.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-setheaders.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-setheaders.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-setheaders.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-setheaders.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-setheaders.js#block_04_block_04`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-setheaders.js#block_05_block_05`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-setheaders.js#block_06_block_06`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-statuscode.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-response-writehead-returns-this.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-respons...
-- `parallel/test-http-server-capture-rejections.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-capture-rejections.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-capture-rejections.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-close-idle-wait-response.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-connection-list-when-close.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-connection-list-when-close.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-http-pause-no-dump.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-pause-no-dump....
+- `parallel/test-http-req-res-close.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-req-res-close....
+- `parallel/test-http-req-res-close.js#block_00_after_res`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-req-res-close....
+- `parallel/test-http-req-res-close.js#block_01_req_should_emit_close_after_res`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-req-res-close....
+- `parallel/test-http-server-close-idle-wait-response.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-server-close-i...
 - `parallel/test-http-server-connections-checking-leak.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at Countdown (/home/node/test/common/countdown.js:13:39)     at <...
-- `parallel/test-http-server-delete-parser.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-keep-alive-defaults.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-keep-alive-max-requests-null.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-keep-alive-timeout.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at serverTest (/home/no...
-- `parallel/test-http-server-keepalive-end.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-multiple-client-error.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-non-utf8-header.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-non-utf8-header.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-non-utf8-header.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-reject-cr-no-lf.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-unconsume-consume.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-server-unconsume.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-server-...
-- `parallel/test-http-server-write-end-after-end.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-set-cookies.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-status-message.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-status-...
+- `parallel/test-http-server-keepalive-end.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-server-keepali...
 - `parallel/test-http-sync-write-error-during-continue.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-sync-write-err...
-- `parallel/test-http-timeout-client-warning.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-timeout-overflow.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-timeout.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-transfer-encoding-repeated-chunked.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-transfer-encoding-smuggling.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-transfer-encoding-smuggling.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-transfer-encoding-smuggling.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-upgrade-server2.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-url.parse-auth-with-header-in-request.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-url.par...
-- `parallel/test-http-url.parse-basic.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-url.par...
-- `parallel/test-http-url.parse-path.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-url.par...
-- `parallel/test-http-url.parse-post.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-url.par...
-- `parallel/test-http-url.parse-search.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-http-url.par...
-- `parallel/test-http-wget.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-write-empty-string.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-write-head-2.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-write-head-2.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-write-head-2.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-write-head-2.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-http-zerolengthbuffer.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-http-transfer-encoding-repeated-chunked.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-transfer-encod...
+- `parallel/test-http-upgrade-server2.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-upgrade-server...
+- `parallel/test-http-wget.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-wget.js:67:22)...
 - `parallel/test-http2-alpn.js#block_00_block_00`: The validation function is expected to return "true". Received false  Caught error:  Error: http2 is not supported in WebAssembly environment AssertionError: The validation function is expected to ret...
 - `parallel/test-http2-alpn.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_03_block_03`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setLocalWindowSize.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setLocalWindowSize.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setLocalWindowSize.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
 - `parallel/test-http2-compat-client-upload-reject.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http2-compat-client...
-- `parallel/test-http2-compat-expect-continue.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-expect-continue.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-headers.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-headers.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_03_block_03`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_04_block_04`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_05_block_05`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_06_block_06`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_07_block_07`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_08_block_08`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_09_block_09`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-write.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-write.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-write.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead-array.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead-array.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead-array.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_00_check_for_session_connect_callback_and_event`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_01_check_for_session_connect_callback_on_already_connected_sock`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_02_check_for_https_as_protocol`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_03_check_for_session_connect_callback_on_already_connected_tls_`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_04_check_for_error_for_init_settings_error`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_05_check_for_error_for_an_invalid_protocol_not_http_or_https`: Expected values to be strictly deep-equal: + actual - expected    Comparison { -   code: 'ERR_HTTP2_UNSUPPORTED_PROTOCOL',     name: 'Error'   }  AssertionError: Expected values to be strictly deep-eq...
-- `parallel/test-http2-connect.js#block_06_authority_host_and_authority_port`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-create-client-connect.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-create-client-connect.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_01_check_if_multiple_custom_settings_can_be_set`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_03_check_for_not_passing_settings`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_04_block_04`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_05_block_05`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_06_block_06`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_07_block_07`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_08_block_08`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_09_verify_that_passing_validate_true_does_not_throw`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_10_check_for_maxframesize_failing_the_max_number`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
 - `parallel/test-http2-https-fallback.js#block_00_http_2_http_1_1_server`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-http2-https-fallback.js#block_01_http_2_only_server`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-http2-invalidheaderfield.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfield.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfield.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfield.js#block_03_block_03`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_01_test_automatically_sending_origin_on_connection_start`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_02_originset`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_03_send_them_but_client_will_ignore_them`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-perform-server-handshake.js#block_00_basic_test`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-perform-server-handshake.js#block_01_double_bind_should_fail`: not a function     at <anonymous> (/home/node/test/parallel/test-http2-perform-server-handshake.js:23:32)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest...
 - `parallel/test-http2-reset-flood.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http2-reset-flood.j...
-- `parallel/test-http2-server-errors.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-errors.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-settimeout-no-callback.js#block_00_test_with_server`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-settimeout-no-callback.js#block_01_test_with_secure_server`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_00_test_the_plaintext_server_socket_timeout`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_01_test_that_http2_createserver_supports_net_server_options`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_02_test_the_secure_server_socket_timeout`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_03_test_that_http2_createsecureserver_supports_net_server_optio`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-too-many-settings.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-too-many-settings.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
 - `parallel/test-https-agent-create-connection.js#block_00_use_option_connect`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
 - `parallel/test-https-agent-create-connection.js#block_01_use_port_and_option_connect`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
 - `parallel/test-https-agent-create-connection.js#block_02_use_port_and_host_and_option_connect`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
@@ -3443,94 +3403,19 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### net
 
-- `parallel/test-net-after-close.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-allow-half-open.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-allow-half-open.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-allow-half-open.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily-commandline-option.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily-default.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily-default.js#block_00_test_that_ipv4_is_reached_by_default_if_ipv6_is_not_reachabl`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily-default.js#block_01_test_that_ipv4_is_not_reached_by_default_if_ipv6_is_not_reac`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily.js#block_00_test_that_ipv4_is_reached_if_ipv6_is_not_reachable`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily.js#block_01_test_that_only_the_last_successful_connection_is_established`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-autoselectfamily.js#block_03_test_that_the_option_can_be_disabled`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-binary.js`: Expected values to be strictly equal:  0 !== 512  AssertionError: Expected values to be strictly equal:  0 !== 512      at <anonymous> (/home/node/test/parallel/test-net-binary.js:79:39)     at emit (...
-- `parallel/test-net-bind-twice.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-buffersize.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-bytes-read.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-bytes-stats.js`: Expected values to be strictly equal:  0 !== 12  AssertionError: Expected values to be strictly equal:  0 !== 12      at <anonymous> (/home/node/test/parallel/test-net-bytes-stats.js:76:22)     at emi...
-- `parallel/test-net-bytes-written-large.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-bytes-written-large.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-bytes-written-large.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-bytes-written-large.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-can-reset-timeout.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-client-bind-twice.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-connect-abort-controller.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-connect-buffer.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-connect-buffer2.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-connect-call-socket-connect.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-connect-immediate-destroy.js`: cannot read property 'port' of null     at <anonymous> (/home/node/test/parallel/test-net-connect-immediate-destroy.js:7:21)     at loadModule (node:module:866:32)     at localRequire (node:module:977...
-- `parallel/test-net-connect-keepalive.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-connect-options-path.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
+- `parallel/test-net-bytes-read.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-net-bytes-read.js:3...
 - `parallel/test-net-connect-options-port.js#block_00_test_wrong_type_of_ports`: Missing expected exception (TypeError): createConnectionWithCb(true) AssertionError: Missing expected exception (TypeError): createConnectionWithCb(true)     at syncFailToConnect (/home/node/test/para...
 - `parallel/test-net-connect-options-port.js#block_01_test_out_of_range_ports`: Missing expected exception (RangeError): createConnectionWithCb() AssertionError: Missing expected exception (RangeError): createConnectionWithCb()     at syncFailToConnect (/home/node/test/parallel/t...
 - `parallel/test-net-connect-options-port.js#block_02_test_invalid_hints`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-net-connect-options-port.js:41:19)     at loadModule (...
-- `parallel/test-net-connect-options-port.js#block_03_test_valid_combinations_of_connect_port_and_connect_port_hos`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-net-connect-reset.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-net-connect-reset.j...
-- `parallel/test-net-end-destroyed.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-listen-close-server-callback-is-not-function.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-net-listen-c...
-- `parallel/test-net-listen-close-server.js`: Unhandled promise rejection:     at mustNotCall (/home/node/test/common/index.js:531:23)     at apply (native)     at emit (node:events:332:36)     at apply (native)     at emit (node:domain:103:32)  ...
-- `parallel/test-net-listen-invalid-port.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-net-listen-i...
-- `parallel/test-net-listening.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-net-perf_hooks.js#block_00_block_00`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-net-perf_hooks.js:38:22)     at emit (...
 - `parallel/test-net-perf_hooks.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-net-perf_hooks.js:38:22)     at emit (...
-- `parallel/test-net-pingpong.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at pingPongTest (/hom...
-- `parallel/test-net-reconnect.js`: Expected values to be strictly equal:  0 !== 51  AssertionError: Expected values to be strictly equal:  0 !== 51      at <anonymous> (/home/node/test/parallel/test-net-reconnect.js:85:44)     at emit ...
-- `parallel/test-net-remote-address-port.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-remote-address.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-server-call-listen-multiple-times.js#block_00_first_test_check_that_after_error_event_you_can_listen_right`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-server-call-listen-multiple-times.js#block_01_second_test_check_that_second_listen_call_throws_an_error`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-net-server-call-listen-multiple-times.js:16:10)     at loadMod...
-- `parallel/test-net-server-call-listen-multiple-times.js#block_02_check_that_after_the_close_call_you_can_run_listen_method_ju`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-server-close.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-server-listen-options-signal.js#block_00_block_00`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-net-server-listen-options-signal.js:10:5)     at loadM...
-- `parallel/test-net-server-listen-options-signal.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-server-listen-options-signal.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-server-listen-options.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-net-pingpong.js`: mustCall verification failed: mustCall: expected exactly 1001 call(s), got 434     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-net-pingpong.j...
 - `parallel/test-net-server-listen-options.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at doListen (node:net:1060:36)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-net-server-listen-...
 - `parallel/test-net-server-listen-options.js#block_02_block_02`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at shouldFailToListen (/home/node/test/parallel/test-net-server-listen-options.js:33:21)     at <ano...
-- `parallel/test-net-server-listen-path.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
-- `parallel/test-net-server-listen-path.js#block_00_test_listen_path`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
-- `parallel/test-net-server-listen-path.js#block_01_test_listen_path`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
-- `parallel/test-net-server-listen-path.js#block_02_test_listen_path_cb`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
-- `parallel/test-net-server-listen-path.js#block_03_test_listen_path_cb`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
-- `parallel/test-net-server-listen-path.js#block_04_test_pipe_chmod`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
-- `parallel/test-net-server-listen-path.js#block_05_test_should_emit_error_events_when_listening_fails`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home/node/test/parallel/test-net-server...
-- `parallel/test-net-server-nodelay.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-settimeout.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-socket-byteswritten.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-socket-close-after-end.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-socket-connect-without-cb.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-socket-connecting.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-net-socket-c...
-- `parallel/test-net-socket-destroy-twice.js`: cannot read property 'port' of null     at <anonymous> (/home/node/test/parallel/test-net-socket-destroy-twice.js:28:21)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)...
-- `parallel/test-net-socket-end-callback.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-net-server-nodelay.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-net-server-nodelay....
 - `parallel/test-net-socket-setnodelay.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-net-socket-setnodel...
-- `parallel/test-net-socket-timeout.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-socket-write-after-close.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-socket-write-after-close.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-socket-write-error.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-net-socket-w...
-- `parallel/test-net-stream.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-net-stream.j...
-- `parallel/test-net-writable.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-net-write-after-close.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `sequential/test-net-connect-econnrefused.js`: Expected values to be strictly equal:  1 !== 5  AssertionError: Expected values to be strictly equal:  1 !== 5      at <anonymous> (/home/node/test/sequential/test-net-connect-econnrefused.js:66:22)  ...
-- `sequential/test-net-reconnect-error.js`: mustCall verification failed: mustCall: expected exactly 21 call(s), got 1     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/sequential/test-net-reconnect-er...
-- `sequential/test-net-server-address.js`: Unhandled promise rejection (likely cause of mustCall failure):     at mustNotCall (/home/node/test/common/index.js:531:23)     at apply (native)     at emit (node:events:332:36)     at apply (native)...
-- `sequential/test-net-server-address.js#block_00_test_on_ipv4_server`: Unhandled promise rejection (likely cause of mustCall failure):     at mustNotCall (/home/node/test/common/index.js:531:23)     at apply (native)     at emit (node:events:332:36)     at apply (native)...
-- `sequential/test-net-server-bind.js#block_00_with_only_a_callback_server_should_get_a_port_assigned_by_th`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `sequential/test-net-server-bind.js#block_01_no_callback_to_listen_assume_we_can_bind_in_100_ms`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/sequential/test-net-server...
-- `sequential/test-net-server-bind.js#block_02_callback_to_listen`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `sequential/test-net-server-bind.js#block_03_backlog_argument`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `sequential/test-net-server-bind.js#block_04_backlog_argument_without_host_argument`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-pipe-head.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-pipe-head.js:14:...
 
 ### other
 
@@ -3554,24 +3439,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-broadcastchannel-custom-inspect.js#block_01_block_01`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-broadcastchannel-custom-inspect.js:13:...
 - `parallel/test-broadcastchannel-custom-inspect.js#block_02_block_02`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-broadcastchannel-custom-inspect.js:15:...
 - `parallel/test-broadcastchannel-custom-inspect.js#block_03_block_03`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-broadcastchannel-custom-inspect.js:17:...
-- `parallel/test-cli-permission-deny-fs.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_02_block_02`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_03_block_03`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_04_block_04`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
-- `parallel/test-cli-permission-deny-fs.js#block_05_block_05`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
-- `parallel/test-cli-permission-deny-fs.js#block_06_block_06`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
-- `parallel/test-cli-permission-deny-fs.js#block_07_block_07`: The input did not match the regular expression /resource: '.*?[\\/](?:etc\|passwd)'/. Input:  "Error: ENOENT: no such file or directory, open '/etc/passwd'\n" +   '    at createSystemError (__wasm_rqui...
-- `parallel/test-cli-permission-multiple-allow.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
-- `parallel/test-cli-permission-multiple-allow.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
-- `parallel/test-cli-permission-multiple-allow.js#block_02_block_02`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
-- `parallel/test-common-countdown.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at Countdown (/home/node/test/common/countdown.js:13:39)     at <...
-- `parallel/test-common-gc.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-common-gc.js:7:27) ...
-- `parallel/test-common-gc.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-common-gc.js:7:27) ...
-- `parallel/test-common.js#block_00_test_for_leaked_global_detection`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:44:15)     at loadModule (node:module:866:32)     at localRequire (n...
-- `parallel/test-common.js#block_01_test_for_disabling_leaked_global_detection`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:46:15)     at loadModule (node:module:866:32)     at localRequire (n...
-- `parallel/test-common.js#block_02_test_tmpdir`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:38:15)     at loadModule (node:module:866:32)     at localRequire (n...
-- `parallel/test-common.js#block_03_must_be_last_since_it_uses_process_on_uncaughtexception`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:38:15)     at loadModule (node:module:866:32)     at localRequire (n...
 - `parallel/test-domexception-cause.js`: Expected values to be strictly equal: + actual - expected  + { +   cause: undefined, +   name: 'abc' + } - 'abc'  AssertionError: Expected values to be strictly equal: + actual - expected  + { +   cau...
 - `parallel/test-domexception-cause.js#block_01_block_01`: Expected values to be strictly equal: + actual - expected  + { +   cause: undefined, +   name: 'abc' + } - 'abc'  AssertionError: Expected values to be strictly equal: + actual - expected  + { +   cau...
 - `parallel/test-domexception-cause.js#block_02_block_02`: Expected values to be strictly equal: + actual - expected  + { +   cause: 'foo', +   name: 'abc' + } - 'abc'  AssertionError: Expected values to be strictly equal: + actual - expected  + { +   cause: ...
@@ -3583,8 +3450,94 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-freeze-intrinsics.js:7:3)     at loadModule (node:modu...
 - `parallel/test-freeze-intrinsics.js#block_03_ensure_that_we_cannot_override_console_properties`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-freeze-intrinsics.js:7:3)     at loadModule (node:modu...
 - `parallel/test-handle-wrap-close-abort.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-handle-wrap-close-a...
-- `parallel/test-heapdump-async-hooks-init-promise.js`: mustCall verification failed: mustCall: expected exactly 8 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-heapdump-async-hook...
 - `parallel/test-no-addons-resolution-condition.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-no-addons-resolutio...
+- `parallel/test-preload-self-referential.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-preload-self-ref...
+- `parallel/test-preload-worker.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-preload-worker.j...
+- `parallel/test-queue-microtask.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
+- `parallel/test-queue-microtask.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
+- `parallel/test-release-changelog.js#block_00_check_changelog_v_md`: ENOENT: no such file or directory, open '/home/node/src/node_version.h'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileSyn...
+- `parallel/test-release-changelog.js#block_01_main_changelog_md_checks`: ENOENT: no such file or directory, open '/home/node/src/node_version.h'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileSyn...
+- `parallel/test-set-incoming-message-header.js#block_02_addheaderlines_function_set_a_header_correctly`: not a function     at <anonymous> (/home/node/test/parallel/test-set-incoming-message-header.js:17:6)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (no...
+- `parallel/test-single-executable-blob-config-errors.js#block_00_block_00`: The input did not match the regular expression /Cannot read single executable configuration from non-existent-relative\.json/. Input:  "Error: Cannot find module '/tmp/w/non-existent-relative.json' fr...
+- `parallel/test-single-executable-blob-config-errors.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(     stderr.includes(       `Cannot read single executable configuration from ${config}`     )   )  AssertionError: The expression evaluated to a f...
+- `parallel/test-single-executable-blob-config-errors.js#block_02_block_02`: The input did not match the regular expression /SyntaxError: Expected ':' after property name/. Input:  "Error: Cannot parse JSON module '/tmp/w/invalid.json': Expected ':' after property name in JSON...
+- `parallel/test-single-executable-blob-config-errors.js#block_03_block_03`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config-errors.js#block_04_block_04`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config-errors.js#block_05_block_05`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config-errors.js#block_06_block_06`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config-errors.js#block_07_block_07`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config-errors.js#block_08_block_08`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config-errors.js#block_09_block_09`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config-errors.js#block_10_block_10`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
+- `parallel/test-single-executable-blob-config.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
+- `parallel/test-single-executable-blob-config.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
+- `parallel/test-single-executable-blob-config.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
+- `parallel/test-single-executable-blob-config.js#block_03_block_03`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
+- `parallel/test-single-executable-blob-config.js#block_04_block_04`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
+- `parallel/test-source-map-api.js#block_00_it_should_throw_with_invalid_args`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'not a function', -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The "payload" argument must be of type obj...
+- `parallel/test-source-map-api.js#block_01_findsourcemap_should_return_undefined_when_no_source_map_is_`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-source-map-api.js#block_02_non_exceptional_case`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:20:13)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-source-map-api.js#block_03_source_map_attached_to_error`: undefined == true AssertionError [ERR_ASSERTION]: undefined == true
+- `parallel/test-source-map-api.js#block_04_sourcemap_can_be_instantiated_with_source_map_v3_object_as_p`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:31:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-source-map-api.js#block_05_error_when_receiving_a_malformed_mappings`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:34:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-source-map-api.js#block_06_sourcemap_can_be_instantiated_with_index_source_map_v3_objec`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:35:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-source-map-api.js#block_07_test_various_known_decodings_to_ensure_decodevlq_works_corre`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:69:52)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-source-map-api.js#block_08_observed_see_https_github_com_mozilla_source_map_pull_92`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:53:5)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
+- `parallel/test-startup-large-pages.js#block_00_block_00`: Expected values to be strictly equal:  'undefined' !== '42'  AssertionError: Expected values to be strictly equal:  'undefined' !== '42'      at <anonymous> (/home/node/test/parallel/test-startup-larg...
+- `parallel/test-startup-large-pages.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 9  AssertionError: Expected values to be strictly equal:  0 !== 9      at <anonymous> (/home/node/test/parallel/test-startup-large-pages.js:14:22)     at l...
+- `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
+- `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
+- `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
+- `parallel/test-webstorage.js#test_04_localstorage_throws_without_localstorage_file`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
+- `parallel/test-webstorage.js#test_05_localstorage_is_not_persisted_if_it_is_unused`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
+- `parallel/test-webstorage.js#test_06_localstorage_is_persisted_if_it_is_used`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
+- `parallel/test-webstorage.js#test_07_webstorage_quota_for_localstorage_and_sessionstorage`: 2 test(s) failed     at finalize (node:test:613:29)     at runNext (node:test:660:16)     at <anonymous> (node:test:650:36)     at apply (native)     at wrapped (node:async_hooks:141:34)     at _resto...
+- `parallel/test-x509-escaping.js#block_00_test_that_all_certificate_chains_provided_by_the_reporter_ar`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:94:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
+- `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:102:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:100:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
+- `parallel/test-x509-escaping.js#block_04_the_internal_parsing_logic_must_match_the_json_specification`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'tls is not supported in WebAssembly environment' -   code: 'ERR_TLS_CERT_ALTNAME_FORMAT', -   message: 'Inv...
+- `parallel/test-x509-escaping.js#block_05_correctly_i_e_not_simply_split_at_commas`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
+- `parallel/test-x509-escaping.js#block_06_the_subject_must_be_ignored_if_a_dnsname_subject_alternative`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:41:24)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
+- `parallel/test-x509-escaping.js#block_07_exists_even_if_other_subject_alternative_names_exist`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:45:24)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
+- `sequential/test-single-executable-application-assets.js#block_00_block_00`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
+- `sequential/test-single-executable-application-assets.js#block_01_block_01`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
+- `sequential/test-single-executable-application-assets.js#block_02_block_02`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
+- `sequential/test-single-executable-application-snapshot.js#block_00_block_00`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
+- `sequential/test-single-executable-application-snapshot.js#block_01_block_01`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
+
+### perf_hooks
+
+- `parallel/test-perf-hooks-histogram.js#block_00_block_00`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:19:13)     at load...
+- `parallel/test-perf-hooks-histogram.js#block_01_block_01`: monitorEventLoopDelay is not supported in WebAssembly environment     at monitorEventLoopDelay (node:perf_hooks:170:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:21:13)...
+- `parallel/test-perf-hooks-histogram.js#block_02_block_02`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:23:13)     at load...
+- `parallel/test-perf-hooks-histogram.js#block_03_block_03`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:26:13)     at load...
+- `parallel/test-perf-hooks-histogram.js#block_04_block_04`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
+- `parallel/test-perf-hooks-histogram.js#block_05_block_05`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:29:14)     at load...
+- `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
+- `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
+- `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
+- `parallel/test-perf-hooks-resourcetiming.js#block_03_custom_getters_math`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
+- `parallel/test-perf-hooks-resourcetiming.js#block_04_using_performanceobserver`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
+- `parallel/test-perf-hooks-usertiming.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
+- `parallel/test-perf-hooks-usertiming.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
+- `parallel/test-perf-hooks-usertiming.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
+- `parallel/test-perf-hooks-worker-timeorigin.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-worker-t...
+- `parallel/test-performance-function.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:18:34)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
+- `parallel/test-performance-function.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:23:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
+- `parallel/test-performance-function.js#block_02_block_02`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:22:34)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
+- `parallel/test-performance-function.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'not a function', -   code: 'ERR_INVALID_ARG_TYPE', -   message: /The "fn" argument must be of type function...
+- `parallel/test-performance-function.js#block_04_function_can_be_wrapped_many_times_also_check_length_and_nam`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:27:34)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
+- `parallel/test-performance-function.js#block_05_regression_tests_for_https_github_com_nodejs_node_issues_406`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:70:43)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
+- `parallel/test-performance-gc.js`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-perfor...
+- `parallel/test-performance-gc.js#block_00_adding_an_observer_should_force_at_least_one_gc_to_appear`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-perfor...
+- `parallel/test-performance-measure-detail.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-performance-measure...
+- `parallel/test-performance-measure.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-performance-measure...
+- `sequential/test-perf-hooks.js#block_00_block_00`: EBADF: bad file descriptor, write     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at writeSync (node:fs:1113:37)     at log (/home/node/test/sequential/test-perf-hooks....
+- `sequential/test-perf-hooks.js#block_01_block_01`: EBADF: bad file descriptor, write     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at writeSync (node:fs:1113:37)     at log (/home/node/test/sequential/test-perf-hooks....
+
+### permission
+
 - `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-allow-child-process-cli.js:28:13)     at loadModule (node:module:866:32)     at localRequire (node:...
 - `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`: execSync is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at execSync (node:child_process:1431:11)     at <anonymous> (/home/node/test/parallel...
 - `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`: Cannot find module 'wasi'     at localRequire (node:module:988:59)     at <anonymous> (/home/node/test/parallel/test-permission-allow-wasi-cli.js:12:18)     at loadModule (node:module:866:32)     at l...
@@ -3605,38 +3558,53 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-permission-fs-write-v8.js#block_01_block_01`: The validation function is expected to return "true". Received false  Caught error:  Error: v8.writeHeapSnapshot is not supported in WASM environment AssertionError: The validation function is expecte...
 - `parallel/test-permission-has.js#block_00_block_00`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-has.js:9:13)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at...
 - `parallel/test-permission-has.js#block_01_block_01`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-has.js:11:10)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     a...
-- `parallel/test-pipe-address.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
-- `parallel/test-pipe-head.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-pipe-head.js:14:...
-- `parallel/test-pipe-stream.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at test (/home/node/test/parallel/test-pipe-stream.js:53...
-- `parallel/test-pipe-unref.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home/node/test/parallel/test-pipe-unref...
-- `parallel/test-pipe-writev.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home/node/test/parallel/test-pipe-write...
-- `parallel/test-preload-self-referential.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-preload-self-ref...
-- `parallel/test-preload-worker.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-preload-worker.j...
+
+### process
+
+- `parallel/test-process-beforeexit-throw-exit.js`: at <anonymous> (/home/node/test/parallel/test-process-beforeexit-throw-exit.js:15:13)     at apply (native)     at wrapper (/home/node/test/common/index.js:512:34)     at apply (native)     at emit (n...
+- `parallel/test-process-beforeexit.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at tryImmediate (/home/node/test/parallel/test-process-beforeexit...
+- `parallel/test-process-chdir-errormessage.js`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-process-chdir-errormessage.js:19:19)     at loadModule (node:m...
+- `parallel/test-process-env-allowed-flags.js#block_00_assert_legit_flags_are_allowed_and_bogus_flags_are_disallowe`: flag should be in set: --perf_basic_prof  false !== true  AssertionError: flag should be in set: --perf_basic_prof  false !== true      at <anonymous> (/home/node/test/parallel/test-process-env-allowe...
+- `parallel/test-process-env-allowed-flags.js#block_02_assert_immutability_of_process_allowednodeenvironmentflags`: Expected values to be strictly equal:  false !== true  AssertionError: Expected values to be strictly equal:  false !== true      at <anonymous> (/home/node/test/parallel/test-process-env-allowed-flag...
+- `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-timer-lifetime.js:8:30)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34...
+- `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-timer-lifetime.js:10:30)     at loadModule (node:module:866:32)     at localRequire (node:module:977:3...
+- `parallel/test-process-redirect-warnings-env.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-process-redirect...
+- `parallel/test-process-redirect-warnings.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-process-redirect...
+- `parallel/test-process-warning.js`: Unhandled promise rejection: AssertionError: The input did not match the regular expression /^DeprecationWarning: test$/. Input:  'AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:...
+
+### promises
+
 - `parallel/test-promise-swallowed-event.js`: mustCall verification failed: mustCall: expected exactly 4 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-promise-swallowed-e...
-- `parallel/test-queue-microtask.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
-- `parallel/test-queue-microtask.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
-- `parallel/test-release-changelog.js#block_00_check_changelog_v_md`: ENOENT: no such file or directory, open '/home/node/src/node_version.h'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileSyn...
-- `parallel/test-release-changelog.js#block_01_main_changelog_md_checks`: ENOENT: no such file or directory, open '/home/node/src/node_version.h'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileSyn...
-- `parallel/test-set-incoming-message-header.js#block_02_addheaderlines_function_set_a_header_correctly`: not a function     at <anonymous> (/home/node/test/parallel/test-set-incoming-message-header.js:17:6)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (no...
+
+### readline
+
+- `parallel/test-readline-emit-keypress-events.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
+- `parallel/test-readline-emit-keypress-events.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
+- `parallel/test-readline-emit-keypress-events.js#block_02_block_02`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
+- `parallel/test-readline.js#block_00_block_00`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
+- `parallel/test-readline.js#block_01_block_01`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
+- `parallel/test-readline.js#block_02_block_02`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
+- `parallel/test-readline.js#block_03_block_03`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
+- `parallel/test-readline.js#block_04_block_04`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
+- `parallel/test-readline.js#block_05_block_05`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
+
+### repl
+
+- `parallel/test-repl-programmatic-history.js`: mustCall verification failed: mustCall: expected exactly 10 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-repl-programmatic-...
+- `parallel/test-repl-tab-complete.js#block_00_block_00`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
+- `parallel/test-repl-tab-complete.js#block_01_block_01`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
+- `parallel/test-repl-tab-complete.js#block_02_test_tab_completion_for_require_relative_to_the_current_dire`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
+- `parallel/test-repl-tab-complete.js#block_03_tab_completion_for_files_directories`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
+- `parallel/test-repl-tab-complete.js#block_04_block_04`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
+
+### shadow_realm
+
 - `parallel/test-shadow-realm-preload-module.js`: Unhandled promise rejection (likely cause of mustCall failure):     at main (/home/node/test/parallel/test-shadow-realm-preload-module.js:16:14)     at <anonymous> (/home/node/test/parallel/test-shado...
 - `parallel/test-shadow-realm-prepare-stack-trace.js#block_00_block_00`: ShadowRealm is not defined ReferenceError: ShadowRealm is not defined     at [object CallSite]     at [object CallSite]     at [object CallSite]     at [object CallSite]
 - `parallel/test-shadow-realm-prepare-stack-trace.js#block_01_block_01`: ShadowRealm is not defined ReferenceError: ShadowRealm is not defined     at [object CallSite]     at [object CallSite]     at [object CallSite]     at [object CallSite]
-- `parallel/test-single-executable-blob-config-errors.js#block_00_block_00`: The input did not match the regular expression /Cannot read single executable configuration from non-existent-relative\.json/. Input:  "Error: Cannot find module '/tmp/w/non-existent-relative.json' fr...
-- `parallel/test-single-executable-blob-config-errors.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(     stderr.includes(       `Cannot read single executable configuration from ${config}`     )   )  AssertionError: The expression evaluated to a f...
-- `parallel/test-single-executable-blob-config-errors.js#block_02_block_02`: The input did not match the regular expression /SyntaxError: Expected ':' after property name/. Input:  "Error: Cannot parse JSON module '/tmp/w/invalid.json': Expected ':' after property name in JSON...
-- `parallel/test-single-executable-blob-config-errors.js#block_03_block_03`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_04_block_04`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_05_block_05`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_06_block_06`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_07_block_07`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_08_block_08`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_09_block_09`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_10_block_10`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_03_block_03`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_04_block_04`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
+
+### snapshot
+
 - `parallel/test-snapshot-api.js#block_00_block_00`: cannot read property 'isBuildingSnapshot' of undefined     at <anonymous> (/home/node/test/parallel/test-snapshot-api.js:16:1)     at loadModule (node:module:866:32)     at localRequire (node:module:9...
 - `parallel/test-snapshot-api.js#block_01_block_01`: cannot read property 'isBuildingSnapshot' of undefined     at <anonymous> (/home/node/test/parallel/test-snapshot-api.js:16:1)     at loadModule (node:module:866:32)     at localRequire (node:module:9...
 - `parallel/test-snapshot-argv1.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-argv1.js:31:24)     at loadMo...
@@ -3685,179 +3653,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-snapshot-warning.js#block_00_block_00`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-warning.js:22:32)     at loadModule (node:module:866:32)     at localRequire (node:module:977:...
 - `parallel/test-snapshot-warning.js#block_01_block_01`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-warning.js:26:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:...
 - `parallel/test-snapshot-warning.js#block_02_block_02`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-warning.js:31:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:...
-- `parallel/test-source-map-api.js#block_00_it_should_throw_with_invalid_args`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'not a function', -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The "payload" argument must be of type obj...
-- `parallel/test-source-map-api.js#block_01_findsourcemap_should_return_undefined_when_no_source_map_is_`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-source-map-api.js#block_02_non_exceptional_case`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:20:13)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-source-map-api.js#block_03_source_map_attached_to_error`: undefined == true AssertionError [ERR_ASSERTION]: undefined == true
-- `parallel/test-source-map-api.js#block_04_sourcemap_can_be_instantiated_with_source_map_v3_object_as_p`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:31:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-source-map-api.js#block_05_error_when_receiving_a_malformed_mappings`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:34:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-source-map-api.js#block_06_sourcemap_can_be_instantiated_with_index_source_map_v3_objec`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:35:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-source-map-api.js#block_07_test_various_known_decodings_to_ensure_decodevlq_works_corre`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:69:52)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-source-map-api.js#block_08_observed_see_https_github_com_mozilla_source_map_pull_92`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:53:5)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
-- `parallel/test-startup-large-pages.js#block_00_block_00`: Expected values to be strictly equal:  'undefined' !== '42'  AssertionError: Expected values to be strictly equal:  'undefined' !== '42'      at <anonymous> (/home/node/test/parallel/test-startup-larg...
-- `parallel/test-startup-large-pages.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 9  AssertionError: Expected values to be strictly equal:  0 !== 9      at <anonymous> (/home/node/test/parallel/test-startup-large-pages.js:14:22)     at l...
-- `parallel/test-stdout-to-file.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stdout-to-file.js:4...
-- `parallel/test-webcrypto-constructors.js#block_00_test_cryptokey_constructor`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:13:10)     at loadModule (no...
-- `parallel/test-webcrypto-constructors.js#block_01_test_subtlecrypto_constructor`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'SubtleCrypto is not defined', +   name: 'ReferenceError' -   code: 'ERR_ILLEGAL_CONSTRUCTOR', -   message: ...
-- `parallel/test-webcrypto-constructors.js#block_02_test_crypto_constructor`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'Crypto is not defined', +   name: 'ReferenceError' -   code: 'ERR_ILLEGAL_CONSTRUCTOR', -   message: 'Illeg...
-- `parallel/test-webcrypto-constructors.js#block_03_test_crypto_prototype_subtle`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_04_test_crypto_prototype_randomuuid`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_05_test_crypto_prototype_getrandomvalues`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_06_test_subtlecrypto_prototype_encrypt`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_07_test_subtlecrypto_prototype_decrypt`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_08_test_subtlecrypto_prototype_sign`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_09_test_subtlecrypto_prototype_verify`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_10_test_subtlecrypto_prototype_digest`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_11_test_subtlecrypto_prototype_generatekey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_12_test_subtlecrypto_prototype_derivekey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_13_test_subtlecrypto_prototype_derivebits`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_14_test_subtlecrypto_prototype_importkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_15_test_subtlecrypto_prototype_exportkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_16_test_subtlecrypto_prototype_wrapkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_17_test_subtlecrypto_prototype_unwrapkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-constructors.js#block_18_block_18`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
-- `parallel/test-webcrypto-cryptokey-workers.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-webcrypto-cryptokey...
-- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_00_test_aes_cbc_vectors`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at testEncrypt (/home/node/test/parallel/test-webcrypto-encrypt-decryp...
-- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_01_test_aes_ctr_vectors`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at testEncrypt (/home/node/test/parallel/test-webcrypto-encrypt-decryp...
-- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_02_test_aes_gcm_vectors`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at testEncrypt (/home/node/test/parallel/test-webcrypto-encrypt-decryp...
-- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (/home/node/test/parallel/test-webcrypto-encrypt-decrypt-aes.js:123:45)
-- `parallel/test-webcrypto-encrypt-decrypt.js#block_00_test_encrypt_decrypt_rsa_oaep`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:...
-- `parallel/test-webcrypto-encrypt-decrypt.js#block_01_test_encrypt_decrypt_aes_ctr`: Unhandled promise rejection (likely cause of mustCall failure):     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:29:7)
-- `parallel/test-webcrypto-encrypt-decrypt.js#block_02_test_encrypt_decrypt_aes_cbc`: Unhandled promise rejection (likely cause of mustCall failure):     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:32:7)
-- `parallel/test-webcrypto-encrypt-decrypt.js#block_03_test_encrypt_decrypt_aes_gcm`: Unhandled promise rejection (likely cause of mustCall failure):     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:35:7)
-- `parallel/test-webcrypto-export-import-ec.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at <anonymous> (/home/node/test/parallel/test-webcrypto-export-import-...
-- `parallel/test-webcrypto-export-import-ec.js#block_01_bad_private_keys`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at <anonymous> (/home/node/test/parallel/test-webcrypto-export-import-...
-- `parallel/test-webcrypto-export-import.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_AR...
-- `parallel/test-webcrypto-export-import.js#block_01_import_export_hmac_secret_key`: Unhandled promise rejection (likely cause of mustCall failure):     at exportKey (__wasm_rquickjs_builtin/web_crypto:7596:57)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:34:3...
-- `parallel/test-webcrypto-export-import.js#block_02_import_export_aes_secret_key`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:21:7...
-- `parallel/test-webcrypto-export-import.js#block_03_import_export_rsa_key_pairs`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:25...
-- `parallel/test-webcrypto-export-import.js#block_04_import_export_ec_key_pairs`: Unhandled promise rejection (likely cause of mustCall failure):     at exportKey (__wasm_rquickjs_builtin/web_crypto:7596:57)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:36:1...
-- `parallel/test-webcrypto-random.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
-- `parallel/test-webcrypto-random.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
-- `parallel/test-webcrypto-random.js#block_02_block_02`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
-- `parallel/test-webcrypto-random.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
-- `parallel/test-webcrypto-sign-verify.js#block_00_test_sign_verify_rsassa_pkcs1_v1_5`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-sign-verify.js:21:2...
-- `parallel/test-webcrypto-sign-verify.js#block_01_test_sign_verify_rsa_pss`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-sign-verify.js:24:2...
-- `parallel/test-webcrypto-sign-verify.js#block_05_test_sign_verify_ed448`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-sign-verify.js:33:5...
-- `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_04_localstorage_throws_without_localstorage_file`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_05_localstorage_is_not_persisted_if_it_is_unused`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_06_localstorage_is_persisted_if_it_is_used`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_07_webstorage_quota_for_localstorage_and_sessionstorage`: 2 test(s) failed     at finalize (node:test:613:29)     at runNext (node:test:660:16)     at <anonymous> (node:test:650:36)     at apply (native)     at wrapped (node:async_hooks:141:34)     at _resto...
-- `parallel/test-webstreams-pipeline.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-webstreams-pipeline.js#block_07_block_07`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-webstreams-pipeline.js#block_08_block_08`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-webstreams-p...
-- `parallel/test-whatwg-events-add-event-listener-options-passive.js#block_00_block_00`: The expression evaluated to a falsy value:    ok(supportsPassive)  AssertionError: The expression evaluated to a falsy value:    ok(supportsPassive)      at <anonymous> (/home/node/test/parallel/test-...
-- `parallel/test-whatwg-events-add-event-listener-options-signal.js`: The listener was still removed  1 !== 0  AssertionError: The listener was still removed  1 !== 0      at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:1...
-- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_06_block_06`: The listener was still removed  1 !== 0  AssertionError: The listener was still removed  1 !== 0      at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:3...
-- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_09_block_09`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:32:...
-- `parallel/test-whatwg-events-customevent.js`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-customevent.js:22:3)     at loadModule (...
-- `parallel/test-whatwg-events-customevent.js#block_01_block_01`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-customevent.js:13:3)     at loadModule (...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_00_block_00`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_02_block_02`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_03_block_03`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-readablebytestreambyob.js`: Unhandled promise rejection (likely cause of mustCall failure):     at mustNotCall (/home/node/test/common/index.js:531:23)     at Buffer (node:buffer:176:17)     at ze (__wasm_rquickjs_builtin/stream...
-- `parallel/test-whatwg-url-custom-searchparams-constructor.js#block_00_block_00`: not a function     at parseToDict (__wasm_rquickjs_builtin/url:236:20)     at URLSearchParamsPolyfill (__wasm_rquickjs_builtin/url:21:46)     at <anonymous> (/home/node/test/parallel/test-whatwg-url-c...
-- `parallel/test-whatwg-url-custom-searchparams-constructor.js#block_01_block_01`: The input did not match the regular expression /^TypeError: Cannot convert a Symbol value to a string$/. Input:  'TypeError: not a function'  AssertionError: The input did not match the regular expres...
-- `parallel/test-whatwg-url-custom-searchparams-delete.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: 'Value...
-- `parallel/test-whatwg-url-custom-searchparams-delete.js#block_01_emptying_searchparams_should_correctly_update_url_s_query`: Expected values to be strictly equal: + actual - expected  + 'var=1&var=2&var=3' - ''  AssertionError: Expected values to be strictly equal: + actual - expected  + 'var=1&var=2&var=3' - ''      at <an...
-- `parallel/test-whatwg-url-custom-searchparams-stringifier.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: 'Value...
-- `parallel/test-whatwg-url-custom-searchparams-stringifier.js#block_01_different_percent_encoding_rules_than_the_url_itself`: Expected values to be strictly equal: + actual - expected  + '?foo=~bar' - '?foo=%7Ebar'         ^  AssertionError: Expected values to be strictly equal: + actual - expected  + '?foo=~bar' - '?foo=%7E...
-- `parallel/test-whatwg-url-properties.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (/home/node/test/parallel/test-whatwg-url-properti...
-- `parallel/test-whatwg-url-properties.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (/home/node/test/parallel/test-whatwg-url-properti...
-- `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED' - }  AssertionError: Expected values to be strictly deep-equal: + ...
-- `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED' - }  AssertionError: Expected values to be strictly deep-equal: + ...
-- `parallel/test-x509-escaping.js#block_00_test_that_all_certificate_chains_provided_by_the_reporter_ar`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:94:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
-- `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:102:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:100:22)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-ru...
-- `parallel/test-x509-escaping.js#block_04_the_internal_parsing_logic_must_match_the_json_specification`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'tls is not supported in WebAssembly environment' -   code: 'ERR_TLS_CERT_ALTNAME_FORMAT', -   message: 'Inv...
-- `parallel/test-x509-escaping.js#block_05_correctly_i_e_not_simply_split_at_commas`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-x509-escaping.js#block_06_the_subject_must_be_ignored_if_a_dnsname_subject_alternative`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:41:24)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
-- `parallel/test-x509-escaping.js#block_07_exists_even_if_other_subject_alternative_names_exist`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:45:24)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-compat-run...
-- `sequential/test-heapdump.js#block_00_block_00`: v8.writeHeapSnapshot is not supported in WASM environment     at writeHeapSnapshot (node:v8:104:15)     at <anonymous> (/home/node/test/sequential/test-heapdump.js:19:3)     at loadModule (node:module...
-- `sequential/test-heapdump.js#block_01_block_01`: v8.writeHeapSnapshot is not supported in WASM environment     at writeHeapSnapshot (node:v8:104:15)     at <anonymous> (/home/node/test/sequential/test-heapdump.js:21:20)     at loadModule (node:modul...
-- `sequential/test-heapdump.js#block_02_block_02`: Expected values to be strictly equal: + actual - expected  + undefined - 'EISDIR'  AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - 'EISDIR'      at <anonymous>...
-- `sequential/test-heapdump.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'v8.writeHeapSnapshot is not supported in WASM environment', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TY...
-- `sequential/test-single-executable-application-assets.js#block_00_block_00`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
-- `sequential/test-single-executable-application-assets.js#block_01_block_01`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
-- `sequential/test-single-executable-application-assets.js#block_02_block_02`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
-- `sequential/test-single-executable-application-snapshot.js#block_00_block_00`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
-- `sequential/test-single-executable-application-snapshot.js#block_01_block_01`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:380:80)     at localRequire (node:module:976:44)     at <anonymous> (/home/node/test/sequential...
-
-### perf_hooks
-
-- `parallel/test-perf-hooks-histogram.js#block_00_block_00`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:19:13)     at load...
-- `parallel/test-perf-hooks-histogram.js#block_01_block_01`: monitorEventLoopDelay is not supported in WebAssembly environment     at monitorEventLoopDelay (node:perf_hooks:170:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:21:13)...
-- `parallel/test-perf-hooks-histogram.js#block_02_block_02`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:23:13)     at load...
-- `parallel/test-perf-hooks-histogram.js#block_03_block_03`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:26:13)     at load...
-- `parallel/test-perf-hooks-histogram.js#block_04_block_04`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
-- `parallel/test-perf-hooks-histogram.js#block_05_block_05`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:29:14)     at load...
-- `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_03_custom_getters_math`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_04_using_performanceobserver`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:866:32)     ...
-- `parallel/test-perf-hooks-usertiming.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
-- `parallel/test-perf-hooks-usertiming.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
-- `parallel/test-perf-hooks-usertiming.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
-- `parallel/test-perf-hooks-worker-timeorigin.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-worker-t...
-- `parallel/test-performance-function.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:18:34)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
-- `parallel/test-performance-function.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:23:25)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
-- `parallel/test-performance-function.js#block_02_block_02`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:22:34)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
-- `parallel/test-performance-function.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'not a function', -   code: 'ERR_INVALID_ARG_TYPE', -   message: /The "fn" argument must be of type function...
-- `parallel/test-performance-function.js#block_04_function_can_be_wrapped_many_times_also_check_length_and_nam`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:27:34)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
-- `parallel/test-performance-function.js#block_05_regression_tests_for_https_github_com_nodejs_node_issues_406`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:70:43)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest (node-com...
-- `parallel/test-performance-gc.js`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-perfor...
-- `parallel/test-performance-gc.js#block_00_adding_an_observer_should_force_at_least_one_gc_to_appear`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-perfor...
-- `parallel/test-performance-measure-detail.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-performance-measure...
-- `parallel/test-performance-measure.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-performance-measure...
-- `sequential/test-perf-hooks.js#block_00_block_00`: EBADF: bad file descriptor, write     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at writeSync (node:fs:1113:37)     at log (/home/node/test/sequential/test-perf-hooks....
-- `sequential/test-perf-hooks.js#block_01_block_01`: EBADF: bad file descriptor, write     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at writeSync (node:fs:1113:37)     at log (/home/node/test/sequential/test-perf-hooks....
-
-### process
-
-- `parallel/test-process-beforeexit-throw-exit.js`: at <anonymous> (/home/node/test/parallel/test-process-beforeexit-throw-exit.js:15:13)     at apply (native)     at wrapper (/home/node/test/common/index.js:512:34)     at apply (native)     at emit (n...
-- `parallel/test-process-beforeexit.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at tryImmediate (/home/node/test/parallel/test-process-beforeexit...
-- `parallel/test-process-chdir-errormessage.js`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-process-chdir-errormessage.js:19:19)     at loadModule (node:m...
-- `parallel/test-process-env-allowed-flags.js#block_00_assert_legit_flags_are_allowed_and_bogus_flags_are_disallowe`: flag should be in set: --perf_basic_prof  false !== true  AssertionError: flag should be in set: --perf_basic_prof  false !== true      at <anonymous> (/home/node/test/parallel/test-process-env-allowe...
-- `parallel/test-process-env-allowed-flags.js#block_02_assert_immutability_of_process_allowednodeenvironmentflags`: Expected values to be strictly equal:  false !== true  AssertionError: Expected values to be strictly equal:  false !== true      at <anonymous> (/home/node/test/parallel/test-process-env-allowed-flag...
-- `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-timer-lifetime.js:8:30)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34...
-- `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-timer-lifetime.js:10:30)     at loadModule (node:module:866:32)     at localRequire (node:module:977:3...
-- `parallel/test-process-redirect-warnings-env.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-process-redirect...
-- `parallel/test-process-redirect-warnings.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-process-redirect...
-- `parallel/test-process-warning.js`: Unhandled promise rejection: AssertionError: The input did not match the regular expression /^DeprecationWarning: test$/. Input:  'AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:...
-
-### readline
-
-- `parallel/test-readline-emit-keypress-events.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
-- `parallel/test-readline-emit-keypress-events.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
-- `parallel/test-readline-emit-keypress-events.js#block_02_block_02`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
-- `parallel/test-readline.js#block_00_block_00`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_01_block_01`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_02_block_02`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_03_block_03`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_04_block_04`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_05_block_05`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-
-### repl
-
-- `parallel/test-repl-context.js#block_00_test_context_when_useglobal_is_false`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-context.js:13:18)     at loadModule (node:module:866:32)     at lo...
-- `parallel/test-repl-context.js#block_01_test_for_context_side_effects`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-context.js:16:23)     at loadModule (node:module:866:32)     at lo...
-- `parallel/test-repl-programmatic-history.js`: mustCall verification failed: mustCall: expected exactly 10 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-repl-programmatic-...
-- `parallel/test-repl-require.js#block_00_block_00`: Expected values to be strictly equal: + actual - expected  + '' - "'eye catcher'\n'perhaps I work'\n"  AssertionError: Expected values to be strictly equal: + actual - expected  + '' - "'eye catcher'\...
-- `parallel/test-repl-require.js#block_01_in_repl_we_shouldn_t_look_up_relative_modules_from_node_modu`: The input did not match the regular expression /Uncaught Error: Cannot find module '\.\/bar'/. Input:  ''  AssertionError: The input did not match the regular expression /Uncaught Error: Cannot find m...
-- `parallel/test-repl-tab-complete-import.js#block_00_block_00`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete-import.js:24:21)     at loadModule (node:module:866:3...
-- `parallel/test-repl-tab-complete-import.js#block_01_block_01`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete-import.js:24:21)     at loadModule (node:module:866:3...
-- `parallel/test-repl-tab-complete-import.js#block_02_test_tab_completion_for_import_relative_to_the_current_direc`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete-import.js:24:21)     at loadModule (node:module:866:3...
-- `parallel/test-repl-tab-complete.js#block_00_block_00`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
-- `parallel/test-repl-tab-complete.js#block_01_block_01`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
-- `parallel/test-repl-tab-complete.js#block_02_test_tab_completion_for_require_relative_to_the_current_dire`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
-- `parallel/test-repl-tab-complete.js#block_03_tab_completion_for_files_directories`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
-- `parallel/test-repl-tab-complete.js#block_04_block_04`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:866:32)     ...
 
 ### sqlite
 
@@ -3868,17 +3663,19 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-sqlite.js`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
 - `parallel/test-sqlite.js#test_00_accessing_the_node_sqlite_module`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
 
+### stdio
+
+- `parallel/test-stdout-to-file.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stdout-to-file.js:4...
+
 ### stream
 
 - `parallel/test-readable-from-iterator-closing.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at asyncSupport (/home/node/test/parallel/test-readable-from-iter...
-- `parallel/test-stream-base-typechecking.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-stream-compose.js`: Unhandled promise rejection:     at ERR_INVALID_RETURN_VALUE (__wasm_rquickjs_builtin/internal/errors:730:109)     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/duplex:232:35)     at apply ...
 - `parallel/test-stream-compose.js#block_17_block_17`: Unhandled promise rejection:     at ERR_INVALID_RETURN_VALUE (__wasm_rquickjs_builtin/internal/errors:730:109)     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/duplex:232:35)     at apply ...
-- `parallel/test-stream-destroy.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-stream-destroy.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-destroy.js:1...
 - `parallel/test-stream-destroy.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-destroy.js:1...
 - `parallel/test-stream-destroy.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-destroy.js:2...
-- `parallel/test-stream-destroy.js#block_04_block_04`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-destr...
-- `parallel/test-stream-destroy.js#block_05_block_05`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-destr...
+- `parallel/test-stream-destroy.js#block_04_block_04`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-destroy.js:2...
 - `parallel/test-stream-drop-take.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-drop-take.js...
 - `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-drop-take.js...
 - `parallel/test-stream-duplex-destroy.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-duplex-destr...
@@ -3888,14 +3685,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-duplex-readable-writable.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-duplex-reada...
 - `parallel/test-stream-duplex-readable-writable.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-duplex-reada...
 - `parallel/test-stream-err-multiple-callback-construction.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-err-multiple...
-- `parallel/test-stream-finished.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-stream-finished.js#block_21_block_21`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
 - `parallel/test-stream-finished.js#block_22_block_22`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
 - `parallel/test-stream-finished.js#block_23_block_23`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
 - `parallel/test-stream-finished.js#block_24_block_24`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
-- `parallel/test-stream-finished.js#block_33_block_33`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-stream-finished.js#block_34_block_34`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-stream-finished.js#block_39_block_39`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-stream-finished.js#block_41_block_41`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
 - `parallel/test-stream-map.js`: mustCall verification failed: mustCall: expected exactly 5 call(s), got 6     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-map.js:63:28...
 - `parallel/test-stream-map.js#block_03_block_03`: mustCall verification failed: mustCall: expected exactly 5 call(s), got 6     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-map.js:40:28...
@@ -3906,22 +3699,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-pipeline-listeners.js`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: + actual - expected  + 'Expected values to be strictly equal:\n\n2 !== 0\n' - 'no ...
 - `parallel/test-stream-pipeline-process.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline-...
 - `parallel/test-stream-pipeline-queued-end-in-destroy.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline-que...
-- `parallel/test-stream-pipeline.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-stream-pipeline.js#block_05_block_05`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-pipel...
-- `parallel/test-stream-pipeline.js#block_06_block_06`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-pipel...
-- `parallel/test-stream-pipeline.js#block_07_block_07`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-pipel...
-- `parallel/test-stream-pipeline.js#block_08_block_08`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-pipel...
-- `parallel/test-stream-pipeline.js#block_17_block_17`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-pipel...
-- `parallel/test-stream-pipeline.js#block_45_block_45`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-pipel...
-- `parallel/test-stream-pipeline.js#block_49_block_49`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-pipel...
-- `parallel/test-stream-pipeline.js#block_55_block_55`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
-- `parallel/test-stream-pipeline.js#block_57_block_57`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
+- `parallel/test-stream-pipeline.js#block_06_block_06`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline.js:...
 - `parallel/test-stream-pipeline.js#block_71_block_71`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline.js:...
 - `parallel/test-stream-pipeline.js#block_72_block_72`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline.js:...
 - `parallel/test-stream-pipeline.js#block_75_block_75`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline....
-- `parallel/test-stream-readable-async-iterators.js`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-reada...
-- `parallel/test-stream-readable-async-iterators.js#block_05_block_05`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-reada...
-- `parallel/test-stream-readable-async-iterators.js#block_06_block_06`: Unhandled promise rejection:     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-stream-reada...
 - `parallel/test-stream-readable-emittedReadable.js`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-readable-emi...
 - `parallel/test-stream-readable-hwm-0-no-flow-data.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 1     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-readable-hwm...
 - `parallel/test-stream-readable-needReadable.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-readable-nee...
@@ -3930,7 +3711,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream-readable-unpipe-resume.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-readable-unp...
 - `parallel/test-stream-reduce.js`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 4     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-reduce.js:56...
 - `parallel/test-stream-reduce.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 4     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-reduce.js:18...
-- `parallel/test-stream-toWeb-allows-server-response.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doListen (node:net:1070:42)     at listen (node:net:1079:31)     at <anonymous> (/home/n...
 - `parallel/test-stream-writable-destroy.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-writable-des...
 - `parallel/test-stream-writable-destroy.js#block_19_block_19`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-writable-des...
 - `parallel/test-stream-writable-end-cb-error.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-writable-end...
@@ -3942,7 +3722,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stream2-transform.js`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream2-transform.j...
 - `parallel/test-stream2-transform.js#block_16_block_16`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream2-transform.j...
 - `parallel/test-stream2-writable.js`: not a function     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/readable:704:10)     at <anonymous> (/home/node/test/parallel/test-stream2-writable.js:301:10)     at loadModule (node:modul...
-- `parallel/test-stream2-writable.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream2-writable.js...
 - `parallel/test-stream2-writable.js#block_05_block_05`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream2-writable.js...
 - `parallel/test-stream2-writable.js#block_13_block_13`: not a function     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/readable:704:10)     at <anonymous> (/home/node/test/parallel/test-stream2-writable.js:87:10)     at loadModule (node:module...
 - `parallel/test-streams-highwatermark.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison {     code: 'ERR_INVALID_ARG_VALUE', +   message: `The property 'options.highWaterMark' is invalid. Received "5"`, -   mess...
@@ -4034,10 +3813,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-timers-max-duration-warning.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 6 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-max-duration...
 - `parallel/test-timers-timeout-to-interval.js`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 1     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-timeout-to-i...
 - `parallel/test-timers-uncaught-exception.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-uncaught-exc...
-- `parallel/test-timers-unenroll-unref-interval.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 210     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-u...
-- `parallel/test-timers-unenroll-unref-interval.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 207     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-u...
-- `parallel/test-timers-unenroll-unref-interval.js#block_03_block_03`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 205     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-u...
-- `parallel/test-timers-unenroll-unref-interval.js#block_04_block_04`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 206     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-u...
+- `parallel/test-timers-unenroll-unref-interval.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 1036     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-...
+- `parallel/test-timers-unenroll-unref-interval.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 1017     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-...
+- `parallel/test-timers-unenroll-unref-interval.js#block_03_block_03`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 1028     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-...
+- `parallel/test-timers-unenroll-unref-interval.js#block_04_block_04`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 1020     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unenroll-...
 - `parallel/test-timers-unref-throw-then-ref.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-unref-throw-...
 - `parallel/test-timers-user-call.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 10 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-user-call.j...
 - `parallel/test-timers-zero-timeout.js`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 1     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-timers-zero-timeout...
@@ -4060,7 +3839,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-tls-socket-allow-half-open-option.js#block_03_block_03`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `parallel/test-tls-translate-peer-certificate.js#block_00_block_00`: Cannot find module '_tls_common'     at localRequire (node:module:988:59)     at <anonymous> (/home/node/test/parallel/test-tls-translate-peer-certificate.js:9:38)     at loadModule (node:module:866:3...
 - `parallel/test-tls-translate-peer-certificate.js#block_01_block_01`: Cannot find module '_tls_common'     at localRequire (node:module:988:59)     at <anonymous> (/home/node/test/parallel/test-tls-translate-peer-certificate.js:9:38)     at loadModule (node:module:866:3...
-- `parallel/test-tls-wrap-econnreset-pipe.js`: Unhandled promise rejection (likely cause of mustCall failure):     at parseNativeError (node:net:77:25)     at doIpcListen (node:net:1032:46)     at listen (node:net:1037:9)     at <anonymous> (/home...
 - `sequential/test-tls-connect.js#block_00_uncatchable_exception_on_tls_connection_error`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
 - `sequential/test-tls-connect.js#block_01_ssl_accept_ssl_connect_error_handling`: The input did not match the regular expression /no cipher match/i. Input:  'Error: tls is not supported in WebAssembly environment'  AssertionError: The input did not match the regular expression /no ...
 
@@ -4111,6 +3889,75 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-vm-new-script-new-context.js#block_04_block_04`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-vm-new-script-new-context.js:47:22)   ...
 - `parallel/test-vm-new-script-new-context.js#block_07_block_07`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-vm-new-script-new-context.js:45:10)     at loadModule (node:module:866:32)    ...
 - `sequential/test-vm-break-on-sigint.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/sequential/test-vm-break-on-sigin...
+
+### webcrypto
+
+- `parallel/test-webcrypto-constructors.js#block_00_test_cryptokey_constructor`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:13:10)     at loadModule (no...
+- `parallel/test-webcrypto-constructors.js#block_01_test_subtlecrypto_constructor`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'SubtleCrypto is not defined', +   name: 'ReferenceError' -   code: 'ERR_ILLEGAL_CONSTRUCTOR', -   message: ...
+- `parallel/test-webcrypto-constructors.js#block_02_test_crypto_constructor`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'Crypto is not defined', +   name: 'ReferenceError' -   code: 'ERR_ILLEGAL_CONSTRUCTOR', -   message: 'Illeg...
+- `parallel/test-webcrypto-constructors.js#block_03_test_crypto_prototype_subtle`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_04_test_crypto_prototype_randomuuid`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_05_test_crypto_prototype_getrandomvalues`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_06_test_subtlecrypto_prototype_encrypt`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_07_test_subtlecrypto_prototype_decrypt`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_08_test_subtlecrypto_prototype_sign`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_09_test_subtlecrypto_prototype_verify`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_10_test_subtlecrypto_prototype_digest`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_11_test_subtlecrypto_prototype_generatekey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_12_test_subtlecrypto_prototype_derivekey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_13_test_subtlecrypto_prototype_derivebits`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_14_test_subtlecrypto_prototype_importkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_15_test_subtlecrypto_prototype_exportkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_16_test_subtlecrypto_prototype_wrapkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_17_test_subtlecrypto_prototype_unwrapkey`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-constructors.js#block_18_block_18`: Crypto is not defined     at <anonymous> (/home/node/test/parallel/test-webcrypto-constructors.js:20:37)     at loadModule (node:module:866:32)     at localRequire (node:module:977:34)     at runTest ...
+- `parallel/test-webcrypto-cryptokey-workers.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-webcrypto-cryptokey...
+- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_00_test_aes_cbc_vectors`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at testEncrypt (/home/node/test/parallel/test-webcrypto-encrypt-decryp...
+- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_01_test_aes_ctr_vectors`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at testEncrypt (/home/node/test/parallel/test-webcrypto-encrypt-decryp...
+- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_02_test_aes_gcm_vectors`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at testEncrypt (/home/node/test/parallel/test-webcrypto-encrypt-decryp...
+- `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (/home/node/test/parallel/test-webcrypto-encrypt-decrypt-aes.js:123:45)
+- `parallel/test-webcrypto-encrypt-decrypt.js#block_00_test_encrypt_decrypt_rsa_oaep`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:...
+- `parallel/test-webcrypto-encrypt-decrypt.js#block_01_test_encrypt_decrypt_aes_ctr`: Unhandled promise rejection (likely cause of mustCall failure):     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:29:7)
+- `parallel/test-webcrypto-encrypt-decrypt.js#block_02_test_encrypt_decrypt_aes_cbc`: Unhandled promise rejection (likely cause of mustCall failure):     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:32:7)
+- `parallel/test-webcrypto-encrypt-decrypt.js#block_03_test_encrypt_decrypt_aes_gcm`: Unhandled promise rejection (likely cause of mustCall failure):     at test (/home/node/test/parallel/test-webcrypto-encrypt-decrypt.js:35:7)
+- `parallel/test-webcrypto-export-import-ec.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at <anonymous> (/home/node/test/parallel/test-webcrypto-export-import-...
+- `parallel/test-webcrypto-export-import-ec.js#block_01_bad_private_keys`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at <anonymous> (/home/node/test/parallel/test-webcrypto-export-import-...
+- `parallel/test-webcrypto-export-import.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_AR...
+- `parallel/test-webcrypto-export-import.js#block_01_import_export_hmac_secret_key`: Unhandled promise rejection (likely cause of mustCall failure):     at exportKey (__wasm_rquickjs_builtin/web_crypto:7596:57)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:34:3...
+- `parallel/test-webcrypto-export-import.js#block_02_import_export_aes_secret_key`: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:7586:82)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:21:7...
+- `parallel/test-webcrypto-export-import.js#block_03_import_export_rsa_key_pairs`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:25...
+- `parallel/test-webcrypto-export-import.js#block_04_import_export_ec_key_pairs`: Unhandled promise rejection (likely cause of mustCall failure):     at exportKey (__wasm_rquickjs_builtin/web_crypto:7596:57)     at test (/home/node/test/parallel/test-webcrypto-export-import.js:36:1...
+- `parallel/test-webcrypto-random.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
+- `parallel/test-webcrypto-random.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
+- `parallel/test-webcrypto-random.js#block_02_block_02`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
+- `parallel/test-webcrypto-random.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'TypeError' -   code: 17, -   name: 'TypeMismatchError'   }  AssertionError: Expected values to be strictly dee...
+- `parallel/test-webcrypto-sign-verify.js#block_00_test_sign_verify_rsassa_pkcs1_v1_5`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-sign-verify.js:21:2...
+- `parallel/test-webcrypto-sign-verify.js#block_01_test_sign_verify_rsa_pss`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-sign-verify.js:24:2...
+- `parallel/test-webcrypto-sign-verify.js#block_05_test_sign_verify_ed448`: Unhandled promise rejection (likely cause of mustCall failure):     at generateKey (__wasm_rquickjs_builtin/web_crypto:7470:53)     at test (/home/node/test/parallel/test-webcrypto-sign-verify.js:33:5...
+
+### whatwg
+
+- `parallel/test-whatwg-events-add-event-listener-options-passive.js#block_00_block_00`: The expression evaluated to a falsy value:    ok(supportsPassive)  AssertionError: The expression evaluated to a falsy value:    ok(supportsPassive)      at <anonymous> (/home/node/test/parallel/test-...
+- `parallel/test-whatwg-events-add-event-listener-options-signal.js`: The listener was still removed  1 !== 0  AssertionError: The listener was still removed  1 !== 0      at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:1...
+- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_06_block_06`: The listener was still removed  1 !== 0  AssertionError: The listener was still removed  1 !== 0      at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:3...
+- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_09_block_09`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:32:...
+- `parallel/test-whatwg-events-customevent.js`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-customevent.js:22:3)     at loadModule (...
+- `parallel/test-whatwg-events-customevent.js#block_01_block_01`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-customevent.js:13:3)     at loadModule (...
+- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_00_block_00`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
+- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
+- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_02_block_02`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
+- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_03_block_03`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
+- `parallel/test-whatwg-readablebytestreambyob.js`: Unhandled promise rejection (likely cause of mustCall failure):     at mustNotCall (/home/node/test/common/index.js:531:23)     at Buffer (node:buffer:176:17)     at ze (__wasm_rquickjs_builtin/stream...
+- `parallel/test-whatwg-url-custom-searchparams-constructor.js#block_00_block_00`: not a function     at parseToDict (__wasm_rquickjs_builtin/url:236:20)     at URLSearchParamsPolyfill (__wasm_rquickjs_builtin/url:21:46)     at <anonymous> (/home/node/test/parallel/test-whatwg-url-c...
+- `parallel/test-whatwg-url-custom-searchparams-constructor.js#block_01_block_01`: The input did not match the regular expression /^TypeError: Cannot convert a Symbol value to a string$/. Input:  'TypeError: not a function'  AssertionError: The input did not match the regular expres...
+- `parallel/test-whatwg-url-custom-searchparams-delete.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: 'Value...
+- `parallel/test-whatwg-url-custom-searchparams-delete.js#block_01_emptying_searchparams_should_correctly_update_url_s_query`: Expected values to be strictly equal: + actual - expected  + 'var=1&var=2&var=3' - ''  AssertionError: Expected values to be strictly equal: + actual - expected  + 'var=1&var=2&var=3' - ''      at <an...
+- `parallel/test-whatwg-url-custom-searchparams-stringifier.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: 'Value...
+- `parallel/test-whatwg-url-custom-searchparams-stringifier.js#block_01_different_percent_encoding_rules_than_the_url_itself`: Expected values to be strictly equal: + actual - expected  + '?foo=~bar' - '?foo=%7Ebar'         ^  AssertionError: Expected values to be strictly equal: + actual - expected  + '?foo=~bar' - '?foo=%7E...
+- `parallel/test-whatwg-url-properties.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (/home/node/test/parallel/test-whatwg-url-properti...
+- `parallel/test-whatwg-url-properties.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (/home/node/test/parallel/test-whatwg-url-properti...
+- `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED' - }  AssertionError: Expected values to be strictly deep-equal: + ...
+- `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED' - }  AssertionError: Expected values to be strictly deep-equal: + ...
 
 ### worker_threads
 
@@ -4235,7 +4082,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ### zlib
 
-- `parallel/test-zlib-brotli-16GB.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-zlib-brotli-16GB.js...
 - `parallel/test-zlib-bytes-read.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-zlib-bytes-read.js:...
 - `parallel/test-zlib-close-after-error.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-zlib-close-after-er...
 - `parallel/test-zlib-destroy-pipe.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-zlib-destroy-pipe.j...
@@ -4249,14 +4095,14 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ## Error Tests (runtime/instantiation errors)
 
-81 tests had runtime errors.
+155 tests had runtime errors.
 
 <details>
 <summary>Click to expand</summary>
 
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xef358a - node_compat_runner.wasm!__assert_fail     2: 0xe2da77 - node_compat_runner.wasm!js_inner_modu...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_01_b_mjs_c_mjs_d_mjs_c_mjs`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xef358a - node_compat_runner.wasm!__assert_fail     2: 0xe2da77 - node_compat_runner.wasm!js_inner_modu...
-- `parallel/test-abortcontroller.js`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xef358a - node_compat_runner.wasm!__assert_fail     2: 0xd8c81b - node_compat_runner.wasm!gc_scan     3...
+- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xf08651 - node_compat_runner.wasm!__assert_fail     2: 0xe42b3e - node_compat_runner.wasm!js_inner_modu...
+- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_01_b_mjs_c_mjs_d_mjs_c_mjs`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xf08651 - node_compat_runner.wasm!__assert_fail     2: 0xe42b3e - node_compat_runner.wasm!js_inner_modu...
+- `parallel/test-abortcontroller.js`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xf08651 - node_compat_runner.wasm!__assert_fail     2: 0xda18e2 - node_compat_runner.wasm!gc_scan     3...
 - `parallel/test-buffer-indexof.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-buffer-indexof.js#block_00_block_00`: Timeout (epoch deadline exceeded)
 - `parallel/test-buffer-indexof.js#block_01_block_01`: Timeout (epoch deadline exceeded)
@@ -4267,54 +4113,128 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-buffer-indexof.js#block_06_see_https_github_com_nodejs_node_issues_32753`: Timeout (epoch deadline exceeded)
 - `parallel/test-child-process-exec-timeout-expire.js`: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-child-process-exec-timeout-kill.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_03_block_03`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_04_block_04`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_05_block_05`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_03_block_03`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-send-returns-boolean.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-send-returns-boolean.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_03_block_03`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_04_block_04`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_05_block_05`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_06_block_06`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_07_block_07`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_08_block_08`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_03_block_03`: Timeout (epoch deadline exceeded)
+- `parallel/test-child-process-server-close.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-cluster-dgram-2.js`: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-crypto-key-objects.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-key-objects.js#block_05_block_05`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-keygen-empty-passphrase-no-prompt.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-dgram-bind-error-repeat.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-blocklist.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-blocklist.js#block_00_block_00`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-blocklist.js#block_01_block_01`: Timeout
+- `parallel/test-dgram-blocklist.js#block_02_block_02`: Timeout
+- `parallel/test-dgram-bytes-length.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-connect-send-callback-buffer-length.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-callback-buffer.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-callback-multi-buffer.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-default-host.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-empty-array.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-empty-buffer.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-empty-packet.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-multi-buffer-copy.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect-send-multi-string-array.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-connect.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-exclusive-implicit-bind.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-implicit-bind.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-msgsize.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-multicast-loopback.js#block_01_block_01`: Timeout
+- `parallel/test-dgram-multicast-set-interface.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`: Timeout
+- `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`: Timeout
+- `parallel/test-dgram-multicast-set-interface.js#block_03_block_03`: Timeout
+- `parallel/test-dgram-multicast-setTTL.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-address-types.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-bad-arguments.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-send-callback-buffer-empty-address.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-callback-buffer-length-empty-address.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-callback-buffer-length.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-callback-buffer.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-callback-multi-buffer-empty-address.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-callback-multi-buffer.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-callback-recursive.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-default-host.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-empty-array.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-dgram-send-empty-buffer.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-dgram-send-empty-packet.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-dgram-send-multi-buffer-copy.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-multi-string-array.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-send-queue-info.js`: error while executing at wasm backtrace:     0:  0x62feb - node_compat_runner.wasm!<wasi::bindings::wasi::sockets::udp::IncomingDatagramStream as wasi::bindings::_rt::WasmResource>::drop::h975fc6291d6...
+- `parallel/test-dgram-setBroadcast.js#block_01_block_01`: Timeout
+- `parallel/test-dgram-udp4.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-unref.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-unref.js#block_00_block_00`: Timeout
+- `parallel/test-dns-cancel-reverse-lookup.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dns-channel-cancel-promise.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dns-channel-cancel.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dns-multi-channel.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dns-resolveany-bad-ancount.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dns-resolveany.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-fs-promises-writefile.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-read-stream-pos.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-fs-readdir-recursive.js`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
 - `parallel/test-fs-readfile.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_00_readfile_and_readfilesync_should_fail_if_the_file_is_too_big`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_01_block_01`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_02_block_02`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_03_block_03`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-sir-writes-alot.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-fs-write-stream-flush.js`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-fs-write-stream-flush.js`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-http-dummy-characters-smuggling.js#block_01_block_01`: Timeout
+- `parallel/test-http-missing-header-separator-cr.js#block_00_block_00`: Timeout
+- `parallel/test-http-missing-header-separator-cr.js#block_01_block_01`: Timeout
+- `parallel/test-http-missing-header-separator-cr.js#block_02_block_02`: Timeout
+- `parallel/test-http-missing-header-separator-lf.js#block_00_block_00`: Timeout
+- `parallel/test-http-missing-header-separator-lf.js#block_01_block_01`: Timeout
+- `parallel/test-http-missing-header-separator-lf.js#block_02_block_02`: Timeout
+- `parallel/test-http-outgoing-destroyed.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-outgoing-destroyed.js#block_00_block_00`: Timeout
+- `parallel/test-http-outgoing-destroyed.js#block_01_block_01`: Timeout
+- `parallel/test-http-outgoing-message-capture-rejection.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-outgoing-message-capture-rejection.js#block_00_block_00`: Timeout
+- `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01`: Timeout
+- `parallel/test-http-outgoing-properties.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-outgoing-properties.js#block_02_block_02`: Timeout
+- `parallel/test-http-request-host-header.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-request-host-header.js#block_00_block_00`: Timeout
+- `parallel/test-http-response-multi-content-length.js#block_00_test_adding_an_extra_content_length_header_using_setheader`: Timeout
+- `parallel/test-http-response-multi-content-length.js#block_01_test_adding_an_extra_content_length_header_using_writehead`: Timeout
+- `parallel/test-http-server-capture-rejections.js#block_00_block_00`: Timeout
+- `parallel/test-http-server-capture-rejections.js#block_01_block_01`: Timeout
+- `parallel/test-http-server-capture-rejections.js#block_02_block_02`: Timeout
+- `parallel/test-http-server-connection-list-when-close.js#block_00_block_00`: Timeout
+- `parallel/test-http-server-connection-list-when-close.js#block_01_block_01`: Timeout
+- `parallel/test-net-autoselectfamily.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-net-autoselectfamily.js#block_01_test_that_only_the_last_successful_connection_is_established`: Timeout
+- `parallel/test-net-blocklist.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips`: Timeout
+- `parallel/test-net-bytes-written-large.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-net-bytes-written-large.js#block_01_block_01`: Timeout (epoch deadline exceeded)
+- `parallel/test-net-bytes-written-large.js#block_02_block_02`: Timeout (epoch deadline exceeded)
+- `parallel/test-net-connect-options-port.js#block_03_test_valid_combinations_of_connect_port_and_connect_port_hos`: Timeout
+- `parallel/test-net-server-listen-options-signal.js#block_00_block_00`: Timeout
+- `parallel/test-net-server-listen-options-signal.js#block_01_block_01`: Timeout
+- `parallel/test-net-server-listen-options-signal.js#block_02_block_02`: Timeout
+- `parallel/test-pipe-unref.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-pipe-writev.js`: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`: Timeout
 - `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01`: Timeout
+- `parallel/test-repl-require.js#block_00_block_00`: Timeout
+- `parallel/test-repl-require.js#block_01_in_repl_we_shouldn_t_look_up_relative_modules_from_node_modu`: Timeout
 - `parallel/test-runner-wait-for.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-runner-wait-for.js#test_05_sets_last_failure_as_error_cause_on_timeouts`: Timeout (epoch deadline exceeded)
+- `parallel/test-stream-finished.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-stream-finished.js#block_34_block_34`: Timeout
+- `parallel/test-stream-pipeline.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-stream-pipeline.js#block_08_block_08`: Timeout
+- `parallel/test-stream-readable-async-iterators.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-stream-readable-async-iterators.js#block_05_block_05`: Timeout
 - `parallel/test-stringbytes-external.js#block_00_block_00`: Timeout (epoch deadline exceeded)
 - `parallel/test-stringbytes-external.js#block_01_block_01`: Timeout (epoch deadline exceeded)
 - `parallel/test-stringbytes-external.js#block_02_https_github_com_nodejs_node_issues_1024`: Timeout (epoch deadline exceeded)
 - `parallel/test-timers-user-call.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-timers-user-call.js#block_01_block_01`: Timeout (epoch deadline exceeded)
+- `parallel/test-tls-wrap-econnreset-pipe.js`: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-vm-module-basic.js#block_00_check_inspection_of_the_instance`: Timeout (epoch deadline exceeded)
 - `parallel/test-vm-module-basic.js#block_01_block_01`: Timeout (epoch deadline exceeded)
 - `parallel/test-vm-module-basic.js#block_02_check_dependencies_getter_returns_same_object_every_time`: Timeout (epoch deadline exceeded)
@@ -4324,15 +4244,15 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-vm-module-basic.js#block_06_check_to_throws_invalid_evaluatecallback`: Timeout (epoch deadline exceeded)
 - `parallel/test-vm-module-basic.js#block_07_check_to_throws_invalid_options`: Timeout (epoch deadline exceeded)
 - `parallel/test-vm-module-basic.js#block_08_test_compilefunction_importmoduledynamically`: Timeout (epoch deadline exceeded)
-- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_08_block_08`: error while executing at wasm backtrace:     0: 0xdb5c20 - node_compat_runner.wasm!JS_CallInternal     1: 0xd8a5a5 - node_compat_runner.wasm!JS_Call     2: 0xeaf9a7 - node_compat_runner.wasm!js_array_...
-- `parallel/test-worker-eval-typescript.js#test_00_worker_eval_module_typescript_without_input_type`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_01_worker_eval_module_typescript_with_input_type_module_typescr`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_02_worker_eval_module_typescript_with_input_type_commonjs_types`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_03_worker_eval_module_typescript_with_input_type_module`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_04_worker_eval_commonjs_typescript_without_input_type`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_05_worker_eval_commonjs_typescript_with_input_type_commonjs_typ`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_06_worker_eval_commonjs_typescript_with_input_type_module_types`: error while executing at wasm backtrace:     0: 0xef1bfe - node_compat_runner.wasm!abort     1: 0xee889d - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `sequential/test-fs-stat-sync-overflow.js`: error while executing at wasm backtrace:     0: 0xdb5c20 - node_compat_runner.wasm!JS_CallInternal     1: 0xdb97d5 - node_compat_runner.wasm!JS_CallInternal     2: 0xdb9204 - node_compat_runner.wasm!J...
+- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_08_block_08`: error while executing at wasm backtrace:     0: 0xdcace7 - node_compat_runner.wasm!JS_CallInternal     1: 0xd9f66c - node_compat_runner.wasm!JS_Call     2: 0xec4a6e - node_compat_runner.wasm!js_array_...
+- `parallel/test-worker-eval-typescript.js#test_00_worker_eval_module_typescript_without_input_type`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-worker-eval-typescript.js#test_01_worker_eval_module_typescript_with_input_type_module_typescr`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-worker-eval-typescript.js#test_02_worker_eval_module_typescript_with_input_type_commonjs_types`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-worker-eval-typescript.js#test_03_worker_eval_module_typescript_with_input_type_module`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-worker-eval-typescript.js#test_04_worker_eval_commonjs_typescript_without_input_type`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-worker-eval-typescript.js#test_05_worker_eval_commonjs_typescript_with_input_type_commonjs_typ`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `parallel/test-worker-eval-typescript.js#test_06_worker_eval_commonjs_typescript_with_input_type_module_types`: error while executing at wasm backtrace:     0: 0xf06cc5 - node_compat_runner.wasm!abort     1: 0xefd964 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
+- `sequential/test-fs-stat-sync-overflow.js`: error while executing at wasm backtrace:     0: 0xdcace7 - node_compat_runner.wasm!JS_CallInternal     1: 0xdce89c - node_compat_runner.wasm!JS_CallInternal     2: 0xdce2cb - node_compat_runner.wasm!J...
 - `sequential/test-fs-watch.js`: Timeout (epoch deadline exceeded)
 - `sequential/test-fs-watch.js#block_02_block_02`: Timeout (epoch deadline exceeded)
 
@@ -4340,7 +4260,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 
 ## Skipped Tests
 
-1901 tests were skipped.
+1847 tests were skipped.
 
 <details>
 <summary>Click to expand</summary>
@@ -4349,8 +4269,11 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `es-module/test-esm-assertionless-json-import.js`: [manual] This test requires Node.js `--experimental-loader` custom ESM loader hooks to allow JSON imports without `{ with: { type: 'json' } }`. Without that loader, Node.js itself rejects assertion...
 - `es-module/test-esm-cjs-exports.js`: [manual] This test requires Node.js's native ESM-CJS interop, which cannot be replicated in WASM/QuickJS. Specifically:
 - `es-module/test-esm-import-meta-resolve.mjs`: [manual] The test uses `spawn` from `child_process` and `spawnPromisified` (lines 61-119) to launch real Node.js child processes with CLI flags (`--input-type=module`, `--eval`, `--import`). Child ...
-- `es-module/test-esm-repl-imports.js`: [manual] The test requires `child_process.spawn` to launch a Node.js REPL subprocess (`node --interactive`), send commands via stdin, and verify the exit code. Process spawning is fundamentally imp...
-- `es-module/test-esm-repl.js`: [manual] The test uses `child_process.spawn(process.execPath, ['--interactive'])` to launch a Node.js REPL subprocess, send ESM import commands via stdin, and verify the exit code. Process spawning...
+- `es-module/test-esm-preserve-symlinks.js`: impossible: [manual] The test requires `child_process.spawn()` to launch a new Node.js process with `--preserve-symlinks` CLI flag and verify its exit code. Spawning OS processes is fundamentally impossible in...
+- `es-module/test-esm-repl-imports.js`: impossible: [manual] The test requires `child_process.spawn` to launch a Node.js REPL subprocess (`node --interactive`), send commands via stdin, and verify the exit code. Process spawning is fundamentally imp...
+- `es-module/test-esm-repl.js`: impossible: [manual] The test uses `child_process.spawn(process.execPath, ['--interactive'])` to launch a Node.js REPL subprocess, send ESM import commands via stdin, and verify the exit code. Process spawning...
+- `es-module/test-esm-symlink-main.js`: impossible: [manual] The test requires `child_process.spawn()` to launch a new Node.js subprocess with `--preserve-symlinks` flag and verify its exit code. Process spawning is fundamentally impossible in a Web...
+- `es-module/test-esm-symlink.js`: impossible: [manual] The test requires `child_process.spawn()` to launch a child Node.js process that loads ESM modules through symlinks and verifies the exit code. Process spawning is fundamentally impossible...
 - `es-module/test-esm-undefined-cjs-global-like-variables.js`: [manual] This test requires three fundamental features our runtime intentionally does not implement:
 - `es-module/test-require-module-cached-tla.js`: newly discovered, not yet evaluated
 - `es-module/test-require-module-conditional-exports-module.js`: newly discovered, not yet evaluated
@@ -4418,79 +4341,88 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-broadcastchannel-custom-inspect.js`: newly discovered, not yet evaluated
 - `parallel/test-buffer-tostring-range.js`: The tested feature is not available in 32bit builds
 - `parallel/test-c-ares.js`: newly discovered, not yet evaluated
-- `parallel/test-child-process-advanced-serialization-largebuffer.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-advanced-serialization-splitted-length-field.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-advanced-serialization.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-constructor.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-cwd.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-default-options.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-destroy.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-detached.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-dgram-reuseport.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-disconnect.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-double-pipe.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-env.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-exec-abortcontroller-promisified.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-exec-any-shells-windows.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-exec-encoding.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-exec-env.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-exec-error.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-exec-std-encoding.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-exec-stdout-stderr-data-string.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-execFile-promisified-abortController.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-execfile-maxbuf.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-execfile.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-execfilesync-maxbuf.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-execsync-maxbuf.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-flush-stdio.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-abort-signal.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-args.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-closed-channel-segfault.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-detached.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-dgram.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-exec-path.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-getconnections.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-net.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-stdio-string-variant.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-stdio.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-timeout-kill-signal.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork-url.mjs`: requires child_process which is not available in WASM
-- `parallel/test-child-process-fork.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-ipc.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-net-reuseport.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-pipe-dataflow.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-promisified.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-prototype-tampering.mjs`: requires child_process which is not available in WASM
-- `parallel/test-child-process-reject-null-bytes.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-send-keep-open.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-send-returns-boolean.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-send-type-error.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-silent.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-args.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-argv0.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-controller.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-error.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-event.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-shell.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-timeout-kill-signal.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-typeerror.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawn-windows-batch-file.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawnsync-args.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawnsync-env.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawnsync-input.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawnsync-maxbuf.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawnsync-timeout.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawnsync-validation-errors.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-spawnsync.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-stdin.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-stdio-big-write-end.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-stdio-inherit.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-stdio-merge-stdouts-into-cat.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-stdio-overlapped.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-stdio-reuse-readable-stdio.js`: requires child_process which is not available in WASM
-- `parallel/test-child-process-stdio.js`: requires child_process which is not available in WASM
+- `parallel/test-child-process-advanced-serialization-largebuffer.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-advanced-serialization-splitted-length-field.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-advanced-serialization.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-can-write-to-stdout.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-constructor.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-cwd.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-default-options.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-destroy.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-detached.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-dgram-reuseport.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-disconnect.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-double-pipe.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-env.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exec-abortcontroller-promisified.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exec-any-shells-windows.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exec-encoding.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exec-env.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exec-error.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exec-std-encoding.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exec-stdout-stderr-data-string.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-execFile-promisified-abortController.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-execfile-maxbuf.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-execfile.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-execfilesync-maxbuf.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-execsync-maxbuf.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-exit-code.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-flush-stdio.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-abort-signal.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-args.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-closed-channel-segfault.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-detached.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-dgram.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-exec-argv.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-exec-path.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-getconnections.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-net.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-stdio-string-variant.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-stdio.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-timeout-kill-signal.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork-url.mjs`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-fork.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-ipc.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-kill.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-net-reuseport.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-no-deprecation.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-pipe-dataflow.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-promisified.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-prototype-tampering.mjs`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-reject-null-bytes.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-send-keep-open.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-send-returns-boolean.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-send-type-error.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-set-blocking.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-silent.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-args.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-argv0.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-controller.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-error.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-event.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-shell.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-timeout-kill-signal.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-typeerror.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawn-windows-batch-file.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawnsync-args.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawnsync-env.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawnsync-input.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawnsync-maxbuf.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawnsync-timeout.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawnsync-validation-errors.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-spawnsync.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdin-ipc.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdin.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdio-big-write-end.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdio-inherit.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdio-merge-stdouts-into-cat.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdio-overlapped.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdio-reuse-readable-stdio.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdio.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdout-flush-exit.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdout-flush.js`: impossible: requires child_process which is not available in WASM
+- `parallel/test-child-process-stdout-ipc.js`: impossible: requires child_process which is not available in WASM
 - `parallel/test-cli-bad-options.js`: newly discovered, not yet evaluated
-- `parallel/test-cli-eval-event.js`: newly discovered, not yet evaluated
 - `parallel/test-cli-node-options-docs.js`: newly discovered, not yet evaluated
 - `parallel/test-cli-node-options.js`: newly discovered, not yet evaluated
 - `parallel/test-cli-options-negation.js`: newly discovered, not yet evaluated
@@ -4633,15 +4565,12 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-debugger-use-strict.js`: newly discovered, not yet evaluated
 - `parallel/test-debugger-watch-validation.js`: newly discovered, not yet evaluated
 - `parallel/test-debugger-websocket-secret-mismatch.js`: newly discovered, not yet evaluated
-- `parallel/test-dgram-address.js`: WASI runtime returns access-denied (EACCES) when binding to 127.0.0.1; wasmtime sandbox permissions issue
 - `parallel/test-dgram-bind-socket-close-before-cluster-reply.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-bind-socket-close-before-lookup.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-close-signal.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-cluster-close-during-bind.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-cluster-close-in-listening.js`: newly discovered, not yet evaluated
-- `parallel/test-dgram-error-message-address.js`: WASI runtime maps binding to non-local IPs as access-denied (EACCES) instead of EADDRNOTAVAIL
 - `parallel/test-dgram-ipv6only.js`: newly discovered, not yet evaluated
-- `parallel/test-dgram-listen-after-bind.js`: WASI async bind may not complete within the 100ms timeout race in this test; binding is asynchronous in WASI
 - `parallel/test-dgram-membership.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-multicast-loopback.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-reuseport.js`: requires reusePort socket option not supported in WASI
@@ -4650,7 +4579,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-dgram-udp6-link-local-address.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-udp6-send-default-host.js`: newly discovered, not yet evaluated
 - `parallel/test-dgram-unref-in-cluster.js`: newly discovered, not yet evaluated
-- `parallel/test-diagnostic-channel-http-request-created.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-diagnostic-channel-http-response-created.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-diagnostics-channel-http-server-start.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-diagnostics-channel-http.js`: newly discovered, not yet evaluated
@@ -4767,7 +4695,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-fs-write-buffer-large.js`: The tested feature is not available in 32bit builds
 - `parallel/test-fs-write-file-invalid-path.js`: This test is for Windows only.
 - `parallel/test-fs-write-sigxfsz.js`: [manual] amp made no code changes
-- `parallel/test-fs-write.js`: requires child_process.exec and process.on('exit')
+- `parallel/test-fs-write.js`: impossible: requires child_process.exec and process.on('exit')
 - `parallel/test-gc-http-client-connaborted.js`: newly discovered, not yet evaluated
 - `parallel/test-gc-net-timeout.js`: newly discovered, not yet evaluated
 - `parallel/test-gc-tls-external-memory.js`: newly discovered, not yet evaluated
@@ -4798,7 +4726,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-heapsnapshot-near-heap-limit-worker.js`: newly discovered, not yet evaluated
 - `parallel/test-http-abort-client.js`: [manual] amp fix caused regressions
 - `parallel/test-http-abort-queued.js`: [manual] amp fix attempt failed verification
-- `parallel/test-http-after-connect.js`: [manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http
 - `parallel/test-http-agent-abort-controller.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-agent-keepalive-delay.js`: requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests
 - `parallel/test-http-agent-keepalive.js`: requires remote server close detection on idle keep-alive sockets and socket hang up errors; wasi:http creates independent connections per request with no shared socket lifecycle
@@ -4810,16 +4737,13 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-automatic-headers.js`: [manual] The test asserts `res.headers.connection === 'keep-alive'`, but the `Connection` header is classified as a **forbidden hop-by-hop header** in wasmtime's wasi:http implementation (`wasmtime...
 - `parallel/test-http-autoselectfamily.js`: times out after 120s
 - `parallel/test-http-blank-header.js`: requires HTTP server functionality, we only support clients
-- `parallel/test-http-buffer-sanity.js`: [manual] batch other-1: cannot fix
 - `parallel/test-http-catch-uncaughtexception.js`: [manual] batch other-1: cannot fix
 - `parallel/test-http-chunk-problem.js`: hangs: test spawns child_process and uses fixed port allocation
 - `parallel/test-http-client-abort-keep-alive-destroy-res.js`: hangs: relies on keep-alive connection reuse not fully implemented
 - `parallel/test-http-client-abort-keep-alive-queued-tcp-socket.js`: hangs: relies on keep-alive connection reuse not fully implemented
 - `parallel/test-http-client-abort-keep-alive-queued-unix-socket.js`: hangs: requires unix socket support
 - `parallel/test-http-client-abort-unix-socket.js`: hangs: requires unix socket support
-- `parallel/test-http-client-abort.js`: [manual] amp fix caused regressions
 - `parallel/test-http-client-agent-end-close-event.js`: hangs: relies on Agent connection lifecycle not fully implemented
-- `parallel/test-http-client-close-event.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-client-default-headers-exist.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-client-error-rawbytes.js`: hangs: test sends raw TCP bytes and expects clientError events
 - `parallel/test-http-client-finished.js`: [manual] amp fix attempt failed verification
@@ -4829,14 +4753,9 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-client-override-global-agent.js`: hangs: relies on Agent createConnection not fully implemented
 - `parallel/test-http-client-parse-error.js`: hangs: test sends raw TCP bytes and expects specific parser errors
 - `parallel/test-http-client-pipe-end.js`: hangs: relies on keep-alive connection piping
-- `parallel/test-http-client-race-2.js`: requires server.listen(0) which fails in WASM environment
-- `parallel/test-http-client-race.js`: requires server.listen(0) which fails in WASM environment
 - `parallel/test-http-client-reject-chunked-with-content-length.js`: hangs: test sends raw TCP bytes and expects specific parser errors
 - `parallel/test-http-client-reject-cr-no-lf.js`: hangs: test sends raw TCP bytes and expects specific parser errors
-- `parallel/test-http-client-reject-unexpected-agent.js`: requires server.listen(0) which fails in WASM environment
-- `parallel/test-http-client-res-destroyed.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-client-response-domain.js`: hangs: requires domain module integration with HTTP client
-- `parallel/test-http-client-set-timeout-after-end.js`: hangs: relies on ClientRequest.setTimeout not fully implemented
 - `parallel/test-http-client-set-timeout.js`: hangs: relies on ClientRequest.setTimeout not fully implemented
 - `parallel/test-http-client-spurious-aborted.js`: hangs: relies on request abort/timeout interaction not fully implemented
 - `parallel/test-http-client-timeout-agent.js`: hangs: relies on Agent timeout behavior not fully implemented
@@ -4859,7 +4778,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-dummy-characters-smuggling.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-dump-req-when-res-ends.js`: hangs: relies on response stream cleanup behavior
 - `parallel/test-http-early-hints-invalid-argument.js`: hangs: test calls server.close() from server handler without consuming client response, causing WASM event loop to not drain
-- `parallel/test-http-end-throw-socket-handling.js`: throws in end handler; requires uncaughtException to catch across 10 parallel requests
 - `parallel/test-http-exceptions.js`: hangs: relies on uncaughtException handling in request callbacks
 - `parallel/test-http-expect-continue.js`: hangs: Expect: 100-continue not fully implemented
 - `parallel/test-http-expect-handling.js`: hangs: Expect header handling not fully implemented
@@ -4867,10 +4785,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-full-response.js`: hangs: test uses raw TCP for full response verification
 - `parallel/test-http-header-badrequest.js`: hangs: test sends raw TCP bytes for malformed headers
 - `parallel/test-http-header-overflow.js`: hangs: test sends raw TCP bytes to trigger header overflow
-- `parallel/test-http-highwatermark.js`: hangs: relies on socket highWaterMark / backpressure behavior
 - `parallel/test-http-host-header-ipv6-fail.js`: hangs: relies on IPv6 connection failure behavior
 - `parallel/test-http-import-websocket.js`: WebSocket global not implemented
-- `parallel/test-http-incoming-message-options.js`: hangs: requires net.createConnection with custom readableHighWaterMark
 - `parallel/test-http-information-headers.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-information-processing.js`: hangs: 1xx informational responses not supported via wasi:http
 - `parallel/test-http-invalid-te.js`: hangs: test sends raw TCP bytes for invalid transfer-encoding
@@ -4901,23 +4817,19 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js`: hangs: creates 4 concurrent server-client pairs with net.connect raw TCP
 - `parallel/test-http-parser-freed-before-upgrade.js`: hangs: relies on HTTP parser lifecycle internals
 - `parallel/test-http-parser-memory-retention.js`: relies on socket.parser lifecycle internals of HTTP server/client
-- `parallel/test-http-parser-timeout-reset.js`: requires process.binding not available in WASM
+- `parallel/test-http-parser-timeout-reset.js`: impossible: requires process.binding not available in WASM
 - `parallel/test-http-pause.js`: hangs: relies on response pause/resume backpressure
 - `parallel/test-http-perf_hooks.js`: requires PerformanceObserver with HTTP performance entries
-- `parallel/test-http-pipeline-assertionerror-finish.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-pipeline-flood.js`: hangs: test sends raw TCP bytes for pipeline flooding
 - `parallel/test-http-pipeline-requests-connection-leak.js`: sends 10000 pipelined requests which exceeds WASM resource limits
-- `parallel/test-http-proxy.js`: [manual] amp fix caused regressions
 - `parallel/test-http-raw-headers.js`: hangs: test uses raw TCP to verify header case preservation
-- `parallel/test-http-remove-connection-header-persists-connection.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-remove-header-stays-removed.js`: hangs: test uses raw TCP for header removal verification
 - `parallel/test-http-req-close-robust-from-tampering.js`: hangs: relies on close event tampering edge case
-- `parallel/test-http-request-agent.js`: requires https.createServer not supported
+- `parallel/test-http-request-agent.js`: impossible: requires https.createServer not supported
 - `parallel/test-http-res-write-after-end.js`: hangs: relies on write-after-end error handling
 - `parallel/test-http-response-multi-content-length.js`: wasi:http does not produce HPE_UNEXPECTED_CONTENT_LENGTH error code for duplicate content-length headers
 - `parallel/test-http-response-multiheaders.js`: [manual] wasmtime's `wasi:http` implementation strips `host` and `proxy-authorization` headers from HTTP responses (treating them as forbidden/hop-by-hop headers). The test asserts all 17 "norepeat...
 - `parallel/test-http-response-no-headers.js`: test uses raw TCP (net.createServer) with HTTP/0.9 responses that wasi:http cannot parse
-- `parallel/test-http-response-splitting.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-response-status-message.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-same-map.js`: test uses V8-specific percent-encoded module syntax
 - `parallel/test-http-server-async-dispose.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
@@ -4937,10 +4849,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-server-headers-timeout-pipelining.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-incomingmessage-destroy.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-keepalive-req-gc.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
-- `parallel/test-http-server-method.query.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-multiheaders.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-multiheaders2.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
-- `parallel/test-http-server-non-utf8-header.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-options-incoming-message.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-options-server-response.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-reject-chunked-with-content-length.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
@@ -4962,8 +4872,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-should-keep-alive.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-socket-encoding-error.js`: hangs: relies on socket encoding error handling
 - `parallel/test-http-socket-error-listeners.js`: hangs: relies on socket error listener behavior
-- `parallel/test-http-status-code.js`: [manual] amp fix attempt failed verification
-- `parallel/test-http-status-reason-invalid-chars.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-uncaught-from-request-callback.js`: [manual] amp batch made no code changes
 - `parallel/test-http-unix-socket-keep-alive.js`: [manual] requires unix sockets / proxy / external tools unavailable in WASM
 - `parallel/test-http-unix-socket.js`: [manual] requires unix sockets / proxy / external tools unavailable in WASM
@@ -4973,297 +4881,294 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-http-upgrade-client.js`: [manual] amp partial fix caused regressions
 - `parallel/test-http-upgrade-client2.js`: [manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http
 - `parallel/test-http-upgrade-reconsume-stream.js`: [manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http
-- `parallel/test-http-upgrade-server.js`: [manual] requires HTTP CONNECT/upgrade which is unavailable via wasi:http
-- `parallel/test-http-url.parse-auth.js`: [manual] amp batch made no code changes
 - `parallel/test-http-url.parse-https.request.js`: [manual] amp batch made no code changes
 - `parallel/test-http-writable-true-after-close.js`: [manual] amp batch made no code changes
 - `parallel/test-http-write-callbacks.js`: [manual] amp batch made no code changes
-- `parallel/test-http-write-head-2.js`: tests server-side HTTP behavior which requires TCP listen, not available in WASI
 - `parallel/test-http-write-head-after-set-header.js`: [manual] the test currently deadlocks in the runtime pollable/executor path (same-component `node:http` client calling back into same-component server via `wasi:http`), and I could not resolve it f...
 - `parallel/test-http-write-head.js`: [manual] The test asserts `response.rawHeaders.includes('Test')` (line 78) — requiring header name case preservation through the HTTP transport. In wasi:http, all header names are normalized to low...
 - `parallel/test-http-zero-length-write.js`: [manual] amp batch made no code changes
 - `parallel/test-http.js`: [manual] amp fix attempt failed verification
-- `parallel/test-http2-allow-http1.js`: [manual] http2/https not implemented
+- `parallel/test-http2-allow-http1.js`: impossible: [manual] http2/https not implemented
 - `parallel/test-http2-alpn.js`: requires TLS/HTTPS which is not supported in WASM
-- `parallel/test-http2-altsvc.js`: [manual] http2/https not implemented
-- `parallel/test-http2-async-local-storage.js`: [manual] http2/https not implemented
-- `parallel/test-http2-autoselect-protocol.js`: [manual] http2/https not implemented
-- `parallel/test-http2-backpressure.js`: [manual] http2/https not implemented
-- `parallel/test-http2-buffersize.js`: [manual] http2/https not implemented
-- `parallel/test-http2-byteswritten-server.js`: [manual] http2/https not implemented
-- `parallel/test-http2-cancel-while-client-reading.js`: [manual] http2/https not implemented
-- `parallel/test-http2-capture-rejection.js`: requires HTTP2 server functionality
-- `parallel/test-http2-clean-output.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-connection-tunnelling.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-data-end.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-jsstream-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-port-80.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-priority-before-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-promisify-connect-error.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-promisify-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-proxy-over-http2.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-request-listeners-warning.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-request-options-errors.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-rststream-before-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-set-priority.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-setLocalWindowSize.js`: requires HTTP2 server functionality
-- `parallel/test-http2-client-setNextStreamID-errors.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-settings-before-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-shutdown-before-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-stream-destroy-before-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-unescaped-path.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-write-before-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-client-write-empty-string.js`: [manual] http2/https not implemented
-- `parallel/test-http2-close-while-writing.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-aborted.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-errors.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-expect-continue-check.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-expect-continue.js`: requires HTTP2 server functionality
-- `parallel/test-http2-compat-expect-handling.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-method-connect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverrequest-end.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverrequest-headers.js`: requires HTTP2 server functionality
-- `parallel/test-http2-compat-serverrequest-host.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverrequest-pause.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverrequest-pipe.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverrequest-settimeout.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverrequest-trailers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverrequest.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-close.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-createpushresponse.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-drain.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-end-after-statuses-without-body.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-end.js`: requires HTTP2 server functionality
-- `parallel/test-http2-compat-serverresponse-finished.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-flushheaders.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-headers-after-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-headers-send-date.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-headers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-settimeout.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-statuscode.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-statusmessage-property-set.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-statusmessage-property.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-statusmessage.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-trailers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse-write.js`: requires HTTP2 server functionality
-- `parallel/test-http2-compat-serverresponse-writehead-array.js`: requires HTTP2 server functionality
-- `parallel/test-http2-compat-serverresponse-writehead.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-serverresponse.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-short-stream-client-server.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-socket-destroy-delayed.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-socket-set.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-write-early-hints-invalid-argument-type.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-write-early-hints-invalid-argument-value.js`: [manual] http2/https not implemented
-- `parallel/test-http2-compat-write-early-hints.js`: requires HTTP2 server functionality
-- `parallel/test-http2-compat-write-head-destroyed.js`: [manual] http2/https not implemented
-- `parallel/test-http2-connect-method-extended-cant-turn-off.js`: [manual] http2/https not implemented
-- `parallel/test-http2-connect-method-extended.js`: [manual] http2/https not implemented
-- `parallel/test-http2-connect-method.js`: [manual] http2/https not implemented
-- `parallel/test-http2-connect.js`: requires HTTP2 server functionality
-- `parallel/test-http2-cookies.js`: [manual] http2/https not implemented
-- `parallel/test-http2-create-client-connect.js`: requires HTTP2 server functionality
-- `parallel/test-http2-create-client-session.js`: [manual] http2/https not implemented
-- `parallel/test-http2-createsecureserver-options.js`: [manual] http2/https not implemented
-- `parallel/test-http2-createserver-options.js`: [manual] http2/https not implemented
-- `parallel/test-http2-createwritereq.js`: [manual] http2/https not implemented
-- `parallel/test-http2-date-header.js`: [manual] http2/https not implemented
-- `parallel/test-http2-debug.js`: [manual] http2/https not implemented
-- `parallel/test-http2-destroy-after-write.js`: [manual] http2/https not implemented
-- `parallel/test-http2-dont-lose-data.js`: [manual] http2/https not implemented
-- `parallel/test-http2-dont-override.js`: [manual] http2/https not implemented
-- `parallel/test-http2-empty-frame-without-eof.js`: [manual] http2/https not implemented
-- `parallel/test-http2-endafterheaders.js`: [manual] http2/https not implemented
-- `parallel/test-http2-error-order.js`: [manual] http2/https not implemented
-- `parallel/test-http2-exceeds-server-trailer-size.js`: [manual] http2/https not implemented
-- `parallel/test-http2-forget-closed-streams.js`: [manual] http2/https not implemented
-- `parallel/test-http2-generic-streams-sendfile.js`: [manual] http2/https not implemented
-- `parallel/test-http2-generic-streams.js`: [manual] http2/https not implemented
-- `parallel/test-http2-getpackedsettings.js`: requires HTTP2 server functionality
-- `parallel/test-http2-goaway-delayed-request.js`: [manual] http2/https not implemented
-- `parallel/test-http2-goaway-opaquedata.js`: [manual] http2/https not implemented
-- `parallel/test-http2-head-request.js`: [manual] http2/https not implemented
-- `parallel/test-http2-https-fallback-http-server-options.js`: [manual] http2/https not implemented
+- `parallel/test-http2-altsvc.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-async-local-storage.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-autoselect-protocol.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-backpressure.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-buffersize.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-byteswritten-server.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-cancel-while-client-reading.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-capture-rejection.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-clean-output.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-connection-tunnelling.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-data-end.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-jsstream-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-port-80.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-priority-before-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-promisify-connect-error.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-promisify-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-proxy-over-http2.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-request-listeners-warning.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-request-options-errors.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-rststream-before-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-set-priority.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-setLocalWindowSize.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-client-setNextStreamID-errors.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-settings-before-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-shutdown-before-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-stream-destroy-before-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-unescaped-path.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-write-before-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-client-write-empty-string.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-close-while-writing.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-aborted.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-errors.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-expect-continue-check.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-expect-continue.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-compat-expect-handling.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-method-connect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverrequest-end.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverrequest-headers.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverrequest-host.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverrequest-pause.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverrequest-pipe.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverrequest-settimeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverrequest-trailers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverrequest.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-close.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-createpushresponse.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-drain.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-end-after-statuses-without-body.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-end.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-finished.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-flushheaders.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-headers-after-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-headers-send-date.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-settimeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-statuscode.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-statusmessage-property-set.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-statusmessage-property.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-statusmessage.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-trailers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse-write.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-writehead-array.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-compat-serverresponse-writehead.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-serverresponse.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-short-stream-client-server.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-socket-destroy-delayed.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-socket-set.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-write-early-hints-invalid-argument-type.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-write-early-hints-invalid-argument-value.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-compat-write-early-hints.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-compat-write-head-destroyed.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-connect-method-extended-cant-turn-off.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-connect-method-extended.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-connect-method.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-connect.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-cookies.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-create-client-connect.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-create-client-session.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-createsecureserver-options.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-createserver-options.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-createwritereq.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-date-header.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-debug.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-destroy-after-write.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-dont-lose-data.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-dont-override.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-empty-frame-without-eof.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-endafterheaders.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-error-order.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-exceeds-server-trailer-size.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-forget-closed-streams.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-generic-streams-sendfile.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-generic-streams.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-getpackedsettings.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-goaway-delayed-request.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-goaway-opaquedata.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-head-request.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-https-fallback-http-server-options.js`: impossible: [manual] http2/https not implemented
 - `parallel/test-http2-https-fallback.js`: requires TLS/HTTPS which is not supported in WASM
-- `parallel/test-http2-info-headers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-invalidargtypes-errors.js`: [manual] http2/https not implemented
-- `parallel/test-http2-invalidheaderfield.js`: requires HTTP2 server functionality
-- `parallel/test-http2-invalidheaderfields-client.js`: [manual] http2/https not implemented
-- `parallel/test-http2-ip-address-host.js`: [manual] http2/https not implemented
-- `parallel/test-http2-large-write-close.js`: [manual] http2/https not implemented
-- `parallel/test-http2-large-write-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-large-write-multiple-requests.js`: [manual] http2/https not implemented
-- `parallel/test-http2-large-writes-session-memory-leak.js`: [manual] http2/https not implemented
-- `parallel/test-http2-malformed-altsvc.js`: [manual] http2/https not implemented
-- `parallel/test-http2-many-writes-and-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-max-concurrent-streams.js`: [manual] http2/https not implemented
-- `parallel/test-http2-max-invalid-frames.js`: [manual] http2/https not implemented
-- `parallel/test-http2-max-session-memory-leak.js`: [manual] http2/https not implemented
-- `parallel/test-http2-max-settings.js`: [manual] http2/https not implemented
-- `parallel/test-http2-methods.js`: [manual] http2/https not implemented
-- `parallel/test-http2-misbehaving-flow-control-paused.js`: [manual] http2/https not implemented
-- `parallel/test-http2-misbehaving-flow-control.js`: [manual] http2/https not implemented
-- `parallel/test-http2-misused-pseudoheaders.js`: [manual] http2/https not implemented
-- `parallel/test-http2-multi-content-length.js`: [manual] http2/https not implemented
-- `parallel/test-http2-multiheaders-raw.js`: [manual] http2/https not implemented
-- `parallel/test-http2-multiheaders.js`: [manual] http2/https not implemented
-- `parallel/test-http2-multiplex.js`: [manual] http2/https not implemented
-- `parallel/test-http2-multistream-destroy-on-read-tls.js`: [manual] http2/https not implemented
-- `parallel/test-http2-no-more-streams.js`: [manual] http2/https not implemented
-- `parallel/test-http2-no-wanttrailers-listener.js`: [manual] http2/https not implemented
-- `parallel/test-http2-onping.js`: [manual] http2/https not implemented
-- `parallel/test-http2-options-max-headers-block-length.js`: [manual] http2/https not implemented
-- `parallel/test-http2-options-max-reserved-streams.js`: [manual] http2/https not implemented
-- `parallel/test-http2-options-server-request.js`: [manual] http2/https not implemented
-- `parallel/test-http2-options-server-response.js`: [manual] http2/https not implemented
-- `parallel/test-http2-origin.js`: requires HTTP2 server functionality
-- `parallel/test-http2-pack-end-stream-flag.js`: [manual] http2/https not implemented
-- `parallel/test-http2-padding-aligned.js`: [manual] http2/https not implemented
-- `parallel/test-http2-perf_hooks.js`: [manual] http2/https not implemented
-- `parallel/test-http2-perform-server-handshake.js`: requires HTTP2 server functionality
-- `parallel/test-http2-ping-settings-heapdump.js`: [manual] http2/https not implemented
-- `parallel/test-http2-ping-unsolicited-ack.js`: [manual] http2/https not implemented
-- `parallel/test-http2-ping.js`: [manual] http2/https not implemented
-- `parallel/test-http2-pipe-named-pipe.js`: [manual] http2/https not implemented
-- `parallel/test-http2-pipe.js`: [manual] http2/https not implemented
-- `parallel/test-http2-priority-cycle-.js`: [manual] http2/https not implemented
-- `parallel/test-http2-priority-event.js`: [manual] http2/https not implemented
-- `parallel/test-http2-propagate-session-destroy-code.js`: [manual] http2/https not implemented
-- `parallel/test-http2-removed-header-stays-removed.js`: [manual] http2/https not implemented
-- `parallel/test-http2-request-remove-connect-listener.js`: [manual] http2/https not implemented
-- `parallel/test-http2-res-corked.js`: [manual] http2/https not implemented
-- `parallel/test-http2-res-writable-properties.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-204.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-304.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-404.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-compat.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-error-dir.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-error-pipe-offset.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-errors.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-fd-errors.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-fd-invalid.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-fd-range.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-fd.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-filehandle.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-push.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-range.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file-with-pipe.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-file.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-no-data.js`: [manual] http2/https not implemented
-- `parallel/test-http2-respond-with-file-connection-abort.js`: [manual] http2/https not implemented
-- `parallel/test-http2-response-splitting.js`: [manual] http2/https not implemented
-- `parallel/test-http2-sensitive-headers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-sent-headers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-serve-file.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-async-dispose.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-close-callback.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-errors.js`: requires HTTP2 server functionality
-- `parallel/test-http2-server-push-disabled.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-push-stream-errors-args.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-push-stream-head.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-push-stream.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-rst-before-respond.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-rst-stream.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-session-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-set-header.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-setLocalWindowSize.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-settimeout-no-callback.js`: requires HTTP2 server functionality
-- `parallel/test-http2-server-shutdown-before-respond.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-shutdown-options-errors.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-shutdown-redundant.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-startup.js`: requires HTTP2 server functionality
-- `parallel/test-http2-server-stream-session-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-timeout.js`: [manual] http2/https not implemented
-- `parallel/test-http2-server-unknown-protocol.js`: [manual] http2/https not implemented
-- `parallel/test-http2-session-gc-while-write-scheduled.js`: [manual] http2/https not implemented
-- `parallel/test-http2-session-settings.js`: [manual] http2/https not implemented
-- `parallel/test-http2-session-stream-state.js`: [manual] http2/https not implemented
-- `parallel/test-http2-session-timeout.js`: [manual] http2/https not implemented
-- `parallel/test-http2-session-unref.js`: [manual] http2/https not implemented
-- `parallel/test-http2-settings-unsolicited-ack.js`: [manual] http2/https not implemented
-- `parallel/test-http2-short-stream-client-server.js`: [manual] http2/https not implemented
-- `parallel/test-http2-single-headers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-socket-close.js`: [manual] http2/https not implemented
-- `parallel/test-http2-socket-proxy-handler-for-has.js`: [manual] http2/https not implemented
-- `parallel/test-http2-status-code-invalid.js`: [manual] http2/https not implemented
-- `parallel/test-http2-status-code.js`: [manual] http2/https not implemented
-- `parallel/test-http2-stream-client.js`: [manual] http2/https not implemented
-- `parallel/test-http2-stream-destroy-event-order.js`: [manual] http2/https not implemented
-- `parallel/test-http2-stream-removelisteners-after-close.js`: [manual] http2/https not implemented
-- `parallel/test-http2-timeouts.js`: [manual] http2/https not implemented
-- `parallel/test-http2-tls-disconnect.js`: [manual] http2/https not implemented
-- `parallel/test-http2-too-large-headers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-too-many-headers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-too-many-settings.js`: requires HTTP2 server functionality
-- `parallel/test-http2-too-many-streams.js`: [manual] http2/https not implemented
-- `parallel/test-http2-trailers-after-session-close.js`: [manual] http2/https not implemented
-- `parallel/test-http2-trailers.js`: [manual] http2/https not implemented
-- `parallel/test-http2-unbound-socket-proxy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-update-settings.js`: [manual] http2/https not implemented
-- `parallel/test-http2-window-size.js`: [manual] http2/https not implemented
-- `parallel/test-http2-write-callbacks.js`: [manual] http2/https not implemented
-- `parallel/test-http2-write-empty-string.js`: [manual] http2/https not implemented
-- `parallel/test-http2-write-finishes-after-stream-destroy.js`: [manual] http2/https not implemented
-- `parallel/test-http2-zero-length-header.js`: [manual] http2/https not implemented
-- `parallel/test-http2-zero-length-write.js`: [manual] http2/https not implemented
-- `parallel/test-https-abortcontroller.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-abort-controller.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-additional-options.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-constructor.js`: [manual] http2/https not implemented
+- `parallel/test-http2-info-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-invalidargtypes-errors.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-invalidheaderfield.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-invalidheaderfields-client.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-ip-address-host.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-large-write-close.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-large-write-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-large-write-multiple-requests.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-large-writes-session-memory-leak.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-malformed-altsvc.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-many-writes-and-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-max-concurrent-streams.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-max-invalid-frames.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-max-session-memory-leak.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-max-settings.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-methods.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-misbehaving-flow-control-paused.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-misbehaving-flow-control.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-misused-pseudoheaders.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-multi-content-length.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-multiheaders-raw.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-multiheaders.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-multiplex.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-multistream-destroy-on-read-tls.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-no-more-streams.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-no-wanttrailers-listener.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-onping.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-options-max-headers-block-length.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-options-max-reserved-streams.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-options-server-request.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-options-server-response.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-origin.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-pack-end-stream-flag.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-padding-aligned.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-perf_hooks.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-perform-server-handshake.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-ping-settings-heapdump.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-ping-unsolicited-ack.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-ping.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-pipe-named-pipe.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-pipe.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-priority-cycle-.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-priority-event.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-propagate-session-destroy-code.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-removed-header-stays-removed.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-request-remove-connect-listener.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-res-corked.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-res-writable-properties.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-204.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-304.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-404.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-compat.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-error-dir.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-error-pipe-offset.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-errors.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-fd-errors.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-fd-invalid.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-fd-range.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-fd.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-filehandle.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-push.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-range.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file-with-pipe.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-file.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-no-data.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-respond-with-file-connection-abort.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-response-splitting.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-sensitive-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-sent-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-serve-file.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-async-dispose.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-close-callback.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-errors.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-server-push-disabled.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-push-stream-errors-args.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-push-stream-head.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-push-stream.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-rst-before-respond.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-rst-stream.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-session-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-set-header.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-setLocalWindowSize.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-settimeout-no-callback.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-server-shutdown-before-respond.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-shutdown-options-errors.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-shutdown-redundant.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-startup.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-server-stream-session-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-timeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-server-unknown-protocol.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-session-gc-while-write-scheduled.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-session-settings.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-session-stream-state.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-session-timeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-session-unref.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-settings-unsolicited-ack.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-short-stream-client-server.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-single-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-socket-close.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-socket-proxy-handler-for-has.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-status-code-invalid.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-status-code.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-stream-client.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-stream-destroy-event-order.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-stream-removelisteners-after-close.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-timeouts.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-tls-disconnect.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-too-large-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-too-many-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-too-many-settings.js`: impossible: requires HTTP2 server functionality
+- `parallel/test-http2-too-many-streams.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-trailers-after-session-close.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-trailers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-unbound-socket-proxy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-update-settings.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-window-size.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-write-callbacks.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-write-empty-string.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-write-finishes-after-stream-destroy.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-zero-length-header.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-http2-zero-length-write.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-abortcontroller.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-abort-controller.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-additional-options.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-constructor.js`: impossible: [manual] http2/https not implemented
 - `parallel/test-https-agent-create-connection.js`: requires TLS/HTTPS which is not supported in WASM
-- `parallel/test-https-agent-disable-session-reuse.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-getname.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-keylog.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-servername.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-session-eviction.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-session-injection.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-session-reuse.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-sni.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-sockets-leak.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent-unref-socket.js`: [manual] http2/https not implemented
-- `parallel/test-https-agent.js`: [manual] http2/https not implemented
+- `parallel/test-https-agent-disable-session-reuse.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-getname.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-keylog.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-servername.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-session-eviction.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-session-injection.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-session-reuse.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-sni.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-sockets-leak.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent-unref-socket.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-agent.js`: impossible: [manual] http2/https not implemented
 - `parallel/test-https-argument-of-creating.js`: requires TLS/HTTPS which is not supported in WASM
 - `parallel/test-https-autoselectfamily.js`: times out after 120s
-- `parallel/test-https-byteswritten.js`: [manual] http2/https not implemented
-- `parallel/test-https-client-checkServerIdentity.js`: [manual] http2/https not implemented
-- `parallel/test-https-client-get-url.js`: [manual] http2/https not implemented
-- `parallel/test-https-client-override-global-agent.js`: [manual] http2/https not implemented
-- `parallel/test-https-client-reject.js`: [manual] http2/https not implemented
-- `parallel/test-https-client-renegotiation-limit.js`: [manual] http2/https not implemented
-- `parallel/test-https-client-resume.js`: [manual] http2/https not implemented
-- `parallel/test-https-close.js`: [manual] http2/https not implemented
-- `parallel/test-https-connect-address-family.js`: [manual] http2/https not implemented
-- `parallel/test-https-connecting-to-http.js`: [manual] http2/https not implemented
-- `parallel/test-https-drain.js`: [manual] http2/https not implemented
-- `parallel/test-https-eof-for-eom.js`: [manual] http2/https not implemented
-- `parallel/test-https-foafssl.js`: [manual] http2/https not implemented
-- `parallel/test-https-host-headers.js`: [manual] http2/https not implemented
-- `parallel/test-https-hwm.js`: [manual] http2/https not implemented
-- `parallel/test-https-keep-alive-drop-requests.js`: [manual] http2/https not implemented
-- `parallel/test-https-localaddress-bind-error.js`: [manual] http2/https not implemented
-- `parallel/test-https-max-headers-count.js`: [manual] http2/https not implemented
-- `parallel/test-https-options-boolean-check.js`: [manual] http2/https not implemented
-- `parallel/test-https-pfx.js`: [manual] http2/https not implemented
-- `parallel/test-https-request-arguments.js`: [manual] http2/https not implemented
-- `parallel/test-https-resume-after-renew.js`: [manual] http2/https not implemented
-- `parallel/test-https-selfsigned-no-keycertsign-no-crash.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-async-dispose.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-close-all.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-close-destroy-timeout.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-close-idle.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-connections-checking-leak.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-headers-timeout.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-options-incoming-message.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-options-server-response.js`: [manual] http2/https not implemented
-- `parallel/test-https-server-request-timeout.js`: [manual] http2/https not implemented
-- `parallel/test-https-simple.js`: [manual] http2/https not implemented
-- `parallel/test-https-socket-options.js`: [manual] http2/https not implemented
-- `parallel/test-https-strict.js`: [manual] http2/https not implemented
-- `parallel/test-https-timeout-server-2.js`: [manual] http2/https not implemented
-- `parallel/test-https-timeout-server.js`: [manual] http2/https not implemented
-- `parallel/test-https-timeout.js`: [manual] http2/https not implemented
-- `parallel/test-https-truncate.js`: [manual] http2/https not implemented
-- `parallel/test-https-unix-socket-self-signed.js`: [manual] http2/https not implemented
+- `parallel/test-https-byteswritten.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-client-checkServerIdentity.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-client-get-url.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-client-override-global-agent.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-client-reject.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-client-renegotiation-limit.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-client-resume.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-close.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-connect-address-family.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-connecting-to-http.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-drain.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-eof-for-eom.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-foafssl.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-host-headers.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-hwm.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-keep-alive-drop-requests.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-localaddress-bind-error.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-max-headers-count.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-options-boolean-check.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-pfx.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-request-arguments.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-resume-after-renew.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-selfsigned-no-keycertsign-no-crash.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-async-dispose.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-close-all.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-close-destroy-timeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-close-idle.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-connections-checking-leak.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-headers-timeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-options-incoming-message.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-options-server-response.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-server-request-timeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-simple.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-socket-options.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-strict.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-timeout-server-2.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-timeout-server.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-timeout.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-truncate.js`: impossible: [manual] http2/https not implemented
+- `parallel/test-https-unix-socket-self-signed.js`: impossible: [manual] http2/https not implemented
 - `parallel/test-icu-env.js`: newly discovered, not yet evaluated
 - `parallel/test-icu-minimum-version.js`: newly discovered, not yet evaluated
 - `parallel/test-icu-transcode.js`: newly discovered, not yet evaluated
@@ -5348,6 +5253,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-microtask-queue-run.js`: newly discovered, not yet evaluated
 - `parallel/test-mime-whatwg.js`: newly discovered, not yet evaluated
 - `parallel/test-module-loading-globalpaths.js`: [manual] This test requires `child_process.execFileSync` to spawn real Node.js child processes from copied binaries, testing module resolution from global paths (`$HOME/.node_modules`, `$HOME/.node...
+- `parallel/test-module-main-extension-lookup.js`: impossible: [manual] The test requires `child_process.execFileSync` to spawn new Node.js child processes, which is fundamentally impossible in a WebAssembly/WASI environment. Updated the skip reason in `config...
 - `parallel/test-module-readonly.js`: test only runs on Windows
 - `parallel/test-module-strip-types.js`: Requires Amaro
 - `parallel/test-module-strip-types.js#test_00_striptypescripttypes`: Requires Amaro
@@ -5359,41 +5265,27 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-module-strip-types.js#test_06_striptypescripttypes_source_map_when_mode_is_transform`: Requires Amaro
 - `parallel/test-module-strip-types.js#test_07_striptypescripttypes_source_map_when_mode_is_transform_and_s`: Requires Amaro
 - `parallel/test-module-strip-types.js#test_08_striptypescripttypes_source_map_when_mode_is_transform_and_s`: Requires Amaro
-- `parallel/test-module-wrapper.js`: [manual] The test requires `child_process.execFileSync` to spawn a new Node.js subprocess (`execFileSync(node, [cjsModuleWrapTest])`). Process spawning is fundamentally impossible in a WASM compone...
-- `parallel/test-net-child-process-connect-reset.js`: [manual] This test fundamentally requires `child_process.spawn()` with IPC communication and OS signal handling (`SIGKILL`), which are impossible in a WebAssembly sandbox. The entire test logic dep...
+- `parallel/test-module-wrapper.js`: impossible: [manual] The test requires `child_process.execFileSync` to spawn a new Node.js subprocess (`execFileSync(node, [cjsModuleWrapTest])`). Process spawning is fundamentally impossible in a WASM compone...
+- `parallel/test-net-child-process-connect-reset.js`: impossible: [manual] This test fundamentally requires `child_process.spawn()` with IPC communication and OS signal handling (`SIGKILL`), which are impossible in a WebAssembly sandbox. The entire test logic dep...
 - `parallel/test-net-connect-memleak.js`: requires process.memoryUsage()
 - `parallel/test-net-connect-nodelay.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-connect-options-allowhalfopen.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-connect-options-ipv6.js`: requires DNS lookup for IPv6
 - `parallel/test-net-connect-options-port.js`: requires DNS lookup
 - `parallel/test-net-connect-paused-connection.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-connect-reset-after-destroy.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-connect-reset-before-connected.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-connect-reset-until-connected.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-dns-custom-lookup.js`: requires custom DNS lookup
-- `parallel/test-net-dns-error.js`: requires DNS lookup
-- `parallel/test-net-dns-lookup-skip.js`: requires DNS lookup
-- `parallel/test-net-dns-lookup.js`: requires DNS lookup
 - `parallel/test-net-during-close.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-eaddrinuse.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-error-twice.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-keepalive.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-large-string.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-listen-after-destroying-stdin.js`: requires process.stdin
 - `parallel/test-net-listen-exclusive-random-ports.js`: requires cluster
 - `parallel/test-net-listen-fd0.js`: requires fd option for listen
 - `parallel/test-net-listen-handle-in-cluster-1.js`: requires cluster
 - `parallel/test-net-listen-ipv6only.js`: requires IPv6 dual-stack and DNS resolution
 - `parallel/test-net-listen-twice.js`: requires cluster
-- `parallel/test-net-local-address-port.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-localerror.js`: requires DNS lookup
 - `parallel/test-net-onread-static-buffer.js`: requires onread option with buffer/callback
-- `parallel/test-net-pause-resume-connecting.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-perf_hooks.js`: requires perf_hooks.PerformanceObserver with net detail
-- `parallel/test-net-persistent-keepalive.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-reuseport.js`: requires reusePort option and cluster
 - `parallel/test-net-server-blocklist.js`: requires net.BlockList
-- `parallel/test-net-server-call-listen-multiple-times.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-server-capture-rejection.js`: requires captureRejections option
 - `parallel/test-net-server-close-before-calling-lookup-callback.js`: requires DNS lookup
 - `parallel/test-net-server-close-before-ipc-response.js`: requires cluster
@@ -5402,28 +5294,11 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-net-server-keepalive.js`: requires internal/test/binding
 - `parallel/test-net-server-listen-options-signal.js`: missing AbortSignal validation for listen
 - `parallel/test-net-server-listen-options.js`: missing ERR_INVALID_ARG_TYPE validation for listen options
-- `parallel/test-net-server-listen-remove-callback.js`: requires Unix domain sockets (IPC path)
-- `parallel/test-net-server-max-connections-close-makes-more-available.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-server-max-connections.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-server-pause-on-connect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-server-reset.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-server-try-ports.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-server-unref-persistent.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-server-unref.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-socket-constructor.js`: requires cluster
-- `parallel/test-net-socket-destroy-send.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-socket-end-before-connect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-socket-local-address.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-socket-ready-without-cb.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-socket-reset-send.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-socket-reset-twice.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-socket-timeout-unref.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-socket-write-after-close.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-sync-cork.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-throttle.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-write-after-end-nt.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-write-cb-on-destroy-before-connect.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `parallel/test-net-write-connect-write.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-write-fully-async-buffer.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-write-fully-async-hex-string.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-write-slow.js`: net.js TCP implementation incomplete - needs event handling and API fixes
@@ -5485,14 +5360,13 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-permission-inspector.js#block_01_block_01`: Inspector not available in WASM
 - `parallel/test-permission-no-addons.js`: newly discovered, not yet evaluated
 - `parallel/test-permission-processbinding.js`: newly discovered, not yet evaluated
-- `parallel/test-permission-sqlite-load-extension.js`: uses spawnPromisified and permission model, not applicable in WASM
+- `parallel/test-permission-sqlite-load-extension.js`: impossible: uses spawnPromisified and permission model, not applicable in WASM
 - `parallel/test-permission-warning-flags.js`: newly discovered, not yet evaluated
 - `parallel/test-permission-wasi.js`: newly discovered, not yet evaluated
 - `parallel/test-permission-worker-threads-cli.js`: newly discovered, not yet evaluated
 - `parallel/test-pipe-abstract-socket-http.js`: newly discovered, not yet evaluated
 - `parallel/test-pipe-abstract-socket.js`: newly discovered, not yet evaluated
 - `parallel/test-pipe-file-to-http.js`: requires HTTP server functionality, we only support clients
-- `parallel/test-pipe-outgoing-message-data-emitted-after-ended.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-preload-print-process-argv.js`: newly discovered, not yet evaluated
 - `parallel/test-preload.js`: newly discovered, not yet evaluated
 - `parallel/test-primitive-timer-leak.js`: requires --expose-gc flag
@@ -5506,6 +5380,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-process-env-allowed-flags.js`: newly discovered, not yet evaluated
 - `parallel/test-process-env-sideeffects.js`: newly discovered, not yet evaluated
 - `parallel/test-process-env-tz.js`: newly discovered, not yet evaluated
+- `parallel/test-process-env.js`: impossible: requires child_process.spawn for child env verification
 - `parallel/test-process-euid-egid.js`: process.getuid() returns 0 (root) in WASM but seteuid/setegid cannot actually change credentials
 - `parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`: newly discovered, not yet evaluated
 - `parallel/test-process-exception-capture-should-abort-on-uncaught.js`: newly discovered, not yet evaluated
@@ -5566,8 +5441,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-readline-emit-keypress-events.js`: newly discovered, not yet evaluated
 - `parallel/test-readline-input-onerror.js`: newly discovered, not yet evaluated
 - `parallel/test-readline-interface-escapecodetimeout.js`: newly discovered, not yet evaluated
-- `parallel/test-readline-interface-no-trailing-newline.js`: repl is not supported in WASM
-- `parallel/test-readline-interface-recursive-writes.js`: repl is not supported in WASM
+- `parallel/test-readline-interface-no-trailing-newline.js`: impossible: repl is not supported in WASM
+- `parallel/test-readline-interface-recursive-writes.js`: impossible: repl is not supported in WASM
 - `parallel/test-readline-keys.js`: newly discovered, not yet evaluated
 - `parallel/test-readline-reopen.js`: newly discovered, not yet evaluated
 - `parallel/test-readline-set-raw-mode.js`: newly discovered, not yet evaluated
@@ -5576,64 +5451,64 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-release-changelog.js`: newly discovered, not yet evaluated
 - `parallel/test-release-npm.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-array-prototype-tempering.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-autolibs.js`: repl is not supported in WASM
+- `parallel/test-repl-autolibs.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-clear-immediate-crash.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-cli-eval.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-colors.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-context.js`: repl is not supported in WASM
+- `parallel/test-repl-context.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-definecommand.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-domain.js`: repl is not supported in WASM
+- `parallel/test-repl-domain.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-dynamic-import.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-editor.js`: repl is not supported in WASM
+- `parallel/test-repl-editor.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-empty.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-end-emits-exit.js`: repl is not supported in WASM
+- `parallel/test-repl-end-emits-exit.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-eval.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-function-definition-edge-case.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-harmony.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-import-referrer.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-inspect-defaults.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-inspector.js`: repl is not supported in WASM
-- `parallel/test-repl-let-process.js`: repl is not supported in WASM
-- `parallel/test-repl-load-multiline-no-trailing-newline.js`: repl is not supported in WASM
-- `parallel/test-repl-load-multiline.js`: repl is not supported in WASM
+- `parallel/test-repl-inspector.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-let-process.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-load-multiline-no-trailing-newline.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-load-multiline.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-mode.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-multiline.js`: repl is not supported in WASM
+- `parallel/test-repl-multiline.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-no-terminal.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-null-thrown.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-null.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-options.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-pretty-custom-stack.js`: repl is not supported in WASM
+- `parallel/test-repl-pretty-custom-stack.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-pretty-stack-custom-writer.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-pretty-stack.js`: repl is not supported in WASM
-- `parallel/test-repl-preview-newlines.js`: repl is not supported in WASM
+- `parallel/test-repl-pretty-stack.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-preview-newlines.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-preview-without-inspector.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-preview.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-recoverable.js`: repl is not supported in WASM
+- `parallel/test-repl-recoverable.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-require-after-write.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-require-cache.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-require-context.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-require-self-referential.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-require.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-reset-event.js`: repl is not supported in WASM
-- `parallel/test-repl-save-load.js`: repl is not supported in WASM
+- `parallel/test-repl-reset-event.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-save-load.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-setprompt.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-sigint-nested-eval.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-sigint.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-stdin-push-null.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-strict-mode-previews.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-syntax-error-stack.js`: repl is not supported in WASM
-- `parallel/test-repl-tab-complete-crash.js`: repl is not supported in WASM
-- `parallel/test-repl-tab-complete-import.js`: repl is not supported in WASM
+- `parallel/test-repl-syntax-error-stack.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-tab-complete-crash.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-tab-complete-import.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-tab-complete-nested-repls.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-tab-complete-no-warn.js`: repl is not supported in WASM
-- `parallel/test-repl-tab-complete-on-editor-mode.js`: repl is not supported in WASM
+- `parallel/test-repl-tab-complete-no-warn.js`: impossible: repl is not supported in WASM
+- `parallel/test-repl-tab-complete-on-editor-mode.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-tab-complete.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-tab.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-throw-null-or-undefined.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-uncaught-exception-async.js`: repl is not supported in WASM
+- `parallel/test-repl-uncaught-exception-async.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-uncaught-exception-evalcallback.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-uncaught-exception-standalone.js`: newly discovered, not yet evaluated
-- `parallel/test-repl-uncaught-exception.js`: repl is not supported in WASM
+- `parallel/test-repl-uncaught-exception.js`: impossible: repl is not supported in WASM
 - `parallel/test-repl-underscore.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-unexpected-token-recoverable.js`: newly discovered, not yet evaluated
 - `parallel/test-repl-unsafe-array-iteration.js`: newly discovered, not yet evaluated
@@ -5723,8 +5598,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-snapshot-worker.js`: newly discovered, not yet evaluated
 - `parallel/test-socket-address.js`: newly discovered, not yet evaluated
 - `parallel/test-socket-options-invalid.js`: newly discovered, not yet evaluated
-- `parallel/test-socket-write-after-fin-error.js`: newly discovered, not yet evaluated
-- `parallel/test-socket-write-after-fin.js`: newly discovered, not yet evaluated
 - `parallel/test-socket-writes-before-passed-to-tls-socket.js`: newly discovered, not yet evaluated
 - `parallel/test-source-map-api.js`: newly discovered, not yet evaluated
 - `parallel/test-source-map-cjs-require-cache.js`: newly discovered, not yet evaluated
@@ -5740,7 +5613,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-stdout-close-unref.js`: newly discovered, not yet evaluated
 - `parallel/test-stdout-pipeline-destroy.js`: newly discovered, not yet evaluated
 - `parallel/test-strace-openat-openssl.js`: newly discovered, not yet evaluated
-- `parallel/test-stream-pipeline-http2.js`: [manual] This test requires `http2.createServer()` (TCP server listening on a port) and `http2.connect()` (full HTTP/2 protocol client), neither of which are available in the WebAssembly/WASI envir...
+- `parallel/test-stream-pipeline-http2.js`: impossible: [manual] This test requires `http2.createServer()` (TCP server listening on a port) and `http2.connect()` (full HTTP/2 protocol client), neither of which are available in the WebAssembly/WASI envir...
 - `parallel/test-stream-readable-to-web.js`: [manual] amp fix caused regressions
 - `parallel/test-stream2-compatibility.js`: newly discovered, not yet evaluated
 - `parallel/test-stream2-httpclient-response-end.js`: requires HTTP server functionality, we only support clients
@@ -5758,11 +5631,9 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-timers-immediate-queue.js`: requires process.on('exit') hooks
 - `parallel/test-timers-interval-throw.js`: requires process.on('uncaughtException') hooks
 - `parallel/test-timers-promises-scheduler.js`: requires scheduler.yield, scheduler.wait, and ERR_ILLEGAL_CONSTRUCTOR
-- `parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js`: requires net.createServer and socket operations
 - `parallel/test-timers-unref-active.js`: requires timer.unref() and _unrefActive
 - `parallel/test-timers-unref-remove-other-unref-timers-only-one-fires.js`: requires timer.unref() which is not implemented
 - `parallel/test-timers-unref-remove-other-unref-timers.js`: requires timer.unref() which is not implemented
-- `parallel/test-timers-unrefed-in-callback.js`: requires timer.unref() and process.on('exit')
 - `parallel/test-timers.js`: newly discovered, not yet evaluated
 - `parallel/test-tls-0-dns-altname.js`: newly discovered, not yet evaluated
 - `parallel/test-tls-add-context.js`: newly discovered, not yet evaluated
@@ -5915,7 +5786,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-tls-sni-servername.js`: newly discovered, not yet evaluated
 - `parallel/test-tls-snicallback-error.js`: newly discovered, not yet evaluated
 - `parallel/test-tls-socket-allow-half-open-option.js`: newly discovered, not yet evaluated
-- `parallel/test-tls-socket-close.js`: requires TLS server functionality
+- `parallel/test-tls-socket-close.js`: impossible: requires TLS server functionality
 - `parallel/test-tls-socket-constructor-alpn-options-parsing.js`: newly discovered, not yet evaluated
 - `parallel/test-tls-socket-default-options.js`: newly discovered, not yet evaluated
 - `parallel/test-tls-socket-destroy.js`: newly discovered, not yet evaluated
@@ -6143,7 +6014,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-worker-messaging-errors-handler.js`: newly discovered, not yet evaluated
 - `parallel/test-worker-messaging-errors-invalid.js`: newly discovered, not yet evaluated
 - `parallel/test-worker-messaging-errors-timeout.js`: newly discovered, not yet evaluated
-- `parallel/test-worker-messaging.js`: requires worker_threads
+- `parallel/test-worker-messaging.js`: impossible: requires worker_threads
 - `parallel/test-worker-name.js`: newly discovered, not yet evaluated
 - `parallel/test-worker-no-stdin-stdout-interaction.js`: newly discovered, not yet evaluated
 - `parallel/test-worker-node-options.js`: newly discovered, not yet evaluated
@@ -6160,10 +6031,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `parallel/test-worker-workerdata-sharedarraybuffer.js`: newly discovered, not yet evaluated
 - `parallel/test-x509-escaping.js`: newly discovered, not yet evaluated
 - `sequential/test-buffer-creation-regression.js`: [manual] amp fix attempt failed verification
-- `sequential/test-child-process-emfile.js`: child_process is not supported in WebAssembly environment
-- `sequential/test-child-process-execsync.js`: child_process is not supported in WebAssembly environment
-- `sequential/test-child-process-exit.js`: child_process is not supported in WebAssembly environment
-- `sequential/test-child-process-pass-fd.js`: child_process is not supported in WebAssembly environment
+- `sequential/test-child-process-emfile.js`: impossible: child_process is not supported in WebAssembly environment
+- `sequential/test-child-process-execsync.js`: impossible: child_process is not supported in WebAssembly environment
+- `sequential/test-child-process-exit.js`: impossible: child_process is not supported in WebAssembly environment
+- `sequential/test-child-process-pass-fd.js`: impossible: child_process is not supported in WebAssembly environment
 - `sequential/test-cli-syntax-require.js`: newly discovered, not yet evaluated
 - `sequential/test-cluster-inspect-brk.js`: newly discovered, not yet evaluated
 - `sequential/test-cluster-net-listen-ipv6only-none.js`: newly discovered, not yet evaluated
@@ -6202,25 +6073,20 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 - `sequential/test-heapdump-flag.js`: newly discovered, not yet evaluated
 - `sequential/test-heapdump.js`: newly discovered, not yet evaluated
 - `sequential/test-http-econnrefused.js`: requires HTTP server functionality
-- `sequential/test-http-keep-alive-large-write.js`: requires HTTP server functionality
 - `sequential/test-http-keepalive-maxsockets.js`: requires HTTP server functionality
 - `sequential/test-http-regr-gh-2928.js`: requires HTTP server functionality
-- `sequential/test-http-server-keep-alive-timeout-slow-client-headers.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
-- `sequential/test-http-server-keep-alive-timeout-slow-server.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `sequential/test-http-server-request-timeouts-mixed.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
-- `sequential/test-http2-large-file.js`: [manual] http2/https not implemented
-- `sequential/test-http2-max-session-memory.js`: [manual] http2/https not implemented
-- `sequential/test-http2-ping-flood.js`: [manual] http2/https not implemented
-- `sequential/test-http2-settings-flood.js`: [manual] http2/https not implemented
-- `sequential/test-http2-timeout-large-write-file.js`: [manual] http2/https not implemented
-- `sequential/test-http2-timeout-large-write.js`: [manual] http2/https not implemented
-- `sequential/test-https-connect-localport.js`: [manual] http2/https not implemented
+- `sequential/test-http2-large-file.js`: impossible: [manual] http2/https not implemented
+- `sequential/test-http2-max-session-memory.js`: impossible: [manual] http2/https not implemented
+- `sequential/test-http2-ping-flood.js`: impossible: [manual] http2/https not implemented
+- `sequential/test-http2-settings-flood.js`: impossible: [manual] http2/https not implemented
+- `sequential/test-http2-timeout-large-write-file.js`: impossible: [manual] http2/https not implemented
+- `sequential/test-http2-timeout-large-write.js`: impossible: [manual] http2/https not implemented
+- `sequential/test-https-connect-localport.js`: impossible: [manual] http2/https not implemented
 - `sequential/test-module-loading.js`: newly discovered, not yet evaluated
 - `sequential/test-net-GH-5504.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `sequential/test-net-listen-shared-ports.js`: requires cluster
-- `sequential/test-net-localport.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `sequential/test-net-response-size.js`: net.js TCP implementation incomplete - needs event handling and API fixes
-- `sequential/test-net-server-bind.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `sequential/test-next-tick-error-spin.js`: newly discovered, not yet evaluated
 - `sequential/test-perf-hooks.js`: newly discovered, not yet evaluated
 - `sequential/test-pipe.js`: newly discovered, not yet evaluated
@@ -6296,29 +6162,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-buffer-write.js | 2 | 2 | 0 | 0 | 0 |
 | test-buffer-writeint.js | 5 | 5 | 0 | 0 | 0 |
 | test-buffer-writeuint.js | 6 | 6 | 0 | 0 | 0 |
-| test-child-process-bad-stdio.js | 3 | 0 | 3 | 0 | 0 |
-| test-child-process-constructor.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-cwd.js | 2 | 0 | 2 | 0 | 0 |
-| test-child-process-exec-abortcontroller-promisified.js | 8 | 0 | 8 | 0 | 0 |
 | test-child-process-exec-maxbuf.js | 11 | 9 | 2 | 0 | 0 |
-| test-child-process-execFile-promisified-abortController.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-execfile-maxbuf.js | 8 | 6 | 2 | 0 | 0 |
-| test-child-process-execfile.js | 8 | 5 | 3 | 0 | 0 |
-| test-child-process-execfilesync-maxbuf.js | 3 | 1 | 2 | 0 | 0 |
-| test-child-process-execsync-maxbuf.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-fork-abort-signal.js | 6 | 0 | 0 | 6 | 0 |
-| test-child-process-fork-args.js | 3 | 0 | 3 | 0 | 0 |
-| test-child-process-fork-timeout-kill-signal.js | 4 | 0 | 0 | 4 | 0 |
-| test-child-process-promisified.js | 6 | 0 | 6 | 0 | 0 |
-| test-child-process-send-returns-boolean.js | 2 | 0 | 0 | 2 | 0 |
-| test-child-process-spawn-controller.js | 9 | 0 | 0 | 9 | 0 |
-| test-child-process-spawn-timeout-kill-signal.js | 4 | 0 | 0 | 4 | 0 |
-| test-child-process-spawnsync-maxbuf.js | 4 | 2 | 2 | 0 | 0 |
-| test-child-process-spawnsync-validation-errors.js | 9 | 0 | 9 | 0 | 0 |
-| test-child-process-spawnsync.js | 2 | 0 | 2 | 0 | 0 |
-| test-child-process-stdio.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-validate-stdio.js | 3 | 0 | 3 | 0 | 0 |
-| test-child-process-windows-hide.js | 3 | 0 | 3 | 0 | 0 |
 | test-cli-eval.js | 5 | 5 | 0 | 0 | 0 |
 | test-cli-permission-deny-fs.js | 8 | 0 | 8 | 0 | 0 |
 | test-cli-permission-multiple-allow.js | 3 | 0 | 3 | 0 | 0 |
@@ -6348,20 +6192,20 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-crypto-secret-keygen.js | 3 | 3 | 0 | 0 | 0 |
 | test-crypto-sign-verify.js | 19 | 11 | 7 | 0 | 1 |
 | test-crypto-x509.js | 3 | 0 | 3 | 0 | 0 |
-| test-dgram-address.js | 2 | 1 | 1 | 0 | 0 |
+| test-dgram-address.js | 2 | 2 | 0 | 0 | 0 |
 | test-dgram-bind-fd-error.js | 2 | 0 | 2 | 0 | 0 |
-| test-dgram-blocklist.js | 3 | 0 | 3 | 0 | 0 |
+| test-dgram-blocklist.js | 3 | 0 | 0 | 3 | 0 |
 | test-dgram-close-signal.js | 3 | 0 | 3 | 0 | 0 |
 | test-dgram-create-socket-handle-fd.js | 3 | 0 | 3 | 0 | 0 |
 | test-dgram-create-socket-handle.js | 3 | 0 | 3 | 0 | 0 |
-| test-dgram-createSocket-type.js | 2 | 1 | 1 | 0 | 0 |
+| test-dgram-createSocket-type.js | 2 | 2 | 0 | 0 | 0 |
 | test-dgram-custom-lookup.js | 3 | 0 | 3 | 0 | 0 |
 | test-dgram-membership.js | 12 | 0 | 12 | 0 | 0 |
-| test-dgram-multicast-loopback.js | 2 | 0 | 2 | 0 | 0 |
-| test-dgram-multicast-set-interface.js | 8 | 3 | 5 | 0 | 0 |
-| test-dgram-setBroadcast.js | 2 | 0 | 2 | 0 | 0 |
-| test-dgram-socket-buffer-size.js | 6 | 0 | 6 | 0 | 0 |
-| test-dgram-unref.js | 2 | 2 | 0 | 0 | 0 |
+| test-dgram-multicast-loopback.js | 2 | 0 | 1 | 1 | 0 |
+| test-dgram-multicast-set-interface.js | 8 | 4 | 1 | 3 | 0 |
+| test-dgram-setBroadcast.js | 2 | 0 | 1 | 1 | 0 |
+| test-dgram-socket-buffer-size.js | 6 | 1 | 2 | 3 | 0 |
+| test-dgram-unref.js | 2 | 1 | 0 | 1 | 0 |
 | test-diagnostics-channel-tracing-channel-has-subscribers.js | 2 | 2 | 0 | 0 | 0 |
 | test-dns-lookup.js | 3 | 0 | 3 | 0 | 0 |
 | test-dns-setlocaladdress.js | 2 | 1 | 1 | 0 | 0 |
@@ -6435,74 +6279,52 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-fs-write-stream-flush.js | 4 | 4 | 0 | 0 | 0 |
 | test-fs-write-stream-fs.js | 2 | 2 | 0 | 0 | 0 |
 | test-fs-write-stream.js | 3 | 3 | 0 | 0 | 0 |
-| test-fs-write.js | 5 | 0 | 5 | 0 | 0 |
 | test-fs-writefile-with-fd.js | 4 | 3 | 1 | 0 | 0 |
 | test-fs-writev-sync.js | 4 | 4 | 0 | 0 | 0 |
 | test-fs-writev.js | 4 | 4 | 0 | 0 | 0 |
 | test-handle-wrap-hasref.js | 6 | 0 | 6 | 0 | 0 |
 | test-heap-prof-invalid-args.js | 3 | 0 | 0 | 0 | 3 |
-| test-http-1.0.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-aborted.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-agent-timeout.js | 4 | 0 | 4 | 0 | 0 |
-| test-http-chunk-extensions-limit.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-client-abort-destroy.js | 6 | 0 | 6 | 0 | 0 |
+| test-http-1.0.js | 3 | 3 | 0 | 0 | 0 |
+| test-http-aborted.js | 2 | 2 | 0 | 0 | 0 |
+| test-http-agent-timeout.js | 4 | 4 | 0 | 0 | 0 |
+| test-http-chunk-extensions-limit.js | 3 | 3 | 0 | 0 | 0 |
+| test-http-client-abort-destroy.js | 6 | 6 | 0 | 0 | 0 |
 | test-http-client-abort3.js | 2 | 2 | 0 | 0 | 0 |
 | test-http-client-aborted-event.js | 2 | 0 | 2 | 0 | 0 |
 | test-http-client-defaults.js | 3 | 3 | 0 | 0 | 0 |
-| test-http-client-res-destroyed.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-dummy-characters-smuggling.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-early-hints.js | 6 | 0 | 6 | 0 | 0 |
+| test-http-client-res-destroyed.js | 2 | 2 | 0 | 0 | 0 |
+| test-http-dummy-characters-smuggling.js | 2 | 1 | 0 | 1 | 0 |
+| test-http-early-hints.js | 6 | 2 | 4 | 0 | 0 |
 | test-http-generic-streams.js | 5 | 0 | 5 | 0 | 0 |
-| test-http-head-throw-on-response-body-write.js | 3 | 0 | 3 | 0 | 0 |
+| test-http-head-throw-on-response-body-write.js | 3 | 3 | 0 | 0 | 0 |
 | test-http-insecure-parser-per-stream.js | 5 | 3 | 2 | 0 | 0 |
 | test-http-max-header-size-per-stream.js | 4 | 2 | 2 | 0 | 0 |
-| test-http-missing-header-separator-cr.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-missing-header-separator-lf.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-outgoing-destroyed.js | 3 | 0 | 3 | 0 | 0 |
+| test-http-missing-header-separator-cr.js | 3 | 0 | 0 | 3 | 0 |
+| test-http-missing-header-separator-lf.js | 3 | 0 | 0 | 3 | 0 |
+| test-http-outgoing-destroyed.js | 3 | 1 | 0 | 2 | 0 |
 | test-http-outgoing-internal-headernames-getter.js | 2 | 2 | 0 | 0 | 0 |
 | test-http-outgoing-internal-headers.js | 3 | 3 | 0 | 0 | 0 |
-| test-http-outgoing-message-capture-rejection.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-outgoing-properties.js | 5 | 3 | 2 | 0 | 0 |
+| test-http-outgoing-message-capture-rejection.js | 2 | 0 | 0 | 2 | 0 |
+| test-http-outgoing-properties.js | 5 | 4 | 0 | 1 | 0 |
 | test-http-outgoing-proto.js | 2 | 2 | 0 | 0 | 0 |
 | test-http-outgoing-renderHeaders.js | 4 | 4 | 0 | 0 | 0 |
 | test-http-outgoing-settimeout.js | 2 | 2 | 0 | 0 | 0 |
 | test-http-parser.js | 12 | 12 | 0 | 0 | 0 |
-| test-http-req-res-close.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-request-host-header.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-request-join-authorization-headers.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-response-close.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-response-multi-content-length.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-response-setheaders.js | 7 | 0 | 7 | 0 | 0 |
-| test-http-server-capture-rejections.js | 3 | 0 | 3 | 0 | 0 |
-| test-http-server-connection-list-when-close.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-server-non-utf8-header.js | 3 | 0 | 3 | 0 | 0 |
+| test-http-req-res-close.js | 3 | 1 | 2 | 0 | 0 |
+| test-http-request-host-header.js | 2 | 1 | 0 | 1 | 0 |
+| test-http-request-join-authorization-headers.js | 3 | 3 | 0 | 0 | 0 |
+| test-http-response-close.js | 3 | 3 | 0 | 0 | 0 |
+| test-http-response-multi-content-length.js | 2 | 0 | 0 | 2 | 0 |
+| test-http-response-setheaders.js | 7 | 7 | 0 | 0 | 0 |
+| test-http-server-capture-rejections.js | 3 | 0 | 0 | 3 | 0 |
+| test-http-server-connection-list-when-close.js | 2 | 0 | 0 | 2 | 0 |
+| test-http-server-non-utf8-header.js | 3 | 3 | 0 | 0 | 0 |
 | test-http-server-options-highwatermark.js | 2 | 0 | 2 | 0 | 0 |
 | test-http-server-timeouts-validation.js | 7 | 7 | 0 | 0 | 0 |
-| test-http-transfer-encoding-smuggling.js | 2 | 0 | 2 | 0 | 0 |
-| test-http-write-head-2.js | 4 | 0 | 4 | 0 | 0 |
+| test-http-transfer-encoding-smuggling.js | 2 | 2 | 0 | 0 | 0 |
+| test-http-write-head-2.js | 4 | 4 | 0 | 0 | 0 |
 | test-http2-alpn.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-capture-rejection.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-client-destroy.js | 9 | 0 | 9 | 0 | 0 |
-| test-http2-client-setLocalWindowSize.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-compat-expect-continue.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-compat-serverrequest-headers.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-compat-serverresponse-end.js | 10 | 0 | 10 | 0 | 0 |
-| test-http2-compat-serverresponse-write.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-compat-serverresponse-writehead-array.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-compat-write-early-hints.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-connect.js | 7 | 0 | 7 | 0 | 0 |
-| test-http2-create-client-connect.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-getpackedsettings.js | 11 | 0 | 11 | 0 | 0 |
 | test-http2-https-fallback.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-invalidheaderfield.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-origin.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-perform-server-handshake.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-server-errors.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-server-settimeout-no-callback.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-server-startup.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-too-many-settings.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-util-headers-list.js | 9 | 0 | 9 | 0 | 0 |
-| test-http2-util-update-options-buffer.js | 2 | 0 | 2 | 0 | 0 |
 | test-https-agent-create-connection.js | 7 | 0 | 7 | 0 | 0 |
 | test-https-argument-of-creating.js | 4 | 0 | 4 | 0 | 0 |
 | test-https-insecure-parse-per-stream.js | 5 | 3 | 2 | 0 | 0 |
@@ -6521,21 +6343,21 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-module-multi-extensions.js | 7 | 7 | 0 | 0 | 0 |
 | test-module-setsourcemapssupport.js | 2 | 2 | 0 | 0 | 0 |
 | test-module-strip-types.js | 9 | 0 | 0 | 0 | 9 |
-| test-net-allow-half-open.js | 2 | 0 | 2 | 0 | 0 |
-| test-net-autoselectfamily-default.js | 2 | 0 | 2 | 0 | 0 |
-| test-net-autoselectfamily.js | 4 | 1 | 3 | 0 | 0 |
+| test-net-allow-half-open.js | 2 | 2 | 0 | 0 | 0 |
+| test-net-autoselectfamily-default.js | 2 | 2 | 0 | 0 | 0 |
+| test-net-autoselectfamily.js | 4 | 3 | 0 | 1 | 0 |
 | test-net-better-error-messages-path.js | 2 | 2 | 0 | 0 | 0 |
-| test-net-blocklist.js | 4 | 4 | 0 | 0 | 0 |
-| test-net-bytes-written-large.js | 3 | 0 | 3 | 0 | 0 |
-| test-net-connect-options-port.js | 4 | 0 | 4 | 0 | 0 |
+| test-net-blocklist.js | 4 | 3 | 0 | 1 | 0 |
+| test-net-bytes-written-large.js | 3 | 1 | 0 | 2 | 0 |
+| test-net-connect-options-port.js | 4 | 0 | 3 | 1 | 0 |
 | test-net-normalize-args.js | 2 | 0 | 2 | 0 | 0 |
 | test-net-perf_hooks.js | 2 | 0 | 2 | 0 | 0 |
-| test-net-server-call-listen-multiple-times.js | 3 | 0 | 3 | 0 | 0 |
+| test-net-server-call-listen-multiple-times.js | 3 | 3 | 0 | 0 | 0 |
 | test-net-server-listen-handle.js | 2 | 0 | 2 | 0 | 0 |
-| test-net-server-listen-options-signal.js | 3 | 0 | 3 | 0 | 0 |
-| test-net-server-listen-options.js | 3 | 0 | 3 | 0 | 0 |
-| test-net-server-listen-path.js | 6 | 0 | 6 | 0 | 0 |
-| test-net-socket-write-after-close.js | 2 | 0 | 2 | 0 | 0 |
+| test-net-server-listen-options-signal.js | 3 | 0 | 0 | 3 | 0 |
+| test-net-server-listen-options.js | 3 | 1 | 2 | 0 | 0 |
+| test-net-server-listen-path.js | 6 | 6 | 0 | 0 | 0 |
+| test-net-socket-write-after-close.js | 2 | 2 | 0 | 0 | 0 |
 | test-nodeeventtarget.js | 7 | 0 | 7 | 0 | 0 |
 | test-perf-hooks-histogram.js | 6 | 0 | 6 | 0 | 0 |
 | test-perf-hooks-resourcetiming.js | 5 | 0 | 5 | 0 | 0 |
@@ -6565,7 +6387,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-priority-queue.js | 6 | 0 | 6 | 0 | 0 |
 | test-process-env-allowed-flags.js | 3 | 1 | 2 | 0 | 0 |
 | test-process-env-windows-error-reset.js | 2 | 2 | 0 | 0 | 0 |
-| test-process-env.js | 4 | 4 | 0 | 0 | 0 |
 | test-process-getactiveresources-track-timer-lifetime.js | 2 | 0 | 2 | 0 | 0 |
 | test-process-uncaught-exception-monitor.js | 2 | 0 | 0 | 2 | 0 |
 | test-querystring.js | 11 | 11 | 0 | 0 | 0 |
@@ -6576,9 +6397,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-readline-tab-complete.js | 2 | 0 | 2 | 0 | 0 |
 | test-readline.js | 6 | 0 | 6 | 0 | 0 |
 | test-release-changelog.js | 2 | 0 | 2 | 0 | 0 |
-| test-repl-context.js | 2 | 0 | 2 | 0 | 0 |
-| test-repl-require.js | 2 | 0 | 2 | 0 | 0 |
-| test-repl-tab-complete-import.js | 3 | 0 | 3 | 0 | 0 |
+| test-repl-require.js | 2 | 0 | 0 | 2 | 0 |
 | test-repl-tab-complete.js | 5 | 0 | 5 | 0 | 0 |
 | test-require-cache.js | 2 | 1 | 1 | 0 | 0 |
 | test-require-node-prefix.js | 2 | 0 | 2 | 0 | 0 |
@@ -6644,7 +6463,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-stream-compose.js | 22 | 21 | 1 | 0 | 0 |
 | test-stream-construct.js | 12 | 12 | 0 | 0 | 0 |
 | test-stream-consumers.js | 16 | 16 | 0 | 0 | 0 |
-| test-stream-destroy.js | 6 | 2 | 4 | 0 | 0 |
+| test-stream-destroy.js | 6 | 3 | 3 | 0 | 0 |
 | test-stream-drop-take.js | 6 | 5 | 1 | 0 | 0 |
 | test-stream-duplex-destroy.js | 16 | 15 | 1 | 0 | 0 |
 | test-stream-duplex-end.js | 3 | 3 | 0 | 0 | 0 |
@@ -6657,7 +6476,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-stream-error-once.js | 2 | 2 | 0 | 0 | 0 |
 | test-stream-event-names.js | 6 | 6 | 0 | 0 | 0 |
 | test-stream-filter.js | 12 | 12 | 0 | 0 | 0 |
-| test-stream-finished.js | 42 | 34 | 8 | 0 | 0 |
+| test-stream-finished.js | 42 | 36 | 5 | 1 | 0 |
 | test-stream-flatMap.js | 8 | 8 | 0 | 0 | 0 |
 | test-stream-forEach.js | 11 | 11 | 0 | 0 | 0 |
 | test-stream-map.js | 17 | 15 | 2 | 0 | 0 |
@@ -6667,10 +6486,10 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-stream-pipe-flow.js | 3 | 3 | 0 | 0 | 0 |
 | test-stream-pipe-same-destination-twice.js | 3 | 3 | 0 | 0 | 0 |
 | test-stream-pipe-unpipe-streams.js | 2 | 2 | 0 | 0 | 0 |
-| test-stream-pipeline.js | 80 | 68 | 12 | 0 | 0 |
+| test-stream-pipeline.js | 80 | 75 | 4 | 1 | 0 |
 | test-stream-promises.js | 9 | 9 | 0 | 0 | 0 |
 | test-stream-readable-aborted.js | 5 | 5 | 0 | 0 | 0 |
-| test-stream-readable-async-iterators.js | 7 | 5 | 2 | 0 | 0 |
+| test-stream-readable-async-iterators.js | 7 | 6 | 0 | 1 | 0 |
 | test-stream-readable-default-encoding.js | 3 | 3 | 0 | 0 | 0 |
 | test-stream-readable-destroy.js | 23 | 23 | 0 | 0 | 0 |
 | test-stream-readable-didRead.js | 6 | 6 | 0 | 0 | 0 |
@@ -6711,7 +6530,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-stream2-readable-wrap-error.js | 2 | 2 | 0 | 0 | 0 |
 | test-stream2-set-encoding.js | 9 | 9 | 0 | 0 | 0 |
 | test-stream2-transform.js | 17 | 16 | 1 | 0 | 0 |
-| test-stream2-writable.js | 24 | 21 | 3 | 0 | 0 |
+| test-stream2-writable.js | 24 | 22 | 2 | 0 | 0 |
 | test-streams-highwatermark.js | 6 | 4 | 2 | 0 | 0 |
 | test-stringbytes-external.js | 3 | 0 | 0 | 3 | 0 |
 | test-tick-processor-version-check.js | 2 | 0 | 2 | 0 | 0 |
@@ -6771,7 +6590,7 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-webstreams-abort-controller.js | 6 | 6 | 0 | 0 | 0 |
 | test-webstreams-compose.js | 20 | 20 | 0 | 0 | 0 |
 | test-webstreams-finished.js | 20 | 20 | 0 | 0 | 0 |
-| test-webstreams-pipeline.js | 17 | 15 | 2 | 0 | 0 |
+| test-webstreams-pipeline.js | 17 | 17 | 0 | 0 | 0 |
 | test-whatwg-encoding-custom-fatal-streaming.js | 2 | 0 | 0 | 0 | 2 |
 | test-whatwg-encoding-custom-interop.js | 4 | 1 | 3 | 0 | 0 |
 | test-whatwg-encoding-custom-textdecoder.js | 12 | 0 | 12 | 0 | 0 |
@@ -6822,7 +6641,6 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-zlib-failed-init.js | 2 | 2 | 0 | 0 | 0 |
 | test-zlib-zero-windowBits.js | 2 | 2 | 0 | 0 | 0 |
 | test-async-wrap-getasyncid.js | 18 | 0 | 18 | 0 | 0 |
-| test-child-process-execsync.js | 7 | 0 | 7 | 0 | 0 |
 | test-cpu-prof-invalid-options.js | 2 | 0 | 0 | 0 | 2 |
 | test-crypto-timing-safe-equal.js | 3 | 3 | 0 | 0 | 0 |
 | test-diagnostic-dir-cpu-prof.js | 2 | 0 | 0 | 0 | 2 |
@@ -6834,8 +6652,8 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 | test-heapdump.js | 4 | 0 | 4 | 0 | 0 |
 | test-init.js | 3 | 3 | 0 | 0 | 0 |
 | test-module-loading.js | 11 | 0 | 11 | 0 | 0 |
-| test-net-server-address.js | 5 | 4 | 1 | 0 | 0 |
-| test-net-server-bind.js | 5 | 0 | 5 | 0 | 0 |
+| test-net-server-address.js | 5 | 5 | 0 | 0 | 0 |
+| test-net-server-bind.js | 5 | 5 | 0 | 0 | 0 |
 | test-perf-hooks.js | 2 | 0 | 2 | 0 | 0 |
 | test-performance-eventloopdelay.js | 3 | 0 | 3 | 0 | 0 |
 | test-single-executable-application-assets.js | 3 | 0 | 3 | 0 | 0 |
@@ -6847,43 +6665,92 @@ Including 322 tests that use Node.js internals (`--expose-internals`, `internalB
 These tests are marked with `"skip": true` in `config.jsonc` but actually pass.
 Consider removing the `skip` flag.
 
-63 test(s) should be unskipped:
+140 test(s) should be unskipped:
 
 - `es-module/test-cjs-prototype-pollution.js`
 - `es-module/test-disable-require-module-with-detection.js`
-- `es-module/test-esm-preserve-symlinks.js`
-- `es-module/test-esm-symlink-main.js`
-- `es-module/test-esm-symlink.js`
 - `es-module/test-require-module-cycle-cjs-esm-esm.js`
 - `es-module/test-require-module-dynamic-import-3.js`
 - `es-module/test-require-module-dynamic-import-4.js`
 - `es-module/test-require-module-implicit.js`
 - `es-module/test-require-module-transpiled.js`
-- `parallel/test-child-process-can-write-to-stdout.js`
-- `parallel/test-child-process-exit-code.js`
-- `parallel/test-child-process-fork-exec-argv.js`
-- `parallel/test-child-process-kill.js`
-- `parallel/test-child-process-no-deprecation.js`
-- `parallel/test-child-process-set-blocking.js`
-- `parallel/test-child-process-stdin-ipc.js`
-- `parallel/test-child-process-stdout-flush-exit.js`
-- `parallel/test-child-process-stdout-flush.js`
-- `parallel/test-child-process-stdout-ipc.js`
+- `parallel/test-cli-eval-event.js`
+- `parallel/test-dgram-address.js`
+- `parallel/test-dgram-error-message-address.js`
+- `parallel/test-dgram-listen-after-bind.js`
+- `parallel/test-diagnostic-channel-http-request-created.js`
 - `parallel/test-domain-nested-throw.js`
+- `parallel/test-http-after-connect.js`
+- `parallel/test-http-buffer-sanity.js`
+- `parallel/test-http-client-abort.js`
+- `parallel/test-http-client-close-event.js`
+- `parallel/test-http-client-race-2.js`
+- `parallel/test-http-client-race.js`
+- `parallel/test-http-client-reject-unexpected-agent.js`
+- `parallel/test-http-client-res-destroyed.js`
+- `parallel/test-http-client-set-timeout-after-end.js`
+- `parallel/test-http-end-throw-socket-handling.js`
+- `parallel/test-http-highwatermark.js`
+- `parallel/test-http-incoming-message-options.js`
+- `parallel/test-http-pipeline-assertionerror-finish.js`
+- `parallel/test-http-proxy.js`
+- `parallel/test-http-remove-connection-header-persists-connection.js`
+- `parallel/test-http-response-splitting.js`
+- `parallel/test-http-server-method.query.js`
+- `parallel/test-http-server-non-utf8-header.js`
+- `parallel/test-http-status-code.js`
+- `parallel/test-http-status-reason-invalid-chars.js`
+- `parallel/test-http-upgrade-server.js`
+- `parallel/test-http-url.parse-auth.js`
+- `parallel/test-http-write-head-2.js`
 - `parallel/test-inspector-stops-no-file.js`
 - `parallel/test-kill-segfault-freebsd.js`
-- `parallel/test-module-main-extension-lookup.js`
+- `parallel/test-net-connect-options-allowhalfopen.js`
+- `parallel/test-net-connect-reset-after-destroy.js`
+- `parallel/test-net-connect-reset-before-connected.js`
+- `parallel/test-net-connect-reset-until-connected.js`
+- `parallel/test-net-dns-custom-lookup.js`
+- `parallel/test-net-dns-error.js`
+- `parallel/test-net-dns-lookup-skip.js`
+- `parallel/test-net-dns-lookup.js`
+- `parallel/test-net-keepalive.js`
+- `parallel/test-net-large-string.js`
+- `parallel/test-net-local-address-port.js`
+- `parallel/test-net-pause-resume-connecting.js`
+- `parallel/test-net-persistent-keepalive.js`
+- `parallel/test-net-server-call-listen-multiple-times.js`
+- `parallel/test-net-server-listen-remove-callback.js`
+- `parallel/test-net-server-max-connections-close-makes-more-available.js`
+- `parallel/test-net-server-max-connections.js`
+- `parallel/test-net-server-pause-on-connect.js`
+- `parallel/test-net-server-try-ports.js`
+- `parallel/test-net-socket-destroy-send.js`
+- `parallel/test-net-socket-end-before-connect.js`
+- `parallel/test-net-socket-local-address.js`
+- `parallel/test-net-socket-reset-send.js`
+- `parallel/test-net-socket-reset-twice.js`
+- `parallel/test-net-socket-timeout-unref.js`
+- `parallel/test-net-socket-write-after-close.js`
+- `parallel/test-net-sync-cork.js`
+- `parallel/test-net-throttle.js`
+- `parallel/test-net-write-after-end-nt.js`
+- `parallel/test-net-write-cb-on-destroy-before-connect.js`
+- `parallel/test-net-write-connect-write.js`
+- `parallel/test-pipe-outgoing-message-data-emitted-after-ended.js`
 - `parallel/test-process-argv-0.js`
 - `parallel/test-process-chdir.js`
-- `parallel/test-process-env.js`
 - `parallel/test-process-remove-all-signal-listeners.js`
 - `parallel/test-repl-syntax-error-handling.js`
+- `parallel/test-socket-write-after-fin-error.js`
+- `parallel/test-socket-write-after-fin.js`
 - `parallel/test-stdin-child-proc.js`
 - `parallel/test-stdin-script-child.js`
 - `parallel/test-stdio-closed.js`
 - `parallel/test-stdio-pipe-redirect.js`
 - `parallel/test-stdout-cannot-be-closed-child-process-pipe.js`
 - `parallel/test-stdout-stderr-reading.js`
+- `parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js`
+- `parallel/test-timers-unrefed-in-callback.js`
 - `parallel/test-tls-cipher-list.js`
 - `parallel/test-trace-events-all.js`
 - `parallel/test-trace-events-async-hooks.js`
@@ -6899,19 +6766,47 @@ Consider removing the `skip` flag.
 - `parallel/test-trace-events-worker-metadata.js`
 - `parallel/test-vm-syntax-error-message.js`
 - `parallel/test-vm-syntax-error-stderr.js`
+- `sequential/test-http-keep-alive-large-write.js`
+- `sequential/test-http-server-keep-alive-timeout-slow-client-headers.js`
+- `sequential/test-http-server-keep-alive-timeout-slow-server.js`
 - `sequential/test-init.js`
+- `sequential/test-net-localport.js`
+- `sequential/test-net-server-bind.js`
 - `sequential/test-stream2-stderr-sync.js`
 - `es-module/test-require-module.js#block_00_test_named_exports`
 - `es-module/test-require-module.js#block_01_test_esm_that_import_esm`
 - `es-module/test-require-module.js#block_03_test_esm_that_require_cjs`
 - `es-module/test-require-module.js#block_05_test_data_import`
+- `parallel/test-dgram-address.js#block_00_block_00`
+- `parallel/test-http-aborted.js#block_00_block_00`
+- `parallel/test-http-client-res-destroyed.js#block_00_block_00`
+- `parallel/test-http-client-res-destroyed.js#block_01_block_01`
+- `parallel/test-http-dummy-characters-smuggling.js#block_00_block_00`
+- `parallel/test-http-server-non-utf8-header.js#block_00_block_00`
+- `parallel/test-http-server-non-utf8-header.js#block_01_block_01`
+- `parallel/test-http-server-non-utf8-header.js#block_02_block_02`
+- `parallel/test-http-write-head-2.js#block_00_block_00`
+- `parallel/test-http-write-head-2.js#block_01_block_01`
+- `parallel/test-http-write-head-2.js#block_02_block_02`
+- `parallel/test-http-write-head-2.js#block_03_block_03`
+- `parallel/test-net-server-call-listen-multiple-times.js#block_00_first_test_check_that_after_error_event_you_can_listen_right`
+- `parallel/test-net-server-call-listen-multiple-times.js#block_01_second_test_check_that_second_listen_call_throws_an_error`
+- `parallel/test-net-server-call-listen-multiple-times.js#block_02_check_that_after_the_close_call_you_can_run_listen_method_ju`
+- `parallel/test-net-server-listen-options.js#block_00_block_00`
+- `parallel/test-net-socket-write-after-close.js#block_00_block_00`
+- `parallel/test-net-socket-write-after-close.js#block_01_block_01`
 - `parallel/test-permission-fs-require.js#block_02_block_02`
-- `parallel/test-process-env.js#block_00_block_00`
 - `parallel/test-set-http-max-http-headers.js#test_00_test_00`
+- `parallel/test-stream-pipeline.js#block_07_block_07`
 - `parallel/test-webstorage.js#test_00_disabled_without_experimental_webstorage`
 - `sequential/test-init.js#block_00_block_00`
 - `sequential/test-init.js#block_01_block_01`
 - `sequential/test-init.js#block_02_block_02`
+- `sequential/test-net-server-bind.js#block_00_with_only_a_callback_server_should_get_a_port_assigned_by_th`
+- `sequential/test-net-server-bind.js#block_01_no_callback_to_listen_assume_we_can_bind_in_100_ms`
+- `sequential/test-net-server-bind.js#block_02_callback_to_listen`
+- `sequential/test-net-server-bind.js#block_03_backlog_argument`
+- `sequential/test-net-server-bind.js#block_04_backlog_argument_without_host_argument`
 
 ## Passing Tests Not in Config
 
@@ -6929,41 +6824,60 @@ _All passing tests are already in config.jsonc._
 | async_hooks | 38 | 4 | 11 | 0 | 23 | 10.5% |
 | blob | 25 | 2 | 22 | 0 | 1 | 8.0% |
 | buffer | 196 | 186 | 0 | 8 | 2 | 94.9% |
-| child_process | 232 | 40 | 84 | 27 | 81 | 17.2% |
-| cluster | 87 | 0 | 4 | 0 | 83 | 0.0% |
+| child_process | 122 | 16 | 12 | 3 | 91 | 13.1% |
+| cli | 35 | 13 | 11 | 0 | 11 | 37.1% |
+| cluster | 87 | 0 | 3 | 1 | 83 | 0.0% |
+| common | 11 | 1 | 7 | 0 | 3 | 9.1% |
+| compile | 15 | 0 | 0 | 0 | 15 | 0.0% |
 | console | 33 | 32 | 1 | 0 | 0 | 97.0% |
 | crypto | 263 | 224 | 21 | 5 | 13 | 85.2% |
-| dgram | 132 | 15 | 87 | 0 | 30 | 11.4% |
+| dgram | 132 | 22 | 35 | 48 | 27 | 16.7% |
 | diagnostics_channel | 34 | 19 | 4 | 0 | 11 | 55.9% |
-| dns | 46 | 3 | 26 | 0 | 17 | 6.5% |
+| dns | 46 | 2 | 21 | 6 | 17 | 4.3% |
 | domain | 63 | 27 | 15 | 0 | 21 | 42.9% |
+| encoding | 1 | 1 | 0 | 0 | 0 | 100.0% |
+| errors | 51 | 3 | 36 | 0 | 12 | 5.9% |
+| eslint | 24 | 0 | 0 | 0 | 24 | 0.0% |
 | events | 101 | 62 | 33 | 0 | 6 | 61.4% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 100.0% |
-| fs | 538 | 477 | 17 | 12 | 32 | 88.7% |
-| http | 960 | 93 | 348 | 0 | 519 | 9.7% |
-| inspector | 91 | 1 | 0 | 0 | 90 | 1.1% |
-| module | 203 | 83 | 48 | 2 | 70 | 40.9% |
-| net | 215 | 44 | 92 | 0 | 79 | 20.5% |
+| fs | 533 | 483 | 6 | 12 | 32 | 90.6% |
+| global | 11 | 2 | 0 | 0 | 9 | 18.2% |
+| heap | 24 | 0 | 5 | 0 | 19 | 0.0% |
+| http | 870 | 285 | 68 | 24 | 493 | 32.8% |
+| inspector | 95 | 1 | 0 | 0 | 94 | 1.1% |
+| internal | 61 | 3 | 38 | 0 | 20 | 4.9% |
+| module | 203 | 79 | 48 | 2 | 74 | 38.9% |
+| net | 240 | 148 | 17 | 13 | 62 | 61.7% |
+| node | 9 | 0 | 7 | 0 | 2 | 0.0% |
 | os | 6 | 6 | 0 | 0 | 0 | 100.0% |
-| other | 1471 | 208 | 719 | 6 | 538 | 14.1% |
+| other | 508 | 80 | 232 | 5 | 191 | 15.7% |
 | path | 16 | 16 | 0 | 0 | 0 | 100.0% |
 | perf_hooks | 49 | 3 | 32 | 0 | 14 | 6.1% |
-| process | 98 | 45 | 10 | 2 | 41 | 45.9% |
+| permission | 71 | 5 | 20 | 0 | 46 | 7.0% |
+| process | 94 | 40 | 10 | 2 | 42 | 42.6% |
+| promises | 23 | 1 | 1 | 0 | 21 | 4.3% |
 | querystring | 15 | 15 | 0 | 0 | 0 | 100.0% |
 | readline | 106 | 0 | 86 | 0 | 20 | 0.0% |
-| repl | 89 | 1 | 14 | 0 | 74 | 1.1% |
+| repl | 84 | 1 | 6 | 3 | 74 | 1.2% |
+| shadow_realm | 12 | 0 | 3 | 0 | 9 | 0.0% |
+| signal | 5 | 1 | 0 | 0 | 4 | 20.0% |
+| snapshot | 79 | 0 | 48 | 0 | 31 | 0.0% |
 | sqlite | 43 | 37 | 6 | 0 | 0 | 86.0% |
-| stream | 829 | 740 | 79 | 0 | 10 | 89.3% |
+| stdio | 23 | 14 | 1 | 0 | 8 | 60.9% |
+| stream | 829 | 754 | 59 | 6 | 10 | 91.0% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 100.0% |
 | test_runner | 175 | 72 | 80 | 2 | 21 | 41.1% |
-| timers | 109 | 36 | 49 | 2 | 22 | 33.0% |
-| tls | 214 | 4 | 18 | 0 | 192 | 1.9% |
+| timers | 109 | 38 | 49 | 2 | 20 | 34.9% |
+| tls | 214 | 4 | 17 | 1 | 192 | 1.9% |
 | trace_events | 35 | 16 | 0 | 0 | 19 | 45.7% |
 | tty | 5 | 0 | 0 | 0 | 5 | 0.0% |
 | url | 33 | 33 | 0 | 0 | 0 | 100.0% |
 | util | 183 | 76 | 106 | 0 | 1 | 41.5% |
 | v8 | 49 | 15 | 21 | 0 | 13 | 30.6% |
 | vm | 127 | 25 | 26 | 9 | 67 | 19.7% |
+| webcrypto | 118 | 3 | 88 | 0 | 27 | 2.5% |
+| webstreams | 72 | 69 | 0 | 0 | 3 | 95.8% |
+| whatwg | 289 | 16 | 214 | 1 | 58 | 5.5% |
 | worker_threads | 204 | 19 | 121 | 7 | 57 | 9.3% |
-| zlib | 67 | 56 | 11 | 0 | 0 | 83.6% |
+| zlib | 67 | 57 | 10 | 0 | 0 | 85.1% |
 
