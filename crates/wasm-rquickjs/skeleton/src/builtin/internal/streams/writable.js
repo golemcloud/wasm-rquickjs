@@ -530,7 +530,7 @@ function afterWrite(stream, state, count, cb) {
 
     while (count-- > 0) {
         state.pendingcb--;
-        cb();
+        cb(null);
     }
 
     if (state.destroyed) {
@@ -550,12 +550,12 @@ function errorBuffer(state) {
         const { chunk, callback } = state.buffered[n];
         const len = state.objectMode ? 1 : chunk.length;
         state.length -= len;
-        callback(new ERR_STREAM_DESTROYED("write"));
+        callback(state.errored ?? new ERR_STREAM_DESTROYED("write"));
     }
 
     const onfinishCallbacks = state[kOnFinished].splice(0);
     for (let i = 0; i < onfinishCallbacks.length; i++) {
-        onfinishCallbacks[i](new ERR_STREAM_DESTROYED("end"));
+        onfinishCallbacks[i](state.errored ?? new ERR_STREAM_DESTROYED("end"));
     }
 
     resetBuffer(state);
@@ -676,6 +676,8 @@ Writable.prototype.end = function (chunk, encoding, cb) {
     if (typeof cb === "function") {
         if (err || state.finished) {
             nextTick(cb, err);
+        } else if (state.errored) {
+            nextTick(cb, state.errored);
         } else {
             state[kOnFinished].push(cb);
         }
@@ -744,7 +746,7 @@ function callFinal(stream, state) {
             }
         }
     } catch (err) {
-        onFinish(stream, state, err);
+        onFinish(err);
     }
 
     state.sync = false;
@@ -782,7 +784,7 @@ function finish(stream, state) {
 
     const onfinishCallbacks = state[kOnFinished].splice(0);
     for (let i = 0; i < onfinishCallbacks.length; i++) {
-        onfinishCallbacks[i]();
+        onfinishCallbacks[i](null);
     }
 
     stream.emit("finish");

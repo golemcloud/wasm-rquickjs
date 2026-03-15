@@ -2505,6 +2505,11 @@ enum KeyData {
     RsaPrivate(RsaPrivateKey),
     #[cfg(feature = "crypto-full")]
     RsaPublic(RsaPublicKey),
+    // DSA
+    #[cfg(feature = "crypto-full")]
+    DsaPrivate(dsa::SigningKey),
+    #[cfg(feature = "crypto-full")]
+    DsaPublic(dsa::VerifyingKey),
     // Symmetric (secret) key
     Secret(Vec<u8>),
 }
@@ -2517,13 +2522,15 @@ impl KeyData {
             #[cfg(feature = "crypto-full")]
             KeyData::EcP384Private(_)
             | KeyData::EcK256Private(_)
-            | KeyData::RsaPrivate(_) => "private",
+            | KeyData::RsaPrivate(_)
+            | KeyData::DsaPrivate(_) => "private",
             KeyData::Ed25519Public(_)
             | KeyData::EcP256Public(_) => "public",
             #[cfg(feature = "crypto-full")]
             KeyData::EcP384Public(_)
             | KeyData::EcK256Public(_)
-            | KeyData::RsaPublic(_) => "public",
+            | KeyData::RsaPublic(_)
+            | KeyData::DsaPublic(_) => "public",
             KeyData::Secret(_) => "secret",
         }
     }
@@ -2538,6 +2545,8 @@ impl KeyData {
             KeyData::EcK256Private(_) | KeyData::EcK256Public(_) => Some("ec"),
             #[cfg(feature = "crypto-full")]
             KeyData::RsaPrivate(_) | KeyData::RsaPublic(_) => Some("rsa"),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPrivate(_) | KeyData::DsaPublic(_) => Some("dsa"),
             KeyData::Secret(_) => None,
         }
     }
@@ -2576,6 +2585,12 @@ impl KeyData {
             }
             #[cfg(feature = "crypto-full")]
             KeyData::RsaPublic(pk) => pk.to_public_key_der().ok().map(|d| d.as_ref().to_vec()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPrivate(sk) => {
+                sk.verifying_key().to_public_key_der().ok().map(|d| d.as_ref().to_vec())
+            }
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPublic(pk) => pk.to_public_key_der().ok().map(|d| d.as_ref().to_vec()),
             KeyData::Secret(raw) => Some(raw.clone()),
         }
     }
@@ -2591,6 +2606,8 @@ impl KeyData {
             KeyData::EcK256Private(sk) => sk.to_pkcs8_der().ok().map(|d| d.as_bytes().to_vec()),
             #[cfg(feature = "crypto-full")]
             KeyData::RsaPrivate(sk) => sk.to_pkcs8_der().ok().map(|d| d.as_bytes().to_vec()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPrivate(sk) => sk.to_pkcs8_der().ok().map(|d| d.as_bytes().to_vec()),
             _ => None,
         }
     }
@@ -2626,6 +2643,13 @@ impl KeyData {
                 .ok(),
             #[cfg(feature = "crypto-full")]
             KeyData::RsaPublic(pk) => pk.to_public_key_pem(pkcs8::LineEnding::LF).ok(),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPrivate(sk) => sk
+                .verifying_key()
+                .to_public_key_pem(pkcs8::LineEnding::LF)
+                .ok(),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPublic(pk) => pk.to_public_key_pem(pkcs8::LineEnding::LF).ok(),
             KeyData::Secret(_) => None,
         }
     }
@@ -2650,6 +2674,11 @@ impl KeyData {
                 .map(|s| s.to_string()),
             #[cfg(feature = "crypto-full")]
             KeyData::RsaPrivate(sk) => sk
+                .to_pkcs8_pem(pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPrivate(sk) => sk
                 .to_pkcs8_pem(pkcs8::LineEnding::LF)
                 .ok()
                 .map(|s| s.to_string()),
@@ -2793,6 +2822,43 @@ impl KeyData {
                 .to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF)
                 .ok()
                 .map(|s| s.to_string()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPrivate(sk) => sk
+                .to_pkcs8_encrypted_pem(rng, passphrase, pkcs8::LineEnding::LF)
+                .ok()
+                .map(|s| s.to_string()),
+            _ => None,
+        }
+    }
+
+    fn export_pkcs8_encrypted_der(&self, passphrase: &[u8]) -> Option<Vec<u8>> {
+        use pkcs8::EncodePrivateKey;
+        let rng = rand_core_06::OsRng;
+        match self {
+            KeyData::EcP256Private(sk) => sk
+                .to_pkcs8_encrypted_der(rng, passphrase)
+                .ok()
+                .map(|d| d.as_bytes().to_vec()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::EcP384Private(sk) => sk
+                .to_pkcs8_encrypted_der(rng, passphrase)
+                .ok()
+                .map(|d| d.as_bytes().to_vec()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::EcK256Private(sk) => sk
+                .to_pkcs8_encrypted_der(rng, passphrase)
+                .ok()
+                .map(|d| d.as_bytes().to_vec()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::RsaPrivate(sk) => sk
+                .to_pkcs8_encrypted_der(rng, passphrase)
+                .ok()
+                .map(|d| d.as_bytes().to_vec()),
+            #[cfg(feature = "crypto-full")]
+            KeyData::DsaPrivate(sk) => sk
+                .to_pkcs8_encrypted_der(rng, passphrase)
+                .ok()
+                .map(|d| d.as_bytes().to_vec()),
             _ => None,
         }
     }
@@ -2923,6 +2989,18 @@ impl KeyData {
                 }
                 Some((modulus_length, val))
             }
+            KeyData::DsaPrivate(sk) => {
+                let components = sk.verifying_key().components();
+                let modulus_length = components.p().bits() as u32;
+                let divisor_length = components.q().bits() as u32;
+                Some((modulus_length, divisor_length as u64))
+            }
+            KeyData::DsaPublic(pk) => {
+                let components = pk.components();
+                let modulus_length = components.p().bits() as u32;
+                let divisor_length = components.q().bits() as u32;
+                Some((modulus_length, divisor_length as u64))
+            }
             _ => None,
         }
     }
@@ -2941,6 +3019,7 @@ fn generate_key_pair_impl(
     named_curve: Option<&str>,
     _modulus_length: Option<u32>,
     _public_exponent: Option<u32>,
+    _divisor_length: Option<u32>,
 ) -> Option<(u32, u32)> {
     let (priv_key, pub_key) = match algorithm {
         "ed25519" => {
@@ -2988,6 +3067,22 @@ fn generate_key_pair_impl(
             let sk = RsaPrivateKey::new_with_exp(&mut rng, bits, &e).ok()?;
             let pk = sk.to_public_key();
             (KeyData::RsaPrivate(sk), KeyData::RsaPublic(pk))
+        }
+        #[cfg(feature = "crypto-full")]
+        "dsa" => {
+            let modulus_length = _modulus_length?;
+            let divisor_length = _divisor_length.unwrap_or(256);
+            let key_size = match (modulus_length, divisor_length) {
+                (2048, 224) => dsa::KeySize::DSA_2048_224,
+                (2048, 256) => dsa::KeySize::DSA_2048_256,
+                (3072, 256) => dsa::KeySize::DSA_3072_256,
+                _ => return None,
+            };
+            let mut rng = rand_core_06::OsRng;
+            let components = dsa::Components::generate(&mut rng, key_size);
+            let sk = dsa::SigningKey::generate(&mut rng, components);
+            let pk = sk.verifying_key().clone();
+            (KeyData::DsaPrivate(sk), KeyData::DsaPublic(pk))
         }
         _ => return None,
     };
@@ -3295,6 +3390,7 @@ fn key_export_encrypted_impl(
                 encrypt_traditional_pem(&der, cipher_name, passphrase, "EC PRIVATE KEY")?;
             Some(encrypted_pem.into_bytes())
         }
+        ("der", "pkcs8") => key.export_pkcs8_encrypted_der(passphrase),
         _ => None,
     }
 }
@@ -3488,6 +3584,19 @@ fn create_private_key_from_der(der: &[u8]) -> Option<u32> {
             .insert(id, KeyData::EcK256Private(sk));
         return Some(id);
     }
+    // Try DSA
+    #[cfg(feature = "crypto-full")]
+    {
+        use pkcs8::DecodePrivateKey as _;
+        if let Ok(sk) = dsa::SigningKey::from_pkcs8_der(der) {
+            let id = next_id();
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::DsaPrivate(sk));
+            return Some(id);
+        }
+    }
     None
 }
 
@@ -3518,6 +3627,19 @@ fn create_private_key_from_pem(pem: &str) -> Option<u32> {
             .unwrap()
             .insert(id, KeyData::EcK256Private(sk));
         return Some(id);
+    }
+    // Try DSA
+    #[cfg(feature = "crypto-full")]
+    {
+        use pkcs8::DecodePrivateKey as _;
+        if let Ok(sk) = dsa::SigningKey::from_pkcs8_pem(pem) {
+            let id = next_id();
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::DsaPrivate(sk));
+            return Some(id);
+        }
     }
     // Try SEC1 PEM
     if let result @ Some(_) = create_private_key_from_sec1_pem(pem) {
@@ -3566,6 +3688,19 @@ fn create_public_key_from_der(der: &[u8]) -> Option<u32> {
             .insert(id, KeyData::EcK256Public(pk));
         return Some(id);
     }
+    // Try DSA
+    #[cfg(feature = "crypto-full")]
+    {
+        use pkcs8::DecodePublicKey as _;
+        if let Ok(pk) = dsa::VerifyingKey::from_public_key_der(der) {
+            let id = next_id();
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::DsaPublic(pk));
+            return Some(id);
+        }
+    }
     None
 }
 
@@ -3597,6 +3732,19 @@ fn create_public_key_from_pem(pem: &str) -> Option<u32> {
             .insert(id, KeyData::EcK256Public(pk));
         return Some(id);
     }
+    // Try DSA
+    #[cfg(feature = "crypto-full")]
+    {
+        use pkcs8::DecodePublicKey as _;
+        if let Ok(pk) = dsa::VerifyingKey::from_public_key_pem(pem) {
+            let id = next_id();
+            KEY_STORE
+                .lock()
+                .unwrap()
+                .insert(id, KeyData::DsaPublic(pk));
+            return Some(id);
+        }
+    }
     None
 }
 
@@ -3612,6 +3760,8 @@ fn create_public_key_from_private(private_id: u32) -> Option<u32> {
         KeyData::EcK256Private(sk) => KeyData::EcK256Public(*sk.verifying_key()),
         #[cfg(feature = "crypto-full")]
         KeyData::RsaPrivate(sk) => KeyData::RsaPublic(sk.to_public_key()),
+        #[cfg(feature = "crypto-full")]
+        KeyData::DsaPrivate(sk) => KeyData::DsaPublic(sk.verifying_key().clone()),
         _ => return None,
     };
     drop(store);
@@ -3656,6 +3806,11 @@ enum SignContext {
         hasher: Option<HashContext>,
         hash_algo: String,
     },
+    #[cfg(feature = "crypto-full")]
+    Dsa {
+        key: dsa::SigningKey,
+        hasher: Option<HashContext>,
+    },
 }
 
 enum VerifyContext {
@@ -3683,6 +3838,11 @@ enum VerifyContext {
         key_is_private: bool,
         hasher: Option<HashContext>,
         hash_algo: String,
+    },
+    #[cfg(feature = "crypto-full")]
+    Dsa {
+        key: dsa::VerifyingKey,
+        hasher: Option<HashContext>,
     },
 }
 
@@ -3736,6 +3896,15 @@ fn sign_init_impl(algorithm: Option<&str>, key_id: u32) -> Option<u32> {
                 hash_algo: algo.to_string(),
             }
         }
+        #[cfg(feature = "crypto-full")]
+        KeyData::DsaPrivate(sk) => {
+            let algo = algorithm.unwrap_or("sha256");
+            let hasher = create_hasher(algo)?;
+            SignContext::Dsa {
+                key: sk.clone(),
+                hasher: Some(hasher),
+            }
+        }
         _ => return None,
     };
     drop(store);
@@ -3768,6 +3937,12 @@ fn sign_update_impl(id: u32, data: &[u8]) -> bool {
             }
             #[cfg(feature = "crypto-full")]
             SignContext::Rsa { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            #[cfg(feature = "crypto-full")]
+            SignContext::Dsa { hasher, .. } => {
                 if let Some(h) = hasher {
                     h.update(data)
                 }
@@ -3816,6 +3991,14 @@ fn sign_final_impl(id: u32) -> Option<Vec<u8>> {
                 _ => return None,
             };
             rsa_sign(key, &digest, &hash_algo)
+        }
+        #[cfg(feature = "crypto-full")]
+        SignContext::Dsa { key, hasher } => {
+            use signature::hazmat::PrehashSigner;
+            let digest = hasher?.finalize();
+            let sig: dsa::Signature = key.sign_prehash(&digest).ok()?;
+            use pkcs8::der::Encode;
+            Some(sig.to_der().ok()?)
         }
     }
 }
@@ -3909,6 +4092,24 @@ fn verify_init_impl(algorithm: Option<&str>, key_id: u32) -> Option<u32> {
                 hash_algo: algo.to_string(),
             }
         }
+        #[cfg(feature = "crypto-full")]
+        KeyData::DsaPublic(pk) => {
+            let algo = algorithm.unwrap_or("sha256");
+            let hasher = create_hasher(algo)?;
+            VerifyContext::Dsa {
+                key: pk.clone(),
+                hasher: Some(hasher),
+            }
+        }
+        #[cfg(feature = "crypto-full")]
+        KeyData::DsaPrivate(sk) => {
+            let algo = algorithm.unwrap_or("sha256");
+            let hasher = create_hasher(algo)?;
+            VerifyContext::Dsa {
+                key: sk.verifying_key().clone(),
+                hasher: Some(hasher),
+            }
+        }
         _ => return None,
     };
     drop(store);
@@ -3941,6 +4142,12 @@ fn verify_update_impl(id: u32, data: &[u8]) -> bool {
             }
             #[cfg(feature = "crypto-full")]
             VerifyContext::Rsa { hasher, .. } => {
+                if let Some(h) = hasher {
+                    h.update(data)
+                }
+            }
+            #[cfg(feature = "crypto-full")]
+            VerifyContext::Dsa { hasher, .. } => {
                 if let Some(h) = hasher {
                     h.update(data)
                 }
@@ -4004,6 +4211,14 @@ fn verify_final_impl(id: u32, signature: &[u8]) -> Option<bool> {
                 };
                 Some(rsa_verify(key, &digest, signature, &hash_algo))
             }
+        }
+        #[cfg(feature = "crypto-full")]
+        VerifyContext::Dsa { key, hasher } => {
+            use signature::hazmat::PrehashVerifier;
+            use pkcs8::der::Decode;
+            let digest = hasher?.finalize();
+            let sig = dsa::Signature::from_der(signature).ok()?;
+            Some(key.verify_prehash(&digest, &sig).is_ok())
         }
     }
 }
@@ -5530,10 +5745,17 @@ pub mod native_module {
         named_curve: Option<String>,
         modulus_length: Option<u32>,
         public_exponent: Option<u32>,
+        divisor_length: Option<u32>,
     ) -> Option<Vec<u32>> {
         let curve_ref = named_curve.as_deref();
-        super::generate_key_pair_impl(&algorithm, curve_ref, modulus_length, public_exponent)
-            .map(|(priv_id, pub_id)| vec![priv_id, pub_id])
+        super::generate_key_pair_impl(
+            &algorithm,
+            curve_ref,
+            modulus_length,
+            public_exponent,
+            divisor_length,
+        )
+        .map(|(priv_id, pub_id)| vec![priv_id, pub_id])
     }
 
     #[rquickjs::function]

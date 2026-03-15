@@ -66,6 +66,12 @@ function validateCallback(callback) {
 function scheduleTimeout(callback, time, args, isInterval) {
     const snapshot = _captureContext();
     const wrapped = function(...a) {
+        // Drain pending nextTick callbacks before executing timer callbacks,
+        // matching Node.js's guarantee that process.nextTick always fires
+        // before timers (setTimeout/setImmediate).
+        if (globalThis.__wasm_rquickjs_drainNextTick) {
+            globalThis.__wasm_rquickjs_drainNextTick();
+        }
         return _restoreContext(snapshot, callback, this, a);
     };
     const timeout = new Timeout(0, wrapped, time, args, isInterval);

@@ -144,6 +144,11 @@ Object.defineProperties(Duplex.prototype, {
     }
 }
 
+// Use the `destroy` method of `Writable`.
+// The copying loop above skips it because Readable already defines destroy,
+// but Writable's version includes errorBuffer scheduling for pending corked writes.
+Duplex.prototype.destroy = Writable.prototype.destroy;
+
 
 function isReadableStream(object) {
     return object instanceof ReadableStream;

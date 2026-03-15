@@ -2847,6 +2847,12 @@ class KeyObject {
 
         const details = webCryptoNative.key_asymmetric_details(this._handle);
         if (details === null || details === undefined) return undefined;
+        if (keyType === 'dsa') {
+            return {
+                modulusLength: Number(details[0]),
+                divisorLength: Number(details[1]),
+            };
+        }
         return {
             modulusLength: Number(details[0]),
             publicExponent: BigInt(details[1]),
@@ -6266,6 +6272,9 @@ export function generateKeyPairSync(type_, options) {
         if (paramEncoding != null && paramEncoding !== 'named' && paramEncoding !== 'explicit') {
             throw createInvalidKeygenPropertyError('paramEncoding', paramEncoding);
         }
+    } else if (type_ === 'dsa') {
+        algorithm = 'dsa';
+        modulusLength = options.modulusLength;
     } else if (type_ === 'ed25519') {
         algorithm = 'ed25519';
     } else if (type_ === 'rsa' || type_ === 'rsa-pss') {
@@ -6286,7 +6295,8 @@ export function generateKeyPairSync(type_, options) {
         throw createUnsupportedKeyTypeError(type_);
     }
 
-    const result = webCryptoNative.generate_key_pair(algorithm, namedCurve, modulusLength, publicExponent);
+    const divisorLength = type_ === 'dsa' ? (options.divisorLength || null) : null;
+    const result = webCryptoNative.generate_key_pair(algorithm, namedCurve, modulusLength, publicExponent, divisorLength);
     if (result === null || result === undefined) {
         if (type_ === 'ec' && EC_KEYGEN_FALLBACK_CURVES.has(namedCurve)) {
             return generateEcFallbackKeyPair(normalizeEcFallbackCurveName(namedCurve), options);

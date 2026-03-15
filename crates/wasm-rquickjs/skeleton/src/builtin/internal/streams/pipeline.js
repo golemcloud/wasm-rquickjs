@@ -5,7 +5,9 @@
 import {
     isIterable,
     isNodeStream,
+    isReadable,
     isReadableNodeStream,
+    isReadableFinished,
     isReadableStream,
     isTransformStream,
     isWebStream,
@@ -19,6 +21,7 @@ import {
     ERR_INVALID_RETURN_VALUE,
     ERR_MISSING_ARGS,
     ERR_STREAM_DESTROYED,
+    ERR_STREAM_PREMATURE_CLOSE,
 } from "__wasm_rquickjs_builtin/internal/errors";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import Duplex from "__wasm_rquickjs_builtin/internal/streams/duplex";
@@ -27,45 +30,23 @@ import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
 import PassThrough from "__wasm_rquickjs_builtin/internal/streams/passthrough";
 import { nextTick } from "node:process";
 
-function destroyer(stream, reading, writing, callback) {
-    callback = once(callback);
-
+function destroyer(stream, reading, writing) {
     let finished = false;
     stream.on("close", () => {
         finished = true;
     });
 
-    eos(stream, { readable: reading, writable: writing }, (err) => {
+    const cleanup = eos(stream, { readable: reading, writable: writing }, (err) => {
         finished = !err;
-
-        const rState = stream._readableState;
-        if (
-            err &&
-            err.code === "ERR_STREAM_PREMATURE_CLOSE" &&
-            reading &&
-            (rState && rState.ended && !rState.errored && !rState.errorEmitted)
-        ) {
-            // Some readable streams will emit 'close' before 'end'. However, since
-            // this is on the readable side 'end' should still be emitted if the
-            // stream has been ended and no error emitted. This should be allowed in
-            // favor of backwards compatibility. Since the stream is piped to a
-            // destination this should not result in any observable difference.
-            // We don't need to check if this is a writable premature close since
-            // eos will only fail with premature close on the reading side for
-            // duplex streams.
-            stream
-                .once("end", callback)
-                .once("error", callback);
-        } else {
-            callback(err);
-        }
     });
 
-    return (err) => {
-        if (finished) return;
-        finished = true;
-        destroyImpl.destroyer(stream, err);
-        callback(err || new ERR_STREAM_DESTROYED("pipe"));
+    return {
+        destroy: (err) => {
+            if (finished) return;
+            finished = true;
+            destroyImpl.destroyer(stream, err);
+        },
+        cleanup,
     };
 }
 
@@ -194,6 +175,49 @@ async function pump(iterable, writable, finish, opts) {
     }
 }
 
+function pipe(src, dst, finish, finishOnlyHandleError, { end }) {
+    let ended = false;
+    dst.on('close', () => {
+        if (!ended) {
+            finishOnlyHandleError(new ERR_STREAM_PREMATURE_CLOSE());
+        }
+    });
+
+    src.pipe(dst, { end: false });
+
+    if (end) {
+        function endFn() {
+            ended = true;
+            dst.end();
+        }
+
+        if (isReadableFinished(src)) {
+            nextTick(endFn);
+        } else {
+            src.once('end', endFn);
+        }
+    } else {
+        finish();
+    }
+
+    eos(src, { readable: true, writable: false }, (err) => {
+        const rState = src._readableState;
+        if (
+            err &&
+            err.code === 'ERR_STREAM_PREMATURE_CLOSE' &&
+            (rState && rState.ended && !rState.errored && !rState.errorEmitted)
+        ) {
+            src
+                .once('end', finish)
+                .once('error', finish);
+        } else {
+            finish(err);
+        }
+    });
+
+    return eos(dst, { readable: false, writable: true }, finish);
+}
+
 function pipeline(...streams) {
     const callback = once(popCallback(streams));
 
@@ -249,9 +273,18 @@ function pipelineImpl(streams, callback, opts) {
         ac.abort();
 
         if (final) {
+            while (lastStreamCleanup.length) {
+                lastStreamCleanup.shift()();
+            }
             callback(error, value);
         }
     }
+
+    function finishOnlyHandleError(err) {
+        finishImpl(err, false);
+    }
+
+    const lastStreamCleanup = [];
 
     let ret;
     for (let i = 0; i < streams.length; i++) {
@@ -259,11 +292,31 @@ function pipelineImpl(streams, callback, opts) {
         const reading = i < streams.length - 1;
         const writing = i > 0;
         const end = reading || opts?.end !== false;
+        const isLastStream = i === streams.length - 1;
 
         if (isNodeStream(stream)) {
             if (end) {
-                finishCount++;
-                destroys.push(destroyer(stream, reading, writing, finish));
+                const { destroy, cleanup } = destroyer(stream, reading, writing);
+                destroys.push(destroy);
+                if (isReadable(stream) && isLastStream) {
+                    lastStreamCleanup.push(cleanup);
+                }
+            }
+
+            function onError(err) {
+                if (
+                    err &&
+                    err.name !== 'AbortError' &&
+                    err.code !== 'ERR_STREAM_PREMATURE_CLOSE'
+                ) {
+                    finishOnlyHandleError(err);
+                }
+            }
+            stream.on('error', onError);
+            if (isReadable(stream) && isLastStream) {
+                lastStreamCleanup.push(() => {
+                    stream.removeListener('error', onError);
+                });
             }
         }
 
@@ -343,12 +396,21 @@ function pipelineImpl(streams, callback, opts) {
 
                 ret = pt;
 
+                const { destroy: ptDestroy, cleanup: ptDestroyerCleanup } = destroyer(ret, false, true);
+                destroys.push(ptDestroy);
                 finishCount++;
-                destroys.push(destroyer(ret, false, true, finish));
+                const ptEosCleanup = eos(ret, { readable: false, writable: true }, finish);
+
+                lastStreamCleanup.push(ptDestroyerCleanup);
+                lastStreamCleanup.push(ptEosCleanup);
             }
         } else if (isNodeStream(stream)) {
             if (isReadableNodeStream(ret)) {
-                ret.pipe(stream, { end });
+                finishCount += 2;
+                const pipeCleanup = pipe(ret, stream, finish, finishOnlyHandleError, { end });
+                if (isReadable(stream) && isLastStream) {
+                    lastStreamCleanup.push(pipeCleanup);
+                }
             } else if (isTransformStream(ret) || isReadableStream(ret)) {
                 const toRead = ret.readable || ret;
                 finishCount++;

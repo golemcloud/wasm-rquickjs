@@ -47,6 +47,7 @@ crypto-full = [
   "dep:sha3", "dep:ripemd", "dep:whirlpool",
   "dep:scrypt",
   "dep:des", "dep:blowfish", "dep:chacha20", "dep:chacha20poly1305", "dep:ccm",
+  "dep:dsa",
 ]
 
 sqlite = ["dep:rusqlite"]
@@ -88,6 +89,7 @@ num-bigint-dig = { version = "0.8", features = ["prime", "rand"], optional = tru
 num-traits = { version = "0.2", optional = true }
 pkcs8 = { version = "0.10", default-features = false, features = ["pem", "alloc", "encryption"], optional = true }
 rsa = { version = "0.9", default-features = false, features = ["pem", "hazmat"], optional = true }
+dsa = { version = "0.6", default-features = false, optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["sec1", "pem", "alloc"], optional = true }
 ecdsa = { version = "0.16", default-features = false, features = ["signing", "verifying", "der"], optional = true }
 signature = { version = "2", optional = true }

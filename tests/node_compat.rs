@@ -280,7 +280,8 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
             for subtest in &entry.subtests {
                 let test_name = format!("{}__{}", file_test_name, subtest.name);
-                let is_ignored = entry.skip || entry.impossible || subtest.skip || subtest.impossible;
+                let is_ignored =
+                    entry.skip || entry.impossible || subtest.skip || subtest.impossible;
                 let props = TestProperties {
                     is_ignored,
                     ..TestProperties::unit_test()

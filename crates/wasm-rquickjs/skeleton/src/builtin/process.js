@@ -313,6 +313,11 @@ function __drainNextTickQueue() {
     }
 }
 
+// Expose the drain function so that timer callbacks can drain pending
+// nextTick work before executing, matching Node.js's guarantee that
+// process.nextTick always fires before timers (setTimeout/setImmediate).
+globalThis.__wasm_rquickjs_drainNextTick = __drainNextTickQueue;
+
 process.nextTick = function processNextTick(callback, ...args) {
     if (typeof callback !== 'function') {
         throw _makeTypeError('ERR_INVALID_ARG_TYPE',

@@ -397,7 +397,7 @@ function _addListener(target, type, listener, prepend) {
             var w = new Error(
                 'Possible EventEmitter memory leak detected. ' +
                 existing.length + ' ' + String(type) + ' listeners added to ' +
-                (target.constructor ? target.constructor.name : 'EventEmitter') +
+                '[' + (target.constructor ? target.constructor.name : 'EventEmitter') + ']' +
                 '. MaxListeners is ' + m +
                 '. Use emitter.setMaxListeners() to increase limit'
             );
@@ -405,7 +405,9 @@ function _addListener(target, type, listener, prepend) {
             w.emitter = target;
             w.type = type;
             w.count = existing.length;
-            if (typeof console !== 'undefined' && console.error) {
+            if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+                process.emitWarning(w);
+            } else if (typeof console !== 'undefined' && console.error) {
                 console.error(w);
             }
         }

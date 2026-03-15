@@ -298,6 +298,352 @@ impl TestResult {
             TestResult::Error(_) => "ERROR",
         }
     }
+
+    fn error_message(&self) -> Option<&str> {
+        match self {
+            TestResult::Fail(msg) | TestResult::Error(msg) | TestResult::Skip(msg) => Some(msg),
+            TestResult::Pass => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SkippedObservation {
+    config_reason: String,
+    actual: TestResult,
+    inferred_impossible: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReportBucket {
+    Pass,
+    Skip,
+    Impossible,
+    Fail,
+    Error,
+}
+
+fn is_unevaluated_reason(reason: &str) -> bool {
+    let r = reason.trim();
+    r == "newly discovered, not yet evaluated" || r.starts_with("inherited: newly discovered")
+}
+
+/// Check if an error message indicates a fundamentally impossible test for the WASM runtime.
+/// Returns a short classification reason if so.
+fn infer_impossible_reason(error_msg: &str) -> Option<&'static str> {
+    let lower = error_msg.to_lowercase();
+    let first_line = lower.lines().next().unwrap_or(&lower);
+
+    if first_line.contains("tls is not supported") || first_line.contains("tls is not available") {
+        return Some("tls not available in WASM");
+    }
+    if first_line.contains("https.createserver is not supported") {
+        return Some("https server not available in WASM");
+    }
+    if first_line.contains("http2 is not supported") {
+        return Some("http2 not available in WASM");
+    }
+    if first_line.contains("worker_threads is not supported") {
+        return Some("worker_threads not available in WASM");
+    }
+    if first_line.contains("cluster is not supported") {
+        return Some("cluster not available in WASM");
+    }
+    if first_line.contains("repl is not supported") {
+        return Some("REPL not available in WASM");
+    }
+    if first_line.contains("inspector") && first_line.contains("not") {
+        return Some("inspector not available in WASM");
+    }
+    None
+}
+
+fn report_bucket(
+    path: &str,
+    actual: &TestResult,
+    skipped_observations: &BTreeMap<String, SkippedObservation>,
+    config_impossible: &BTreeMap<String, String>,
+) -> ReportBucket {
+    if config_impossible.contains_key(path) {
+        return ReportBucket::Impossible;
+    }
+    if let Some(obs) = skipped_observations.get(path) {
+        if obs.inferred_impossible.is_some() {
+            return ReportBucket::Impossible;
+        }
+        if matches!(obs.actual, TestResult::Pass) {
+            return ReportBucket::Pass;
+        }
+        return ReportBucket::Skip;
+    }
+    match actual {
+        TestResult::Pass => ReportBucket::Pass,
+        TestResult::Skip(_) => ReportBucket::Skip,
+        TestResult::Fail(_) => ReportBucket::Fail,
+        TestResult::Error(_) => ReportBucket::Error,
+    }
+}
+
+/// Normalize an error message for grouping: take first meaningful line, strip dynamic content.
+fn normalize_error_for_grouping(msg: &str) -> String {
+    let first_line = msg.lines().next().unwrap_or(msg).trim();
+    // Strip stack frames starting with "     at "
+    let cleaned = if let Some(pos) = first_line.find("     at ") {
+        first_line[..pos].trim()
+    } else {
+        first_line
+    };
+    // Strip absolute paths (e.g. /home/node/test/..., /tmp/...)
+    let mut result = String::with_capacity(cleaned.len());
+    let mut chars = cleaned.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '/' && chars.peek().is_some_and(|&nc| nc == 'h' || nc == 't') {
+            let rest: String =
+                std::iter::once(c)
+                    .chain(chars.by_ref().take_while(|&ch| {
+                        !ch.is_whitespace() && ch != ')' && ch != '\'' && ch != '"'
+                    }))
+                    .collect();
+            if rest.starts_with("/home/node") || rest.starts_with("/tmp") {
+                result.push_str("<path>");
+            } else {
+                result.push_str(&rest);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    let cleaned = result.trim().to_string();
+    // Truncate to reasonable length
+    if cleaned.len() > 120 {
+        format!("{}...", &cleaned[..120])
+    } else {
+        cleaned
+    }
+}
+
+/// Find the byte span (start, end) of a JSON object value for a given key in JSONC text.
+/// Returns the byte range of the value object `{...}` (inclusive of braces).
+fn find_value_span_in_jsonc(content: &str, key: &str) -> Option<(usize, usize)> {
+    let search = format!("\"{}\"", key);
+    let key_pos = content.find(&search)?;
+    let bytes = content.as_bytes();
+    let mut pos = key_pos + search.len();
+
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    if pos >= bytes.len() || bytes[pos] != b':' {
+        return None;
+    }
+    pos += 1;
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    if pos >= bytes.len() || bytes[pos] != b'{' {
+        return None;
+    }
+
+    let value_start = pos;
+    let mut depth = 0;
+    let mut in_string = false;
+
+    while pos < bytes.len() {
+        if in_string {
+            if bytes[pos] == b'\\' && pos + 1 < bytes.len() {
+                pos += 2;
+                continue;
+            }
+            if bytes[pos] == b'"' {
+                in_string = false;
+            }
+        } else {
+            match bytes[pos] {
+                b'"' => in_string = true,
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((value_start, pos + 1));
+                    }
+                }
+                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'/' => {
+                    pos += 2;
+                    while pos < bytes.len() && bytes[pos] != b'\n' {
+                        pos += 1;
+                    }
+                    continue;
+                }
+                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
+                    pos += 2;
+                    while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
+                        pos += 1;
+                    }
+                    if pos + 1 < bytes.len() {
+                        pos += 2;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        pos += 1;
+    }
+
+    None
+}
+
+/// Find the byte position of the closing '}' of the "tests" object in JSONC content.
+fn find_tests_object_close(content: &str) -> Option<usize> {
+    let tests_key = "\"tests\"";
+    let key_pos = content.find(tests_key)?;
+    let bytes = content.as_bytes();
+    let mut pos = key_pos + tests_key.len();
+
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    if pos >= bytes.len() || bytes[pos] != b':' {
+        return None;
+    }
+    pos += 1;
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    if pos >= bytes.len() || bytes[pos] != b'{' {
+        return None;
+    }
+
+    let mut depth = 0;
+    let mut in_string = false;
+
+    while pos < bytes.len() {
+        if in_string {
+            if bytes[pos] == b'\\' && pos + 1 < bytes.len() {
+                pos += 2;
+                continue;
+            }
+            if bytes[pos] == b'"' {
+                in_string = false;
+            }
+        } else {
+            match bytes[pos] {
+                b'"' => in_string = true,
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(pos);
+                    }
+                }
+                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'/' => {
+                    pos += 2;
+                    while pos < bytes.len() && bytes[pos] != b'\n' {
+                        pos += 1;
+                    }
+                    continue;
+                }
+                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
+                    pos += 2;
+                    while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
+                        pos += 1;
+                    }
+                    if pos + 1 < bytes.len() {
+                        pos += 2;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        pos += 1;
+    }
+
+    None
+}
+
+/// Update config.jsonc to auto-enable passing tests and add missing passing tests.
+fn update_config_jsonc(should_not_be_skipped: &[String], missing_from_config: &[String]) {
+    let config_path = "tests/node_compat/config.jsonc";
+    let Ok(mut content) = fs::read_to_string(config_path) else {
+        eprintln!("WARNING: Could not read config.jsonc for auto-update");
+        return;
+    };
+
+    let mut unskip_count = 0;
+    let mut add_count = 0;
+
+    // Phase 1: Unskip tests that pass — replace their value with {}
+    // Process in reverse order of position to preserve byte offsets
+    let mut updates: Vec<(usize, usize, String)> = Vec::new();
+
+    for path in should_not_be_skipped {
+        // Handle subtests (path contains #)
+        if let Some((base_path, subtest_name)) = path.split_once('#') {
+            // Find the parent entry's value span, then find the subtest within it
+            if let Some((parent_start, parent_end)) = find_value_span_in_jsonc(&content, base_path)
+            {
+                let parent_content = &content[parent_start..parent_end];
+                if let Some((sub_start, sub_end)) =
+                    find_value_span_in_jsonc(parent_content, subtest_name)
+                {
+                    let abs_start = parent_start + sub_start;
+                    let abs_end = parent_start + sub_end;
+                    updates.push((abs_start, abs_end, "{}".to_string()));
+                    unskip_count += 1;
+                }
+            }
+        } else if let Some((start, end)) = find_value_span_in_jsonc(&content, path) {
+            updates.push((start, end, "{}".to_string()));
+            unskip_count += 1;
+        }
+    }
+
+    // Apply updates in reverse order to preserve byte offsets
+    updates.sort_by(|a, b| b.0.cmp(&a.0));
+    for (start, end, new_value) in updates {
+        content.replace_range(start..end, &new_value);
+    }
+
+    // Phase 2: Add missing passing tests before the closing '}' of the tests object
+    if !missing_from_config.is_empty()
+        && let Some(close_pos) = find_tests_object_close(&content)
+    {
+        let prefix = &content[..close_pos];
+        let suffix = &content[close_pos..];
+
+        let trimmed_prefix = prefix.trim_end();
+        let needs_comma = !trimmed_prefix.ends_with(',') && !trimmed_prefix.ends_with('{');
+
+        let mut new_section = String::new();
+        if needs_comma {
+            new_section.push(',');
+        }
+
+        for test_path in missing_from_config {
+            new_section.push_str(&format!("\n    \"{}\": {{}},", test_path));
+            add_count += 1;
+        }
+
+        // Remove trailing comma
+        if new_section.ends_with(',') {
+            new_section.pop();
+        }
+        new_section.push_str("\n  ");
+
+        content = format!("{}{}{}", trimmed_prefix, new_section, suffix);
+    }
+
+    if unskip_count > 0 || add_count > 0 {
+        if let Err(e) = fs::write(config_path, &content) {
+            eprintln!("WARNING: Could not write config.jsonc: {e}");
+        } else {
+            println!(
+                "\n✅ Auto-updated config.jsonc: {} test(s) unskipped, {} test(s) added",
+                unskip_count, add_count
+            );
+        }
+    }
 }
 
 fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
@@ -489,7 +835,11 @@ fn classify_test(filename: &str) -> &str {
         "signal"
     } else if name.starts_with("errors") || name.starts_with("error") {
         "errors"
-    } else if name.starts_with("pipe") || name.starts_with("socket") || name.starts_with("listen") || name.starts_with("tcp") {
+    } else if name.starts_with("pipe")
+        || name.starts_with("socket")
+        || name.starts_with("listen")
+        || name.starts_with("tcp")
+    {
         "net"
     } else if name.starts_with("webstream") || name.starts_with("webstreams") {
         "webstreams"
@@ -709,6 +1059,8 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     // Track skipped tests that actually pass (should be unskipped)
     let mut should_not_be_skipped: Vec<String> = Vec::new();
+    // Track actual results for config-skipped tests
+    let mut skipped_observations: BTreeMap<String, SkippedObservation> = BTreeMap::new();
 
     // Run all tests sequentially
     let mut progress = 0usize;
@@ -757,13 +1109,49 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                         elapsed.as_secs_f64()
                     );
                     should_not_be_skipped.push(test_path.clone());
+                    skipped_observations.insert(
+                        test_path.clone(),
+                        SkippedObservation {
+                            config_reason: reason,
+                            actual: r.clone(),
+                            inferred_impossible: None,
+                        },
+                    );
                     TestResult::Pass
                 }
                 _ => {
-                    // Test still fails — count as skipped (known skip)
-                    println!(
-                        "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
-                        progress
+                    // Infer impossible for unevaluated tests
+                    let inferred = if is_unevaluated_reason(&reason) {
+                        let msg = match &r {
+                            TestResult::Fail(m) | TestResult::Error(m) | TestResult::Skip(m) => {
+                                m.as_str()
+                            }
+                            TestResult::Pass => "",
+                        };
+                        infer_impossible_reason(msg).map(|s| s.to_string())
+                    } else {
+                        None
+                    };
+
+                    if let Some(ref imp_reason) = inferred {
+                        println!(
+                            "[{:>4}/{total_tests}] IMPOSSIBLE* {filename}{tag} (auto: {imp_reason})",
+                            progress
+                        );
+                    } else {
+                        println!(
+                            "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
+                            progress
+                        );
+                    }
+
+                    skipped_observations.insert(
+                        test_path.clone(),
+                        SkippedObservation {
+                            config_reason: reason.clone(),
+                            actual: r.clone(),
+                            inferred_impossible: inferred,
+                        },
                     );
                     TestResult::Skip(reason)
                 }
@@ -810,29 +1198,43 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             r
         };
 
-        match &result {
-            TestResult::Pass => {
+        // Use report_bucket for counting
+        let bucket = report_bucket(
+            test_path,
+            &result,
+            &skipped_observations,
+            &config_impossible,
+        );
+        match bucket {
+            ReportBucket::Pass => {
                 if is_internal {
                     internals_pass += 1;
                 } else {
                     pass_count += 1;
                 }
             }
-            TestResult::Skip(_) => {
+            ReportBucket::Skip => {
                 if is_internal {
                     internals_skip += 1;
                 } else {
                     skip_count += 1;
                 }
             }
-            TestResult::Fail(_) => {
+            ReportBucket::Impossible => {
+                if is_internal {
+                    internals_impossible += 1;
+                } else {
+                    impossible_count += 1;
+                }
+            }
+            ReportBucket::Fail => {
                 if is_internal {
                     internals_fail += 1;
                 } else {
                     fail_count += 1;
                 }
             }
-            TestResult::Error(_) => {
+            ReportBucket::Error => {
                 if is_internal {
                     internals_error += 1;
                 } else {
@@ -1001,34 +1403,32 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             .push((path, result));
     }
 
-    report.push_str("| Module | Total | Pass | Fail | Error | Skip | Pass% |\n");
-    report.push_str("|--------|-------|------|------|-------|------|-------|\n");
+    report.push_str("| Module | Total | Pass | Fail | Error | Skip | Impossible | Pass% |\n");
+    report.push_str("|--------|-------|------|------|-------|------|------------|-------|\n");
 
     for (module, tests) in &by_module_public {
         let total = tests.len();
-        let pass = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Pass))
-            .count();
-        let fail = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Fail(_)))
-            .count();
-        let error = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Error(_)))
-            .count();
-        let skip = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Skip(_)))
-            .count();
+        let mut pass = 0;
+        let mut fail = 0;
+        let mut error = 0;
+        let mut skip = 0;
+        let mut impossible = 0;
+        for (path, result) in tests {
+            match report_bucket(path, result, &skipped_observations, &config_impossible) {
+                ReportBucket::Pass => pass += 1,
+                ReportBucket::Fail => fail += 1,
+                ReportBucket::Error => error += 1,
+                ReportBucket::Skip => skip += 1,
+                ReportBucket::Impossible => impossible += 1,
+            }
+        }
         let pass_pct = if total > 0 {
             pass as f64 / total as f64 * 100.0
         } else {
             0.0
         };
         report.push_str(&format!(
-            "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {pass_pct:.1}% |\n"
+            "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {impossible} | {pass_pct:.1}% |\n"
         ));
     }
 
@@ -1103,24 +1503,180 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         report.push_str("\n</details>\n\n");
     }
 
-    // Skipped tests (public API only)
-    report.push_str("## Skipped Tests\n\n");
-    let skipped: Vec<_> = results
+    // Skipped tests (public API only, file-level only — subtests are in Split Test Summary)
+    // Collect skipped tests, separating unevaluated (with actual errors) from manually skipped
+    let all_skipped: Vec<_> = results
         .iter()
         .filter(|(p, r)| {
-            matches!(r, TestResult::Skip(_))
-                && !internals_tests.contains(p.split('#').next().unwrap_or(p))
+            // Exclude subtests (they are covered by Split Test Summary)
+            if p.contains('#') {
+                return false;
+            }
+            let base_path = p.split('#').next().unwrap_or(p);
+            !internals_tests.contains(base_path)
+                && report_bucket(p, r, &skipped_observations, &config_impossible)
+                    == ReportBucket::Skip
         })
         .collect();
-    if skipped.is_empty() {
-        report.push_str("_No tests skipped._\n\n");
-    } else {
-        report.push_str(&format!("{} tests were skipped.\n\n", skipped.len()));
-        report.push_str("<details>\n<summary>Click to expand</summary>\n\n");
-        for (path, result) in &skipped {
-            if let TestResult::Skip(reason) = result {
-                report.push_str(&format!("- `{path}`: {reason}\n"));
+
+    // Separate unevaluated tests (newly discovered) from manually skipped
+    let mut unevaluated: Vec<(&String, &SkippedObservation)> = Vec::new();
+    let mut manually_skipped: Vec<(&String, &str)> = Vec::new();
+    for (path, result) in &all_skipped {
+        if let Some(obs) = skipped_observations.get(*path) {
+            if is_unevaluated_reason(&obs.config_reason) {
+                unevaluated.push((path, obs));
+            } else {
+                manually_skipped.push((path, &obs.config_reason));
             }
+        } else if let TestResult::Skip(reason) = result {
+            manually_skipped.push((path, reason));
+        }
+    }
+
+    // Auto-classified impossible from unevaluated
+    let auto_impossible: Vec<_> = skipped_observations
+        .iter()
+        .filter(|(p, obs)| {
+            let base_path = p.split('#').next().unwrap_or(p);
+            !internals_tests.contains(base_path) && obs.inferred_impossible.is_some()
+        })
+        .collect();
+
+    // Section: Unevaluated Tests with actual errors
+    report.push_str("## Unevaluated Tests (newly discovered, with actual errors)\n\n");
+    report.push_str(
+        "These tests were added by `migrate_config_split` but have not been manually evaluated.\n\
+         The report ran each test and captured the actual error. Tests are grouped by error pattern.\n\n",
+    );
+
+    if unevaluated.is_empty() && auto_impossible.is_empty() {
+        report.push_str("_No unevaluated tests._\n\n");
+    } else {
+        // Auto-classified impossible subsection
+        if !auto_impossible.is_empty() {
+            report.push_str(&format!(
+                "### Auto-classified as impossible ({} tests)\n\n\
+                 These tests fail with errors indicating features fundamentally unavailable in WASM.\n\
+                 They are counted as IMPOSSIBLE in the summary.\n\n",
+                auto_impossible.len()
+            ));
+            report.push_str("| Reason | Count | Example tests |\n");
+            report.push_str("|--------|-------|---------------|\n");
+            let mut by_reason: BTreeMap<&str, Vec<&String>> = BTreeMap::new();
+            for (path, obs) in &auto_impossible {
+                if let Some(ref reason) = obs.inferred_impossible {
+                    by_reason.entry(reason.as_str()).or_default().push(path);
+                }
+            }
+            for (reason, paths) in &by_reason {
+                let examples: Vec<_> = paths
+                    .iter()
+                    .take(3)
+                    .map(|p| {
+                        let f = p.rsplit('/').next().unwrap_or(p);
+                        format!("`{f}`")
+                    })
+                    .collect();
+                let suffix = if paths.len() > 3 {
+                    format!(", ... (+{})", paths.len() - 3)
+                } else {
+                    String::new()
+                };
+                report.push_str(&format!(
+                    "| {} | {} | {}{} |\n",
+                    reason,
+                    paths.len(),
+                    examples.join(", "),
+                    suffix
+                ));
+            }
+            report.push('\n');
+        }
+
+        // Unevaluated tests grouped by error pattern
+        if !unevaluated.is_empty() {
+            report.push_str(&format!(
+                "### Needs investigation ({} tests)\n\n\
+                 These unevaluated tests fail with errors that may be fixable.\n\n",
+                unevaluated.len()
+            ));
+
+            // Group by normalized error
+            let mut by_pattern: BTreeMap<String, Vec<&String>> = BTreeMap::new();
+            for (path, obs) in &unevaluated {
+                let error_msg = match &obs.actual {
+                    TestResult::Fail(m) | TestResult::Error(m) | TestResult::Skip(m) => m.clone(),
+                    TestResult::Pass => "passed (unexpected)".to_string(),
+                };
+                let pattern = normalize_error_for_grouping(&error_msg);
+                by_pattern.entry(pattern).or_default().push(path);
+            }
+
+            // Sort by count descending
+            let mut patterns: Vec<_> = by_pattern.into_iter().collect();
+            patterns.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+            report.push_str("| Error Pattern | Count | Example tests |\n");
+            report.push_str("|---------------|-------|---------------|\n");
+            for (pattern, paths) in &patterns {
+                let examples: Vec<_> = paths
+                    .iter()
+                    .take(3)
+                    .map(|p| {
+                        let f = p.rsplit('/').next().unwrap_or(p);
+                        format!("`{f}`")
+                    })
+                    .collect();
+                let suffix = if paths.len() > 3 {
+                    format!(", ... (+{})", paths.len() - 3)
+                } else {
+                    String::new()
+                };
+                let escaped_pattern = pattern.replace('|', "\\|");
+                report.push_str(&format!(
+                    "| {} | {} | {}{} |\n",
+                    escaped_pattern,
+                    paths.len(),
+                    examples.join(", "),
+                    suffix
+                ));
+            }
+            report.push('\n');
+
+            // Also list all unevaluated tests with their actual errors in a collapsible section
+            report.push_str("<details>\n<summary>Full list of unevaluated tests with actual errors</summary>\n\n");
+            for (path, obs) in &unevaluated {
+                let actual_msg = match &obs.actual {
+                    TestResult::Fail(m) => format!("FAIL: {}", m),
+                    TestResult::Error(m) => format!("ERROR: {}", m),
+                    TestResult::Skip(m) => format!("SKIP: {}", m),
+                    TestResult::Pass => "PASS".to_string(),
+                };
+                let short = if actual_msg.len() > 200 {
+                    format!("{}...", truncate_str(&actual_msg, 200))
+                } else {
+                    actual_msg
+                };
+                let short = short.replace('\n', " ").replace('|', "\\|");
+                report.push_str(&format!("- `{path}`: {short}\n"));
+            }
+            report.push_str("\n</details>\n\n");
+        }
+    }
+
+    // Manually skipped tests (with known reasons)
+    report.push_str("## Skipped Tests\n\n");
+    if manually_skipped.is_empty() {
+        report.push_str("_No manually skipped tests._\n\n");
+    } else {
+        report.push_str(&format!(
+            "{} tests are manually skipped with known reasons.\n\n",
+            manually_skipped.len()
+        ));
+        report.push_str("<details>\n<summary>Click to expand</summary>\n\n");
+        for (path, reason) in &manually_skipped {
+            report.push_str(&format!("- `{path}`: {reason}\n"));
         }
         report.push_str("\n</details>\n\n");
     }
@@ -1198,16 +1754,16 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     }
 
     // Tests that should not be skipped (marked skip in config.jsonc but actually pass)
-    report.push_str("## Tests That Should Not Be Skipped\n\n");
+    report.push_str("## Tests That Were Auto-Enabled\n\n");
     report.push_str(
-        "These tests are marked with `\"skip\": true` in `config.jsonc` but actually pass.\n\
-         Consider removing the `skip` flag.\n\n",
+        "These tests were marked with `\"skip\": true` in `config.jsonc` but actually pass.\n\
+         The report has automatically removed the skip flag.\n\n",
     );
     if should_not_be_skipped.is_empty() {
         report.push_str("_All skipped tests still fail — no changes needed._\n\n");
     } else {
         report.push_str(&format!(
-            "{} test(s) should be unskipped:\n\n",
+            "{} test(s) were auto-enabled:\n\n",
             should_not_be_skipped.len()
         ));
         for path in &should_not_be_skipped {
@@ -1217,11 +1773,12 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     }
 
     // Passing tests not in config.jsonc
-    report.push_str("## Passing Tests Not in Config\n\n");
+    report.push_str("## Passing Tests Auto-Added to Config\n\n");
     report.push_str(
-        "These tests pass but are not listed in `config.jsonc`.\n\
-         Consider adding them.\n\n",
+        "These tests pass but were not listed in `config.jsonc`.\n\
+         The report has automatically added them.\n\n",
     );
+    let missing_from_config_for_report: Vec<String>;
     {
         let config_content =
             fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
@@ -1240,40 +1797,33 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             keys
         };
 
-        let missing_for_report: Vec<&String> = results
+        missing_from_config_for_report = results
             .iter()
             .filter(|(path, result)| {
                 if !matches!(result, TestResult::Pass) {
                     return false;
                 }
-                // For subtest keys like "parallel/test.js#subtest_name",
-                // check the base path for internals and config membership,
-                // and check subtest name against config subtests list
+                // Only file-level entries (not subtests)
+                if path.contains('#') {
+                    return false;
+                }
                 let base_path = path.split('#').next().unwrap_or(path);
                 if internals_tests.contains(base_path) {
                     return false;
                 }
-                if let Some(subtest_name) = path.split('#').nth(1) {
-                    // It's a subtest — check if it's in the config's subtests list
-                    if let Some(config_subtests) = config_split_entries.get(base_path) {
-                        return !config_subtests.contains(&subtest_name.to_string());
-                    }
-                    // Split file not in config at all
-                    return true;
-                }
                 !config_tests_for_report.contains(path.as_str())
             })
-            .map(|(path, _)| path)
+            .map(|(path, _)| path.clone())
             .collect();
 
-        if missing_for_report.is_empty() {
+        if missing_from_config_for_report.is_empty() {
             report.push_str("_All passing tests are already in config.jsonc._\n\n");
         } else {
             report.push_str(&format!(
-                "{} test(s) should be added:\n\n",
-                missing_for_report.len()
+                "{} test(s) were auto-added:\n\n",
+                missing_from_config_for_report.len()
             ));
-            for path in &missing_for_report {
+            for path in &missing_from_config_for_report {
                 report.push_str(&format!("- `{path}`\n"));
             }
             report.push('\n');
@@ -1293,33 +1843,31 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             .push((path, result));
     }
 
-    report.push_str("| Module | Total | Pass | Fail | Error | Skip | Pass% |\n");
-    report.push_str("|--------|-------|------|------|-------|------|-------|\n");
+    report.push_str("| Module | Total | Pass | Fail | Error | Skip | Impossible | Pass% |\n");
+    report.push_str("|--------|-------|------|------|-------|------|------------|-------|\n");
     for (module, tests) in &by_module_all {
         let total = tests.len();
-        let pass = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Pass))
-            .count();
-        let fail = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Fail(_)))
-            .count();
-        let error = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Error(_)))
-            .count();
-        let skip = tests
-            .iter()
-            .filter(|(_, r)| matches!(r, TestResult::Skip(_)))
-            .count();
+        let mut pass = 0;
+        let mut fail = 0;
+        let mut error = 0;
+        let mut skip = 0;
+        let mut impossible = 0;
+        for (path, result) in tests {
+            match report_bucket(path, result, &skipped_observations, &config_impossible) {
+                ReportBucket::Pass => pass += 1,
+                ReportBucket::Fail => fail += 1,
+                ReportBucket::Error => error += 1,
+                ReportBucket::Skip => skip += 1,
+                ReportBucket::Impossible => impossible += 1,
+            }
+        }
         let pass_pct = if total > 0 {
             pass as f64 / total as f64 * 100.0
         } else {
             0.0
         };
         report.push_str(&format!(
-            "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {pass_pct:.1}% |\n"
+            "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {impossible} | {pass_pct:.1}% |\n"
         ));
     }
     report.push('\n');
@@ -1384,71 +1932,8 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         );
     }
 
-    // Warn about skipped tests that actually pass
-    if !should_not_be_skipped.is_empty() {
-        println!(
-            "\n⚠️  WARNING: {} skipped test(s) in config.jsonc actually PASS!",
-            should_not_be_skipped.len()
-        );
-        println!("Consider removing \"skip\": true for these entries:\n");
-        for path in &should_not_be_skipped {
-            println!("    \"{path}\"");
-        }
-        println!();
-    }
-
-    // Step 6: Warn about passing tests not in config.jsonc
-    let config_content = fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
-    let config_json_str = strip_jsonc_comments(&config_content);
-    let config_tests: BTreeSet<String> = {
-        let mut keys: BTreeSet<String> =
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
-                val.get("tests")
-                    .and_then(|v| v.as_object())
-                    .map(|obj| obj.keys().cloned().collect())
-                    .unwrap_or_default()
-            } else {
-                BTreeSet::new()
-            };
-        // Also include all config-skipped keys (already loaded earlier)
-        keys.extend(config_skipped.keys().cloned());
-        keys
-    };
-
-    let missing_from_config: Vec<&String> = results
-        .iter()
-        .filter(|(path, result)| {
-            if !matches!(result, TestResult::Pass) {
-                return false;
-            }
-            let base_path = path.split('#').next().unwrap_or(path);
-            if internals_tests.contains(base_path) {
-                return false;
-            }
-            if let Some(subtest_name) = path.split('#').nth(1) {
-                if let Some(config_subtests) = config_split_entries.get(base_path) {
-                    return !config_subtests.contains(&subtest_name.to_string());
-                }
-                return true;
-            }
-            !config_tests.contains(path.as_str())
-        })
-        .map(|(path, _)| path)
-        .collect();
-
-    if !missing_from_config.is_empty() {
-        println!(
-            "\n⚠️  WARNING: {} passing test(s) are NOT in config.jsonc!",
-            missing_from_config.len()
-        );
-        println!(
-            "Add the following entries to the \"tests\" object in tests/node_compat/config.jsonc:\n"
-        );
-        for path in &missing_from_config {
-            println!("    \"{path}\": {{}},");
-        }
-        println!();
-    }
+    // Step 6: Auto-update config.jsonc
+    update_config_jsonc(&should_not_be_skipped, &missing_from_config_for_report);
 
     // Don't fail the test - this is a report generator
     Ok(())
