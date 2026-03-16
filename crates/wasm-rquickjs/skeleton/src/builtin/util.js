@@ -1151,7 +1151,7 @@ export const types = {
     isExternal: function isExternal(v) {
         return _isExternalLike(v);
     },
-    isCryptoKey: function isCryptoKey() { return false; },
+    isCryptoKey: function isCryptoKey(value) { return typeof globalThis.CryptoKey === 'function' && value instanceof globalThis.CryptoKey; },
     isKeyObject: function isKeyObject() { return false; }
 };
 

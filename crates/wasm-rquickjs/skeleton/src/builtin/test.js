@@ -4,7 +4,7 @@
 // and an aggregate error is thrown after all tests in a suite complete.
 
 import assert from 'node:assert';
-import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 import { validateNumber, validateInteger } from '__wasm_rquickjs_builtin/internal/validators';
 
 let currentSuite = null;
@@ -83,29 +83,33 @@ function TestContext(name, parent, filePath) {
     this._beforeEachFns = [];
     this._afterEachFns = [];
     this.mock = new MockTracker();
+    this._planCount = undefined;
+    this._assertionCount = 0;
 
     // Build t.assert: copy assert methods excluding AssertionError, CallTracker, strict,
     // and add snapshot/fileSnapshot per Node.js spec.
+    // All methods are wrapped to track assertion count for t.plan().
     const uncopiedKeys = ['AssertionError', 'CallTracker', 'strict'];
     const tAssert = {};
+    const self = this;
     const assertKeys = Object.keys(assert);
     for (let i = 0; i < assertKeys.length; i++) {
         const key = assertKeys[i];
         if (!uncopiedKeys.includes(key)) {
-            tAssert[key] = assert[key];
+            tAssert[key] = wrapAssertForPlan(assert[key], self);
         }
     }
-    tAssert.snapshot = function snapshot(_value, _options) {
+    tAssert.snapshot = wrapAssertForPlan(function snapshot(_value, _options) {
         throw new Error('snapshot is not supported in this context');
-    };
-    tAssert.fileSnapshot = function fileSnapshot(_value, _path) {
+    }, self);
+    tAssert.fileSnapshot = wrapAssertForPlan(function fileSnapshot(_value, _path) {
         throw new Error('fileSnapshot is not supported in this context');
-    };
+    }, self);
     // Apply custom assertions registered via testAssertions.register()
     const customKeys = Object.keys(_customAssertions);
     for (let ci = 0; ci < customKeys.length; ci++) {
         const ckey = customKeys[ci];
-        tAssert[ckey] = wrapCustomAssertion(_customAssertions[ckey], this);
+        tAssert[ckey] = wrapAssertForPlan(wrapCustomAssertion(_customAssertions[ckey], this), self);
     }
     this.assert = tAssert;
 }
@@ -201,6 +205,12 @@ TestContext.prototype.afterEach = function (fn) {
     this._afterEachFns.push(fn);
 };
 
+TestContext.prototype.plan = function plan(count) {
+    validateInteger(count, 'count', 0);
+    this._planCount = count;
+    this._assertionCount = 0;
+};
+
 TestContext.prototype.waitFor = function waitFor(condition, options) {
     if (typeof condition !== 'function') {
         throw new ERR_INVALID_ARG_TYPE('condition', 'function', condition);
@@ -293,6 +303,21 @@ function isSkipOption(skip) {
 
 function wrapCustomAssertion(fn, ctx) {
     return function () { return fn.apply(ctx, arguments); };
+}
+
+function wrapAssertForPlan(fn, ctx) {
+    return function () {
+        ctx._assertionCount++;
+        return fn.apply(this, arguments);
+    };
+}
+
+function checkPlan(ctx) {
+    if (ctx._planCount !== undefined && ctx._assertionCount !== ctx._planCount) {
+        throw new Error(
+            'Expected ' + ctx._planCount + ' assertion(s) but received ' + ctx._assertionCount
+        );
+    }
 }
 
 function runHookList(hooks) {
@@ -442,6 +467,7 @@ function runTest(parsed, parentSuite) {
                 }
             });
             const asyncResult = donePromise.then(function () {
+                checkPlan(ctx);
                 cleanup();
                 runHookList(afterEachFns);
                 restoreModuleContext();
@@ -474,6 +500,7 @@ function runTest(parsed, parentSuite) {
         // If test returned a promise, return an async result that can be awaited
         if (result && typeof result.then === 'function') {
             const asyncResult = result.then(function () {
+                checkPlan(ctx);
                 cleanup();
                 runHookList(afterEachFns);
                 restoreModuleContext();
@@ -500,6 +527,7 @@ function runTest(parsed, parentSuite) {
             return { status: 'async', name: name, promise: asyncResult };
         }
 
+        checkPlan(ctx);
         cleanup();
         runHookList(afterEachFns);
 
@@ -877,6 +905,8 @@ function removeMockEntry(tracker, obj, methodName) {
 
 function MockTracker() {
     this._mocks = [];
+    this._fnMocks = [];
+    this._moduleMocks = [];
 }
 
 MockTracker.prototype.method = function (obj, methodName, implementation, options) {
@@ -887,8 +917,28 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
     }
     options = options || {};
 
+    // Validate obj
+    if (obj === null || obj === undefined) {
+        throw new ERR_INVALID_ARG_TYPE('object', 'Object', obj);
+    }
+
+    // Validate methodName type
+    if (typeof methodName !== 'string' && typeof methodName !== 'symbol') {
+        throw new ERR_INVALID_ARG_TYPE('methodName', ['string', 'symbol'], methodName);
+    }
+
     if (options.getter && options.setter) {
         throw new Error("The property 'options.setter' cannot be used with 'options.getter'");
+    }
+
+    // Check property exists on the object (own or inherited)
+    if (!(methodName in obj) && !options.getter && !options.setter) {
+        throw new ERR_INVALID_ARG_VALUE('methodName', methodName, 'must be a method');
+    }
+
+    // For regular method mocking (not getter/setter), check that the property is a function
+    if (!options.getter && !options.setter && typeof obj[methodName] !== 'function') {
+        throw new TypeError("The argument 'methodName' must be a method");
     }
 
     const tracker = this;
@@ -985,6 +1035,13 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
     }
 
     // Regular method mocking (no getter/setter)
+
+    // Check if property is configurable (for non-configurable own properties)
+    const ownDescriptor = Object.getOwnPropertyDescriptor(obj, methodName);
+    if (ownDescriptor && !ownDescriptor.configurable && !ownDescriptor.writable) {
+        throw new TypeError('Cannot redefine property: ' + String(methodName));
+    }
+
     const original = obj[methodName];
 
     mockInfo.restore = function () {
@@ -1011,6 +1068,9 @@ MockTracker.prototype.method = function (obj, methodName, implementation, option
             throw e;
         }
     };
+    // Copy name and length from original function
+    Object.defineProperty(wrapper, 'name', Object.getOwnPropertyDescriptor(original, 'name') || { value: '', configurable: true });
+    Object.defineProperty(wrapper, 'length', Object.getOwnPropertyDescriptor(original, 'length') || { value: 0, configurable: true });
     wrapper.mock = mockInfo;
 
     obj[methodName] = wrapper;
@@ -1100,7 +1160,7 @@ MockTracker.prototype.fn = function (original, implementation, options) {
             }
             let result;
             if (isConstructorCall) {
-                result = Reflect.construct(fn, args);
+                result = Reflect.construct(fn, args, originalFn);
                 callRecord.this = result;
             } else {
                 result = fn.apply(this, arguments);
@@ -1115,7 +1175,13 @@ MockTracker.prototype.fn = function (original, implementation, options) {
             throw e;
         }
     };
+    // Copy name and length from original function
+    const nameDesc = Object.getOwnPropertyDescriptor(originalFn, 'name');
+    const lengthDesc = Object.getOwnPropertyDescriptor(originalFn, 'length');
+    if (nameDesc) Object.defineProperty(wrapper, 'name', nameDesc);
+    if (lengthDesc) Object.defineProperty(wrapper, 'length', lengthDesc);
     wrapper.mock = mockInfo;
+    this._fnMocks.push(mockInfo);
     return wrapper;
 };
 
@@ -1135,20 +1201,19 @@ MockTracker.prototype.restoreAll = function () {
         }
     }
     this._mocks = [];
+    for (let i = 0; i < this._fnMocks.length; i++) {
+        this._fnMocks[i].restore();
+    }
+    this._fnMocks = [];
+    // Restore module mocks in reverse order
+    for (let i = this._moduleMocks.length - 1; i >= 0; i--) {
+        this._moduleMocks[i].restore();
+    }
+    this._moduleMocks = [];
 };
 
 MockTracker.prototype.reset = function () {
-    for (let i = 0; i < this._mocks.length; i++) {
-        const m = this._mocks[i];
-        if (m.type === 'getter' || m.type === 'setter') {
-            // For getter/setter mocks, the wrapper object is not directly accessible
-            // from the object; reset is handled differently
-        } else {
-            if (m.obj[m.methodName] && m.obj[m.methodName].mock) {
-                m.obj[m.methodName].mock.calls.length = 0;
-            }
-        }
-    }
+    this.restoreAll();
 };
 
 MockTracker.prototype.getter = function (obj, methodName, implementation, options) {
@@ -1182,6 +1247,41 @@ MockTracker.prototype.setter = function (obj, methodName, implementation, option
     options.setter = true;
     return this.method(obj, methodName, implementation, options);
 };
+
+MockTracker.prototype.module = function module(specifier, options) {
+    if (typeof specifier !== 'string' && !(typeof specifier === 'object' && specifier !== null && typeof specifier.href === 'string')) {
+        throw new ERR_INVALID_ARG_TYPE('specifier', 'string', specifier);
+    }
+    if (options !== undefined && options !== null && typeof options === 'object') {
+        // valid
+    } else if (options !== undefined) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+
+    var opts = options || {};
+
+    if (opts.cache !== undefined && typeof opts.cache !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.cache', 'boolean', opts.cache);
+    }
+    if (opts.namedExports !== undefined && (opts.namedExports === null || typeof opts.namedExports !== 'object')) {
+        throw new ERR_INVALID_ARG_TYPE('options.namedExports', 'object', opts.namedExports);
+    }
+
+    var registerFn = globalThis.__wasm_rquickjs_register_module_mock;
+    if (!registerFn) {
+        throw new Error('Module mocking is not available');
+    }
+
+    var handle = registerFn(typeof specifier === 'object' ? specifier.href : specifier, opts);
+    if (!handle) {
+        throw new Error('Failed to register module mock');
+    }
+
+    this._moduleMocks.push(handle);
+
+    return handle;
+};
+
 MockTracker.prototype.timers = { enable: function () {}, reset: function () {}, tick: function () {} };
 
 const mock = new MockTracker();

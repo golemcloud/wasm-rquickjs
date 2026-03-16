@@ -165,6 +165,8 @@ fn require_esm_impl<'js>(
     let src = CString::new(code.as_str()).map_err(|_| rquickjs::Error::Unknown)?;
     let fname = CString::new(wrapper_name.as_str()).map_err(|_| rquickjs::Error::Unknown)?;
 
+    let globals = ctx.globals();
+
     unsafe {
         let val = qjs::JS_Eval(
             ctx.as_raw().as_ptr(),
@@ -176,20 +178,70 @@ fn require_esm_impl<'js>(
         if qjs::JS_IsException(val) {
             return Err(rquickjs::Error::Exception);
         }
+
+        // If the module evaluation returned a Promise (TLA), attach a no-op
+        // .catch() handler so any rejection is marked as handled and doesn't
+        // trigger an unhandledRejection event. We'll report TLA as
+        // ERR_REQUIRE_ASYNC_MODULE below instead.
+        let tag = qjs::JS_VALUE_GET_TAG(val);
+        if tag == qjs::JS_TAG_OBJECT as i32 {
+            let catch_str = CString::new("catch").unwrap();
+            let catch_fn = qjs::JS_GetPropertyStr(
+                ctx.as_raw().as_ptr(),
+                val,
+                catch_str.as_ptr(),
+            );
+            if !qjs::JS_IsUndefined(catch_fn) && !qjs::JS_IsException(catch_fn) {
+                // Create a no-op function: function() {}
+                let noop_code = CString::new("(function(){})").unwrap();
+                let noop_fname = CString::new("<noop>").unwrap();
+                let noop_fn = qjs::JS_Eval(
+                    ctx.as_raw().as_ptr(),
+                    noop_code.as_ptr(),
+                    14,
+                    noop_fname.as_ptr(),
+                    qjs::JS_EVAL_TYPE_GLOBAL as i32,
+                );
+                if !qjs::JS_IsException(noop_fn) {
+                    // Call promise.catch(noop)
+                    let result = qjs::JS_Call(
+                        ctx.as_raw().as_ptr(),
+                        catch_fn,
+                        val,
+                        1,
+                        &noop_fn as *const _ as *mut _,
+                    );
+                    if !qjs::JS_IsException(result) {
+                        qjs::JS_FreeValue(ctx.as_raw().as_ptr(), result);
+                    }
+                    qjs::JS_FreeValue(ctx.as_raw().as_ptr(), noop_fn);
+                }
+                qjs::JS_FreeValue(ctx.as_raw().as_ptr(), catch_fn);
+            }
+        }
+
         // Free the return value (Promise from module evaluation)
         qjs::JS_FreeValue(ctx.as_raw().as_ptr(), val);
     }
 
     // Read the namespace from globalThis and clean up
-    let globals = ctx.globals();
     let ns: Value = globals.get(temp_key_str.as_str())?;
 
     // Clean up the global property
     globals.remove(temp_key_str.as_str())?;
 
     if ns.is_undefined() {
-        // Module didn't store the namespace - evaluation may have failed silently
-        Err(rquickjs::Error::Unknown)
+        // Module didn't store the namespace — likely has top-level await (TLA)
+        // and the module evaluation Promise hasn't resolved synchronously.
+        // Throw ERR_REQUIRE_ASYNC_MODULE matching Node.js behavior.
+        let error_ctor: rquickjs::Function = globals.get("Error")?;
+        let msg = format!(
+            "require() cannot be used on an ESM graph with top-level await. Use import() instead. Module: {}",
+            filename
+        );
+        let error_obj: rquickjs::Object = error_ctor.call((&msg,))?;
+        error_obj.set("code", "ERR_REQUIRE_ASYNC_MODULE")?;
+        Err(ctx.throw(error_obj.into_value()))
     } else {
         Ok(ns)
     }

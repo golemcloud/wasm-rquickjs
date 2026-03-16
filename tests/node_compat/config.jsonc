@@ -6466,34 +6466,34 @@
     "es-module/test-require-module-cycle-cjs-esm-esm.js": {},
     "es-module/test-require-module-cycle-esm-cjs-esm-esm.js": {
       "skip": true,
-      "reason": "newly discovered, not yet evaluated",
+      "reason": "QuickJS module system does not support ESM-CJS interop cycle detection",
       "split": true,
       "subtests": {
-        "block_00_a_mjs_b_cjs_c_mjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_b_cjs_c_mjs_a_mjs_b_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_c_mjs_a_mjs_b_cjs_c_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_a_mjs_b_cjs_c_mjs_a_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_01_b_cjs_c_mjs_a_mjs_b_cjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_02_c_mjs_a_mjs_b_cjs_c_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" }
       }
     },
     "es-module/test-require-module-cycle-esm-cjs-esm.js": {
       "skip": true,
-      "reason": "newly discovered, not yet evaluated",
+      "reason": "QuickJS module system does not support ESM-CJS interop cycle detection",
       "split": true,
       "subtests": {
-        "block_00_require_a_cjs_a_mjs_b_cjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_require_b_cjs_b_cjs_a_mjs_b_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_a_mjs_b_cjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_b_cjs_a_mjs_b_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_require_a_cjs_a_mjs_b_cjs_a_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_01_require_b_cjs_b_cjs_a_mjs_b_cjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_02_a_mjs_b_cjs_a_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_03_b_cjs_a_mjs_b_cjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" }
       }
     },
     "es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js": {
       "skip": true,
-      "reason": "newly discovered, not yet evaluated",
+      "reason": "QuickJS module system does not support ESM-CJS interop cycle detection",
       "split": true,
       "subtests": {
-        "block_00_a_mjs_b_mjs_c_cjs_z_mjs_a_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_b_mjs_c_cjs_z_mjs_a_mjs_b_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_c_cjs_z_mjs_a_mjs_b_mjs_c_cjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_z_mjs_a_mjs_b_mjs_c_cjs_z_mjs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_a_mjs_b_mjs_c_cjs_z_mjs_a_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_01_b_mjs_c_cjs_z_mjs_a_mjs_b_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_02_c_cjs_z_mjs_a_mjs_b_mjs_c_cjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" },
+        "block_03_z_mjs_a_mjs_b_mjs_c_cjs_z_mjs": { "skip": true, "reason": "QuickJS module system does not support ESM-CJS interop cycle detection" }
       }
     },
     "es-module/test-require-module-cycle-esm-esm-cjs-esm.js": {
@@ -6534,12 +6534,10 @@
     "es-module/test-require-module-tla-retry-import.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-tla-retry-require.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-tla.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_block_00": { "skip": true, "reason": "spawnSyncAndExit block - QuickJS evaluates TLA module body before detecting TLA, so _rawDebug runs" },
+        "block_01_block_01": { "skip": true, "reason": "spawnSyncAndExit with --experimental-print-required-tla not supported" }
       }
     },
     "es-module/test-require-module-transpiled.js": {},
@@ -8079,7 +8077,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_01_block_01": {}
       }
     },
     "parallel/test-require-delete-array-iterator.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -8093,22 +8091,18 @@
     "parallel/test-require-long-path.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-require-mjs.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-require-node-prefix.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_all_kinds_of_specifiers_should_work_without_issue": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_node_prefixed_require_calls_bypass_the_require_cache": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_all_kinds_of_specifiers_should_work_without_issue": {},
+        "block_01_node_prefixed_require_calls_bypass_the_require_cache": {}
       }
     },
     "parallel/test-require-resolve-opts-paths-relative.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_parent_directory_paths_work_as_intended": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_current_directory_paths_work_as_intended": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_sub_directory_paths_work_as_intended": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_parent_directory_paths_work_as_intended": {},
+        "block_01_current_directory_paths_work_as_intended": {},
+        "block_02_sub_directory_paths_work_as_intended": {}
       }
     },
     "parallel/test-require-resolve.js": {
@@ -8226,10 +8220,7 @@
       "subtests": {
         "test_00_throws_if_name_is_not_a_string": {},
         "test_01_throws_if_fn_is_not_a_function": {},
-        "test_02_invokes_a_custom_assertion_as_part_of_the_test_plan": {
-          "skip": true,
-          "reason": "[manual] amp fix attempt failed verification"
-        },
+        "test_02_invokes_a_custom_assertion_as_part_of_the_test_plan": {},
         "test_03_can_override_existing_assertions": {},
         "test_04_this_is_set_to_the_testcontext": {}
       }
@@ -8289,29 +8280,29 @@
         "test_11_spy_functions_can_be_bound": {},
         "test_12_mocks_prototype_methods_on_an_instance": {},
         "test_13_spies_on_async_static_class_methods": {},
-        "test_14_given_null_to_a_mock_method_it_throws_a_invalid_argument_err": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_15_it_should_throw_given_an_inexistent_property_on_a_object_ins": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_14_given_null_to_a_mock_method_it_throws_a_invalid_argument_err": {},
+        "test_15_it_should_throw_given_an_inexistent_property_on_a_object_ins": {},
         "test_16_spy_functions_can_be_used_on_classes_inheritance": {},
-        "test_17_spy_functions_don_t_affect_the_prototype_chain": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_17_spy_functions_don_t_affect_the_prototype_chain": {},
         "test_18_mocked_functions_report_thrown_errors": {},
         "test_19_mocked_constructors_report_thrown_errors": {},
         "test_20_mocks_a_function": {},
-        "test_21_mocks_a_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_21_mocks_a_constructor": { "skip": true, "reason": "QuickJS uses different error message for private field access" },
         "test_22_mocks_an_object_method": {},
         "test_23_mocks_a_getter": {},
         "test_24_mocks_a_setter": {},
         "test_25_mocks_a_getter_with_syntax_sugar": {},
         "test_26_mocks_a_setter_with_syntax_sugar": {},
-        "test_27_mocked_functions_match_name_and_length": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_28_method_fails_if_method_cannot_be_redefined": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_29_method_fails_if_field_is_a_property_instead_of_a_method": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_27_mocked_functions_match_name_and_length": {},
+        "test_28_method_fails_if_method_cannot_be_redefined": {},
+        "test_29_method_fails_if_field_is_a_property_instead_of_a_method": {},
         "test_30_mocks_can_be_auto_restored": {},
         "test_31_mock_implementation_can_be_changed_dynamically": {},
         "test_32_local_mocks_are_auto_restored_after_the_test_finishes": {},
         "test_33_reset_mock_calls": {},
-        "test_34_uses_top_level_mock": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_34_uses_top_level_mock": {},
         "test_35_the_getter_and_setter_options_cannot_be_used_together": {},
-        "test_36_method_names_must_be_strings_or_symbols": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "test_36_method_names_must_be_strings_or_symbols": {},
         "test_37_the_times_option_must_be_an_integer_1": {},
         "test_38_spies_on_a_class_prototype_method": {},
         "test_39_getter_fails_if_getter_options_set_to_false": {},
@@ -8321,29 +8312,27 @@
       }
     },
     "parallel/test-runner-module-mocking.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "test_00_input_validation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_01_core_module_mocking_with_namedexports_option": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_02_cjs_mocking_with_namedexports_option": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_03_esm_mocking_with_namedexports_option": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_04_modules_cannot_be_mocked_multiple_times_at_once": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_05_mocks_are_automatically_restored": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_06_mocks_can_be_restored_independently": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_07_core_module_mocks_can_be_used_by_both_module_systems": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_08_node_core_module_mocks_can_be_used_by_both_module_systems": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_09_cjs_mocks_can_be_used_by_both_module_systems": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_10_relative_paths_can_be_used_by_both_module_systems": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_11_node_modules_can_be_used_by_both_module_systems": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_12_file_imports_are_supported_in_esm_only": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_13_mocked_modules_do_not_impact_unmocked_modules": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_14_defaultexports_work_with_cjs_mocks_in_both_module_systems": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_15_defaultexports_work_with_esm_mocks_in_both_module_systems": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_16_wrong_import_syntax_should_throw_error_after_module_mocking": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_17_should_throw_err_access_denied_when_permission_model_is_enab": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "test_18_should_work_when_allow_worker_is_passed_and_permission_model": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "test_00_input_validation": {},
+        "test_01_core_module_mocking_with_namedexports_option": {},
+        "test_02_cjs_mocking_with_namedexports_option": {},
+        "test_03_esm_mocking_with_namedexports_option": {},
+        "test_04_modules_cannot_be_mocked_multiple_times_at_once": {},
+        "test_05_mocks_are_automatically_restored": {},
+        "test_06_mocks_can_be_restored_independently": {},
+        "test_07_core_module_mocks_can_be_used_by_both_module_systems": {},
+        "test_08_node_core_module_mocks_can_be_used_by_both_module_systems": {},
+        "test_09_cjs_mocks_can_be_used_by_both_module_systems": {},
+        "test_10_relative_paths_can_be_used_by_both_module_systems": {},
+        "test_11_node_modules_can_be_used_by_both_module_systems": { "skip": true, "reason": "requires child process spawning" },
+        "test_12_file_imports_are_supported_in_esm_only": {},
+        "test_13_mocked_modules_do_not_impact_unmocked_modules": {},
+        "test_14_defaultexports_work_with_cjs_mocks_in_both_module_systems": {},
+        "test_15_defaultexports_work_with_esm_mocks_in_both_module_systems": {},
+        "test_16_wrong_import_syntax_should_throw_error_after_module_mocking": { "skip": true, "reason": "requires child process spawning" },
+        "test_17_should_throw_err_access_denied_when_permission_model_is_enab": { "skip": true, "reason": "requires child process spawning and permission model" },
+        "test_18_should_work_when_allow_worker_is_passed_and_permission_model": { "skip": true, "reason": "requires child process spawning and permission model" }
       }
     },
     "parallel/test-runner-no-isolation-filtering.js": {
@@ -9764,83 +9753,73 @@
     "parallel/test-warn-sigprof.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-warn-stream-wrap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-constructors.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_cryptokey_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_subtlecrypto_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_test_crypto_constructor": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_test_crypto_prototype_subtle": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_test_crypto_prototype_randomuuid": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_test_crypto_prototype_getrandomvalues": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_06_test_subtlecrypto_prototype_encrypt": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_07_test_subtlecrypto_prototype_decrypt": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_08_test_subtlecrypto_prototype_sign": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_09_test_subtlecrypto_prototype_verify": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_10_test_subtlecrypto_prototype_digest": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_11_test_subtlecrypto_prototype_generatekey": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_12_test_subtlecrypto_prototype_derivekey": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_13_test_subtlecrypto_prototype_derivebits": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_14_test_subtlecrypto_prototype_importkey": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_15_test_subtlecrypto_prototype_exportkey": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_16_test_subtlecrypto_prototype_wrapkey": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_17_test_subtlecrypto_prototype_unwrapkey": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_18_block_18": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_test_cryptokey_constructor": {},
+        "block_01_test_subtlecrypto_constructor": {},
+        "block_02_test_crypto_constructor": {},
+        "block_03_test_crypto_prototype_subtle": {},
+        "block_04_test_crypto_prototype_randomuuid": {},
+        "block_05_test_crypto_prototype_getrandomvalues": {},
+        "block_06_test_subtlecrypto_prototype_encrypt": {},
+        "block_07_test_subtlecrypto_prototype_decrypt": {},
+        "block_08_test_subtlecrypto_prototype_sign": {},
+        "block_09_test_subtlecrypto_prototype_verify": {},
+        "block_10_test_subtlecrypto_prototype_digest": {},
+        "block_11_test_subtlecrypto_prototype_generatekey": {},
+        "block_12_test_subtlecrypto_prototype_derivekey": {},
+        "block_13_test_subtlecrypto_prototype_derivebits": {},
+        "block_14_test_subtlecrypto_prototype_importkey": {},
+        "block_15_test_subtlecrypto_prototype_exportkey": {},
+        "block_16_test_subtlecrypto_prototype_wrapkey": {},
+        "block_17_test_subtlecrypto_prototype_unwrapkey": {},
+        "block_18_block_18": {}
       }
     },
-    "parallel/test-webcrypto-cryptokey-workers.js": {},
+    "parallel/test-webcrypto-cryptokey-workers.js": { "impossible": true, "reason": "requires Worker threads with structured clone of CryptoKey" },
     "parallel/test-webcrypto-derivebits-cfrg.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-derivebits-ecdh.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-derivebits-hkdf.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-derivebits.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_ecdh_bit_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_hkdf_bit_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_test_pbkdf2_bit_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_test_x25519_and_x448_bit_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_test_ecdh_bit_derivation": { "skip": true, "reason": "P-521 ECDH not yet implemented in native Rust" },
+        "block_01_test_hkdf_bit_derivation": {},
+        "block_02_test_pbkdf2_bit_derivation": {},
+        "block_03_test_x25519_and_x448_bit_derivation": { "skip": true, "reason": "X25519/X448 DH not yet implemented in native Rust" }
       }
     },
     "parallel/test-webcrypto-derivekey-cfrg.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-derivekey-ecdh.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-derivekey.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_ecdh_key_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_hkdf_key_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_test_pbkdf2_key_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_test_default_key_lengths": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_block_04": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_test_x25519_and_x448_key_derivation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_test_ecdh_key_derivation": { "skip": true, "reason": "P-521 ECDH not yet implemented in native Rust" },
+        "block_01_test_hkdf_key_derivation": {},
+        "block_02_test_pbkdf2_key_derivation": {},
+        "block_03_test_default_key_lengths": { "skip": true, "reason": "needs evaluation" },
+        "block_04_block_04": { "skip": true, "reason": "needs evaluation" },
+        "block_05_test_x25519_and_x448_key_derivation": { "skip": true, "reason": "X25519/X448 DH not yet implemented in native Rust" }
       }
     },
     "parallel/test-webcrypto-digest.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-encrypt-decrypt-aes.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_aes_cbc_vectors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_aes_ctr_vectors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_test_aes_gcm_vectors": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_test_aes_cbc_vectors": {},
+        "block_01_test_aes_ctr_vectors": {},
+        "block_02_test_aes_gcm_vectors": {},
+        "block_03_block_03": {}
       }
     },
     "parallel/test-webcrypto-encrypt-decrypt-rsa.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-encrypt-decrypt.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_encrypt_decrypt_rsa_oaep": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_encrypt_decrypt_aes_ctr": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_test_encrypt_decrypt_aes_cbc": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_test_encrypt_decrypt_aes_gcm": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_test_encrypt_decrypt_rsa_oaep": {},
+        "block_01_test_encrypt_decrypt_aes_ctr": {},
+        "block_02_test_encrypt_decrypt_aes_cbc": {},
+        "block_03_test_encrypt_decrypt_aes_gcm": {}
       }
     },
     "parallel/test-webcrypto-export-import-cfrg.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9855,42 +9834,38 @@
     },
     "parallel/test-webcrypto-export-import-rsa.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-export-import.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_import_export_hmac_secret_key": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_import_export_aes_secret_key": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_import_export_rsa_key_pairs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_import_export_ec_key_pairs": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_block_00": {},
+        "block_01_import_export_hmac_secret_key": {},
+        "block_02_import_export_aes_secret_key": {},
+        "block_03_import_export_rsa_key_pairs": {},
+        "block_04_import_export_ec_key_pairs": {}
       }
     },
     "parallel/test-webcrypto-getRandomValues.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-keygen.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
+      "impossible": true,
+      "reason": "requires --expose-internals and internal/crypto/util module",
       "split": true,
       "subtests": {
-        "block_00_test_invalid_algorithms": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_bad_usages": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_test_rsa_key_generation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_test_ec_key_generation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_04_test_aes_key_generation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_05_test_hmac_key_generation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_06_block_06": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_07_test_okp_key_generation": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_test_invalid_algorithms": { "impossible": true, "reason": "requires internal/crypto/util" },
+        "block_01_test_bad_usages": { "impossible": true, "reason": "requires internal/crypto/util" },
+        "block_02_test_rsa_key_generation": { "impossible": true, "reason": "requires internal/crypto/util" },
+        "block_03_test_ec_key_generation": { "impossible": true, "reason": "requires internal/crypto/util" },
+        "block_04_test_aes_key_generation": { "impossible": true, "reason": "requires internal/crypto/util" },
+        "block_05_test_hmac_key_generation": { "impossible": true, "reason": "requires internal/crypto/util" },
+        "block_06_block_06": { "impossible": true, "reason": "requires internal/crypto/util" },
+        "block_07_test_okp_key_generation": { "impossible": true, "reason": "requires internal/crypto/util" }
       }
     },
     "parallel/test-webcrypto-random.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
     "parallel/test-webcrypto-sign-verify-ecdsa.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9898,16 +9873,14 @@
     "parallel/test-webcrypto-sign-verify-hmac.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-sign-verify-rsa.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webcrypto-sign-verify.js": {
-      "skip": true,
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_test_sign_verify_rsassa_pkcs1_v1_5": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_01_test_sign_verify_rsa_pss": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_00_test_sign_verify_rsassa_pkcs1_v1_5": {},
+        "block_01_test_sign_verify_rsa_pss": {},
         "block_02_test_sign_verify_ecdsa": {},
         "block_03_test_sign_verify_hmac": {},
         "block_04_test_sign_verify_ed25519": {},
-        "block_05_test_sign_verify_ed448": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
+        "block_05_test_sign_verify_ed448": { "skip": true, "reason": "Ed448 key generation not yet implemented" }
       }
     },
     "parallel/test-webcrypto-util.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9946,7 +9919,7 @@
         "block_27_ed448params": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-webcrypto-wrap-unwrap.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-webcrypto-wrap-unwrap.js": { "skip": true, "reason": "requires CFRG key (Ed448/X25519/X448) DER export support" },
     "parallel/test-websocket.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-webstorage.js": {
       "skip": true,

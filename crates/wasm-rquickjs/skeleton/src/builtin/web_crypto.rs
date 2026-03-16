@@ -6195,6 +6195,8 @@ pub const REEXPORT_JS: &str = r#"import * as _crypto from '__wasm_rquickjs_built
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_web_crypto from '__wasm_rquickjs_builtin/web_crypto';
-        globalThis.crypto = __wasm_rquickjs_web_crypto;
+        globalThis.crypto = __wasm_rquickjs_web_crypto.webcrypto;
+        globalThis.Crypto = __wasm_rquickjs_web_crypto.Crypto;
+        globalThis.SubtleCrypto = __wasm_rquickjs_web_crypto.SubtleCrypto;
         globalThis.CryptoKey = __wasm_rquickjs_web_crypto.CryptoKey;
     "#;

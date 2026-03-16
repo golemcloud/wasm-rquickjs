@@ -1,13 +1,16 @@
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
 import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
+import { DOMException } from '__wasm_rquickjs_builtin/abort_controller'
 import {
     ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS,
     ERR_CRYPTO_INVALID_DIGEST,
     ERR_CRYPTO_INVALID_JWK,
     ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE,
+    ERR_ILLEGAL_CONSTRUCTOR,
     ERR_INCOMPATIBLE_OPTION_PAIR,
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_ARG_VALUE,
+    ERR_INVALID_THIS,
     ERR_MISSING_OPTION,
     ERR_OUT_OF_RANGE,
     ERR_UNKNOWN_ENCODING,
@@ -578,28 +581,30 @@ export function hash(algorithm, data, outputEncoding) {
     return encodeOutput(result, normalizeHashOutputEncoding(outputEncoding));
 }
 
+function isIntegerTypedArray(value) {
+    return value instanceof Int8Array ||
+        value instanceof Uint8Array ||
+        value instanceof Uint8ClampedArray ||
+        value instanceof Int16Array ||
+        value instanceof Uint16Array ||
+        value instanceof Int32Array ||
+        value instanceof Uint32Array ||
+        value instanceof BigInt64Array ||
+        value instanceof BigUint64Array;
+}
+
 export function getRandomValues(typedArray) {
-    if (typedArray instanceof Int8Array) {
-        webCryptoNative.randomize_int8_array(typedArray);
-    } else if (typedArray instanceof Uint8Array) {
-        webCryptoNative.randomize_uint8_array(typedArray);
-    } else if (typedArray instanceof Uint8ClampedArray) {
-        webCryptoNative.randomize_uint8_clamped_array(typedArray);
-    } else if (typedArray instanceof Int16Array) {
-        webCryptoNative.randomize_int16_array(typedArray);
-    } else if (typedArray instanceof Uint16Array) {
-        webCryptoNative.randomize_uint16_array(typedArray);
-    } else if (typedArray instanceof Int32Array) {
-        webCryptoNative.randomize_int32_array(typedArray);
-    } else if (typedArray instanceof Uint32Array) {
-        webCryptoNative.randomize_uint32_array(typedArray);
-    } else if (typedArray instanceof BigInt64Array) {
-        webCryptoNative.randomize_bigint64_array(typedArray);
-    } else if (typedArray instanceof BigUint64Array) {
-        webCryptoNative.randomize_biguint64_array(typedArray);
-    } else {
-        throw new TypeError('Unsupported TypedArray type');
+    if (!isIntegerTypedArray(typedArray)) {
+        throw new DOMException('The provided value is not of type \'(Int8Array or Int16Array or Int32Array or Uint8Array or Uint16Array or Uint32Array or Uint8ClampedArray or Float32Array or Float64Array or DataView or BigInt64Array or BigUint64Array)\'', 'TypeMismatchError');
     }
+    if (typedArray.byteLength > 65536) {
+        throw new DOMException('The ArrayBufferView\'s byte length (' + typedArray.byteLength + ') exceeds the number of bytes of entropy available via this API (65536)', 'QuotaExceededError');
+    }
+    // Use a plain Uint8Array view to randomize the underlying buffer,
+    // which works for all integer typed array types including Buffer subclasses
+    // that rquickjs native bindings may not recognize.
+    const view = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength);
+    webCryptoNative.randomize_uint8_array(view);
     return typedArray;
 }
 
@@ -2735,6 +2740,7 @@ const TO_CRYPTO_KEY_ALGORITHM_NAMES = {
     'AES-GCM': 'AES-GCM',
     'AES-KW': 'AES-KW',
     'PBKDF2': 'PBKDF2',
+    'HKDF': 'HKDF',
     'HMAC': 'HMAC',
     'ED25519': 'Ed25519',
     'ED448': 'Ed448',
@@ -3009,10 +3015,27 @@ class KeyObject {
                     'Unsupported key usage for a PBKDF2 key',
                 );
                 cryptoAlgorithm = { name: 'PBKDF2' };
+            } else if (normalizedAlgorithm.upperName === 'HKDF') {
+                if (extractable) {
+                    throw createSyntaxError('HKDF keys are not extractable');
+                }
+                ensureAllowedCryptoKeyUsages(
+                    usages,
+                    new Set(['deriveBits', 'deriveKey']),
+                    'Unsupported key usage for an HKDF key',
+                );
+                cryptoAlgorithm = { name: 'HKDF' };
             } else if (normalizedAlgorithm.upperName === 'HMAC') {
                 const requestedLength = getRequestedHmacLength(algorithm, keyLengthBits);
                 if (requestedLength === 0 || keyLengthBits === 0) {
                     throw createDataError('Zero-length key is not supported');
+                }
+                if (requestedLength !== keyLengthBits) {
+                    const expectedBytes = Math.ceil(requestedLength / 8);
+                    const actualBytes = keyLengthBits / 8;
+                    if (actualBytes !== expectedBytes) {
+                        throw createDataError('Invalid key length');
+                    }
                 }
                 if (usages.length === 0) {
                     throw createSyntaxError('Usages cannot be empty when importing a secret key.');
@@ -3031,9 +3054,12 @@ class KeyObject {
                 if (keyLengthBits !== 128 && keyLengthBits !== 192 && keyLengthBits !== 256) {
                     throw createDataError('Invalid key length');
                 }
+                if (usages.length === 0) {
+                    throw createSyntaxError('Usages cannot be empty when importing a secret key.');
+                }
                 const allowedUsages = normalizedAlgorithm.upperName === 'AES-KW'
                     ? new Set(['wrapKey', 'unwrapKey'])
-                    : new Set(['encrypt', 'decrypt']);
+                    : new Set(['encrypt', 'decrypt', 'wrapKey', 'unwrapKey']);
                 ensureAllowedCryptoKeyUsages(usages, allowedUsages, 'Unsupported key usage for an AES key');
                 cryptoAlgorithm = {
                     name: normalizedAlgorithm.name,
@@ -3112,7 +3138,7 @@ class KeyObject {
             }
         }
 
-        return new CryptoKey(this.type, cryptoAlgorithm, Boolean(extractable), usages, this);
+        return new CryptoKey(kInternal, this.type, cryptoAlgorithm, Boolean(extractable), usages, this);
     }
 
     static from(value) {
@@ -7419,8 +7445,60 @@ function normalizeHashForSign(algorithm) {
     return lower;
 }
 
+const kInternal = Symbol('webcrypto.internal');
+const cryptoBrand = new WeakSet();
+const subtleBrand = new WeakSet();
+const cryptoKeyBrand = new WeakSet();
+
+function assertCrypto(thisArg) {
+    if (!cryptoBrand.has(thisArg)) throw new ERR_INVALID_THIS('Crypto');
+}
+
+function assertSubtleCrypto(thisArg) {
+    if (!subtleBrand.has(thisArg)) throw new ERR_INVALID_THIS('SubtleCrypto');
+}
+
+function concatBytesParts(...parts) {
+    let totalLength = 0;
+    for (const p of parts) totalLength += p.length;
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const p of parts) {
+        const bytes = p instanceof Uint8Array ? p : new Uint8Array(p);
+        result.set(bytes, offset);
+        offset += bytes.length;
+    }
+    return result;
+}
+
+function throwInvalidAccessError() {
+    throw new DOMException('The requested operation is not valid for the provided key', 'InvalidAccessError');
+}
+
+function throwOperationError() {
+    throw new DOMException('The operation failed for an operation-specific reason', 'OperationError');
+}
+
+function validateKeyUsage(key, usage) {
+    if (!key || !key._usages || !key._usages.includes(usage)) {
+        throwInvalidAccessError();
+    }
+}
+
+function validateKeyAlgorithm(key, algorithmName) {
+    if (!key || !key._algorithm || key._algorithm.name.toUpperCase() !== algorithmName.toUpperCase()) {
+        throwInvalidAccessError();
+    }
+}
+
 class SubtleCrypto {
+    constructor(token) {
+        if (token !== kInternal) throw new ERR_ILLEGAL_CONSTRUCTOR();
+        subtleBrand.add(this);
+    }
+
     async digest(algorithm, data) {
+        assertSubtleCrypto(this);
         let algoName;
         if (typeof algorithm === 'string') {
             algoName = algorithm;
@@ -7436,51 +7514,241 @@ class SubtleCrypto {
     }
 
     async generateKey(algorithm, extractable, keyUsages) {
+        assertSubtleCrypto(this);
         let algoName;
         if (typeof algorithm === 'string') {
             algoName = algorithm;
         } else if (algorithm && typeof algorithm === 'object') {
             algoName = algorithm.name;
-        } else {
-            throw new TypeError('Algorithm must be a string or an object with a name property');
+        }
+        if (typeof algoName !== 'string') {
+            throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
         }
 
         const name = algoName.toUpperCase();
-        if (name === 'ED25519') {
-            const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+
+        // Validate algorithm name is supported
+        const SUPPORTED_KEYGEN = new Set([
+            'ED25519', 'ED448', 'X25519', 'X448',
+            'ECDSA', 'ECDH',
+            'HMAC',
+            'AES-CBC', 'AES-CTR', 'AES-GCM', 'AES-KW',
+            'RSA-OAEP', 'RSASSA-PKCS1-V1_5', 'RSA-PSS',
+        ]);
+        if (!SUPPORTED_KEYGEN.has(name)) {
+            throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
+        }
+
+        if (name === 'ED25519' || name === 'ED448') {
+            const keyType = name === 'ED25519' ? 'ed25519' : 'ed448';
+            const algName = name === 'ED25519' ? 'Ed25519' : 'Ed448';
+            const privUsages = keyUsages.filter(u => u === 'sign');
+            const pubUsages = keyUsages.filter(u => u === 'verify');
+            // Validate usages
+            for (const u of keyUsages) {
+                if (u !== 'sign' && u !== 'verify') {
+                    throw new DOMException('Unsupported key usage for a ' + algName + ' key', 'SyntaxError');
+                }
+            }
+            if (privUsages.length === 0 && pubUsages.length === 0) {
+                throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+            }
+            if (privUsages.length === 0) {
+                throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+            }
+            const { publicKey, privateKey } = generateKeyPairSync(keyType);
             return {
-                publicKey: new CryptoKey('public', { name: 'Ed25519' }, extractable, keyUsages.filter(u => u === 'verify'), publicKey),
-                privateKey: new CryptoKey('private', { name: 'Ed25519' }, extractable, keyUsages.filter(u => u === 'sign'), privateKey),
+                publicKey: new CryptoKey(kInternal, 'public', { name: algName }, extractable, pubUsages, publicKey),
+                privateKey: new CryptoKey(kInternal, 'private', { name: algName }, extractable, privUsages, privateKey),
             };
-        } else if (name === 'ECDSA') {
-            const curve = algorithm.namedCurve || 'P-256';
-            const curveMap = { 'P-256': 'prime256v1', 'P-384': 'secp384r1', 'P-256K': 'secp256k1' };
-            const nativeCurve = curveMap[curve] || curve;
+        }
+
+        if (name === 'X25519' || name === 'X448') {
+            const keyType = name === 'X25519' ? 'x25519' : 'x448';
+            const algName = name === 'X25519' ? 'X25519' : 'X448';
+            const privUsages = keyUsages.filter(u => u === 'deriveBits' || u === 'deriveKey');
+            const pubUsages = [];
+            for (const u of keyUsages) {
+                if (u !== 'deriveBits' && u !== 'deriveKey') {
+                    throw new DOMException('Unsupported key usage for a ' + algName + ' key', 'SyntaxError');
+                }
+            }
+            if (privUsages.length === 0) {
+                throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+            }
+            const { publicKey, privateKey } = generateKeyPairSync(keyType);
+            return {
+                publicKey: new CryptoKey(kInternal, 'public', { name: algName }, extractable, pubUsages, publicKey),
+                privateKey: new CryptoKey(kInternal, 'private', { name: algName }, extractable, privUsages, privateKey),
+            };
+        }
+
+        if (name === 'ECDSA' || name === 'ECDH') {
+            if (algorithm.namedCurve === undefined) {
+                throw new ERR_MISSING_OPTION('algorithm.namedCurve');
+            }
+            const curve = algorithm.namedCurve;
+            if (typeof curve !== 'string') {
+                throw new DOMException('Unrecognized namedCurve', 'NotSupportedError');
+            }
+            const curveMap = { 'P-256': 'prime256v1', 'P-384': 'secp384r1', 'P-521': 'secp521r1', 'P-256K': 'secp256k1' };
+            const nativeCurve = curveMap[curve];
+            if (!nativeCurve) {
+                throw new DOMException('Unrecognized namedCurve', 'NotSupportedError');
+            }
+
+            let privUsages, pubUsages;
+            if (name === 'ECDH') {
+                privUsages = keyUsages.filter(u => u === 'deriveBits' || u === 'deriveKey');
+                pubUsages = [];
+                for (const u of keyUsages) {
+                    if (u !== 'deriveBits' && u !== 'deriveKey') {
+                        throw new DOMException('Unsupported key usage for an ECDH key', 'SyntaxError');
+                    }
+                }
+                if (privUsages.length === 0) {
+                    throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+                }
+            } else {
+                privUsages = keyUsages.filter(u => u === 'sign');
+                pubUsages = keyUsages.filter(u => u === 'verify');
+                for (const u of keyUsages) {
+                    if (u !== 'sign' && u !== 'verify') {
+                        throw new DOMException('Unsupported key usage for an ECDSA key', 'SyntaxError');
+                    }
+                }
+                if (privUsages.length === 0 && pubUsages.length === 0) {
+                    throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+                }
+                if (privUsages.length === 0) {
+                    throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+                }
+            }
+
+            const algName = name === 'ECDH' ? 'ECDH' : 'ECDSA';
             const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: nativeCurve });
             return {
-                publicKey: new CryptoKey('public', { name: 'ECDSA', namedCurve: curve }, extractable, keyUsages.filter(u => u === 'verify'), publicKey),
-                privateKey: new CryptoKey('private', { name: 'ECDSA', namedCurve: curve }, extractable, keyUsages.filter(u => u === 'sign'), privateKey),
+                publicKey: new CryptoKey(kInternal, 'public', { name: algName, namedCurve: curve }, extractable, pubUsages, publicKey),
+                privateKey: new CryptoKey(kInternal, 'private', { name: algName, namedCurve: curve }, extractable, privUsages, privateKey),
             };
-        } else if (name === 'HMAC') {
+        }
+
+        if (name === 'HMAC') {
             const hashAlgo = algorithm.hash;
-            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
-            const length = algorithm.length || 256;
-            const keyBytes = randomBytes(length / 8);
+            if (hashAlgo === undefined || hashAlgo === null) {
+                throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
+            }
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : (hashAlgo && typeof hashAlgo === 'object' ? hashAlgo.name : undefined);
+            if (typeof hashName !== 'string') {
+                throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
+            }
+            const normalizedHash = normalizeHashAlgorithm(hashName);
+            const supportedHashes = new Set(['sha1', 'sha256', 'sha384', 'sha512']);
+            if (!supportedHashes.has(normalizedHash) && !hashName.startsWith('SHA-')) {
+                throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
+            }
+            for (const u of keyUsages) {
+                if (u !== 'sign' && u !== 'verify') {
+                    throw new DOMException('Unsupported key usage for an HMAC key', 'SyntaxError');
+                }
+            }
+            if (keyUsages.length === 0) {
+                throw new DOMException('Usages cannot be empty when generating a secret key.', 'SyntaxError');
+            }
+            let length = algorithm.length;
+            if (length === undefined) {
+                // Default HMAC key length is the block size of the hash
+                const hashBlockSizes = { 'SHA-1': 512, 'SHA-256': 512, 'SHA-384': 1024, 'SHA-512': 1024 };
+                length = hashBlockSizes[hashName] || 512;
+            }
+            const keyBytes = randomBytes(Math.ceil(length / 8));
             const secretKey = createSecretKey(keyBytes);
-            return new CryptoKey('secret', { name: 'HMAC', hash: { name: hashName }, length }, extractable, keyUsages, secretKey);
-        } else if (name === 'AES-CBC' || name === 'AES-CTR' || name === 'AES-GCM' || name === 'AES-KW') {
-            const length = Number(algorithm && algorithm.length);
+            return new CryptoKey(kInternal, 'secret', { name: 'HMAC', hash: { name: hashName }, length }, extractable, keyUsages, secretKey);
+        }
+
+        if (name === 'AES-CBC' || name === 'AES-CTR' || name === 'AES-GCM' || name === 'AES-KW') {
+            if (algorithm.length === undefined) {
+                throw new ERR_MISSING_OPTION('algorithm.length');
+            }
+            const length = Number(algorithm.length);
             if (length !== 128 && length !== 192 && length !== 256) {
-                throw new TypeError('AES key length must be 128, 192, or 256 bits');
+                throw new DOMException('AES key length must be 128, 192, or 256 bits', 'OperationError');
+            }
+            const allowedUsages = name === 'AES-KW'
+                ? new Set(['wrapKey', 'unwrapKey'])
+                : new Set(['encrypt', 'decrypt', 'wrapKey', 'unwrapKey']);
+            for (const u of keyUsages) {
+                if (!allowedUsages.has(u)) {
+                    throw new DOMException('Unsupported key usage for an AES key', 'SyntaxError');
+                }
+            }
+            if (keyUsages.length === 0) {
+                throw new DOMException('Usages cannot be empty when generating a secret key.', 'SyntaxError');
             }
             const keyBytes = randomBytes(length / 8);
             const secretKey = createSecretKey(keyBytes);
-            return new CryptoKey('secret', { name: algoName, length }, extractable, keyUsages, secretKey);
+            return new CryptoKey(kInternal, 'secret', { name: algoName, length }, extractable, keyUsages, secretKey);
         }
-        throw new Error('Unsupported algorithm: ' + algoName);
+
+        if (name === 'RSA-OAEP' || name === 'RSASSA-PKCS1-V1_5' || name === 'RSA-PSS') {
+            const hashAlgo = algorithm.hash;
+            if (hashAlgo === undefined || hashAlgo === null) {
+                throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
+            }
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : (hashAlgo && typeof hashAlgo === 'object' ? hashAlgo.name : undefined);
+            if (typeof hashName !== 'string') {
+                throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
+            }
+            const normalizedHash = normalizeHashAlgorithm(hashName);
+            const supportedHashes = new Set(['sha1', 'sha256', 'sha384', 'sha512']);
+            if (!supportedHashes.has(normalizedHash) && !hashName.startsWith('SHA-')) {
+                throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
+            }
+            const modulusLength = algorithm.modulusLength;
+            let publicExponent = 65537;
+            if (algorithm.publicExponent) {
+                const pe = algorithm.publicExponent;
+                publicExponent = 0;
+                for (let i = 0; i < pe.length; i++) {
+                    publicExponent = publicExponent * 256 + pe[i];
+                }
+            }
+            const pubUsages = name === 'RSA-OAEP'
+                ? keyUsages.filter(u => u === 'encrypt' || u === 'wrapKey')
+                : keyUsages.filter(u => u === 'verify');
+            const privUsages = name === 'RSA-OAEP'
+                ? keyUsages.filter(u => u === 'decrypt' || u === 'unwrapKey')
+                : keyUsages.filter(u => u === 'sign');
+            const allowedUsages = name === 'RSA-OAEP'
+                ? new Set(['encrypt', 'decrypt', 'wrapKey', 'unwrapKey'])
+                : new Set(['sign', 'verify']);
+            for (const u of keyUsages) {
+                if (!allowedUsages.has(u)) {
+                    throw new DOMException('Unsupported key usage for a ' + name + ' key', 'SyntaxError');
+                }
+            }
+            if (privUsages.length === 0 && pubUsages.length === 0) {
+                throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+            }
+            if (privUsages.length === 0) {
+                throw new DOMException('Usages cannot be empty when generating a key pair.', 'SyntaxError');
+            }
+            const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+                modulusLength,
+                publicExponent,
+            });
+            const algoInfo = { name: algoName, hash: { name: hashName }, modulusLength, publicExponent: algorithm.publicExponent ? new Uint8Array(algorithm.publicExponent) : new Uint8Array([1, 0, 1]) };
+            return {
+                publicKey: new CryptoKey(kInternal, 'public', algoInfo, extractable, pubUsages, publicKey),
+                privateKey: new CryptoKey(kInternal, 'private', algoInfo, extractable, privUsages, privateKey),
+            };
+        }
+
+        throw new DOMException('Unrecognized algorithm name', 'NotSupportedError');
     }
 
     async sign(algorithm, key, data) {
+        assertSubtleCrypto(this);
         let algoName;
         if (typeof algorithm === 'string') {
             algoName = algorithm;
@@ -7491,9 +7759,10 @@ class SubtleCrypto {
         }
 
         const name = algoName.toUpperCase();
+        validateKeyUsage(key, 'sign');
         const bytes = toBytes(data);
 
-        if (name === 'ED25519') {
+        if (name === 'ED25519' || name === 'ED448') {
             const sign = createSign(null);
             sign.update(bytes);
             const sig = sign.sign(key._keyObject);
@@ -7514,11 +7783,29 @@ class SubtleCrypto {
             hmac.update(bytes);
             const result = hmac.digest();
             return (result instanceof Uint8Array ? result : new Uint8Array(result)).buffer;
+        } else if (name === 'RSASSA-PKCS1-V1_5') {
+            const hashAlgo = key._algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const sign = createSign(normalized);
+            sign.update(bytes);
+            const sig = sign.sign({ key: key._keyObject, padding: 1 }); // RSA_PKCS1_PADDING
+            return (sig instanceof Uint8Array ? sig : new Uint8Array(sig)).buffer;
+        } else if (name === 'RSA-PSS') {
+            const hashAlgo = key._algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const saltLength = algorithm.saltLength !== undefined ? algorithm.saltLength : 0;
+            const sign = createSign(normalized);
+            sign.update(bytes);
+            const sig = sign.sign({ key: key._keyObject, padding: 6, saltLength }); // RSA_PKCS1_PSS_PADDING
+            return (sig instanceof Uint8Array ? sig : new Uint8Array(sig)).buffer;
         }
         throw new Error('Unsupported algorithm: ' + algoName);
     }
 
     async verify(algorithm, key, signature, data) {
+        assertSubtleCrypto(this);
         let algoName;
         if (typeof algorithm === 'string') {
             algoName = algorithm;
@@ -7529,10 +7816,11 @@ class SubtleCrypto {
         }
 
         const name = algoName.toUpperCase();
+        validateKeyUsage(key, 'verify');
         const dataBytes = toBytes(data);
         const sigBytes = toBytes(signature);
 
-        if (name === 'ED25519') {
+        if (name === 'ED25519' || name === 'ED448') {
             const verify = createVerify(null);
             verify.update(dataBytes);
             return verify.verify(key._keyObject, sigBytes);
@@ -7554,11 +7842,148 @@ class SubtleCrypto {
             if (sigBytes.length !== expectedBytes.length) return false;
             const result = webCryptoNative.timing_safe_equal(sigBytes, expectedBytes);
             return result === true;
+        } else if (name === 'RSASSA-PKCS1-V1_5') {
+            const hashAlgo = key._algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const verify = createVerify(normalized);
+            verify.update(dataBytes);
+            return verify.verify({ key: key._keyObject, padding: 1 }, sigBytes);
+        } else if (name === 'RSA-PSS') {
+            const hashAlgo = key._algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const saltLength = algorithm.saltLength !== undefined ? algorithm.saltLength : 0;
+            const verify = createVerify(normalized);
+            verify.update(dataBytes);
+            return verify.verify({ key: key._keyObject, padding: 6, saltLength }, sigBytes);
         }
         throw new Error('Unsupported algorithm: ' + algoName);
     }
 
     async importKey(format, keyData, algorithm, extractable, keyUsages) {
+        assertSubtleCrypto(this);
+
+        if (typeof format !== 'string') {
+            throw new ERR_INVALID_ARG_VALUE('format', format);
+        }
+        const validFormats = ['raw', 'spki', 'pkcs8', 'jwk'];
+        if (!validFormats.includes(format)) {
+            const err = new TypeError(`'${format}' is not a valid enum value of type KeyFormat`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+
+        // Validate keyData type early for raw/spki/pkcs8 formats
+        if (format === 'raw' || format === 'spki' || format === 'pkcs8') {
+            if (keyData === null || keyData === undefined || typeof keyData === 'number' || typeof keyData === 'string' || typeof keyData === 'boolean') {
+                throw new ERR_INVALID_ARG_TYPE('keyData', ['ArrayBuffer', 'TypedArray', 'DataView', 'Buffer'], keyData);
+            }
+        }
+
+        let algoName;
+        if (typeof algorithm === 'string') {
+            algoName = algorithm;
+        } else if (algorithm && typeof algorithm === 'object') {
+            algoName = algorithm.name;
+        } else {
+            throw new TypeError('Algorithm must be a string or an object with a name property');
+        }
+
+        const name = algoName ? algoName.toUpperCase() : '';
+
+        if (format === 'raw') {
+            const data = toBytes(keyData);
+            if (name === 'AES-CBC' || name === 'AES-CTR' || name === 'AES-GCM' || name === 'AES-KW') {
+                const secretKey = createSecretKey(data);
+                return secretKey.toCryptoKey({ name: algoName }, extractable, keyUsages);
+            }
+            if (name === 'PBKDF2') {
+                const secretKey = createSecretKey(data);
+                return secretKey.toCryptoKey({ name: 'PBKDF2' }, extractable, keyUsages);
+            }
+            if (name === 'HKDF') {
+                const secretKey = createSecretKey(data);
+                return secretKey.toCryptoKey({ name: 'HKDF' }, extractable, keyUsages);
+            }
+            if (name === 'HMAC') {
+                if (!algorithm.hash) throw new ERR_MISSING_OPTION('hash');
+                const secretKey = createSecretKey(data);
+                return secretKey.toCryptoKey(algorithm, extractable, keyUsages);
+            }
+        }
+
+        if (format === 'jwk') {
+            if (keyData === null || typeof keyData !== 'object' || Array.isArray(keyData)) {
+                throw createDataError('Invalid keyData');
+            }
+            if (keyData.kty === 'oct') {
+                const raw = base64UrlToBytes(keyData.k);
+                const secretKey = createSecretKey(raw);
+                return secretKey.toCryptoKey(algorithm, extractable, keyUsages);
+            }
+            let keyObject;
+            if (keyData.d) {
+                keyObject = createPrivateKey({ key: keyData, format: 'jwk' });
+            } else {
+                keyObject = createPublicKey({ key: keyData, format: 'jwk' });
+            }
+            return keyObject.toCryptoKey(algorithm, extractable, keyUsages);
+        }
+
+        if (format === 'spki') {
+            const keyObject = createPublicKey({
+                key: keyData,
+                format: 'der',
+                type: 'spki',
+            });
+            return keyObject.toCryptoKey(algorithm, extractable, keyUsages);
+        }
+
+        if (format === 'pkcs8') {
+            const keyObject = createPrivateKey({
+                key: keyData,
+                format: 'der',
+                type: 'pkcs8',
+            });
+            return keyObject.toCryptoKey(algorithm, extractable, keyUsages);
+        }
+
+        throw new Error('Unsupported import format/algorithm: ' + format + '/' + algoName);
+    }
+
+    async exportKey(format, key) {
+        assertSubtleCrypto(this);
+        if (format === 'raw') {
+            if (key._type === 'secret') {
+                const exported = key._keyObject.export();
+                return (exported instanceof Uint8Array ? exported : new Uint8Array(exported)).buffer;
+            }
+        }
+        if (format === 'jwk') {
+            let jwk;
+            if (key._type === 'secret') {
+                jwk = key._keyObject.export({ format: 'jwk' });
+            } else {
+                jwk = key._keyObject.export({ format: 'jwk' });
+            }
+            jwk.key_ops = [...key._usages];
+            jwk.ext = key._extractable;
+            return jwk;
+        }
+        if (format === 'spki') {
+            const exported = key._keyObject.export({ format: 'der', type: 'spki' });
+            return (exported instanceof Uint8Array ? exported : new Uint8Array(exported)).buffer;
+        }
+        if (format === 'pkcs8') {
+            const exported = key._keyObject.export({ format: 'der', type: 'pkcs8' });
+            return (exported instanceof Uint8Array ? exported : new Uint8Array(exported)).buffer;
+        }
+        throw new Error('Unsupported export format: ' + format);
+    }
+
+    async encrypt(algorithm, key, data) {
+        assertSubtleCrypto(this);
         let algoName;
         if (typeof algorithm === 'string') {
             algoName = algorithm;
@@ -7569,46 +7994,283 @@ class SubtleCrypto {
         }
 
         const name = algoName.toUpperCase();
-
-        if (format === 'spki') {
-            if (name === 'ECDSA') {
-                const keyObject = createPublicKey({
-                    key: keyData,
-                    format: 'der',
-                    type: 'spki',
-                });
-                return keyObject.toCryptoKey({
-                    name: 'ECDSA',
-                    namedCurve: algorithm && algorithm.namedCurve,
-                }, extractable, keyUsages);
+        if (name === 'AES-KW') {
+            if (!key._usages.includes('wrapKey') && !key._usages.includes('encrypt')) {
+                throwInvalidAccessError();
             }
+        } else {
+            validateKeyUsage(key, 'encrypt');
         }
+        validateKeyAlgorithm(key, algoName);
+        const dataBytes = toBytes(data);
 
-        if (format === 'raw') {
-            if (name === 'HMAC') {
-                const hashAlgo = algorithm.hash;
-                const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
-                const data = toBytes(keyData);
-                const secretKey = createSecretKey(data);
-                return new CryptoKey('secret', { name: 'HMAC', hash: { name: hashName }, length: data.length * 8 }, extractable, keyUsages, secretKey);
+        if (name === 'AES-KW') {
+            const cipher = createCipheriv(`aes-${key._algorithm.length}-wrap`, key._keyObject, Buffer.alloc(0));
+            const part1 = cipher.update(dataBytes);
+            const part2 = cipher.final();
+            return concatBytesParts(toBytes(part1), toBytes(part2)).buffer;
+        } else if (name === 'AES-CBC') {
+            if (!algorithm.iv) throw new TypeError('algorithm.iv must contain exactly 16 bytes');
+            const iv = toBytes(algorithm.iv);
+            if (iv.length !== 16) throw new TypeError('algorithm.iv must contain exactly 16 bytes');
+            const cipher = createCipheriv(`aes-${key._algorithm.length}-cbc`, key._keyObject, iv);
+            const part1 = cipher.update(dataBytes);
+            const part2 = cipher.final();
+            return concatBytesParts(toBytes(part1), toBytes(part2)).buffer;
+        } else if (name === 'AES-CTR') {
+            if (!algorithm.counter) throw new TypeError('algorithm.counter must contain exactly 16 bytes');
+            const counter = toBytes(algorithm.counter);
+            if (counter.length !== 16) throw new TypeError('algorithm.counter must contain exactly 16 bytes');
+            const ctrLength = algorithm.length;
+            if (!Number.isInteger(ctrLength) || ctrLength < 1 || ctrLength > 128) {
+                throw new DOMException('AES-CTR algorithm.length must be between 1 and 128', 'OperationError');
             }
+            const cipher = createCipheriv(`aes-${key._algorithm.length}-ctr`, key._keyObject, counter);
+            const part1 = cipher.update(dataBytes);
+            const part2 = cipher.final();
+            return concatBytesParts(toBytes(part1), toBytes(part2)).buffer;
+        } else if (name === 'AES-GCM') {
+            if (!algorithm.iv) throw new TypeError('algorithm.iv is required for AES-GCM');
+            const iv = toBytes(algorithm.iv);
+            const tagLength = algorithm.tagLength || 128;
+            const validTagLengths = [32, 64, 96, 104, 112, 120, 128];
+            if (!validTagLengths.includes(tagLength)) {
+                throw new TypeError(`${tagLength} is not a valid AES-GCM tag length`);
+            }
+            const tagBytes = tagLength / 8;
+            const cipher = createCipheriv(`aes-${key._algorithm.length}-gcm`, key._keyObject, iv, { authTagLength: tagBytes });
+            if (algorithm.additionalData) {
+                cipher.setAAD(toBytes(algorithm.additionalData));
+            }
+            const part1 = cipher.update(dataBytes);
+            const part2 = cipher.final();
+            const tag = cipher.getAuthTag();
+            return concatBytesParts(toBytes(part1), toBytes(part2), toBytes(tag)).buffer;
+        } else if (name === 'RSA-OAEP') {
+            const hashName = key._algorithm.hash ? key._algorithm.hash.name : 'SHA-1';
+            const opts = {
+                key: key._keyObject,
+                padding: 4, // RSA_PKCS1_OAEP_PADDING
+                oaepHash: normalizeHashAlgorithm(hashName),
+            };
+            if (algorithm.label) {
+                opts.oaepLabel = toBytes(algorithm.label);
+            }
+            const result = publicEncrypt(opts, dataBytes);
+            return (result instanceof Uint8Array ? result : new Uint8Array(result)).buffer;
         }
-        throw new Error('Unsupported import format/algorithm: ' + format + '/' + algoName);
+        throw new Error('Unsupported algorithm for encrypt: ' + algoName);
     }
 
-    async exportKey(format, key) {
-        if (format === 'raw') {
-            if (key._type === 'secret') {
-                const exported = key._keyObject.export();
-                return (exported instanceof Uint8Array ? exported : new Uint8Array(exported)).buffer;
-            }
+    async decrypt(algorithm, key, data) {
+        assertSubtleCrypto(this);
+        let algoName;
+        if (typeof algorithm === 'string') {
+            algoName = algorithm;
+        } else if (algorithm && typeof algorithm === 'object') {
+            algoName = algorithm.name;
+        } else {
+            throw new TypeError('Algorithm must be a string or an object with a name property');
         }
-        throw new Error('Unsupported export format: ' + format);
+
+        const name = algoName.toUpperCase();
+        if (name === 'AES-KW') {
+            if (!key._usages.includes('unwrapKey') && !key._usages.includes('decrypt')) {
+                throwInvalidAccessError();
+            }
+        } else {
+            validateKeyUsage(key, 'decrypt');
+        }
+        validateKeyAlgorithm(key, algoName);
+        const dataBytes = toBytes(data);
+
+        try {
+            if (name === 'AES-KW') {
+                const decipher = createDecipheriv(`aes-${key._algorithm.length}-wrap`, key._keyObject, Buffer.alloc(0));
+                const part1 = decipher.update(dataBytes);
+                const part2 = decipher.final();
+                return concatBytesParts(toBytes(part1), toBytes(part2)).buffer;
+            } else if (name === 'AES-CBC') {
+                if (!algorithm.iv) throw new TypeError('algorithm.iv must contain exactly 16 bytes');
+                const iv = toBytes(algorithm.iv);
+                if (iv.length !== 16) throw new TypeError('algorithm.iv must contain exactly 16 bytes');
+                const decipher = createDecipheriv(`aes-${key._algorithm.length}-cbc`, key._keyObject, iv);
+                const part1 = decipher.update(dataBytes);
+                const part2 = decipher.final();
+                return concatBytesParts(toBytes(part1), toBytes(part2)).buffer;
+            } else if (name === 'AES-CTR') {
+                if (!algorithm.counter) throw new TypeError('algorithm.counter must contain exactly 16 bytes');
+                const counter = toBytes(algorithm.counter);
+                if (counter.length !== 16) throw new TypeError('algorithm.counter must contain exactly 16 bytes');
+                const ctrLength = algorithm.length;
+                if (!Number.isInteger(ctrLength) || ctrLength < 1 || ctrLength > 128) {
+                    throw new DOMException('AES-CTR algorithm.length must be between 1 and 128', 'OperationError');
+                }
+                const decipher = createDecipheriv(`aes-${key._algorithm.length}-ctr`, key._keyObject, counter);
+                const part1 = decipher.update(dataBytes);
+                const part2 = decipher.final();
+                return concatBytesParts(toBytes(part1), toBytes(part2)).buffer;
+            } else if (name === 'AES-GCM') {
+                if (!algorithm.iv) throw new TypeError('algorithm.iv is required for AES-GCM');
+                const iv = toBytes(algorithm.iv);
+                const tagLength = algorithm.tagLength || 128;
+                const validTagLengths = [32, 64, 96, 104, 112, 120, 128];
+                if (!validTagLengths.includes(tagLength)) {
+                    throw new TypeError(`${tagLength} is not a valid AES-GCM tag length`);
+                }
+                const tagBytes = tagLength / 8;
+                if (dataBytes.length < tagBytes) throwOperationError();
+                const ciphertext = dataBytes.slice(0, dataBytes.length - tagBytes);
+                const tag = dataBytes.slice(dataBytes.length - tagBytes);
+                const decipher = createDecipheriv(`aes-${key._algorithm.length}-gcm`, key._keyObject, iv, { authTagLength: tagBytes });
+                if (algorithm.additionalData) {
+                    decipher.setAAD(toBytes(algorithm.additionalData));
+                }
+                decipher.setAuthTag(tag);
+                const part1 = decipher.update(ciphertext);
+                const part2 = decipher.final();
+                return concatBytesParts(toBytes(part1), toBytes(part2)).buffer;
+            } else if (name === 'RSA-OAEP') {
+                const hashName = key._algorithm.hash ? key._algorithm.hash.name : 'SHA-1';
+                const opts = {
+                    key: key._keyObject,
+                    padding: 4, // RSA_PKCS1_OAEP_PADDING
+                    oaepHash: normalizeHashAlgorithm(hashName),
+                };
+                if (algorithm.label) {
+                    opts.oaepLabel = toBytes(algorithm.label);
+                }
+                const result = privateDecrypt(opts, dataBytes);
+                return (result instanceof Uint8Array ? result : new Uint8Array(result)).buffer;
+            }
+        } catch (e) {
+            if (e instanceof TypeError || (e instanceof DOMException && e.name !== 'OperationError')) throw e;
+            throwOperationError();
+        }
+        throw new Error('Unsupported algorithm for decrypt: ' + algoName);
+    }
+
+    async deriveBits(algorithm, baseKey, length) {
+        assertSubtleCrypto(this);
+        const algoName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+        if (!algoName) throw new TypeError('Algorithm must be a string or an object with a name property');
+        const name = algoName.toUpperCase();
+
+        if (name === 'PBKDF2') {
+            const hashAlgo = algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const salt = toBytes(algorithm.salt);
+            const secret = baseKey._keyObject.export();
+            const out = pbkdf2Sync(secret, salt, algorithm.iterations, length / 8, hashName);
+            return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
+        }
+
+        if (name === 'HKDF') {
+            const hashAlgo = algorithm.hash;
+            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+            const normalized = normalizeHashAlgorithm(hashName);
+            const salt = toBytes(algorithm.salt);
+            const info = toBytes(algorithm.info);
+            const ikm = baseKey._keyObject.export();
+            const out = hkdfSync(normalized, ikm, salt, info, length / 8);
+            return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
+        }
+
+        if (name === 'ECDH') {
+            const peerKey = algorithm.public;
+            if (!peerKey || peerKey._type !== 'public') {
+                throw new DOMException('ECDH requires a public key', 'InvalidAccessError');
+            }
+            // Use the ECDH class to compute shared secret
+            const curve = baseKey._algorithm.namedCurve;
+            const curveMap = { 'P-256': 'prime256v1', 'P-384': 'secp384r1', 'P-521': 'secp521r1' };
+            const nativeCurve = curveMap[curve] || curve;
+            // Export private key bytes and peer public key bytes
+            const privKeyBytes = baseKey._keyObject.export({ format: 'der', type: 'pkcs8' });
+            const pubKeyBytes = peerKey._keyObject.export({ format: 'der', type: 'spki' });
+            // Use native ECDH
+            const result = webCryptoNative.ecdh_derive_bits(nativeCurve, toBytes(privKeyBytes), toBytes(pubKeyBytes), length / 8);
+            if (result === null || result === undefined) {
+                throw new DOMException('ECDH deriveBits failed', 'OperationError');
+            }
+            return new Uint8Array(result).buffer;
+        }
+
+        if (name === 'X25519' || name === 'X448') {
+            const peerKey = algorithm.public;
+            if (!peerKey || peerKey._type !== 'public') {
+                throw new DOMException(name + ' requires a public key', 'InvalidAccessError');
+            }
+            const privKeyBytes = baseKey._keyObject.export({ format: 'der', type: 'pkcs8' });
+            const pubKeyBytes = peerKey._keyObject.export({ format: 'der', type: 'spki' });
+            const result = webCryptoNative.cfrg_derive_bits(name.toLowerCase(), toBytes(privKeyBytes), toBytes(pubKeyBytes), length / 8);
+            if (result === null || result === undefined) {
+                throw new DOMException(name + ' deriveBits failed', 'OperationError');
+            }
+            return new Uint8Array(result).buffer;
+        }
+
+        throw new Error('Unsupported algorithm for deriveBits: ' + algoName);
+    }
+
+    async deriveKey(algorithm, baseKey, derivedKeyAlgorithm, extractable, keyUsages) {
+        assertSubtleCrypto(this);
+        // Determine the derived key length
+        let derivedLength;
+        const dkaName = typeof derivedKeyAlgorithm === 'string'
+            ? derivedKeyAlgorithm.toUpperCase()
+            : (derivedKeyAlgorithm?.name || '').toUpperCase();
+
+        if (dkaName === 'HMAC') {
+            if (derivedKeyAlgorithm.length !== undefined) {
+                derivedLength = derivedKeyAlgorithm.length;
+            } else {
+                // Default to hash block size
+                const hashAlgo = derivedKeyAlgorithm.hash;
+                const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo?.name;
+                const hashBlockSizes = { 'SHA-1': 512, 'SHA-256': 512, 'SHA-384': 1024, 'SHA-512': 1024 };
+                derivedLength = hashBlockSizes[hashName] || 512;
+            }
+        } else {
+            derivedLength = derivedKeyAlgorithm.length;
+        }
+
+        const bits = await SubtleCrypto.prototype.deriveBits.call(this, algorithm, baseKey, derivedLength);
+        const keyObject = createSecretKey(new Uint8Array(bits));
+        return keyObject.toCryptoKey(derivedKeyAlgorithm, extractable, keyUsages);
+    }
+
+    async wrapKey(format, key, wrappingKey, wrapAlgorithm) {
+        assertSubtleCrypto(this);
+        validateKeyUsage(wrappingKey, 'wrapKey');
+        const exported = await SubtleCrypto.prototype.exportKey.call(this, format, key);
+        let bytes;
+        if (format === 'jwk') {
+            bytes = new TextEncoder().encode(JSON.stringify(exported));
+        } else {
+            bytes = exported;
+        }
+        return SubtleCrypto.prototype.encrypt.call(this, wrapAlgorithm, wrappingKey, bytes);
+    }
+
+    async unwrapKey(format, wrappedKey, unwrappingKey, unwrapAlgorithm, unwrappedKeyAlgorithm, extractable, keyUsages) {
+        assertSubtleCrypto(this);
+        validateKeyUsage(unwrappingKey, 'unwrapKey');
+        const decrypted = await SubtleCrypto.prototype.decrypt.call(this, unwrapAlgorithm, unwrappingKey, wrappedKey);
+        let keyData;
+        if (format === 'jwk') {
+            keyData = JSON.parse(new TextDecoder().decode(new Uint8Array(decrypted)));
+        } else {
+            keyData = decrypted;
+        }
+        return SubtleCrypto.prototype.importKey.call(this, format, keyData, unwrappedKeyAlgorithm, extractable, keyUsages);
     }
 }
 
 class CryptoKey {
-    constructor(type_, algorithm, extractable, usages, keyObject) {
+    constructor(token, type_, algorithm, extractable, usages, keyObject) {
+        if (token !== kInternal) throw new ERR_ILLEGAL_CONSTRUCTOR();
+        cryptoKeyBrand.add(this);
         this._type = type_;
         this._algorithm = algorithm;
         this._extractable = extractable;
@@ -7626,9 +8288,41 @@ class CryptoKey {
     }
 }
 
-globalThis.CryptoKey = CryptoKey;
-export { CryptoKey };
+Object.defineProperty(CryptoKey.prototype, Symbol.toStringTag, {
+    value: 'CryptoKey',
+    writable: false,
+    enumerable: false,
+    configurable: true,
+});
 
-const subtleCrypto = new SubtleCrypto();
-export { subtleCrypto as subtle };
-export const webcrypto = { getRandomValues, subtle: subtleCrypto, CryptoKey };
+class Crypto {
+    constructor(token) {
+        if (token !== kInternal) throw new ERR_ILLEGAL_CONSTRUCTOR();
+        cryptoBrand.add(this);
+    }
+
+    get subtle() {
+        assertCrypto(this);
+        return subtleCryptoInstance;
+    }
+
+    getRandomValues(array) {
+        assertCrypto(this);
+        return getRandomValues(array);
+    }
+
+    randomUUID(options) {
+        assertCrypto(this);
+        return randomUUID(options);
+    }
+}
+
+const subtleCryptoInstance = new SubtleCrypto(kInternal);
+const cryptoInstance = new Crypto(kInternal);
+
+globalThis.CryptoKey = CryptoKey;
+globalThis.Crypto = Crypto;
+globalThis.SubtleCrypto = SubtleCrypto;
+export { CryptoKey, Crypto, SubtleCrypto };
+export { subtleCryptoInstance as subtle };
+export const webcrypto = cryptoInstance;

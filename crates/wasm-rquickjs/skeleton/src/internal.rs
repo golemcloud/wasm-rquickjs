@@ -725,6 +725,102 @@ impl Resolver for RealmGuardResolver {
     }
 }
 
+/// Resolver that intercepts module resolution for mocked modules.
+/// Checks `globalThis.__wasm_rquickjs_module_mocks` registry via JS helpers.
+struct MockModuleResolver;
+
+impl Resolver for MockModuleResolver {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        let globals = ctx.globals();
+
+        let canonical_key_fn: Function = globals
+            .get::<_, Function>("__wasm_rquickjs_mock_canonical_key")
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let key: Value = canonical_key_fn
+            .call((name, base))
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        if key.is_null() || key.is_undefined() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let key_str: String = key
+            .get::<String>()
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let registry: Object = globals
+            .get::<_, Object>("__wasm_rquickjs_module_mocks")
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let entry: Value = registry
+            .get::<_, Value>(&key_str as &str)
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        if entry.is_undefined() || entry.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let entry_obj: Object = entry
+            .into_object()
+            .ok_or_else(|| Error::new_resolving(base, name))?;
+
+        let mock_id: i64 = entry_obj
+            .get::<_, i64>("id")
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let cache: bool = entry_obj.get::<_, bool>("cache").unwrap_or(false);
+
+        if cache {
+            Ok(format!("__wasm_rquickjs_mock__:{}", mock_id))
+        } else {
+            let seq_key = "__wasm_rquickjs_mock_seq";
+            let seq: i64 = globals.get::<_, i64>(seq_key).unwrap_or(0);
+            let next_seq = seq + 1;
+            let _ = globals.set(seq_key, next_seq);
+            Ok(format!("__wasm_rquickjs_mock__:{}:{}", mock_id, next_seq))
+        }
+    }
+}
+
+/// Loader that handles synthetic mock module IDs produced by MockModuleResolver.
+/// Generates ESM source from the JS-side mock registry.
+struct MockModuleLoader;
+
+impl Loader for MockModuleLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.starts_with("__wasm_rquickjs_mock__:") {
+            return Err(Error::new_loading(path));
+        }
+
+        let rest = &path["__wasm_rquickjs_mock__:".len()..];
+        let mock_id_str = rest.split(':').next().unwrap_or(rest);
+        let mock_id: i64 = mock_id_str
+            .parse()
+            .map_err(|_| Error::new_loading(path))?;
+
+        let globals = ctx.globals();
+        let gen_fn: Function = globals
+            .get::<_, Function>("__wasm_rquickjs_get_mock_module_source")
+            .map_err(|_| Error::new_loading(path))?;
+
+        let source: String = gen_fn
+            .call::<_, String>((mock_id,))
+            .map_err(|_| Error::new_loading(path))?;
+
+        Module::declare(ctx.clone(), path, source.as_bytes().to_vec())
+    }
+}
+
 /// Resolver that handles relative path imports from eval'd CJS code.
 /// When base is `<input>` (from eval) and there's a CJS module context,
 /// resolves relative paths against the module's directory.
@@ -1308,6 +1404,7 @@ impl JsState {
             let resolver = (
                 (
                     RealmGuardResolver,
+                    MockModuleResolver,
                     DataUrlResolver,
                     FileUrlResolver,
                     builtin_resolver,
@@ -1344,6 +1441,7 @@ impl JsState {
             }
 
             let loader = (
+                MockModuleLoader,
                 builtin_loader,
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
@@ -1360,6 +1458,9 @@ impl JsState {
 
                 global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                     .expect("Failed to initialize resource table");
+
+                global.set("__wasm_rquickjs_mock_seq", 0i64)
+                    .expect("Failed to initialize mock sequence counter");
 
                 // Phase 1: Wire built-in globals (globalThis.require, Buffer, process, etc.)
                 // This must complete before user code runs, because bundled CJS-in-ESM code

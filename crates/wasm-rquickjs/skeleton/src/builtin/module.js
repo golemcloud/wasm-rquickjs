@@ -258,6 +258,228 @@ builtinModuleMap['internal/streams/add-abort-signal'] = internalStreamsAddAbortS
 builtinModuleMap['internal/streams/state'] = internalStreamsStateCjs;
 builtinModuleMap['internal/test/binding'] = internalTestBindingCjs;
 
+// --- Module mock registry (used by node:test mock.module()) ---
+const _moduleMockRegistry = Object.create(null);
+const _moduleMockRegistryById = Object.create(null);
+let _moduleMockNextId = 1;
+globalThis.__wasm_rquickjs_module_mocks = _moduleMockRegistry;
+
+function _mockCanonicalKey(specifier, base) {
+    if (typeof specifier === 'object' && specifier !== null && typeof specifier.href === 'string') {
+        specifier = specifier.href;
+    }
+    if (typeof specifier !== 'string') return null;
+
+    // Check if it's a builtin (with or without node: prefix)
+    var bare = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
+    if (builtinModuleMap[bare] !== undefined || builtinModuleMap['node:' + bare] !== undefined) {
+        return 'builtin:' + bare;
+    }
+
+    // file:// URL
+    if (specifier.startsWith('file://')) {
+        try {
+            var filePath = nodeUrl.fileURLToPath(specifier);
+            return 'path:' + pathModule.resolve(filePath);
+        } catch (e) {
+            return 'path:' + specifier;
+        }
+    }
+
+    // Absolute path
+    if (specifier.startsWith('/')) {
+        return 'path:' + pathModule.resolve(specifier);
+    }
+
+    // Relative path — resolve against base (from ESM resolver) or current module context
+    if (specifier.startsWith('./') || specifier.startsWith('../')) {
+        var baseDir = '/';
+        if (typeof base === 'string' && base) {
+            try {
+                if (base.startsWith('file://')) {
+                    baseDir = pathModule.dirname(nodeUrl.fileURLToPath(base));
+                } else {
+                    baseDir = pathModule.dirname(base);
+                }
+            } catch (e) {
+                // fall through to context
+            }
+        }
+        if (baseDir === '/') {
+            var ctx = globalThis.__wasm_rquickjs_current_module;
+            if (ctx && ctx.filename) {
+                baseDir = pathModule.dirname(ctx.filename);
+            }
+        }
+        return 'path:' + pathModule.resolve(baseDir, specifier);
+    }
+
+    // Bare specifier (could be node_modules)
+    return 'bare:' + specifier;
+}
+
+function _detectMockModuleKind(canonicalKey) {
+    if (!canonicalKey) return 'esm';
+    if (canonicalKey.startsWith('builtin:')) return 'cjs';
+    if (!canonicalKey.startsWith('path:')) return 'esm';
+    var filename = canonicalKey.slice(5);
+    if (filename.endsWith('.mjs')) return 'esm';
+    // Default to CJS for .js, .cjs, and everything else
+    return 'cjs';
+}
+
+function _materializeCjsMock(entry) {
+    var result;
+    var hasDefault = 'defaultExport' in entry;
+    var hasNamed = entry.namedExports !== undefined;
+
+    if (hasDefault) {
+        result = entry.defaultExport;
+    } else {
+        result = {};
+    }
+
+    if (hasNamed) {
+        if (result === null || (typeof result !== 'object' && typeof result !== 'function')) {
+            var err = new Error('Cannot create mock: named exports cannot be applied to non-object defaultExport');
+            err.code = 'ERR_INVALID_STATE';
+            throw err;
+        }
+        var keys = Object.keys(entry.namedExports);
+        for (var i = 0; i < keys.length; i++) {
+            result[keys[i]] = entry.namedExports[keys[i]];
+        }
+    }
+
+    return result;
+}
+
+function _registerModuleMock(specifier, options) {
+    var key = _mockCanonicalKey(specifier);
+    if (!key) return null;
+
+    if (_moduleMockRegistry[key]) {
+        var err = new Error('The module is already mocked');
+        err.code = 'ERR_INVALID_STATE';
+        throw err;
+    }
+
+    var id = _moduleMockNextId++;
+    var kind = _detectMockModuleKind(key);
+    var entry = {
+        id: id,
+        canonicalKey: key,
+        specifier: specifier,
+        kind: kind,
+        namedExports: options.namedExports,
+        cache: options.cache !== undefined ? options.cache : false,
+        _cachedCjsResult: undefined,
+        _cachedCjsReady: false,
+    };
+    if ('defaultExport' in options) {
+        entry.defaultExport = options.defaultExport;
+    }
+
+    _moduleMockRegistry[key] = entry;
+    _moduleMockRegistryById[id] = entry;
+
+    return {
+        canonicalKey: key,
+        id: id,
+        restore: function() {
+            delete _moduleMockRegistry[key];
+            delete _moduleMockRegistryById[id];
+            // Clean up ESM storage
+            var storageKey = '__wasm_rquickjs_mock_data_' + id;
+            delete globalThis[storageKey];
+            entry._cachedCjsResult = undefined;
+            entry._cachedCjsReady = false;
+        }
+    };
+}
+
+function _resolveRequireMock(id) {
+    // CJS require() does not support file:// URLs — don't intercept them
+    if (typeof id === 'string' && id.startsWith('file://')) return null;
+    var key = _mockCanonicalKey(id);
+    if (!key) return null;
+    return _moduleMockRegistry[key] || null;
+}
+
+globalThis.__wasm_rquickjs_mock_canonical_key = _mockCanonicalKey;
+globalThis.__wasm_rquickjs_register_module_mock = _registerModuleMock;
+globalThis.__wasm_rquickjs_resolve_require_mock = _resolveRequireMock;
+globalThis.__wasm_rquickjs_materialize_cjs_mock = _materializeCjsMock;
+
+// Lookup mock entry by ID (for ESM source generation)
+globalThis.__wasm_rquickjs_get_mock_module_entry = function(mockId) {
+    return _moduleMockRegistryById[mockId] || null;
+};
+
+// Generate ESM module source for a mock entry (called from Rust MockModuleLoader)
+globalThis.__wasm_rquickjs_get_mock_module_source = function(mockId) {
+    var entry = _moduleMockRegistryById[mockId];
+    if (!entry) {
+        throw new Error('Mock entry not found for id: ' + mockId);
+    }
+    return _generateMockEsmSource(entry);
+};
+
+function _generateMockEsmSource(entry) {
+    var storageKey = '__wasm_rquickjs_mock_data_' + entry.id;
+    globalThis[storageKey] = entry;
+
+    var lines = [];
+    lines.push('var __entry = globalThis["' + storageKey + '"];');
+    lines.push('var __named = __entry.namedExports;');
+    lines.push('var __hasDefault = "defaultExport" in __entry;');
+
+    if (entry.kind === 'cjs') {
+        // CJS-style mock: default export is the materialized object with named exports applied
+        lines.push('var __result;');
+        lines.push('if (__hasDefault) { __result = __entry.defaultExport; } else { __result = {}; }');
+        lines.push('if (__named) {');
+        lines.push('  if (__result === null || (typeof __result !== "object" && typeof __result !== "function")) {');
+        lines.push('    await Promise.reject(new Error("Cannot create mock: named exports cannot be applied to non-object defaultExport"));');
+        lines.push('  }');
+        lines.push('  var __nk = Object.keys(__named);');
+        lines.push('  for (var __i = 0; __i < __nk.length; __i++) { __result[__nk[__i]] = __named[__nk[__i]]; }');
+        lines.push('}');
+        lines.push('export default __result;');
+        // Also export named entries individually for ESM consumers
+        if (entry.namedExports) {
+            var nkeys = Object.keys(entry.namedExports);
+            for (var i = 0; i < nkeys.length; i++) {
+                var k = nkeys[i];
+                if (k === 'default') continue;
+                if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k)) {
+                    lines.push('export var ' + k + ' = __named["' + k + '"];');
+                }
+            }
+        }
+    } else {
+        // ESM-style mock: named exports are independent, default is separate
+        if (entry.namedExports) {
+            var nkeys = Object.keys(entry.namedExports);
+            for (var i = 0; i < nkeys.length; i++) {
+                var k = nkeys[i];
+                if (k === 'default') {
+                    lines.push('export default __named["default"];');
+                } else if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k)) {
+                    lines.push('export var ' + k + ' = __named["' + k + '"];');
+                }
+            }
+        }
+        // Add default export if not already handled via namedExports
+        if (!entry.namedExports || !entry.namedExports.hasOwnProperty('default')) {
+            lines.push('var __defVal = __hasDefault ? __entry.defaultExport : undefined;');
+            lines.push('export { __defVal as default };');
+        }
+    }
+
+    return lines.join('\n');
+}
+
 // Self-reference will be added after the module object is created (see bottom of file)
 
 const builtinModuleNames = Object.keys(builtinModuleMap).filter(
@@ -892,9 +1114,50 @@ const mainModule = {
     children: [],
 };
 
+function splitPackageName(id) {
+    // Scoped packages: @scope/pkg or @scope/pkg/subpath
+    if (id.charAt(0) === '@') {
+        var slashIdx = id.indexOf('/');
+        if (slashIdx === -1) return { name: id, subpath: '' };
+        var secondSlash = id.indexOf('/', slashIdx + 1);
+        if (secondSlash === -1) return { name: id, subpath: '' };
+        return { name: id.substring(0, secondSlash), subpath: id.substring(secondSlash + 1) };
+    }
+    // Regular packages: pkg or pkg/subpath
+    var idx = id.indexOf('/');
+    if (idx === -1) return { name: id, subpath: '' };
+    return { name: id.substring(0, idx), subpath: id.substring(idx + 1) };
+}
+
 function resolveFromNodeModules(id, parentDir, parentFilename) {
     var dirs = _nodeModulePaths(parentDir);
+
+    // Split into package name and subpath for packages with subpath specifiers
+    var parts = splitPackageName(id);
+    var hasSubpath = parts.subpath.length > 0;
+
     for (var i = 0; i < dirs.length; i++) {
+        // If there's a subpath, try resolving it relative to the package directory
+        if (hasSubpath) {
+            var pkgDir = pathModule.join(dirs[i], parts.name);
+            var subCandidate = pathModule.join(pkgDir, parts.subpath);
+            // Try exact subpath
+            var content = tryReadFile(subCandidate);
+            if (content !== null) return { filename: subCandidate, content: content };
+            // Try with extensions
+            content = tryReadFile(subCandidate + '.js');
+            if (content !== null) return { filename: subCandidate + '.js', content: content };
+            content = tryReadFile(subCandidate + '.mjs');
+            if (content !== null) return { filename: subCandidate + '.mjs', content: content };
+            content = tryReadFile(subCandidate + '.json');
+            if (content !== null) return { filename: subCandidate + '.json', content: content };
+            // Try as directory
+            content = tryReadFile(pathModule.join(subCandidate, 'index.js'));
+            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.js'), content: content };
+            content = tryReadFile(pathModule.join(subCandidate, 'index.json'));
+            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content };
+        }
+
         var candidate = pathModule.join(dirs[i], id);
 
         // Try as directory: check package.json "main" field
@@ -965,6 +1228,38 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
             zlib._captureKMaxLength();
         }
 
+        // Check module mock registry
+        var mockEntry = _resolveRequireMock(id);
+        if (mockEntry) {
+            if (mockEntry.cache && mockEntry._cachedCjsReady) {
+                return mockEntry._cachedCjsResult;
+            }
+            var mockResult = _materializeCjsMock(mockEntry);
+            if (mockEntry.cache) {
+                mockEntry._cachedCjsResult = mockResult;
+                mockEntry._cachedCjsReady = true;
+            }
+            return mockResult;
+        }
+
+        // node:-prefixed requires always go to builtins, bypassing cache
+        if (id.startsWith('node:')) {
+            var builtin = builtinModuleMap[id];
+            if (builtin !== undefined) {
+                return builtin;
+            }
+            var err = new Error('No such built-in module: ' + id);
+            err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
+            throw err;
+        }
+
+        // Check require.cache before builtins for non-node: specifiers
+        // (allows shadowing builtins via require.cache)
+        var cached = moduleCache[id];
+        if (cached !== undefined) {
+            return cached.exports;
+        }
+
         // Builtin modules
         var builtin = builtinModuleMap[id];
         if (builtin !== undefined) {
@@ -993,9 +1288,41 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
     localRequire.cache = moduleCache;
     localRequire.extensions = requireExtensions;
 
-    localRequire.resolve = function resolve(id) {
+    localRequire.resolve = function resolve(id, options) {
+        if (typeof id !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('request', 'string', id);
+        }
         if (isBuiltin(id)) {
             return id;
+        }
+        if (id.startsWith('node:')) {
+            var err = new Error('No such built-in module: ' + id);
+            err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
+            throw err;
+        }
+        // If paths option is provided, resolve relative to each path
+        if (options && options.paths) {
+            var searchPaths = options.paths;
+            var isRelative = id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/');
+            for (var pi = 0; pi < searchPaths.length; pi++) {
+                var searchDir = pathModule.resolve(searchPaths[pi]);
+                if (isRelative) {
+                    // Relative/absolute: resolve directly against the search path
+                    try {
+                        var resolved = resolveFilename(id, searchDir);
+                        return resolved.filename;
+                    } catch (e) {
+                        // Try next path
+                    }
+                } else {
+                    // Bare specifier: use node_modules resolution from search path
+                    var nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
+                    if (nmResolved) return nmResolved.filename;
+                }
+            }
+            var err = new Error("Cannot find module '" + id + "'");
+            err.code = 'MODULE_NOT_FOUND';
+            throw err;
         }
         if (id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
             var resolved = resolveFilename(id, parentDir);
@@ -1009,6 +1336,16 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         var err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
         throw err;
+    };
+
+    localRequire.resolve.paths = function paths(request) {
+        if (typeof request !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('request', 'string', request);
+        }
+        if (isBuiltinModule(request)) {
+            return null;
+        }
+        return _resolveLookupPaths(request, parentModule);
     };
 
     Object.defineProperty(localRequire, 'main', {
