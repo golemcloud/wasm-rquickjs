@@ -6,7 +6,7 @@ import fs from "fs";
 const testFiles = fs.readdirSync(".").filter((f) => f.startsWith("test-") && f.endsWith(".js"));
 
 const nodeBuiltins = [
-  "assert", "buffer", "child_process", "crypto", "dgram", "dns", "events",
+  "assert", "buffer", "child_process", "constants", "crypto", "dgram", "dns", "events",
   "fs", "http", "http2", "https", "module", "net", "os", "path",
   "perf_hooks", "querystring", "readline", "stream", "string_decoder",
   "tls", "url", "util", "v8", "vm", "worker_threads", "zlib",
@@ -24,6 +24,7 @@ export default testFiles.map((input) => ({
     format: "esm",
     inlineDynamicImports: true,
     sourcemap: false,
+    intro: `import { fileURLToPath as __fileURLToPath } from 'url'; import { dirname as __pathDirname } from 'path'; const __filename = typeof __fileURLToPath === 'function' ? __fileURLToPath(import.meta.url || 'file:///app.js') : '/app.js'; const __dirname = typeof __pathDirname === 'function' ? __pathDirname(__filename) : '/';`,
   },
   external: externalPackages,
   plugins: [

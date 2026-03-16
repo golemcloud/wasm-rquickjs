@@ -26,23 +26,24 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
-## Untestable Features
+## Integration Tests (Docker — Kafka broker)
 
-The following features could not be fully tested without an external Kafka cluster:
+### test-integration-01-connect.js — admin connect, listTopics, and disconnect
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ❌ FAIL (timeout/hang)
+- **Error:** Process hangs indefinitely — no output, killed after 90s timeout
+- **Root cause:** kafkajs communicates with Kafka brokers via raw TCP sockets (`node:net`). The wasm-rquickjs runtime's `node:net` implementation does not support the binary Kafka protocol over raw TCP connections, causing the client to hang during the initial broker handshake.
 
-- Producer `connect()`, `send()`, and `sendBatch()` end-to-end delivery against real brokers
-- Consumer group coordination, heartbeats, partition assignment, and `run()` message consumption loops
-- Admin operations such as topic creation/deletion, offset inspection, ACL management, and metadata fetches
-- SASL/TLS authentication and network transport behavior (`net`/`tls` socket paths)
-
-To fully test this library, a user would need to:
-1. Run an accessible Apache Kafka broker (or cluster)
-2. Provide reachable broker addresses in test scripts
-3. Re-run bundled tests that exercise connect/send/consume/admin operations
+### test-integration-02-produce-consume.js — produce and consume a message with content verification
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ❌ FAIL (timeout/hang)
+- **Error:** Process hangs indefinitely — no output, killed after 60s timeout
+- **Root cause:** Same as above — raw TCP socket communication with Kafka broker hangs.
 
 ## Summary
 
-- Tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs: none observed in tested offline surfaces
-- Behavioral differences: none observed in tested offline surfaces
-- Blockers: broker-backed runtime behavior remains unverified without a live Kafka service
+- Offline tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Integration tests passed: 0/2 in wasm-rquickjs (2/2 in Node.js)
+- Missing APIs: `node:net` raw TCP socket support needed for Kafka binary protocol
+- Behavioral differences: none observed in offline surfaces
+- Blockers: kafkajs requires raw TCP socket communication (`node:net`) to connect to Kafka brokers. The wasm-rquickjs runtime does not support this, so all broker-connected operations (admin, produce, consume) hang indefinitely.

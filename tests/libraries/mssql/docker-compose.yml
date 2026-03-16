@@ -1,0 +1,16 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    ports:
+      - "14330:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "TestPass123!"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/1433' 2>/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    tmpfs:
+      - /var/opt/mssql/data

@@ -7,7 +7,7 @@ if (!testFile) {
 const mod = await import(testFile);
 
 try {
-  const result = mod.run();
+  const result = await mod.run();
   console.log(result);
   if (!result.startsWith('PASS')) {
     process.exit(1);

@@ -30,24 +30,44 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (require Docker — NATS server on port 4223)
+
+### test-integration-01-connect.js — connect, get server info, drain/close
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-pubsub.js — publish/subscribe with string codec
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### Running integration tests
+
+```bash
+cd tests/libraries/nats
+docker compose up -d --wait
+npx rollup -c rollup.config.mjs
+# Node.js
+timeout 30 node run-node.mjs ./dist/test-integration-01-connect.bundle.js
+timeout 30 node run-node.mjs ./dist/test-integration-02-pubsub.bundle.js
+# wasm-rquickjs (from repo root)
+# generate-wrapper-crate + cargo-component build + wasmtime run with:
+#   -S cli -S http -S inherit-network -S allow-ip-name-lookup
+docker compose down
+```
+
 ## Untestable Features
 
-The following features could not be fully tested without an external NATS server:
+The following features could not be fully tested:
 
-- Connection lifecycle operations (`connect`, `close`, `drain`, reconnect behavior)
-- Publish/subscribe and request-reply against real subjects
-- JetStream, KV, and Object Store APIs backed by a running NATS server
+- JetStream, KV, and Object Store APIs (could be added as further integration tests)
 - TLS/auth handshake behavior over live network transport
-
-To fully test this library, a user would need to:
-1. Run an accessible NATS server (and JetStream-enabled server for JS/KV/ObjectStore cases)
-2. Configure reachable server URLs and credentials in dedicated integration tests
-3. Re-run the bundled tests that exercise connection and messaging paths
+- Request-reply pattern
 
 ## Summary
 
-- Tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
+- Offline tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
+- Integration tests passed: 2/2 in wasm-rquickjs (2/2 in Node.js)
 - **Previous blocker (fixed):** `stream/web` missing default export — this is now resolved; all 5 tests get past initialization
-- Remaining failures:
+- Remaining offline failures:
   - test-03: `TextEncoder.encode()` doesn't coerce non-string input per Web spec
   - test-04: Assertion failure in utility/error test logic

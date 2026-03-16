@@ -42,24 +42,24 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 16 | Sequelize | `sequelize` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (DataTypes, Op/SQL builders, errors, Model.build, hooks) |
 | 17 | MikroORM | `@mikro-orm/core` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Error resolving module 'constants'` |
 | 18 | Knex | `knex` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (SELECT, INSERT/upsert, DDL, raw SQL, builder cloning) |
-| 19 | pg | `pg` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (escape utils, connection config, type parsers, client overrides, pool/native) |
-| 20 | mysql2 | `mysql2` | ✅ | 2026-03-09 | All 5 tests pass (escaping/SQL, constants/charsets, query factory/cache, pool/cluster, promise API) |
+| 19 | pg | `pg` | ✅ | 2026-03-16 | All 5 offline + 3 Docker integration tests pass on Node.js and wasm-rquickjs. Integration tests cover connect, CRUD, and transactions against real PostgreSQL (md5 auth; SCRAM-SHA-256 blocked by missing `raw/PBKDF2` in `crypto.subtle.importKey`) |
+| 20 | mysql2 | `mysql2` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass on Node.js and wasm-rquickjs. Integration tests cover connect+SELECT and full CRUD against real MySQL 8.0 |
 | 21 | better-sqlite3 | `better-sqlite3` | ❌ | 2026-03-08 | Bundled tests fail to initialize (`__filename is not defined`); native `.node` binding load path incompatible |
-| 22 | mssql | `mssql` | ⚠️ | 2026-03-08 | 4/5 wasm tests pass; `ConnectionPool.parseConnectionString(...)` fails with `cannot read property 'trim' of undefined` |
+| 22 | mssql | `mssql` | ⚠️ | 2026-03-16 | 4/5 offline + 2/2 Docker integration tests pass in wasm-rquickjs; connect + CRUD work against Azure SQL Edge; `ConnectionPool.parseConnectionString(...)` has a behavioral difference |
 
 ## Databases — NoSQL
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 23 | Mongoose | `mongoose` | ✅ | 2026-03-08 | 5/5 bundled tests pass in Node and wasm-rquickjs for offline schema/model/document APIs; live MongoDB operations untested |
-| 24 | mongodb | `mongodb` | ✅ | 2026-03-08 | 5/5 bundled tests pass in Node and wasm-rquickjs for offline BSON/errors/options APIs; live DB operations untested |
+| 23 | Mongoose | `mongoose` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass on Node.js and wasm-rquickjs. Integration tests cover connect/disconnect and full CRUD against real MongoDB 7 |
+| 24 | mongodb | `mongodb` | ✅ | 2026-03-16 | 5/5 offline + 2/2 Docker integration tests pass in Node and wasm-rquickjs; connect, ping, CRUD all work via `node:net` TCP |
 
 ## Caching & Redis
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 25 | ioredis | `ioredis` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (lazy client, RESP encoding, URL parsing, pipeline, custom Lua commands) |
-| 26 | redis | `redis` | ✅ | 2026-03-09 | All 5 tests pass (core exports, factories, defineScript, digest, types/errors) |
+| 25 | ioredis | `ioredis` | ✅ | 2026-03-08 | All 5 offline tests pass; Docker integration tests (connect, commands, pub/sub) pass on Node.js but fail in wasm-rquickjs — `node:dns` resolution fails, blocking `node:net` TCP connections to Redis |
+| 26 | redis | `redis` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass (connect, PING, SET/GET, DEL, HSET/HGETALL, LPUSH/LRANGE, INCR/DECR, EXPIRE/TTL); requires `-S allow-ip-name-lookup` for DNS |
 | 27 | lru-cache | `lru-cache` | ✅ | 2026-03-08 | All 5 bundled tests pass in Node.js and wasm-rquickjs (LRU behavior, TTL, size eviction, dispose hooks, memo/fetch) |
 | 28 | cache-manager | `cache-manager` | ✅ | 2026-03-08 | All 5 bundled tests pass in Node.js and wasm-rquickjs (basic CRUD, TTL, wrap coalescing, events, multi-store ops) |
 
@@ -67,11 +67,11 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 29 | BullMQ | `bullmq` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (QueueKeys, backoffs, errors, job JSON, AsyncFifoQueue) |
-| 30 | amqplib | `amqplib` | ✅ | 2026-03-08 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (credentials, codec, frame, API args, URL credential helpers); live broker operations untested |
-| 31 | kafkajs | `kafkajs` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (exports/constants, client factories/validation, disconnected producer errors, partitioners, codec registry); live broker operations untested |
-| 32 | nats | `nats` | ⚠️ | 2026-03-10 | 3/5 wasm tests pass (codecs, headers, consumer opts); auth test fails (`TextEncoder.encode` non-string coercion), utils test has assertion failure |
-| 33 | mqtt | `mqtt` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (connect/options parsing, validation helpers, Store, message-id providers, ReasonCodes/events); live broker flows untested |
+| 29 | BullMQ | `bullmq` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass on Node.js and wasm-rquickjs (QueueKeys, backoffs, errors, job JSON, AsyncFifoQueue, Queue add/getJob, Worker processing) |
+| 30 | amqplib | `amqplib` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass in Node.js and wasm-rquickjs; live connect, queue assert, pub/sub with ack all verified against RabbitMQ |
+| 31 | kafkajs | `kafkajs` | ⚠️ | 2026-03-16 | 5/5 offline tests pass; 0/2 Docker integration tests pass in wasm-rquickjs (both hang — kafkajs requires raw TCP via `node:net` for Kafka binary protocol, which is unsupported) |
+| 32 | nats | `nats` | ⚠️ | 2026-03-16 | 3/5 offline + 2/2 integration (connect, pub/sub) pass in wasm; auth test fails (`TextEncoder.encode` non-string coercion), utils test has assertion failure |
+| 33 | mqtt | `mqtt` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass in Node.js and wasm-rquickjs. Integration tests cover connect and publish/subscribe round-trip against real Mosquitto broker |
 
 ## Workflow Engines & Reactive
 
@@ -176,13 +176,13 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 83 | Nodemailer | `nodemailer` | ✅ | 2026-03-10 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (json transport, stream transport, address normalization, attachments) |
+| 83 | Nodemailer | `nodemailer` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass in Node.js and wasm-rquickjs (json/stream/SMTP transport, address normalization, attachments, MailHog SMTP send/verify) |
 
 ## Cloud & Infrastructure SDKs
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 84 | AWS SDK v3 | `@aws-sdk/client-s3` | ⚠️ | 2026-03-10 | 5/5 bundled offline tests pass in Node.js and wasm-rquickjs; live S3 API calls require AWS credentials and network |
+| 84 | AWS SDK v3 | `@aws-sdk/client-s3` | ⚠️ | 2026-03-16 | 5/5 offline tests pass; 0/2 Docker integration tests (MinIO) fail in wasm-rquickjs — wstd reactor panics on real HTTP requests |
 | 85 | Google Cloud Storage | `@google-cloud/storage` | ❌ | 2026-03-10 | Node bundles 5/5 pass, but all wasm runs fail at startup: `JavaScript error: Cannot find module 'punycode'` |
 
 ## Configuration & Environment

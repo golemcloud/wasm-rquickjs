@@ -2,7 +2,7 @@
 
 **Package:** `bullmq`
 **Version:** `5.70.4`
-**Tested on:** 2026-03-08
+**Tested on:** 2026-03-16
 
 ## Test Results
 
@@ -26,22 +26,29 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
-## Untestable Features
+## Integration Tests (Docker)
 
-The following BullMQ features were not tested because they require an external Redis service:
+**Docker setup:** Redis 7 Alpine on port 63792 via `docker compose up -d --wait`
 
-- Queue operations (`Queue.add`, `Queue.pause`, `Queue.getJobs`, etc.)
-- Worker processing loops and event streams (`Worker`, `QueueEvents`)
-- Flow and scheduler features (`FlowProducer`, repeat/job scheduling)
+**Build notes:** Generated wrapper crates used `default = ["full-no-logging"]` feature set to avoid `wasi:logging` linker errors. Ran with `wasmtime run -W component-model -S http -S inherit-network -S allow-ip-name-lookup --invoke 'run()'`.
 
-To fully test these features, a user would need to:
-1. Start an accessible Redis server
-2. Configure BullMQ connections in the test scripts
-3. Re-run the bundled tests with integration scenarios enabled
+### test-integration-01-queue.js — Queue add, getJob, and getJobCounts
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-worker.js — Worker processes job and returns result
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### Integration Test Summary
+
+- Node.js: 2/2 pass
+- wasm-rquickjs: 2/2 pass
+- **Note:** Despite BullMQ depending on ioredis internally (which fails standalone due to `node:net` + `node:dns` limitations), BullMQ's integration tests pass in wasm-rquickjs. This suggests the `node:net` and `node:dns` implementations have improved sufficiently to support ioredis connections using IP addresses (127.0.0.1) rather than hostnames that require DNS resolution.
 
 ## Summary
 
-- Tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Tests passed: 7/7 in wasm-rquickjs (7/7 in Node.js)
 - Missing APIs: none observed
 - Behavioral differences: none observed
-- Blockers: none — all tested BullMQ features work correctly
+- Blockers: none — all tested BullMQ features work correctly, including live Redis operations

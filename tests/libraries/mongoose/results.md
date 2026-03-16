@@ -27,26 +27,33 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (Docker)
+
+Requires Docker. Run `docker compose up -d --wait` in the `tests/libraries/mongoose/` directory before executing these tests. MongoDB 7 is started on port 27018. Generated wrapper crates used `default = ["full-no-logging"]` feature set to avoid `wasi:logging` linker errors. Ran with `wasmtime run --wasm component-model -S cli -S http -S inherit-network -S allow-ip-name-lookup --invoke 'run()'`.
+
+### test-integration-01-connect.js — Connect, verify readyState, admin ping, disconnect
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-crud.js — Schema/model, create, findOne, updateOne, deleteOne, countDocuments
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
 ## Untestable Features
 
-The following features could not be tested without an external MongoDB instance:
+The following features could not be tested without more complex infrastructure:
 
-- **Live database operations** (`connect`, `save`, `find`, `aggregate`, transactions) — Require a reachable MongoDB server.
-- **Replica set/session behavior** — Requires a real deployment and server coordination.
+- **Replica set/session behavior** — Requires a multi-node deployment and server coordination.
 - **Network-level error paths** (timeouts, reconnection, topology changes) — Depend on real network/database conditions.
-
-To fully test these features, a user would need to:
-1. Provision a MongoDB instance reachable from the test environment.
-2. Provide connection URI and credentials.
-3. Re-run integration tests that execute real CRUD, query, and transaction operations.
 
 ## Summary
 
-- Tests passed in Node.js: 5/5
-- Tests passed in wasm-rquickjs: 5/5
-- Missing APIs: None observed in the tested offline API surface
-- Behavioral differences: None observed in the tested offline API surface
-- Blockers:
-  - No bundling, compilation, or runtime blockers encountered for offline usage.
+- Offline tests passed in Node.js: 5/5
+- Offline tests passed in wasm-rquickjs: 5/5
+- Integration tests passed in Node.js: 2/2
+- Integration tests passed in wasm-rquickjs: 2/2
+- Missing APIs: None observed
+- Behavioral differences: None observed
+- Blockers: None
 
-`mongoose` is compatible in wasm-rquickjs for the tested offline/document-layer functionality.
+`mongoose` is fully compatible in wasm-rquickjs for both offline document-layer APIs and live MongoDB CRUD operations.

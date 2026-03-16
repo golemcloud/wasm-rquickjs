@@ -163,7 +163,10 @@ export function clearTimeout(id) {
         return;
     }
     if (typeof id === 'number' || typeof id === 'string') {
-        timeoutNative.clear_schedule(+id);
+        const numId = +id;
+        if (numId >= 0 && Number.isFinite(numId)) {
+            timeoutNative.clear_schedule(numId);
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 
 **Package:** `mssql`
 **Version:** `9.1.1`
-**Tested on:** 2026-03-08
+**Tested on:** 2026-03-16
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -29,29 +29,26 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
-## Untestable Features
+## Integration Tests (Docker-based, against Azure SQL Edge)
 
-The following features could not be tested without an external SQL Server instance:
+### test-integration-01-connect.js — connect and SELECT 1+1
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
 
-- **Live connections and queries** (`connect`, `query`, `batch`, `execute`) — Require a reachable SQL Server endpoint and credentials.
-- **Transactions and prepared statements against a real database** — Require server-side execution state.
-- **Bulk insert execution** (`request.bulk(table)`) — Requires a live database connection.
-
-To fully test these features, a user would need to:
-1. Provision a SQL Server instance reachable from the test environment.
-2. Create credentials and target schema.
-3. Provide connection configuration for `mssql`.
-4. Re-run dedicated integration tests that perform actual DB operations.
+### test-integration-02-crud.js — CREATE, INSERT, SELECT, UPDATE, DELETE, DROP
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
 
 ## Summary
 
-- Tests passed in Node.js: 5/5
-- Tests passed in wasm-rquickjs: 4/5
-- Missing APIs: None identified in these offline tests
+- Offline tests passed in Node.js: 5/5
+- Offline tests passed in wasm-rquickjs: 4/5
+- Integration tests passed in Node.js: 2/2
+- Integration tests passed in wasm-rquickjs: 2/2
+- Missing APIs: None
 - Behavioral differences:
   - `ConnectionPool.parseConnectionString(...)` fails in wasm-rquickjs with `JavaScript error: cannot read property 'trim' of undefined`
 - Blockers:
-  - No compile-time blockers in this run; all wrapper crates built successfully.
-  - One runtime blocker remains in the connection-string parser path used by `test-03-advanced.js`.
+  - One offline runtime blocker remains in the connection-string parser path used by `test-03-advanced.js`.
 
-`mssql` shows partial compatibility in wasm-rquickjs for offline, non-network API surface (types, table helpers, request parameter APIs, map/value handlers), with one parser-path runtime failure.
+`mssql` shows strong compatibility in wasm-rquickjs. All offline tests pass except the connection-string parser path. Both Docker integration tests (connect + CRUD) pass against a real Azure SQL Edge instance.

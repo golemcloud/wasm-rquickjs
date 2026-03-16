@@ -26,22 +26,33 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (Docker)
+
+Requires Docker. Run `docker compose up -d --wait` in the `tests/libraries/mqtt/` directory before executing these tests. Mosquitto 2 is configured with anonymous access on port 1884. Generated wrapper crates use `default = ["full-no-logging"]` to avoid `wasi:logging` linker errors. Ran with `wasmtime run --wasm component-model -S cli -S http -S inherit-network -S allow-ip-name-lookup --invoke 'run()'`.
+
+### test-integration-01-connect.js — Connect to Mosquitto broker and verify state
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-pubsub.js — Publish/subscribe round-trip
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
 ## Untestable Features
 
-The following features could not be tested without an external MQTT broker:
-
-- Live connection lifecycle over TCP/TLS/WebSocket (`connect`, reconnect/backoff behavior, protocol handshakes)
-- End-to-end publish/subscribe delivery guarantees (QoS 0/1/2), retained messages, and session persistence
+- TLS/WebSocket transport (`mqtts://`, `wss://`) — Requires certificate setup
 - Authentication and broker-specific authorization behavior in real deployments
-
-To fully test this library, a user would need to:
-1. Run a reachable MQTT broker (for example, Mosquitto/EMQX)
-2. Configure test credentials/TLS as needed
-3. Re-run integration-focused publish/subscribe and reconnect scenarios against that broker
+- QoS 1/2 delivery guarantees, retained messages, and session persistence (require more complex broker configuration)
+- Reconnect/backoff behavior under network partitions
 
 ## Summary
 
-- Tests passed: 5/5
-- Missing APIs: None observed in tested offline API surface
-- Behavioral differences: None observed in tested offline API surface
-- Blockers: None for offline-compatible `mqtt` usage patterns
+- Offline tests passed in Node.js: 5/5
+- Offline tests passed in wasm-rquickjs: 5/5
+- Integration tests passed in Node.js: 2/2
+- Integration tests passed in wasm-rquickjs: 2/2
+- Missing APIs: None observed
+- Behavioral differences: None observed
+- Blockers: None
+
+All offline `mqtt` API surface tested (option parsing, validation helpers, Store, message-id providers, ReasonCodes/events) works correctly in both environments. Integration tests confirm that real MQTT broker connectivity (connect, publish/subscribe round-trip) works end-to-end in both Node.js and wasm-rquickjs.

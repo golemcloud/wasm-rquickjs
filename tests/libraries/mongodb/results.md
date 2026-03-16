@@ -27,25 +27,34 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (Docker)
+
+Requires Docker. Run `docker compose up -d --wait` in this directory to start MongoDB 7 on port 27019.
+
+### test-integration-01-connect.js — connect and ping MongoDB
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-crud.js — insertOne, findOne, updateOne, deleteOne, countDocuments
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+Build notes: Generated wrapper crates used `default = ["full-no-logging"]` feature set to avoid `wasi:logging` linker errors. Ran with `wasmtime run --wasm component-model -S cli -S http -S inherit-network -S allow-ip-name-lookup --invoke 'run()'`.
+
 ## Untestable Features
 
-The following features could not be tested without an external MongoDB deployment:
-
-- **Live database operations** (`connect`, CRUD, aggregation, transactions, sessions) — Require a reachable MongoDB server.
 - **`mongodb+srv://` DNS discovery** — Requires live DNS SRV/TXT resolution.
 - **Authentication integrations** (SCRAM against real server, cloud/OIDC, Kerberos) — Require real infrastructure/credentials.
-
-To fully test these features, a user would need to:
-1. Provision a MongoDB instance reachable from the test environment.
-2. Provide connection URI and credentials.
-3. Re-run integration tests that execute real connections and database commands.
+- **Transactions, sessions, change streams** — Require replica set configuration.
 
 ## Summary
 
-- Tests passed in Node.js: 5/5
-- Tests passed in wasm-rquickjs: 5/5
-- Missing APIs: None observed in the tested offline API surface
-- Behavioral differences: None observed in the tested offline API surface
-- Blockers: None for offline/document and option-parsing functionality
+- Offline tests passed in Node.js: 5/5
+- Offline tests passed in wasm-rquickjs: 5/5
+- Integration tests passed in Node.js: 2/2
+- Integration tests passed in wasm-rquickjs: 2/2
+- Missing APIs: None observed
+- Behavioral differences: None observed
+- Blockers: None
 
-`mongodb` is compatible in wasm-rquickjs for the tested offline API surface.
+`mongodb` is fully compatible in wasm-rquickjs for both offline and live database operations.

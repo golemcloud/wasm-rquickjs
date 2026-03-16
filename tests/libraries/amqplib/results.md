@@ -26,23 +26,21 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
-## Untestable Features
+## Integration Tests (Docker)
 
-The following features could not be fully tested without an external RabbitMQ service:
+Requires Docker. Start RabbitMQ with `docker compose up -d --wait` in this directory.
 
-- Live connection establishment and AMQP handshake over `amqp://` or `amqps://`
-- Queue/exchange declaration against a broker
-- Publishing/consuming real messages
-- Acknowledgement and QoS behavior against broker state
+### test-integration-01-connect.js — connect, createChannel, assertQueue, deleteQueue, close
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
 
-To fully test this library, a user would need to:
-1. Run an accessible RabbitMQ broker
-2. Provide connection details to test scripts
-3. Re-run bundled tests that perform end-to-end broker operations
+### test-integration-02-pubsub.js — publish and consume round-trip with ack
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
 
 ## Summary
 
-- Tests passed: 5/5
-- Missing APIs: none observed in tested offline surfaces
-- Behavioral differences: none observed in tested offline surfaces
-- Blockers: broker-backed runtime behavior remains unverified without a RabbitMQ instance
+- Offline tests passed: 5/5
+- Integration tests passed: 2/2
+- Missing APIs: none observed
+- Behavioral differences: none observed

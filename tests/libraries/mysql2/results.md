@@ -27,10 +27,26 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (Docker)
+
+**Requires:** Docker with `docker compose up -d --wait` in this directory.
+
+**MySQL:** 8.0 with `--default-authentication-plugin=mysql_native_password`, host port 33061 → container port 3306.
+
+### test-integration-01-connect.js — createConnection and SELECT 1+1
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-crud.js — CREATE TABLE, INSERT, SELECT, UPDATE, DELETE, DROP TABLE
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
 ## Summary
 
-- Tests passed in Node.js: 5/5
-- Tests passed in wasm-rquickjs: 5/5
+- Offline tests passed in Node.js: 5/5
+- Offline tests passed in wasm-rquickjs: 5/5
+- Integration tests passed in Node.js: 2/2
+- Integration tests passed in wasm-rquickjs: 2/2
 - Previous blockers (`string_decoder` missing default export, `createRequire(import.meta.url)` failure) are **fixed**
 - Missing APIs: None
 - Behavioral differences: None observed

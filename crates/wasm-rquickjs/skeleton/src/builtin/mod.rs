@@ -7,6 +7,7 @@ mod base64;
 mod buffer;
 mod child_process;
 mod cluster;
+mod constants;
 mod console;
 mod dgram;
 mod diagnostics_channel;
@@ -50,6 +51,7 @@ mod node_http {
 mod node_test;
 mod os;
 mod path;
+mod punycode;
 mod perf_hooks;
 mod process;
 mod querystring;
@@ -156,6 +158,8 @@ pub fn add_module_resolvers(
         .with_module("path/posix")
         .with_module("node:path/win32")
         .with_module("path/win32")
+        .with_module("node:punycode")
+        .with_module("punycode")
         .with_module("__wasm_rquickjs_builtin/url_native")
         .with_module("__wasm_rquickjs_builtin/url")
         .with_module("node:url")
@@ -191,6 +195,8 @@ pub fn add_module_resolvers(
         .with_module("async_hooks")
         .with_module("node:cluster")
         .with_module("cluster")
+        .with_module("node:constants")
+        .with_module("constants")
         .with_module("__wasm_rquickjs_builtin/dgram_native")
         .with_module("node:dgram")
         .with_module("dgram")
@@ -381,6 +387,8 @@ pub fn module_loader() -> (
         .with_module("path/posix", path::PATH_POSIX_REEXPORT_JS)
         .with_module("node:path/win32", path::PATH_WIN32_REEXPORT_JS)
         .with_module("path/win32", path::PATH_WIN32_REEXPORT_JS)
+        .with_module("node:punycode", punycode::PUNYCODE_JS)
+        .with_module("punycode", punycode::REEXPORT_JS)
         .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
         .with_module("node:url", url::URL_JS)
         .with_module("url", url::REEXPORT_JS)
@@ -415,6 +423,8 @@ pub fn module_loader() -> (
         .with_module("async_hooks", async_hooks::REEXPORT_JS)
         .with_module("node:cluster", cluster::CLUSTER_JS)
         .with_module("cluster", cluster::REEXPORT_JS)
+        .with_module("node:constants", constants::CONSTANTS_JS)
+        .with_module("constants", constants::REEXPORT_JS)
         .with_module("node:dgram", dgram::DGRAM_JS)
         .with_module("dgram", dgram::REEXPORT_JS)
         .with_module(
@@ -506,7 +516,7 @@ pub fn wire_builtins() -> String {
 const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_resolve = function(baseUrl, specifier) {
   if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(specifier) || specifier.startsWith('data:')) return specifier;
   if (specifier.startsWith('node:')) return specifier;
-  var NODE_BUILTINS = new Set(['fs','path','os','crypto','http','https','url','util','stream','events','buffer','querystring','string_decoder','zlib','assert','module','net','tls','child_process','timers','dns','dgram','cluster','readline','tty','v8','vm','worker_threads','perf_hooks','async_hooks','diagnostics_channel','trace_events','inspector','punycode','console','process','test','sqlite','domain','http2','repl']);
+  var NODE_BUILTINS = new Set(['fs','path','os','crypto','http','https','url','util','stream','events','buffer','querystring','string_decoder','zlib','assert','module','net','tls','child_process','timers','dns','dgram','cluster','constants','readline','tty','v8','vm','worker_threads','perf_hooks','async_hooks','diagnostics_channel','trace_events','inspector','punycode','console','process','test','sqlite','domain','http2','repl']);
   function normalizePath(p) {
     var parts = p.split('/'); var out = [];
     for (var i = 0; i < parts.length; i++) {

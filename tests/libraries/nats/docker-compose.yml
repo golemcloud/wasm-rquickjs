@@ -1,0 +1,14 @@
+services:
+  nats:
+    image: nats:latest
+    ports:
+      - "4223:4222"
+    healthcheck:
+      test: ["CMD", "nats-server", "--help"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+      start_period: 2s
+    command: ["-js", "-m", "8222"]
+    tmpfs:
+      - /data
