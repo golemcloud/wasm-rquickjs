@@ -7440,7 +7440,7 @@
     "parallel/test-module-wrapper.js": { "impossible": true, "reason": "[manual] The test requires `child_process.execFileSync` to spawn a new Node.js subprocess (`execFileSync(node, [cjsModuleWrapTest])`). Process spawning is fundamentally impossible in a WASM compone..." },
     "parallel/test-navigator.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-next-tick-errors.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-next-tick-ordering.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-next-tick-ordering.js": {},
     "parallel/test-no-addons-resolution-condition.js": {},
     "parallel/test-node-run.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-nodeeventtarget.js": {
@@ -9160,7 +9160,7 @@
         "block_27_block_27": {}
       }
     },
-    "parallel/test-stream2-compatibility.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-stream2-compatibility.js": {},
     "parallel/test-stream2-large-read-stall.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
     "parallel/test-stream2-unpipe-leak.js": {},
     "parallel/test-stream2-writable.js": {
