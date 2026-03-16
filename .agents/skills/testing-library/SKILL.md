@@ -40,13 +40,16 @@ Create **~5 small test scripts** in `tests/libraries/<package-name>/`. Each test
 
 ```
 tests/libraries/<package-name>/
-├── test-01-basic.js        # Core functionality
-├── test-02-validation.js   # Input validation, edge cases
-├── test-03-advanced.js     # More complex features
-├── rollup.config.mjs       # Rollup config (see template below)
-├── run-node.mjs            # Shared Node.js runner (see below)
-├── package.json            # Dependencies + rollup devDeps
-└── results.md              # Test results (created in Step 6)
+├── test-01-basic.js              # Core functionality
+├── test-02-validation.js         # Input validation, edge cases
+├── test-03-advanced.js           # More complex features
+├── test-integration-01-connect.js  # (Optional) Docker integration: connectivity
+├── test-integration-02-crud.js     # (Optional) Docker integration: CRUD operations
+├── docker-compose.yml            # (Optional) Local service for integration tests
+├── rollup.config.mjs             # Rollup config (see template below)
+├── run-node.mjs                  # Shared Node.js runner (see below)
+├── package.json                  # Dependencies + rollup devDeps
+└── results.md                    # Test results (created in Step 6)
 ```
 
 ### Test script format — dual-mode (Node.js + WASM)
@@ -72,12 +75,12 @@ export const run = () => {
 Create `run-node.mjs` once per package directory:
 
 ```js
-// run-node.mjs — runs a test file and prints the result
+// run-node.mjs — runs a test file and prints the result (supports sync and async run())
 const testFile = process.argv[2];
 if (!testFile) { console.error('Usage: node run-node.mjs ./test-01-basic.js'); process.exit(1); }
 const mod = await import(testFile);
 try {
-    const result = mod.run();
+    const result = await mod.run();
     console.log(result);
     if (!result.startsWith('PASS')) process.exit(1);
 } catch (e) {
@@ -248,6 +251,177 @@ wasmtime run --wasm component-model \
 
 Capture stdout/stderr from each run. If the component fails to compile or run, record the exact error.
 
+## Step 5.5: Docker-Based Integration Tests (Optional)
+
+Many libraries (databases, message queues, caches, etc.) are designed to connect to an external service. The tests in Step 3–5 deliberately avoid external dependencies. This step adds **optional integration tests** that validate the library works end-to-end against a real, locally-running service via Docker.
+
+### 5.5a. Determine if Docker testing is applicable
+
+Check whether the library's primary use case involves communicating with a service that can be run locally via Docker. Common examples:
+
+| Library type | Docker image | Port |
+|---|---|---|
+| PostgreSQL clients (`pg`, `postgres`, `slonik`) | `postgres:16-alpine` | 5432 |
+| MySQL clients (`mysql2`, `mariadb`) | `mysql:8` or `mariadb:11` | 3306 |
+| Redis clients (`ioredis`, `redis`) | `redis:7-alpine` | 6379 |
+| MongoDB clients (`mongoose`, `mongodb`) | `mongo:7` | 27017 |
+| Elasticsearch clients (`@elastic/elasticsearch`) | `elasticsearch:8.x` | 9200 |
+| RabbitMQ clients (`amqplib`) | `rabbitmq:3-management-alpine` | 5672 |
+| NATS clients (`nats`, `nats.ws`) | `nats:latest` | 4222 |
+| Kafka clients (`kafkajs`) | `confluentinc/cp-kafka` | 9092 |
+| MinIO/S3 clients (`@aws-sdk/client-s3`, `minio`) | `minio/minio` | 9000 |
+| SMTP clients (`nodemailer`) | `mailhog/mailhog` | 1025 |
+
+**Skip this step entirely** if:
+- The library is a pure-computation library (validation, formatting, crypto utilities)
+- The service requires paid/proprietary software with no Docker image
+- The library is a server framework (Express, Fastify, etc.) — already excluded by the Golem constraint
+- The library requires API keys to a cloud service that cannot be self-hosted (e.g., OpenAI, Stripe)
+
+### 5.5b. Create `docker-compose.yml`
+
+Place a `docker-compose.yml` in the test directory:
+
+```yaml
+# tests/libraries/<package-name>/docker-compose.yml
+services:
+  <service-name>:
+    image: <docker-image>:<tag>
+    ports:
+      - "<host-port>:<container-port>"
+    environment:
+      # Use simple, deterministic credentials for testing
+      <ENV_VAR>: <value>
+    healthcheck:
+      test: ["CMD", "<health-check-command>"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/<data-dir>  # Use tmpfs for speed — no persistent data needed
+```
+
+**Example for PostgreSQL (`pg`):**
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "54320:5432"
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: testdb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d testdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
+```
+
+**Rules for `docker-compose.yml`:**
+- Use **non-standard host ports** (e.g., 54320 instead of 5432) to avoid conflicts with locally running services
+- Use **deterministic, non-secret credentials** (these are ephemeral test containers)
+- Always include a **healthcheck** so the startup script can wait for readiness
+- Use **`tmpfs`** for data directories — no need for persistent volumes
+- Use **Alpine-based images** where available for faster pulls
+
+### 5.5c. Create integration test scripts
+
+Create additional test scripts named `test-integration-*.js` in the same directory. These follow the same dual-mode format (export a `run` function) but connect to the locally running service:
+
+```js
+// test-integration-01-connect.js
+import { Client } from 'pg';
+
+export const run = async () => {
+    const client = new Client({
+        host: 'localhost',
+        port: 54320,
+        user: 'testuser',
+        password: 'testpass',
+        database: 'testdb',
+    });
+    await client.connect();
+    const res = await client.query('SELECT 1 + 1 AS result');
+    await client.end();
+    if (res.rows[0].result !== 2) throw new Error(`Expected 2, got ${res.rows[0].result}`);
+    return "PASS: Connect and query PostgreSQL";
+};
+```
+
+**Integration test rules:**
+- **Hard-code the connection parameters** to match `docker-compose.yml` — no environment variable indirection
+- Create **2–4 integration tests** covering: connection, basic CRUD, library-specific features (transactions, pub/sub, etc.)
+- Tests must be **idempotent** — create tables/keys if they don't exist, clean up after themselves
+- Handle **async operations** — integration tests will typically need `async run()` functions
+- Use the same `PASS:`/`FAIL:` output convention
+
+### 5.5d. Update Rollup config
+
+The existing `rollup.config.mjs` already discovers `test-*.js` files automatically. The `test-integration-*.js` files match this glob, so they will be bundled automatically. No changes needed.
+
+### 5.5e. Run integration tests
+
+```bash
+# Start the service
+cd tests/libraries/<package-name>
+docker compose up -d --wait
+
+# Bundle (if not already done — the config picks up integration test files too)
+npx rollup -c rollup.config.mjs
+
+# Verify on Node.js first
+node run-node.mjs ./dist/test-integration-01-connect.bundle.js
+node run-node.mjs ./dist/test-integration-02-crud.bundle.js
+
+# Run through wasm-rquickjs (same generate/compile/run flow as Step 5d)
+# For each integration test bundle:
+./target/release/wasm-rquickjs generate-wrapper-crate \
+  --js tests/libraries/<package-name>/dist/test-integration-01-connect.bundle.js \
+  --wit tests/libraries/<package-name>/wit \
+  --output tmp/lib-test-<package-name>-int-01
+
+sed -i '' 's/default = \["http", "logging"\]/default = ["http", "sqlite"]/' \
+  tmp/lib-test-<package-name>-int-01/Cargo.toml
+
+cd tmp/lib-test-<package-name>-int-01
+cargo-component build
+cd ../..
+
+wasmtime run --wasm component-model \
+  -S cli -S http -S inherit-network \
+  --invoke 'run()' \
+  tmp/lib-test-<package-name>-int-01/target/wasm32-wasip1/debug/lib_test_<package_name>_int_01.wasm
+
+# Tear down
+cd tests/libraries/<package-name>
+docker compose down
+```
+
+**Important:**
+- Always **start the service before running** and **tear it down after**
+- Use `docker compose up -d --wait` to block until healthcheck passes
+- If Docker is not available on the machine, skip this step and note it in `results.md`
+- Use `timeout 60` for each test run to prevent hangs
+
+### 5.5f. Handle async `run()` in WASM
+
+The WIT definition from Step 5b (`run: func() -> string`) is synchronous. If integration tests need `async`, and the library supports it, the wrapper must await internally. The standard approach is:
+
+```js
+// test-integration-01-connect.js
+export const run = async () => {
+    // ... async operations ...
+    return "PASS: description";
+};
+```
+
+The wasm-rquickjs runtime handles top-level `async` `run()` functions — the QuickJS engine runs the microtask queue to completion. No special WIT changes are needed.
+
 ## Step 6: Record Results
 
 ### Update `tests/libraries/<package-name>/results.md`
@@ -273,9 +447,26 @@ Create a detailed results file:
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (Docker)
+
+> This section is only present when Docker-based integration tests were run (see Step 5.5).
+
+**Service:** `<docker-image>:<tag>` on port `<host-port>`
+
+### test-integration-01-connect.js — <description>
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-crud.js — <description>
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `<exact error message>`
+- **Root cause:** <explanation>
+
 ## Summary
 
-- Tests passed: X/Y
+- Offline tests passed: X/Y
+- Integration tests passed: X/Y (or "N/A — no Docker service applicable" / "N/A — Docker not available")
 - Missing APIs: `node:xyz.someMethod`, `node:abc.otherMethod`
 - Behavioral differences: <list>
 - Blockers: <list of issues preventing the library from working>
@@ -378,3 +569,5 @@ The `package.json` for each test directory should include Rollup and its plugins
 9. **Always use `edit_file` to update `libraries.md`** — never overwrite the entire file
 10. **Always use Rollup for bundling** — do NOT use esbuild; Rollup matches the production Golem CLI toolchain
 11. **Always run tests with a timeout** — use `timeout 60` (or similar) when running tests both on Node.js and via wasmtime to prevent hanging on tests that wait for network/IO that will never arrive
+12. **Always tear down Docker services** — run `docker compose down` after integration tests, even if tests fail
+13. **Integration tests are optional** — only create them when the library's primary purpose involves a Docker-hostable service; never force Docker tests for pure-computation libraries
