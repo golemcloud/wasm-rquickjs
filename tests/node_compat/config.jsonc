@@ -1290,14 +1290,7 @@
       "skip": true,
       "reason": "requires process.on('uncaughtException') hooks"
     },
-    "parallel/test-timers-max-duration-warning.js": {
-      "split": true,
-      "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {},
-        "block_02_block_02": {}
-      }
-    },
+    "parallel/test-timers-max-duration-warning.js": {},
     "parallel/test-timers-enroll-invalid-msecs.js": {
       "skip": true,
       "reason": "requires timers.enroll which is not implemented"
@@ -1638,14 +1631,7 @@
     "parallel/test-crypto-dh-group-setters.js": {},
     "parallel/test-crypto-dh-leak.js": {},
     "parallel/test-crypto-dh-modp2-views.js": {},
-    "parallel/test-crypto-dh-modp2.js": {
-      "split": true,
-      "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {},
-        "block_02_block_02": {}
-      }
-    },
+    "parallel/test-crypto-dh-modp2.js": {},
     "parallel/test-crypto-dh-odd-key.js": {},
     "parallel/test-crypto-dh-padding.js": {},
     "parallel/test-crypto-dh-shared.js": {},
@@ -9241,7 +9227,7 @@
         "block_05_interval": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
-    "parallel/test-timers.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-timers.js": {},
     "parallel/test-tls-0-dns-altname.js": { "impossible": true, "reason": "tls/https is not supported in WebAssembly environment" },
     "parallel/test-tls-add-context.js": { "impossible": true, "reason": "tls/https is not supported in WebAssembly environment" },
     "parallel/test-tls-addca.js": { "impossible": true, "reason": "tls/https is not supported in WebAssembly environment" },

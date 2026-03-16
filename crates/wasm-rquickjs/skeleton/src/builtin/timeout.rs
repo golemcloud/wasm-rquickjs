@@ -1,4 +1,4 @@
-use crate::internal::format_caught_error;
+use crate::internal::{format_caught_error, get_js_state};
 use rquickjs::function::Args;
 use rquickjs::{CatchResultExt, Ctx, Persistent, Value};
 
@@ -33,15 +33,17 @@ pub mod native_module {
             0
         };
 
+        let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
+
         let (task, abort_handle) = abortable(super::scheduled_task(
             ctx.clone(),
             code_or_fn,
             delay,
             periodic,
             args,
+            key,
         ));
-
-        let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
+        state.abort_handles.borrow_mut().insert(key, abort_handle);
         ctx.spawn(async move {
             let _ = task.await;
             // Clean up after the task completes naturally
@@ -49,7 +51,6 @@ pub mod native_module {
             state.abort_handles.borrow_mut().remove(&key);
             state.unrefed_timers.borrow_mut().remove(&key);
         });
-        state.abort_handles.borrow_mut().insert(key, abort_handle);
         key
     }
 
@@ -105,34 +106,30 @@ async fn scheduled_task(
     delay: u32,
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
+    timer_key: usize,
 ) {
-    if delay == 0 {
+    let duration = wstd::time::Duration::from_millis(delay as u64);
+
+    loop {
+        wstd::task::sleep(duration).await;
+
         run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
             .catch(&ctx)
             .unwrap_or_else(|e| {
                 eprintln!(
-                    "Uncaught exception in timer callback: {}",
+                    "Timer callback error escaped JS uncaught handler: {}",
                     format_caught_error(e)
                 )
             });
-    } else {
-        let duration = wstd::time::Duration::from_millis(delay as u64);
 
-        loop {
-            wstd::task::sleep(duration).await;
+        if !periodic {
+            break;
+        }
 
-            run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
-                .catch(&ctx)
-                .unwrap_or_else(|e| {
-                    eprintln!(
-                        "Uncaught exception in timer callback: {}",
-                        format_caught_error(e)
-                    )
-                });
-
-            if !periodic {
-                break;
-            }
+        // Check if the timer was cancelled during the callback
+        let state = get_js_state();
+        if !state.abort_handles.borrow().contains_key(&timer_key) {
+            break;
         }
     }
 }

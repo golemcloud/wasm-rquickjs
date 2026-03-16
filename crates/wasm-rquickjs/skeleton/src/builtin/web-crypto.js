@@ -78,6 +78,19 @@ const HASH_OUTPUT_LENGTHS = {
     'ripemd160': 20,
 };
 
+const RSA_PKCS1_DIGEST_INFO_PREFIX_LENGTHS = {
+    'md5': 18,
+    'sha1': 15,
+    'sha224': 19,
+    'sha256': 19,
+    'sha384': 19,
+    'sha512': 19,
+    'sha3-256': 19,
+    'sha3-384': 19,
+    'sha3-512': 19,
+    'ripemd160': 15,
+};
+
 const HKDF_MAX_INFO_LENGTH = 1024;
 const RANDOM_INT_MAX_RANGE = 0xFFFF_FFFF_FFFF;
 
@@ -653,7 +666,7 @@ export function randomBytes(size, callback) {
     const buf = typeof Buffer !== 'undefined' ? Buffer.from(bytes) : new Uint8Array(bytes);
 
     if (callback !== undefined) {
-        queueMicrotask(() => callback(null, buf));
+        process.nextTick(() => callback(null, buf));
         return;
     }
 
@@ -767,7 +780,7 @@ export function randomFill(buffer, offset, size, callback) {
         target[offset + i] = bytes[i];
     }
 
-    queueMicrotask(() => callback(null, buffer));
+    process.nextTick(() => callback(null, buffer));
 }
 
 export function randomInt(low, high, callback) {
@@ -807,7 +820,7 @@ export function randomInt(low, high, callback) {
     }
 
     if (!isSync) {
-        queueMicrotask(() => callback(null, result));
+        process.nextTick(() => callback(null, result));
         return;
     }
 
@@ -1190,7 +1203,7 @@ export function generatePrime(size, options, callback) {
         throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
     }
 
-    queueMicrotask(() => {
+    process.nextTick(() => {
         try {
             const prime = generatePrimeBigInt(normalizedSize, normalizedOptions);
             callback(null, encodeGeneratedPrime(prime, normalizedSize, normalizedOptions.bigint));
@@ -1219,7 +1232,7 @@ export function checkPrime(candidate, options, callback) {
         throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
     }
 
-    queueMicrotask(() => {
+    process.nextTick(() => {
         try {
             callback(null, isProbablePrime(normalizedCandidate, normalizedOptions.checks));
         } catch (err) {
@@ -1319,7 +1332,7 @@ export function pbkdf2(password, salt, iterations, keylen, digest, callback) {
     }
 
     const result = derivePbkdf2(params);
-    queueMicrotask(() => callback(null, result));
+    process.nextTick(() => callback(null, result));
 }
 
 export function scryptSync(password, salt, keylen, options) {
@@ -1348,9 +1361,9 @@ export function scrypt(password, salt, keylen, options, callback) {
     }
     try {
         const result = scryptSync(password, salt, keylen, options);
-        queueMicrotask(() => callback(null, result));
+        process.nextTick(() => callback(null, result));
     } catch (err) {
-        queueMicrotask(() => callback(err));
+        process.nextTick(() => callback(err));
     }
 }
 
@@ -1367,7 +1380,7 @@ export function hkdf(digest, ikm, salt, info, keylen, callback) {
     }
 
     const result = deriveHkdf(args);
-    queueMicrotask(() => callback(null, result));
+    process.nextTick(() => callback(null, result));
 }
 
 const MAX_SPKAC_SIZE = 0x7FFFFFFF;
@@ -1613,13 +1626,14 @@ function createPrivateKeyParseError() {
 }
 
 function createRsaIllegalOrUnsupportedPaddingModeError() {
-    const err = new Error('error:06099079:digital envelope routines:EVP_PKEY_CTX_ctrl:illegal or unsupported padding mode');
+    const err = new Error('error:04068093:rsa routines:RSA_sign:illegal or unsupported padding mode');
     err.code = 'ERR_OSSL_RSA_ILLEGAL_OR_UNSUPPORTED_PADDING_MODE';
-    // Populate legacy stack details to match Node's OpenSSL 1.x surface.
+    err.reason = 'illegal or unsupported padding mode';
+    err.library = 'rsa routines';
+    err.function = 'RSA_sign';
     err.opensslErrorStack = [
         'error:06089093:digital envelope routines:EVP_PKEY_CTX_ctrl:command not supported',
     ];
-    err.reason = 'illegal or unsupported padding mode';
     return err;
 }
 
@@ -2927,6 +2941,12 @@ class KeyObject {
             }
             if (this.asymmetricKeyType === 'rsa') {
                 return exportRsaKeyObjectAsJwk(this);
+            }
+            const keyType = this.asymmetricKeyType;
+            if (keyType === 'dsa' || keyType === 'rsa-pss') {
+                const err = new Error('Unsupported JWK key type: ' + keyType);
+                err.code = 'ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE';
+                throw err;
             }
             throw new Error('Failed to export key as JWK');
         }
@@ -4626,6 +4646,162 @@ function exportEcCustomKeyObject(keyObject, options) {
     return undefined;
 }
 
+function exportMontgomeryCustomKeyObject(keyObject, options) {
+    if (options === undefined || options === null || typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+    const keyType = keyObject._customData.asymmetricKeyType;
+    const mont = keyObject._customData.montgomery;
+    const info = OKP_TYPE_INFO[keyType];
+    if (!mont || !info) {
+        throw new Error('Failed to export key');
+    }
+    const format = options.format || (options.type ? 'pem' : 'der');
+    if (format === 'jwk') {
+        const publicBytes = mont.publicKey;
+        if (!publicBytes) {
+            throw new Error('Failed to export key as JWK');
+        }
+        const jwk = { kty: 'OKP', crv: info.crv, x: bytesToBase64Url(publicBytes) };
+        if (keyObject.type === 'private' && mont.privateKey) {
+            jwk.d = bytesToBase64Url(mont.privateKey);
+        }
+        return jwk;
+    }
+    const type_ = options.type || null;
+    if (keyObject.type === 'private') {
+        if (!mont.privateKey) {
+            throw new Error('Failed to export key');
+        }
+        if (type_ !== null && type_ !== 'pkcs8') {
+            throw new Error('Failed to export key');
+        }
+        const der = encodeOkpPrivateDer(keyType, mont.privateKey);
+        if (!der) {
+            throw new Error('Failed to export key');
+        }
+        if (format === 'pem') return encodeDerAsPem('PRIVATE KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    } else if (keyObject.type === 'public') {
+        const publicBytes = mont.publicKey;
+        if (!publicBytes) {
+            throw new Error('Failed to export key');
+        }
+        if (type_ !== null && type_ !== 'spki') {
+            throw new Error('Failed to export key');
+        }
+        const der = encodeOkpPublicDer(keyType, publicBytes);
+        if (!der) {
+            throw new Error('Failed to export key');
+        }
+        if (format === 'pem') return encodeDerAsPem('PUBLIC KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    }
+    throw new Error('Failed to export key');
+}
+
+function exportEdwardsCustomKeyObject(keyObject, options) {
+    if (options === undefined || options === null || typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+    const keyType = keyObject._customData.asymmetricKeyType;
+    const edwards = keyObject._customData.edwards;
+    const info = OKP_TYPE_INFO[keyType];
+    if (!edwards || !info) {
+        throw new Error('Failed to export key');
+    }
+    const format = options.format || (options.type ? 'pem' : 'der');
+    if (format === 'jwk') {
+        const publicBytes = edwards.publicKey || getOkpPublicFromPrivate(keyType, edwards.privateKey);
+        if (!publicBytes) {
+            throw new Error('Failed to export key as JWK');
+        }
+        const jwk = { kty: 'OKP', crv: info.crv, x: bytesToBase64Url(publicBytes) };
+        if (keyObject.type === 'private' && edwards.privateKey) {
+            jwk.d = bytesToBase64Url(edwards.privateKey);
+        }
+        return jwk;
+    }
+    const type_ = options.type || null;
+    if (keyObject.type === 'private') {
+        if (!edwards.privateKey) {
+            throw new Error('Failed to export key');
+        }
+        if (type_ !== null && type_ !== 'pkcs8') {
+            throw new Error('Failed to export key');
+        }
+        const der = encodeOkpPrivateDer(keyType, edwards.privateKey);
+        if (!der) {
+            throw new Error('Failed to export key');
+        }
+        if (format === 'pem') return encodeDerAsPem('PRIVATE KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    } else if (keyObject.type === 'public') {
+        const publicBytes = edwards.publicKey || getOkpPublicFromPrivate(keyType, edwards.privateKey);
+        if (!publicBytes) {
+            throw new Error('Failed to export key');
+        }
+        if (type_ !== null && type_ !== 'spki') {
+            throw new Error('Failed to export key');
+        }
+        const der = encodeOkpPublicDer(keyType, publicBytes);
+        if (!der) {
+            throw new Error('Failed to export key');
+        }
+        if (format === 'pem') return encodeDerAsPem('PUBLIC KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    }
+    throw new Error('Failed to export key');
+}
+
+function exportEcFallbackCustomKeyObject(keyObject, options) {
+    if (options === undefined || options === null || typeof options !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
+    }
+    const ecData = keyObject._customData.ec;
+    const format = options.format || (options.type ? 'pem' : 'der');
+    if (format === 'jwk') {
+        const publicBytes = ecData.publicKey;
+        if (!publicBytes || publicBytes[0] !== 0x04) {
+            throw new Error('Failed to export key as JWK');
+        }
+        const fieldLen = (publicBytes.length - 1) / 2;
+        const x = publicBytes.slice(1, 1 + fieldLen);
+        const y = publicBytes.slice(1 + fieldLen);
+        const jwk = { kty: 'EC', crv: ecData.namedCurve, x: bytesToBase64Url(x), y: bytesToBase64Url(y) };
+        if (keyObject.type === 'private' && ecData.privateKey) {
+            jwk.d = bytesToBase64Url(ecData.privateKey);
+        }
+        return jwk;
+    }
+    if (keyObject.type === 'private') {
+        const publicBytes = ecData.publicKey;
+        if (!publicBytes || publicBytes[0] !== 0x04) {
+            throw new Error('Failed to export key');
+        }
+        const fieldLen = (publicBytes.length - 1) / 2;
+        const x = publicBytes.slice(1, 1 + fieldLen);
+        const y = publicBytes.slice(1 + fieldLen);
+        const jwk = { kty: 'EC', crv: ecData.namedCurve, x: bytesToBase64Url(x), y: bytesToBase64Url(y), d: bytesToBase64Url(ecData.privateKey) };
+        const der = buildEcPrivatePkcs8Der(jwk);
+        if (format === 'pem') return encodeDerAsPem('PRIVATE KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    } else {
+        const publicBytes = ecData.publicKey;
+        if (!publicBytes || publicBytes[0] !== 0x04) {
+            throw new Error('Failed to export key');
+        }
+        const fieldLen = (publicBytes.length - 1) / 2;
+        const x = publicBytes.slice(1, 1 + fieldLen);
+        const y = publicBytes.slice(1 + fieldLen);
+        const jwk = { kty: 'EC', crv: ecData.namedCurve, x: bytesToBase64Url(x), y: bytesToBase64Url(y) };
+        const der = buildEcPublicSpkiDer(jwk);
+        if (format === 'pem') return encodeDerAsPem('PUBLIC KEY', der);
+        if (format === 'der') return toBinaryOutput(der);
+    }
+    return undefined;
+}
+
 const DSA_OID = '1.2.840.10040.4.1';
 const RSA_PSS_OID = '1.2.840.113549.1.1.10';
 const RSA_OID = '1.2.840.113549.1.1.1';
@@ -4998,8 +5174,17 @@ function tryExportCustomKeyObject(keyObject, options) {
     if (keyObject._customData && keyObject._customData.okp) {
         return exportOkpCustomKeyObject(keyObject, options);
     }
+    if (keyObject._customData && keyObject._customData.montgomery) {
+        return exportMontgomeryCustomKeyObject(keyObject, options);
+    }
+    if (keyObject._customData && keyObject._customData.edwards) {
+        return exportEdwardsCustomKeyObject(keyObject, options);
+    }
     if (keyObject._customData && keyObject._customData.ec && keyObject._customData.ec.jwk) {
         return exportEcCustomKeyObject(keyObject, options);
+    }
+    if (keyObject._customData && keyObject._customData.ec) {
+        return exportEcFallbackCustomKeyObject(keyObject, options);
     }
     if (keyObject._customData && keyObject._customData.dsa) {
         return exportDsaCustomKeyObject(keyObject, options);
@@ -5101,6 +5286,14 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
             return okpKey;
         }
 
+        const rsaPssKey = maybeParseRsaPssPrivateKey(pem, 'pem');
+        if (rsaPssKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, rsaPssKey);
+            }
+            return rsaPssKey;
+        }
+
         const handle = webCryptoNative.create_private_key_pem(pem);
         if (handle !== null && handle !== undefined) {
             const key = new KeyObject(handle, 'private');
@@ -5108,14 +5301,6 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 PRIVATE_KEY_CACHE.set(cacheKey, key);
             }
             return key;
-        }
-
-        const rsaPssKey = maybeParseRsaPssPrivateKey(pem, 'pem');
-        if (rsaPssKey) {
-            if (cacheKey !== null) {
-                PRIVATE_KEY_CACHE.set(cacheKey, rsaPssKey);
-            }
-            return rsaPssKey;
         }
 
         const pemDer = decodePemToDer(pem);
@@ -5167,6 +5352,14 @@ function createPrivateKeyFromData(keyData, format, passphrase, type_) {
                 PRIVATE_KEY_CACHE.set(cacheKey, okpKey);
             }
             return okpKey;
+        }
+
+        const rsaPssKey = maybeParseRsaPssPrivateKey(data, 'der');
+        if (rsaPssKey) {
+            if (cacheKey !== null) {
+                PRIVATE_KEY_CACHE.set(cacheKey, rsaPssKey);
+            }
+            return rsaPssKey;
         }
 
         const ed25519Raw = extractEd25519PrivateRaw(data);
@@ -5253,6 +5446,14 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
         }
 
+        const rsaPssPubKey = maybeParseRsaPssPublicKey(pem, 'pem');
+        if (rsaPssPubKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, rsaPssPubKey);
+            }
+            return rsaPssPubKey;
+        }
+
         const pubHandle = webCryptoNative.create_public_key_pem(pem);
         if (pubHandle !== null && pubHandle !== undefined) {
             const key = new KeyObject(pubHandle, 'public');
@@ -5277,14 +5478,6 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
         }
 
-        const rsaPssPubKey = maybeParseRsaPssPublicKey(pem, 'pem');
-        if (rsaPssPubKey) {
-            if (cacheKey !== null) {
-                PUBLIC_KEY_CACHE.set(cacheKey, rsaPssPubKey);
-            }
-            return rsaPssPubKey;
-        }
-
         if (passphrase !== undefined) {
             const passBytes = toBytes(passphrase);
             const encryptedPrivateHandle = webCryptoNative.create_private_key_encrypted_pem(pem, passBytes);
@@ -5299,19 +5492,6 @@ function createPublicKeyFromData(keyData, format, passphrase) {
             }
         }
 
-        // Node accepts private key inputs in createPublicKey() and derives a public key.
-        const privHandle = webCryptoNative.create_private_key_pem(pem);
-        if (privHandle !== null && privHandle !== undefined) {
-            const derived = webCryptoNative.create_public_key_from_private_key(privHandle);
-            if (derived !== null && derived !== undefined) {
-                const key = new KeyObject(derived, 'public');
-                if (cacheKey !== null) {
-                    PUBLIC_KEY_CACHE.set(cacheKey, key);
-                }
-                return key;
-            }
-        }
-
         const rsaPssPrivKey = maybeParseRsaPssPrivateKey(pem, 'pem');
         if (rsaPssPrivKey) {
             const derivedHandle = webCryptoNative.create_public_key_from_private_key(rsaPssPrivKey._handle);
@@ -5322,6 +5502,19 @@ function createPublicKeyFromData(keyData, format, passphrase) {
                     asymmetricKeyDetails: rsaPssData.asymmetricKeyDetails,
                     rsaPss: rsaPssData.rsaPss,
                 });
+                if (cacheKey !== null) {
+                    PUBLIC_KEY_CACHE.set(cacheKey, key);
+                }
+                return key;
+            }
+        }
+
+        // Node accepts private key inputs in createPublicKey() and derives a public key.
+        const privHandle = webCryptoNative.create_private_key_pem(pem);
+        if (privHandle !== null && privHandle !== undefined) {
+            const derived = webCryptoNative.create_public_key_from_private_key(privHandle);
+            if (derived !== null && derived !== undefined) {
+                const key = new KeyObject(derived, 'public');
                 if (cacheKey !== null) {
                     PUBLIC_KEY_CACHE.set(cacheKey, key);
                 }
@@ -5420,6 +5613,14 @@ function createPublicKeyFromData(keyData, format, passphrase) {
                 }
                 return key;
             }
+        }
+
+        const rsaPssPubKey = maybeParseRsaPssPublicKey(data, 'der');
+        if (rsaPssPubKey) {
+            if (cacheKey !== null) {
+                PUBLIC_KEY_CACHE.set(cacheKey, rsaPssPubKey);
+            }
+            return rsaPssPubKey;
         }
 
         const ed25519Raw = extractEd25519PublicRaw(data);
@@ -6392,15 +6593,15 @@ export function generateKeyPair(type_, options, callback) {
         validateDsaKeyPairOptions(options);
     } else if (type_ === 'dh') {
         const result = generateKeyPairSync(type_, options);
-        queueMicrotask(() => callback(null, result.publicKey, result.privateKey));
+        process.nextTick(() => callback(null, result.publicKey, result.privateKey));
         return;
     }
 
     try {
         const result = generateKeyPairSync(type_, options);
-        queueMicrotask(() => callback(null, result.publicKey, result.privateKey));
+        process.nextTick(() => callback(null, result.publicKey, result.privateKey));
     } catch (err) {
-        queueMicrotask(() => callback(err));
+        process.nextTick(() => callback(err));
     }
 }
 
@@ -6478,7 +6679,7 @@ export function generateKey(type_, options, callback) {
 
     const params = validateGenerateKeyOptions(type_, options);
 
-    queueMicrotask(() => {
+    process.nextTick(() => {
         try {
             callback(null, generateSecretKey(params));
         } catch (err) {
@@ -6671,6 +6872,9 @@ function getSignVerifyIntOption(optionName, options) {
 }
 
 Sign.prototype.update = function(data, inputEncoding) {
+    if (typeof data !== 'string' && !ArrayBuffer.isView(data) && !isAnyArrayBuffer(data)) {
+        throw new ERR_INVALID_ARG_TYPE('data', ['string', 'Buffer', 'TypedArray', 'DataView'], data);
+    }
     if (this._handle !== null) {
         const bytes = toBytes(data, inputEncoding);
         webCryptoNative.sign_update(this._handle, bytes);
@@ -6683,7 +6887,19 @@ Sign.prototype.update = function(data, inputEncoding) {
 
 Sign.prototype._transform = Hash.prototype._transform;
 
+Sign.prototype._write = function(chunk, encoding, callback) {
+    if (typeof chunk !== 'string' && !ArrayBuffer.isView(chunk) && !isAnyArrayBuffer(chunk)) {
+        throw new ERR_INVALID_ARG_TYPE('data', ['string', 'Buffer', 'TypedArray', 'DataView'], chunk);
+    }
+    return Transform.prototype._write.call(this, chunk, encoding, callback);
+};
+
 Sign.prototype.sign = function(privateKey, outputEncoding) {
+    if (privateKey === null || privateKey === undefined) {
+        const err = new Error('No key provided to sign');
+        err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+        throw err;
+    }
     let keyObj;
     let padding;
     let saltLength;
@@ -6699,6 +6915,20 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
 
     if (padding === constants.RSA_PKCS1_OAEP_PADDING) {
         throw createRsaIllegalOrUnsupportedPaddingModeError();
+    }
+
+    if (keyObj) {
+        const keyType = keyObj.asymmetricKeyType;
+        if (keyType === 'dh' || keyType === 'x25519' || keyType === 'x448') {
+            const err = new Error('error:06000068:public key routines::operation not supported for this keytype');
+            err.code = 'ERR_OSSL_EVP_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE';
+            throw err;
+        }
+        if ((keyType === 'ed25519' || keyType === 'ed448') && this._algorithmNormalized !== null && this._algorithmNormalized !== undefined) {
+            const err = new Error('Unsupported crypto operation');
+            err.code = 'ERR_CRYPTO_UNSUPPORTED_OPERATION';
+            throw err;
+        }
     }
 
     if (keyObj && (keyObj._handle === null || keyObj._handle === undefined)) {
@@ -6778,6 +7008,9 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
     if (this._handle === null) {
         const handle = webCryptoNative.sign_init(this._algorithmNormalized, keyObj._handle);
         if (handle === null || handle === undefined) {
+            if (isRsaKeyObject(keyObj) && this._algorithmNormalized && isRsaDigestTooBigForKey(this._algorithmNormalized, keyObj)) {
+                throw createRsaDigestTooBigError();
+            }
             const err = new Error('Sign init failed');
             err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
             throw err;
@@ -6795,6 +7028,9 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
     const result = webCryptoNative.sign_final_native(this._handle);
     this._handle = null;
     if (result === null || result === undefined) {
+        if (isRsaKeyObject(keyObj) && this._algorithmNormalized && isRsaDigestTooBigForKey(this._algorithmNormalized, keyObj)) {
+            throw createRsaDigestTooBigError();
+        }
         const err = new Error('Sign failed');
         err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
         throw err;
@@ -6806,6 +7042,15 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
 export { Sign };
 
 export function createSign(algorithm) {
+    if (typeof algorithm !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('algorithm', 'string', algorithm);
+    }
+    const lower = algorithm.toLowerCase();
+    if (!HASH_ALIASES[lower]) {
+        const err = new Error('Invalid digest: ' + algorithm);
+        err.code = 'ERR_OSSL_EVP_INVALID_DIGEST';
+        throw err;
+    }
     return new Sign(algorithm);
 }
 
@@ -6821,6 +7066,9 @@ Object.setPrototypeOf(Verify.prototype, Transform.prototype);
 Object.setPrototypeOf(Verify, Transform);
 
 Verify.prototype.update = function(data, inputEncoding) {
+    if (typeof data !== 'string' && !ArrayBuffer.isView(data) && !isAnyArrayBuffer(data)) {
+        throw new ERR_INVALID_ARG_TYPE('data', ['string', 'Buffer', 'TypedArray', 'DataView'], data);
+    }
     if (this._handle !== null) {
         const bytes = toBytes(data, inputEncoding);
         webCryptoNative.verify_update(this._handle, bytes);
@@ -6833,7 +7081,22 @@ Verify.prototype.update = function(data, inputEncoding) {
 
 Verify.prototype._transform = Hash.prototype._transform;
 
+Verify.prototype._write = function(chunk, encoding, callback) {
+    if (typeof chunk !== 'string' && !ArrayBuffer.isView(chunk) && !isAnyArrayBuffer(chunk)) {
+        throw new ERR_INVALID_ARG_TYPE('data', ['string', 'Buffer', 'TypedArray', 'DataView'], chunk);
+    }
+    return Transform.prototype._write.call(this, chunk, encoding, callback);
+};
+
 Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
+    if (publicKey === null || publicKey === undefined) {
+        const err = new Error('No key provided to verify');
+        err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+        throw err;
+    }
+    if (!ArrayBuffer.isView(signature) && typeof signature !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('signature', ['Buffer', 'TypedArray', 'DataView'], signature);
+    }
     let keyObj;
     let padding;
     let saltLength;
@@ -6856,6 +7119,20 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     }
 
     const sigBytes = toBytes(signature, signatureEncoding);
+
+    if (keyObj) {
+        const keyType = keyObj.asymmetricKeyType;
+        if (keyType === 'dh' || keyType === 'x25519' || keyType === 'x448') {
+            const err = new Error('error:06000068:public key routines::operation not supported for this keytype');
+            err.code = 'ERR_OSSL_EVP_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE';
+            throw err;
+        }
+        if ((keyType === 'ed25519' || keyType === 'ed448') && this._algorithmNormalized !== null && this._algorithmNormalized !== undefined) {
+            const err = new Error('Unsupported crypto operation');
+            err.code = 'ERR_CRYPTO_UNSUPPORTED_OPERATION';
+            throw err;
+        }
+    }
 
     if (keyObj && (keyObj._handle === null || keyObj._handle === undefined)) {
         if (isEd448FallbackKeyObject(keyObj)) {
@@ -6932,24 +7209,32 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
 export { Verify };
 
 export function createVerify(algorithm) {
+    if (typeof algorithm !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('algorithm', 'string', algorithm);
+    }
     return new Verify(algorithm);
 }
 
 export function sign(algorithm, data, key, callback) {
-    const algo = algorithm ? algorithm.toLowerCase() : null;
+    const algo = algorithm !== null && algorithm !== undefined ? String(algorithm).toLowerCase() : null;
+    if (algo !== null && !HASH_ALIASES[algo]) {
+        const err = new Error('Invalid digest: ' + algorithm);
+        err.code = 'ERR_OSSL_EVP_INVALID_DIGEST';
+        throw err;
+    }
     const normalizedData = toBytes(data);
     const s = new Sign(algo);
     s.update(normalizedData);
     const result = s.sign(key);
     if (callback) {
-        queueMicrotask(() => callback(null, result));
+        process.nextTick(() => callback(null, result));
         return;
     }
     return result;
 }
 
 export function verify(algorithm, data, key, signature, callback) {
-    const algo = algorithm ? algorithm.toLowerCase() : null;
+    const algo = algorithm !== null && algorithm !== undefined ? String(algorithm).toLowerCase() : null;
     const normalizedData = toBytes(data);
     const v = new Verify(algo);
     v.update(normalizedData);
@@ -6962,7 +7247,7 @@ export function verify(algorithm, data, key, signature, callback) {
 
     const result = v.verify(key, signature);
     if (callback) {
-        queueMicrotask(() => callback(null, result));
+        process.nextTick(() => callback(null, result));
         return;
     }
     return result;
@@ -7036,6 +7321,25 @@ function getRsaPssUnusedBits(modulusBits, emLength) {
 function getRsaPssHashLength(hashAlgorithm) {
     const hashLength = HASH_OUTPUT_LENGTHS[hashAlgorithm];
     return typeof hashLength === 'number' ? hashLength : null;
+}
+
+function getRsaPkcs1DigestInfoLength(hashAlgorithm) {
+    const digestLen = HASH_OUTPUT_LENGTHS[hashAlgorithm];
+    const prefixLen = RSA_PKCS1_DIGEST_INFO_PREFIX_LENGTHS[hashAlgorithm];
+    if (typeof digestLen !== 'number' || typeof prefixLen !== 'number') return null;
+    return prefixLen + digestLen;
+}
+
+function isRsaDigestTooBigForKey(hashAlgorithm, keyObj) {
+    const tLen = getRsaPkcs1DigestInfoLength(hashAlgorithm);
+    const modBytes = getRsaModulusSizeBytes(keyObj);
+    return tLen !== null && modBytes !== null && tLen + 11 > modBytes;
+}
+
+function createRsaDigestTooBigError() {
+    const err = new Error('error:0408006C:rsa routines::digest too big for rsa key');
+    err.code = 'ERR_OSSL_RSA_DIGEST_TOO_BIG_FOR_RSA_KEY';
+    return err;
 }
 
 function resolveRsaPssSignSaltLength(saltLength, hashLength, maxSaltLength) {

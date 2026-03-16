@@ -294,21 +294,50 @@ process.cwd = function cwd() {
 var __nextTickQueue = [];
 var __nextTickDrainScheduled = false;
 
+function __wasm_rquickjs_handleUncaughtError(err, domain) {
+    if (domain && typeof domain.emit === 'function') {
+        if (err != null && (typeof err === 'object' || typeof err === 'function')) {
+            err.domain = domain;
+            err.domainThrown = true;
+        }
+        domain.emit('error', err);
+        return;
+    }
+
+    if (_uncaughtExceptionCallback !== null) {
+        _uncaughtExceptionCallback(err);
+        return;
+    }
+
+    if (process.listenerCount('uncaughtException') > 0) {
+        process.emit('uncaughtException', err);
+        return;
+    }
+
+    if (typeof console !== 'undefined') {
+        console.error(err);
+    }
+}
+
+globalThis.__wasm_rquickjs_handleUncaughtError = __wasm_rquickjs_handleUncaughtError;
+
 function __drainNextTickQueue() {
     __nextTickDrainScheduled = false;
     while (__nextTickQueue.length > 0) {
         var entry = __nextTickQueue.shift();
         try {
-            entry.callback.apply(undefined, entry.args);
-        } catch (e) {
-            // Emit 'uncaughtException' if there are listeners (matching Node.js
-            // behaviour for exceptions thrown in nextTick callbacks). Otherwise
-            // print the error to avoid silent swallowing.
-            if (process.listenerCount('uncaughtException') > 0) {
-                process.emit('uncaughtException', e);
-            } else if (typeof console !== 'undefined') {
-                console.error(e);
+            if (entry.domain) {
+                entry.domain.enter();
             }
+            entry.callback.apply(undefined, entry.args);
+            if (entry.domain) {
+                entry.domain.exit();
+            }
+        } catch (e) {
+            if (entry.domain) {
+                entry.domain.exit();
+            }
+            __wasm_rquickjs_handleUncaughtError(e, entry.domain);
         }
     }
 }
@@ -323,7 +352,8 @@ process.nextTick = function processNextTick(callback, ...args) {
         throw _makeTypeError('ERR_INVALID_ARG_TYPE',
             'The "callback" argument must be of type function.' + _invalidArgTypeHelper(callback));
     }
-    __nextTickQueue.push({ callback, args });
+    var domain = process.domain || null;
+    __nextTickQueue.push({ callback, args, domain });
     if (!__nextTickDrainScheduled) {
         __nextTickDrainScheduled = true;
         // Use enough deferral levels to fire after import() resolution +

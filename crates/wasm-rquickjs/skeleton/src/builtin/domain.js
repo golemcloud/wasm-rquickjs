@@ -114,12 +114,9 @@ EventEmitter._domainInit = function(emitter) {
     }
 };
 
-// Patch setTimeout/setInterval to auto-bind callbacks to active domain.
-// We do NOT patch process.nextTick — Node.js doesn't either
-// (test-next-tick-domain.js verifies this). nextTick callbacks within
-// domain.run() get domain error routing because domain.bind() wraps them
-// through the setTimeout/setInterval patch, and thrown errors from
-// nextTick propagate up through the event loop.
+// Patch setTimeout/setInterval/process.nextTick to auto-bind callbacks
+// to the active domain. In Node.js, domains integrate with nextTick
+// through the async hooks system; in our runtime we patch it directly.
 var _origSetTimeout = globalThis.setTimeout;
 var _origSetInterval = globalThis.setInterval;
 

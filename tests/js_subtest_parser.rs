@@ -89,9 +89,16 @@ fn test_rewrite_for_block() {
             name: "block_02".to_string(),
         },
     ];
+    // Targeting block 1: only block 1 preserved, blocks 0 and 2 emptied
     let result = rewrite_for_block(source, &blocks, 1);
     assert!(!result.contains("assert(1)"));
     assert!(result.contains("assert(2)"));
+    assert!(!result.contains("assert(3)"));
+
+    // Targeting block 0: only block 0 preserved, blocks 1 and 2 emptied
+    let result = rewrite_for_block(source, &blocks, 0);
+    assert!(result.contains("assert(1)"));
+    assert!(!result.contains("assert(2)"));
     assert!(!result.contains("assert(3)"));
 }
 

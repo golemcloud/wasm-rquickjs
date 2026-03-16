@@ -10,6 +10,31 @@ class Timeout {
         this._delay = delay;
         this._args = args;
         this._isInterval = isInterval;
+        this.__idleTimeout = delay;
+        this.__onTimeout = callback;
+        this._repeat = isInterval ? delay : null;
+    }
+
+    get _idleTimeout() {
+        return this.__idleTimeout;
+    }
+
+    set _idleTimeout(value) {
+        this.__idleTimeout = value;
+        if (value === -1) {
+            this.close();
+        }
+    }
+
+    get _onTimeout() {
+        return this.__onTimeout;
+    }
+
+    set _onTimeout(value) {
+        this.__onTimeout = value;
+        if (value === null) {
+            this.close();
+        }
     }
 
     ref() {
@@ -63,16 +88,50 @@ function validateCallback(callback) {
     }
 }
 
+const TIMEOUT_MAX = 2 ** 31 - 1;
+
+function normalizeTimerDelay(time) {
+    const delay = +time;
+    if (delay > TIMEOUT_MAX) {
+        if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+            process.emitWarning(`${time} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.`, 'TimeoutOverflowWarning');
+        }
+        return 1;
+    }
+    if (!(delay >= 1)) {
+        return 0;
+    }
+    return Math.trunc(delay);
+}
+
 function scheduleTimeout(callback, time, args, isInterval) {
     const snapshot = _captureContext();
     const wrapped = function(...a) {
-        // Drain pending nextTick callbacks before executing timer callbacks,
-        // matching Node.js's guarantee that process.nextTick always fires
-        // before timers (setTimeout/setImmediate).
-        if (globalThis.__wasm_rquickjs_drainNextTick) {
-            globalThis.__wasm_rquickjs_drainNextTick();
+        const currentId = this._id;
+        try {
+            // Drain pending nextTick callbacks before executing timer callbacks,
+            // matching Node.js's guarantee that process.nextTick always fires
+            // before timers (setTimeout/setImmediate).
+            if (globalThis.__wasm_rquickjs_drainNextTick) {
+                globalThis.__wasm_rquickjs_drainNextTick();
+            }
+            return _restoreContext(snapshot, callback, this, a);
+        } catch (e) {
+            if (globalThis.__wasm_rquickjs_handleUncaughtError) {
+                globalThis.__wasm_rquickjs_handleUncaughtError(e);
+            } else if (typeof console !== 'undefined') {
+                console.error(e);
+            }
+        } finally {
+            // Support converting setTimeout to interval via _repeat
+            if (!this._destroyed && this._id === currentId && !isInterval && this._repeat > 0) {
+                const nextId = timeoutNative.schedule(this._bound, this._repeat, false, args);
+                this._id = nextId;
+                if (!this._refed) {
+                    timeoutNative.unref_schedule(nextId);
+                }
+            }
         }
-        return _restoreContext(snapshot, callback, this, a);
     };
     const timeout = new Timeout(0, wrapped, time, args, isInterval);
     const bound = wrapped.bind(timeout);
@@ -84,12 +143,12 @@ function scheduleTimeout(callback, time, args, isInterval) {
 
 export function setTimeout(callback, time, ...args) {
     validateCallback(callback);
-    return scheduleTimeout(callback, time, args, false);
+    return scheduleTimeout(callback, normalizeTimerDelay(time), args, false);
 }
 
 export function setInterval(callback, time, ...args) {
     validateCallback(callback);
-    return scheduleTimeout(callback, time, args, true);
+    return scheduleTimeout(callback, normalizeTimerDelay(time), args, true);
 }
 
 export function setImmediate(callback, ...args) {

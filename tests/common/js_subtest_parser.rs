@@ -253,11 +253,8 @@ pub fn discover_subtests(path: &str, source: &str) -> SubtestDiscovery {
     }
 }
 
-/// Rewrite source to keep all blocks up to and including `target_index`,
-/// while emptying later blocks.
-///
-/// This preserves setup side-effects from earlier blocks when a test file is
-/// authored as sequential scenarios that build on previous state.
+/// Rewrite source to run only `target_index`, emptying all other top-level
+/// blocks.  Top-level non-block code is always preserved.
 /// Processes in reverse order to preserve byte offsets.
 pub fn rewrite_for_block(source: &str, blocks: &[BlockInfo], target_index: usize) -> String {
     let bytes = source.as_bytes();
