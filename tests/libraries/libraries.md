@@ -239,7 +239,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 115 | LangChain OpenAI | `@langchain/openai` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 live tests pass in Node.js and wasm-rquickjs (ChatOpenAI/structured output/token counting, embeddings, auth headers, and 429 error mapping) |
-| 116 | LangChain Anthropic | `@langchain/anthropic` | ⬜ | | LangChain Anthropic Claude integration |
+| 116 | LangChain Anthropic | `@langchain/anthropic` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (constructor/invocation params/tool formatting/prompt conversion + invoke/header/error transport paths); live Anthropic API calls require `ANTHROPIC_API_KEY` |
 | 117 | LangChain Google GenAI | `@langchain/google-genai` | ⬜ | | LangChain Google Gemini integration |
 | 118 | LangChain Community | `@langchain/community` | ⬜ | | LangChain community integrations (vector stores, tools, etc.) |
 | 119 | LangSmith SDK | `langsmith` | ⬜ | | LangSmith tracing/evaluation client |
