@@ -222,7 +222,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 101 | Google Generative AI | `@google/generative-ai` | ⚠️ | 2026-03-17 | 5/5 offline bundled tests pass in Node.js and wasm-rquickjs (constructors, validation, config, enums/errors, chat state); live API/streaming/embed calls require credentials |
 | 102 | Cohere SDK | `cohere-ai` | ❌ | 2026-03-17 | 5/5 bundled tests pass in Node.js, but 0/5 run in wasm-rquickjs: module initialization fails with `Cannot find module 'formdata-node'` |
 | 103 | Mistral SDK | `@mistralai/mistralai` | ⚠️ | 2026-03-17 | 5/5 bundled tests pass in Node.js; 2/5 pass in wasm-rquickjs (constructor/helpers OK), request paths fail with `headers` iterator and object→string conversion errors; live API calls require credentials |
-| 104 | Groq SDK | `groq-sdk` | ⬜ | | Groq inference API client (OpenAI-compatible) |
+| 104 | Groq SDK | `groq-sdk` | ⚠️ | 2026-03-17 | 5/5 bundled tests pass in Node.js; 3/5 pass in wasm-rquickjs (constructor/helpers OK), mocked request paths fail with `cannot read property 'Symbol.iterator' of undefined`; live API calls require credentials |
 | 105 | Together AI SDK | `together-ai` | ⬜ | | Together.ai inference client |
 | 106 | Fireworks AI SDK | `@fireworks-ai/sdk` | ⬜ | | Fireworks.ai inference client |
 | 107 | Replicate SDK | `replicate` | ⬜ | | Replicate model prediction API client |
