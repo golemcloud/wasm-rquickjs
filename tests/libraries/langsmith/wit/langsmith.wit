@@ -1,0 +1,5 @@
+package test:lib-langsmith;
+
+world lib-langsmith {
+  export run: func() -> string;
+}
