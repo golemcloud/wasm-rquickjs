@@ -1,0 +1,26 @@
+package example:response-constructor;
+
+interface response-constructor-exports {
+    record test-result {
+        name: string,
+        passed: bool,
+        error: string,
+    }
+
+    test-string-body: func() -> test-result;
+    test-status-and-status-text: func() -> test-result;
+    test-headers: func() -> test-result;
+    test-ok-property: func() -> test-result;
+    test-json-parse: func() -> test-result;
+    test-null-body: func() -> test-result;
+    test-array-buffer-body: func() -> test-result;
+    test-clone: func() -> test-result;
+    test-body-stream: func() -> test-result;
+    test-default-values: func() -> test-result;
+    test-mock-fetch-pattern: func() -> test-result;
+    test-headers-iteration: func() -> test-result;
+}
+
+world response-constructor {
+    export response-constructor-exports;
+}

@@ -285,86 +285,152 @@ async function streamingRequest(
 }
 
 export class Response {
-    constructor(nativeResponse, url, credentials, isError = false) {
-        this.nativeResponse = nativeResponse;
-        this.url = url;
-        this.bodyUsed = false;
-        this._credentials = credentials || 'same-origin';
-        this._isError = isError;
+    constructor(bodyOrNative, initOrUrl, credentials, isError = false) {
+        if (bodyOrNative instanceof httpNative.HttpResponse) {
+            // Internal path: constructed from native HttpResponse
+            this.nativeResponse = bodyOrNative;
+            this.url = initOrUrl || '';
+            this.bodyUsed = false;
+            this._credentials = credentials || 'same-origin';
+            this._isError = isError;
+            this._isNative = true;
+        } else {
+            // Standard Web API path: new Response(body, init)
+            const body = bodyOrNative;
+            const init = initOrUrl || {};
+            this._status = init.status !== undefined ? init.status : 200;
+            this._statusText = init.statusText !== undefined ? init.statusText : '';
+            this._headers = new Headers(init.headers || {});
+            this.url = '';
+            this.bodyUsed = false;
+            this._credentials = 'same-origin';
+            this._isError = false;
+            this._isNative = false;
+            this._body = body !== undefined && body !== null ? body : null;
+        }
     }
 
     get status() {
-        return this.nativeResponse.status;
+        if (this._isNative) {
+            return this.nativeResponse.status;
+        }
+        return this._status;
     }
 
     get statusText() {
-        return this.nativeResponse.statusText;
+        if (this._isNative) {
+            return this.nativeResponse.statusText;
+        }
+        return this._statusText;
     }
 
     get body() {
-        let nativeStreamSourceSlot = {
-            nativeStreamSource: undefined
-        };
-        let response = this;
-        return new ReadableStream({
-            start() {
-            },
-            get type() {
-                return "bytes";
-            },
-            async pull(controller) {
-                if (nativeStreamSourceSlot.nativeStreamSource === undefined) {
-                    nativeStreamSourceSlot.nativeStreamSource = response.nativeResponse.stream();
-                    response.bodyUsed = true;
-                }
+        if (this._isNative) {
+            let nativeStreamSourceSlot = {
+                nativeStreamSource: undefined
+            };
+            let response = this;
+            return new ReadableStream({
+                start() {
+                },
+                get type() {
+                    return "bytes";
+                },
+                async pull(controller) {
+                    if (nativeStreamSourceSlot.nativeStreamSource === undefined) {
+                        nativeStreamSourceSlot.nativeStreamSource = response.nativeResponse.stream();
+                        response.bodyUsed = true;
+                    }
 
-                // controller is https://developer.mozilla.org/en-US/docs/Web/API/ReadableByteStreamController
-                const [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull();
-                if (err !== undefined) {
-                    console.error("Error reading response body stream:", err);
-                    controller.error(err);
-                } else if (next === undefined) {
-                    controller.close();
+                    const [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull();
+                    if (err !== undefined) {
+                        console.error("Error reading response body stream:", err);
+                        controller.error(err);
+                    } else if (next === undefined) {
+                        controller.close();
+                    } else {
+                        controller.enqueue(next);
+                    }
+                }
+            });
+        }
+
+        if (this._body === null) {
+            return null;
+        }
+
+        const body = this._body;
+        if (body instanceof ReadableStream) {
+            return body;
+        }
+
+        let bytes;
+        if (typeof body === 'string' || body instanceof String) {
+            bytes = new TextEncoder().encode(body);
+        } else if (body instanceof ArrayBuffer) {
+            bytes = new Uint8Array(body);
+        } else if (body instanceof Uint8Array) {
+            bytes = body;
+        } else if (body instanceof Blob) {
+            return body.stream();
+        } else {
+            bytes = new TextEncoder().encode(String(body));
+        }
+        const data = bytes;
+        let pulled = false;
+        return new ReadableStream({
+            pull(controller) {
+                if (!pulled) {
+                    controller.enqueue(data);
+                    pulled = true;
                 } else {
-                    controller.enqueue(next);
+                    controller.close();
                 }
             }
         });
     }
 
     get headers() {
-        const rawHeaders = this.nativeResponse.headers;
-        let result = new Headers();
-        for (const [name, value] of rawHeaders) {
-            // Filter out Set-Cookie headers when credentials is 'omit'
-            if (this._credentials === 'omit' && name.toLowerCase() === 'set-cookie') {
-                continue;
+        if (this._isNative) {
+            const rawHeaders = this.nativeResponse.headers;
+            let result = new Headers();
+            for (const [name, value] of rawHeaders) {
+                if (this._credentials === 'omit' && name.toLowerCase() === 'set-cookie') {
+                    continue;
+                }
+                result.set(name, value);
             }
-            result.set(name, value);
+            return result;
         }
-        return result;
+        return this._headers;
     }
 
     get ok() {
-        return this.nativeResponse.status >= 200 && this.nativeResponse.status < 300;
+        const s = this._isNative ? this.nativeResponse.status : this._status;
+        return s >= 200 && s < 300;
     }
 
     get redirected() {
-        return this.nativeResponse.redirected;
+        if (this._isNative) {
+            return this.nativeResponse.redirected;
+        }
+        return false;
     }
 
     get type() {
         if (this._isError) {
             return 'error';
-        } else if (this.nativeResponse.isOpaque) {
-            if (this.nativeResponse.redirected) {
-                return 'opaqueredirect';
-            } else {
-                return 'opaque';
-            }
-        } else {
-            return 'basic';
         }
+        if (this._isNative) {
+            if (this.nativeResponse.isOpaque) {
+                if (this.nativeResponse.redirected) {
+                    return 'opaqueredirect';
+                } else {
+                    return 'opaque';
+                }
+            }
+        }
+        return 'basic';
     }
 
     static error() {
@@ -398,7 +464,16 @@ export class Response {
             throw new TypeError('Response body is already consumed');
         }
 
-        return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
+        if (this._isNative) {
+            return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
+        }
+        const cloned = new Response(this._body, {
+            status: this._status,
+            statusText: this._statusText,
+            headers: this._headers,
+        });
+        cloned.url = this.url;
+        return cloned;
     }
 
     async formData() {
@@ -420,9 +495,44 @@ export class Response {
     }
 
     async arrayBuffer() {
-        let result = await this.nativeResponse.arrayBuffer();
+        if (this._isNative) {
+            let result = await this.nativeResponse.arrayBuffer();
+            this.bodyUsed = true;
+            return result;
+        }
         this.bodyUsed = true;
-        return result;
+        if (this._body === null) {
+            return new ArrayBuffer(0);
+        }
+        if (this._body instanceof ArrayBuffer) {
+            return this._body;
+        }
+        if (this._body instanceof Uint8Array) {
+            return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
+        }
+        if (this._body instanceof Blob) {
+            return this._body.arrayBuffer();
+        }
+        if (this._body instanceof ReadableStream) {
+            const reader = this._body.getReader();
+            const chunks = [];
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+                chunks.push(value);
+            }
+            let totalLength = 0;
+            for (const chunk of chunks) totalLength += chunk.byteLength;
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+                result.set(new Uint8Array(chunk.buffer || chunk), offset);
+                offset += chunk.byteLength;
+            }
+            return result.buffer;
+        }
+        const text = typeof this._body === 'string' ? this._body : String(this._body);
+        return new TextEncoder().encode(text).buffer;
     }
 
     async blob() {
@@ -440,9 +550,20 @@ export class Response {
     }
 
     async text() {
-        let result = await this.nativeResponse.text();
+        if (this._isNative) {
+            let result = await this.nativeResponse.text();
+            this.bodyUsed = true;
+            return result;
+        }
         this.bodyUsed = true;
-        return result;
+        if (this._body === null) {
+            return '';
+        }
+        if (typeof this._body === 'string') {
+            return this._body;
+        }
+        const buffer = await this.arrayBuffer();
+        return new TextDecoder().decode(buffer);
     }
 }
 

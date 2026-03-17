@@ -32,6 +32,7 @@ mod node_http;
 mod os;
 mod path;
 mod pollable;
+mod response_constructor;
 mod response_static;
 mod stateful1;
 mod streams;
