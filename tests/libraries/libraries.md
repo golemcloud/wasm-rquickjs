@@ -243,7 +243,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 117 | LangChain Google GenAI | `@langchain/google-genai` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 live credential-gate tests pass in Node.js and wasm-rquickjs (chat/embeddings/structured-output/tool-binding coverage); full live Gemini responses remain gated by Google project/API enablement for the configured key |
 | 118 | LangChain Community | `@langchain/community` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 1/1 live Google CSE tests pass in Node.js and wasm-rquickjs (calculator, BM25, CSV/html transforms, SSE parser, Wikipedia/Searxng/Cheerio HTTP paths) |
 | 119 | LangSmith SDK | `langsmith` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (RunTree/traceable/anonymizer/client CRUD/list coverage); live LangSmith API coverage requires `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` |
-| 120 | AutoGen JS | `autogen` | ⬜ | | Microsoft AutoGen multi-agent framework |
+| 120 | AutoGen JS | `autogen` | ✅ | 2026-03-17 | All 5 offline bundled tests pass in Node.js and wasm-rquickjs; npm `autogen@0.0.1` is a minimal passthrough utility (not Microsoft AutoGen framework) |
 | 121 | CrewAI JS | `crewai` | ⬜ | | CrewAI agent orchestration (JS port) |
 | 122 | Instructor JS | `@instructor-ai/instructor` | ⬜ | | Structured output extraction from LLMs via function calling |
 | 123 | Mastra | `mastra` | ⬜ | | AI agent framework with tool/workflow orchestration |
