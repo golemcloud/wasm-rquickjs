@@ -26,6 +26,26 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (HTTP Mock)
+
+**Mock server:** `mock-server.mjs` on port `18080`
+
+### test-integration-01-models-list.js — `models.list()` against local HTTP endpoint
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-chat-completion.js — `chat.completions.create()` JSON response parsing
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-03-retry.js — retry flow (429 then 200) against local HTTP endpoint
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+## Live Service Tests
+
+**Token(s) used:** `OPENAI_API_KEY`
+
 ### test-live-01-chat-completion.js — live chat.completions.create
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
@@ -50,7 +70,8 @@ To run the live integration tests, set `OPENAI_API_KEY=<key>` and forward it to 
 ## Summary
 
 - Offline tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
-- Live integration tests passed: 3/3 in wasm-rquickjs (3/3 in Node.js)
+- Integration tests passed: 3/3 HTTP mock in wasm-rquickjs (3/3 in Node.js)
+- Live service tests passed: 3/3 in wasm-rquickjs (3/3 in Node.js)
 - Missing APIs: none observed
 - Behavioral differences: none
 - Blockers: none; live API calls require `OPENAI_API_KEY`

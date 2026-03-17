@@ -253,7 +253,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 125 | OpenAI Embeddings (via openai) | `openai` | ⬜ | | Embedding API via OpenAI SDK `embeddings.create()` |
+| 125 | OpenAI Embeddings (via openai) | `openai` | ✅ | 2026-03-17 | OpenAI SDK suite passes fully in Node.js and wasm-rquickjs: 5/5 offline + 3/3 HTTP mock + 3/3 live tests, including `embeddings.create()` |
 | 126 | Voyage AI SDK | `voyageai` | ⬜ | | Voyage AI embedding/reranking client |
 | 127 | Jina AI SDK | `@jina-ai/sdk` | ⬜ | | Jina AI embedding/reranking API client |
 | 128 | Transformers.js | `@xenova/transformers` | ⬜ | | Local ML inference (embeddings, NLP); uses ONNX runtime |
@@ -311,7 +311,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 155 | Deepgram SDK | `@deepgram/sdk` | ⬜ | | Deepgram STT/TTS API client; HTTP + WebSocket |
 | 156 | AssemblyAI SDK | `assemblyai` | ⬜ | | AssemblyAI speech-to-text client; HTTP-based |
 | 157 | ElevenLabs SDK | `elevenlabs` | ⬜ | | ElevenLabs TTS/voice cloning API client |
-| 158 | OpenAI Audio (via openai) | `openai` | ⬜ | | Whisper STT + TTS via OpenAI SDK `audio.transcriptions`/`audio.speech` |
+| 158 | OpenAI Audio (via openai) | `openai` | ❌ | 2026-03-17 | Agent did not update row; check logs |
 | 159 | Google Cloud Speech | `@google-cloud/speech` | ⬜ | | Google Cloud Speech-to-Text client; uses gRPC |
 | 160 | Google Cloud Text-to-Speech | `@google-cloud/text-to-speech` | ⬜ | | Google Cloud TTS client; uses gRPC |
 | 161 | Azure Cognitive Speech | `microsoft-cognitiveservices-speech-sdk` | ⬜ | | Azure Speech Services SDK; native + WebSocket |
