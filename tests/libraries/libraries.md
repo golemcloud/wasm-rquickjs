@@ -263,7 +263,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 130 | Pinecone SDK | `@pinecone-database/pinecone` | ⬜ | | Pinecone vector DB client; HTTP-based |
+| 130 | Pinecone SDK | `@pinecone-database/pinecone` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (control/data/inference paths); live Pinecone API calls remain credential-gated (`PINECONE_API_KEY`) |
 | 131 | Weaviate Client | `weaviate-client` | ⬜ | | Weaviate vector DB client; HTTP/gRPC |
 | 132 | Qdrant JS | `@qdrant/js-client-rest` | ⬜ | | Qdrant vector DB REST client |
 | 133 | ChromaDB Client | `chromadb` | ⬜ | | ChromaDB embedding database client |
