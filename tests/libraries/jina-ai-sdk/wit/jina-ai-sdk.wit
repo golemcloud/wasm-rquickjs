@@ -1,0 +1,5 @@
+package test:lib-jina-ai-sdk;
+
+world lib-jina-ai-sdk {
+  export run: func() -> string;
+}
