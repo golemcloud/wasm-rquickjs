@@ -230,7 +230,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 109 | HuggingFace Hub | `@huggingface/hub` | ✅ | 2026-03-17 | 5/5 bundled offline tests pass in both Node.js and wasm-rquickjs (constants, safetensors utils, SHA-256 hashing, OAuth URL building, mocked whoAmI/repoExists); previously failing Symbol.iterator bug is now fixed; live API calls require credentials |
 | 110 | Ollama JS | `ollama` | ✅ | 2026-03-17 | 5/5 bundled offline tests pass in both Node.js and wasm-rquickjs (host normalization, version, embed, streaming chat, error handling); previously failing Symbol.iterator bug is now fixed |
 | 111 | AI SDK OpenAI Provider | `@ai-sdk/openai` | ✅ | 2026-03-17 | 4/4 offline tests pass in both Node.js and wasm-rquickjs (factory/tools/mocked chat doGenerate/mocked responses doGenerate); previously failing Symbol.iterator bug is now fixed; live API calls require `OPENAI_API_KEY` |
-| 112 | AI SDK Anthropic Provider | `@ai-sdk/anthropic` | ⬜ | | Vercel AI SDK Anthropic provider adapter |
+| 112 | AI SDK Anthropic Provider | `@ai-sdk/anthropic` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (factory/validation/tools/request+headers/error propagation); live Anthropic API calls require `ANTHROPIC_API_KEY` |
 | 113 | AI SDK Google Provider | `@ai-sdk/google` | ⬜ | | Vercel AI SDK Google Gemini provider adapter |
 | 114 | AI SDK Mistral Provider | `@ai-sdk/mistral` | ⬜ | | Vercel AI SDK Mistral provider adapter |
 
