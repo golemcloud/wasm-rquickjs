@@ -1,0 +1,5 @@
+package test:lib-langchain-community;
+
+world lib-langchain-community {
+  export run: func() -> string;
+}

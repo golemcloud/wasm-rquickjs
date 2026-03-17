@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "dependencies": {
+    "@langchain/community": "^1.1.24",
+    "@langchain/core": "^1.1.33",
+    "cheerio": "^1.2.0",
+    "d3-dsv": "^3.0.1",
+    "html-to-text": "^9.0.5"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.0.0"
+  }
+}
