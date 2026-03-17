@@ -256,7 +256,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 125 | OpenAI Embeddings (via openai) | `openai` | ✅ | 2026-03-17 | OpenAI SDK suite passes fully in Node.js and wasm-rquickjs: 5/5 offline + 3/3 HTTP mock + 3/3 live tests, including `embeddings.create()` |
 | 126 | Voyage AI SDK | `voyageai` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (embed/rerank/retry/error paths); live Voyage API calls require `VOYAGE_API_KEY`, and local `voyage-4-nano`/`tokenize()` paths need optional `@huggingface/transformers` + `onnxruntime-node` |
 | 127 | Jina AI SDK | `@jina-ai/sdk` | ❌ | 2026-03-17 | `npm install` fails with E404 (`@jina-ai/sdk@latest` not in registry); package cannot be installed, bundled, or executed |
-| 128 | Transformers.js | `@xenova/transformers` | ⬜ | | Local ML inference (embeddings, NLP); uses ONNX runtime |
+| 128 | Transformers.js | `@xenova/transformers` | ❌ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js, but 0/8 run in wasm-rquickjs: bundled init fails with `JavaScript error: self is not defined` |
 | 129 | LlamaIndex TS | `llamaindex` | ⬜ | | LlamaIndex data framework for LLM apps (RAG, agents) |
 
 ## Vector Databases
