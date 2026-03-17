@@ -1,0 +1,5 @@
+package test:lib-langchain-openai;
+
+world lib-langchain-openai {
+  export run: func() -> string;
+}
