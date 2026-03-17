@@ -1,0 +1,5 @@
+package test:lib-genkit-ai-core;
+
+world lib-genkit-ai-core {
+  export run: func() -> string;
+}
