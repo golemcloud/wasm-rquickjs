@@ -16,44 +16,29 @@
 
 ### test-03-chat-do-generate-mock.js — `chat(...).doGenerate()` with mocked `fetch`
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-  - Stack excerpt: `at extractResponseHeaders (bundle/script_module:5820:17)`
-  - Stack excerpt: `at postToApi (bundle/script_module:7809:52)`
-- **Root cause:** Runtime HTTP response-header handling breaks request-path execution in `@ai-sdk/openai` chat generation.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-responses-do-generate-mock.js — `responses(...).doGenerate()` with mocked `fetch`
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-  - Stack excerpt: `at extractResponseHeaders (bundle/script_module:5820:17)`
-  - Stack excerpt: `at postToApi (bundle/script_module:7809:52)`
-- **Root cause:** Same runtime HTTP response-header incompatibility blocks Responses API request-path execution.
-
-## Integration Tests (Docker)
-
-N/A — `@ai-sdk/openai` is an HTTP API provider adapter, not a Docker-hostable local-service client.
-
-## Integration Tests (HTTP Mock)
-
-N/A — request-path behavior was covered with deterministic injected `fetch` mocks in offline bundled tests.
-
-## Live Service Tests
-
-**Token(s) used:** `OPENAI_API_KEY` (value not logged)
-
-### test-live-01-chat-completion.js — real `gpt-4o-mini` chat completion
-- **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
-- **Notes:** In this environment, passing credentials to `wasmtime` required explicit `--env OPENAI_API_KEY=...`.
+
+## Untestable Features
+
+The following features could not be tested without external dependencies:
+
+- **API calls to OpenAI** — Requires an `OPENAI_API_KEY` obtained by registering at https://platform.openai.com. Without a valid key, all API calls return authentication errors.
+- **Streaming completions** — Depends on a live API connection; cannot be tested offline.
+
+To fully test this library, a user would need to:
+1. Register at https://platform.openai.com
+2. Obtain an API key
+3. Set the environment variable `OPENAI_API_KEY=<key>`
+4. Re-run the test scripts that are marked as requiring credentials
 
 ## Summary
 
-- Offline tests passed: 2/4 in wasm-rquickjs (4/4 in Node.js)
-- Integration tests passed: N/A — no Docker service applicable
-- Live service tests passed: 1/1
-- Missing APIs: none identified in tested constructor/tool descriptor surface
-- Behavioral differences: request-path execution fails in wasm-rquickjs for mocked chat/responses generation with `cannot read property 'Symbol.iterator' of undefined` in `__wasm_rquickjs_builtin/http` header handling
-- Blockers: HTTP response header handling incompatibility prevents reliable use of mocked request-path APIs for this provider
+- Offline tests passed: 4/4 in wasm-rquickjs (4/4 in Node.js)
+- Missing APIs: none identified
+- Behavioral differences: none
+- Blockers: none — all offline tests pass
+- **Previous issue resolved:** The `cannot read property 'Symbol.iterator' of undefined` error in `__wasm_rquickjs_builtin/http` header handling (tests 03 & 04) has been fixed.

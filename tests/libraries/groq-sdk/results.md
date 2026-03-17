@@ -16,15 +16,11 @@
 
 ### test-03-mock-api.js — `models.list()` with mocked fetch and response parsing
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-- **Root cause:** Request execution fails in the runtime HTTP/headers path before the mocked response can be processed (stack includes `at get headers (__wasm_rquickjs_builtin/http:337:26)` and `at shouldRetry (bundle/script_module:1921:11)`).
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-retry.js — retry flow on HTTP 429 using mocked fetch
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-- **Root cause:** Same HTTP headers/request-path incompatibility prevents retry handling from completing (stack includes `at get headers (__wasm_rquickjs_builtin/http:337:26)` and `at shouldRetry (bundle/script_module:1921:11)`).
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-helpers.js — `APIError.generate` and `toFile` helper behavior
 - **Node.js:** ✅ PASS
@@ -48,8 +44,8 @@ To fully test these features, a user would need to:
 
 ## Summary
 
-- Offline tests passed: 3/5
+- Offline tests passed: 5/5
 - Integration tests passed: N/A — no Docker service applicable
-- Missing APIs: none observed in constructor/helper paths
-- Behavioral differences: request execution fails for mocked HTTP request paths with `cannot read property 'Symbol.iterator' of undefined`
-- Blockers: HTTP headers/request interoperability issue blocks Groq SDK request and retry flows in wasm-rquickjs
+- Missing APIs: none
+- Behavioral differences: none
+- Blockers: none — previously failing tests (03, 04) with `cannot read property 'Symbol.iterator' of undefined` now pass

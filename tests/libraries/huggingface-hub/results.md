@@ -20,31 +20,11 @@
 
 ### test-04-oauth-url.js — `oauthLoginUrl` PKCE URL creation with mocked OpenID config fetch
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-  - Stack excerpt: `at oauthLoginUrl (bundle/script_module:89:32)`
-- **Root cause:** OAuth HTTP response handling in wasm fails when iterating response headers from the runtime `node:http` implementation.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-http-mocks.js — `whoAmI` and `repoExists` with injected mock fetch responses
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-  - Stack excerpt: `at whoAmI (bundle/script_module:166:32)`
-- **Root cause:** Auth request path fails on the same wasm response-header iterator issue.
-
-## Integration Tests (Docker)
-
-N/A — `@huggingface/hub` is an HTTP API client and does not depend on a Docker-hostable local service.
-
-## Integration Tests (HTTP Mock)
-
-N/A — request-path coverage was exercised with deterministic injected `fetch` mocks in offline bundled tests.
-
-## Live Service Tests
-
-N/A — no Hugging Face token key was available in `tests/libraries/.tokens.json`.
+- **wasm-rquickjs:** ✅ PASS
 
 ## Untestable Features
 
@@ -60,9 +40,8 @@ To fully test these features, a user would need to:
 
 ## Summary
 
-- Offline tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
-- Integration tests passed: N/A — no Docker service applicable
-- Live service tests passed: N/A — no tokens available
-- Missing APIs: none identified in pure utility/hash paths
-- Behavioral differences: authenticated HTTP/OAuth request paths fail in wasm-rquickjs with `cannot read property 'Symbol.iterator' of undefined` from `__wasm_rquickjs_builtin/http` headers access
-- Blockers: runtime HTTP response header handling incompatibility blocks key Hub API methods that depend on request/response processing
+- Offline tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- All previously failing tests (test-04, test-05) now pass — the `Symbol.iterator` response header iteration bug has been fixed
+- Missing APIs: none identified
+- Behavioral differences: none identified
+- Blockers: none

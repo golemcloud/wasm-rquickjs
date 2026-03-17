@@ -2,7 +2,7 @@
 
 **Package:** `@anthropic-ai/sdk`
 **Version:** `0.78.0`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-17
 
 ## Test Results
 
@@ -20,11 +20,7 @@
 
 ### test-04-mock-api.js — `messages.create()` with mocked fetch and response metadata
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:**
-  - `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack includes `at get headers (__wasm_rquickjs_builtin/http:337:26)` and `at makeRequest (bundle/script_module:4921:23)`
-- **Root cause:** Runtime incompatibility in the HTTP headers/request path used during Anthropic SDK request execution.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-errors-helpers.js — API error class mapping and `toFile` helper
 - **Node.js:** ✅ PASS
@@ -45,7 +41,7 @@ To fully test these features, a user would need to:
 
 ## Summary
 
-- Tests passed: 4/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs: none observed in tested offline constructor/request-builder/helper paths
-- Behavioral differences: request execution fails in wasm-rquickjs for Anthropic SDK with `cannot read property 'Symbol.iterator' of undefined`
-- Blockers: HTTP request path incompatibility prevents fully exercising request/response handling methods such as `messages.create()`
+- Tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Missing APIs: none observed
+- Behavioral differences: none observed
+- Blockers: none — the `Symbol.iterator` issue from the previous test run (2026-03-09) is now resolved

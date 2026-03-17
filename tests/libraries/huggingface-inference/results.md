@@ -16,39 +16,15 @@
 
 ### test-03-chat-completion.js — routed `chatCompletion` call with mocked `fetch`
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-  - Stack excerpt: `at innerRequest (bundle/script_module:2753:29)`
-- **Root cause:** Request-based HTTP path crashes in wasm when HuggingFace client reads response headers.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-streaming.js — `chatCompletionStream` SSE parsing with mocked `fetch`
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-  - Stack excerpt: `at innerStreamingRequest (bundle/script_module:2926:45)`
-- **Root cause:** Streaming HTTP path hits the same response-header iteration failure in wasm.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-text-to-image.js — `textToImage` binary output from custom endpoint
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-  - Stack excerpt: `at innerRequest (bundle/script_module:2736:29)`
-- **Root cause:** Binary-response request flow fails for the same HTTP headers iterator issue.
-
-## Integration Tests (Docker)
-
-N/A — `@huggingface/inference` is an HTTP API client and does not depend on a Docker-hostable local service.
-
-## Integration Tests (HTTP Mock)
-
-N/A — request paths were tested with deterministic injected `fetch` mocks in offline bundled tests.
-
-## Live Service Tests
-
-N/A — no Hugging Face token key was available in `tests/libraries/.tokens.json`.
+- **wasm-rquickjs:** ✅ PASS
 
 ## Untestable Features
 
@@ -65,9 +41,7 @@ To fully test these features, a user would need to:
 
 ## Summary
 
-- Offline tests passed: 2/5 in wasm-rquickjs (5/5 in Node.js)
-- Integration tests passed: N/A — no Docker service applicable
-- Live service tests passed: N/A — no tokens available
-- Missing APIs: none identified in constructor/validation/request-options utility paths
-- Behavioral differences: request/stream/binary inference paths fail in wasm-rquickjs with `JavaScript error: cannot read property 'Symbol.iterator' of undefined` from `__wasm_rquickjs_builtin/http` headers access
-- Blockers: runtime HTTP response header handling incompatibility prevents core inference request methods from completing
+- Offline tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Missing APIs: none identified
+- Behavioral differences: none — all previously failing tests (03, 04, 05) now pass; the `Symbol.iterator` issue in HTTP response headers has been fixed
+- Blockers: none

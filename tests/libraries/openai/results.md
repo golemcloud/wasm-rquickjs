@@ -2,7 +2,7 @@
 
 **Package:** `openai`
 **Version:** `6.27.0`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-17
 
 ## Test Results
 
@@ -16,37 +16,41 @@
 
 ### test-03-mock-api.js — `models.list()` with mocked fetch and response metadata
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined` (stack includes `at get headers (__wasm_rquickjs_builtin/http:337:26)` and `at makeRequest (bundle/script_module:7163:23)`)
-- **Root cause:** Runtime incompatibility in the HTTP headers/request path used by OpenAI SDK request construction.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-retry.js — retry behavior on HTTP 429 with mocked fetch
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined` (stack includes `at get headers (__wasm_rquickjs_builtin/http:337:26)` and `at makeRequest (bundle/script_module:7163:23)`)
-- **Root cause:** Same HTTP headers/request-path incompatibility blocks request execution before retry logic can complete.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-helpers.js — `toFile` helper for byte input
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+### test-live-01-chat-completion.js — live chat.completions.create
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-live-02-streaming.js — live streaming chat completion
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-live-03-embeddings.js — live embeddings.create
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
 ## Untestable Features
 
-The following OpenAI SDK features could not be fully tested without external dependencies:
+The following OpenAI SDK features could not be fully tested without additional setup:
 
-- **Live OpenAI API calls** (`chat.completions.create`, `responses.create`, embeddings, files, audio, images, etc.) — require a valid `OPENAI_API_KEY` and network access to OpenAI services.
 - **Realtime API** (`client.realtime`) — requires live WebSocket connectivity and valid credentials.
-- **Credential-dependent end-to-end webhook scenarios** — require realistic signed webhook payloads and integration setup.
+- **File uploads, images, audio** — require larger payloads and specific model access.
 
-To fully test these features, a user would need to:
-1. Register at https://platform.openai.com.
-2. Obtain an API key.
-3. Set `OPENAI_API_KEY=<key>`.
-4. Re-run tests that execute live API paths.
+To run the live integration tests, set `OPENAI_API_KEY=<key>` and forward it to wasmtime via `--env`.
 
 ## Summary
 
-- Tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs: none observed in tested offline helpers/constructor paths
-- Behavioral differences: request execution fails in wasm-rquickjs for OpenAI SDK HTTP path with `cannot read property 'Symbol.iterator' of undefined`
-- Blockers: HTTP request path incompatibility prevents exercising request/retry flows
+- Offline tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Live integration tests passed: 3/3 in wasm-rquickjs (3/3 in Node.js)
+- Missing APIs: none observed
+- Behavioral differences: none
+- Blockers: none; live API calls require `OPENAI_API_KEY`

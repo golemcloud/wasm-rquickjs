@@ -16,25 +16,15 @@
 
 ### test-03-mock-api.js — `models.list()` with mocked fetch and response parsing
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-- **Root cause:** Request execution fails in the runtime HTTP/headers path before mocked `models.list()` response handling can complete.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-04-retry.js — retry flow on HTTP 429 using mocked fetch
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-- **Root cause:** Same HTTP headers/request-path incompatibility blocks SDK retry handling.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-helpers.js — `APIError.generate` and `toFile` helper behavior
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
-
-## Integration Tests (Docker)
-
-N/A — this SDK targets Together.ai's hosted API and is not tied to a Docker-hostable local service.
 
 ## Untestable Features
 
@@ -47,12 +37,12 @@ To fully test these features, a user would need to:
 1. Register at https://api.together.xyz/.
 2. Obtain an API key.
 3. Set `TOGETHER_API_KEY=<key>`.
-4. Re-run credentialed tests against live endpoints after request-path runtime issues are resolved.
+4. Re-run credentialed tests against live endpoints.
 
 ## Summary
 
-- Offline tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
-- Integration tests passed: N/A — no Docker service applicable
-- Missing APIs: none directly identified in tested constructor/helper paths
-- Behavioral differences: SDK request/retry paths fail in wasm-rquickjs with `cannot read property 'Symbol.iterator' of undefined`
-- Blockers: Runtime HTTP headers interoperability issue prevents Together SDK request methods from completing
+- Offline tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
+- Missing APIs: none identified in tested paths
+- Behavioral differences: none
+- Blockers: none — all offline tests pass
+- **Previous issue resolved:** The `cannot read property 'Symbol.iterator' of undefined` error in the HTTP headers path (tests 03 and 04) has been fixed in the runtime.
