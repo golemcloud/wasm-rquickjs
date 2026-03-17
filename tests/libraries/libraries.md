@@ -257,7 +257,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 126 | Voyage AI SDK | `voyageai` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (embed/rerank/retry/error paths); live Voyage API calls require `VOYAGE_API_KEY`, and local `voyage-4-nano`/`tokenize()` paths need optional `@huggingface/transformers` + `onnxruntime-node` |
 | 127 | Jina AI SDK | `@jina-ai/sdk` | ❌ | 2026-03-17 | `npm install` fails with E404 (`@jina-ai/sdk@latest` not in registry); package cannot be installed, bundled, or executed |
 | 128 | Transformers.js | `@xenova/transformers` | ❌ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js, but 0/8 run in wasm-rquickjs: bundled init fails with `JavaScript error: self is not defined` |
-| 129 | LlamaIndex TS | `llamaindex` | ⬜ | | LlamaIndex data framework for LLM apps (RAG, agents) |
+| 129 | LlamaIndex TS | `llamaindex` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 live tests pass in Node.js and wasm-rquickjs (Document/Prompt/SentenceSplitter/FunctionTool/Memory + OpenAI provider chat/retry + VectorStoreIndex RAG); live wasm runs require `--env OPENAI_API_KEY=...` |
 
 ## Vector Databases
 
