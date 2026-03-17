@@ -1,0 +1,40 @@
+
+thread '<unnamed>' (1) panicked at src/internal.rs:1738:41:
+Exception during awaiting call result for run:
+JavaScript error: cannot read property 'Symbol.iterator' of undefined
+Stack:
+    at get headers (__wasm_rquickjs_builtin/http:337:26)
+    at innerStreamingRequest (bundle/script_module:2926:45)
+    at <anonymous> (native)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: failed to run main module `tmp/lib-test-huggingface-inference-04/target/wasm32-wasip1/debug/lib_huggingface_inference.wasm`
+
+Caused by:
+    0: error while executing at wasm backtrace:
+           0: 0xf2d713 - lib_huggingface_inference.wasm!abort
+           1: 0xf243b2 - lib_huggingface_inference.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8
+           2: 0xf1c6f0 - lib_huggingface_inference.wasm!std::process::abort::h52a756c95aa1ed34
+           3: 0xf1c76c - lib_huggingface_inference.wasm!__rustc[4425a7e20b4c8619]::__rust_abort
+           4: 0xf1c520 - lib_huggingface_inference.wasm!__rustc[4425a7e20b4c8619]::__rust_start_panic
+           5: 0xf1c543 - lib_huggingface_inference.wasm!__rustc[4425a7e20b4c8619]::rust_panic
+           6: 0xf26665 - lib_huggingface_inference.wasm!std::panicking::panic_with_hook::h046cb6b5bb1ae87d
+           7: 0xf24881 - lib_huggingface_inference.wasm!std::panicking::panic_handler::{{closure}}::h8c2da803f45c255c
+           8: 0xf1c85b - lib_huggingface_inference.wasm!std::sys::backtrace::__rust_end_short_backtrace::h4575429eed93cb20
+           9: 0xf1c84f - lib_huggingface_inference.wasm!__rustc[4425a7e20b4c8619]::rust_begin_unwind
+          10: 0xf3e8d6 - lib_huggingface_inference.wasm!core::panicking::panic_fmt::h45db92ad3ae804a3
+          11:  0x9c5ef - lib_huggingface_inference.wasm!lib_huggingface_inference::internal::call_js_export_internal::{{closure}}::{{closure}}::{{closure}}::h789eed058d5f9076
+          12:  0x911c9 - lib_huggingface_inference.wasm!<core::pin::Pin<P> as core::future::future::Future>::poll::hb3f988efb4b3464a
+          13: 0x122503 - lib_huggingface_inference.wasm!<rquickjs_core::context::async::future::WithFuture<F,R> as core::future::future::Future>::poll::hc672cda3cc3748de
+          14:  0x98ec8 - lib_huggingface_inference.wasm!lib_huggingface_inference::internal::call_js_export_internal::{{closure}}::h0c790e2739723d59
+          15:  0x98c2e - lib_huggingface_inference.wasm!lib_huggingface_inference::internal::call_js_export::{{closure}}::h2e280bdc69fa203b
+          16: 0x14bc5d - lib_huggingface_inference.wasm!<lib_huggingface_inference::Component as lib_huggingface_inference::bindings::Guest>::run::{{closure}}::h8e982eeb7080094a
+          17: 0x38f8e0 - lib_huggingface_inference.wasm!<futures_concurrency::future::join::tuple::Join2<A,B> as core::future::future::Future>::poll::hecf90ffa95353035
+          18:  0x9af98 - lib_huggingface_inference.wasm!lib_huggingface_inference::internal::async_exported_function::{{closure}}::hd554c083943977cf
+          19: 0x59f47c - lib_huggingface_inference.wasm!wstd::runtime::block_on::block_on::hd8f06c216e726872
+          20:  0x9ad1a - lib_huggingface_inference.wasm!lib_huggingface_inference::internal::async_exported_function::he97bb25badf923d5
+          21: 0x3f7a53 - lib_huggingface_inference.wasm!<lib_huggingface_inference::Component as lib_huggingface_inference::bindings::Guest>::run::h8e675e6eb9e12cfb
+          22: 0x4fe5b8 - lib_huggingface_inference.wasm!lib_huggingface_inference::bindings::_export_run_cabi::h3d2294f7e8e515b2
+          23: 0x3f7a9c - lib_huggingface_inference.wasm!run
+       note: using the `WASMTIME_BACKTRACE_DETAILS=1` environment variable may show more debugging information
+    1: wasm trap: wasm `unreachable` instruction executed

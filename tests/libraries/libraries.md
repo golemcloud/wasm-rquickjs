@@ -226,7 +226,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 105 | Together AI SDK | `together-ai` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 3/5 pass in wasm-rquickjs (constructor/validation/helpers), while request/retry paths fail with `cannot read property 'Symbol.iterator' of undefined`; live API calls require credentials |
 | 106 | Fireworks AI SDK | `@fireworks-ai/sdk` | ❌ | 2026-03-17 | Package unpublished from npm on 2026-02-14; cannot be installed or tested |
 | 107 | Replicate SDK | `replicate` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 3/5 pass in wasm-rquickjs (constructor/validation/webhook helpers), while request/pagination paths fail with `JavaScript error: not a function` in `__wasm_rquickjs_builtin/http`; live API calls require credentials |
-| 108 | HuggingFace Inference | `@huggingface/inference` | ⬜ | | HuggingFace Inference API client; pure JS |
+| 108 | HuggingFace Inference | `@huggingface/inference` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 2/5 pass in wasm-rquickjs (constructor/validation OK), while chat/stream/image request paths fail with `cannot read property 'Symbol.iterator' of undefined` in `__wasm_rquickjs_builtin/http`; live API calls require credentials |
 | 109 | HuggingFace Hub | `@huggingface/hub` | ⬜ | | HuggingFace Hub file/model management client |
 | 110 | Ollama JS | `ollama` | ⬜ | | Ollama local LLM API client |
 | 111 | AI SDK OpenAI Provider | `@ai-sdk/openai` | ⬜ | | Vercel AI SDK OpenAI provider adapter |
