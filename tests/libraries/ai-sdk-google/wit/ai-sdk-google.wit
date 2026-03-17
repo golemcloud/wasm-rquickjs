@@ -1,0 +1,5 @@
+package test:lib-ai-sdk-google;
+
+world lib-ai-sdk-google {
+  export run: func() -> string;
+}
