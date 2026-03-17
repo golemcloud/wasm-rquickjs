@@ -228,7 +228,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 107 | Replicate SDK | `replicate` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 3/5 pass in wasm-rquickjs (constructor/validation/webhook helpers), while request/pagination paths fail with `JavaScript error: not a function` in `__wasm_rquickjs_builtin/http`; live API calls require credentials |
 | 108 | HuggingFace Inference | `@huggingface/inference` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 2/5 pass in wasm-rquickjs (constructor/validation OK), while chat/stream/image request paths fail with `cannot read property 'Symbol.iterator' of undefined` in `__wasm_rquickjs_builtin/http`; live API calls require credentials |
 | 109 | HuggingFace Hub | `@huggingface/hub` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 3/5 pass in wasm-rquickjs (utilities/hash OK), while OAuth/auth request paths fail with `cannot read property 'Symbol.iterator' of undefined` in `__wasm_rquickjs_builtin/http`; live API calls require credentials |
-| 110 | Ollama JS | `ollama` | ⬜ | | Ollama local LLM API client |
+| 110 | Ollama JS | `ollama` | ❌ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js, but 0/5 run in wasm-rquickjs: HTTP paths fail with `cannot read property 'Symbol.iterator' of undefined` in `__wasm_rquickjs_builtin/http`; error object shape also differs (`status_code` missing) |
 | 111 | AI SDK OpenAI Provider | `@ai-sdk/openai` | ⬜ | | Vercel AI SDK OpenAI provider adapter |
 | 112 | AI SDK Anthropic Provider | `@ai-sdk/anthropic` | ⬜ | | Vercel AI SDK Anthropic provider adapter |
 | 113 | AI SDK Google Provider | `@ai-sdk/google` | ⬜ | | Vercel AI SDK Google Gemini provider adapter |
