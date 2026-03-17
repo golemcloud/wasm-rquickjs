@@ -30,6 +30,18 @@ function isLibraryStillUntested(npmName: string): boolean {
   return re.test(content);
 }
 
+/** Mark a library's row as ❌ in libraries.md when the agent fails to update it. */
+function markLibraryFailed(npmName: string, reason: string): void {
+  const content = fs.readFileSync(LIBRARIES_MD, "utf-8");
+  const escaped = npmName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `(\\|\\s*\\d+\\s*\\|[^|]+\\|\\s*\`${escaped}\`\\s*\\|)\\s*⬜\\s*\\|[^|]*\\|[^\\n]*`,
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  const updated = content.replace(re, `$1 ❌ | ${today} | ${reason} |`);
+  fs.writeFileSync(LIBRARIES_MD, updated, "utf-8");
+}
+
 /** Commit changes in tests/libraries/ after a library test. */
 async function commitLibraryTest(libraryName: string): Promise<void> {
   console.log(`  Committing library test results for ${libraryName}...`);
@@ -117,10 +129,10 @@ When done, ensure the row for \`${nextLib}\` in libraries.md is updated with the
         break;
       }
 
-      // Verify the agent actually updated libraries.md for this library
+      // If the agent didn't update the row, mark it failed and continue
       if (isLibraryStillUntested(nextLib)) {
-        console.log(`  ❌ '${nextLib}' is still marked ⬜ in libraries.md after Amp run. Stopping.`);
-        break;
+        console.log(`  ⚠️ '${nextLib}' still ⬜ — marking as ❌ (agent failed to update) and continuing.`);
+        markLibraryFailed(nextLib, "Agent did not update row; check logs");
       }
 
       await commitLibraryTest(nextLib);

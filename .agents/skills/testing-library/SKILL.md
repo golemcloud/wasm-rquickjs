@@ -45,7 +45,9 @@ tests/libraries/<package-name>/
 ├── test-03-advanced.js           # More complex features
 ├── test-integration-01-connect.js  # (Optional) Docker integration: connectivity
 ├── test-integration-02-crud.js     # (Optional) Docker integration: CRUD operations
-├── docker-compose.yml            # (Optional) Local service for integration tests
+├── test-live-01-completion.js     # (Optional) Live service test (requires token)
+├── docker-compose.yml            # (Optional) Docker service for integration tests
+├── mock-server.mjs               # (Optional) HTTP mock server for integration tests
 ├── rollup.config.mjs             # Rollup config (see template below)
 ├── run-node.mjs                  # Shared Node.js runner (see below)
 ├── package.json                  # Dependencies + rollup devDeps
@@ -422,6 +424,370 @@ export const run = async () => {
 
 The wasm-rquickjs runtime handles top-level `async` `run()` functions — the QuickJS engine runs the microtask queue to completion. No special WIT changes are needed.
 
+## Step 5.6: HTTP Mock Server Integration Tests (Optional)
+
+Some libraries are **HTTP client libraries** (e.g., `axios`, `got`, `node-fetch`, `ky`, `superagent`, `undici`) or libraries whose core functionality involves making HTTP requests (e.g., REST API wrappers, GraphQL clients like `graphql-request`, webhook senders). For these, a simple local HTTP mock server provides much better test coverage than offline-only tests.
+
+### 5.6a. Determine if HTTP mock testing is applicable
+
+Use this approach when:
+- The library's **primary purpose** is making HTTP requests
+- The library wraps a REST/GraphQL API and you want to test its HTTP layer without real credentials
+- The library transforms HTTP responses (parsing, retries, interceptors) and you need a server that returns controlled responses
+
+**Skip this step** if:
+- The library doesn't make HTTP requests
+- The library can be fully tested with offline/computation-only tests
+- Docker-based testing (Step 5.5) already covers the library's needs better (e.g., database clients)
+
+### 5.6b. Create the mock server
+
+Create a standalone `mock-server.mjs` in the test directory. The server should:
+- Use **only `node:http`** — no frameworks, no npm dependencies
+- Listen on a **non-standard port** (e.g., `18080`) to avoid conflicts
+- Serve **deterministic, hard-coded responses** for known routes
+- Support the HTTP methods the library uses (GET, POST, PUT, DELETE, PATCH, etc.)
+- Include a `GET /health` endpoint for readiness checking
+- Print the listening port to stdout so the test runner can detect when it's ready
+- Handle unknown routes with a 404
+
+```js
+// mock-server.mjs — lightweight HTTP mock server for testing
+import http from 'node:http';
+
+const PORT = 18080;
+
+const routes = {
+  'GET /health': (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok' }));
+  },
+  'GET /api/users': (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' },
+    ]));
+  },
+  'POST /api/users': (req, res) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const user = JSON.parse(body);
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ id: 3, ...user }));
+    });
+  },
+  'GET /api/error': (req, res) => {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Internal Server Error' }));
+  },
+  'GET /api/slow': (req, res) => {
+    setTimeout(() => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ delayed: true }));
+    }, 2000);
+  },
+};
+
+const server = http.createServer((req, res) => {
+  const key = `${req.method} ${req.url.split('?')[0]}`;
+  const handler = routes[key];
+  if (handler) {
+    handler(req, res);
+  } else {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not Found', path: req.url }));
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`Mock server listening on http://localhost:${PORT}`);
+});
+```
+
+**Customize the routes** to match what the library tests need — add/remove endpoints, adjust response bodies, add headers (e.g., `Content-Type`, `Authorization` echo-back), simulate redirects (`301`/`302`), return streaming responses, etc.
+
+### 5.6c. Create integration test scripts
+
+Create test scripts named `test-integration-*.js` that make requests to the mock server:
+
+```js
+// test-integration-01-get.js
+import axios from 'axios';
+import assert from 'assert';
+
+const BASE = 'http://localhost:18080';
+
+export const run = async () => {
+    const res = await axios.get(`${BASE}/api/users`);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.length, 2);
+    assert.strictEqual(res.data[0].name, 'Alice');
+    return "PASS: GET request returns parsed JSON";
+};
+```
+
+```js
+// test-integration-02-post.js
+import axios from 'axios';
+import assert from 'assert';
+
+const BASE = 'http://localhost:18080';
+
+export const run = async () => {
+    const res = await axios.post(`${BASE}/api/users`, { name: 'Charlie' });
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(res.data.name, 'Charlie');
+    assert.strictEqual(res.data.id, 3);
+    return "PASS: POST request sends and receives JSON";
+};
+```
+
+```js
+// test-integration-03-error-handling.js
+import axios from 'axios';
+import assert from 'assert';
+
+const BASE = 'http://localhost:18080';
+
+export const run = async () => {
+    try {
+        await axios.get(`${BASE}/api/error`);
+        throw new Error('Should have thrown');
+    } catch (e) {
+        assert.strictEqual(e.response.status, 500);
+        assert.strictEqual(e.response.data.error, 'Internal Server Error');
+    }
+    return "PASS: Error responses are handled correctly";
+};
+```
+
+**Integration test rules:**
+- **Hard-code `http://localhost:18080`** (or whatever port the mock server uses) — no environment variable indirection
+- Tests must work with the **deterministic mock responses** — no random data
+- Use `async run()` since HTTP requests are inherently async
+- Follow the same `PASS:`/`FAIL:` output convention
+
+### 5.6d. Run HTTP mock integration tests
+
+The Rollup config automatically discovers `test-integration-*.js` files. Run the flow:
+
+```bash
+cd tests/libraries/<package-name>
+
+# 1. Bundle (picks up integration test files automatically)
+npx rollup -c rollup.config.mjs
+
+# 2. Start the mock server in the background
+node mock-server.mjs &
+MOCK_PID=$!
+
+# 3. Wait for the server to be ready
+for i in $(seq 1 10); do
+  curl -s http://localhost:18080/health > /dev/null && break
+  sleep 0.5
+done
+
+# 4. Verify on Node.js first
+node run-node.mjs ./dist/test-integration-01-get.bundle.js
+node run-node.mjs ./dist/test-integration-02-post.bundle.js
+node run-node.mjs ./dist/test-integration-03-error-handling.bundle.js
+
+# 5. Run through wasm-rquickjs (same generate/compile/run flow as Step 5d)
+# For each integration test bundle:
+./target/release/wasm-rquickjs generate-wrapper-crate \
+  --js tests/libraries/<package-name>/dist/test-integration-01-get.bundle.js \
+  --wit tests/libraries/<package-name>/wit \
+  --output tmp/lib-test-<package-name>-int-01
+
+sed -i '' 's/default = \["http", "logging"\]/default = ["http", "sqlite"]/' \
+  tmp/lib-test-<package-name>-int-01/Cargo.toml
+
+cd tmp/lib-test-<package-name>-int-01
+cargo-component build
+cd ../..
+
+wasmtime run --wasm component-model \
+  -S cli -S http -S inherit-network \
+  --invoke 'run()' \
+  tmp/lib-test-<package-name>-int-01/target/wasm32-wasip1/debug/lib_test_<package_name>_int_01.wasm
+
+# 6. Kill the mock server
+kill $MOCK_PID 2>/dev/null
+```
+
+**Important:**
+- Always **start the mock server before running tests** and **kill it after**
+- Use `timeout 60` for each test run to prevent hangs
+- If a test hangs, the mock server port may be occupied — kill stale processes on port 18080 before retrying
+- The mock server runs as a **separate Node.js process** — it is NOT bundled or run inside WASM
+
+### 5.6e. When to use HTTP mock vs Docker
+
+| Scenario | Use HTTP Mock (5.6) | Use Docker (5.5) |
+|---|---|---|
+| HTTP client library (axios, got, fetch) | ✅ | ❌ |
+| REST API wrapper (without real API key) | ✅ | ❌ |
+| Database client (pg, redis, mongodb) | ❌ | ✅ |
+| Message queue client (amqplib, kafkajs) | ❌ | ✅ |
+| Library that speaks HTTP to a specific service | Consider either — mock if only HTTP matters, Docker if protocol-specific behavior matters | ✅ |
+
+## Step 5.7: Live Service Integration Tests Using Tokens (Optional)
+
+Some libraries are clients for real external services (e.g., OpenAI, Stripe, AWS, Twilio) and can only be meaningfully tested with live API calls. A **per-user token file** enables these tests when the user has provided credentials, without requiring API keys to be committed to the repository.
+
+### Token file location and format
+
+The token file lives at **`tests/libraries/.tokens.json`**. It is a flat JSON object mapping well-known service names to API keys or tokens:
+
+```json
+{
+  "OPENAI_API_KEY": "sk-...",
+  "STRIPE_SECRET_KEY": "sk_test_...",
+  "AWS_ACCESS_KEY_ID": "AKIA...",
+  "AWS_SECRET_ACCESS_KEY": "...",
+  "ANTHROPIC_API_KEY": "sk-ant-...",
+  "TWILIO_ACCOUNT_SID": "AC...",
+  "TWILIO_AUTH_TOKEN": "..."
+}
+```
+
+**Rules for the token file:**
+- The file is **gitignored** — it must NEVER be committed (already in `.gitignore`)
+- Key names should match the **standard environment variable names** the library expects
+- The file is **optional** — tests must handle its absence gracefully
+- Each user creates their own file locally; it is never shared
+
+### 5.7a. Determine if live service testing is applicable
+
+Use this approach when:
+- The library is a **client for a specific external API** (LLM providers, payment processors, cloud services, email/SMS APIs)
+- The library's core value is making API calls that cannot be replicated with a mock server (e.g., LLM completions, payment processing, cloud resource management)
+- The user has provided the relevant token in `.tokens.json`
+
+**Skip this step** if:
+- No relevant token exists in `.tokens.json`
+- The `.tokens.json` file doesn't exist
+- The library can be fully tested offline, with a mock server, or with Docker
+
+### 5.7b. Check for available tokens
+
+At the start of Step 2 (Research), read `.tokens.json` to discover which tokens are available:
+
+```js
+// Conceptual — the agent reads this file, not the test script
+import fs from 'fs';
+const tokensPath = 'tests/libraries/.tokens.json';
+const tokens = fs.existsSync(tokensPath)
+  ? JSON.parse(fs.readFileSync(tokensPath, 'utf-8'))
+  : {};
+```
+
+When researching a library, check if the library's required credentials are present. For example:
+- Testing `openai` → look for `OPENAI_API_KEY`
+- Testing `stripe` → look for `STRIPE_SECRET_KEY`
+- Testing `@aws-sdk/client-s3` → look for `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`
+
+If the required token is **not present**, skip live service tests entirely and fall back to the offline-only approach described in "Handling Libraries That Require External Services or API Keys".
+
+### 5.7c. Create live service integration test scripts
+
+Create test scripts named `test-live-*.js`. These follow the same dual-mode format but read tokens from the environment (set by the runner):
+
+```js
+// test-live-01-completion.js
+import OpenAI from 'openai';
+import assert from 'assert';
+
+export const run = async () => {
+    const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    const response = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: 'Reply with exactly: HELLO' }],
+        max_tokens: 10,
+    });
+
+    const text = response.choices[0].message.content.trim();
+    assert.strictEqual(text, 'HELLO');
+    return "PASS: Chat completion returns expected response";
+};
+```
+
+**Live test rules:**
+- **Read credentials from `process.env`** — the runner injects them (see 5.7d)
+- **Minimize API usage** — use the cheapest models/tiers, smallest payloads, fewest calls possible
+- **Use test/sandbox modes** when available (e.g., Stripe test keys, AWS LocalStack-compatible calls)
+- **Never log, print, or include tokens in output** — not in `PASS:`/`FAIL:` messages, not in error messages
+- **Make tests idempotent** — don't create resources that can't be cleaned up
+- **Name tests `test-live-*.js`** to distinguish them from offline and integration tests
+
+### 5.7d. Run live service tests
+
+The Rollup config discovers `test-live-*.js` files automatically (they match `test-*.js`). The key difference is passing tokens as environment variables:
+
+```bash
+cd tests/libraries/<package-name>
+
+# 1. Bundle
+npx rollup -c rollup.config.mjs
+
+# 2. Read tokens and export as environment variables
+# (the agent reads .tokens.json and sets the relevant vars)
+export OPENAI_API_KEY="$(cat ../../../tests/libraries/.tokens.json | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf-8')).OPENAI_API_KEY || '')")"
+
+# 3. Verify on Node.js first
+node run-node.mjs ./dist/test-live-01-completion.bundle.js
+
+# 4. Run through wasm-rquickjs (same generate/compile/run flow as Step 5d)
+./target/release/wasm-rquickjs generate-wrapper-crate \
+  --js tests/libraries/<package-name>/dist/test-live-01-completion.bundle.js \
+  --wit tests/libraries/<package-name>/wit \
+  --output tmp/lib-test-<package-name>-live-01
+
+sed -i '' 's/default = \["http", "logging"\]/default = ["http", "sqlite"]/' \
+  tmp/lib-test-<package-name>-live-01/Cargo.toml
+
+cd tmp/lib-test-<package-name>-live-01
+cargo-component build
+cd ../..
+
+# Pass the env var through to wasmtime
+OPENAI_API_KEY="$OPENAI_API_KEY" wasmtime run --wasm component-model \
+  -S cli -S http -S inherit-network \
+  --invoke 'run()' \
+  tmp/lib-test-<package-name>-live-01/target/wasm32-wasip1/debug/lib_test_<package_name>_live_01.wasm
+```
+
+**Important:**
+- Use `timeout 60` for each test run — live API calls can hang
+- **Never echo or log the token values** in shell commands or output
+- If a live test fails due to authentication errors, verify the token in `.tokens.json` is valid and not expired
+- Live tests may incur **real costs** — keep API calls minimal
+
+### 5.7e. Interaction with offline tests
+
+Live service tests **supplement, not replace** offline tests. Always create offline tests first (Step 3) that exercise the library's API surface without credentials (object construction, request building, validation, configuration). Live tests add coverage for the actual API call path.
+
+A typical test directory for a service-client library:
+
+```
+tests/libraries/openai/
+├── test-01-client-init.js          # Offline: client construction, config
+├── test-02-message-building.js     # Offline: message/request object creation
+├── test-03-error-classes.js        # Offline: error types, validation
+├── test-live-01-completion.js      # Live: real API call (requires OPENAI_API_KEY)
+├── test-live-02-embedding.js       # Live: embedding API (requires OPENAI_API_KEY)
+├── mock-server.mjs                 # (Optional) mock for HTTP-layer testing
+├── rollup.config.mjs
+├── run-node.mjs
+├── package.json
+└── results.md
+```
+
 ## Step 6: Record Results
 
 ### Update `tests/libraries/<package-name>/results.md`
@@ -463,10 +829,43 @@ Create a detailed results file:
 - **Error:** `<exact error message>`
 - **Root cause:** <explanation>
 
+## Integration Tests (HTTP Mock)
+
+> This section is only present when HTTP mock server integration tests were run (see Step 5.6).
+
+**Mock server:** `mock-server.mjs` on port `18080`
+
+### test-integration-01-get.js — <description>
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-integration-02-post.js — <description>
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `<exact error message>`
+- **Root cause:** <explanation>
+
+## Live Service Tests
+
+> This section is only present when live service tests were run using tokens from `.tokens.json` (see Step 5.7).
+
+**Token(s) used:** `OPENAI_API_KEY` (do NOT include the actual token value)
+
+### test-live-01-completion.js — <description>
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ✅ PASS
+
+### test-live-02-embedding.js — <description>
+- **Node.js:** ✅ PASS
+- **wasm-rquickjs:** ❌ FAIL
+- **Error:** `<exact error message>`
+- **Root cause:** <explanation>
+
 ## Summary
 
 - Offline tests passed: X/Y
-- Integration tests passed: X/Y (or "N/A — no Docker service applicable" / "N/A — Docker not available")
+- Integration tests passed: X/Y (or "N/A — no Docker service applicable" / "N/A — Docker not available" / "N/A — HTTP mock not applicable")
+- Live service tests passed: X/Y (or "N/A — no tokens available" / "N/A — not a service client library")
 - Missing APIs: `node:xyz.someMethod`, `node:abc.otherMethod`
 - Behavioral differences: <list>
 - Blockers: <list of issues preventing the library from working>
@@ -515,7 +914,11 @@ its standard way in Golem applications.
 
 ## Handling Libraries That Require External Services or API Keys
 
-Some libraries (e.g., cloud SDKs, payment APIs, LLM clients) cannot be meaningfully tested without external credentials or running services. When this is the case:
+Some libraries (e.g., cloud SDKs, payment APIs, LLM clients) cannot be meaningfully tested without external credentials or running services.
+
+**First, check `tests/libraries/.tokens.json`** — if the user has provided the relevant token, use Step 5.7 (Live Service Integration Tests) to test against the real service. This is the preferred approach when tokens are available.
+
+When no token is available:
 
 1. **Still create test scripts** that exercise as much of the library as possible without live credentials — e.g., object construction, request building, validation, configuration parsing, error handling
 2. **Document the limitation clearly** in `results.md` under a `## Untestable Features` section:
@@ -570,4 +973,9 @@ The `package.json` for each test directory should include Rollup and its plugins
 10. **Always use Rollup for bundling** — do NOT use esbuild; Rollup matches the production Golem CLI toolchain
 11. **Always run tests with a timeout** — use `timeout 60` (or similar) when running tests both on Node.js and via wasmtime to prevent hanging on tests that wait for network/IO that will never arrive
 12. **Always tear down Docker services** — run `docker compose down` after integration tests, even if tests fail
-13. **Integration tests are optional** — only create them when the library's primary purpose involves a Docker-hostable service; never force Docker tests for pure-computation libraries
+13. **Integration tests are optional** — only create them when the library's primary purpose involves a Docker-hostable service or HTTP requests; never force integration tests for pure-computation libraries
+14. **Always kill the mock server** — run `kill $MOCK_PID` after HTTP mock integration tests, even if tests fail
+15. **Mock servers are Node.js-only** — the `mock-server.mjs` runs as a separate Node.js process on the host; it is never bundled or run inside WASM
+16. **NEVER commit `.tokens.json`** — it is gitignored; never stage, commit, or display token values in output, logs, results, or error messages
+17. **Live tests are opportunistic** — only run them when the required token exists in `.tokens.json`; never ask the user to provide tokens or fail because they're missing
+18. **Minimize live API costs** — use cheapest models/tiers, smallest payloads, and fewest calls possible in `test-live-*.js` scripts

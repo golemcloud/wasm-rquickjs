@@ -6,3 +6,4 @@ target
 tests/node_compat/suite
 tools/ai-dev-tools/node_modules
 tools/ai-dev-tools/dist
+tests/libraries/.tokens.json
