@@ -276,7 +276,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 138 | Neo4j Driver | `neo4j-driver` | ⬜ | | Neo4j graph DB driver; uses Bolt protocol via `node:net` |
+| 138 | Neo4j Driver | `neo4j-driver` | ⚠️ | 2026-03-17 | 5/5 offline tests pass in Node.js and wasm-rquickjs; 2/2 Docker integration tests pass in Node.js but fail in wasm-rquickjs with `getaddrinfo ESERVFAIL localhost` when opening Bolt connections |
 | 139 | ArangoDB JS | `arangojs` | ⬜ | | ArangoDB multi-model DB client; HTTP-based |
 | 140 | Dgraph JS | `dgraph-js-http` | ⬜ | | Dgraph graph DB HTTP client |
 | 141 | SurrealDB JS | `surrealdb` | ⬜ | | SurrealDB multi-model DB client; HTTP + WebSocket |

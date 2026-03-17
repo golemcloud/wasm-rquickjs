@@ -1,0 +1,120 @@
+  Generating bindings for lib-neo4j-driver (src/bindings.rs)
+warning: /Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/Cargo.toml: version requirement `=0.14.1+wasi-0.2.3` for dependency `wasi` includes semver metadata which will be ignored, removing the metadata is recommended to avoid confusion
+   Compiling zeroize v1.8.2
+   Compiling getrandom v0.2.17
+   Compiling smallvec v1.15.1
+   Compiling serde_core v1.0.228
+   Compiling libm v0.2.16
+   Compiling serde v1.0.228
+   Compiling num-traits v0.2.19
+   Compiling vcpkg v0.2.15
+   Compiling pkg-config v0.3.32
+   Compiling num-bigint-dig v0.8.6
+   Compiling spin v0.9.8
+   Compiling siphasher v1.0.2
+   Compiling alloc-no-stdlib v2.0.4
+   Compiling chrono-tz v0.10.4
+   Compiling keccak v0.1.6
+   Compiling byteorder v1.5.0
+   Compiling rand_core v0.6.4
+   Compiling generic-array v0.14.7
+   Compiling der v0.7.10
+   Compiling icu_normalizer v2.1.1
+   Compiling lazy_static v1.5.0
+   Compiling phf_shared v0.12.1
+   Compiling ff v0.13.1
+   Compiling rand_chacha v0.3.1
+   Compiling alloc-stdlib v0.2.2
+   Compiling group v0.13.0
+   Compiling phf v0.12.1
+   Compiling brotli-decompressor v4.0.3
+   Compiling futures-concurrency v7.7.1
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling fallible-iterator v0.3.0
+   Compiling rand v0.8.5
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling block-padding v0.3.3
+   Compiling crypto-bigint v0.5.5
+   Compiling digest v0.10.7
+   Compiling inout v0.1.4
+   Compiling universal-hash v0.5.1
+   Compiling spki v0.7.3
+   Compiling cipher v0.4.4
+   Compiling libsqlite3-sys v0.36.0 (https://github.com/golemcloud/rusqlite?branch=v0.38.0-patched#353b267e)
+   Compiling hmac v0.12.1
+   Compiling sha2 v0.10.9
+   Compiling pbkdf2 v0.12.2
+   Compiling salsa20 v0.10.2
+   Compiling aes v0.8.4
+   Compiling cbc v0.1.2
+   Compiling signature v2.2.0
+   Compiling scrypt v0.11.0
+   Compiling hkdf v0.12.4
+   Compiling rfc6979 v0.4.0
+   Compiling aead v0.5.2
+   Compiling idna_adapter v1.2.1
+   Compiling pkcs5 v0.7.1
+   Compiling ctr v0.9.2
+   Compiling polyval v0.6.2
+   Compiling chacha20 v0.9.1
+   Compiling idna v1.1.0
+   Compiling ghash v0.5.1
+   Compiling curve25519-dalek v4.1.3
+   Compiling poly1305 v0.8.0
+   Compiling aes-gcm v0.10.3
+   Compiling ccm v0.5.0
+   Compiling des v0.8.1
+   Compiling pkcs8 v0.10.2
+   Compiling url v2.5.8
+   Compiling chacha20poly1305 v0.10.1
+   Compiling blowfish v0.9.1
+   Compiling sha3 v0.10.8
+   Compiling md-5 v0.10.6
+   Compiling sec1 v0.7.3
+   Compiling ed25519 v2.2.3
+   Compiling pkcs1 v0.7.5
+   Compiling whirlpool v0.10.4
+   Compiling ripemd v0.1.3
+   Compiling elliptic-curve v0.13.8
+   Compiling ed25519-dalek v2.2.0
+   Compiling sha1 v0.10.6
+   Compiling brotli v7.0.0
+   Compiling ecdsa v0.16.9
+   Compiling primeorder v0.13.6
+   Compiling k256 v0.13.4
+   Compiling p384 v0.13.1
+   Compiling p256 v0.13.2
+   Compiling num-integer v0.1.46
+   Compiling chrono v0.4.44
+   Compiling num-iter v0.1.45
+   Compiling serde_json v1.0.149
+   Compiling serde_urlencoded v0.7.1
+   Compiling wstd v0.5.4
+   Compiling rsa v0.9.10
+   Compiling dsa v0.6.3
+   Compiling golem-wasi-http v0.1.0
+rustc-LLVM ERROR: IO failure on output stream: No space left on device
+rustc-LLVM ERROR: IO failure on output stream: No space left on device
+error: could not compile `rsa` (lib)
+
+Caused by:
+  process didn't exit successfully: `/Users/vigoo/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc --crate-name rsa --edition=2021 /Users/vigoo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rsa-0.9.10/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --cfg 'feature="hazmat"' --cfg 'feature="pem"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("default", "getrandom", "hazmat", "nightly", "pem", "pkcs5", "serde", "sha1", "sha2", "std", "u64_digit"))' -C metadata=3a6b6091e61369a5 -C extra-filename=-8a77b10a41db8c73 --out-dir /Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps --target wasm32-wasip1 -L dependency=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps -L dependency=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/debug/deps --extern const_oid=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libconst_oid-243cdb56fbc25ce9.rmeta --extern digest=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libdigest-132bf24a45e0547d.rmeta --extern num_bigint=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libnum_bigint_dig-644ce387fc32c791.rmeta --extern num_integer=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libnum_integer-e6e06fe806daa2b5.rmeta --extern num_traits=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libnum_traits-6ec66831b7105554.rmeta --extern pkcs1=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libpkcs1-aec7fe8535ae0280.rmeta --extern pkcs8=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libpkcs8-6c6f77c9aa7050b8.rmeta --extern rand_core=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/librand_core-4fd89251286e5982.rmeta --extern signature=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libsignature-3fd0b0619b9b307c.rmeta --extern spki=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libspki-10c231bb4d5137a2.rmeta --extern subtle=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libsubtle-25459ede3af9ac86.rmeta --extern zeroize=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libzeroize-ef4351f05ce4ef83.rmeta --cap-lints allow` (exit status: 101)
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `golem-wasi-http` (lib)
+
+Caused by:
+  process didn't exit successfully: `/Users/vigoo/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc --crate-name golem_wasi_http --edition=2021 /Users/vigoo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/golem-wasi-http-0.1.0/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --cfg 'feature="async"' --cfg 'feature="default"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("async", "default", "json", "multipart"))' -C metadata=8fa889a076313cfb -C extra-filename=-a9f9683dd8801de6 --out-dir /Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps --target wasm32-wasip1 -L dependency=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps -L dependency=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/debug/deps --extern async_iterator=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libasync_iterator-2dab9e397cb70ab8.rmeta --extern base64=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libbase64-788b5d4eaec0b436.rmeta --extern bytes=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libbytes-89aac592c7c973a4.rmeta --extern encoding_rs=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libencoding_rs-f5f8d7967a90cb00.rmeta --extern futures=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libfutures-73a9aa7c505b7290.rmeta --extern futures_concurrency=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libfutures_concurrency-ee7185c0daa4bbca.rmeta --extern http=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libhttp-5fd4feb21f18f6e0.rmeta --extern mime=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libmime-f8b8b929487dc7ec.rmeta --extern percent_encoding=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libpercent_encoding-28e88c431f98784a.rmeta --extern serde=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libserde-ee88faa246692ab8.rmeta --extern serde_urlencoded=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libserde_urlencoded-bd5abcf354cae201.rmeta --extern url=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/liburl-1d8ddf75fc92aa78.rmeta --extern wasi=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libwasi-e17c6f55a8b623e0.rmeta --extern wstd=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/libwstd-0a6a691eb67bcf84.rmeta --cap-lints allow -L native=/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/build/wit-bindgen-rt-bab201b53c4f6e41/out` (exit status: 101)
+error: failed to write to `/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/deps/rmetaoXp5Ni/full.rmeta`: No space left on device (os error 28)
+
+error: could not compile `chrono-tz` (lib) due to 1 previous error
+warning: libsqlite3-sys@0.36.0: fatal error: error in backend: IO failure on output stream: No space left on device
+warning: libsqlite3-sys@0.36.0: PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace, preprocessed source, and associated run script.
+warning: libsqlite3-sys@0.36.0: Stack dump:
+warning: libsqlite3-sys@0.36.0: 0.	Program arguments: /Users/vigoo/wasi-sdk/bin/wasm32-wasip1-clang -O0 -ffunction-sections -fdata-sections -fno-exceptions -g -fno-omit-frame-pointer --target=wasm32-wasip1 -w -DSQLITE_CORE -DSQLITE_DEFAULT_FOREIGN_KEYS=1 -DSQLITE_ENABLE_API_ARMOR -DSQLITE_ENABLE_COLUMN_METADATA -DSQLITE_ENABLE_DBSTAT_VTAB -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ENABLE_MEMORY_MANAGEMENT -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_STAT4 -DSQLITE_SOUNDEX -DSQLITE_THREADSAFE=1 -DSQLITE_USE_URI -DHAVE_USLEEP=1 -DHAVE_ISNAN -D_POSIX_THREAD_SAFE_FUNCTIONS -DHAVE_LOCALTIME_R -USQLITE_THREADSAFE -DSQLITE_THREADSAFE=0 -DLONGDOUBLE_TYPE=double -D_WASI_EMULATED_MMAN -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -DSQLITE_ENABLE_PREUPDATE_HOOK -DSQLITE_ENABLE_SESSION -o /Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/build/libsqlite3-sys-6dc540246d1d3009/out/c877a2978823c39d-sqlite3.o -c sqlite3/sqlite3.c
+warning: libsqlite3-sys@0.36.0: 1.	<eof> parser at end of file
+warning: libsqlite3-sys@0.36.0: Stack dump without symbol names (ensure you have llvm-symbolizer in your PATH or set the environment var `LLVM_SYMBOLIZER_PATH` to point to it):
+warning: libsqlite3-sys@0.36.0: 0  libLLVM.dylib      0x000000010c7684fc llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) + 56
+warning: libsqlite3-sys@0.36.0: 1  libLLVM.dylib      0x000000010c767f40 llvm::sys::CleanupOnSignal(unsigned long) + 252
+warning: libsqlite3-sys@0.36.0: 2  libLLVM.dylib      0x000000010c6e1bc8 (anonymous namespace)::CrashRecoveryContextImpl::HandleCrash(int, unsigned long) + 76
+warning

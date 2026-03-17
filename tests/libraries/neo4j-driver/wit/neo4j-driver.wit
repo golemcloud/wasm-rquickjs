@@ -1,0 +1,5 @@
+package test:lib-neo4j-driver;
+
+world lib-neo4j-driver {
+  export run: func() -> string;
+}
