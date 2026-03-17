@@ -266,7 +266,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 130 | Pinecone SDK | `@pinecone-database/pinecone` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (control/data/inference paths); live Pinecone API calls remain credential-gated (`PINECONE_API_KEY`) |
 | 131 | Weaviate Client | `weaviate-client` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 Docker tests pass in Node.js; wasm-rquickjs passes 9/10 tests, with only `connectToWeaviateCloud()` failing (`tls is not supported in WebAssembly environment`) |
 | 132 | Qdrant JS | `@qdrant/js-client-rest` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 Docker integration tests pass in Node.js and wasm-rquickjs (`versionInfo`, collection lifecycle, upsert/count/query) |
-| 133 | ChromaDB Client | `chromadb` | ⬜ | | ChromaDB embedding database client |
+| 133 | ChromaDB Client | `chromadb` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 Docker integration tests pass in Node.js and wasm-rquickjs (constructors, config/builders, collection lifecycle, and record CRUD/query); Chroma Cloud live tests are credential-gated (`CHROMA_API_KEY`) |
 | 134 | Milvus SDK | `@zilliz/milvus2-sdk-node` | ⬜ | | Milvus/Zilliz vector DB client; uses gRPC |
 | 135 | LanceDB | `@lancedb/lancedb` | ⬜ | | LanceDB embedded vector DB; uses native bindings |
 | 136 | Turbopuffer SDK | `@turbopuffer/turbopuffer` | ⬜ | | Turbopuffer vector DB HTTP client |
