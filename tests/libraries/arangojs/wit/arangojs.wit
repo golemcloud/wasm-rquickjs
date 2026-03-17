@@ -1,0 +1,5 @@
+package test:lib-arangojs;
+
+world lib-arangojs {
+  export run: func() -> string;
+}
