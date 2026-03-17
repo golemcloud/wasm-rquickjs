@@ -1,0 +1,5 @@
+package test:lib-instructor-ai-instructor;
+
+world lib-instructor-ai-instructor {
+  export run: func() -> string;
+}

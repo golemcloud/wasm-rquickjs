@@ -245,7 +245,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 119 | LangSmith SDK | `langsmith` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (RunTree/traceable/anonymizer/client CRUD/list coverage); live LangSmith API coverage requires `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` |
 | 120 | AutoGen JS | `autogen` | ✅ | 2026-03-17 | All 5 offline bundled tests pass in Node.js and wasm-rquickjs; npm `autogen@0.0.1` is a minimal passthrough utility (not Microsoft AutoGen framework) |
 | 121 | CrewAI JS | `crewai` | ❌ | 2026-03-17 | 5/5 Node tests pass, but Rollup cannot bundle package entrypoint (`src/crewai/cli/cli.ts`) due untranspiled TypeScript syntax (`const program: Command`); wasm tests blocked |
-| 122 | Instructor JS | `@instructor-ai/instructor` | ⬜ | | Structured output extraction from LLMs via function calling |
+| 122 | Instructor JS | `@instructor-ai/instructor` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 1/1 live tests pass in Node.js and wasm-rquickjs (constructor/proxy validation, pass-through, retry behavior, and live OpenAI structured output) |
 | 123 | Mastra | `mastra` | ⬜ | | AI agent framework with tool/workflow orchestration |
 | 124 | GenKit | `@genkit-ai/core` | ⬜ | | Google GenKit AI application framework |
 
