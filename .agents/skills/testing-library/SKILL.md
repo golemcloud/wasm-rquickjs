@@ -32,7 +32,7 @@ Create **~5 small test scripts** in `tests/libraries/<package-name>/`. Each test
 - Be a **standalone ESM file** (`.js`) that exports a `run` function
 - Use `assert` or simple `console.log`-based checks — no test framework dependencies
 - Exit with code 0 on success, non-zero on failure (use `process.exit(1)` or let uncaught errors propagate)
-- **Not require API keys, network services, databases, or manual intervention**
+- **Not require API keys, network services, databases, or manual intervention** (these are _offline_ tests; live-service tests with tokens from `.tokens.json` are created separately as `test-live-*.js` — see Step 5.7)
 - Test a distinct aspect of the library's API
 - Print `PASS: <description>` on success or throw/print `FAIL: <description>` on failure
 
@@ -432,13 +432,15 @@ Some libraries are **HTTP client libraries** (e.g., `axios`, `got`, `node-fetch`
 
 Use this approach when:
 - The library's **primary purpose** is making HTTP requests
-- The library wraps a REST/GraphQL API and you want to test its HTTP layer without real credentials
+- The library wraps a REST/GraphQL API and you want to test its HTTP layer without real credentials (e.g., `openai`, `@anthropic-ai/sdk`, `stripe`, `@sendgrid/mail`, `twilio`)
 - The library transforms HTTP responses (parsing, retries, interceptors) and you need a server that returns controlled responses
+- The library makes **any** HTTP requests as part of its core functionality — even if you could test _some_ features offline, the HTTP path should be tested with a real mock server
 
 **Skip this step** if:
-- The library doesn't make HTTP requests
-- The library can be fully tested with offline/computation-only tests
+- The library doesn't make HTTP requests at all
 - Docker-based testing (Step 5.5) already covers the library's needs better (e.g., database clients)
+
+**⚠️ Do NOT substitute mock servers with inline `globalThis.fetch` overrides.** If a library makes HTTP requests, always prefer a mock HTTP server (`mock-server.mjs`) over monkey-patching `fetch` or other globals in the test script itself. Overriding `fetch` bypasses the entire HTTP stack (request construction, header serialization, response parsing) which is exactly what we need to test in the WASM runtime. A mock server exercises the real HTTP path end-to-end; an inline fetch mock hides bugs.
 
 ### 5.6b. Create the mock server
 
@@ -788,6 +790,17 @@ tests/libraries/openai/
 └── results.md
 ```
 
+## ⚠️ Pre-Results Checkpoint: Did You Run All Applicable Test Types?
+
+Before recording results, verify you have run **all applicable test types**:
+
+1. ✅ **Offline tests** (`test-01-*.js` … `test-05-*.js`) — always required
+2. ☐ **Docker integration tests** (`test-integration-*.js`) — if the library works with a Docker-hostable service (see Step 5.5)
+3. ☐ **HTTP mock server tests** (`test-integration-*.js` with `mock-server.mjs`) — if the library makes HTTP requests in **any** capacity (HTTP clients, REST/GraphQL API wrappers, SDK clients like `openai`/`stripe`/etc.), you **MUST** create a mock server and integration tests per Step 5.6. Do NOT use inline `globalThis.fetch` overrides in offline tests as a substitute — that hides HTTP stack bugs.
+4. ☐ **Live service tests** (`test-live-*.js`) — **check `tests/libraries/.tokens.json` NOW**. If it contains a relevant token (e.g., `OPENAI_API_KEY` for the `openai` package), you **MUST** create and run `test-live-*.js` scripts per Step 5.7. Do not skip this just because offline tests already passed or failed.
+
+If you skipped mock server tests for an HTTP-making library, or skipped live service tests despite a token being available in `.tokens.json`, go back to the relevant step before proceeding.
+
 ## Step 6: Record Results
 
 ### Update `tests/libraries/<package-name>/results.md`
@@ -979,3 +992,4 @@ The `package.json` for each test directory should include Rollup and its plugins
 16. **NEVER commit `.tokens.json`** — it is gitignored; never stage, commit, or display token values in output, logs, results, or error messages
 17. **Live tests are opportunistic** — only run them when the required token exists in `.tokens.json`; never ask the user to provide tokens or fail because they're missing
 18. **Minimize live API costs** — use cheapest models/tiers, smallest payloads, and fewest calls possible in `test-live-*.js` scripts
+19. **Never mock `fetch` or other globals as a substitute for a mock server** — if a library makes HTTP requests, use `mock-server.mjs` (Step 5.6) to test the real HTTP path. Inline `globalThis.fetch` overrides hide HTTP stack bugs in the WASM runtime
