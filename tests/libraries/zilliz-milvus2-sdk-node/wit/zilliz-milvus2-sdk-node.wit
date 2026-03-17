@@ -1,0 +1,5 @@
+package test:lib-zilliz-milvus2-sdk-node;
+
+world lib-zilliz-milvus2-sdk-node {
+  export run: func() -> string;
+}
