@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "dependencies": {
+    "dgraph-js-http": "23.0.0-rc1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.0.0"
+  }
+}

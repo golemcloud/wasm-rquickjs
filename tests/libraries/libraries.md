@@ -278,7 +278,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 138 | Neo4j Driver | `neo4j-driver` | ⚠️ | 2026-03-17 | 5/5 offline tests pass in Node.js and wasm-rquickjs; 2/2 Docker integration tests pass in Node.js but fail in wasm-rquickjs with `getaddrinfo ESERVFAIL localhost` when opening Bolt connections |
 | 139 | ArangoDB JS | `arangojs` | ⚠️ | 2026-03-17 | 5/5 offline + 2/2 Docker integration tests pass in Node.js; wasm-rquickjs passes offline tests but fails live HTTP operations (0/2 integration) with `Error converting from js 'object' into type 'string'` |
-| 140 | Dgraph JS | `dgraph-js-http` | ⬜ | | Dgraph graph DB HTTP client |
+| 140 | Dgraph JS | `dgraph-js-http` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (client config, validation, transaction state, login/query/mutate HTTP paths, and error handling) |
 | 141 | SurrealDB JS | `surrealdb` | ⬜ | | SurrealDB multi-model DB client; HTTP + WebSocket |
 | 142 | FalkorDB SDK | `falkordb` | ⬜ | | FalkorDB (Redis-based graph DB) client |
 | 143 | TypeDB Driver | `typedb-driver` | ⬜ | | TypeDB (formerly Grakn) driver; uses gRPC |
