@@ -215,21 +215,171 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 99 | yargs | `yargs` | ✅ | 2026-03-11 | All 5 bundled tests pass in Node.js and wasm-rquickjs (basic options, validation, commands, parser config, middleware/coerce) |
 | 100 | Ramda | `ramda` | ⚠️ | 2026-03-10 | 4/5 bundled tests pass; `ascendNatural("en", ...)` sort order differs in wasm (`item-10` before `item-2`) |
 
+## AI / LLM Clients & Providers
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 101 | Google Generative AI | `@google/generative-ai` | ⚠️ | 2026-03-17 | 5/5 offline bundled tests pass in Node.js and wasm-rquickjs (constructors, validation, config, enums/errors, chat state); live API/streaming/embed calls require credentials |
+| 102 | Cohere SDK | `cohere-ai` | ⬜ | | Cohere chat/embed/rerank API client |
+| 103 | Mistral SDK | `@mistralai/mistralai` | ⬜ | | Mistral AI chat/embed client |
+| 104 | Groq SDK | `groq-sdk` | ⬜ | | Groq inference API client (OpenAI-compatible) |
+| 105 | Together AI SDK | `together-ai` | ⬜ | | Together.ai inference client |
+| 106 | Fireworks AI SDK | `@fireworks-ai/sdk` | ⬜ | | Fireworks.ai inference client |
+| 107 | Replicate SDK | `replicate` | ⬜ | | Replicate model prediction API client |
+| 108 | HuggingFace Inference | `@huggingface/inference` | ⬜ | | HuggingFace Inference API client; pure JS |
+| 109 | HuggingFace Hub | `@huggingface/hub` | ⬜ | | HuggingFace Hub file/model management client |
+| 110 | Ollama JS | `ollama` | ⬜ | | Ollama local LLM API client |
+| 111 | AI SDK OpenAI Provider | `@ai-sdk/openai` | ⬜ | | Vercel AI SDK OpenAI provider adapter |
+| 112 | AI SDK Anthropic Provider | `@ai-sdk/anthropic` | ⬜ | | Vercel AI SDK Anthropic provider adapter |
+| 113 | AI SDK Google Provider | `@ai-sdk/google` | ⬜ | | Vercel AI SDK Google Gemini provider adapter |
+| 114 | AI SDK Mistral Provider | `@ai-sdk/mistral` | ⬜ | | Vercel AI SDK Mistral provider adapter |
+
+## AI Agent Frameworks & Tools
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 115 | LangChain OpenAI | `@langchain/openai` | ⬜ | | LangChain OpenAI chat/embedding integration |
+| 116 | LangChain Anthropic | `@langchain/anthropic` | ⬜ | | LangChain Anthropic Claude integration |
+| 117 | LangChain Google GenAI | `@langchain/google-genai` | ⬜ | | LangChain Google Gemini integration |
+| 118 | LangChain Community | `@langchain/community` | ⬜ | | LangChain community integrations (vector stores, tools, etc.) |
+| 119 | LangSmith SDK | `langsmith` | ⬜ | | LangSmith tracing/evaluation client |
+| 120 | AutoGen JS | `autogen` | ⬜ | | Microsoft AutoGen multi-agent framework |
+| 121 | CrewAI JS | `crewai` | ⬜ | | CrewAI agent orchestration (JS port) |
+| 122 | Instructor JS | `@instructor-ai/instructor` | ⬜ | | Structured output extraction from LLMs via function calling |
+| 123 | Mastra | `mastra` | ⬜ | | AI agent framework with tool/workflow orchestration |
+| 124 | GenKit | `@genkit-ai/core` | ⬜ | | Google GenKit AI application framework |
+
+## Embedding & Retrieval
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 125 | OpenAI Embeddings (via openai) | `openai` | ⬜ | | Embedding API via OpenAI SDK `embeddings.create()` |
+| 126 | Voyage AI SDK | `voyageai` | ⬜ | | Voyage AI embedding/reranking client |
+| 127 | Jina AI SDK | `@jina-ai/sdk` | ⬜ | | Jina AI embedding/reranking API client |
+| 128 | Transformers.js | `@xenova/transformers` | ⬜ | | Local ML inference (embeddings, NLP); uses ONNX runtime |
+| 129 | LlamaIndex TS | `llamaindex` | ⬜ | | LlamaIndex data framework for LLM apps (RAG, agents) |
+
+## Vector Databases
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 130 | Pinecone SDK | `@pinecone-database/pinecone` | ⬜ | | Pinecone vector DB client; HTTP-based |
+| 131 | Weaviate Client | `weaviate-client` | ⬜ | | Weaviate vector DB client; HTTP/gRPC |
+| 132 | Qdrant JS | `@qdrant/js-client-rest` | ⬜ | | Qdrant vector DB REST client |
+| 133 | ChromaDB Client | `chromadb` | ⬜ | | ChromaDB embedding database client |
+| 134 | Milvus SDK | `@zilliz/milvus2-sdk-node` | ⬜ | | Milvus/Zilliz vector DB client; uses gRPC |
+| 135 | LanceDB | `@lancedb/lancedb` | ⬜ | | LanceDB embedded vector DB; uses native bindings |
+| 136 | Turbopuffer SDK | `@turbopuffer/turbopuffer` | ⬜ | | Turbopuffer vector DB HTTP client |
+| 137 | Upstash Vector | `@upstash/vector` | ⬜ | | Upstash serverless vector DB; HTTP-based |
+
+## Graph Databases
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 138 | Neo4j Driver | `neo4j-driver` | ⬜ | | Neo4j graph DB driver; uses Bolt protocol via `node:net` |
+| 139 | ArangoDB JS | `arangojs` | ⬜ | | ArangoDB multi-model DB client; HTTP-based |
+| 140 | Dgraph JS | `dgraph-js-http` | ⬜ | | Dgraph graph DB HTTP client |
+| 141 | SurrealDB JS | `surrealdb` | ⬜ | | SurrealDB multi-model DB client; HTTP + WebSocket |
+| 142 | FalkorDB SDK | `falkordb` | ⬜ | | FalkorDB (Redis-based graph DB) client |
+| 143 | TypeDB Driver | `typedb-driver` | ⬜ | | TypeDB (formerly Grakn) driver; uses gRPC |
+
+## Search Providers
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 144 | Elasticsearch Client | `@elastic/elasticsearch` | ⬜ | | Elasticsearch/OpenSearch HTTP client |
+| 145 | Algolia Search | `algoliasearch` | ⬜ | | Algolia search API client; HTTP-based |
+| 146 | Typesense Client | `typesense` | ⬜ | | Typesense search engine HTTP client |
+| 147 | MeiliSearch JS | `meilisearch` | ⬜ | | MeiliSearch HTTP client; pure JS |
+| 148 | OpenSearch Client | `@opensearch-project/opensearch` | ⬜ | | OpenSearch HTTP client |
+
+## Web Search APIs
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 149 | SerpAPI | `serpapi` | ⬜ | | SerpAPI web search client; HTTP-based |
+| 150 | Serper SDK | `serper` | ⬜ | | Serper.dev Google search API client |
+| 151 | Tavily SDK | `@tavily/core` | ⬜ | | Tavily AI-optimized web search API client |
+| 152 | Brave Search SDK | `brave-search` | ⬜ | | Brave Search API client |
+| 153 | Exa JS | `exa-js` | ⬜ | | Exa (formerly Metaphor) neural search API client |
+| 154 | Google Custom Search | `googleapis` | ⬜ | | Google APIs client (Custom Search, etc.); HTTP-based |
+
+## Speech-to-Text & Text-to-Speech
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 155 | Deepgram SDK | `@deepgram/sdk` | ⬜ | | Deepgram STT/TTS API client; HTTP + WebSocket |
+| 156 | AssemblyAI SDK | `assemblyai` | ⬜ | | AssemblyAI speech-to-text client; HTTP-based |
+| 157 | ElevenLabs SDK | `elevenlabs` | ⬜ | | ElevenLabs TTS/voice cloning API client |
+| 158 | OpenAI Audio (via openai) | `openai` | ⬜ | | Whisper STT + TTS via OpenAI SDK `audio.transcriptions`/`audio.speech` |
+| 159 | Google Cloud Speech | `@google-cloud/speech` | ⬜ | | Google Cloud Speech-to-Text client; uses gRPC |
+| 160 | Google Cloud Text-to-Speech | `@google-cloud/text-to-speech` | ⬜ | | Google Cloud TTS client; uses gRPC |
+| 161 | Azure Cognitive Speech | `microsoft-cognitiveservices-speech-sdk` | ⬜ | | Azure Speech Services SDK; native + WebSocket |
+| 162 | PlayHT SDK | `playht` | ⬜ | | PlayHT text-to-speech API client |
+| 163 | Cartesia SDK | `@cartesia/cartesia-js` | ⬜ | | Cartesia real-time TTS API client |
+
+## Video & Image Generation
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 164 | Replicate (video models) | `replicate` | ⬜ | | Replicate API client for video generation models (Runway, Kling, etc.) |
+| 165 | Stability AI SDK | `@stability-ai/sdk` | ⬜ | | Stability AI image generation (Stable Diffusion) client |
+| 166 | Fal.ai Client | `@fal-ai/client` | ⬜ | | Fal.ai serverless AI model client (image/video) |
+| 167 | Luma AI SDK | `lumaai` | ⬜ | | Luma AI Dream Machine video generation client |
+| 168 | RunwayML SDK | `@runwayml/sdk` | ⬜ | | RunwayML Gen-3 video generation API client |
+| 169 | Leonardo AI SDK | `@leonardo-ai/sdk` | ⬜ | | Leonardo.ai image generation API client |
+
+## Effect Ecosystem
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 170 | Effect | `effect` | ⬜ | | Core Effect library; typed functional effects, fibers, streams, layers |
+| 171 | Effect Platform | `@effect/platform` | ⬜ | | Cross-platform HTTP client/server, file system, key-value store |
+| 172 | Effect Platform Node | `@effect/platform-node` | ⬜ | | Node.js runtime adapter for @effect/platform |
+| 173 | Effect Schema | `@effect/schema` | ⬜ | | Schema validation/serialization (successor to io-ts) |
+| 174 | Effect CLI | `@effect/cli` | ⬜ | | CLI argument parsing built on Effect |
+| 175 | Effect SQL | `@effect/sql` | ⬜ | | SQL database layer for Effect |
+| 176 | Effect SQL pg | `@effect/sql-pg` | ⬜ | | PostgreSQL adapter for @effect/sql |
+| 177 | Effect SQL MySQL | `@effect/sql-mysql2` | ⬜ | | MySQL adapter for @effect/sql |
+| 178 | Effect SQL SQLite | `@effect/sql-sqlite-node` | ⬜ | | SQLite Node.js adapter for @effect/sql |
+| 179 | Effect RPC | `@effect/rpc` | ⬜ | | Type-safe RPC layer for Effect |
+| 180 | Effect OpenTelemetry | `@effect/opentelemetry` | ⬜ | | OpenTelemetry integration for Effect |
+| 181 | Effect Cluster | `@effect/cluster` | ⬜ | | Distributed systems / cluster primitives for Effect |
+
+## Observability & Tracing
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 182 | OpenTelemetry API | `@opentelemetry/api` | ⬜ | | OpenTelemetry core API; pure JS |
+| 183 | OpenTelemetry SDK Trace | `@opentelemetry/sdk-trace-base` | ⬜ | | OTel trace SDK base; pure JS |
+| 184 | OpenTelemetry SDK Metrics | `@opentelemetry/sdk-metrics` | ⬜ | | OTel metrics SDK; pure JS |
+| 185 | OpenTelemetry Exporter OTLP HTTP | `@opentelemetry/exporter-trace-otlp-http` | ⬜ | | OTel OTLP exporter over HTTP |
+| 186 | Sentry Node SDK | `@sentry/node` | ⬜ | | Sentry error/performance monitoring; uses native hooks |
+| 187 | Datadog Trace | `dd-trace` | ⬜ | | Datadog APM tracing; native bindings |
+| 188 | Prometheus Client | `prom-client` | ⬜ | | Prometheus metrics collector; pure JS |
+
+## Template Engines & Rendering
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 189 | Handlebars | `handlebars` | ⬜ | | Template engine; pure JS |
+| 190 | EJS | `ejs` | ⬜ | | Embedded JavaScript templates; pure JS |
+| 191 | Mustache | `mustache` | ⬜ | | Logic-less templates; pure JS |
+| 192 | Nunjucks | `nunjucks` | ⬜ | | Jinja2-inspired template engine |
+| 193 | Liquid | `liquidjs` | ⬜ | | Shopify Liquid template engine; pure JS |
+
+## Data Processing & Streaming
+
+| # | Package | npm name | Status | Tested On | Notes |
+|---|---------|----------|--------|-----------|-------|
+| 194 | csv-parser | `csv-parser` | ⬜ | | CSV streaming parser; uses `node:stream` |
+| 195 | PapaParse | `papaparse` | ⬜ | | CSV parser; mostly pure JS |
+| 196 | xlsx / SheetJS | `xlsx` | ⬜ | | Excel file parser/generator; pure JS |
+| 197 | pdf-parse | `pdf-parse` | ⬜ | | PDF text extraction; pure JS |
+| 198 | cheerio | `cheerio` | ⬜ | | HTML parser/scraper (jQuery-like API); pure JS |
+| 199 | turndown | `turndown` | ⬜ | | HTML to Markdown converter; pure JS |
+| 200 | marked | `marked` | ⬜ | | Markdown to HTML parser; pure JS |
+
 ---
 
 ## Compatibility Notes
-
-### Likely compatible (pure JS, minimal Node.js built-in deps)
-`zod`, `joi`, `date-fns`, `dayjs`, `lodash`, `uuid`, `semver`, `async`, `yargs`, `dotenv`, `lru-cache`, `msgpackr`, `form-data`, `graphql`, `ajv`, `yup`, `ramda`, `cron-parser`, `rxjs`
-
-### Needs `node:crypto`
-`bcryptjs`, `jsonwebtoken`, `uuid` (v4/v7)
-
-### Needs `node:http` + `node:stream`
-`express`, `fastify`, `axios`, `got`, `node-fetch`, `undici`, `superagent`, `multer`, `compression`, `nodemailer`, `ws`, `socket.io`, `hono`, `koa`
-
-### Needs `node:net` / native bindings (likely incompatible)
-`pg`, `mysql2`, `better-sqlite3`, `ioredis`, `redis`, `@grpc/grpc-js`, `mongodb`, `bcrypt`
-
-### Complex multi-module runtimes (likely incompatible)
-`@temporalio/*`, `kafkajs`, `amqplib`, `@nestjs/core`, `jest`, `vitest`, `mocha`
