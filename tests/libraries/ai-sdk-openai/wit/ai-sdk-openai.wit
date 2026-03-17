@@ -1,0 +1,5 @@
+package test:lib-ai-sdk-openai;
+
+world lib-ai-sdk-openai {
+  export run: func() -> string;
+}
