@@ -225,7 +225,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 104 | Groq SDK | `groq-sdk` | ⚠️ | 2026-03-17 | 5/5 bundled tests pass in Node.js; 3/5 pass in wasm-rquickjs (constructor/helpers OK), mocked request paths fail with `cannot read property 'Symbol.iterator' of undefined`; live API calls require credentials |
 | 105 | Together AI SDK | `together-ai` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 3/5 pass in wasm-rquickjs (constructor/validation/helpers), while request/retry paths fail with `cannot read property 'Symbol.iterator' of undefined`; live API calls require credentials |
 | 106 | Fireworks AI SDK | `@fireworks-ai/sdk` | ❌ | 2026-03-17 | Package unpublished from npm on 2026-02-14; cannot be installed or tested |
-| 107 | Replicate SDK | `replicate` | ⬜ | | Replicate model prediction API client |
+| 107 | Replicate SDK | `replicate` | ⚠️ | 2026-03-17 | 5/5 bundled offline tests pass in Node.js; 3/5 pass in wasm-rquickjs (constructor/validation/webhook helpers), while request/pagination paths fail with `JavaScript error: not a function` in `__wasm_rquickjs_builtin/http`; live API calls require credentials |
 | 108 | HuggingFace Inference | `@huggingface/inference` | ⬜ | | HuggingFace Inference API client; pure JS |
 | 109 | HuggingFace Hub | `@huggingface/hub` | ⬜ | | HuggingFace Hub file/model management client |
 | 110 | Ollama JS | `ollama` | ⬜ | | Ollama local LLM API client |
@@ -322,7 +322,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 164 | Replicate (video models) | `replicate` | ⬜ | | Replicate API client for video generation models (Runway, Kling, etc.) |
+| 164 | Replicate (video models) | `replicate` | ❌ | 2026-03-17 | Agent did not update row; check logs |
 | 165 | Stability AI SDK | `@stability-ai/sdk` | ⬜ | | Stability AI image generation (Stable Diffusion) client |
 | 166 | Fal.ai Client | `@fal-ai/client` | ⬜ | | Fal.ai serverless AI model client (image/video) |
 | 167 | Luma AI SDK | `lumaai` | ⬜ | | Luma AI Dream Machine video generation client |
