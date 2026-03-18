@@ -327,7 +327,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 166 | Fal.ai Client | `@fal-ai/client` | ✅ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`run`, queue subscribe/cancel, middleware, errors/helpers); live Fal API tests were not run (`FAL_KEY` not present in `.tokens.json`) |
 | 167 | Luma AI SDK | `lumaai` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs; live Luma API tests not run because `LUMAAI_API_KEY` is not present in `.tokens.json` |
 | 168 | RunwayML SDK | `@runwayml/sdk` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`tasks.retrieve`, `textToImage.create`, error mapping); live Runway API tests not run because `RUNWAYML_API_SECRET` is not present in `.tokens.json` |
-| 169 | Leonardo AI SDK | `@leonardo-ai/sdk` | ⬜ | | Leonardo.ai image generation API client |
+| 169 | Leonardo AI SDK | `@leonardo-ai/sdk` | ❌ | 2026-03-18 | Node.js passes 5/5 offline + 3/3 HTTP mock tests, but wasm-rquickjs only passes 1/5 offline and 0/3 integration tests; all HTTP paths fail in `_createRequest` with `Error converting from js 'object' into type 'string'` |
 
 ## Effect Ecosystem
 
