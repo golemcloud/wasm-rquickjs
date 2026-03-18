@@ -280,7 +280,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 139 | ArangoDB JS | `arangojs` | ⚠️ | 2026-03-17 | 5/5 offline + 2/2 Docker integration tests pass in Node.js; wasm-rquickjs passes offline tests but fails live HTTP operations (0/2 integration) with `Error converting from js 'object' into type 'string'` |
 | 140 | Dgraph JS | `dgraph-js-http` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (client config, validation, transaction state, login/query/mutate HTTP paths, and error handling) |
 | 141 | SurrealDB JS | `surrealdb` | ⚠️ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs, but all HTTP integration tests fail in wasm-rquickjs (0/5 HTTP mock + Docker) with `Error converting from js 'object' into type 'string'` |
-| 142 | FalkorDB SDK | `falkordb` | ⬜ | | FalkorDB (Redis-based graph DB) client |
+| 142 | FalkorDB SDK | `falkordb` | ✅ | 2026-03-18 | All 5 offline + 2 Docker integration tests pass in Node.js and wasm-rquickjs (connect/config, graph CRUD, and index create/drop against live FalkorDB) |
 | 143 | TypeDB Driver | `typedb-driver` | ⬜ | | TypeDB (formerly Grakn) driver; uses gRPC |
 
 ## Search Providers
