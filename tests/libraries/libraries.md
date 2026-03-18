@@ -323,7 +323,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 164 | Replicate (video models) | `replicate` | ❌ | 2026-03-17 | Agent did not update row; check logs |
-| 165 | Stability AI SDK | `@stability-ai/sdk` | ⬜ | | Stability AI image generation (Stable Diffusion) client |
+| 165 | Stability AI SDK | `@stability-ai/sdk` | ❌ | 2026-03-18 | npm install fails with E404 (`@stability-ai/sdk` not found in registry); runtime testing blocked |
 | 166 | Fal.ai Client | `@fal-ai/client` | ⬜ | | Fal.ai serverless AI model client (image/video) |
 | 167 | Luma AI SDK | `lumaai` | ⬜ | | Luma AI Dream Machine video generation client |
 | 168 | RunwayML SDK | `@runwayml/sdk` | ⬜ | | RunwayML Gen-3 video generation API client |
