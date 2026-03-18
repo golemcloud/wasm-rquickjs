@@ -1,0 +1,5 @@
+package test:lib-typesense;
+
+world lib-typesense {
+  export run: func() -> string;
+}
