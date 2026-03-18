@@ -363,7 +363,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 189 | Handlebars | `handlebars` | ⬜ | | Template engine; pure JS |
+| 189 | Handlebars | `handlebars` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (compile/escape, helpers+SafeString, partial blocks, precompile/runtime template, strict mode + runtime helper overrides) |
 | 190 | EJS | `ejs` | ⬜ | | Embedded JavaScript templates; pure JS |
 | 191 | Mustache | `mustache` | ⬜ | | Logic-less templates; pure JS |
 | 192 | Nunjucks | `nunjucks` | ⬜ | | Jinja2-inspired template engine |
