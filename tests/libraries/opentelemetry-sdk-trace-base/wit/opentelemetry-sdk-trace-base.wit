@@ -1,0 +1,5 @@
+package test:lib-opentelemetry-sdk-trace-base;
+
+world lib-opentelemetry-sdk-trace-base {
+  export run: func() -> string;
+}
