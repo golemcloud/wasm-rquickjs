@@ -1,0 +1,5 @@
+package test:lib-nunjucks;
+
+world lib-nunjucks {
+  export run: func() -> string;
+}
