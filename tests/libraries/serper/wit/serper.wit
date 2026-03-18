@@ -1,0 +1,5 @@
+package test:lib-serper;
+
+world lib-serper {
+  export run: func() -> string;
+}
