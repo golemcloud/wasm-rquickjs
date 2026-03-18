@@ -288,7 +288,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 144 | Elasticsearch Client | `@elastic/elasticsearch` | ⚠️ | 2026-03-18 | 5/5 offline + 5/5 integration tests pass in Node.js; wasm-rquickjs passes offline APIs (5/5) but all real HTTP operations fail (0/5 HTTP mock + Docker) with `JavaScript error: Request aborted` |
-| 145 | Algolia Search | `algoliasearch` | ⬜ | | Algolia search API client; HTTP-based |
+| 145 | Algolia Search | `algoliasearch` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Algolia service tests are credential-gated |
 | 146 | Typesense Client | `typesense` | ⬜ | | Typesense search engine HTTP client |
 | 147 | MeiliSearch JS | `meilisearch` | ⬜ | | MeiliSearch HTTP client; pure JS |
 | 148 | OpenSearch Client | `@opensearch-project/opensearch` | ⬜ | | OpenSearch HTTP client |
