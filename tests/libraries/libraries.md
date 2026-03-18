@@ -355,7 +355,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 183 | OpenTelemetry SDK Trace | `@opentelemetry/sdk-trace-base` | ✅ | 2026-03-18 | All 5 offline tests pass in Node.js and wasm-rquickjs (provider/span lifecycle, limits, samplers, TraceIdRatioBasedSampler, custom processor hooks + flush/shutdown) |
 | 184 | OpenTelemetry SDK Metrics | `@opentelemetry/sdk-metrics` | ✅ | 2026-03-18 | All 5 offline tests pass in Node.js and wasm-rquickjs (sync instruments, monotonic value validation, views/aggregation controls, observable callbacks, delta temporality) |
 | 185 | OpenTelemetry Exporter OTLP HTTP | `@opentelemetry/exporter-trace-otlp-http` | ✅ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (lifecycle + failure handling, OTLP JSON export, custom headers/user-agent forwarding, gzip payload compression) |
-| 186 | Sentry Node SDK | `@sentry/node` | ⬜ | | Sentry error/performance monitoring; uses native hooks |
+| 186 | Sentry Node SDK | `@sentry/node` | ✅💰 | 2026-03-18 | 3/3 offline + 2/2 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`captureMessage`/`captureException`, scope enrichment, tracing headers, envelope delivery); full live ingestion remains credential-gated (no Sentry DSN token configured) |
 | 187 | Datadog Trace | `dd-trace` | ⬜ | | Datadog APM tracing; native bindings |
 | 188 | Prometheus Client | `prom-client` | ⬜ | | Prometheus metrics collector; pure JS |
 
