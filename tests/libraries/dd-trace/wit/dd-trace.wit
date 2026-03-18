@@ -1,0 +1,5 @@
+package test:lib-dd-trace;
+
+world lib-dd-trace {
+  export run: func() -> string;
+}
