@@ -291,7 +291,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 145 | Algolia Search | `algoliasearch` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Algolia service tests are credential-gated |
 | 146 | Typesense Client | `typesense` | ✅ | 2026-03-18 | All 5 offline + 5 integration tests (HTTP mock 3/3, Docker 2/2) pass in Node.js and wasm-rquickjs |
 | 147 | MeiliSearch JS | `meilisearch` | ❌ | 2026-03-18 | Node.js passes all 5 offline + 5 integration tests (HTTP mock 3/3, Docker 2/2), but wasm-rquickjs fails core HTTP paths (0/5 integration, 2/5 offline only) with `JavaScript error: Error converting from js 'object' into type 'string'` |
-| 148 | OpenSearch Client | `@opensearch-project/opensearch` | ⬜ | | OpenSearch HTTP client |
+| 148 | OpenSearch Client | `@opensearch-project/opensearch` | ✅ | 2026-03-18 | All 5 offline + 5 integration tests (HTTP mock 3/3, Docker 2/2) pass in Node.js and wasm-rquickjs |
 
 ## Web Search APIs
 

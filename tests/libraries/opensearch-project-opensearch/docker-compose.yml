@@ -1,0 +1,17 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    ports:
+      - "19210:9200"
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200 >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    tmpfs:
+      - /usr/share/opensearch/data:uid=1000,gid=1000

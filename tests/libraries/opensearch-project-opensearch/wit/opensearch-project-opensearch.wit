@@ -1,0 +1,5 @@
+package test:lib-opensearch-project-opensearch;
+
+world lib-opensearch-project-opensearch {
+  export run: func() -> string;
+}
