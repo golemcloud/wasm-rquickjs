@@ -338,7 +338,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 172 | Effect Platform Node | `@effect/platform-node` | ⚠️ | 2026-03-18 | Node.js passes 5/5 offline + 3/3 HTTP mock tests, but wasm-rquickjs passes 2/5 offline + 1/3 integration tests; filesystem directory creation fails (`ENOENT` on resolved root paths) and successful HTTP JSON payload handling differs (query/body assertions fail) |
 | 173 | Effect Schema | `@effect/schema` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (struct decode, refinements, built-in transforms, `parseJson` pipeline, custom transform); package is deprecated and merged into `effect` |
 | 174 | Effect CLI | `@effect/cli` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (command descriptors, args/options parsing, `Command.run`, help/usage, shell completion generation) |
-| 175 | Effect SQL | `@effect/sql` | ⬜ | | SQL database layer for Effect |
+| 175 | Effect SQL | `@effect/sql` | ✅ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs (Statement compiler/helpers, SqlSchema wrappers, Model variants, Migrator loader/error types); package is driver-agnostic so DB integration is tested in adapter packages |
 | 176 | Effect SQL pg | `@effect/sql-pg` | ⬜ | | PostgreSQL adapter for @effect/sql |
 | 177 | Effect SQL MySQL | `@effect/sql-mysql2` | ⬜ | | MySQL adapter for @effect/sql |
 | 178 | Effect SQL SQLite | `@effect/sql-sqlite-node` | ⬜ | | SQLite Node.js adapter for @effect/sql |
