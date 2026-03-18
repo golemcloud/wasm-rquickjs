@@ -1,0 +1,5 @@
+package test:lib-csv-parser;
+
+world lib-csv-parser {
+  export run: func() -> string;
+}

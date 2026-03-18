@@ -373,7 +373,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 194 | csv-parser | `csv-parser` | ⬜ | | CSV streaming parser; uses `node:stream` |
+| 194 | csv-parser | `csv-parser` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (basic parsing, separator/quote handling, mapHeaders/mapValues, output byte offsets, strict-mode errors) |
 | 195 | PapaParse | `papaparse` | ⬜ | | CSV parser; mostly pure JS |
 | 196 | xlsx / SheetJS | `xlsx` | ⬜ | | Excel file parser/generator; pure JS |
 | 197 | pdf-parse | `pdf-parse` | ⬜ | | PDF text extraction; pure JS |
