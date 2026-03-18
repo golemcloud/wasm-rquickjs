@@ -375,7 +375,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 194 | csv-parser | `csv-parser` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (basic parsing, separator/quote handling, mapHeaders/mapValues, output byte offsets, strict-mode errors) |
 | 195 | PapaParse | `papaparse` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (basic header parsing, dynamic typing, quoted field handling, unparse round-trip, step/preview behavior) |
-| 196 | xlsx / SheetJS | `xlsx` | ⬜ | | Excel file parser/generator; pure JS |
+| 196 | xlsx / SheetJS | `xlsx` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (workbook read/write roundtrip, JSON sheet builders, formula/CSV/HTML exports, Date-cell options, address helpers + workbook props) |
 | 197 | pdf-parse | `pdf-parse` | ⬜ | | PDF text extraction; pure JS |
 | 198 | cheerio | `cheerio` | ⬜ | | HTML parser/scraper (jQuery-like API); pure JS |
 | 199 | turndown | `turndown` | ⬜ | | HTML to Markdown converter; pure JS |

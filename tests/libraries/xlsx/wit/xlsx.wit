@@ -1,0 +1,5 @@
+package test:lib-xlsx;
+
+world lib-xlsx {
+  export run: func() -> string;
+}
