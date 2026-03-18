@@ -351,7 +351,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 182 | OpenTelemetry API | `@opentelemetry/api` | ⬜ | | OpenTelemetry core API; pure JS |
+| 182 | OpenTelemetry API | `@opentelemetry/api` | ✅ | 2026-03-18 | All 5 offline tests pass in Node.js and wasm-rquickjs (trace, context, propagation/baggage, metrics, diag APIs) |
 | 183 | OpenTelemetry SDK Trace | `@opentelemetry/sdk-trace-base` | ⬜ | | OTel trace SDK base; pure JS |
 | 184 | OpenTelemetry SDK Metrics | `@opentelemetry/sdk-metrics` | ⬜ | | OTel metrics SDK; pure JS |
 | 185 | OpenTelemetry Exporter OTLP HTTP | `@opentelemetry/exporter-trace-otlp-http` | ⬜ | | OTel OTLP exporter over HTTP |
