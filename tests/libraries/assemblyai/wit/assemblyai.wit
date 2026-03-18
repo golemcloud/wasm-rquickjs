@@ -1,0 +1,5 @@
+package test:lib-assemblyai;
+
+world lib-assemblyai {
+  export run: func() -> string;
+}
