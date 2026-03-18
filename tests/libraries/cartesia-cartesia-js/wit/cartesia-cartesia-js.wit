@@ -1,0 +1,5 @@
+package test:lib-cartesia-cartesia-js;
+
+world lib-cartesia-cartesia-js {
+  export run: func() -> string;
+}

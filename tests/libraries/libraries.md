@@ -316,7 +316,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 160 | Google Cloud Text-to-Speech | `@google-cloud/text-to-speech` | ⚠️ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs, but HTTP request paths fail in wasm (0/3 mock integration, 0/1 live) with `Error converting from js 'object' into type 'string'` and missing error status metadata |
 | 161 | Azure Cognitive Speech | `microsoft-cognitiveservices-speech-sdk` | ⚠️ | 2026-03-18 | 5/5 offline + 1/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs; websocket recognition/synthesis integration paths fail in wasm (no websocket upgrade observed), while `getVoicesAsync` HTTP path works; live Azure calls remain credential-gated |
 | 162 | PlayHT SDK | `playht` | ❌ | 2026-03-18 | Node.js passes 5/5 offline + 3/3 HTTP mock tests, but all wasm-rquickjs runs fail at module init: `Cannot find module 'punycode'` |
-| 163 | Cartesia SDK | `@cartesia/cartesia-js` | ⬜ | | Cartesia real-time TTS API client |
+| 163 | Cartesia SDK | `@cartesia/cartesia-js` | ✅ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (status, voices, access-token retry/auth flows); live Cartesia API/WebSocket tests were not run (`CARTESIA_API_KEY` not present in `.tokens.json`) |
 
 ## Video & Image Generation
 
