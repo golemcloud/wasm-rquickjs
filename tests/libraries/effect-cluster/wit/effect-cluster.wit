@@ -1,0 +1,5 @@
+package test:lib-effect-cluster;
+
+world lib-effect-cluster {
+  export run: func() -> string;
+}

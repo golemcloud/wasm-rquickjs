@@ -345,7 +345,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 178 | Effect SQL SQLite | `@effect/sql-sqlite-node` | ❌ | 2026-03-18 | Bundled `SqliteClient` tests fail at startup with `__filename is not defined` (native `better-sqlite3` binding path); only migrator loader helpers pass |
 | 179 | Effect RPC | `@effect/rpc` | ✅ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`Rpc.make`/`RpcGroup` operations, `RpcTest` unary+error+stream flows, and HTTP protocol client with headers + flat mode) |
 | 180 | Effect OpenTelemetry | `@effect/opentelemetry` | ✅ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`OtlpResource` conversions/config, `Tracer.makeExternalSpan`, `OtlpSerialization` JSON/Protobuf, OTLP trace export/resource metadata/custom headers) |
-| 181 | Effect Cluster | `@effect/cluster` | ⬜ | | Distributed systems / cluster primitives for Effect |
+| 181 | Effect Cluster | `@effect/cluster` | ⚠️ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs, but HTTP mock integration tests only pass in Node.js (wasm-rquickjs fails 0/3 with 400s due query params from `HttpClientRequest.setUrlParam` not being propagated) |
 
 ## Observability & Tracing
 
