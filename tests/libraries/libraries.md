@@ -339,7 +339,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 173 | Effect Schema | `@effect/schema` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (struct decode, refinements, built-in transforms, `parseJson` pipeline, custom transform); package is deprecated and merged into `effect` |
 | 174 | Effect CLI | `@effect/cli` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (command descriptors, args/options parsing, `Command.run`, help/usage, shell completion generation) |
 | 175 | Effect SQL | `@effect/sql` | ✅ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs (Statement compiler/helpers, SqlSchema wrappers, Model variants, Migrator loader/error types); package is driver-agnostic so DB integration is tested in adapter packages |
-| 176 | Effect SQL pg | `@effect/sql-pg` | ⬜ | | PostgreSQL adapter for @effect/sql |
+| 176 | Effect SQL pg | `@effect/sql-pg` | ✅ | 2026-03-18 | 5/5 offline + 3/3 Docker integration tests pass in Node.js and wasm-rquickjs (`layerFromPool`/`fromPool` config + builders, `PgMigrator.fromRecord`, live connect/CRUD/transactions against PostgreSQL) |
 | 177 | Effect SQL MySQL | `@effect/sql-mysql2` | ⬜ | | MySQL adapter for @effect/sql |
 | 178 | Effect SQL SQLite | `@effect/sql-sqlite-node` | ⬜ | | SQLite Node.js adapter for @effect/sql |
 | 179 | Effect RPC | `@effect/rpc` | ⬜ | | Type-safe RPC layer for Effect |

@@ -1,0 +1,5 @@
+package test:lib-effect-sql-pg;
+
+world lib-effect-sql-pg {
+  export run: func() -> string;
+}
