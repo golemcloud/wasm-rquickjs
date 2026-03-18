@@ -1,0 +1,5 @@
+package test:lib-effect-cli;
+
+world lib-effect-cli {
+  export run: func() -> string;
+}
