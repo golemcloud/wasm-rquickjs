@@ -379,7 +379,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 197 | pdf-parse | `pdf-parse` | ❌ | 2026-03-18 | Rollup bundle initializes but functional tests fail at runtime: `createCommonjsRequire(...).ensure is not a function` (dynamic `pdf.js` require/`require.ensure` incompatibility) |
 | 198 | cheerio | `cheerio` | ⚠️ | 2026-03-18 | Offline API surface works (3/3), but `fromURL` integration fails in wasm-rquickjs with `getaddrinfo ESERVFAIL localhost` (Node.js 5/5 pass) |
 | 199 | turndown | `turndown` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (headings/inline formatting, fenced code blocks, keep/remove, custom rules, ordered-list start handling) |
-| 200 | marked | `marked` | ⬜ | | Markdown to HTML parser; pure JS |
+| 200 | marked | `marked` | ✅ | 2026-03-18 | All offline parser/extension tests pass in wasm-rquickjs |
 
 ---
 

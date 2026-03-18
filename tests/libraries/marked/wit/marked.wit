@@ -1,0 +1,5 @@
+package test:lib-marked;
+
+world lib-marked {
+  export run: func() -> string;
+}
