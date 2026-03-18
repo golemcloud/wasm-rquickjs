@@ -357,7 +357,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 185 | OpenTelemetry Exporter OTLP HTTP | `@opentelemetry/exporter-trace-otlp-http` | ✅ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (lifecycle + failure handling, OTLP JSON export, custom headers/user-agent forwarding, gzip payload compression) |
 | 186 | Sentry Node SDK | `@sentry/node` | ✅💰 | 2026-03-18 | 3/3 offline + 2/2 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`captureMessage`/`captureException`, scope enrichment, tracing headers, envelope delivery); full live ingestion remains credential-gated (no Sentry DSN token configured) |
 | 187 | Datadog Trace | `dd-trace` | ❌ | 2026-03-18 | Rollup ESM bundles crash before test execution (`ReferenceError: __dirname is not defined in ES module scope` at dd-trace init), so bundled Node baseline and wasm-rquickjs runs are blocked |
-| 188 | Prometheus Client | `prom-client` | ⬜ | | Prometheus metrics collector; pure JS |
+| 188 | Prometheus Client | `prom-client` | ✅ | 2026-03-18 | All 5 offline bundled tests pass in Node.js and wasm-rquickjs (Counter, Gauge, Histogram, Summary, Registry/merge/default-label behavior) |
 
 ## Template Engines & Rendering
 
