@@ -367,7 +367,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 190 | EJS | `ejs` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (render/escape, compile options, custom delimiters, async templates, cache APIs) |
 | 191 | Mustache | `mustache` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (escaped/raw interpolation, sections/inverted blocks, partials, lambdas, custom tags/escape + cache APIs) |
 | 192 | Nunjucks | `nunjucks` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (renderString escaping/safe output, macros/loops/tests, custom filters/tests/globals, in-memory loader extends/include, compile + error handling) |
-| 193 | Liquid | `liquidjs` | ⬜ | | Shopify Liquid template engine; pure JS |
+| 193 | Liquid | `liquidjs` | ❌ | 2026-03-18 | Node.js 5/5 pass, but wasm-rquickjs 0/5: every bundle fails at startup with `JavaScript error: stack underflow (op=112, pc=301)` during module initialization |
 
 ## Data Processing & Streaming
 
