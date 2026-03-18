@@ -1,0 +1,5 @@
+package test:lib-effect-rpc;
+
+world lib-effect-rpc {
+  export run: func() -> string;
+}
