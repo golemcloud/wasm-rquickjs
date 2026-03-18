@@ -899,8 +899,9 @@ rm -rf tmp/lib-test-<package-name>-*
 
 Update the library's row in the tracker table:
 
-- **Status:** Set to ✅, ⚠️, or ❌ based on results
+- **Status:** Set to ✅, ✅💰, ⚠️, or ❌ based on results
   - ✅ = All tests pass
+  - ✅💰 = All tests pass, but full live API testing requires credentials/tokens
   - ⚠️ = Some tests pass, some fail (partially working)
   - ❌ = No tests pass or critical functionality broken
 - **Tested On:** Set to today's date (YYYY-MM-DD)
@@ -952,7 +953,7 @@ To fully test this library, a user would need to:
 4. Re-run the test scripts that are marked as requiring credentials
 ```
 
-3. **Mark the library status** in `libraries.md` as ⚠️ with a note like "Partially tested — API calls require credentials"
+3. **Mark the library status** in `libraries.md` as ✅💰 if all offline + mock tests pass (the only gap is live credential-gated tests), or ⚠️ if there are actual test failures beyond missing credentials
 
 ## Package.json Template
 

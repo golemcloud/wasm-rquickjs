@@ -4,6 +4,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 **Legend:**
 - ✅ Tested & working
+- ✅💰 Tested & working (requires API token/credentials for full live testing)
 - ⚠️ Tested & partially working
 - ❌ Tested & not working
 - ⬜ Not yet tested
@@ -219,7 +220,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 101 | Google Generative AI | `@google/generative-ai` | ⚠️ | 2026-03-17 | 5/5 offline bundled tests pass in Node.js and wasm-rquickjs (constructors, validation, config, enums/errors, chat state); live API/streaming/embed calls require credentials |
+| 101 | Google Generative AI | `@google/generative-ai` | ✅💰 | 2026-03-17 | 5/5 offline bundled tests pass in Node.js and wasm-rquickjs (constructors, validation, config, enums/errors, chat state); live API/streaming/embed calls require credentials |
 | 102 | Cohere SDK | `cohere-ai` | ❌ | 2026-03-17 | 5/5 bundled tests pass in Node.js, but 0/5 run in wasm-rquickjs: module initialization fails with `Cannot find module 'formdata-node'` |
 | 103 | Mistral SDK | `@mistralai/mistralai` | ⚠️ | 2026-03-17 | 5/5 bundled tests pass in Node.js; 2/5 pass in wasm-rquickjs (constructor/helpers OK), request paths fail with `headers` iterator and object→string conversion errors; live API calls require credentials |
 | 104 | Groq SDK | `groq-sdk` | ✅ | 2026-03-17 | 5/5 bundled offline tests pass in both Node.js and wasm-rquickjs (constructor, validation, mocked API requests, retry flow, helpers); previous `Symbol.iterator` error resolved; live API calls require credentials |
@@ -230,19 +231,19 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 109 | HuggingFace Hub | `@huggingface/hub` | ✅ | 2026-03-17 | 5/5 bundled offline tests pass in both Node.js and wasm-rquickjs (constants, safetensors utils, SHA-256 hashing, OAuth URL building, mocked whoAmI/repoExists); previously failing Symbol.iterator bug is now fixed; live API calls require credentials |
 | 110 | Ollama JS | `ollama` | ✅ | 2026-03-17 | 5/5 bundled offline tests pass in both Node.js and wasm-rquickjs (host normalization, version, embed, streaming chat, error handling); previously failing Symbol.iterator bug is now fixed |
 | 111 | AI SDK OpenAI Provider | `@ai-sdk/openai` | ✅ | 2026-03-17 | 4/4 offline tests pass in both Node.js and wasm-rquickjs (factory/tools/mocked chat doGenerate/mocked responses doGenerate); previously failing Symbol.iterator bug is now fixed; live API calls require `OPENAI_API_KEY` |
-| 112 | AI SDK Anthropic Provider | `@ai-sdk/anthropic` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (factory/validation/tools/request+headers/error propagation); live Anthropic API calls require `ANTHROPIC_API_KEY` |
-| 113 | AI SDK Google Provider | `@ai-sdk/google` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 1/1 live credential-gate tests pass in Node.js and wasm-rquickjs (factory/tools/supported URLs/mocked doGenerate+embeddings/header+error paths); full live generation remains gated because `generativelanguage.googleapis.com` is not enabled for the configured Google project |
-| 114 | AI SDK Mistral Provider | `@ai-sdk/mistral` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (factory/validation/doGenerate/embeddings/supportedUrls + header/error transport paths); live Mistral API calls require `MISTRAL_API_KEY` |
+| 112 | AI SDK Anthropic Provider | `@ai-sdk/anthropic` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (factory/validation/tools/request+headers/error propagation); live Anthropic API calls require `ANTHROPIC_API_KEY` |
+| 113 | AI SDK Google Provider | `@ai-sdk/google` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 1/1 live credential-gate tests pass in Node.js and wasm-rquickjs (factory/tools/supported URLs/mocked doGenerate+embeddings/header+error paths); full live generation remains gated because `generativelanguage.googleapis.com` is not enabled for the configured Google project |
+| 114 | AI SDK Mistral Provider | `@ai-sdk/mistral` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (factory/validation/doGenerate/embeddings/supportedUrls + header/error transport paths); live Mistral API calls require `MISTRAL_API_KEY` |
 
 ## AI Agent Frameworks & Tools
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 115 | LangChain OpenAI | `@langchain/openai` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 live tests pass in Node.js and wasm-rquickjs (ChatOpenAI/structured output/token counting, embeddings, auth headers, and 429 error mapping) |
-| 116 | LangChain Anthropic | `@langchain/anthropic` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (constructor/invocation params/tool formatting/prompt conversion + invoke/header/error transport paths); live Anthropic API calls require `ANTHROPIC_API_KEY` |
-| 117 | LangChain Google GenAI | `@langchain/google-genai` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 live credential-gate tests pass in Node.js and wasm-rquickjs (chat/embeddings/structured-output/tool-binding coverage); full live Gemini responses remain gated by Google project/API enablement for the configured key |
+| 116 | LangChain Anthropic | `@langchain/anthropic` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (constructor/invocation params/tool formatting/prompt conversion + invoke/header/error transport paths); live Anthropic API calls require `ANTHROPIC_API_KEY` |
+| 117 | LangChain Google GenAI | `@langchain/google-genai` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 live credential-gate tests pass in Node.js and wasm-rquickjs (chat/embeddings/structured-output/tool-binding coverage); full live Gemini responses remain gated by Google project/API enablement for the configured key |
 | 118 | LangChain Community | `@langchain/community` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 1/1 live Google CSE tests pass in Node.js and wasm-rquickjs (calculator, BM25, CSV/html transforms, SSE parser, Wikipedia/Searxng/Cheerio HTTP paths) |
-| 119 | LangSmith SDK | `langsmith` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (RunTree/traceable/anonymizer/client CRUD/list coverage); live LangSmith API coverage requires `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` |
+| 119 | LangSmith SDK | `langsmith` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (RunTree/traceable/anonymizer/client CRUD/list coverage); live LangSmith API coverage requires `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` |
 | 120 | AutoGen JS | `autogen` | ✅ | 2026-03-17 | All 5 offline bundled tests pass in Node.js and wasm-rquickjs; npm `autogen@0.0.1` is a minimal passthrough utility (not Microsoft AutoGen framework) |
 | 121 | CrewAI JS | `crewai` | ❌ | 2026-03-17 | 5/5 Node tests pass, but Rollup cannot bundle package entrypoint (`src/crewai/cli/cli.ts`) due untranspiled TypeScript syntax (`const program: Command`); wasm tests blocked |
 | 122 | Instructor JS | `@instructor-ai/instructor` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 1/1 live tests pass in Node.js and wasm-rquickjs (constructor/proxy validation, pass-through, retry behavior, and live OpenAI structured output) |
@@ -254,7 +255,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 125 | OpenAI Embeddings (via openai) | `openai` | ✅ | 2026-03-17 | OpenAI SDK suite passes fully in Node.js and wasm-rquickjs: 5/5 offline + 3/3 HTTP mock + 3/3 live tests, including `embeddings.create()` |
-| 126 | Voyage AI SDK | `voyageai` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (embed/rerank/retry/error paths); live Voyage API calls require `VOYAGE_API_KEY`, and local `voyage-4-nano`/`tokenize()` paths need optional `@huggingface/transformers` + `onnxruntime-node` |
+| 126 | Voyage AI SDK | `voyageai` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (embed/rerank/retry/error paths); live Voyage API calls require `VOYAGE_API_KEY`, and local `voyage-4-nano`/`tokenize()` paths need optional `@huggingface/transformers` + `onnxruntime-node` |
 | 127 | Jina AI SDK | `@jina-ai/sdk` | ❌ | 2026-03-17 | `npm install` fails with E404 (`@jina-ai/sdk@latest` not in registry); package cannot be installed, bundled, or executed |
 | 128 | Transformers.js | `@xenova/transformers` | ❌ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js, but 0/8 run in wasm-rquickjs: bundled init fails with `JavaScript error: self is not defined` |
 | 129 | LlamaIndex TS | `llamaindex` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 live tests pass in Node.js and wasm-rquickjs (Document/Prompt/SentenceSplitter/FunctionTool/Memory + OpenAI provider chat/retry + VectorStoreIndex RAG); live wasm runs require `--env OPENAI_API_KEY=...` |
@@ -263,14 +264,14 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 130 | Pinecone SDK | `@pinecone-database/pinecone` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (control/data/inference paths); live Pinecone API calls remain credential-gated (`PINECONE_API_KEY`) |
+| 130 | Pinecone SDK | `@pinecone-database/pinecone` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (control/data/inference paths); live Pinecone API calls remain credential-gated (`PINECONE_API_KEY`) |
 | 131 | Weaviate Client | `weaviate-client` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 Docker tests pass in Node.js; wasm-rquickjs passes 9/10 tests, with only `connectToWeaviateCloud()` failing (`tls is not supported in WebAssembly environment`) |
 | 132 | Qdrant JS | `@qdrant/js-client-rest` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 Docker integration tests pass in Node.js and wasm-rquickjs (`versionInfo`, collection lifecycle, upsert/count/query) |
 | 133 | ChromaDB Client | `chromadb` | ✅ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock + 2/2 Docker integration tests pass in Node.js and wasm-rquickjs (constructors, config/builders, collection lifecycle, and record CRUD/query); Chroma Cloud live tests are credential-gated (`CHROMA_API_KEY`) |
-| 134 | Milvus SDK | `@zilliz/milvus2-sdk-node` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Milvus/Zilliz service calls (gRPC + real HTTP endpoints) remain untested |
+| 134 | Milvus SDK | `@zilliz/milvus2-sdk-node` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Milvus/Zilliz service calls (gRPC + real HTTP endpoints) remain untested |
 | 135 | LanceDB | `@lancedb/lancedb` | ❌ | 2026-03-17 | Cannot bundle: Rollup fails on native `.node` addon import (`lancedb.darwin-arm64.node`); source sanity tests pass in Node.js |
-| 136 | Turbopuffer SDK | `@turbopuffer/turbopuffer` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Turbopuffer API coverage requires `TURBOPUFFER_API_KEY` |
-| 137 | Upstash Vector | `@upstash/vector` | ⚠️ | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Upstash API coverage requires `UPSTASH_VECTOR_REST_URL` + `UPSTASH_VECTOR_REST_TOKEN` |
+| 136 | Turbopuffer SDK | `@turbopuffer/turbopuffer` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Turbopuffer API coverage requires `TURBOPUFFER_API_KEY` |
+| 137 | Upstash Vector | `@upstash/vector` | ✅💰 | 2026-03-17 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Upstash API coverage requires `UPSTASH_VECTOR_REST_URL` + `UPSTASH_VECTOR_REST_TOKEN` |
 
 ## Graph Databases
 
@@ -288,7 +289,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 144 | Elasticsearch Client | `@elastic/elasticsearch` | ⚠️ | 2026-03-18 | 5/5 offline + 5/5 integration tests pass in Node.js; wasm-rquickjs passes offline APIs (5/5) but all real HTTP operations fail (0/5 HTTP mock + Docker) with `JavaScript error: Request aborted` |
-| 145 | Algolia Search | `algoliasearch` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Algolia service tests are credential-gated |
+| 145 | Algolia Search | `algoliasearch` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs; live Algolia service tests are credential-gated |
 | 146 | Typesense Client | `typesense` | ✅ | 2026-03-18 | All 5 offline + 5 integration tests (HTTP mock 3/3, Docker 2/2) pass in Node.js and wasm-rquickjs |
 | 147 | MeiliSearch JS | `meilisearch` | ❌ | 2026-03-18 | Node.js passes all 5 offline + 5 integration tests (HTTP mock 3/3, Docker 2/2), but wasm-rquickjs fails core HTTP paths (0/5 integration, 2/5 offline only) with `JavaScript error: Error converting from js 'object' into type 'string'` |
 | 148 | OpenSearch Client | `@opensearch-project/opensearch` | ✅ | 2026-03-18 | All 5 offline + 5 integration tests (HTTP mock 3/3, Docker 2/2) pass in Node.js and wasm-rquickjs |
@@ -297,19 +298,19 @@ This document tracks compatibility testing of popular npm packages with the wasm
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 149 | SerpAPI | `serpapi` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`getJson`/`getHtml`/archive/account/locations); live SerpAPI calls remain credential-gated |
-| 150 | Serper SDK | `serper` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`news`/`images`/`videos`/`places`, pagination, cache); live Serper.dev calls remain credential-gated |
-| 151 | Tavily SDK | `@tavily/core` | ⚠️ | 2026-03-18 | 3/3 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`extract`/`map`/`research`/`getResearch`, deprecated APIs, error handling); live Tavily API calls remain credential-gated |
-| 152 | Brave Search SDK | `brave-search` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`webSearch`/`imageSearch`/`newsSearch`, local POI/descriptions, summary polling, auth/rate-limit mapping); live Brave API calls remain credential-gated |
-| 153 | Exa JS | `exa-js` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`findSimilar`/`getContents`/`answer`/`streamAnswer`, schema + polling helpers); live Exa API calls remain credential-gated (`EXA_API_KEY` missing) |
+| 149 | SerpAPI | `serpapi` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`getJson`/`getHtml`/archive/account/locations); live SerpAPI calls remain credential-gated |
+| 150 | Serper SDK | `serper` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`news`/`images`/`videos`/`places`, pagination, cache); live Serper.dev calls remain credential-gated |
+| 151 | Tavily SDK | `@tavily/core` | ✅💰 | 2026-03-18 | 3/3 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`extract`/`map`/`research`/`getResearch`, deprecated APIs, error handling); live Tavily API calls remain credential-gated |
+| 152 | Brave Search SDK | `brave-search` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`webSearch`/`imageSearch`/`newsSearch`, local POI/descriptions, summary polling, auth/rate-limit mapping); live Brave API calls remain credential-gated |
+| 153 | Exa JS | `exa-js` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`findSimilar`/`getContents`/`answer`/`streamAnswer`, schema + polling helpers); live Exa API calls remain credential-gated (`EXA_API_KEY` missing) |
 | 154 | Google Custom Search | `googleapis` | ⚠️ | 2026-03-18 | 5/5 offline tests pass in Node.js + wasm-rquickjs, but all HTTP paths fail in wasm (0/3 mock integration, 0/1 live) with `Error converting from js 'object' into type 'string'` |
 
 ## Speech-to-Text & Text-to-Speech
 
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
-| 155 | Deepgram SDK | `@deepgram/sdk` | ⚠️ | 2026-03-18 | 5/5 offline + 4/4 HTTP mock tests pass in Node.js and wasm-rquickjs (`listen`/`read`/`speak`/`auth`/`manage`, websocket client construction/guards); live Deepgram API tests remain credential-gated (`DEEPGRAM_API_KEY` missing) |
-| 156 | AssemblyAI SDK | `assemblyai` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`files`/`transcripts`/`lemur` + temporary token APIs, realtime/streaming transcriber URL and guard behavior); live AssemblyAI API tests remain credential-gated (`ASSEMBLYAI_API_KEY` missing) |
+| 155 | Deepgram SDK | `@deepgram/sdk` | ✅💰 | 2026-03-18 | 5/5 offline + 4/4 HTTP mock tests pass in Node.js and wasm-rquickjs (`listen`/`read`/`speak`/`auth`/`manage`, websocket client construction/guards); live Deepgram API tests remain credential-gated (`DEEPGRAM_API_KEY` missing) |
+| 156 | AssemblyAI SDK | `assemblyai` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`files`/`transcripts`/`lemur` + temporary token APIs, realtime/streaming transcriber URL and guard behavior); live AssemblyAI API tests remain credential-gated (`ASSEMBLYAI_API_KEY` missing) |
 | 157 | ElevenLabs SDK | `elevenlabs` | ❌ | 2026-03-18 | Node.js passes 5/5 offline + 3/3 HTTP mock tests, but all wasm-rquickjs runs fail at module init: `Cannot find module 'formdata-node'` |
 | 158 | OpenAI Audio (via openai) | `openai` | ❌ | 2026-03-17 | Agent did not update row; check logs |
 | 159 | Google Cloud Speech | `@google-cloud/speech` | ⚠️ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs, but HTTP request paths fail in wasm (0/3 mock integration, 0/1 live) with `Error converting from js 'object' into type 'string'` and missing error status metadata |
@@ -325,8 +326,8 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 164 | Replicate (video models) | `replicate` | ❌ | 2026-03-17 | Agent did not update row; check logs |
 | 165 | Stability AI SDK | `@stability-ai/sdk` | ❌ | 2026-03-18 | npm install fails with E404 (`@stability-ai/sdk` not found in registry); runtime testing blocked |
 | 166 | Fal.ai Client | `@fal-ai/client` | ✅ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`run`, queue subscribe/cancel, middleware, errors/helpers); live Fal API tests were not run (`FAL_KEY` not present in `.tokens.json`) |
-| 167 | Luma AI SDK | `lumaai` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs; live Luma API tests not run because `LUMAAI_API_KEY` is not present in `.tokens.json` |
-| 168 | RunwayML SDK | `@runwayml/sdk` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`tasks.retrieve`, `textToImage.create`, error mapping); live Runway API tests not run because `RUNWAYML_API_SECRET` is not present in `.tokens.json` |
+| 167 | Luma AI SDK | `lumaai` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs; live Luma API tests not run because `LUMAAI_API_KEY` is not present in `.tokens.json` |
+| 168 | RunwayML SDK | `@runwayml/sdk` | ✅💰 | 2026-03-18 | 5/5 offline + 3/3 HTTP mock integration tests pass in Node.js and wasm-rquickjs (`tasks.retrieve`, `textToImage.create`, error mapping); live Runway API tests not run because `RUNWAYML_API_SECRET` is not present in `.tokens.json` |
 | 169 | Leonardo AI SDK | `@leonardo-ai/sdk` | ❌ | 2026-03-18 | Node.js passes 5/5 offline + 3/3 HTTP mock tests, but wasm-rquickjs only passes 1/5 offline and 0/3 integration tests; all HTTP paths fail in `_createRequest` with `Error converting from js 'object' into type 'string'` |
 
 ## Effect Ecosystem
