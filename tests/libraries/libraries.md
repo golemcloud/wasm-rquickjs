@@ -301,7 +301,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 150 | Serper SDK | `serper` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`news`/`images`/`videos`/`places`, pagination, cache); live Serper.dev calls remain credential-gated |
 | 151 | Tavily SDK | `@tavily/core` | ⚠️ | 2026-03-18 | 3/3 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`extract`/`map`/`research`/`getResearch`, deprecated APIs, error handling); live Tavily API calls remain credential-gated |
 | 152 | Brave Search SDK | `brave-search` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`webSearch`/`imageSearch`/`newsSearch`, local POI/descriptions, summary polling, auth/rate-limit mapping); live Brave API calls remain credential-gated |
-| 153 | Exa JS | `exa-js` | ⬜ | | Exa (formerly Metaphor) neural search API client |
+| 153 | Exa JS | `exa-js` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`findSimilar`/`getContents`/`answer`/`streamAnswer`, schema + polling helpers); live Exa API calls remain credential-gated (`EXA_API_KEY` missing) |
 | 154 | Google Custom Search | `googleapis` | ⬜ | | Google APIs client (Custom Search, etc.); HTTP-based |
 
 ## Speech-to-Text & Text-to-Speech

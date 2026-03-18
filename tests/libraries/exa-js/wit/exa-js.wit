@@ -1,0 +1,5 @@
+package test:lib-exa-js;
+
+world lib-exa-js {
+  export run: func() -> string;
+}
