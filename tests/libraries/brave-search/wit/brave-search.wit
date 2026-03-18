@@ -1,0 +1,5 @@
+package test:lib-brave-search;
+
+world lib-brave-search {
+  export run: func() -> string;
+}

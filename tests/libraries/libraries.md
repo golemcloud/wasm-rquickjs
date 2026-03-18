@@ -300,7 +300,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 149 | SerpAPI | `serpapi` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`getJson`/`getHtml`/archive/account/locations); live SerpAPI calls remain credential-gated |
 | 150 | Serper SDK | `serper` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`news`/`images`/`videos`/`places`, pagination, cache); live Serper.dev calls remain credential-gated |
 | 151 | Tavily SDK | `@tavily/core` | ⚠️ | 2026-03-18 | 3/3 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`search`/`extract`/`map`/`research`/`getResearch`, deprecated APIs, error handling); live Tavily API calls remain credential-gated |
-| 152 | Brave Search SDK | `brave-search` | ⬜ | | Brave Search API client |
+| 152 | Brave Search SDK | `brave-search` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`webSearch`/`imageSearch`/`newsSearch`, local POI/descriptions, summary polling, auth/rate-limit mapping); live Brave API calls remain credential-gated |
 | 153 | Exa JS | `exa-js` | ⬜ | | Exa (formerly Metaphor) neural search API client |
 | 154 | Google Custom Search | `googleapis` | ⬜ | | Google APIs client (Custom Search, etc.); HTTP-based |
 
