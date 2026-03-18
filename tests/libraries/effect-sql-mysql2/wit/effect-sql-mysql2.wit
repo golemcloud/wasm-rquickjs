@@ -1,0 +1,5 @@
+package test:lib-effect-sql-mysql2;
+
+world lib-effect-sql-mysql2 {
+  export run: func() -> string;
+}

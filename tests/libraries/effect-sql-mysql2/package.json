@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "dependencies": {
+    "@effect/experimental": "0.59.0",
+    "@effect/platform": "0.95.0",
+    "@effect/sql": "0.50.0",
+    "@effect/sql-mysql2": "0.51.0",
+    "effect": "3.20.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.0.0"
+  }
+}
