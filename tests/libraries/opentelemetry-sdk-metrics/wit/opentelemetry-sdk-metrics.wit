@@ -1,0 +1,5 @@
+package test:lib-opentelemetry-sdk-metrics;
+
+world lib-opentelemetry-sdk-metrics {
+  export run: func() -> string;
+}

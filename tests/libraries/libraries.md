@@ -353,7 +353,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 182 | OpenTelemetry API | `@opentelemetry/api` | ✅ | 2026-03-18 | All 5 offline tests pass in Node.js and wasm-rquickjs (trace, context, propagation/baggage, metrics, diag APIs) |
 | 183 | OpenTelemetry SDK Trace | `@opentelemetry/sdk-trace-base` | ✅ | 2026-03-18 | All 5 offline tests pass in Node.js and wasm-rquickjs (provider/span lifecycle, limits, samplers, TraceIdRatioBasedSampler, custom processor hooks + flush/shutdown) |
-| 184 | OpenTelemetry SDK Metrics | `@opentelemetry/sdk-metrics` | ⬜ | | OTel metrics SDK; pure JS |
+| 184 | OpenTelemetry SDK Metrics | `@opentelemetry/sdk-metrics` | ✅ | 2026-03-18 | All 5 offline tests pass in Node.js and wasm-rquickjs (sync instruments, monotonic value validation, views/aggregation controls, observable callbacks, delta temporality) |
 | 185 | OpenTelemetry Exporter OTLP HTTP | `@opentelemetry/exporter-trace-otlp-http` | ⬜ | | OTel OTLP exporter over HTTP |
 | 186 | Sentry Node SDK | `@sentry/node` | ⬜ | | Sentry error/performance monitoring; uses native hooks |
 | 187 | Datadog Trace | `dd-trace` | ⬜ | | Datadog APM tracing; native bindings |
