@@ -1,0 +1,5 @@
+package test:lib-deepgram-sdk;
+
+world lib-deepgram-sdk {
+  export run: func() -> string;
+}
