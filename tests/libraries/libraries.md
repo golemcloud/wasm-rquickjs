@@ -342,7 +342,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 175 | Effect SQL | `@effect/sql` | ✅ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs (Statement compiler/helpers, SqlSchema wrappers, Model variants, Migrator loader/error types); package is driver-agnostic so DB integration is tested in adapter packages |
 | 176 | Effect SQL pg | `@effect/sql-pg` | ✅ | 2026-03-18 | 5/5 offline + 3/3 Docker integration tests pass in Node.js and wasm-rquickjs (`layerFromPool`/`fromPool` config + builders, `PgMigrator.fromRecord`, live connect/CRUD/transactions against PostgreSQL) |
 | 177 | Effect SQL MySQL | `@effect/sql-mysql2` | ✅ | 2026-03-18 | 5/5 offline + 3/3 Docker integration tests pass in Node.js and wasm-rquickjs (`MysqlClient.makeCompiler` builders, `MysqlMigrator` loaders, live connect/CRUD/transactions against MySQL 8.0) |
-| 178 | Effect SQL SQLite | `@effect/sql-sqlite-node` | ⬜ | | SQLite Node.js adapter for @effect/sql |
+| 178 | Effect SQL SQLite | `@effect/sql-sqlite-node` | ❌ | 2026-03-18 | Bundled `SqliteClient` tests fail at startup with `__filename is not defined` (native `better-sqlite3` binding path); only migrator loader helpers pass |
 | 179 | Effect RPC | `@effect/rpc` | ⬜ | | Type-safe RPC layer for Effect |
 | 180 | Effect OpenTelemetry | `@effect/opentelemetry` | ⬜ | | OpenTelemetry integration for Effect |
 | 181 | Effect Cluster | `@effect/cluster` | ⬜ | | Distributed systems / cluster primitives for Effect |
