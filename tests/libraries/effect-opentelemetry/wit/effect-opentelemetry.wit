@@ -1,0 +1,5 @@
+package test:lib-effect-opentelemetry;
+
+world lib-effect-opentelemetry {
+  export run: func() -> string;
+}
