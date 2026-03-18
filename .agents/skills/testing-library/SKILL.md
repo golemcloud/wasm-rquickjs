@@ -230,8 +230,9 @@ For each bundled test file:
   --output tmp/lib-test-<package-name>-01
 
 # 2. Patch Cargo.toml features — disable "logging" (wasmtime CLI doesn't provide
-#    wasi:logging), keep "http" and "sqlite" (required for compilation)
-sed -i '' 's/default = \["http", "logging"\]/default = ["http", "sqlite"]/' \
+#    wasi:logging). The generated default is ["normal"] which transitively includes
+#    "logging". Replace it with "full-no-logging" which has everything except logging.
+sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
   tmp/lib-test-<package-name>-01/Cargo.toml
 
 # 3. Compile to WASM
@@ -387,7 +388,7 @@ node run-node.mjs ./dist/test-integration-02-crud.bundle.js
   --wit tests/libraries/<package-name>/wit \
   --output tmp/lib-test-<package-name>-int-01
 
-sed -i '' 's/default = \["http", "logging"\]/default = ["http", "sqlite"]/' \
+sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
   tmp/lib-test-<package-name>-int-01/Cargo.toml
 
 cd tmp/lib-test-<package-name>-int-01
@@ -603,7 +604,7 @@ node run-node.mjs ./dist/test-integration-03-error-handling.bundle.js
   --wit tests/libraries/<package-name>/wit \
   --output tmp/lib-test-<package-name>-int-01
 
-sed -i '' 's/default = \["http", "logging"\]/default = ["http", "sqlite"]/' \
+sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
   tmp/lib-test-<package-name>-int-01/Cargo.toml
 
 cd tmp/lib-test-<package-name>-int-01
@@ -750,7 +751,7 @@ node run-node.mjs ./dist/test-live-01-completion.bundle.js
   --wit tests/libraries/<package-name>/wit \
   --output tmp/lib-test-<package-name>-live-01
 
-sed -i '' 's/default = \["http", "logging"\]/default = ["http", "sqlite"]/' \
+sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
   tmp/lib-test-<package-name>-live-01/Cargo.toml
 
 cd tmp/lib-test-<package-name>-live-01
