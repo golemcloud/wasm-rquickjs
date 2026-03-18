@@ -310,7 +310,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 155 | Deepgram SDK | `@deepgram/sdk` | ⚠️ | 2026-03-18 | 5/5 offline + 4/4 HTTP mock tests pass in Node.js and wasm-rquickjs (`listen`/`read`/`speak`/`auth`/`manage`, websocket client construction/guards); live Deepgram API tests remain credential-gated (`DEEPGRAM_API_KEY` missing) |
 | 156 | AssemblyAI SDK | `assemblyai` | ⚠️ | 2026-03-18 | 5/5 offline + 3/3 HTTP mock tests pass in Node.js and wasm-rquickjs (`files`/`transcripts`/`lemur` + temporary token APIs, realtime/streaming transcriber URL and guard behavior); live AssemblyAI API tests remain credential-gated (`ASSEMBLYAI_API_KEY` missing) |
-| 157 | ElevenLabs SDK | `elevenlabs` | ⬜ | | ElevenLabs TTS/voice cloning API client |
+| 157 | ElevenLabs SDK | `elevenlabs` | ❌ | 2026-03-18 | Node.js passes 5/5 offline + 3/3 HTTP mock tests, but all wasm-rquickjs runs fail at module init: `Cannot find module 'formdata-node'` |
 | 158 | OpenAI Audio (via openai) | `openai` | ❌ | 2026-03-17 | Agent did not update row; check logs |
 | 159 | Google Cloud Speech | `@google-cloud/speech` | ⬜ | | Google Cloud Speech-to-Text client; uses gRPC |
 | 160 | Google Cloud Text-to-Speech | `@google-cloud/text-to-speech` | ⬜ | | Google Cloud TTS client; uses gRPC |

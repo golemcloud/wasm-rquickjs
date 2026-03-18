@@ -1,0 +1,5 @@
+package test:lib-elevenlabs;
+
+world lib-elevenlabs {
+  export run: func() -> string;
+}
