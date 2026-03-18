@@ -1,0 +1,5 @@
+package test:lib-runwayml-sdk;
+
+world lib-runwayml-sdk {
+  export run: func() -> string;
+}
