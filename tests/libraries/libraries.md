@@ -377,7 +377,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 195 | PapaParse | `papaparse` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (basic header parsing, dynamic typing, quoted field handling, unparse round-trip, step/preview behavior) |
 | 196 | xlsx / SheetJS | `xlsx` | ✅ | 2026-03-18 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (workbook read/write roundtrip, JSON sheet builders, formula/CSV/HTML exports, Date-cell options, address helpers + workbook props) |
 | 197 | pdf-parse | `pdf-parse` | ❌ | 2026-03-18 | Rollup bundle initializes but functional tests fail at runtime: `createCommonjsRequire(...).ensure is not a function` (dynamic `pdf.js` require/`require.ensure` incompatibility) |
-| 198 | cheerio | `cheerio` | ⬜ | | HTML parser/scraper (jQuery-like API); pure JS |
+| 198 | cheerio | `cheerio` | ⚠️ | 2026-03-18 | Offline API surface works (3/3), but `fromURL` integration fails in wasm-rquickjs with `getaddrinfo ESERVFAIL localhost` (Node.js 5/5 pass) |
 | 199 | turndown | `turndown` | ⬜ | | HTML to Markdown converter; pure JS |
 | 200 | marked | `marked` | ⬜ | | Markdown to HTML parser; pure JS |
 

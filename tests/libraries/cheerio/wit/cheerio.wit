@@ -1,0 +1,5 @@
+package test:lib-cheerio;
+
+world lib-cheerio {
+  export run: func() -> string;
+}
