@@ -335,7 +335,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 |---|---------|----------|--------|-----------|-------|
 | 170 | Effect | `effect` | ✅ | 2026-03-18 | 5/5 offline tests pass in Node.js and wasm-rquickjs (Option/Either/Data primitives, sync+async Effect execution, schema validation, immutable collections) |
 | 171 | Effect Platform | `@effect/platform` | ⚠️ | 2026-03-18 | 3/5 offline + 3/3 HTTP mock integration tests pass in wasm-rquickjs; URL helper paths have behavioral mismatches (`Url.mutate` conversion error, `HttpClientRequest.toUrl` query-param difference) |
-| 172 | Effect Platform Node | `@effect/platform-node` | ⬜ | | Node.js runtime adapter for @effect/platform |
+| 172 | Effect Platform Node | `@effect/platform-node` | ⚠️ | 2026-03-18 | Node.js passes 5/5 offline + 3/3 HTTP mock tests, but wasm-rquickjs passes 2/5 offline + 1/3 integration tests; filesystem directory creation fails (`ENOENT` on resolved root paths) and successful HTTP JSON payload handling differs (query/body assertions fail) |
 | 173 | Effect Schema | `@effect/schema` | ⬜ | | Schema validation/serialization (successor to io-ts) |
 | 174 | Effect CLI | `@effect/cli` | ⬜ | | CLI argument parsing built on Effect |
 | 175 | Effect SQL | `@effect/sql` | ⬜ | | SQL database layer for Effect |
