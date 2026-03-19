@@ -12,7 +12,9 @@ mod common;
 
 #[test_gen]
 fn gen_dts_tests(r: &mut DynamicTestRegistration) {
-    for example_path in collect_example_paths(&["examples/runtime", "examples/compilation"]).unwrap() {
+    for example_path in
+        collect_example_paths(&["examples/runtime", "examples/compilation"]).unwrap()
+    {
         let example_path_clone = example_path.clone();
         let example_name = example_path.file_name().unwrap().to_string();
 
