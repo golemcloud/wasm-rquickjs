@@ -63,20 +63,24 @@ jobs:
   test-runtime:
     needs: [build]
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: ./.github/actions/setup
-      - name: Runtime tests
-        run: cargo test --test runtime -- --nocapture --report-time --format ctrf --logfile target/ctrf.json
+      - name: Runtime tests (group ${{ matrix.group }}/8)
+        run: cargo test --test runtime -- --nocapture --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
-          artifact-name: test-runtime-report
+          artifact-name: test-runtime-group-${{ matrix.group }}-report
           summary: true
           summary-report: true
           failed-report: true
