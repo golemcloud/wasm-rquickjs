@@ -8,7 +8,9 @@ use crate::common::{
     strip_jsonc_comments,
 };
 use camino::Utf8Path;
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 use test_r::core::{DynamicTestRegistration, TestProperties};
@@ -193,6 +195,16 @@ fn handle_test_result(
     }
 }
 
+// --- Shard tagging for CI parallelism ---
+
+const NUM_SHARDS: u64 = 8;
+
+fn shard_tag(name: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    name.hash(&mut hasher);
+    format!("shard{}", hasher.finish() % NUM_SHARDS)
+}
+
 // --- Dynamic test generation ---
 
 #[test_gen]
@@ -211,6 +223,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
             // Non-split: one Rust test per file (unchanged behavior)
             let props = TestProperties {
                 is_ignored: entry.skip || entry.impossible,
+                tags: vec![shard_tag(&file_test_name)],
                 ..TestProperties::unit_test()
             };
 
@@ -284,6 +297,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     entry.skip || entry.impossible || subtest.skip || subtest.impossible;
                 let props = TestProperties {
                     is_ignored,
+                    tags: vec![shard_tag(&test_name)],
                     ..TestProperties::unit_test()
                 };
 
