@@ -3,11 +3,11 @@ use std::cell::RefCell;
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime};
-use wasi::io::streams::{InputStream, OutputStream, StreamError};
-use wasi::sockets::instance_network::instance_network;
-use wasi::sockets::network::{ErrorCode, IpAddressFamily};
-use wasi::sockets::tcp::ShutdownType;
-use wasi::sockets::tcp_create_socket::create_tcp_socket;
+use wasip2::io::streams::{InputStream, OutputStream, StreamError};
+use wasip2::sockets::instance_network::instance_network;
+use wasip2::sockets::network::{ErrorCode, IpAddressFamily};
+use wasip2::sockets::tcp::ShutdownType;
+use wasip2::sockets::tcp_create_socket::create_tcp_socket;
 use wstd::runtime::AsyncPollable;
 
 use super::socket_helpers::{
@@ -79,7 +79,7 @@ struct TcpInner {
     // Drop order matters: streams must be dropped before the socket (WASI child resources).
     input: Option<InputStream>,
     output: Option<OutputStream>,
-    socket: Option<wasi::sockets::tcp::TcpSocket>,
+    socket: Option<wasip2::sockets::tcp::TcpSocket>,
     connected: bool,
     closed: bool,
     generation: u64,
@@ -795,7 +795,7 @@ fn create_tcp_listener_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpL
 }
 
 struct ListenerInner {
-    socket: Option<wasi::sockets::tcp::TcpSocket>,
+    socket: Option<wasip2::sockets::tcp::TcpSocket>,
     listening: bool,
     closed: bool,
     generation: u64,
@@ -987,7 +987,7 @@ impl TcpListener {
                         })?;
                         socket.subscribe()
                     };
-                    wasi::io::poll::poll(&[&pollable]);
+                    wasip2::io::poll::poll(&[&pollable]);
                 }
                 Err(e) => {
                     return Err(throw_socket_error(
@@ -1066,7 +1066,7 @@ impl TcpListener {
                         })?;
                         socket.subscribe()
                     };
-                    wasi::io::poll::poll(&[&pollable]);
+                    wasip2::io::poll::poll(&[&pollable]);
                 }
                 Err(e) => {
                     return Err(throw_socket_error(

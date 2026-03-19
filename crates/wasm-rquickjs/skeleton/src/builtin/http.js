@@ -893,7 +893,7 @@ export class Request {
     }
 
     clone() {
-        return new Response(this);
+        return new Request(this);
     }
 
     async formData() {
@@ -906,7 +906,7 @@ export class Request {
     }
 
     async json() {
-        return JSON.stringify(await this.text());
+        return JSON.parse(await this.text());
     }
 
     async text() {

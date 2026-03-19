@@ -1,7 +1,7 @@
 use rquickjs::{Ctx, Exception};
-use wasi::sockets::instance_network::instance_network;
-use wasi::sockets::ip_name_lookup::{resolve_addresses, ResolveAddressStream};
-use wasi::sockets::network::{ErrorCode, IpAddress};
+use wasip2::sockets::instance_network::instance_network;
+use wasip2::sockets::ip_name_lookup::{resolve_addresses, ResolveAddressStream};
+use wasip2::sockets::network::{ErrorCode, IpAddress};
 use wstd::runtime::AsyncPollable;
 
 #[rquickjs::module]

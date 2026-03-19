@@ -1,5 +1,5 @@
 use rquickjs::{Ctx, Exception};
-use wasi::sockets::network::{
+use wasip2::sockets::network::{
     ErrorCode, IpAddress, IpSocketAddress, Ipv4SocketAddress, Ipv6SocketAddress,
 };
 

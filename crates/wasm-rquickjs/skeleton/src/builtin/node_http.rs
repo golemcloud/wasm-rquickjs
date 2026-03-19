@@ -1,9 +1,9 @@
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
-use wasi::http::outgoing_handler;
-use wasi::http::types as wasi_http;
-use wasi::io::streams::{InputStream, OutputStream, StreamError};
+use wasip2::http::outgoing_handler;
+use wasip2::http::types as wasi_http;
+use wasip2::io::streams::{InputStream, OutputStream, StreamError};
 use wstd::runtime::AsyncPollable;
 
 #[rquickjs::module]

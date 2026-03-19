@@ -258,7 +258,7 @@ impl PreparedComponent {
                 "log",
                 |_ctx: StoreContextMut<'_, Host>,
                  (_level, _context, _message): (LogLevel, String, String)|
-                 -> Result<(), anyhow::Error> { Ok(()) },
+                 -> Result<(), wasmtime::Error> { Ok(()) },
             )?;
         }
 
@@ -338,7 +338,7 @@ impl GolemPreparedComponent {
                 "log",
                 |_ctx: StoreContextMut<'_, Host>,
                  (_level, _context, _message): (LogLevel, String, String)|
-                 -> Result<(), anyhow::Error> { Ok(()) },
+                 -> Result<(), wasmtime::Error> { Ok(()) },
             )?;
         }
 
@@ -366,7 +366,7 @@ impl GolemPreparedComponent {
             let spans = spans_clone.clone();
             move |mut ctx: StoreContextMut<'_, Host>,
                   (name,): (String,)|
-                  -> Result<(wasmtime::component::Resource<GolemSpan>,), anyhow::Error> {
+                  -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
                 let span = GolemSpan {
                     name,
                     attributes: Vec::new(),
@@ -399,7 +399,7 @@ impl GolemPreparedComponent {
                 String,
                 AttributeValue,
             )|
-                  -> Result<(), anyhow::Error> {
+                  -> Result<(), wasmtime::Error> {
                 let value_str = match &attr_value {
                     AttributeValue::String(s) => s.clone(),
                 };
@@ -421,7 +421,7 @@ impl GolemPreparedComponent {
             let spans = spans_clone.clone();
             move |mut ctx: StoreContextMut<'_, Host>,
                   (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
-                  -> Result<(), anyhow::Error> {
+                  -> Result<(), wasmtime::Error> {
                 let mut table = ctx.data_mut().table.lock().unwrap();
                 if let Ok(span) = table.get_mut(&span_res) {
                     span.finished = true;

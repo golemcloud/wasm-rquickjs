@@ -3,12 +3,12 @@ use std::cell::RefCell;
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime};
-use wasi::sockets::instance_network::instance_network;
-use wasi::sockets::network::{ErrorCode, IpAddressFamily, IpSocketAddress};
-use wasi::sockets::udp::{
+use wasip2::sockets::instance_network::instance_network;
+use wasip2::sockets::network::{ErrorCode, IpAddressFamily, IpSocketAddress};
+use wasip2::sockets::udp::{
     IncomingDatagramStream, OutgoingDatagram, OutgoingDatagramStream, UdpSocket,
 };
-use wasi::sockets::udp_create_socket::create_udp_socket;
+use wasip2::sockets::udp_create_socket::create_udp_socket;
 use wstd::runtime::AsyncPollable;
 
 use super::socket_helpers::{

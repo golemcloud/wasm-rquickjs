@@ -33,7 +33,7 @@ fn set_file_times(file: &std::fs::File, atime_secs: f64, mtime_secs: f64) -> std
 
 fn secs_to_wasi_timestamp(
     secs: f64,
-) -> std::io::Result<wasi::filesystem::types::NewTimestamp> {
+) -> std::io::Result<wasip2::filesystem::types::NewTimestamp> {
     if !secs.is_finite() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -47,16 +47,16 @@ fn secs_to_wasi_timestamp(
     }
     let seconds = secs.floor() as u64;
     let nanoseconds = ((secs - secs.floor()) * 1_000_000_000.0) as u32;
-    Ok(wasi::filesystem::types::NewTimestamp::Timestamp(
-        wasi::clocks::wall_clock::Datetime {
+    Ok(wasip2::filesystem::types::NewTimestamp::Timestamp(
+        wasip2::clocks::wall_clock::Datetime {
             seconds,
             nanoseconds,
         },
     ))
 }
 
-fn wasi_fs_error_to_io(e: &wasi::filesystem::types::ErrorCode) -> std::io::Error {
-    use wasi::filesystem::types::ErrorCode;
+fn wasi_fs_error_to_io(e: &wasip2::filesystem::types::ErrorCode) -> std::io::Error {
+    use wasip2::filesystem::types::ErrorCode;
     match e {
         ErrorCode::NoEntry => std::io::Error::new(std::io::ErrorKind::NotFound, e.to_string()),
         ErrorCode::Access => {
@@ -88,12 +88,12 @@ fn set_path_times(
     let mtime = secs_to_wasi_timestamp(mtime_secs)?;
 
     let path_flags = if follow_symlinks {
-        wasi::filesystem::types::PathFlags::SYMLINK_FOLLOW
+        wasip2::filesystem::types::PathFlags::SYMLINK_FOLLOW
     } else {
-        wasi::filesystem::types::PathFlags::empty()
+        wasip2::filesystem::types::PathFlags::empty()
     };
 
-    let dirs = wasi::filesystem::preopens::get_directories();
+    let dirs = wasip2::filesystem::preopens::get_directories();
 
     // Find the best matching preopened directory (longest prefix)
     let mut best_match: Option<(usize, String)> = None;
