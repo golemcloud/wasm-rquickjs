@@ -41,7 +41,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 14 | TypeORM | `typeorm` | ❌ | 2026-03-09 | wasm init fails: `app-root-path` passes undefined to `path.dirname` (The "path" argument must be of type string) |
 | 15 | Drizzle ORM | `drizzle-orm` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (query builder, placeholders, relations, entities, aggregates) |
 | 16 | Sequelize | `sequelize` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (DataTypes, Op/SQL builders, errors, Model.build, hooks) |
-| 17 | MikroORM | `@mikro-orm/core` | ❌ | 2026-03-08 | Node bundles pass (5/5), but all wasm runs fail at init: `Error resolving module 'constants'` |
+| 17 | MikroORM | `@mikro-orm/core` | ✅ | 2026-03-19 | All 5 tests pass (utils, entity schema, naming strategies, cache/fragments, contexts) |
 | 18 | Knex | `knex` | ✅ | 2026-03-08 | All 5 bundled tests pass on Node.js and wasm-rquickjs (SELECT, INSERT/upsert, DDL, raw SQL, builder cloning) |
 | 19 | pg | `pg` | ✅ | 2026-03-16 | All 5 offline + 3 Docker integration tests pass on Node.js and wasm-rquickjs. Integration tests cover connect, CRUD, and transactions against real PostgreSQL (md5 auth; SCRAM-SHA-256 blocked by missing `raw/PBKDF2` in `crypto.subtle.importKey`) |
 | 20 | mysql2 | `mysql2` | ✅ | 2026-03-16 | All 5 offline + 2 Docker integration tests pass on Node.js and wasm-rquickjs. Integration tests cover connect+SELECT and full CRUD against real MySQL 8.0 |
@@ -184,7 +184,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 84 | AWS SDK v3 | `@aws-sdk/client-s3` | ⚠️ | 2026-03-16 | 5/5 offline tests pass; 0/2 Docker integration tests (MinIO) fail in wasm-rquickjs — wstd reactor panics on real HTTP requests |
-| 85 | Google Cloud Storage | `@google-cloud/storage` | ❌ | 2026-03-10 | Node bundles 5/5 pass, but all wasm runs fail at startup: `JavaScript error: Cannot find module 'punycode'` |
+| 85 | Google Cloud Storage | `@google-cloud/storage` | ⚠️ | 2026-03-19 | 5/5 offline tests pass; live GCS API calls require credentials and could not be tested |
 
 ## Configuration & Environment
 

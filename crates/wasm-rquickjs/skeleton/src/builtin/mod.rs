@@ -14,6 +14,7 @@ mod diagnostics_channel;
 mod dns;
 mod domain;
 mod encoding;
+mod formdata_node;
 mod fs;
 mod gc;
 
@@ -31,6 +32,7 @@ mod events;
 mod http2;
 mod https;
 mod ieee754;
+mod inspector;
 mod intl;
 mod internal;
 mod internal_binding_util;
@@ -175,6 +177,7 @@ pub fn add_module_resolvers(
         .with_module("stream/consumers")
         .with_module("stream/web")
         .with_module("web-streams-polyfill")
+        .with_module("formdata-node")
         .with_module("__wasm_rquickjs_builtin/string_decoder_native")
         .with_module("node:string_decoder")
         .with_module("string_decoder")
@@ -213,6 +216,8 @@ pub fn add_module_resolvers(
         .with_module("http2")
         .with_module("node:https")
         .with_module("https")
+        .with_module("node:inspector")
+        .with_module("inspector")
         .with_module("__wasm_rquickjs_builtin/node_http_native")
         .with_module("__wasm_rquickjs_builtin/node_http_server")
         .with_module("node:_http_common")
@@ -352,6 +357,7 @@ pub fn module_loader() -> (
         .with_module("node:stream/web", webstreams::REEXPORT_JS)
         .with_module("stream/web", webstreams::REEXPORT_JS)
         .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)
+        .with_module("formdata-node", formdata_node::FORMDATA_NODE_JS)
         .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
         .with_module("__wasm_rquickjs_builtin/intl", intl::INTL_JS)
         .with_module("node:util", util::UTIL_JS)
@@ -449,6 +455,8 @@ pub fn module_loader() -> (
         .with_module("http2", http2::REEXPORT_JS)
         .with_module("node:https", https::HTTPS_JS)
         .with_module("https", https::REEXPORT_JS)
+        .with_module("node:inspector", inspector::INSPECTOR_JS)
+        .with_module("inspector", inspector::REEXPORT_JS)
         .with_module("node:net", net::NET_JS)
         .with_module("net", net::REEXPORT_JS)
         .with_module("node:perf_hooks", perf_hooks::PERF_HOOKS_JS)
