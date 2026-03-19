@@ -1,8 +1,84 @@
 import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
 
+// ---------------------------------------------------------------------------
+// V8-compatible CallSite objects
+// ---------------------------------------------------------------------------
+// Many npm packages (depd, source-map-support, etc.) rely on V8's structured
+// stack trace API: Error.captureStackTrace, Error.prepareStackTrace, and
+// CallSite objects with methods like getFileName(), getLineNumber(), etc.
+//
+// QuickJS produces plain string stack traces. We parse them into CallSite
+// objects so that libraries consuming the V8 API work correctly.
+// ---------------------------------------------------------------------------
+
+const _callSiteWithFnPattern = /^\s*at\s+(.+?)\s+\((.+):(\d+):(\d+)\)\s*$/;
+const _callSiteNoFnPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
+
+function _makeCallSite(functionName, fileName, lineNumber, columnNumber) {
+    return {
+        getThis() { return undefined; },
+        getTypeName() { return null; },
+        getFunction() { return undefined; },
+        getFunctionName() { return functionName || null; },
+        getMethodName() { return null; },
+        getFileName() { return fileName || null; },
+        getLineNumber() { return lineNumber | 0; },
+        getColumnNumber() { return columnNumber | 0; },
+        getEvalOrigin() { return undefined; },
+        isToplevel() { return true; },
+        isEval() { return false; },
+        isNative() { return false; },
+        isConstructor() { return false; },
+        isAsync() { return false; },
+        isPromiseAll() { return false; },
+        getPromiseIndex() { return null; },
+        getScriptNameOrSourceURL() { return fileName || null; },
+        toString() {
+            const name = functionName || '<anonymous>';
+            if (fileName) {
+                return `${name} (${fileName}:${lineNumber}:${columnNumber})`;
+            }
+            return name;
+        },
+    };
+}
+
+function _parseStackStringToCallSites(stackString) {
+    if (typeof stackString !== 'string') return [];
+    const lines = stackString.split('\n');
+    const sites = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        let m = line.match(_callSiteWithFnPattern);
+        if (m) {
+            sites.push(_makeCallSite(m[1], m[2], parseInt(m[3], 10), parseInt(m[4], 10)));
+            continue;
+        }
+        m = line.match(_callSiteNoFnPattern);
+        if (m) {
+            sites.push(_makeCallSite(null, m[1], parseInt(m[2], 10), parseInt(m[3], 10)));
+        }
+    }
+    return sites;
+}
+
+// Helper to create property descriptors immune to Object.prototype pollution.
+// Some libraries (e.g., test-assert-fail.js) set Object.prototype.get which
+// would leak into plain object descriptors and cause "Cannot both specify
+// accessors and a value or writable attribute" errors.
+function _dataDesc(value) {
+    const d = Object.create(null);
+    d.value = value;
+    d.writable = true;
+    d.configurable = true;
+    d.enumerable = false;
+    return d;
+}
+
 // Normalize `Error.prototype.stack` so deleting an instance stack works like
 // Node (i.e. `delete err.stack` makes subsequent `err.stack` reads undefined).
 const nativeErrorStackDescriptor = Object.getOwnPropertyDescriptor(Error.prototype, "stack");
+const NativeError = Error;
 const nativeErrorToString = Error.prototype.toString;
 const materializedErrorStacks = new WeakSet();
 
@@ -39,12 +115,7 @@ function materializeOwnStack(errorInstance) {
     }
 
     try {
-        Object.defineProperty(errorInstance, "stack", {
-            value: stackValue,
-            writable: true,
-            configurable: true,
-            enumerable: false,
-        });
+        Object.defineProperty(errorInstance, "stack", _dataDesc(stackValue));
         materializedErrorStacks.add(errorInstance);
     } catch {
         // Best effort only.
@@ -52,7 +123,6 @@ function materializeOwnStack(errorInstance) {
 }
 
 function installErrorStackShimForNonConfigurablePrototype() {
-    const NativeError = Error;
     const ErrorShimPrototype = Object.create(NativeError.prototype);
 
     Object.defineProperty(ErrorShimPrototype, "stack", {
@@ -72,12 +142,7 @@ function installErrorStackShimForNonConfigurablePrototype() {
             return undefined;
         },
         set(value) {
-            Object.defineProperty(this, "stack", {
-                value,
-                writable: true,
-                configurable: true,
-                enumerable: false,
-            });
+            Object.defineProperty(this, "stack", _dataDesc(value));
         },
     });
 
@@ -95,23 +160,13 @@ function installErrorStackShimForNonConfigurablePrototype() {
             get() {
                 const prepareStackTrace = globalThis.Error && globalThis.Error.prepareStackTrace;
                 const result = typeof prepareStackTrace === "function"
-                    ? prepareStackTrace(errorInstance, [])
+                    ? prepareStackTrace(errorInstance, _parseStackStringToCallSites(rawStack))
                     : rawStack;
-                Object.defineProperty(errorInstance, "stack", {
-                    value: result,
-                    writable: true,
-                    configurable: true,
-                    enumerable: false,
-                });
+                Object.defineProperty(errorInstance, "stack", _dataDesc(result));
                 return result;
             },
             set(value) {
-                Object.defineProperty(errorInstance, "stack", {
-                    value,
-                    writable: true,
-                    configurable: true,
-                    enumerable: false,
-                });
+                Object.defineProperty(errorInstance, "stack", _dataDesc(value));
             },
             configurable: true,
             enumerable: false,
@@ -173,17 +228,72 @@ if (nativeErrorStackDescriptor && nativeErrorStackDescriptor.configurable === fa
                 return undefined;
             },
             set(value) {
-                Object.defineProperty(this, "stack", {
-                    value,
-                    writable: true,
-                    configurable: true,
-                    enumerable: false,
-                });
+                Object.defineProperty(this, "stack", _dataDesc(value));
                 materializedErrorStacks.add(this);
             },
         });
     } catch {
         // Keep best-effort compatibility if the runtime forbids reconfiguration.
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Global Error.captureStackTrace & Error.stackTraceLimit (V8 compat)
+// ---------------------------------------------------------------------------
+// QuickJS natively provides Error.captureStackTrace, Error.prepareStackTrace,
+// Error.stackTraceLimit, and native CallSite objects. However, the ErrorShim
+// above replaces globalThis.Error, which can interfere with the native
+// prepareStackTrace getter/setter chain when Error.captureStackTrace is called.
+//
+// We wrap the native captureStackTrace so that it checks the JS-level
+// Error.prepareStackTrace (which may be set on the ErrorShim) and, if set,
+// parses the raw stack string into our JS CallSite objects. This ensures
+// libraries like depd that set Error.prepareStackTrace and then call
+// Error.captureStackTrace get proper CallSite objects.
+{
+    const nativeCaptureStackTrace = globalThis.Error.captureStackTrace;
+    if (typeof nativeCaptureStackTrace === 'function') {
+        globalThis.Error.captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
+            // If prepareStackTrace is set at the JS level (e.g., on the ErrorShim),
+            // we need to handle it ourselves since the native captureStackTrace
+            // may not see it through the ErrorShim prototype chain.
+            const currentPrepare = globalThis.Error && globalThis.Error.prepareStackTrace;
+            if (typeof currentPrepare === 'function') {
+                // Temporarily clear prepareStackTrace so the native implementation
+                // produces a raw string stack (not CallSite objects).
+                globalThis.Error.prepareStackTrace = undefined;
+                try {
+                    nativeCaptureStackTrace(targetObject, constructorOpt);
+                } finally {
+                    globalThis.Error.prepareStackTrace = currentPrepare;
+                }
+
+                // Read the raw stack string, parse into CallSites, and install
+                // a lazy getter that calls prepareStackTrace on first access.
+                const rawStack = targetObject.stack;
+                if (typeof rawStack === 'string') {
+                    const callSites = _parseStackStringToCallSites(rawStack);
+                    Object.defineProperty(targetObject, "stack", {
+                        get() {
+                            const prepare = globalThis.Error && globalThis.Error.prepareStackTrace;
+                            const result = typeof prepare === "function"
+                                ? prepare(targetObject, callSites)
+                                : rawStack;
+                            Object.defineProperty(targetObject, "stack", _dataDesc(result));
+                            return result;
+                        },
+                        set(value) {
+                            Object.defineProperty(targetObject, "stack", _dataDesc(value));
+                        },
+                        configurable: true,
+                        enumerable: false,
+                    });
+                }
+            } else {
+                // No prepareStackTrace set — just use the native implementation as-is.
+                nativeCaptureStackTrace(targetObject, constructorOpt);
+            }
+        };
     }
 }
 

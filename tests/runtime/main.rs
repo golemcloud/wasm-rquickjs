@@ -39,6 +39,7 @@ mod streams;
 mod structured_clone;
 mod timeout;
 mod url;
+mod v8_stack_trace;
 mod xhr;
 
 #[test_dep(tagged_as = "example3")]
