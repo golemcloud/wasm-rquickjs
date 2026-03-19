@@ -1349,192 +1349,198 @@ pub struct JsState {
     pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
-impl Default for JsState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl JsState {
-    pub fn new() -> Self {
-        block_on(async {
-            let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
-            // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
-            // shape refcount bug during heavy async/promise workloads. The default
-            // threshold (0xFF) causes GC to run too frequently, which can trigger
-            // a use-after-free in the shape reference counting code path.
-            rt.set_gc_threshold(256 * 1024 * 1024).await;
-            let ctx = AsyncContext::full(&rt)
-                .await
-                .expect("Failed to create AsyncContext");
+    /// Phase 1: Create the runtime, context, resolvers, loaders, and all Rust-side
+    /// state. Does NOT evaluate any JavaScript — safe to publish to `STATE` before
+    /// JS module initialization runs.
+    async fn new_base() -> Self {
+        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+        // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
+        // shape refcount bug during heavy async/promise workloads. The default
+        // threshold (0xFF) causes GC to run too frequently, which can trigger
+        // a use-after-free in the shape reference counting code path.
+        rt.set_gc_threshold(256 * 1024 * 1024).await;
+        let ctx = AsyncContext::full(&rt)
+            .await
+            .expect("Failed to create AsyncContext");
 
-            async_with!(ctx => |ctx| {
-                Module::evaluate(
-                    ctx.clone(),
-                    "dispose",
-                    format!(r#"
-                    const dispose = Symbol.for("dispose");
-                    globalThis.{DISPOSE_SYMBOL} = dispose;
-                    Symbol.dispose = dispose;
-                    const asyncDispose = Symbol.for("asyncDispose");
-                    Symbol.asyncDispose = asyncDispose;
-                    "#)
-                ).catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
-                .finish::<()>()
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
-            })
-                .await;
-            rt.idle().await;
+        let mut builtin_resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
+        for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+            builtin_resolver = builtin_resolver.with_module(name.to_string());
+        }
+        let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
+        let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
 
-            let mut builtin_resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
-            for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-                builtin_resolver = builtin_resolver.with_module(name.to_string());
-            }
-            let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
-            let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
+        let file_resolver = FileResolver::default()
+            .with_path("/")
+            .with_pattern("{}.js")
+            .with_pattern("{}.mjs")
+            .with_pattern("{}.json");
 
-            let file_resolver = FileResolver::default()
-                .with_path("/")
-                .with_pattern("{}.js")
-                .with_pattern("{}.mjs")
-                .with_pattern("{}.json");
+        let resolver = (
+            (
+                RealmGuardResolver,
+                MockModuleResolver,
+                DataUrlResolver,
+                FileUrlResolver,
+                builtin_resolver,
+                NodeModulesResolver,
+            ),
+            (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
+        );
 
-            let resolver = (
-                (
-                    RealmGuardResolver,
-                    MockModuleResolver,
-                    DataUrlResolver,
-                    FileUrlResolver,
-                    builtin_resolver,
-                    NodeModulesResolver,
-                ),
-                (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
-            );
-
-            let mut builtin_loader = BuiltinLoader::default()
-                .with_module(
-                    crate::JS_EXPORT_MODULE_NAME,
-                    inject_import_meta_prologue(
-                        &ImportMetaInit {
-                            url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", crate::JS_EXPORT_MODULE_NAME),
-                            filename: None,
-                            dirname: None,
-                            include_resolve: true,
-                        },
-                        crate::JS_EXPORT_MODULE,
-                    ),
-                );
-            for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
-                let source = (get_module)();
-                let injected = inject_import_meta_prologue(
+        let mut builtin_loader = BuiltinLoader::default()
+            .with_module(
+                crate::JS_EXPORT_MODULE_NAME,
+                inject_import_meta_prologue(
                     &ImportMetaInit {
-                        url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
+                        url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", crate::JS_EXPORT_MODULE_NAME),
                         filename: None,
                         dirname: None,
                         include_resolve: true,
                     },
-                    &source,
-                );
-                builtin_loader = builtin_loader.with_module(name.to_string(), injected);
-            }
-
-            let loader = (
-                MockModuleLoader,
-                builtin_loader,
-                crate::modules::module_loader(),
-                crate::builtin::module_loader(),
-                DataUrlLoader,
-                JsonFileLoader,
-                CjsCompatLoader,
-                ImportMetaLoader,
+                    crate::JS_EXPORT_MODULE,
+                ),
             );
-
-            rt.set_loader(resolver, loader).await;
-
-            async_with!(ctx => |ctx| {
-                let global = ctx.globals();
-
-                global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
-                    .expect("Failed to initialize resource table");
-
-                global.set("__wasm_rquickjs_mock_seq", 0i64)
-                    .expect("Failed to initialize mock sequence counter");
-
-                // Phase 1: Wire built-in globals (globalThis.require, Buffer, process, etc.)
-                // This must complete before user code runs, because bundled CJS-in-ESM code
-                // (e.g. esbuild's __require shim) checks `typeof require` at the top level
-                // during module evaluation. ES module semantics hoist all imports and evaluate
-                // them before the module body, so wiring and user import cannot share a single
-                // Module::evaluate call.
-                let wiring = crate::builtin::wire_builtins();
-                Module::evaluate(
-                    ctx.clone(),
-                    "__wasm_rquickjs_init_wiring",
-                    wiring,
-                )
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
-                .finish::<()>()
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
-
-                // Phase 2: Import the user module (now globalThis.require is available)
-                Module::evaluate(
-                    ctx.clone(),
-                    "__wasm_rquickjs_init_entry",
-                    format!(r#"
-                    import * as userModule from '{}';
-                    globalThis.userModule = userModule;
-                    "#, crate::JS_EXPORT_MODULE_NAME),
-                )
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
-                .finish::<()>()
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
-
-                for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-                  Module::import(&ctx, name.to_string())
-                     .catch(&ctx)
-                     .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
-                     .finish::<()>()
-                     .catch(&ctx)
-                     .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
-                }
-            })
-                .await;
-            rt.idle().await;
-
-            rt.set_host_promise_rejection_tracker(Some(Box::new(
-                |ctx, promise, reason, is_handled| {
-                    if let Ok(handler) = ctx
-                        .globals()
-                        .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
-                    {
-                        let _ = handler.call::<_, Value>((promise, reason, is_handled));
-                    }
+        for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
+            let source = (get_module)();
+            let injected = inject_import_meta_prologue(
+                &ImportMetaInit {
+                    url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
+                    filename: None,
+                    dirname: None,
+                    include_resolve: true,
                 },
-            )))
+                &source,
+            );
+            builtin_loader = builtin_loader.with_module(name.to_string(), injected);
+        }
+
+        let loader = (
+            MockModuleLoader,
+            builtin_loader,
+            crate::modules::module_loader(),
+            crate::builtin::module_loader(),
+            DataUrlLoader,
+            JsonFileLoader,
+            CjsCompatLoader,
+            ImportMetaLoader,
+        );
+
+        rt.set_loader(resolver, loader).await;
+
+        async_with!(ctx => |ctx| {
+            let global = ctx.globals();
+
+            global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
+                .expect("Failed to initialize resource table");
+
+            global.set("__wasm_rquickjs_mock_seq", 0i64)
+                .expect("Failed to initialize mock sequence counter");
+        })
             .await;
 
-            let (resource_drop_queue_tx, resource_drop_queue_rx) =
-                futures::channel::mpsc::unbounded();
+        rt.set_host_promise_rejection_tracker(Some(Box::new(
+            |ctx, promise, reason, is_handled| {
+                if let Ok(handler) = ctx
+                    .globals()
+                    .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
+                {
+                    let _ = handler.call::<_, Value>((promise, reason, is_handled));
+                }
+            },
+        )))
+        .await;
 
-            let last_resource_id = AtomicUsize::new(1);
-            Self {
-                rt,
-                ctx,
-                last_resource_id,
-                resource_drop_queue_tx,
-                resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
-                abort_handles: RefCell::new(HashMap::new()),
-                last_abort_id: AtomicUsize::new(0),
-                unrefed_timers: RefCell::new(HashSet::new()),
-                gc_pending: std::sync::atomic::AtomicBool::new(false),
+        let (resource_drop_queue_tx, resource_drop_queue_rx) =
+            futures::channel::mpsc::unbounded();
+
+        let last_resource_id = AtomicUsize::new(1);
+        Self {
+            rt,
+            ctx,
+            last_resource_id,
+            resource_drop_queue_tx,
+            resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
+            abort_handles: RefCell::new(HashMap::new()),
+            last_abort_id: AtomicUsize::new(0),
+            unrefed_timers: RefCell::new(HashSet::new()),
+            gc_pending: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Phase 2: Evaluate all JavaScript — dispose symbols, builtin wiring, user
+    /// module import. Must be called after `STATE` is published so that any
+    /// re-entrant `get_js_state()` calls (e.g. from `setTimeout` during module
+    /// init) find the already-published state instead of recursing.
+    async fn finish_init(&self) {
+        // Dispose symbols must be initialized before builtins, since builtin
+        // modules use [Symbol.dispose] in their class definitions.
+        async_with!(self.ctx => |ctx| {
+            Module::evaluate(
+                ctx.clone(),
+                "dispose",
+                format!(r#"
+                const dispose = Symbol.for("dispose");
+                globalThis.{DISPOSE_SYMBOL} = dispose;
+                Symbol.dispose = dispose;
+                const asyncDispose = Symbol.for("asyncDispose");
+                Symbol.asyncDispose = asyncDispose;
+                "#)
+            ).catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
+        })
+            .await;
+        self.rt.idle().await;
+
+        async_with!(self.ctx => |ctx| {
+            // Wire built-in globals (globalThis.require, Buffer, process, etc.)
+            // This must complete before user code runs, because bundled CJS-in-ESM code
+            // (e.g. esbuild's __require shim) checks `typeof require` at the top level
+            // during module evaluation. ES module semantics hoist all imports and evaluate
+            // them before the module body, so wiring and user import cannot share a single
+            // Module::evaluate call.
+            let wiring = crate::builtin::wire_builtins();
+            Module::evaluate(
+                ctx.clone(),
+                "__wasm_rquickjs_init_wiring",
+                wiring,
+            )
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
+
+            // Import the user module (now globalThis.require is available)
+            Module::evaluate(
+                ctx.clone(),
+                "__wasm_rquickjs_init_entry",
+                format!(r#"
+                import * as userModule from '{}';
+                globalThis.userModule = userModule;
+                "#, crate::JS_EXPORT_MODULE_NAME),
+            )
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
+
+            for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+              Module::import(&ctx, name.to_string())
+                 .catch(&ctx)
+                 .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
+                 .finish::<()>()
+                 .catch(&ctx)
+                 .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
             }
         })
+            .await;
+        drain_and_idle(self).await;
     }
 }
 
@@ -1600,7 +1606,13 @@ static mut STATE: Option<JsState> = None;
 pub fn get_js_state() -> &'static JsState {
     unsafe {
         if STATE.is_none() {
-            STATE = Some(JsState::new());
+            // Phase 1: Create the runtime and all Rust-side state (no JS evaluation).
+            STATE = Some(block_on(JsState::new_base()));
+
+            // Phase 2: Evaluate JS modules. STATE is already published, so any
+            // re-entrant get_js_state() calls (e.g. setTimeout during module init)
+            // will find the existing state instead of recursing into new_base().
+            block_on(STATE.as_ref().unwrap().finish_init());
         }
         STATE.as_ref().unwrap()
     }

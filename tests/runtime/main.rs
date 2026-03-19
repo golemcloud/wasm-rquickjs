@@ -38,6 +38,7 @@ mod stateful1;
 mod streams;
 mod structured_clone;
 mod timeout;
+mod toplevel_timer;
 mod url;
 mod v8_stack_trace;
 mod xhr;
