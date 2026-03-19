@@ -12,7 +12,7 @@ mod common;
 
 #[test_dep(tagged_as = "errors")]
 fn compiled_errors() -> CompiledTest {
-    let path = Utf8Path::new("examples/errors");
+    let path = Utf8Path::new("examples/runtime/errors");
     CompiledTest::new(path, true).expect("Failed to compile errors")
 }
 

@@ -5,7 +5,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "export_from_inner_package")]
 fn compiled_export_from_inner_package() -> CompiledTest {
-    let path = Utf8Path::new("examples/export-from-inner-package");
+    let path = Utf8Path::new("examples/runtime/export-from-inner-package");
     CompiledTest::new(path, true).expect("Failed to compile export_from_inner_package")
 }
 

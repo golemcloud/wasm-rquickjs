@@ -4,7 +4,7 @@ use test_r::{test, test_dep};
 
 #[test_dep(tagged_as = "fs")]
 fn compiled_fs() -> CompiledTest {
-    let path = Utf8Path::new("examples/fs");
+    let path = Utf8Path::new("examples/runtime/fs");
     CompiledTest::new(path, false).expect("Failed to compile fs")
 }
 

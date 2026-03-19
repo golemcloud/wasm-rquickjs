@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "streams")]
 fn compiled_streams() -> CompiledTest {
-    let path = Utf8Path::new("examples/streams");
+    let path = Utf8Path::new("examples/runtime/streams");
     CompiledTest::new(path, true).expect("Failed to compile streams")
 }
 

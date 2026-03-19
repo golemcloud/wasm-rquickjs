@@ -5,7 +5,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "assert")]
 fn compiled_assert() -> CompiledTest {
-    let path = Utf8Path::new("examples/assert");
+    let path = Utf8Path::new("examples/runtime/assert");
     CompiledTest::new(path, false).expect("Failed to compile assert")
 }
 

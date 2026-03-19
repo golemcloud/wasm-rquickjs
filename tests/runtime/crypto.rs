@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "crypto")]
 fn compiled_crypto() -> CompiledTest {
-    let path = Utf8Path::new("examples/crypto");
+    let path = Utf8Path::new("examples/runtime/crypto");
     CompiledTest::new_with_features(path, false, FeatureCombination::Full)
         .expect("Failed to compile crypto")
 }

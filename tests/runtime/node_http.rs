@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "node_http")]
 fn compiled_node_http() -> CompiledTest {
-    let path = Utf8Path::new("examples/node-http");
+    let path = Utf8Path::new("examples/runtime/node-http");
     CompiledTest::new(path, true).expect("Failed to compile node_http")
 }
 

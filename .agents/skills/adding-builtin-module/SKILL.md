@@ -123,7 +123,7 @@ The skeleton is **always compiled to `wasm32-wasip1`**. Never write conditional 
 
 ## Testing
 
-1. Define an example in `examples/` (JS file + WIT interface pair)
+1. Define an example in `examples/runtime/` (JS file + WIT interface pair)
 2. Add tests in `tests/runtime.rs` that use the example
 3. Run: `cargo test --test runtime <module> -- --nocapture`
 

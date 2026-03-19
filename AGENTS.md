@@ -13,7 +13,9 @@ wasm-rquickjs/
 │   │   ├── skeleton/           # Embedded skeleton crate (separate project)
 │   │   └── src/
 │   └── wasi-logging/           # WASI logging support crate
-├── examples/                   # Example projects
+├── examples/
+│   ├── runtime/                # Examples used by runtime tests
+│   └── compilation/            # Examples only tested via compilation
 ├── src/                        # CLI binary source (main.rs)
 ├── tests/                      # Integration tests
 ├── Cargo.toml                  # Workspace root

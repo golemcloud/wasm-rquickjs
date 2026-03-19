@@ -7,19 +7,19 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "imports1")]
 fn compiled_imports1() -> CompiledTest {
-    let path = Utf8Path::new("examples/imports1");
+    let path = Utf8Path::new("examples/runtime/imports1");
     CompiledTest::new(path, true).expect("Failed to compile imports1")
 }
 
 #[test_dep(tagged_as = "imports2")]
 fn compiled_imports2() -> CompiledTest {
-    let path = Utf8Path::new("examples/imports2");
+    let path = Utf8Path::new("examples/runtime/imports2");
     CompiledTest::new(path, true).expect("Failed to compile imports2")
 }
 
 #[test_dep(tagged_as = "imports3")]
 fn compiled_imports3() -> CompiledTest {
-    let path = Utf8Path::new("examples/imports3");
+    let path = Utf8Path::new("examples/runtime/imports3");
     CompiledTest::new(path, true).expect("Failed to compile imports3")
 }
 
@@ -30,7 +30,7 @@ inherit_test_dep!(
 
 #[test_dep(tagged_as = "types_in_exports")]
 fn compiled_types_in_exports() -> CompiledTest {
-    let path = Utf8Path::new("examples/types-in-exports");
+    let path = Utf8Path::new("examples/runtime/types-in-exports");
     CompiledTest::new(path, true).expect("Failed to compile types-in-exports")
 }
 

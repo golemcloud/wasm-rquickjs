@@ -7,7 +7,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "fetch")]
 fn compiled_fetch() -> CompiledTest {
-    let path = Utf8Path::new("examples/fetch");
+    let path = Utf8Path::new("examples/runtime/fetch");
     CompiledTest::new(path, true).expect("Failed to compile fetch")
 }
 

@@ -5,7 +5,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "cjs_require")]
 fn compiled_cjs_require() -> CompiledTest {
-    let path = Utf8Path::new("examples/cjs-require");
+    let path = Utf8Path::new("examples/runtime/cjs-require");
     CompiledTest::new(path, false).expect("Failed to compile cjs_require")
 }
 

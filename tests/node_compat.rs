@@ -27,7 +27,7 @@ struct FullPreparedComponent(Arc<PreparedComponent>);
 fn compile_node_compat_with_features(
     feature_combination: common::FeatureCombination,
 ) -> Arc<PreparedComponent> {
-    let path = Utf8Path::new("examples/node-compat-runner");
+    let path = Utf8Path::new("examples/runtime/node-compat-runner");
     let compiled = CompiledTest::new_with_features(path, true, feature_combination)
         .expect("Failed to compile node-compat-runner");
     Arc::new(PreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"))

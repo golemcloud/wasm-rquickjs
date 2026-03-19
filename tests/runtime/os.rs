@@ -5,7 +5,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "os")]
 fn compiled_os() -> CompiledTest {
-    let path = Utf8Path::new("examples/os");
+    let path = Utf8Path::new("examples/runtime/os");
     CompiledTest::new(path, true).expect("Failed to compile os")
 }
 

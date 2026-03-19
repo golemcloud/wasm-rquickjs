@@ -5,7 +5,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "stateful1")]
 fn compiled_stateful1() -> CompiledTest {
-    let path = Utf8Path::new("examples/stateful1");
+    let path = Utf8Path::new("examples/runtime/stateful1");
     CompiledTest::new(path, true).expect("Failed to compile stateful1")
 }
 

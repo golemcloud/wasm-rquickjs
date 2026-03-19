@@ -5,7 +5,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "structured_clone")]
 fn compiled_structured_clone() -> CompiledTest {
-    let path = Utf8Path::new("examples/structured-clone");
+    let path = Utf8Path::new("examples/runtime/structured-clone");
     CompiledTest::new(path, true).expect("Failed to compile structured_clone")
 }
 

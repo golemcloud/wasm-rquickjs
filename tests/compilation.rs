@@ -12,7 +12,7 @@ mod common;
 
 #[test_gen]
 fn gen_compilation_tests(r: &mut DynamicTestRegistration) {
-    for example_path in collect_example_paths().unwrap() {
+    for example_path in collect_example_paths(&["examples/compilation"]).unwrap() {
         for feature_combination in FeatureCombination::all() {
             let example_path_clone = example_path.clone();
             let example_name = example_path.file_name().unwrap().to_string();

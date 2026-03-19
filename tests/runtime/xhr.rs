@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "xhr")]
 fn compiled_xhr() -> CompiledTest {
-    let path = Utf8Path::new("examples/xhr");
+    let path = Utf8Path::new("examples/runtime/xhr");
     CompiledTest::new(path, true).expect("Failed to compile xhr")
 }
 

@@ -4,7 +4,7 @@ use test_r::{test, test_dep};
 
 #[test_dep(tagged_as = "abort_controller")]
 fn compiled_abort_controller() -> CompiledTest {
-    let path = Utf8Path::new("examples/abort-controller");
+    let path = Utf8Path::new("examples/runtime/abort-controller");
     CompiledTest::new(path, true).expect("Failed to compile abort_controller")
 }
 

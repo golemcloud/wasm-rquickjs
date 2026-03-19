@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "response_constructor")]
 fn compiled_response_constructor() -> CompiledTest {
-    let path = Utf8Path::new("examples/response-constructor");
+    let path = Utf8Path::new("examples/runtime/response-constructor");
     CompiledTest::new(path, true).expect("Failed to compile response_constructor")
 }
 

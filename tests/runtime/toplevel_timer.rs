@@ -5,7 +5,7 @@ use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "toplevel_timer")]
 fn compiled_toplevel_timer() -> CompiledTest {
-    let path = Utf8Path::new("examples/toplevel-timer");
+    let path = Utf8Path::new("examples/runtime/toplevel-timer");
     CompiledTest::new(path, true).expect("Failed to compile toplevel-timer")
 }
 

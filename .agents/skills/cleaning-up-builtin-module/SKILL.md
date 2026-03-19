@@ -32,7 +32,7 @@ Determine which module to clean up (e.g., `buffer`). Locate all its files:
 4. **Internal helpers**: Check imports in the JS file for `__wasm_rquickjs_builtin/internal/*` paths and read those files too — these are **in scope** for cleanup if improvements are found, but must be validated carefully since they are shared across modules (run tests for all modules that import the changed helper)
 5. **Runtime tests**: `tests/runtime/<name>.rs` — our own functional tests
 6. **Node-compat tests**: Search `tests/node_compat/config.jsonc` for entries matching the module name (e.g., `test-buffer-*`, `test-path-*`)
-7. **Example project**: Check `examples/` for an example that exercises this module
+7. **Example project**: Check `examples/runtime/` for an example that exercises this module
 
 ### Step 2: Establish the green baseline
 
