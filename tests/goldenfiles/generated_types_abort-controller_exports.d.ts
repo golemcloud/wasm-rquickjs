@@ -13,6 +13,7 @@ declare module 'abort-controller' {
   export function testAbortIdempotent(): Promise<void>;
   export function testAbortNoReason(): Promise<void>;
   export function testDuplicateListeners(): Promise<void>;
+  export function testTimeoutUnrefDoesNotBlockIdle(): Promise<void>;
   export function testFetchAbortAlreadyAborted(): Promise<void>;
   export function testFetchAbortDuringRequest(): Promise<void>;
 }
