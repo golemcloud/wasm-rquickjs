@@ -8067,9 +8067,7 @@ class SubtleCrypto {
         const bytes = toBytes(data);
 
         if (name === 'ED25519' || name === 'ED448') {
-            const sign = createSign(null);
-            sign.update(bytes);
-            const sig = sign.sign(key._keyObject);
+            const sig = sign(null, bytes, key._keyObject);
             return (sig instanceof Uint8Array ? sig : new Uint8Array(sig)).buffer;
         } else if (name === 'ECDSA') {
             const hashAlgo = algorithm.hash;
@@ -8125,9 +8123,7 @@ class SubtleCrypto {
         const sigBytes = toBytes(signature);
 
         if (name === 'ED25519' || name === 'ED448') {
-            const verify = createVerify(null);
-            verify.update(dataBytes);
-            return verify.verify(key._keyObject, sigBytes);
+            return verify(null, dataBytes, key._keyObject, sigBytes);
         } else if (name === 'ECDSA') {
             const hashAlgo = algorithm.hash;
             const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;

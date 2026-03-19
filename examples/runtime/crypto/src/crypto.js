@@ -1,4 +1,4 @@
-import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPairSync, createSign, createVerify, createPublicKey } from 'node:crypto';
+import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPairSync, createSign, createVerify, createPublicKey, sign, verify } from 'node:crypto';
 
 export function newUuids() {
     const uuid1 = crypto.randomUUID()
@@ -175,12 +175,9 @@ export function aesGcmEncryptHex(plaintext, keyHex, ivHex) {
 
 export function ed25519SignVerify(message) {
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-    const sign = createSign(null);
-    sign.update(message);
-    const signature = sign.sign(privateKey);
-    const verify = createVerify(null);
-    verify.update(message);
-    return verify.verify(publicKey, signature);
+    const data = Buffer.from(message);
+    const signature = sign(null, data, privateKey);
+    return verify(null, data, publicKey, signature);
 }
 
 export function ecdsaP256SignVerify(message) {
@@ -227,13 +224,9 @@ export function ed25519WrongKeyVerify(message) {
     const kp1 = generateKeyPairSync('ed25519');
     const kp2 = generateKeyPairSync('ed25519');
 
-    const sign = createSign(null);
-    sign.update(message);
-    const signature = sign.sign(kp1.privateKey);
-
-    const verify = createVerify(null);
-    verify.update(message);
-    return verify.verify(kp2.publicKey, signature);
+    const data = Buffer.from(message);
+    const signature = sign(null, data, kp1.privateKey);
+    return verify(null, data, kp2.publicKey, signature);
 }
 
 export function listCurves() {
