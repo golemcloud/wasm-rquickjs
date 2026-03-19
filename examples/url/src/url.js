@@ -123,3 +123,76 @@ export const test6 = () => {
 
      return true;
 };
+
+export const test7 = () => {
+     // Test URL constructor with a URL object as base (coercion via toString)
+     const base = new URL("https://example.com/a/b/");
+     const url = new URL("x", base);
+     console.log('test7 href:', url.href);
+     return url.href === "https://example.com/a/b/x";
+};
+
+export const test8 = () => {
+     // Test canParse and parse with a URL object as base
+     const base = new URL("https://example.com/a/b/");
+     const canParse = URL.canParse("x", base);
+     console.log('test8 canParse:', canParse);
+     if (!canParse) return false;
+
+     const parsed = URL.parse("x", base);
+     console.log('test8 parsed:', parsed ? parsed.href : null);
+     if (!parsed) return false;
+     if (parsed.href !== "https://example.com/a/b/x") return false;
+
+     // Verify canParse returns false for invalid inputs
+     if (URL.canParse("://invalid")) return false;
+
+     return true;
+};
+
+export const test9 = () => {
+     // Test setter coercion: assigning objects with toString to URL properties
+     const url = new URL("https://example.com/old?old=1#oldhash");
+
+     url.pathname = { toString: () => '/v1' };
+     console.log('test9 pathname:', url.pathname);
+     if (url.pathname !== '/v1') return false;
+
+     url.hash = { toString: () => '#newhash' };
+     console.log('test9 hash:', url.hash);
+     if (url.hash !== '#newhash') return false;
+
+     url.search = { toString: () => '?key=value' };
+     console.log('test9 search:', url.search);
+     if (url.search !== '?key=value') return false;
+
+     url.protocol = { toString: () => 'http:' };
+     console.log('test9 protocol:', url.protocol);
+     if (url.protocol !== 'http:') return false;
+
+     url.username = { toString: () => 'user' };
+     console.log('test9 username:', url.username);
+     if (url.username !== 'user') return false;
+
+     url.password = { toString: () => 'pass' };
+     console.log('test9 password:', url.password);
+     if (url.password !== 'pass') return false;
+
+     url.hostname = { toString: () => 'other.com' };
+     console.log('test9 hostname:', url.hostname);
+     if (url.hostname !== 'other.com') return false;
+
+     url.port = { toString: () => '8080' };
+     console.log('test9 port:', url.port);
+     if (url.port !== '8080') return false;
+
+     url.href = { toString: () => 'https://final.example.com/' };
+     console.log('test9 href:', url.href);
+     if (url.href !== 'https://final.example.com/') return false;
+
+     url.host = { toString: () => 'host.example.com:9090' };
+     console.log('test9 host:', url.host);
+     if (url.host !== 'host.example.com:9090') return false;
+
+     return true;
+};

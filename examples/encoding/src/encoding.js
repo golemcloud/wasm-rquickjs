@@ -74,3 +74,46 @@ async function test1Impl() {
 }
 
 export const test1 = test1Impl;
+
+export const test2 = () => {
+    const encoder = new TextEncoder();
+
+    // Test encode with object having toString (coercion)
+    const result = encoder.encode({ toString() { return 'abc' } });
+    console.log('encode coerced:', JSON.stringify(result));
+    if (result[0] !== 97 || result[1] !== 98 || result[2] !== 99 || result.length !== 3) {
+        return false;
+    }
+
+    // Test encode with no arguments (should return empty Uint8Array)
+    const empty = encoder.encode();
+    console.log('encode no-args length:', empty.length);
+    if (empty.length !== 0) return false;
+
+    // Test encodeInto works correctly
+    const dest = new Uint8Array(10);
+    const intoResult = encoder.encodeInto("abc", dest);
+    console.log('encodeInto result:', JSON.stringify(intoResult));
+    if (intoResult.read !== 3 || intoResult.written !== 3) return false;
+    if (dest[0] !== 97 || dest[1] !== 98 || dest[2] !== 99) return false;
+
+    // Test encodeInto with non-string first arg should throw TypeError
+    let threw = false;
+    try {
+        encoder.encodeInto(42, dest);
+    } catch (e) {
+        threw = e instanceof TypeError;
+        console.log('encodeInto TypeError:', e.message);
+    }
+    if (!threw) return false;
+
+    // Test encode with number (coerced via toString)
+    const numResult = encoder.encode(123);
+    console.log('encode number:', JSON.stringify(numResult));
+    // "123" => [49, 50, 51]
+    if (numResult[0] !== 49 || numResult[1] !== 50 || numResult[2] !== 51 || numResult.length !== 3) {
+        return false;
+    }
+
+    return true;
+};

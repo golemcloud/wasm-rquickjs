@@ -62,7 +62,9 @@ pub mod native_module {
 #[rquickjs::class]
 #[derive(Trace, JsLifetime)]
 pub struct EncodeIntoResult {
+    #[qjs(get, enumerable)]
     pub read: usize,
+    #[qjs(get, enumerable)]
     pub written: usize,
 }
 
