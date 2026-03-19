@@ -2495,7 +2495,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2855,7 +2855,7 @@ dependencies = [
  "getrandom 0.4.1",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2869,9 +2869,9 @@ dependencies = [
 
 [[package]]
 name = "test-r"
-version = "3.0.2"
+version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "025d8853f33bb7b8bc777d169ab5902d5e1b32c5aebb29469192623f11de32b9"
+checksum = "29af3b851f27a4f4223b7638cfc197601e04f86cd0057e9dc8b3760771b653e9"
 dependencies = [
  "ctor",
  "test-r-core",
@@ -2881,9 +2881,9 @@ dependencies = [
 
 [[package]]
 name = "test-r-core"
-version = "6.0.2"
+version = "6.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e24f90ef090a0531162b01c0e06b44cb937c82f62da5b96ea4b0f5698a3785ba"
+checksum = "e0f22fa86d211b7b94c5f6f2472d44fd953d381ad4e93a46e806833d48a28fef"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2907,9 +2907,9 @@ dependencies = [
 
 [[package]]
 name = "test-r-macro"
-version = "1.4.2"
+version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ef16529b08dd28ad0efe6940ce9ccde8fb78f0b7c4e0c7aab5e8dd101f60f25"
+checksum = "f96550a7e63f9cdc5ced794757e31f43e6a2d5402192edcadaeb578bc58ba0c9"
 dependencies = [
  "darling",
  "humantime",
