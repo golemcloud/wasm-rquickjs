@@ -145,6 +145,16 @@ fn add_wit_dependencies(context: &&GeneratorContext, doc: &mut DocumentMut) -> a
 /// Skipping them avoids unnecessary timestamp changes that would trigger recompilation.
 const GENERATED_FILES: &[&str] = &["src/lib.rs"];
 
+/// Copies the skeleton's `Cargo.lock` to the output directory so that dependency
+/// resolution is instant instead of resolving 300+ crates from scratch each time.
+pub fn copy_skeleton_lock(output: &Utf8Path) -> anyhow::Result<()> {
+    if let Some(lock_file) = SKELETON.get_file("Cargo.lock") {
+        let dest = output.join("Cargo.lock");
+        crate::write_if_changed(dest, lock_file.contents())?;
+    }
+    Ok(())
+}
+
 /// Copies all source files from the skeleton directory to `<output>/src`.
 pub fn copy_skeleton_sources(output: &Utf8Path) -> anyhow::Result<()> {
     if let Some(src) = SKELETON.get_dir("src") {

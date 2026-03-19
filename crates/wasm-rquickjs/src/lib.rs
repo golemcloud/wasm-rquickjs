@@ -1,7 +1,9 @@
 use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
 use crate::imports::generate_import_modules;
-use crate::skeleton::{copy_skeleton_sources, generate_app_manifest, generate_cargo_toml};
+use crate::skeleton::{
+    copy_skeleton_lock, copy_skeleton_sources, generate_app_manifest, generate_cargo_toml,
+};
 use crate::wit::add_get_script_import;
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -108,6 +110,9 @@ pub fn generate_wrapper_crate(
 
     // Generating the Cargo.toml file
     generate_cargo_toml(&context)?;
+
+    // Copying the skeleton's Cargo.lock for faster dependency resolution
+    copy_skeleton_lock(context.output).context("Failed to copy skeleton Cargo.lock")?;
 
     // Generating a Golem App Manifest file (for debugging)
     generate_app_manifest(&context)?;
