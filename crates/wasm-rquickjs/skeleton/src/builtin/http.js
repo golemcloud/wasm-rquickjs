@@ -64,10 +64,10 @@ export async function fetch(resource, options = {}) {
 
         body = options.body;
         // Convert URL objects to strings
-        if (typeof resource === 'object' && resource instanceof URL) {
-            url = resource.toString();
-        } else {
+        if (typeof resource === 'string') {
             url = resource;
+        } else {
+            url = String(resource);
         }
     }
 
@@ -713,7 +713,7 @@ export class Request {
                 ...input._options,
             };
         } else {
-            this._url = input;
+            this._url = typeof input === 'string' ? input : String(input);
             this._headers = new Headers(options.headers || {});
             this._bodyUsed = false;
             this._options = {

@@ -14,6 +14,7 @@ use golem_wasi_http::{
     Version,
 };
 use rquickjs::class::Trace;
+use rquickjs::convert::Coerced;
 use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 use std::cell::RefCell;
@@ -260,7 +261,7 @@ impl HttpRequest {
     #[qjs(constructor)]
     pub fn new<'js>(
         ctx: Ctx<'js>,
-        url: String,
+        url: Coerced<String>,
         method: String,
         headers: HashMap<String, String>,
         version: String,
@@ -270,6 +271,7 @@ impl HttpRequest {
         credentials: CredentialsMode,
         redirect_policy: RedirectPolicy,
     ) -> rquickjs::Result<Self> {
+        let url = url.0;
         let url: Url = url
             .parse()
             .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
@@ -929,7 +931,8 @@ impl HttpResponse {
 
     /// Create a redirect response
     #[qjs(static)]
-    pub fn redirect(url: String, status: Option<u16>) -> Self {
+    pub fn redirect(url: Coerced<String>, status: Option<u16>) -> Self {
+        let url = url.0;
         let status_code = status
             .and_then(|code| golem_wasi_http::StatusCode::from_u16(code).ok())
             .unwrap_or(golem_wasi_http::StatusCode::FOUND);

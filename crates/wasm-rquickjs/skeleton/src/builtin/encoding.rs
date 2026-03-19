@@ -8,11 +8,13 @@ use std::ptr::NonNull;
 // Native functions for the encoding implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
+    use rquickjs::convert::Coerced;
     use rquickjs::prelude::*;
     use rquickjs::{Ctx, TypedArray};
 
     #[rquickjs::function]
-    pub fn supports_encoding(encoding: String) -> bool {
+    pub fn supports_encoding(encoding: Coerced<String>) -> bool {
+        let encoding = encoding.0;
         #[cfg(feature = "encoding")]
         {
             encoding_rs::Encoding::for_label(encoding.as_bytes()).is_some()
@@ -27,11 +29,12 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn decode(
         bytes: TypedArray<'_, u8>,
-        encoding: String,
+        encoding: Coerced<String>,
         stream: bool,
         fatal: bool,
         ignore_bom: bool,
     ) -> List<(Option<String>, Option<String>)> {
+        let encoding = encoding.0;
         let bytes = bytes
             .as_bytes()
             .expect("the UInt8Array passed to decode is detached");
@@ -70,9 +73,10 @@ fn encode_impl(string: &str) -> &[u8] {
 fn encode_into_impl(string: &str, target_len: usize, target: NonNull<u8>) -> EncodeIntoResult {
     let mut bytes_to_copy = 0;
     let mut chars_copied = 0;
-    for (idx, _) in string.char_indices() {
-        if idx <= target_len {
-            bytes_to_copy = idx;
+    for (idx, ch) in string.char_indices() {
+        let next = idx + ch.len_utf8();
+        if next <= target_len {
+            bytes_to_copy = next;
             chars_copied += 1;
         } else {
             break;

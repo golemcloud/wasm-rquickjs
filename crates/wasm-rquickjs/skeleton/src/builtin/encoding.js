@@ -3,7 +3,7 @@ import * as streams from '__wasm_rquickjs_builtin/streams';
 
 export class TextDecoder {
     constructor(label, options) {
-        const safeLabel = label || 'utf-8';
+        const safeLabel = label === undefined ? 'utf-8' : `${label}`;
         if (!encodingNative.supports_encoding(safeLabel)) {
             throw new RangeError(safeLabel + ' is not supported');
         }
@@ -57,18 +57,21 @@ export class TextEncoder {
         return 'utf-8';
     }
 
-    encode(string) {
-        return encodingNative.encode(string);
+    encode(input = '') {
+        return encodingNative.encode(`${input}`);
     }
 
     encodeInto(string, uint8Array) {
-        return encodingNative.encode_into(string);
+        if (typeof string !== 'string') {
+            throw new TypeError('The "src" argument must be of type string. Received type ' + typeof string);
+        }
+        return encodingNative.encode_into(string, uint8Array);
     }
 }
 
 export class TextDecoderStream extends streams.TransformStream {
     constructor(label, options) {
-        const safeLabel = label || 'utf-8';
+        const safeLabel = label === undefined ? 'utf-8' : `${label}`;
         const fatal = !!(options && options.fatal);
         if (!encodingNative.supports_encoding(safeLabel)) {
             throw new RangeError(safeLabel + ' is not supported');
