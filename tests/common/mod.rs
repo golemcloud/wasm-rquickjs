@@ -226,7 +226,6 @@ pub struct PreparedComponent {
 impl PreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
-        config.async_support(true);
         config.wasm_component_model(true);
         config.epoch_interruption(true);
         config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)

@@ -83,7 +83,6 @@ struct SharedRunner {
 impl SharedRunner {
     fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
-        config.async_support(true);
         config.wasm_component_model(true);
         config.epoch_interruption(true);
         config.cache(Some(wasmtime::Cache::from_file(None)?));
@@ -148,10 +147,7 @@ impl SharedRunner {
         let mut results = vec![Val::Bool(false)];
 
         let invoke_result = match func.call_async(&mut store, &args, &mut results).await {
-            Ok(()) => {
-                let _ = func.post_return_async(&mut store).await;
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(e) => {
                 let msg = format!("{e:#}");
                 if msg.contains("epoch") || msg.contains("interrupt") {
@@ -250,10 +246,7 @@ impl SharedRunner {
         let mut results = vec![Val::Bool(false)];
 
         let invoke_result = match func.call_async(&mut store, &args, &mut results).await {
-            Ok(()) => {
-                let _ = func.post_return_async(&mut store).await;
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(e) => {
                 let msg = format!("{e:#}");
                 if msg.contains("epoch") || msg.contains("interrupt") {

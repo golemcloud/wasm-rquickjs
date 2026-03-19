@@ -331,7 +331,10 @@ async fn crypto_random_int(#[tagged_as("crypto")] compiled: &CompiledTest) -> an
     let result = result?;
     match result {
         Some(Val::S64(n)) => {
-            assert!(n >= 0 && n < 100, "Random int {n} should be in [0, 100)");
+            assert!(
+                (0..100).contains(&n),
+                "Random int {n} should be in [0, 100)"
+            );
             Ok(())
         }
         _ => Err(anyhow!("Expected s64 result, got {:?}", result)),

@@ -1,7 +1,7 @@
 use crate::common::test_server::start_test_server;
 use crate::common::{CompiledTest, invoke_and_capture_output};
 use camino::Utf8Path;
-use indoc::indoc;
+
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
