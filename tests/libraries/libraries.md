@@ -170,7 +170,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | # | Package | npm name | Status | Tested On | Notes |
 |---|---------|----------|--------|-----------|-------|
 | 80 | node-cron | `node-cron` | ✅ | 2026-03-11 | All 5 bundled tests pass in Node.js and wasm-rquickjs (exports, validation, lifecycle, execute, events) |
-| 81 | cron-parser | `cron-parser` | ⚠️ | 2026-03-11 | 4/5 wasm tests pass (basic, validation, advanced, hash); test-05 fails with `ENOENT` writing temp file via `node:fs` |
+| 81 | cron-parser | `cron-parser` | ✅ | 2026-03-19 | All 5 tests pass (basic, validation, advanced, hash, timezone+file parser); previously blocked by missing `Intl` support |
 | 82 | NestJS Schedule | `@nestjs/schedule` | ⚠️ | 2026-03-11 | 4/5 wasm tests pass (decorators, CronExpression, module config, errors); test-04 registry fails: `DateTimeFormat` must be called with `new` (Intl bug) |
 
 ## Email

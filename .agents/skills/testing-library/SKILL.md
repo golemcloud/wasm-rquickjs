@@ -243,14 +243,25 @@ cd ../..
 # 4. Run with wasmtime
 #    - --invoke 'run()' — parentheses are REQUIRED
 #    - -S cli -S http -S inherit-network — provide WASI imports
+#    - --dir creates a temp directory preopened at "/" so node:fs operations work
 #    - --invoke must come BEFORE the wasm path
+TEST_TMPDIR=$(mktemp -d)
 wasmtime run --wasm component-model \
   -S cli -S http -S inherit-network \
+  --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-01/target/wasm32-wasip1/debug/lib_test_<package_name>_01.wasm
+rm -rf "$TEST_TMPDIR"
 ```
 
 **Do NOT write Rust test harnesses** for running library tests. Always use `wasmtime` CLI as shown above.
+
+**Filesystem access:** Each test run gets a fresh temp directory preopened at `/` via `--dir`. This gives `node:fs` operations (read, write, mkdir, etc.) a working filesystem. The temp dir is cleaned up after each run. If a test needs fixture files (e.g., `dotenv.config({ path: 'fixtures/config.env' })`), copy them into `$TEST_TMPDIR` before running wasmtime:
+
+```bash
+# Example: copy fixture files into the temp dir for the test
+cp -r tests/libraries/<package-name>/fixtures "$TEST_TMPDIR/fixtures"
+```
 
 Capture stdout/stderr from each run. If the component fails to compile or run, record the exact error.
 
@@ -395,10 +406,13 @@ cd tmp/lib-test-<package-name>-int-01
 cargo-component build
 cd ../..
 
+TEST_TMPDIR=$(mktemp -d)
 wasmtime run --wasm component-model \
   -S cli -S http -S inherit-network \
+  --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-int-01/target/wasm32-wasip1/debug/lib_test_<package_name>_int_01.wasm
+rm -rf "$TEST_TMPDIR"
 
 # Tear down
 cd tests/libraries/<package-name>
@@ -611,10 +625,13 @@ cd tmp/lib-test-<package-name>-int-01
 cargo-component build
 cd ../..
 
+TEST_TMPDIR=$(mktemp -d)
 wasmtime run --wasm component-model \
   -S cli -S http -S inherit-network \
+  --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-int-01/target/wasm32-wasip1/debug/lib_test_<package_name>_int_01.wasm
+rm -rf "$TEST_TMPDIR"
 
 # 6. Kill the mock server
 kill $MOCK_PID 2>/dev/null
@@ -759,10 +776,13 @@ cargo-component build
 cd ../..
 
 # Pass the env var through to wasmtime
+TEST_TMPDIR=$(mktemp -d)
 OPENAI_API_KEY="$OPENAI_API_KEY" wasmtime run --wasm component-model \
   -S cli -S http -S inherit-network \
+  --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-live-01/target/wasm32-wasip1/debug/lib_test_<package_name>_live_01.wasm
+rm -rf "$TEST_TMPDIR"
 ```
 
 **Important:**
