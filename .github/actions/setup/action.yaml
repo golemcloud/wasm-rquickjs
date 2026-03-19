@@ -1,19 +1,22 @@
 name: "Setup Build Environment"
 description: "Shared setup for Rust, WASI SDK, and cargo-component"
 
+inputs:
+  cache-key:
+    description: "Shared cache key for rust-cache"
+    required: false
+    default: "debug"
+
 runs:
   using: "composite"
   steps:
     - uses: useblacksmith/rust-cache@v3
       with:
         prefix-key: v1-rust
-        shared-key: debug
+        shared-key: ${{ inputs.cache-key }}
         cache-all-crates: true
     - name: Setup Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+      uses: dtolnay/rust-toolchain@stable
     - uses: cargo-bins/cargo-binstall@main
     - name: Install cargo-component
       shell: bash
