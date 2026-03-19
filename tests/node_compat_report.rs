@@ -29,8 +29,9 @@ use test_r::test;
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{Component, Linker, ResourceTable, Val};
 use wasmtime::{Engine, Store};
-use wasmtime_wasi::p2::{IoView, OutputFile, WasiCtx, WasiView, bindings};
-use wasmtime_wasi::{DirPerms, FilePerms};
+use wasmtime_wasi::cli::OutputFile;
+use wasmtime_wasi::p2::bindings;
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 // --- Host type (same as common/mod.rs) ---
@@ -42,21 +43,18 @@ struct Host {
     pub wasi_http: Arc<WasiHttpCtx>,
 }
 
-impl IoView for Host {
-    fn table(&mut self) -> &mut ResourceTable {
-        Arc::get_mut(&mut self.table)
-            .expect("ResourceTable is shared and cannot be borrowed mutably")
-            .get_mut()
-            .expect("ResourceTable mutex must never fail")
-    }
-}
-
 impl WasiView for Host {
-    fn ctx(&mut self) -> &mut WasiCtx {
-        Arc::get_mut(&mut self.wasi)
-            .expect("WasiCtx is shared and cannot be borrowed mutably")
-            .get_mut()
-            .expect("WasiCtx mutex must never fail")
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView {
+            ctx: Arc::get_mut(&mut self.wasi)
+                .expect("WasiCtx is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("WasiCtx mutex must never fail"),
+            table: Arc::get_mut(&mut self.table)
+                .expect("ResourceTable is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("ResourceTable mutex must never fail"),
+        }
     }
 }
 
@@ -64,6 +62,13 @@ impl WasiHttpView for Host {
     fn ctx(&mut self) -> &mut WasiHttpCtx {
         Arc::get_mut(&mut self.wasi_http)
             .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
+    }
+
+    fn table(&mut self) -> &mut ResourceTable {
+        Arc::get_mut(&mut self.table)
+            .expect("ResourceTable is shared and cannot be borrowed mutably")
+            .get_mut()
+            .expect("ResourceTable mutex must never fail")
     }
 }
 
@@ -152,7 +157,7 @@ impl SharedRunner {
                 if msg.contains("epoch") || msg.contains("interrupt") {
                     Err(anyhow::anyhow!("Timeout (epoch deadline exceeded)"))
                 } else {
-                    Err(e)
+                    Err(anyhow::anyhow!(e))
                 }
             }
         };
@@ -254,7 +259,7 @@ impl SharedRunner {
                 if msg.contains("epoch") || msg.contains("interrupt") {
                     Err(anyhow::anyhow!("Timeout (epoch deadline exceeded)"))
                 } else {
-                    Err(e)
+                    Err(anyhow::anyhow!(e))
                 }
             }
         };
