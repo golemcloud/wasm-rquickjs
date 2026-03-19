@@ -512,6 +512,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", module::WIRE_JS).unwrap();
     writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();
     writeln!(result, "globalThis.global = globalThis;").unwrap();
+    writeln!(result, "globalThis.self = globalThis;").unwrap();
     writeln!(result, "{}", IMPORT_META_RESOLVE_JS).unwrap();
     writeln!(result, "{}", IMPORT_ATTRS_VALIDATE_JS).unwrap();
 
