@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 #[test_dep(tagged_as = "intl")]
 fn compiled_intl() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/intl");
-    CompiledTest::new(path, false).expect("Failed to compile intl")
+    CompiledTest::new(path, true).expect("Failed to compile intl")
 }
 
 #[test]

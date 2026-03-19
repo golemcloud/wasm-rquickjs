@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 #[test_dep(tagged_as = "v8_stack_trace")]
 fn compiled_v8_stack_trace() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/v8_stack_trace");
-    CompiledTest::new(path, false).expect("Failed to compile v8_stack_trace")
+    CompiledTest::new(path, true).expect("Failed to compile v8_stack_trace")
 }
 
 #[test]

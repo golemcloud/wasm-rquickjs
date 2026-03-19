@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 #[test_dep(tagged_as = "diagnostics_channel_golem")]
 fn compiled_diagnostics_channel_golem() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/diagnostics-channel-golem");
-    CompiledTest::new_with_features(path, false, FeatureCombination::Golem)
+    CompiledTest::new_with_features(path, true, FeatureCombination::Golem)
         .expect("Failed to compile diagnostics-channel-golem")
 }
 

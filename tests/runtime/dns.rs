@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 #[test_dep(tagged_as = "dns")]
 fn compiled_dns() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/dns");
-    CompiledTest::new(path, false).expect("Failed to compile dns")
+    CompiledTest::new(path, true).expect("Failed to compile dns")
 }
 
 #[test]

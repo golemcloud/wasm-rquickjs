@@ -6,7 +6,7 @@ use wasmtime::component::Val;
 #[test_dep(tagged_as = "domain")]
 fn compiled_domain() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/domain");
-    CompiledTest::new(path, false).expect("Failed to compile domain")
+    CompiledTest::new(path, true).expect("Failed to compile domain")
 }
 
 #[test]
