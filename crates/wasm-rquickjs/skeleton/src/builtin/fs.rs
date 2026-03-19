@@ -31,9 +31,7 @@ fn set_file_times(file: &std::fs::File, atime_secs: f64, mtime_secs: f64) -> std
     file.set_times(times)
 }
 
-fn secs_to_wasi_timestamp(
-    secs: f64,
-) -> std::io::Result<wasip2::filesystem::types::NewTimestamp> {
+fn secs_to_wasi_timestamp(secs: f64) -> std::io::Result<wasip2::filesystem::types::NewTimestamp> {
     if !secs.is_finite() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -65,16 +63,12 @@ fn wasi_fs_error_to_io(e: &wasip2::filesystem::types::ErrorCode) -> std::io::Err
         ErrorCode::NotPermitted => {
             std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
         }
-        ErrorCode::Exist => {
-            std::io::Error::new(std::io::ErrorKind::AlreadyExists, e.to_string())
-        }
+        ErrorCode::Exist => std::io::Error::new(std::io::ErrorKind::AlreadyExists, e.to_string()),
         ErrorCode::BadDescriptor => {
             std::io::Error::from_raw_os_error(8) // EBADF on WASI
         }
-        ErrorCode::Invalid => {
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
-        }
-        _ => std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+        ErrorCode::Invalid => std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()),
+        _ => std::io::Error::other(e.to_string()),
     }
 }
 
@@ -344,8 +338,7 @@ fn resolve_emulated_symlinks_checked(path: &str) -> std::io::Result<String> {
         if let Some(target) = get_emulated_symlink_target(&current) {
             symlink_count += 1;
             if symlink_count > MAX_SYMLINK_FOLLOWS {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(std::io::Error::other(
                     "too many levels of symbolic links",
                 ));
             }
@@ -399,8 +392,7 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
         std::io::ErrorKind::InvalidInput => ("EINVAL", -22, "invalid argument"),
         _ => {
             let err_text = err.to_string().to_lowercase();
-            if err_text.contains("too many levels of symbolic links")
-                || err_text.contains("eloop")
+            if err_text.contains("too many levels of symbolic links") || err_text.contains("eloop")
             {
                 return ("ELOOP", -40, "too many levels of symbolic links");
             }
@@ -539,7 +531,7 @@ fn metadata_to_obj<'js>(
     obj.set("gid", 0_f64).unwrap();
     obj.set("rdev", 0_f64).unwrap();
     obj.set("blksize", 4096_f64).unwrap();
-    obj.set("blocks", ((meta.len() + 511) / 512) as f64)
+    obj.set("blocks", meta.len().div_ceil(512) as f64)
         .unwrap();
 
     obj.set("size", meta.len() as f64).unwrap();
@@ -577,7 +569,10 @@ fn metadata_to_obj<'js>(
 }
 
 #[cfg(feature = "encoding")]
-fn read_file_with_encoding_impl(path: &str, encoding: &str) -> rquickjs::prelude::List<(Option<String>, Option<String>)> {
+fn read_file_with_encoding_impl(
+    path: &str,
+    encoding: &str,
+) -> rquickjs::prelude::List<(Option<String>, Option<String>)> {
     use rquickjs::prelude::List;
     let path = std::path::Path::new(path);
     match std::fs::read(path) {
@@ -593,27 +588,33 @@ fn read_file_with_encoding_impl(path: &str, encoding: &str) -> rquickjs::prelude
 }
 
 #[cfg(not(feature = "encoding"))]
-fn read_file_with_encoding_impl(path: &str, encoding: &str) -> rquickjs::prelude::List<(Option<String>, Option<String>)> {
+fn read_file_with_encoding_impl(
+    path: &str,
+    encoding: &str,
+) -> rquickjs::prelude::List<(Option<String>, Option<String>)> {
     use rquickjs::prelude::List;
     let path_obj = std::path::Path::new(path);
     let label = encoding.trim().to_ascii_lowercase();
     if !matches!(label.as_str(), "utf-8" | "utf8" | "unicode-1-1-utf-8") {
-        return List((None, Some(format!(
-            "Encoding \"{encoding}\" is not supported (encoding feature is not enabled, only UTF-8 is available)"
-        ))));
+        return List((
+            None,
+            Some(format!(
+                "Encoding \"{encoding}\" is not supported (encoding feature is not enabled, only UTF-8 is available)"
+            )),
+        ));
     }
     match std::fs::read(path_obj) {
-        Ok(bytes) => {
-            List((Some(String::from_utf8_lossy(&bytes).into_owned()), None))
-        }
-        Err(err) => List((None, Some(format!("Failed to read file {path_obj:?}: {err}")))),
+        Ok(bytes) => List((Some(String::from_utf8_lossy(&bytes).into_owned()), None)),
+        Err(err) => List((
+            None,
+            Some(format!("Failed to read file {path_obj:?}: {err}")),
+        )),
     }
 }
 
 #[rquickjs::module(rename_vars = "camelCase")]
 pub mod native_module {
-    #[cfg(feature = "encoding")]
-    use encoding_rs::Encoding;
+
     use rquickjs::prelude::List;
     use rquickjs::{Array, Ctx, Object, TypedArray, Value};
     use std::path::Path;
@@ -804,9 +805,7 @@ pub mod native_module {
                 if creating {
                     super::set_mode_override_for_path(&path, mode as u32);
                     super::set_mode_override_for_fd(fd, mode as u32);
-                } else if let Some(mode_override) =
-                    super::get_mode_override_for_path(&path)
-                {
+                } else if let Some(mode_override) = super::get_mode_override_for_path(&path) {
                     super::set_mode_override_for_fd(fd, mode_override);
                 }
                 result.set("fd", fd).unwrap();
@@ -849,15 +848,16 @@ pub mod native_module {
 
         match table.get_mut(fd) {
             Some(file) => {
-                if !position.is_null() && !position.is_undefined() {
-                    if let Some(pos) = position.as_number() {
-                        let pos = pos as u64;
-                        if let Err(err) = file.seek(SeekFrom::Start(pos)) {
-                            result
-                                .set("error", super::make_fs_error(&ctx, &err, "read", None))
-                                .unwrap();
-                            return result;
-                        }
+                if !position.is_null()
+                    && !position.is_undefined()
+                    && let Some(pos) = position.as_number()
+                {
+                    let pos = pos as u64;
+                    if let Err(err) = file.seek(SeekFrom::Start(pos)) {
+                        result
+                            .set("error", super::make_fs_error(&ctx, &err, "read", None))
+                            .unwrap();
+                        return result;
                     }
                 }
 
@@ -920,15 +920,16 @@ pub mod native_module {
         let mut table = super::FD_TABLE.lock().unwrap();
         match table.get_mut(fd) {
             Some(file) => {
-                if !position.is_null() && !position.is_undefined() {
-                    if let Some(pos) = position.as_number() {
-                        let pos = pos as u64;
-                        if let Err(err) = file.seek(SeekFrom::Start(pos)) {
-                            result
-                                .set("error", super::make_fs_error(&ctx, &err, "write", None))
-                                .unwrap();
-                            return result;
-                        }
+                if !position.is_null()
+                    && !position.is_undefined()
+                    && let Some(pos) = position.as_number()
+                {
+                    let pos = pos as u64;
+                    if let Err(err) = file.seek(SeekFrom::Start(pos)) {
+                        result
+                            .set("error", super::make_fs_error(&ctx, &err, "write", None))
+                            .unwrap();
+                        return result;
                     }
                 }
                 match file.write(data) {
@@ -965,15 +966,16 @@ pub mod native_module {
 
         match table.get_mut(fd) {
             Some(file) => {
-                if !position.is_null() && !position.is_undefined() {
-                    if let Some(pos) = position.as_number() {
-                        let pos = pos as u64;
-                        if let Err(err) = file.seek(SeekFrom::Start(pos)) {
-                            result
-                                .set("error", super::make_fs_error(&ctx, &err, "write", None))
-                                .unwrap();
-                            return result;
-                        }
+                if !position.is_null()
+                    && !position.is_undefined()
+                    && let Some(pos) = position.as_number()
+                {
+                    let pos = pos as u64;
+                    if let Err(err) = file.seek(SeekFrom::Start(pos)) {
+                        result
+                            .set("error", super::make_fs_error(&ctx, &err, "write", None))
+                            .unwrap();
+                        return result;
                     }
                 }
                 let bytes = data.as_bytes();
@@ -1060,9 +1062,7 @@ pub mod native_module {
                 if let Some(mode_override) = super::get_mode_override_for_path(&path) {
                     super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
                 }
-                result
-                    .set("stat", stat_obj)
-                    .unwrap();
+                result.set("stat", stat_obj).unwrap();
             }
             Err(err) => {
                 result
@@ -1104,9 +1104,7 @@ pub mod native_module {
                 if super::get_emulated_symlink_target(&path).is_some() {
                     super::apply_emulated_symlink_to_stat_obj(&stat_obj);
                 }
-                result
-                    .set("stat", stat_obj)
-                    .unwrap();
+                result.set("stat", stat_obj).unwrap();
             }
             Err(err) => {
                 result
@@ -1125,7 +1123,7 @@ pub mod native_module {
         let result = Object::new(ctx.clone()).unwrap();
 
         // Handle stdin/stdout/stderr (fd 0, 1, 2) which are not in FD_TABLE
-        if fd >= 0 && fd <= 2 {
+        if (0..=2).contains(&fd) {
             let stat = super::stdio_stat_obj(&ctx);
             result.set("stat", stat).unwrap();
             return result;
@@ -1143,9 +1141,7 @@ pub mod native_module {
                     if let Some(mode_override) = mode_override {
                         super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
                     }
-                    result
-                        .set("stat", stat_obj)
-                        .unwrap();
+                    result.set("stat", stat_obj).unwrap();
                 }
                 Err(err) => {
                     result
@@ -1248,12 +1244,7 @@ pub mod native_module {
                         result
                             .set(
                                 "error",
-                                super::make_fs_error(
-                                    &ctx,
-                                    &err,
-                                    "realpath",
-                                    Some(&path),
-                                ),
+                                super::make_fs_error(&ctx, &err, "realpath", Some(&path)),
                             )
                             .unwrap();
                     }

@@ -10,4 +10,3 @@ export { DatabaseSync, StatementSync, constants };
 export default { DatabaseSync, StatementSync, constants };
 "#;
 
-pub const WIRE_JS: &str = "";

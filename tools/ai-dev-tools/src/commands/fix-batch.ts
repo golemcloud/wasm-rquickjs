@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { REPO_ROOT, LOG_DIR } from "../paths.js";
@@ -50,31 +49,61 @@ const HTTP_GROUPS: Record<string, GroupDef> = {
   "incoming-message": {
     patterns: [/^test-http-incoming-/],
   },
-  "headers": {
-    patterns: [/^test-http-header-/, /^test-http-invalidheader/, /^test-http-blank-header/, /^test-http-automatic-header/],
+  headers: {
+    patterns: [
+      /^test-http-header-/,
+      /^test-http-invalidheader/,
+      /^test-http-blank-header/,
+      /^test-http-automatic-header/,
+    ],
   },
-  "abort": {
+  abort: {
     patterns: [/^test-http-abort-/, /^test-http-client-abort/, /^test-http-aborted/],
   },
-  "agent": {
+  agent: {
     patterns: [/^test-http-agent-/],
   },
   "client-body": {
     patterns: [/^test-http-client-upload/, /^test-http-client-pipe/, /^test-http-client-encoding/],
   },
   "request-options": {
-    patterns: [/^test-http-url-/, /^test-http-request-/, /^test-http-hostname-/, /^test-http-host-/, /^test-http-localaddress/],
+    patterns: [
+      /^test-http-url-/,
+      /^test-http-request-/,
+      /^test-http-hostname-/,
+      /^test-http-host-/,
+      /^test-http-localaddress/,
+    ],
   },
   "encoding-framing": {
-    patterns: [/^test-http-chunked/, /^test-http-chunk-/, /^test-http-content/, /^test-http-transfer-/],
+    patterns: [
+      /^test-http-chunked/,
+      /^test-http-chunk-/,
+      /^test-http-content/,
+      /^test-http-transfer-/,
+    ],
   },
-  "response": {
-    patterns: [/^test-http-response-/, /^test-http-head-/, /^test-http-status-/, /^test-http-allow-/, /^test-http-no-content/, /^test-http-date-/, /^test-http-early-/, /^test-http-information-/],
+  response: {
+    patterns: [
+      /^test-http-response-/,
+      /^test-http-head-/,
+      /^test-http-status-/,
+      /^test-http-allow-/,
+      /^test-http-no-content/,
+      /^test-http-date-/,
+      /^test-http-early-/,
+      /^test-http-information-/,
+    ],
   },
   "keep-alive": {
-    patterns: [/^test-http-keep-alive/, /^test-http-1\.0/, /^test-http-should-keep/, /^test-http-pipeline/],
+    patterns: [
+      /^test-http-keep-alive/,
+      /^test-http-1\.0/,
+      /^test-http-should-keep/,
+      /^test-http-pipeline/,
+    ],
   },
-  "timeout": {
+  timeout: {
     patterns: [/^test-http-set-timeout/, /^test-http-timeout/],
   },
   "compat-parser": {
@@ -84,11 +113,11 @@ const HTTP_GROUPS: Record<string, GroupDef> = {
     patterns: [/^test-http-client-timeout/, /^test-http-client-close/],
   },
   // Auto-skip groups — fundamentally impossible in WASM
-  "server": {
+  server: {
     patterns: [/^test-http-server-/, /^test-http-bind-/, /^test-http-listening/],
     autoSkip: "[manual] requires HTTP server (net.listen) which is unavailable in WASM",
   },
-  "transport": {
+  transport: {
     patterns: [/^test-http-unix-socket/, /^test-http-proxy/, /^test-http-pipe-/, /^test-http-wget/],
     autoSkip: "[manual] requires unix sockets / proxy / external tools unavailable in WASM",
   },
@@ -242,7 +271,10 @@ async function skipExposeInternalsTests(category: string): Promise<number> {
 
 const MAX_ATTEMPTS = 2;
 
-export async function fixBatchCommand(category: string, options?: { dryRun?: boolean }): Promise<void> {
+export async function fixBatchCommand(
+  category: string,
+  options?: { dryRun?: boolean },
+): Promise<void> {
   const dryRun = options?.dryRun ?? false;
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
@@ -272,7 +304,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
 
   if (missing.length === 0) {
     const initCounts = getTestCounts(category);
-    console.log(`  ✅ All ${vendored.length} vendored test files already in config.jsonc (${initCounts.total} test cases)`);
+    console.log(
+      `  ✅ All ${vendored.length} vendored test files already in config.jsonc (${initCounts.total} test cases)`,
+    );
   } else {
     addTestsToConfigSkippedBatch(missing, category);
     console.log(`  Added ${missing.length} missing tests to config.jsonc (as skipped)`);
@@ -299,7 +333,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
     const counts = getTestCounts(category);
     const totalSkipped = counts.fixableSkipped + counts.manualSkipped;
 
-    console.log(`  ${counts.total} total test cases: ${counts.enabled} passing, ${totalSkipped} skipped (${counts.fixableSkipped} fixable, ${counts.manualSkipped} manual)`);
+    console.log(
+      `  ${counts.total} total test cases: ${counts.enabled} passing, ${totalSkipped} skipped (${counts.fixableSkipped} fixable, ${counts.manualSkipped} manual)`,
+    );
     console.log(`  ${allSkipped.length} fixable tests in ${fixableGroups.length} groups:`);
     console.log();
 
@@ -400,7 +436,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
       break;
     }
 
-    console.log(`  Round ${round}: ${allSkipped.length} fixable tests in ${fixableGroups.length} groups`);
+    console.log(
+      `  Round ${round}: ${allSkipped.length} fixable tests in ${fixableGroups.length} groups`,
+    );
     for (const g of fixableGroups) {
       console.log(`    ${g.name}: ${g.tests.length} test(s)`);
     }
@@ -419,12 +457,23 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
       const ampMode = attempts === 1 ? "smart" : "deep";
 
       if (attempts > MAX_ATTEMPTS) {
-        console.log(`  ⏭ ${groupLabel}: exceeded ${MAX_ATTEMPTS} attempts. Marking for manual review.`);
+        console.log(
+          `  ⏭ ${groupLabel}: exceeded ${MAX_ATTEMPTS} attempts. Marking for manual review.`,
+        );
         for (const test of group.tests) {
           if (test.subtestName) {
-            skipSubtestInConfig(test.path, test.subtestName, MANUAL_SKIP_PREFIX + `amp batch failed after ${MAX_ATTEMPTS} attempts (${group.name})`);
+            skipSubtestInConfig(
+              test.path,
+              test.subtestName,
+              MANUAL_SKIP_PREFIX +
+                `amp batch failed after ${MAX_ATTEMPTS} attempts (${group.name})`,
+            );
           } else {
-            updateSkipReason(test.path, MANUAL_SKIP_PREFIX + `amp batch failed after ${MAX_ATTEMPTS} attempts (${group.name})`);
+            updateSkipReason(
+              test.path,
+              MANUAL_SKIP_PREFIX +
+                `amp batch failed after ${MAX_ATTEMPTS} attempts (${group.name})`,
+            );
           }
         }
         await commitProgress(category, `batch-skip-${group.name}`);
@@ -432,7 +481,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
       }
 
       console.log("───────────────────────────────────────────────────────────────");
-      console.log(`▶ Batch: ${groupLabel} (${group.tests.length} tests, attempt ${attempts}/${MAX_ATTEMPTS}, mode: ${ampMode})`);
+      console.log(
+        `▶ Batch: ${groupLabel} (${group.tests.length} tests, attempt ${attempts}/${MAX_ATTEMPTS}, mode: ${ampMode})`,
+      );
       console.log("───────────────────────────────────────────────────────────────");
 
       for (const t of group.tests) {
@@ -443,10 +494,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
 
       // Check which tests in the group still actually fail
       console.log("  Running batch tests to get current failure state...");
-      const { ok: batchAlreadyPasses, output: beforeOutput } = await runSpecificTests(
-        group.tests,
-        { includeIgnored: true },
-      );
+      const { ok: batchAlreadyPasses, output: beforeOutput } = await runSpecificTests(group.tests, {
+        includeIgnored: true,
+      });
 
       if (batchAlreadyPasses) {
         console.log("  🎉 All tests in batch already pass! Enabling...");
@@ -476,9 +526,6 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
         continue;
       }
 
-      // Record which tests failed before the fix attempt
-      const beforeFailingFilters = extractFailingFilters(beforeOutput);
-
       // Build batch prompt with failure output
       const prompt = buildBatchPrompt(category, group.name, group.tests, beforeOutput);
       const ampResult = await runAmp(prompt, category, `batch-${group.name}`, round, ampMode);
@@ -499,7 +546,11 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
         console.log("  ℹ Amp made no code changes. Marking group for manual review.");
         for (const test of group.tests) {
           if (test.subtestName) {
-            skipSubtestInConfig(test.path, test.subtestName, MANUAL_SKIP_PREFIX + "amp batch made no code changes");
+            skipSubtestInConfig(
+              test.path,
+              test.subtestName,
+              MANUAL_SKIP_PREFIX + "amp batch made no code changes",
+            );
           } else {
             updateSkipReason(test.path, MANUAL_SKIP_PREFIX + "amp batch made no code changes");
           }
@@ -517,7 +568,11 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
         revertWorkspace();
         for (const test of group.tests) {
           if (test.subtestName) {
-            skipSubtestInConfig(test.path, test.subtestName, MANUAL_SKIP_PREFIX + `batch ${group.name}: cannot fix`);
+            skipSubtestInConfig(
+              test.path,
+              test.subtestName,
+              MANUAL_SKIP_PREFIX + `batch ${group.name}: cannot fix`,
+            );
           } else {
             updateSkipReason(test.path, MANUAL_SKIP_PREFIX + `batch ${group.name}: cannot fix`);
           }
@@ -530,10 +585,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
       // ── Verification: run batch tests again + regression check ──
 
       console.log("  Running batch tests after changes...");
-      const { ok: afterBatchOk, output: afterOutput } = await runSpecificTests(
-        group.tests,
-        { includeIgnored: true },
-      );
+      const { output: afterOutput } = await runSpecificTests(group.tests, {
+        includeIgnored: true,
+      });
 
       const afterFailingFilters = extractFailingFilters(afterOutput);
 
@@ -550,7 +604,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
         }
       }
 
-      console.log(`  Results: ${nowPassing.length} now passing, ${stillFailing.length} still failing`);
+      console.log(
+        `  Results: ${nowPassing.length} now passing, ${stillFailing.length} still failing`,
+      );
 
       if (nowPassing.length === 0) {
         // No improvement
@@ -604,9 +660,10 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
 
       const total = group.tests.length;
       const passing = nowPassing.length;
-      const commitLabel = passing === total
-        ? `batch-fix-${group.name}`
-        : `batch-partial-${group.name}-${passing}of${total}`;
+      const commitLabel =
+        passing === total
+          ? `batch-fix-${group.name}`
+          : `batch-partial-${group.name}-${passing}of${total}`;
 
       console.log(`  ✅ ${passing}/${total} tests now passing!`);
       await commitProgress(category, commitLabel);
@@ -624,7 +681,9 @@ export async function fixBatchCommand(category: string, options?: { dryRun?: boo
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(`  Done! Batch processing for '${category}' complete.`);
   const finalCounts = getTestCounts(category);
-  console.log(`  ${finalCounts.enabled} passing, ${finalCounts.fixableSkipped} fixable, ${finalCounts.manualSkipped} manual`);
+  console.log(
+    `  ${finalCounts.enabled} passing, ${finalCounts.fixableSkipped} fixable, ${finalCounts.manualSkipped} manual`,
+  );
   console.log(`  Logs in: ${LOG_DIR}`);
   console.log("═══════════════════════════════════════════════════════════════");
 }

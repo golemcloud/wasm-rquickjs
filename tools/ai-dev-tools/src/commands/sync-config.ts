@@ -26,16 +26,14 @@ function parseTestList(report: string, sectionHeading: string): ParsedTestEntry[
   const afterHeading = report.slice(headingIdx);
   const nextHeadingIdx = afterHeading.indexOf("\n## ", 1);
   const sectionContent =
-    nextHeadingIdx === -1
-      ? afterHeading
-      : afterHeading.slice(0, nextHeadingIdx);
+    nextHeadingIdx === -1 ? afterHeading : afterHeading.slice(0, nextHeadingIdx);
 
   const entries: ParsedTestEntry[] = [];
   for (const line of sectionContent.split("\n")) {
     const match = line.match(/^- `([^`]+)`/);
     if (match) {
       const fullPath = match[1];
-      const hashIdx = fullPath.indexOf('#');
+      const hashIdx = fullPath.indexOf("#");
       if (hashIdx >= 0) {
         entries.push({
           path: fullPath.substring(0, hashIdx),
@@ -75,9 +73,7 @@ export async function syncConfigCommand(
   }
 
   if (shouldUnskip.length > 0) {
-    console.log(
-      `\n🔄 ${shouldUnskip.length} test(s) to unskip (marked skip but actually pass):`,
-    );
+    console.log(`\n🔄 ${shouldUnskip.length} test(s) to unskip (marked skip but actually pass):`);
     for (const entry of shouldUnskip) {
       const label = entry.subtestName ? `${entry.path}#${entry.subtestName}` : entry.path;
       console.log(`  • ${label}`);
@@ -85,9 +81,7 @@ export async function syncConfigCommand(
   }
 
   if (missingFromConfig.length > 0) {
-    console.log(
-      `\n➕ ${missingFromConfig.length} passing test(s) to add to config:`,
-    );
+    console.log(`\n➕ ${missingFromConfig.length} passing test(s) to add to config:`);
     for (const entry of missingFromConfig) {
       const label = entry.subtestName ? `${entry.path}#${entry.subtestName}` : entry.path;
       console.log(`  • ${label}`);
@@ -116,20 +110,30 @@ export async function syncConfigCommand(
     for (const entry of missingFromConfig) {
       if (entry.subtestName) {
         // Add subtest to existing split entry
-        const edits = jsonc.modify(content, ["tests", entry.path, "subtests", entry.subtestName], {}, { formattingOptions });
+        const edits = jsonc.modify(
+          content,
+          ["tests", entry.path, "subtests", entry.subtestName],
+          {},
+          { formattingOptions },
+        );
         content = jsonc.applyEdits(content, edits);
       } else {
         // Add new file entry
-        const edits = jsonc.modify(content, ["tests", entry.path], {}, {
-          formattingOptions,
-          getInsertionIndex: (properties) => {
-            // Insert in sorted position
-            for (let i = 0; i < properties.length; i++) {
-              if (properties[i] > entry.path) return i;
-            }
-            return properties.length;
+        const edits = jsonc.modify(
+          content,
+          ["tests", entry.path],
+          {},
+          {
+            formattingOptions,
+            getInsertionIndex: (properties) => {
+              // Insert in sorted position
+              for (let i = 0; i < properties.length; i++) {
+                if (properties[i] > entry.path) return i;
+              }
+              return properties.length;
+            },
           },
-        });
+        );
         content = jsonc.applyEdits(content, edits);
       }
     }

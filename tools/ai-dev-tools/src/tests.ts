@@ -1,6 +1,6 @@
 import path from "node:path";
 import { globSync } from "node:fs";
-import { REPO_ROOT, SUITE_DIR, LOG_DIR } from "./paths.js";
+import { REPO_ROOT, LOG_DIR } from "./paths.js";
 import { loadConfig } from "./config.js";
 import { run, type RunOptions } from "./runner.js";
 
@@ -24,44 +24,44 @@ export const MANUAL_SKIP_PREFIX = "[manual] ";
  * "crypto" → `test-crypto-*.js`) don't need an entry here.
  */
 const CATEGORY_ALIASES: Record<string, string[]> = {
-  test_runner:          ["runner"],
-  string_decoder:       ["string-decoder", "stringdecoder"],
-  child_process:        ["child-process", "child_process"],
-  worker_threads:       ["worker", "worker-threads"],
-  async_hooks:          ["async-hooks", "async-context", "async-local-storage", "async-wrap"],
-  perf_hooks:           ["perf", "performance"],
-  diagnostics_channel:  ["diagnostics"],
-  trace_events:         ["trace"],
-  abort:                ["abortcontroller", "abortsignal", "aborted"],
-  module:               ["module", "require", "esm", "cjs", "loaders"],
-  events:               ["events", "event-emitter"],
-  fs:                   ["fs", "file"],
-  http:                 ["http", "http2", "https"],
-  tls:                  ["tls", "ssl"],
-  timers:               ["timers", "settimeout", "setinterval", "setimmediate"],
-  stream:               ["stream", "readable", "writable", "transform", "duplex"],
-  encoding:             ["encoding", "textdecoder", "textencoder", "btoa", "atob"],
-  fetch:                ["fetch", "response", "request", "headers"],
-  inspector:            ["inspector", "debugger", "inspect"],
-  net:                  ["net", "pipe", "socket", "listen", "tcp"],
-  promises:             ["promise", "promises"],
-  errors:               ["errors", "error"],
-  stdio:                ["stdin", "stdout", "stdio"],
-  signal:               ["signal"],
-  cli:                  ["cli"],
-  global:               ["global"],
-  compile:              ["compile"],
-  whatwg:               ["whatwg"],
-  webcrypto:            ["webcrypto"],
-  webstreams:           ["webstream", "webstreams"],
-  permission:           ["permission"],
-  snapshot:             ["snapshot"],
-  eslint:               ["eslint"],
-  internal:             ["internal"],
-  heap:                 ["heap"],
-  node:                 ["node"],
-  shadow_realm:         ["shadow-realm"],
-  common:               ["common"],
+  test_runner: ["runner"],
+  string_decoder: ["string-decoder", "stringdecoder"],
+  child_process: ["child-process", "child_process"],
+  worker_threads: ["worker", "worker-threads"],
+  async_hooks: ["async-hooks", "async-context", "async-local-storage", "async-wrap"],
+  perf_hooks: ["perf", "performance"],
+  diagnostics_channel: ["diagnostics"],
+  trace_events: ["trace"],
+  abort: ["abortcontroller", "abortsignal", "aborted"],
+  module: ["module", "require", "esm", "cjs", "loaders"],
+  events: ["events", "event-emitter"],
+  fs: ["fs", "file"],
+  http: ["http", "http2", "https"],
+  tls: ["tls", "ssl"],
+  timers: ["timers", "settimeout", "setinterval", "setimmediate"],
+  stream: ["stream", "readable", "writable", "transform", "duplex"],
+  encoding: ["encoding", "textdecoder", "textencoder", "btoa", "atob"],
+  fetch: ["fetch", "response", "request", "headers"],
+  inspector: ["inspector", "debugger", "inspect"],
+  net: ["net", "pipe", "socket", "listen", "tcp"],
+  promises: ["promise", "promises"],
+  errors: ["errors", "error"],
+  stdio: ["stdin", "stdout", "stdio"],
+  signal: ["signal"],
+  cli: ["cli"],
+  global: ["global"],
+  compile: ["compile"],
+  whatwg: ["whatwg"],
+  webcrypto: ["webcrypto"],
+  webstreams: ["webstream", "webstreams"],
+  permission: ["permission"],
+  snapshot: ["snapshot"],
+  eslint: ["eslint"],
+  internal: ["internal"],
+  heap: ["heap"],
+  node: ["node"],
+  shadow_realm: ["shadow-realm"],
+  common: ["common"],
 };
 
 /**
@@ -99,9 +99,7 @@ export function getVendoredTests(category: string): string[] {
     }
   }
 
-  return [...files]
-    .map((f) => path.relative(suiteRoot, f))
-    .sort();
+  return [...files].map((f) => path.relative(suiteRoot, f)).sort();
 }
 
 /** Return ALL vendored test paths (relative to suite/) across all suites. */
@@ -164,10 +162,7 @@ export function getSkippedTests(category: string): SkippedTest[] {
 
 /** Convert e.g. 'parallel/test-net-isip.js' to 'parallel__test_net_isip_js'. */
 export function testPathToFilter(testPath: string, subtestName?: string): string {
-  let filter = testPath
-    .replace(/\//g, "__")
-    .replace(/\./g, "_")
-    .replace(/-/g, "_");
+  let filter = testPath.replace(/\//g, "__").replace(/\./g, "_").replace(/-/g, "_");
   if (subtestName) {
     filter += `__${subtestName}`;
   }
@@ -188,7 +183,10 @@ function categoryTestFilters(category: string): string[] {
 }
 
 /** Run all enabled (non-ignored) tests for a category. */
-export async function runCategoryTests(category: string, options?: RunOptions): Promise<{ ok: boolean; output: string }> {
+export async function runCategoryTests(
+  category: string,
+  options?: RunOptions,
+): Promise<{ ok: boolean; output: string }> {
   const logfile = path.join(LOG_DIR, `run-${Date.now()}.txt`);
   console.log(`  Running ${category} tests...`);
   const filters = categoryTestFilters(category);
@@ -220,7 +218,6 @@ export async function runSingleTest(
     logfile,
   );
 }
-
 
 /** Run a specific set of tests (by path/subtest) in a single cargo test invocation.
  *  Uses test-r's support for multiple filter arguments. */
@@ -302,7 +299,13 @@ export function getTestCounts(category: string): TestCounts {
     }
   }
 
-  return { enabled, fixableSkipped, manualSkipped, impossible, total: enabled + fixableSkipped + manualSkipped + impossible };
+  return {
+    enabled,
+    fixableSkipped,
+    manualSkipped,
+    impossible,
+    total: enabled + fixableSkipped + manualSkipped + impossible,
+  };
 }
 
 /** Return the count of enabled (non-skipped) tests/subtests for a category. */

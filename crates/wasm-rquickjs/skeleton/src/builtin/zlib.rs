@@ -23,7 +23,6 @@ fn map_compression_level(level: i32) -> Compression {
     }
 }
 
-
 fn map_flush_decompress(flush: i32) -> FlushDecompress {
     match flush {
         2 => FlushDecompress::Sync,
@@ -32,11 +31,7 @@ fn map_flush_decompress(flush: i32) -> FlushDecompress {
     }
 }
 
-fn zlib_compress_sync_impl(
-    data: &[u8],
-    level: i32,
-    window_bits: i32,
-) -> Option<Vec<u8>> {
+fn zlib_compress_sync_impl(data: &[u8], level: i32, window_bits: i32) -> Option<Vec<u8>> {
     let compression = map_compression_level(level);
 
     if window_bits >= 24 {
@@ -110,10 +105,7 @@ fn read_to_vec<R: Read>(mut reader: R) -> Option<Vec<u8>> {
 
 /// Returns `(Some(data), None)` on success, `(None, Some(msg))` on a data error
 /// with a specific message, or `(None, None)` on a generic failure.
-fn zlib_decompress_sync_impl(
-    data: &[u8],
-    window_bits: i32,
-) -> (Option<Vec<u8>>, Option<String>) {
+fn zlib_decompress_sync_impl(data: &[u8], window_bits: i32) -> (Option<Vec<u8>>, Option<String>) {
     if window_bits >= 24 || window_bits == 0 {
         // gzip or auto-detect: try gzip first
         match gzip_decompress_multi_member(data) {
@@ -124,13 +116,22 @@ fn zlib_decompress_sync_impl(
             Err(specific_msg) => return (None, specific_msg),
         }
         // Try zlib
-        (read_to_vec(flate2::read::ZlibDecoder::new(Cursor::new(data))), None)
+        (
+            read_to_vec(flate2::read::ZlibDecoder::new(Cursor::new(data))),
+            None,
+        )
     } else if window_bits < 0 {
         // raw deflate
-        (read_to_vec(flate2::read::DeflateDecoder::new(Cursor::new(data))), None)
+        (
+            read_to_vec(flate2::read::DeflateDecoder::new(Cursor::new(data))),
+            None,
+        )
     } else {
         // zlib format
-        (read_to_vec(flate2::read::ZlibDecoder::new(Cursor::new(data))), None)
+        (
+            read_to_vec(flate2::read::ZlibDecoder::new(Cursor::new(data))),
+            None,
+        )
     }
 }
 
@@ -160,6 +161,7 @@ fn brotli_decompress_sync_impl(data: &[u8]) -> Option<Vec<u8>> {
     Some(output)
 }
 
+#[cfg(feature = "brotli")]
 fn parse_json_i32(params_json: &str, key: &str, default: i32) -> i32 {
     if let Some(pos) = params_json.find(key) {
         let rest = &params_json[pos + key.len()..];
@@ -618,7 +620,7 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
                     // Deflate stream ended; remaining bytes are trailer + possibly next member
                     remaining.drain(..result.input_consumed);
                     *trailer_remaining = 8; // gzip trailer: CRC32 (4) + ISIZE (4)
-                    // Loop back to skip trailer and potentially process next member
+                // Loop back to skip trailer and potentially process next member
                 } else {
                     break;
                 }
@@ -628,7 +630,6 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
         }
     }
 }
-
 
 struct DecompressResult {
     output_len: usize,
@@ -792,9 +793,7 @@ fn zlib_stream_params_impl(id: u32, level: i32, _strategy: i32) -> bool {
         }
         ZlibStreamKind::RawCompress { .. } | ZlibStreamKind::RawStored { .. } => {
             if is_stored {
-                stream.kind = ZlibStreamKind::RawStored {
-                    buffer: Vec::new(),
-                };
+                stream.kind = ZlibStreamKind::RawStored { buffer: Vec::new() };
             } else {
                 stream.kind = ZlibStreamKind::RawCompress {
                     encoder: flate2::write::DeflateEncoder::new(Vec::new(), compression),
@@ -869,9 +868,7 @@ fn brotli_stream_new_impl(mode: u8, params_json: &str) -> Option<u32> {
                 has_data: false,
             }
         }
-        1 => BrotliStreamKind::DecompressBuffering {
-            buffer: Vec::new(),
-        },
+        1 => BrotliStreamKind::DecompressBuffering { buffer: Vec::new() },
         _ => return None,
     };
 
@@ -1042,10 +1039,7 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn brotli_compress_sync(
-        data: TypedArray<'_, u8>,
-        params_json: String,
-    ) -> Option<Vec<u8>> {
+    pub fn brotli_compress_sync(data: TypedArray<'_, u8>, params_json: String) -> Option<Vec<u8>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to brotliCompressSync is detached");

@@ -1,6 +1,6 @@
 use rquickjs::{Ctx, Exception};
 use wasip2::sockets::instance_network::instance_network;
-use wasip2::sockets::ip_name_lookup::{resolve_addresses, ResolveAddressStream};
+use wasip2::sockets::ip_name_lookup::{ResolveAddressStream, resolve_addresses};
 use wasip2::sockets::network::{ErrorCode, IpAddress};
 use wstd::runtime::AsyncPollable;
 
@@ -11,7 +11,10 @@ pub mod native_module {
     /// Resolve a hostname to a list of IP addresses.
     /// Returns a list of DnsResult objects with `address` (string) and `family` (4 or 6).
     #[rquickjs::function]
-    pub async fn resolve(ctx: rquickjs::Ctx<'_>, hostname: String) -> rquickjs::Result<Vec<DnsResult>> {
+    pub async fn resolve(
+        ctx: rquickjs::Ctx<'_>,
+        hostname: String,
+    ) -> rquickjs::Result<Vec<DnsResult>> {
         super::resolve_impl(&ctx, &hostname).await
     }
 }

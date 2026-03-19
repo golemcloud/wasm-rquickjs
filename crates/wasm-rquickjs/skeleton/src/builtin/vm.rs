@@ -36,10 +36,7 @@ pub mod native_module {
     /// This implements `require()` of ES modules (Node.js --experimental-require-module).
     /// The module goes through the normal ESM resolver/loader chain.
     #[rquickjs::function]
-    pub fn require_esm<'js>(
-        ctx: Ctx<'js>,
-        filename: String,
-    ) -> rquickjs::Result<Value<'js>> {
+    pub fn require_esm<'js>(ctx: Ctx<'js>, filename: String) -> rquickjs::Result<Value<'js>> {
         super::require_esm_impl(ctx, &filename)
     }
 }
@@ -184,13 +181,9 @@ fn require_esm_impl<'js>(
         // trigger an unhandledRejection event. We'll report TLA as
         // ERR_REQUIRE_ASYNC_MODULE below instead.
         let tag = qjs::JS_VALUE_GET_TAG(val);
-        if tag == qjs::JS_TAG_OBJECT as i32 {
+        if tag == qjs::JS_TAG_OBJECT {
             let catch_str = CString::new("catch").unwrap();
-            let catch_fn = qjs::JS_GetPropertyStr(
-                ctx.as_raw().as_ptr(),
-                val,
-                catch_str.as_ptr(),
-            );
+            let catch_fn = qjs::JS_GetPropertyStr(ctx.as_raw().as_ptr(), val, catch_str.as_ptr());
             if !qjs::JS_IsUndefined(catch_fn) && !qjs::JS_IsException(catch_fn) {
                 // Create a no-op function: function() {}
                 let noop_code = CString::new("(function(){})").unwrap();

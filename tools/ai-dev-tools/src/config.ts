@@ -36,7 +36,12 @@ function editConfig(apply: (content: string) => string): void {
   fs.writeFileSync(CONFIG_PATH, apply(content));
 }
 
-function applyModify(content: string, jsonPath: jsonc.JSONPath, value: unknown, opts?: jsonc.ModificationOptions): string {
+function applyModify(
+  content: string,
+  jsonPath: jsonc.JSONPath,
+  value: unknown,
+  opts?: jsonc.ModificationOptions,
+): string {
   const edits = jsonc.modify(content, jsonPath, value, { formattingOptions, ...opts });
   return jsonc.applyEdits(content, edits);
 }
@@ -179,7 +184,10 @@ export function skipSubtestInConfig(testPath: string, subtestName: string, reaso
   console.log(`  Skipped subtest "${subtestName}" in "${testPath}"`);
 }
 
-export function addSplitTestToConfig(testPath: string, subtests: Record<string, SubtestEntry>): void {
+export function addSplitTestToConfig(
+  testPath: string,
+  subtests: Record<string, SubtestEntry>,
+): void {
   editConfig((content) => {
     let result = content;
     // Set split flag

@@ -17,7 +17,12 @@ use wstd::runtime::block_on;
 struct DataUrlResolver;
 
 impl Resolver for DataUrlResolver {
-    fn resolve<'js>(&mut self, _ctx: &Ctx<'js>, _base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        _base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
         if name.starts_with("data:") {
             Ok(name.to_string())
         } else {
@@ -35,15 +40,16 @@ impl DataUrlLoader {
         let mut decoded = Vec::with_capacity(bytes.len());
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == b'%' && i + 2 < bytes.len() {
-                if let (Some(hi), Some(lo)) = (
+            if bytes[i] == b'%'
+                && i + 2 < bytes.len()
+                && let (Some(hi), Some(lo)) = (
                     FileUrlResolver::hex_val(bytes[i + 1]),
                     FileUrlResolver::hex_val(bytes[i + 2]),
-                ) {
-                    decoded.push(hi << 4 | lo);
-                    i += 3;
-                    continue;
-                }
+                )
+            {
+                decoded.push(hi << 4 | lo);
+                i += 3;
+                continue;
             }
             decoded.push(bytes[i]);
             i += 1;
@@ -256,7 +262,10 @@ impl DataUrlLoader {
                 if pos >= bytes.len() {
                     "Unexpected end of JSON input".to_string()
                 } else {
-                    format!("Unexpected token {} in JSON at position {}", bytes[pos] as char, pos)
+                    format!(
+                        "Unexpected token {} in JSON at position {}",
+                        bytes[pos] as char, pos
+                    )
                 }
             }
         } else {
@@ -264,7 +273,10 @@ impl DataUrlLoader {
             if pos >= bytes.len() {
                 "Unexpected end of JSON input".to_string()
             } else {
-                format!("Unexpected token {} in JSON at position {}", bytes[pos] as char, pos)
+                format!(
+                    "Unexpected token {} in JSON at position {}",
+                    bytes[pos] as char, pos
+                )
             }
         };
         let escaped_msg = Self::js_string_escape(&msg);
@@ -273,8 +285,14 @@ impl DataUrlLoader {
 }
 
 impl Loader for DataUrlLoader {
-    fn load<'js>(&mut self, ctx: &Ctx<'js>, path: &str) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let rest = path.strip_prefix("data:").ok_or_else(|| Error::new_loading(path))?;
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        let rest = path
+            .strip_prefix("data:")
+            .ok_or_else(|| Error::new_loading(path))?;
 
         // Find the comma separating metadata from content
         let comma_pos = rest.find(',').ok_or_else(|| Error::new_loading(path))?;
@@ -326,7 +344,9 @@ impl Loader for DataUrlLoader {
         } else {
             let escaped_mime = Self::js_string_escape(base_mime);
             let escaped_path = Self::js_string_escape(path);
-            let module_source = format!("await Promise.reject(Object.assign(new TypeError('Unknown module format: {escaped_mime} for URL {escaped_path}'), {{code: 'ERR_UNKNOWN_MODULE_FORMAT'}}));\n");
+            let module_source = format!(
+                "await Promise.reject(Object.assign(new TypeError('Unknown module format: {escaped_mime} for URL {escaped_path}'), {{code: 'ERR_UNKNOWN_MODULE_FORMAT'}}));\n"
+            );
             Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
         }
     }
@@ -375,7 +395,10 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
             && i + 6 <= len
             && &source[i..i + 6] == "import"
             && (i == 0 || !is_id_char(bytes[i - 1]))
-            && (i + 6 >= len || !is_id_char(bytes[i + 6]) || bytes[i + 6] == b'"' || bytes[i + 6] == b'\'')
+            && (i + 6 >= len
+                || !is_id_char(bytes[i + 6])
+                || bytes[i + 6] == b'"'
+                || bytes[i + 6] == b'\'')
         {
             let import_start = i;
             i += 6;
@@ -447,9 +470,12 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                         let format = determine_data_url_format(specifier);
 
                         // Validate
-                        if let Some(error_module) =
-                            validate_static_import_attrs(type_value.as_deref(), format, specifier, module_path)
-                        {
+                        if let Some(error_module) = validate_static_import_attrs(
+                            type_value.as_deref(),
+                            format,
+                            specifier,
+                            module_path,
+                        ) {
                             return error_module;
                         }
 
@@ -593,15 +619,15 @@ fn validate_static_import_attrs(
     type_value: Option<&str>,
     format: Option<&str>,
     specifier: &str,
-    module_path: &str,
+    _module_path: &str,
 ) -> Option<String> {
     if let Some(tv) = type_value {
         match tv {
             "json" => {
                 if format == Some("module") {
-                    return Some(format!(
-                        "await Promise.reject(Object.assign(new TypeError('Cannot use import attributes to change the type of a JavaScript module'), {{code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE'}}));\n"
-                    ));
+                    return Some(
+                        "await Promise.reject(Object.assign(new TypeError('Cannot use import attributes to change the type of a JavaScript module'), {code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE'}));\n".to_string()
+                    );
                 }
             }
             "css" => {
@@ -639,15 +665,14 @@ impl FileUrlResolver {
         let mut decoded = Vec::with_capacity(bytes.len());
         let mut i = 0;
         while i < bytes.len() {
-            if bytes[i] == b'%' && i + 2 < bytes.len() {
-                if let (Some(hi), Some(lo)) = (
-                    Self::hex_val(bytes[i + 1]),
-                    Self::hex_val(bytes[i + 2]),
-                ) {
-                    decoded.push(hi << 4 | lo);
-                    i += 3;
-                    continue;
-                }
+            if bytes[i] == b'%'
+                && i + 2 < bytes.len()
+                && let (Some(hi), Some(lo)) =
+                    (Self::hex_val(bytes[i + 1]), Self::hex_val(bytes[i + 2]))
+            {
+                decoded.push(hi << 4 | lo);
+                i += 3;
+                continue;
             }
             decoded.push(bytes[i]);
             i += 1;
@@ -666,7 +691,12 @@ impl FileUrlResolver {
 }
 
 impl Resolver for FileUrlResolver {
-    fn resolve<'js>(&mut self, _ctx: &Ctx<'js>, _base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        _base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
         if let Some(path) = Self::file_url_to_path(name) {
             Ok(path)
         } else {
@@ -687,12 +717,7 @@ impl Resolver for FileUrlResolver {
 struct RealmGuardResolver;
 
 impl Resolver for RealmGuardResolver {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         if base != "<input>" {
             return Err(Error::new_resolving(base, name));
         }
@@ -730,12 +755,7 @@ impl Resolver for RealmGuardResolver {
 struct MockModuleResolver;
 
 impl Resolver for MockModuleResolver {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         let globals = ctx.globals();
 
         let canonical_key_fn: Function = globals
@@ -804,9 +824,7 @@ impl Loader for MockModuleLoader {
 
         let rest = &path["__wasm_rquickjs_mock__:".len()..];
         let mock_id_str = rest.split(':').next().unwrap_or(rest);
-        let mock_id: i64 = mock_id_str
-            .parse()
-            .map_err(|_| Error::new_loading(path))?;
+        let mock_id: i64 = mock_id_str.parse().map_err(|_| Error::new_loading(path))?;
 
         let globals = ctx.globals();
         let gen_fn: Function = globals
@@ -854,12 +872,7 @@ impl CjsEvalResolver {
 }
 
 impl Resolver for CjsEvalResolver {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         if base != "<input>" {
             return Err(Error::new_resolving(base, name));
         }
@@ -952,10 +965,7 @@ impl NodeModulesResolver {
         use std::path::{Path, PathBuf};
 
         // Only handle bare specifiers (not relative, absolute, or URL)
-        if name.starts_with('.')
-            || name.starts_with('/')
-            || name.contains("://")
-        {
+        if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
             return None;
         }
 
@@ -969,30 +979,27 @@ impl NodeModulesResolver {
             if nm_dir.is_dir() {
                 // Try package.json main field
                 let pkg_path = nm_dir.join("package.json");
-                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
-                    if let Some(main) = Self::extract_json_string_field(&pkg_content, "main") {
-                        // Try the main entry with various extensions
-                        let main_path = nm_dir.join(&main);
-                        let candidates = [
-                            main_path.clone(),
-                            main_path.with_extension("mjs"),
-                            main_path.with_extension("js"),
-                            main_path.join("index.mjs"),
-                            main_path.join("index.js"),
-                        ];
-                        for candidate in &candidates {
-                            if candidate.is_file() {
-                                return Some(candidate.to_string_lossy().into_owned());
-                            }
+                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path)
+                    && let Some(main) = Self::extract_json_string_field(&pkg_content, "main")
+                {
+                    // Try the main entry with various extensions
+                    let main_path = nm_dir.join(&main);
+                    let candidates = [
+                        main_path.clone(),
+                        main_path.with_extension("mjs"),
+                        main_path.with_extension("js"),
+                        main_path.join("index.mjs"),
+                        main_path.join("index.js"),
+                    ];
+                    for candidate in &candidates {
+                        if candidate.is_file() {
+                            return Some(candidate.to_string_lossy().into_owned());
                         }
                     }
                 }
 
                 // Fallback: index.mjs, index.js
-                let fallbacks: [PathBuf; 2] = [
-                    nm_dir.join("index.mjs"),
-                    nm_dir.join("index.js"),
-                ];
+                let fallbacks: [PathBuf; 2] = [nm_dir.join("index.mjs"), nm_dir.join("index.js")];
                 for fallback in &fallbacks {
                     if fallback.is_file() {
                         return Some(fallback.to_string_lossy().into_owned());
@@ -1023,7 +1030,12 @@ impl NodeModulesResolver {
 }
 
 impl Resolver for NodeModulesResolver {
-    fn resolve<'js>(&mut self, _ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
         self.try_resolve(base, name)
             .ok_or_else(|| Error::new_resolving(base, name))
     }
@@ -1034,7 +1046,11 @@ impl Resolver for NodeModulesResolver {
 struct CjsCompatLoader;
 
 impl Loader for CjsCompatLoader {
-    fn load<'js>(&mut self, ctx: &Ctx<'js>, path: &str) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         let is_cjs_ext = path.ends_with(".cjs");
         if !path.ends_with(".js") && !is_cjs_ext {
             return Err(Error::new_loading(path));
@@ -1082,7 +1098,11 @@ impl Loader for CjsCompatLoader {
         let cjs_source = if let Some(rest) = source.strip_prefix("#!") {
             if let Some(newline_pos) = rest.find('\n') {
                 // Replace shebang with a comment to preserve line numbers
-                format!("//{}{}", &source[2..2 + newline_pos + 1], &source[2 + newline_pos + 1..])
+                format!(
+                    "//{}{}",
+                    &source[2..2 + newline_pos + 1],
+                    &source[2 + newline_pos + 1..]
+                )
             } else {
                 String::new()
             }
@@ -1137,15 +1157,9 @@ fn path_to_file_url(path: &str) -> String {
             b'#' => url.push_str("%23"),
             b'?' => url.push_str("%3F"),
             // Unreserved characters + path separators
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'_'
-            | b'.'
-            | b'~'
-            | b'/'
-            | b':' => url.push(*byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' | b':' => {
+                url.push(*byte as char)
+            }
             _ if *byte > 0x7F => {
                 // Non-ASCII: percent-encode each byte
                 url.push_str(&format!("%{:02X}", byte));
@@ -1224,10 +1238,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         ));
     }
     if let Some(ref dirname) = init.dirname {
-        prologue.push_str(&format!(
-            "var __dirname=\"{}\";",
-            escape_js_string(dirname)
-        ));
+        prologue.push_str(&format!("var __dirname=\"{}\";", escape_js_string(dirname)));
     }
 
     if let Some(rest) = source.strip_prefix("#!") {
@@ -1287,12 +1298,11 @@ impl Loader for ImportMetaLoader {
         // error so subsequent imports throw the exact same error object,
         // matching Node.js/V8 behavior (ES spec §16.2.1.5.2).
         let globals = ctx.globals();
-        if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache") {
-            if let Ok(cached_error) = cache.get::<_, Value>(path) {
-                if !cached_error.is_undefined() {
-                    return Err(ctx.throw(cached_error));
-                }
-            }
+        if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache")
+            && let Ok(cached_error) = cache.get::<_, Value>(path)
+            && !cached_error.is_undefined()
+        {
+            return Err(ctx.throw(cached_error));
         }
 
         let injected = inject_import_meta_prologue(&init, &source);
@@ -1304,8 +1314,7 @@ impl Loader for ImportMetaLoader {
                 let cache: Object = match globals.get::<_, Value>("__esm_error_cache") {
                     Ok(v) if v.is_object() => v.into_object().unwrap(),
                     _ => {
-                        let obj =
-                            Object::new(ctx.clone()).map_err(|_| Error::new_loading(path))?;
+                        let obj = Object::new(ctx.clone()).map_err(|_| Error::new_loading(path))?;
                         globals
                             .set("__esm_error_cache", obj.clone())
                             .map_err(|_| Error::new_loading(path))?;
@@ -1379,7 +1388,8 @@ impl JsState {
             .await
             .expect("Failed to create AsyncContext");
 
-        let mut builtin_resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
+        let mut builtin_resolver =
+            BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
         for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
             builtin_resolver = builtin_resolver.with_module(name.to_string());
         }
@@ -1404,19 +1414,21 @@ impl JsState {
             (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
         );
 
-        let mut builtin_loader = BuiltinLoader::default()
-            .with_module(
-                crate::JS_EXPORT_MODULE_NAME,
-                inject_import_meta_prologue(
-                    &ImportMetaInit {
-                        url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", crate::JS_EXPORT_MODULE_NAME),
-                        filename: None,
-                        dirname: None,
-                        include_resolve: true,
-                    },
-                    crate::JS_EXPORT_MODULE,
-                ),
-            );
+        let mut builtin_loader = BuiltinLoader::default().with_module(
+            crate::JS_EXPORT_MODULE_NAME,
+            inject_import_meta_prologue(
+                &ImportMetaInit {
+                    url: format!(
+                        "file:///__wasm_rquickjs_virtual__/{}.mjs",
+                        crate::JS_EXPORT_MODULE_NAME
+                    ),
+                    filename: None,
+                    dirname: None,
+                    include_resolve: true,
+                },
+                crate::JS_EXPORT_MODULE,
+            ),
+        );
         for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
             let source = (get_module)();
             let injected = inject_import_meta_prologue(
@@ -1453,7 +1465,7 @@ impl JsState {
             global.set("__wasm_rquickjs_mock_seq", 0i64)
                 .expect("Failed to initialize mock sequence counter");
         })
-            .await;
+        .await;
 
         rt.set_host_promise_rejection_tracker(Some(Box::new(
             |ctx, promise, reason, is_handled| {
@@ -1467,8 +1479,7 @@ impl JsState {
         )))
         .await;
 
-        let (resource_drop_queue_tx, resource_drop_queue_rx) =
-            futures::channel::mpsc::unbounded();
+        let (resource_drop_queue_tx, resource_drop_queue_rx) = futures::channel::mpsc::unbounded();
 
         let last_resource_id = AtomicUsize::new(1);
         Self {
@@ -1611,7 +1622,8 @@ async fn drain_and_idle(js_state: &JsState) {
                 }
             }
         });
-    }).await;
+    })
+    .await;
     js_state.rt.idle().await;
 }
 

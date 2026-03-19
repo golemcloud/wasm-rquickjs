@@ -158,28 +158,24 @@ impl NodeHttpClientRequest {
         })?;
 
         // Now take the buffered body — all fallible construction succeeded.
-        let buffered_body =
-            if let RequestState::Created { buffered_body } = std::mem::replace(
-                &mut self.state,
-                RequestState::Started {
-                    body,
-                    stream,
-                    future_response,
-                },
-            ) {
-                buffered_body
-            } else {
-                unreachable!("checked Created above")
-            };
+        let buffered_body = if let RequestState::Created { buffered_body } = std::mem::replace(
+            &mut self.state,
+            RequestState::Started {
+                body,
+                stream,
+                future_response,
+            },
+        ) {
+            buffered_body
+        } else {
+            unreachable!("checked Created above")
+        };
 
         // Flush any data that was buffered via sync write() before start().
-        if !buffered_body.is_empty() {
-            if let RequestState::Started {
-                stream: ref s, ..
-            } = self.state
-            {
-                write_all_to_stream(&ctx, s, &buffered_body).await?;
-            }
+        if !buffered_body.is_empty()
+            && let RequestState::Started { stream: ref s, .. } = self.state
+        {
+            write_all_to_stream(&ctx, s, &buffered_body).await?;
         }
 
         Ok(())
@@ -210,11 +206,7 @@ impl NodeHttpClientRequest {
         }
     }
 
-    pub fn write_string<'js>(
-        &mut self,
-        ctx: Ctx<'js>,
-        data: String,
-    ) -> rquickjs::Result<()> {
+    pub fn write_string<'js>(&mut self, ctx: Ctx<'js>, data: String) -> rquickjs::Result<()> {
         if self.aborted {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
@@ -314,7 +306,8 @@ impl NodeHttpClientRequest {
             ));
         }
         let lower = name.to_ascii_lowercase();
-        self.headers.retain(|(n, _)| n.to_ascii_lowercase() != lower);
+        self.headers
+            .retain(|(n, _)| n.to_ascii_lowercase() != lower);
         self.headers.push((name, value));
         Ok(())
     }
@@ -343,7 +336,8 @@ impl NodeHttpClientRequest {
             ));
         }
         let lower = name.to_ascii_lowercase();
-        self.headers.retain(|(n, _)| n.to_ascii_lowercase() != lower);
+        self.headers
+            .retain(|(n, _)| n.to_ascii_lowercase() != lower);
         Ok(())
     }
 
@@ -464,10 +458,7 @@ impl NodeHttpClientRequest {
         Ok(())
     }
 
-    pub fn get_response<'js>(
-        &mut self,
-        _ctx: Ctx<'js>,
-    ) -> Option<NodeHttpIncomingResponse> {
+    pub fn get_response<'js>(&mut self, _ctx: Ctx<'js>) -> Option<NodeHttpIncomingResponse> {
         if self.aborted {
             return None;
         }
@@ -524,7 +515,7 @@ impl NodeHttpIncomingResponse {
     }
 
     #[qjs(skip)]
-    pub fn from_raw_response(raw: RawResponse) -> Self {
+    pub(crate) fn from_raw_response(raw: RawResponse) -> Self {
         NodeHttpIncomingResponse {
             body_state: ResponseBodyState::WasiNative {
                 incoming_response: raw.incoming_response,
@@ -571,9 +562,9 @@ impl NodeHttpIncomingResponse {
 
         match state {
             ResponseBodyState::WasiNative { incoming_response } => {
-                let incoming_body = incoming_response
-                    .consume()
-                    .map_err(|_| Exception::throw_message(&ctx, "failed to consume response body"))?;
+                let incoming_body = incoming_response.consume().map_err(|_| {
+                    Exception::throw_message(&ctx, "failed to consume response body")
+                })?;
                 let stream = incoming_body
                     .stream()
                     .map_err(|_| Exception::throw_message(&ctx, "failed to get body stream"))?;
@@ -672,9 +663,7 @@ fn http_error_to_node_code(err: &wasi_http::ErrorCode) -> &'static str {
         wasi_http::ErrorCode::ConnectionRefused => "ECONNREFUSED",
         wasi_http::ErrorCode::DnsTimeout => "ENOTFOUND",
         wasi_http::ErrorCode::DnsError(e) => {
-            if e.rcode.as_deref() == Some("NXDOMAIN")
-                || e.info_code.map_or(false, |c| c == 3)
-            {
+            if e.rcode.as_deref() == Some("NXDOMAIN") || e.info_code == Some(3) {
                 "ENOTFOUND"
             } else {
                 "EAI_FAIL"
@@ -740,7 +729,10 @@ async fn write_all_to_stream<'js>(
                 offset += to_write;
             }
             Err(_) => {
-                return Err(Exception::throw_message(ctx, "failed to write request body"));
+                return Err(Exception::throw_message(
+                    ctx,
+                    "failed to write request body",
+                ));
             }
         }
     }
@@ -756,5 +748,4 @@ pub const NODE_HTTP_JS: &str = include_str!("node_http.js");
 pub const NODE_HTTP_SERVER_JS: &str = include_str!("node_http_server.js");
 pub const HTTP_COMMON_JS: &str = include_str!("node_http_common.js");
 pub const HTTP_AGENT_JS: &str = include_str!("node_http_agent.js");
-pub const REEXPORT_JS: &str =
-    r#"export * from 'node:http'; export { default } from 'node:http';"#;
+pub const REEXPORT_JS: &str = r#"export * from 'node:http'; export { default } from 'node:http';"#;

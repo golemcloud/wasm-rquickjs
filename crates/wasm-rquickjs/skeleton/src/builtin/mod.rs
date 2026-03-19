@@ -7,8 +7,8 @@ mod base64;
 mod buffer;
 mod child_process;
 mod cluster;
-mod constants;
 mod console;
+mod constants;
 mod dgram;
 mod diagnostics_channel;
 mod dns;
@@ -33,9 +33,9 @@ mod http2;
 mod https;
 mod ieee754;
 mod inspector;
-mod intl;
 mod internal;
 mod internal_binding_util;
+mod intl;
 mod module;
 mod net;
 mod socket_helpers;
@@ -53,9 +53,9 @@ mod node_http {
 mod node_test;
 mod os;
 mod path;
-mod punycode;
 mod perf_hooks;
 mod process;
+mod punycode;
 mod querystring;
 mod readline;
 mod repl;
@@ -64,8 +64,8 @@ mod string_decoder;
 mod structured_clone;
 mod timeout;
 mod timers;
-mod trace_events;
 mod tls;
+mod trace_events;
 mod tty;
 mod url;
 mod util;
@@ -324,10 +324,7 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/node_http_native",
             node_http::js_native_module,
         )
-        .with_module(
-            "__wasm_rquickjs_builtin/net_native",
-            net::js_native_module,
-        )
+        .with_module("__wasm_rquickjs_builtin/net_native", net::js_native_module)
         .with_module(
             "__wasm_rquickjs_builtin/sqlite_native",
             sqlite::js_native_module,
@@ -444,7 +441,10 @@ pub fn module_loader() -> (
         .with_module("dns/promises", dns::REEXPORT_PROMISES_JS)
         .with_module("node:domain", domain::DOMAIN_JS)
         .with_module("domain", domain::REEXPORT_JS)
-        .with_module("__wasm_rquickjs_builtin/node_http_server", node_http::NODE_HTTP_SERVER_JS)
+        .with_module(
+            "__wasm_rquickjs_builtin/node_http_server",
+            node_http::NODE_HTTP_SERVER_JS,
+        )
         .with_module("node:_http_common", node_http::HTTP_COMMON_JS)
         .with_module("_http_common", node_http::HTTP_COMMON_JS)
         .with_module("node:_http_agent", node_http::HTTP_AGENT_JS)

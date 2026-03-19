@@ -21,14 +21,22 @@ import {
   MANUAL_SKIP_PREFIX,
   type SkippedTest,
 } from "../tests.js";
-import { buildAmpPrompt, runAmp, classifyAmpResult, extractCannotFixReason, isCreditsExhausted, buildPrioritizePrompt, runAmpPrioritize, parsePrioritizeResult } from "../amp.js";
+import {
+  buildAmpPrompt,
+  runAmp,
+  classifyAmpResult,
+  extractCannotFixReason,
+  isCreditsExhausted,
+  buildPrioritizePrompt,
+  runAmpPrioritize,
+  parsePrioritizeResult,
+} from "../amp.js";
 import { commitProgress } from "../git.js";
 import {
   CARGO_FAIL_RE,
   revertWorkspace,
   stopRequested,
   setupGracefulStop,
-  type FailingTest,
   extractFailingTests,
   recordFlakyTests,
   checkIfFlaky,
@@ -40,7 +48,10 @@ import {
  * that already pass without any code changes.
  * Returns the number of newly-enabled tests.
  */
-async function batchCheckSkippedTests(category: string, testsToCheck?: SkippedTest[]): Promise<number> {
+async function batchCheckSkippedTests(
+  category: string,
+  testsToCheck?: SkippedTest[],
+): Promise<number> {
   const skipped = testsToCheck ?? getSkippedTests(category);
   if (skipped.length === 0) return 0;
 
@@ -176,7 +187,8 @@ export async function fixCommand(category: string): Promise<void> {
   });
   let cleanExit = false;
   process.on("beforeExit", (code) => {
-    if (!cleanExit) console.error(`\n⚠ beforeExit (code=${code}) — event loop drained unexpectedly`);
+    if (!cleanExit)
+      console.error(`\n⚠ beforeExit (code=${code}) — event loop drained unexpectedly`);
   });
   process.on("exit", (code) => {
     if (!cleanExit) console.error(`\n⚠ exit (code=${code})`);
@@ -205,7 +217,9 @@ export async function fixCommand(category: string): Promise<void> {
 
   if (missing.length === 0) {
     const initCounts = getTestCounts(category);
-    console.log(`  ✅ All ${vendored.length} vendored test files already in config.jsonc (${initCounts.total} test cases with subtests)`);
+    console.log(
+      `  ✅ All ${vendored.length} vendored test files already in config.jsonc (${initCounts.total} test cases with subtests)`,
+    );
   } else {
     addTestsToConfigSkippedBatch(missing, category);
     console.log(`  Added ${missing.length} missing tests to config.jsonc (as skipped)`);
@@ -223,7 +237,9 @@ export async function fixCommand(category: string): Promise<void> {
 
     const failingTests = extractFailingTests(baselineOutput);
     if (failingTests.length === 0) {
-      throw new Error("Enabled tests are failing but could not parse which ones. Fix regressions before proceeding.");
+      throw new Error(
+        "Enabled tests are failing but could not parse which ones. Fix regressions before proceeding.",
+      );
     }
 
     for (const ft of failingTests) {
@@ -241,7 +257,9 @@ export async function fixCommand(category: string): Promise<void> {
     console.log("  Re-verifying after skipping failing tests...");
     const { ok: retryOk } = await runCategoryTests(category, { failFast: true });
     if (!retryOk) {
-      throw new Error("Tests still failing after skipping detected failures. Fix regressions before proceeding.");
+      throw new Error(
+        "Tests still failing after skipping detected failures. Fix regressions before proceeding.",
+      );
     }
 
     await commitProgress(category, "skip-regressions");
@@ -267,7 +285,9 @@ export async function fixCommand(category: string): Promise<void> {
     const allSkipped = getSkippedTests(category);
     if (allSkipped.length === 0) {
       const counts = getTestCounts(category);
-      console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! No fixable tests remaining.`);
+      console.log(
+        `🎉 All ${counts.enabled} test cases for '${category}' are passing! No fixable tests remaining.`,
+      );
       console.log(`   (${counts.manualSkipped} tests marked for manual review)`);
       break;
     }
@@ -291,7 +311,9 @@ export async function fixCommand(category: string): Promise<void> {
     );
 
     console.log();
-    console.log(`  Round ${round}: ${allSkipped.length} fixable tests total, working on batch of ${batch.length}`);
+    console.log(
+      `  Round ${round}: ${allSkipped.length} fixable tests total, working on batch of ${batch.length}`,
+    );
     console.log();
 
     let iteration = 0;
@@ -318,7 +340,9 @@ export async function fixCommand(category: string): Promise<void> {
       const counts = getTestCounts(category);
 
       if (skipped.length === 0) {
-        console.log(`🎉 All ${counts.enabled} test cases for '${category}' are passing! No fixable tests remaining.`);
+        console.log(
+          `🎉 All ${counts.enabled} test cases for '${category}' are passing! No fixable tests remaining.`,
+        );
         console.log(`   (${counts.manualSkipped} tests marked for manual review)`);
         break outer;
       }
@@ -345,224 +369,283 @@ export async function fixCommand(category: string): Promise<void> {
 
       const totalSkipped = counts.fixableSkipped + counts.manualSkipped;
       console.log("───────────────────────────────────────────────────────────────");
-      console.log(`  Round ${round}, iteration ${iteration} — ${counts.total} test cases: ${counts.enabled} passing, ${totalSkipped} skipped (${skipped.length} fixable, batch ${priorityQueue.length})`);
+      console.log(
+        `  Round ${round}, iteration ${iteration} — ${counts.total} test cases: ${counts.enabled} passing, ${totalSkipped} skipped (${skipped.length} fixable, batch ${priorityQueue.length})`,
+      );
       console.log("───────────────────────────────────────────────────────────────");
       console.log();
-      console.log(`Fixable skipped tests: ${skipped.length} remaining (batch: ${priorityQueue.length})`);
+      console.log(
+        `Fixable skipped tests: ${skipped.length} remaining (batch: ${priorityQueue.length})`,
+      );
       console.log();
 
-    const target = priorityQueue[0];
-    const targetLabel = target.subtestName ? `${target.path}#${target.subtestName}` : target.path;
+      const target = priorityQueue[0];
+      const targetLabel = target.subtestName ? `${target.path}#${target.subtestName}` : target.path;
 
-    // Track attempts per test — try smart first, then deep, then give up
-    const attempts = (attemptCounts.get(targetLabel) ?? 0) + 1;
-    attemptCounts.set(targetLabel, attempts);
-    const ampMode = attempts === 1 ? "smart" : "deep";
-    if (attempts > MAX_ATTEMPTS) {
-      console.log(`  ⏭ ${targetLabel}: exceeded ${MAX_ATTEMPTS} attempts (smart + deep). Marking for manual review.`);
-      if (target.subtestName) {
-        skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + `amp failed after ${MAX_ATTEMPTS} attempts`);
-      } else {
-        updateSkipReason(target.path, MANUAL_SKIP_PREFIX + `amp failed after ${MAX_ATTEMPTS} attempts`);
-      }
-      await commitProgress(category, target.path);
-      continue;
-    }
-
-    console.log(`▶ Attempting to fix: ${targetLabel} (attempt ${attempts}/${MAX_ATTEMPTS}, mode: ${ampMode})`);
-    console.log(`  Current skip reason: ${target.reason}`);
-    console.log();
-
-    const testFile = path.join(REPO_ROOT, "tests", "node_compat", "suite", target.path);
-    if (!fs.existsSync(testFile)) {
-      console.log(`  ⚠ Test file not found: ${testFile}`);
-      console.log(`    Run tests/node_compat/vendor.sh to fetch the vendored test suite.`);
-      if (target.subtestName) {
-        skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "test file not vendored");
-      } else {
-        updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "test file not vendored");
-      }
-      await commitProgress(category, target.path);
-      continue;
-    }
-
-    // Run the test to check if it already passes
-    console.log("  Running test to check current status...");
-    const { ok: alreadyPasses, output: failureOutput } = await runSingleTest(target.path, target.subtestName);
-    console.log();
-
-    if (alreadyPasses) {
-      console.log("  🎉 Test already passes! Enabling in config.jsonc...");
-      if (target.subtestName) {
-        enableSubtestInConfig(target.path, target.subtestName);
-      } else {
-        enableTestInConfig(target.path);
-      }
-      await commitProgress(category, target.path);
-      console.log();
-      continue;
-    }
-
-    // Build prompt and run amp
-    const prompt = buildAmpPrompt(category, target.path, target.reason, failureOutput, target.subtestName);
-    const ampResult = await runAmp(prompt, category, target.path, iteration, ampMode);
-
-    console.log();
-    console.log("  Amp agent finished. Analyzing result...");
-    console.log();
-
-    // Detect credit exhaustion — don't count this as a real attempt
-    if (ampResult.isError && isCreditsExhausted(ampResult.output)) {
-      attemptCounts.set(targetLabel, attempts - 1);
-      await waitForCredits();
-      continue; // Retry the same test
-    }
-
-    const ampOutput = ampResult.output;
-    const result = classifyAmpResult(ampOutput);
-
-    // Check if amp actually changed any files (including new untracked files)
-    let hasChanges: boolean;
-    try {
-      const status = execSync("git status --porcelain", { cwd: REPO_ROOT, encoding: "utf-8" });
-      hasChanges = status.trim().length > 0;
-    } catch {
-      hasChanges = true;
-    }
-
-    if (!hasChanges && result !== "CANNOT_FIX") {
-      console.log("  ℹ Amp made no code changes. Marking for manual review.");
-      if (target.subtestName) {
-        skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp made no code changes");
-      } else {
-        updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp made no code changes");
-      }
-      await commitProgress(category, target.path);
-      console.log();
-      continue;
-    }
-
-    if (result === "CANNOT_FIX") {
-      const reasonNew = MANUAL_SKIP_PREFIX + extractCannotFixReason(ampOutput);
-      console.log(`  ⏭ Test cannot be fixed: ${reasonNew}`);
-      // Revert any code changes amp made before updating config
-      if (hasChanges) {
-        console.log("  ↩ Reverting code changes from CANNOT_FIX attempt...");
-        revertWorkspace();
-      }
-      if (target.subtestName) {
-        skipSubtestInConfig(target.path, target.subtestName, reasonNew);
-      } else {
-        updateSkipReason(target.path, reasonNew);
-      }
-      console.log();
-      await commitProgress(category, target.path);
-      console.log();
-      continue;
-    }
-
-    if (result === "FIXED") {
-      console.log("  ✅ Amp reports test is fixed!");
-      console.log();
-
-      // Enable first, then verify with a single category run (which includes the target)
-      console.log("  Enabling in config.jsonc and verifying...");
-      if (target.subtestName) {
-        enableSubtestInConfig(target.path, target.subtestName);
-      } else {
-        enableTestInConfig(target.path);
-      }
-
-      // Run without failFast so we see ALL failing tests, not just the first
-      console.log(`  Running ${category} tests (includes target)...`);
-      const { ok: categoryOk, output: verifyOutput } = await runCategoryTests(category);
-      if (categoryOk) {
-        console.log("  ✅ Test passes and no regressions!");
-      } else {
-        // Extract which tests failed and check if they're just flaky
-        const regressions = extractFailingTests(verifyOutput);
-
-        // If the target test itself is among the failures, the fix didn't work — don't treat as flaky
-        const targetInRegressions = regressions.some(
-          (r) => r.path === target.path && r.subtestName === target.subtestName,
+      // Track attempts per test — try smart first, then deep, then give up
+      const attempts = (attemptCounts.get(targetLabel) ?? 0) + 1;
+      attemptCounts.set(targetLabel, attempts);
+      const ampMode = attempts === 1 ? "smart" : "deep";
+      if (attempts > MAX_ATTEMPTS) {
+        console.log(
+          `  ⏭ ${targetLabel}: exceeded ${MAX_ATTEMPTS} attempts (smart + deep). Marking for manual review.`,
         );
-
-        if (targetInRegressions || regressions.length === 0) {
-          if (targetInRegressions) {
-            console.log("  ❌ Target test itself failed verification. Reverting...");
-          } else {
-            console.log("  ❌ Tests failed but could not identify which ones. Reverting...");
-          }
-          revertWorkspace();
-          if (target.subtestName) {
-            skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
-          } else {
-            updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
-          }
+        if (target.subtestName) {
+          skipSubtestInConfig(
+            target.path,
+            target.subtestName,
+            MANUAL_SKIP_PREFIX + `amp failed after ${MAX_ATTEMPTS} attempts`,
+          );
         } else {
-          console.log(`  ⚠ ${regressions.length} other test(s) failed. Checking if they're flaky...`);
-          const flaky = await checkIfFlaky(regressions);
-          if (flaky) {
-            console.log("  ✅ All failures were flaky. Accepting the fix.");
-            recordFlakyTests(regressions, targetLabel);
-          } else {
-            console.log("  ❌ Real regressions. Reverting code and re-skipping...");
+          updateSkipReason(
+            target.path,
+            MANUAL_SKIP_PREFIX + `amp failed after ${MAX_ATTEMPTS} attempts`,
+          );
+        }
+        await commitProgress(category, target.path);
+        continue;
+      }
+
+      console.log(
+        `▶ Attempting to fix: ${targetLabel} (attempt ${attempts}/${MAX_ATTEMPTS}, mode: ${ampMode})`,
+      );
+      console.log(`  Current skip reason: ${target.reason}`);
+      console.log();
+
+      const testFile = path.join(REPO_ROOT, "tests", "node_compat", "suite", target.path);
+      if (!fs.existsSync(testFile)) {
+        console.log(`  ⚠ Test file not found: ${testFile}`);
+        console.log(`    Run tests/node_compat/vendor.sh to fetch the vendored test suite.`);
+        if (target.subtestName) {
+          skipSubtestInConfig(
+            target.path,
+            target.subtestName,
+            MANUAL_SKIP_PREFIX + "test file not vendored",
+          );
+        } else {
+          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "test file not vendored");
+        }
+        await commitProgress(category, target.path);
+        continue;
+      }
+
+      // Run the test to check if it already passes
+      console.log("  Running test to check current status...");
+      const { ok: alreadyPasses, output: failureOutput } = await runSingleTest(
+        target.path,
+        target.subtestName,
+      );
+      console.log();
+
+      if (alreadyPasses) {
+        console.log("  🎉 Test already passes! Enabling in config.jsonc...");
+        if (target.subtestName) {
+          enableSubtestInConfig(target.path, target.subtestName);
+        } else {
+          enableTestInConfig(target.path);
+        }
+        await commitProgress(category, target.path);
+        console.log();
+        continue;
+      }
+
+      // Build prompt and run amp
+      const prompt = buildAmpPrompt(
+        category,
+        target.path,
+        target.reason,
+        failureOutput,
+        target.subtestName,
+      );
+      const ampResult = await runAmp(prompt, category, target.path, iteration, ampMode);
+
+      console.log();
+      console.log("  Amp agent finished. Analyzing result...");
+      console.log();
+
+      // Detect credit exhaustion — don't count this as a real attempt
+      if (ampResult.isError && isCreditsExhausted(ampResult.output)) {
+        attemptCounts.set(targetLabel, attempts - 1);
+        await waitForCredits();
+        continue; // Retry the same test
+      }
+
+      const ampOutput = ampResult.output;
+      const result = classifyAmpResult(ampOutput);
+
+      // Check if amp actually changed any files (including new untracked files)
+      let hasChanges: boolean;
+      try {
+        const status = execSync("git status --porcelain", { cwd: REPO_ROOT, encoding: "utf-8" });
+        hasChanges = status.trim().length > 0;
+      } catch {
+        hasChanges = true;
+      }
+
+      if (!hasChanges && result !== "CANNOT_FIX") {
+        console.log("  ℹ Amp made no code changes. Marking for manual review.");
+        if (target.subtestName) {
+          skipSubtestInConfig(
+            target.path,
+            target.subtestName,
+            MANUAL_SKIP_PREFIX + "amp made no code changes",
+          );
+        } else {
+          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp made no code changes");
+        }
+        await commitProgress(category, target.path);
+        console.log();
+        continue;
+      }
+
+      if (result === "CANNOT_FIX") {
+        const reasonNew = MANUAL_SKIP_PREFIX + extractCannotFixReason(ampOutput);
+        console.log(`  ⏭ Test cannot be fixed: ${reasonNew}`);
+        // Revert any code changes amp made before updating config
+        if (hasChanges) {
+          console.log("  ↩ Reverting code changes from CANNOT_FIX attempt...");
+          revertWorkspace();
+        }
+        if (target.subtestName) {
+          skipSubtestInConfig(target.path, target.subtestName, reasonNew);
+        } else {
+          updateSkipReason(target.path, reasonNew);
+        }
+        console.log();
+        await commitProgress(category, target.path);
+        console.log();
+        continue;
+      }
+
+      if (result === "FIXED") {
+        console.log("  ✅ Amp reports test is fixed!");
+        console.log();
+
+        // Enable first, then verify with a single category run (which includes the target)
+        console.log("  Enabling in config.jsonc and verifying...");
+        if (target.subtestName) {
+          enableSubtestInConfig(target.path, target.subtestName);
+        } else {
+          enableTestInConfig(target.path);
+        }
+
+        // Run without failFast so we see ALL failing tests, not just the first
+        console.log(`  Running ${category} tests (includes target)...`);
+        const { ok: categoryOk, output: verifyOutput } = await runCategoryTests(category);
+        if (categoryOk) {
+          console.log("  ✅ Test passes and no regressions!");
+        } else {
+          // Extract which tests failed and check if they're just flaky
+          const regressions = extractFailingTests(verifyOutput);
+
+          // If the target test itself is among the failures, the fix didn't work — don't treat as flaky
+          const targetInRegressions = regressions.some(
+            (r) => r.path === target.path && r.subtestName === target.subtestName,
+          );
+
+          if (targetInRegressions || regressions.length === 0) {
+            if (targetInRegressions) {
+              console.log("  ❌ Target test itself failed verification. Reverting...");
+            } else {
+              console.log("  ❌ Tests failed but could not identify which ones. Reverting...");
+            }
             revertWorkspace();
             if (target.subtestName) {
-              skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+              skipSubtestInConfig(
+                target.path,
+                target.subtestName,
+                MANUAL_SKIP_PREFIX + "amp fix attempt failed verification",
+              );
             } else {
-              updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix attempt failed verification");
+              updateSkipReason(
+                target.path,
+                MANUAL_SKIP_PREFIX + "amp fix attempt failed verification",
+              );
+            }
+          } else {
+            console.log(
+              `  ⚠ ${regressions.length} other test(s) failed. Checking if they're flaky...`,
+            );
+            const flaky = await checkIfFlaky(regressions);
+            if (flaky) {
+              console.log("  ✅ All failures were flaky. Accepting the fix.");
+              recordFlakyTests(regressions, targetLabel);
+            } else {
+              console.log("  ❌ Real regressions. Reverting code and re-skipping...");
+              revertWorkspace();
+              if (target.subtestName) {
+                skipSubtestInConfig(
+                  target.path,
+                  target.subtestName,
+                  MANUAL_SKIP_PREFIX + "amp fix attempt failed verification",
+                );
+              } else {
+                updateSkipReason(
+                  target.path,
+                  MANUAL_SKIP_PREFIX + "amp fix attempt failed verification",
+                );
+              }
             }
           }
         }
-      }
-    } else if (result === "PARTIAL") {
-      console.log("  ⚠ Partial progress made. Running regression check...");
-      const { ok: regrOk } = await runCategoryTests(category, { failFast: true });
-      if (regrOk) {
-        console.log("  ✅ No regressions from partial changes. Rotating test to end of queue.");
-        priorityQueue = [...priorityQueue.slice(1), priorityQueue[0]];
-      } else {
-        console.log("  ❌ Regressions from partial changes. Reverting...");
-        revertWorkspace();
-        if (target.subtestName) {
-          skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp partial fix caused regressions");
+      } else if (result === "PARTIAL") {
+        console.log("  ⚠ Partial progress made. Running regression check...");
+        const { ok: regrOk } = await runCategoryTests(category, { failFast: true });
+        if (regrOk) {
+          console.log("  ✅ No regressions from partial changes. Rotating test to end of queue.");
+          priorityQueue = [...priorityQueue.slice(1), priorityQueue[0]];
         } else {
-          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp partial fix caused regressions");
-        }
-      }
-    } else {
-      // UNCLEAR
-      console.log("  ❓ Unclear result from amp. Running regression check...");
-      const { ok: regrOk } = await runCategoryTests(category, { failFast: true });
-      if (regrOk) {
-        console.log("  ✅ No regressions.");
-        const { ok: ok2 } = await runSingleTest(target.path, target.subtestName);
-        if (ok2) {
-          console.log(`  🎉 Test actually passes now! Enabling in config.`);
+          console.log("  ❌ Regressions from partial changes. Reverting...");
+          revertWorkspace();
           if (target.subtestName) {
-            enableSubtestInConfig(target.path, target.subtestName);
+            skipSubtestInConfig(
+              target.path,
+              target.subtestName,
+              MANUAL_SKIP_PREFIX + "amp partial fix caused regressions",
+            );
           } else {
-            enableTestInConfig(target.path);
+            updateSkipReason(
+              target.path,
+              MANUAL_SKIP_PREFIX + "amp partial fix caused regressions",
+            );
+          }
+        }
+      } else {
+        // UNCLEAR
+        console.log("  ❓ Unclear result from amp. Running regression check...");
+        const { ok: regrOk } = await runCategoryTests(category, { failFast: true });
+        if (regrOk) {
+          console.log("  ✅ No regressions.");
+          const { ok: ok2 } = await runSingleTest(target.path, target.subtestName);
+          if (ok2) {
+            console.log(`  🎉 Test actually passes now! Enabling in config.`);
+            if (target.subtestName) {
+              enableSubtestInConfig(target.path, target.subtestName);
+            } else {
+              enableTestInConfig(target.path);
+            }
+          } else {
+            console.log("  ℹ Test still fails. Rotating to end of queue.");
+            priorityQueue = [...priorityQueue.slice(1), priorityQueue[0]];
           }
         } else {
-          console.log("  ℹ Test still fails. Rotating to end of queue.");
-          priorityQueue = [...priorityQueue.slice(1), priorityQueue[0]];
-        }
-      } else {
-        console.log("  ❌ Regressions detected. Reverting...");
-        revertWorkspace();
-        if (target.subtestName) {
-          skipSubtestInConfig(target.path, target.subtestName, MANUAL_SKIP_PREFIX + "amp fix caused regressions");
-        } else {
-          updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix caused regressions");
+          console.log("  ❌ Regressions detected. Reverting...");
+          revertWorkspace();
+          if (target.subtestName) {
+            skipSubtestInConfig(
+              target.path,
+              target.subtestName,
+              MANUAL_SKIP_PREFIX + "amp fix caused regressions",
+            );
+          } else {
+            updateSkipReason(target.path, MANUAL_SKIP_PREFIX + "amp fix caused regressions");
+          }
         }
       }
-    }
 
-    console.log();
-    await commitProgress(category, target.path);
-    console.log();
+      console.log();
+      await commitProgress(category, target.path);
+      console.log();
     }
   }
 

@@ -36,7 +36,7 @@ fn create_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<DgramSocke
                 "EINVAL",
                 "socket",
                 &format!("Invalid address family: {family}"),
-            ))
+            ));
         }
     };
 
@@ -91,12 +91,7 @@ impl DgramSocket {
 
     pub async fn bind(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
         let ip = parse_ip_address(&addr).ok_or_else(|| {
-            throw_socket_error(
-                &ctx,
-                "EINVAL",
-                "bind",
-                &format!("Invalid address: {addr}"),
-            )
+            throw_socket_error(&ctx, "EINVAL", "bind", &format!("Invalid address: {addr}"))
         })?;
         let sock_addr = ip_socket_address(ip, port as u16);
 
@@ -154,12 +149,7 @@ impl DgramSocket {
                     let pollable = {
                         let inner = self.inner.borrow();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
-                            throw_socket_error(
-                                &ctx,
-                                "EBADF",
-                                "bind",
-                                "Socket was closed or reset",
-                            )
+                            throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
                         })?;
                         socket.subscribe()
                     };
@@ -295,12 +285,7 @@ impl DgramSocket {
                 let restore_result = {
                     let inner = self.inner.borrow();
                     let socket = inner.socket.as_ref().ok_or_else(|| {
-                        throw_socket_error(
-                            &ctx,
-                            "EBADF",
-                            "connect",
-                            "Socket was closed or reset",
-                        )
+                        throw_socket_error(&ctx, "EBADF", "connect", "Socket was closed or reset")
                     })?;
                     socket.stream(None)
                 };
@@ -377,12 +362,7 @@ impl DgramSocket {
         let remote_address = match (addr, port) {
             (Some(a), Some(p)) => {
                 let ip = parse_ip_address(&a).ok_or_else(|| {
-                    throw_socket_error(
-                        &ctx,
-                        "EINVAL",
-                        "send",
-                        &format!("Invalid address: {a}"),
-                    )
+                    throw_socket_error(&ctx, "EINVAL", "send", &format!("Invalid address: {a}"))
                 })?;
                 Some(ip_socket_address(ip, p as u16))
             }
@@ -491,9 +471,10 @@ impl DgramSocket {
         // Send the datagram
         let sent = {
             let inner = self.inner.borrow();
-            let outgoing = inner.outgoing.as_ref().ok_or_else(|| {
-                throw_socket_error(&ctx, "EINVAL", "send", "No outgoing stream")
-            })?;
+            let outgoing = inner
+                .outgoing
+                .as_ref()
+                .ok_or_else(|| throw_socket_error(&ctx, "EINVAL", "send", "No outgoing stream"))?;
             outgoing.send(&[datagram]).map_err(|e| {
                 throw_socket_error(
                     &ctx,

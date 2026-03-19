@@ -6,6 +6,7 @@ pub mod native_module {
 
     // Returns flat tuple: (year, month, day, hour, minute, second, weekday, utc_offset_minutes, error)
     #[rquickjs::function]
+    #[allow(clippy::type_complexity)]
     pub fn intl_dtf_resolve_fields(
         timestamp_ms: f64,
         timezone: String,
@@ -63,10 +64,7 @@ struct DtfResolved {
     utc_offset_minutes: i32,
 }
 
-fn dtf_resolve_impl(
-    timestamp_ms: f64,
-    timezone: &str,
-) -> Result<DtfResolved, String> {
+fn dtf_resolve_impl(timestamp_ms: f64, timezone: &str) -> Result<DtfResolved, String> {
     let dt = DateTime::<Utc>::from_timestamp_millis(timestamp_ms as i64)
         .ok_or_else(|| format!("Invalid timestamp: {timestamp_ms}"))?;
 
@@ -88,15 +86,12 @@ fn dtf_resolve_impl(
 }
 
 #[cfg(feature = "timezone")]
-fn resolve_named_timezone(
-    dt: DateTime<Utc>,
-    timezone: &str,
-) -> Result<DtfResolved, String> {
+fn resolve_named_timezone(dt: DateTime<Utc>, timezone: &str) -> Result<DtfResolved, String> {
     use chrono::Offset;
     use std::str::FromStr;
 
-    let tz = chrono_tz::Tz::from_str(timezone)
-        .map_err(|_| format!("Invalid timezone: {timezone}"))?;
+    let tz =
+        chrono_tz::Tz::from_str(timezone).map_err(|_| format!("Invalid timezone: {timezone}"))?;
     let civil = dt.with_timezone(&tz);
     let offset_seconds = civil.offset().fix().local_minus_utc();
     Ok(DtfResolved {
@@ -112,10 +107,7 @@ fn resolve_named_timezone(
 }
 
 #[cfg(not(feature = "timezone"))]
-fn resolve_named_timezone(
-    _dt: DateTime<Utc>,
-    timezone: &str,
-) -> Result<DtfResolved, String> {
+fn resolve_named_timezone(_dt: DateTime<Utc>, timezone: &str) -> Result<DtfResolved, String> {
     Err(format!(
         "Named timezone '{timezone}' is not supported without the 'timezone' feature"
     ))

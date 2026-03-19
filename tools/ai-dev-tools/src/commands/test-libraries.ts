@@ -111,12 +111,7 @@ This package is the next untested entry in tests/libraries/libraries.md.
 Follow the skill instructions exactly.
 When done, ensure the row for \`${nextLib}\` in libraries.md is updated with the results.`;
 
-      const result = await runAmpWithSkill(
-        prompt,
-        "test-libraries",
-        nextLib,
-        iteration,
-      );
+      const result = await runAmpWithSkill(prompt, "test-libraries", nextLib, iteration);
 
       console.log();
 
@@ -131,7 +126,9 @@ When done, ensure the row for \`${nextLib}\` in libraries.md is updated with the
 
       // If the agent didn't update the row, mark it failed and continue
       if (isLibraryStillUntested(nextLib)) {
-        console.log(`  ⚠️ '${nextLib}' still ⬜ — marking as ❌ (agent failed to update) and continuing.`);
+        console.log(
+          `  ⚠️ '${nextLib}' still ⬜ — marking as ❌ (agent failed to update) and continuing.`,
+        );
         markLibraryFailed(nextLib, "Agent did not update row; check logs");
       }
 

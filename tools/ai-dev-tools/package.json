@@ -6,15 +6,23 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "fix": "tsx src/cli.ts fix"
+    "fix": "tsx src/cli.ts fix",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write src/",
+    "format:check": "prettier --check src/"
   },
   "bin": {
     "ai-dev-tools": "./dist/cli.js"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
+    "eslint": "^10.0.3",
+    "prettier": "^3.8.1",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.57.1"
   },
   "dependencies": {
     "@sourcegraph/amp-sdk": "^0.1.0-20260223122441-g31e6594",

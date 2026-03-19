@@ -4,6 +4,7 @@ import logUpdate from "log-update";
 import { REPO_ROOT } from "./paths.js";
 
 const MAX_PREVIEW_LINES = 20;
+// eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 const FAIL_LINE_RE = /^(?:Finished test:\s+)?\S+\s+(?:\.\.\.\s+FAILED|\[FAILED\])\s*$/;
 
@@ -37,11 +38,15 @@ export function run(
       killed = true;
       try {
         process.kill(-child.pid!, "SIGINT");
-      } catch {}
+      } catch {
+        /* process may already be dead */
+      }
       setTimeout(() => {
         try {
           process.kill(-child.pid!, "SIGKILL");
-        } catch {}
+        } catch {
+          /* process may already be dead */
+        }
       }, 1500);
     }
 

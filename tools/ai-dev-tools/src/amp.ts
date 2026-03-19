@@ -78,9 +78,10 @@ function formatPatch(icon: string, toolName: string, patchText: string): string 
     }
   }
 
-  const fileList = header.length > 0
-    ? header.map(f => `${c.cyan}${f}${c.reset}`).join(", ")
-    : `${c.dim}(unknown files)${c.reset}`;
+  const fileList =
+    header.length > 0
+      ? header.map((f) => `${c.cyan}${f}${c.reset}`).join(", ")
+      : `${c.dim}(unknown files)${c.reset}`;
 
   const summary = `${icon} ${toolName} ${fileList} ${c.dim}(${filesChanged} file${filesChanged !== 1 ? "s" : ""})${c.reset}`;
 
@@ -88,9 +89,12 @@ function formatPatch(icon: string, toolName: string, patchText: string): string 
 
   const shown = diffLines.slice(0, PATCH_MAX_LINES);
   const remaining = diffLines.length - shown.length;
-  const truncNote = remaining > 0 ? `\n    ${c.dim}… ${remaining} more line${remaining !== 1 ? "s" : ""}${c.reset}` : "";
+  const truncNote =
+    remaining > 0
+      ? `\n    ${c.dim}… ${remaining} more line${remaining !== 1 ? "s" : ""}${c.reset}`
+      : "";
 
-  return `${summary}\n${shown.map(l => `    ${l}`).join("\n")}${truncNote}`;
+  return `${summary}\n${shown.map((l) => `    ${l}`).join("\n")}${truncNote}`;
 }
 
 function formatToolUse(name: string, input: Record<string, unknown>): string {
@@ -100,7 +104,9 @@ function formatToolUse(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case "Read": {
       const p = shortPath(String(input.path ?? ""));
-      const range = input.read_range ? ` ${c.dim}L${(input.read_range as number[])[0]}-${(input.read_range as number[])[1]}${c.reset}` : "";
+      const range = input.read_range
+        ? ` ${c.dim}L${(input.read_range as number[])[0]}-${(input.read_range as number[])[1]}${c.reset}`
+        : "";
       return `${icon} ${toolName} ${c.cyan}${p}${c.reset}${range}`;
     }
     case "edit_file": {
@@ -145,10 +151,13 @@ function formatToolUse(name: string, input: Record<string, unknown>): string {
     }
     default: {
       const keys = Object.keys(input);
-      const summary = keys.slice(0, 3).map(k => {
-        const v = String(input[k] ?? "");
-        return `${k}=${truncLine(v, 30)}`;
-      }).join(", ");
+      const summary = keys
+        .slice(0, 3)
+        .map((k) => {
+          const v = String(input[k] ?? "");
+          return `${k}=${truncLine(v, 30)}`;
+        })
+        .join(", ");
       return `${icon} ${toolName} ${c.dim}${summary}${c.reset}`;
     }
   }
@@ -180,7 +189,8 @@ function formatToolResult(toolName: string, content: string, isError: boolean): 
   }
 
   const { text, exitCode } = extractToolOutput(content);
-  const exitSuffix = exitCode != null && exitCode !== 0 ? ` ${c.red}(exit ${exitCode})${c.reset}` : "";
+  const exitSuffix =
+    exitCode != null && exitCode !== 0 ? ` ${c.red}(exit ${exitCode})${c.reset}` : "";
 
   const lines = text.split("\n").filter((l) => l.length > 0);
   if (lines.length === 0) {
@@ -201,10 +211,12 @@ export function buildBatchPrompt(
   tests: { path: string; subtestName?: string; reason: string }[],
   failureOutput: string,
 ): string {
-  const testList = tests.map((t) => {
-    const label = t.subtestName ? `${t.path}#${t.subtestName}` : t.path;
-    return `- **${label}** — ${t.reason}`;
-  }).join("\n");
+  const testList = tests
+    .map((t) => {
+      const label = t.subtestName ? `${t.path}#${t.subtestName}` : t.path;
+      return `- **${label}** — ${t.reason}`;
+    })
+    .join("\n");
 
   const testPaths = tests.map((t) => `tests/node_compat/suite/${t.path}`);
   const uniquePaths = [...new Set(testPaths)];
@@ -280,7 +292,7 @@ export function buildAmpPrompt(
 
   const subtestInfo = subtestName
     ? `\n- **Subtest**: ${subtestName} (this is one of multiple sub-tests in the file; focus on the specific block/test case that this subtest targets)`
-    : '';
+    : "";
 
   return `\
 You are working on the wasm-rquickjs project which wraps JavaScript in WebAssembly Components using QuickJS.
@@ -354,7 +366,11 @@ export async function runAmpWithSkill(
   iteration: number,
   mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
-  const safeLabel = libraryName.replace(/[^a-zA-Z0-9-]/g, "-").replace(/^-+/, "").replace(/-+$/, "").slice(0, 32);
+  const safeLabel = libraryName
+    .replace(/[^a-zA-Z0-9-]/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
+    .slice(0, 32);
   return runAmpGeneric(prompt, [taskLabel, safeLabel], iteration, mode);
 }
 
@@ -365,7 +381,16 @@ export async function runAmp(
   iteration: number,
   mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
-  return runAmpGeneric(prompt, ["fix-node-compat", category.replace(/_/g, "-"), targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)], iteration, mode);
+  return runAmpGeneric(
+    prompt,
+    [
+      "fix-node-compat",
+      category.replace(/_/g, "-"),
+      targetTest.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32),
+    ],
+    iteration,
+    mode,
+  );
 }
 
 const AMP_TIMEOUT_MS = 45 * 60 * 1000; // 45 minutes
@@ -377,7 +402,9 @@ async function runAmpGeneric(
   mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
   const ampLog = path.join(LOG_DIR, `amp-${iteration}-${Date.now()}.txt`);
-  console.log(`  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration}, mode: ${mode}, timeout: ${AMP_TIMEOUT_MS / 60000}m)${c.reset}`);
+  console.log(
+    `  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration}, mode: ${mode}, timeout: ${AMP_TIMEOUT_MS / 60000}m)${c.reset}`,
+  );
   console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);
   console.log();
 
@@ -451,7 +478,9 @@ async function runAmpGeneric(
             toolNames.set(content.id, content.name);
             const rawText = `[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`;
             logParts.push(rawText);
-            pushPreview(`  ${formatToolUse(content.name, content.input as Record<string, unknown>)}`);
+            pushPreview(
+              `  ${formatToolUse(content.name, content.input as Record<string, unknown>)}`,
+            );
           }
         }
       } else if (message.type === "user") {
@@ -460,10 +489,13 @@ async function runAmpGeneric(
             const resultText = content.content ?? "";
             const toolName = toolNames.get(content.tool_use_id) ?? "unknown";
             // Log the full result to the log file (truncated for very large results)
-            const logText = resultText.length > 8000
-              ? resultText.slice(0, 4000) + "\n... (truncated) ...\n" + resultText.slice(-4000)
-              : resultText;
-            logParts.push(`[tool_result ${toolName} id=${content.tool_use_id} error=${content.is_error}]\n${logText}\n`);
+            const logText =
+              resultText.length > 8000
+                ? resultText.slice(0, 4000) + "\n... (truncated) ...\n" + resultText.slice(-4000)
+                : resultText;
+            logParts.push(
+              `[tool_result ${toolName} id=${content.tool_use_id} error=${content.is_error}]\n${logText}\n`,
+            );
             // Show a preview of the tail of the result
             pushPreview(formatToolResult(toolName, resultText, content.is_error));
           }
@@ -495,7 +527,9 @@ async function runAmpGeneric(
       // after it has already delivered a valid result message. If we captured a
       // result (or the agent made progress via tool calls), treat the process
       // exit as non-fatal.
-      logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
+      logParts.push(
+        `[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`,
+      );
     } else {
       isError = true;
       result = err instanceof Error ? err.message : String(err);
@@ -532,10 +566,12 @@ export function buildPrioritizePrompt(
   category: string,
   skippedTests: { path: string; subtestName?: string; reason: string }[],
 ): string {
-  const testList = skippedTests.map((t) => {
-    const label = t.subtestName ? `${t.path}#${t.subtestName}` : t.path;
-    return `- ${label} — ${t.reason}`;
-  }).join("\n");
+  const testList = skippedTests
+    .map((t) => {
+      const label = t.subtestName ? `${t.path}#${t.subtestName}` : t.path;
+      return `- ${label} — ${t.reason}`;
+    })
+    .join("\n");
 
   return `\
 You are helping prioritize Node.js compatibility tests for the wasm-rquickjs project.
@@ -564,10 +600,7 @@ If there are fewer than 10 skipped tests, include all of them in priority order.
 Respond ONLY with the JSON array, no other text.`;
 }
 
-export async function runAmpPrioritize(
-  prompt: string,
-  category: string,
-): Promise<AmpResult> {
+export async function runAmpPrioritize(prompt: string, category: string): Promise<AmpResult> {
   const ampLog = path.join(LOG_DIR, `amp-prioritize-${Date.now()}.txt`);
   console.log(`  ${c.cyan}🤖 Launching amp agent for test prioritization${c.reset}`);
   console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);
@@ -575,7 +608,6 @@ export async function runAmpPrioritize(
   const logParts: string[] = [];
   let result = "";
   let isError = false;
-  let toolCount = 0;
   const startTime = Date.now();
 
   try {
@@ -593,7 +625,6 @@ export async function runAmpPrioritize(
           if (content.type === "text") {
             logParts.push(content.text);
           } else if (content.type === "tool_use") {
-            toolCount++;
             logParts.push(`[tool_use] ${content.name}(${JSON.stringify(content.input)})\n`);
           }
         }
@@ -611,7 +642,9 @@ export async function runAmpPrioritize(
     }
   } catch (err) {
     if (result) {
-      logParts.push(`[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`);
+      logParts.push(
+        `[warning] Amp CLI exited with non-zero code after delivering result: ${err}\n`,
+      );
     } else {
       isError = true;
       result = err instanceof Error ? err.message : String(err);
@@ -619,9 +652,13 @@ export async function runAmpPrioritize(
     }
   } finally {
     if (!isError) {
-      console.log(`  ${c.green}✓ Prioritization complete${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
+      console.log(
+        `  ${c.green}✓ Prioritization complete${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`,
+      );
     } else {
-      console.log(`  ${c.red}✗ Prioritization failed${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`);
+      console.log(
+        `  ${c.red}✗ Prioritization failed${c.reset} ${c.dim}(${elapsed(startTime)})${c.reset}`,
+      );
     }
 
     try {

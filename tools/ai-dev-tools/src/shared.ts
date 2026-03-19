@@ -5,7 +5,8 @@ import { REPO_ROOT, LOG_DIR } from "./paths.js";
 import { loadConfig } from "./config.js";
 import { testPathToFilter, runSpecificTests } from "./tests.js";
 
-export const CARGO_FAIL_RE = /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
+export const CARGO_FAIL_RE =
+  /(?:Finished test:\s+)?(?:node_compat::)?gen_node_compat_tests::(\S+)\s+(?:\[FAILED\]|\.\.\.\s+FAILED)/g;
 
 /** Revert all working tree changes including untracked files created by Amp. */
 export function revertWorkspace(): void {
@@ -147,10 +148,14 @@ export function recordFlakyTests(tests: FailingTest[], targetLabel: string): voi
  */
 export async function checkIfFlaky(failingTests: FailingTest[]): Promise<boolean> {
   for (let retry = 1; retry <= FLAKY_RETRIES; retry++) {
-    console.log(`  🔄 Flaky retry ${retry}/${FLAKY_RETRIES}: re-running ${failingTests.length} failing test(s)...`);
+    console.log(
+      `  🔄 Flaky retry ${retry}/${FLAKY_RETRIES}: re-running ${failingTests.length} failing test(s)...`,
+    );
     const { ok } = await runSpecificTests(failingTests);
     if (ok) {
-      console.log(`  ✅ All previously-failing tests passed on retry ${retry}. They appear to be flaky.`);
+      console.log(
+        `  ✅ All previously-failing tests passed on retry ${retry}. They appear to be flaky.`,
+      );
       return true;
     }
   }
@@ -165,7 +170,9 @@ export function sleep(ms: number): Promise<void> {
 }
 
 export async function waitForCredits(): Promise<void> {
-  console.log(`  ⏳ Credits appear exhausted. Waiting ${CREDIT_WAIT_MINUTES} minutes for recharge...`);
+  console.log(
+    `  ⏳ Credits appear exhausted. Waiting ${CREDIT_WAIT_MINUTES} minutes for recharge...`,
+  );
   for (let remaining = CREDIT_WAIT_MINUTES; remaining > 0; remaining--) {
     console.log(`     ${remaining} minute${remaining !== 1 ? "s" : ""} remaining...`);
     await sleep(60_000);

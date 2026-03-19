@@ -176,17 +176,12 @@ fn create_sqlite_error<'js>(
 ) -> rquickjs::Result<rquickjs::Error> {
     let (message, errcode_val, errstr_val) = match err {
         rusqlite::Error::SqliteFailure(ffi_err, msg) => {
-            let message = msg
-                .as_deref()
-                .unwrap_or("unknown error")
-                .to_string();
+            let message = msg.as_deref().unwrap_or("unknown error").to_string();
             let extended = ffi_err.extended_code;
             let primary = extended & 0xFF;
             let errstr = unsafe {
                 let ptr = sqlite3_errstr(primary);
-                std::ffi::CStr::from_ptr(ptr)
-                    .to_string_lossy()
-                    .into_owned()
+                std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
             };
             (message, Some(extended), Some(errstr))
         }
@@ -563,9 +558,8 @@ fn validate_named_params<'js>(
         let (key, _) = entry?;
 
         // Check if key directly matches a SQL parameter name
-        let direct_match = (1..=stmt.parameter_count()).any(|idx| {
-            stmt.parameter_name(idx).map_or(false, |name| name == key)
-        });
+        let direct_match = (1..=stmt.parameter_count())
+            .any(|idx| stmt.parameter_name(idx).map_or(false, |name| name == key));
         if direct_match {
             continue;
         }
@@ -649,10 +643,16 @@ fn open_database_impl<'js>(
             .map_err(|e| sqlite_error(&ctx, &e))?;
     }
 
-    conn.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DQS_DML, enable_dqs)
-        .map_err(|e| sqlite_error(&ctx, &e))?;
-    conn.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DQS_DDL, enable_dqs)
-        .map_err(|e| sqlite_error(&ctx, &e))?;
+    conn.set_db_config(
+        rusqlite::config::DbConfig::SQLITE_DBCONFIG_DQS_DML,
+        enable_dqs,
+    )
+    .map_err(|e| sqlite_error(&ctx, &e))?;
+    conn.set_db_config(
+        rusqlite::config::DbConfig::SQLITE_DBCONFIG_DQS_DDL,
+        enable_dqs,
+    )
+    .map_err(|e| sqlite_error(&ctx, &e))?;
 
     if timeout > 0 {
         conn.busy_timeout(Duration::from_millis(timeout as u64))
@@ -735,9 +735,14 @@ fn stmt_run_impl<'js>(
 
         if stmt.column_count() > 0 {
             let mut rows = stmt.raw_query();
-            while rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))?.is_some() {}
+            while rows
+                .next()
+                .map_err(|e| map_sqlite_or_udf_error(&ctx, e))?
+                .is_some()
+            {}
         } else {
-            stmt.raw_execute().map_err(|e| map_sqlite_or_udf_error(&ctx, e))?;
+            stmt.raw_execute()
+                .map_err(|e| map_sqlite_or_udf_error(&ctx, e))?;
         }
     }
 
@@ -1120,7 +1125,8 @@ fn register_function_impl<'js>(
         }
 
         let mut call_args = rquickjs::function::Args::new(js_ctx.clone(), js_args.len());
-        call_args.push_args(js_args)
+        call_args
+            .push_args(js_args)
             .map_err(|e| rusqlite::Error::UserFunctionError(format!("{}", e).into()))?;
         let result: rquickjs::Value<'_> = func.call_arg(call_args).map_err(|e| {
             if matches!(e, rquickjs::Error::Exception) {
@@ -1205,7 +1211,8 @@ impl rusqlite::functions::Aggregate<JsAccumulator, rusqlite::types::Value> for J
         }
 
         let mut call_args = rquickjs::function::Args::new(js_ctx.clone(), js_args.len());
-        call_args.push_args(js_args)
+        call_args
+            .push_args(js_args)
             .map_err(|e| rusqlite::Error::UserFunctionError(format!("{}", e).into()))?;
         let new_acc: rquickjs::Value<'_> = step_fn.call_arg(call_args).map_err(|e| {
             if matches!(e, rquickjs::Error::Exception) {
@@ -1481,8 +1488,7 @@ fn apply_changeset_impl<'js>(
     use std::sync::Arc;
 
     let aborted = Arc::new(Mutex::new(false));
-    let callback_error: Arc<Mutex<Option<String>>> =
-        Arc::new(Mutex::new(None));
+    let callback_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
     let aborted_clone = Arc::clone(&aborted);
     let error_clone = Arc::clone(&callback_error);

@@ -8,7 +8,9 @@ pub fn parse_ip_address(addr: &str) -> Option<IpAddress> {
     match addr.parse::<IpAddr>() {
         Ok(IpAddr::V4(v4)) => {
             let octets = v4.octets();
-            Some(IpAddress::Ipv4((octets[0], octets[1], octets[2], octets[3])))
+            Some(IpAddress::Ipv4((
+                octets[0], octets[1], octets[2], octets[3],
+            )))
         }
         Ok(IpAddr::V6(v6)) => {
             let segs = v6.segments();
@@ -83,7 +85,12 @@ pub fn error_code_to_errno(error: ErrorCode) -> &'static str {
     }
 }
 
-pub fn throw_socket_error(ctx: &Ctx<'_>, code: &str, syscall: &str, message: &str) -> rquickjs::Error {
+pub fn throw_socket_error(
+    ctx: &Ctx<'_>,
+    code: &str,
+    syscall: &str,
+    message: &str,
+) -> rquickjs::Error {
     let escaped = message.replace('\\', "\\\\").replace('"', "\\\"");
     Exception::throw_message(
         ctx,

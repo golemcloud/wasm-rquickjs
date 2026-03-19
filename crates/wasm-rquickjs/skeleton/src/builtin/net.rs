@@ -49,7 +49,7 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
                 "EINVAL",
                 "socket",
                 &format!("Invalid address family: {family}"),
-            ))
+            ));
         }
     };
 
@@ -118,12 +118,7 @@ impl TcpSocket {
 
     pub async fn bind(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
         let ip = parse_ip_address(&addr).ok_or_else(|| {
-            throw_socket_error(
-                &ctx,
-                "EINVAL",
-                "bind",
-                &format!("Invalid address: {addr}"),
-            )
+            throw_socket_error(&ctx, "EINVAL", "bind", &format!("Invalid address: {addr}"))
         })?;
         let sock_addr = ip_socket_address(ip, port as u16);
 
@@ -172,12 +167,7 @@ impl TcpSocket {
                     let pollable = {
                         let mut inner = self.inner.borrow_mut();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
-                            throw_socket_error(
-                                &ctx,
-                                "EBADF",
-                                "bind",
-                                "Socket was closed or reset",
-                            )
+                            throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
                         })?;
                         let pollable = socket.subscribe();
                         inner.waiters += 1;
@@ -251,16 +241,14 @@ impl TcpSocket {
             let socket = inner.socket.as_ref().ok_or_else(|| {
                 throw_socket_error(&ctx, "EBADF", "connect", "Socket was closed or reset")
             })?;
-            socket
-                .start_connect(&network, remote_addr)
-                .map_err(|e| {
-                    throw_socket_error(
-                        &ctx,
-                        error_code_to_errno(e),
-                        "connect",
-                        &format!("connect failed: {e:?}"),
-                    )
-                })?;
+            socket.start_connect(&network, remote_addr).map_err(|e| {
+                throw_socket_error(
+                    &ctx,
+                    error_code_to_errno(e),
+                    "connect",
+                    &format!("connect failed: {e:?}"),
+                )
+            })?;
         }
 
         // Poll until finish_connect succeeds
@@ -359,9 +347,10 @@ impl TcpSocket {
         loop {
             let result = {
                 let inner = self.inner.borrow();
-                let input = inner.input.as_ref().ok_or_else(|| {
-                    throw_socket_error(&ctx, "EBADF", "read", "No input stream")
-                })?;
+                let input = inner
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| throw_socket_error(&ctx, "EBADF", "read", "No input stream"))?;
                 input.read(len)
             };
 
@@ -446,14 +435,12 @@ impl TcpSocket {
                         StreamError::Closed => {
                             throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                         }
-                        StreamError::LastOperationFailed(e) => {
-                            throw_socket_error(
-                                &ctx,
-                                "EIO",
-                                "write",
-                                &format!("check_write failed: {e:?}"),
-                            )
-                        }
+                        StreamError::LastOperationFailed(e) => throw_socket_error(
+                            &ctx,
+                            "EIO",
+                            "write",
+                            &format!("check_write failed: {e:?}"),
+                        ),
                     })?
                 };
 
@@ -497,12 +484,9 @@ impl TcpSocket {
                     StreamError::Closed => {
                         throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                     }
-                    StreamError::LastOperationFailed(e) => throw_socket_error(
-                        &ctx,
-                        "EIO",
-                        "write",
-                        &format!("write failed: {e:?}"),
-                    ),
+                    StreamError::LastOperationFailed(e) => {
+                        throw_socket_error(&ctx, "EIO", "write", &format!("write failed: {e:?}"))
+                    }
                 })?;
             };
             offset = end;
@@ -539,7 +523,7 @@ impl TcpSocket {
                     "EINVAL",
                     "shutdown",
                     &format!("Invalid shutdown type: {how}"),
-                ))
+                ));
             }
         };
         let socket = inner.socket.as_ref().ok_or_else(|| {
@@ -617,12 +601,7 @@ impl TcpSocket {
         Ok(List((addr_str, port, family)))
     }
 
-    pub fn set_keep_alive(
-        &self,
-        ctx: Ctx<'_>,
-        enable: bool,
-        idle_ms: u64,
-    ) -> rquickjs::Result<()> {
+    pub fn set_keep_alive(&self, ctx: Ctx<'_>, enable: bool, idle_ms: u64) -> rquickjs::Result<()> {
         let inner = self.inner.borrow();
         if inner.closed {
             return Err(throw_socket_error(
@@ -770,7 +749,7 @@ fn create_tcp_listener_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpL
                 "EINVAL",
                 "socket",
                 &format!("Invalid address family: {family}"),
-            ))
+            ));
         }
     };
 
@@ -829,12 +808,7 @@ impl TcpListener {
 
     pub async fn bind(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
         let ip = parse_ip_address(&addr).ok_or_else(|| {
-            throw_socket_error(
-                &ctx,
-                "EINVAL",
-                "bind",
-                &format!("Invalid address: {addr}"),
-            )
+            throw_socket_error(&ctx, "EINVAL", "bind", &format!("Invalid address: {addr}"))
         })?;
         let sock_addr = ip_socket_address(ip, port as u16);
 
@@ -883,12 +857,7 @@ impl TcpListener {
                     let pollable = {
                         let mut inner = self.inner.borrow_mut();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
-                            throw_socket_error(
-                                &ctx,
-                                "EBADF",
-                                "bind",
-                                "Socket was closed or reset",
-                            )
+                            throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
                         })?;
                         let pollable = socket.subscribe();
                         inner.waiters += 1;
@@ -927,12 +896,7 @@ impl TcpListener {
 
     pub fn bind_sync(&self, ctx: Ctx<'_>, addr: String, port: u32) -> rquickjs::Result<()> {
         let ip = parse_ip_address(&addr).ok_or_else(|| {
-            throw_socket_error(
-                &ctx,
-                "EINVAL",
-                "bind",
-                &format!("Invalid address: {addr}"),
-            )
+            throw_socket_error(&ctx, "EINVAL", "bind", &format!("Invalid address: {addr}"))
         })?;
         let sock_addr = ip_socket_address(ip, port as u16);
 
@@ -978,12 +942,7 @@ impl TcpListener {
                     let pollable = {
                         let inner = self.inner.borrow();
                         let socket = inner.socket.as_ref().ok_or_else(|| {
-                            throw_socket_error(
-                                &ctx,
-                                "EBADF",
-                                "bind",
-                                "Socket was closed or reset",
-                            )
+                            throw_socket_error(&ctx, "EBADF", "bind", "Socket was closed or reset")
                         })?;
                         socket.subscribe()
                     };
@@ -1241,16 +1200,15 @@ impl TcpListener {
             match result {
                 Ok((client_socket, input, output)) => {
                     // Get remote address from client socket
-                    let (addr_str, port, family) =
-                        match client_socket.remote_address() {
-                            Ok(addr) => {
-                                let a = ip_address_to_string(&addr);
-                                let p = ip_socket_address_port(&addr) as u32;
-                                let f = ip_socket_address_family(&addr).to_string();
-                                (a, p, f)
-                            }
-                            Err(_) => ("0.0.0.0".to_string(), 0, "IPv4".to_string()),
-                        };
+                    let (addr_str, port, family) = match client_socket.remote_address() {
+                        Ok(addr) => {
+                            let a = ip_address_to_string(&addr);
+                            let p = ip_socket_address_port(&addr) as u32;
+                            let f = ip_socket_address_family(&addr).to_string();
+                            (a, p, f)
+                        }
+                        Err(_) => ("0.0.0.0".to_string(), 0, "IPv4".to_string()),
+                    };
 
                     let wrapped = TcpSocket {
                         inner: RefCell::new(TcpInner {

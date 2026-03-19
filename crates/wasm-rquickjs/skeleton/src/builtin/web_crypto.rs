@@ -168,7 +168,12 @@ fn supported_hashes() -> Vec<&'static str> {
     let mut hashes = vec!["md5", "sha1", "sha224", "sha256", "sha384", "sha512"];
     #[cfg(feature = "crypto-full")]
     hashes.extend_from_slice(&[
-        "shake128", "shake256", "sha3-256", "sha3-384", "sha3-512", "ripemd160",
+        "shake128",
+        "shake256",
+        "sha3-256",
+        "sha3-384",
+        "sha3-512",
+        "ripemd160",
     ]);
     hashes
 }
@@ -517,7 +522,7 @@ fn aes_decrypt_block(key: &[u8], block: &mut [u8; 16]) -> Option<()> {
 }
 
 fn aes_wrap_nopad_encrypt(key: &[u8], iv: [u8; 8], plaintext: &[u8]) -> Option<Vec<u8>> {
-    if plaintext.len() < 16 || plaintext.len() % 8 != 0 {
+    if plaintext.len() < 16 || !plaintext.len().is_multiple_of(8) {
         return None;
     }
 
@@ -557,7 +562,7 @@ fn aes_wrap_nopad_encrypt(key: &[u8], iv: [u8; 8], plaintext: &[u8]) -> Option<V
 }
 
 fn aes_wrap_nopad_unwrap_raw(key: &[u8], ciphertext: &[u8]) -> Option<([u8; 8], Vec<u8>)> {
-    if ciphertext.len() < 16 || ciphertext.len() % 8 != 0 {
+    if ciphertext.len() < 16 || !ciphertext.len().is_multiple_of(8) {
         return None;
     }
 
@@ -601,7 +606,7 @@ fn aes_wrap_nopad_unwrap_raw(key: &[u8], ciphertext: &[u8]) -> Option<([u8; 8], 
 }
 
 fn aes_wrap_nopad_decrypt(key: &[u8], iv: [u8; 8], ciphertext: &[u8]) -> Option<Vec<u8>> {
-    if ciphertext.len() < 24 || ciphertext.len() % 8 != 0 {
+    if ciphertext.len() < 24 || !ciphertext.len().is_multiple_of(8) {
         return None;
     }
 
@@ -639,7 +644,7 @@ fn aes_wrap_pad_encrypt(key: &[u8], iv_prefix: [u8; 4], plaintext: &[u8]) -> Opt
 }
 
 fn aes_wrap_pad_decrypt(key: &[u8], iv_prefix: [u8; 4], ciphertext: &[u8]) -> Option<Vec<u8>> {
-    if ciphertext.len() < 16 || ciphertext.len() % 8 != 0 {
+    if ciphertext.len() < 16 || !ciphertext.len().is_multiple_of(8) {
         return None;
     }
 
@@ -745,7 +750,7 @@ fn des3_wrap_encrypt(key: &[u8], plaintext: &[u8]) -> Option<Vec<u8>> {
 fn des3_wrap_decrypt(key: &[u8], ciphertext: &[u8]) -> Option<Vec<u8>> {
     use subtle::ConstantTimeEq;
 
-    if ciphertext.len() < 24 || ciphertext.len() % 8 != 0 {
+    if ciphertext.len() < 24 || !ciphertext.len().is_multiple_of(8) {
         return None;
     }
 
@@ -809,12 +814,12 @@ fn gcm_ghash(h: u128, aad: &[u8], ciphertext: &[u8]) -> [u8; 16] {
     );
 
     input.extend_from_slice(aad);
-    if aad.len() % 16 != 0 {
+    if !aad.len().is_multiple_of(16) {
         input.resize(input.len() + (16 - (aad.len() % 16)), 0);
     }
 
     input.extend_from_slice(ciphertext);
-    if ciphertext.len() % 16 != 0 {
+    if !ciphertext.len().is_multiple_of(16) {
         input.resize(input.len() + (16 - (ciphertext.len() % 16)), 0);
     }
 
@@ -841,7 +846,7 @@ fn gcm_compute_j0(h: u128, iv: &[u8]) -> [u8; 16] {
 
     let mut input = Vec::with_capacity(iv.len() + (16 - (iv.len() % 16)) % 16 + 16);
     input.extend_from_slice(iv);
-    if iv.len() % 16 != 0 {
+    if !iv.len().is_multiple_of(16) {
         input.resize(input.len() + (16 - (iv.len() % 16)), 0);
     }
     input.extend_from_slice(&0u64.to_be_bytes());
@@ -2127,11 +2132,7 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return if auto_padding {
-                    None
-                } else {
-                    Some(Vec::new())
-                };
+                return if auto_padding { None } else { Some(Vec::new()) };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -2165,11 +2166,7 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return if auto_padding {
-                    None
-                } else {
-                    Some(Vec::new())
-                };
+                return if auto_padding { None } else { Some(Vec::new()) };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -2204,11 +2201,7 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 8;
             if tail.is_empty() {
-                return if auto_padding {
-                    None
-                } else {
-                    Some(Vec::new())
-                };
+                return if auto_padding { None } else { Some(Vec::new()) };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -2243,11 +2236,7 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return if auto_padding {
-                    None
-                } else {
-                    Some(Vec::new())
-                };
+                return if auto_padding { None } else { Some(Vec::new()) };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -2281,11 +2270,7 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 16;
             if tail.is_empty() {
-                return if auto_padding {
-                    None
-                } else {
-                    Some(Vec::new())
-                };
+                return if auto_padding { None } else { Some(Vec::new()) };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -2320,11 +2305,7 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         } => {
             let block_size = 8;
             if tail.is_empty() {
-                return if auto_padding {
-                    None
-                } else {
-                    Some(Vec::new())
-                };
+                return if auto_padding { None } else { Some(Vec::new()) };
             }
             if tail.len() % block_size != 0 {
                 return None;
@@ -2359,32 +2340,31 @@ fn cipher_final_impl(id: u32) -> Option<Vec<u8>> {
         | CipherContext::AesKwpEnc { .. }
         | CipherContext::AesKwpDec { .. } => Some(Vec::new()),
         #[cfg(feature = "crypto-full")]
-        CipherContext::Des3WrapEnc { .. }
-        | CipherContext::Des3WrapDec { .. } => Some(Vec::new()),
+        CipherContext::Des3WrapEnc { .. } | CipherContext::Des3WrapDec { .. } => Some(Vec::new()),
     }
 }
 
 fn cipher_set_aad_impl(id: u32, aad_data: &[u8]) -> bool {
     let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
-    if let Some(ctx) = contexts.get_mut(&id) {
-        match ctx {
+    match contexts.get_mut(&id) {
+        Some(
             CipherContext::Aes128GcmEnc { aad, .. }
             | CipherContext::Aes256GcmEnc { aad, .. }
             | CipherContext::Aes128GcmDec { aad, .. }
-            | CipherContext::Aes256GcmDec { aad, .. } => {
-                aad.extend_from_slice(aad_data);
-                true
-            }
-            #[cfg(feature = "crypto-full")]
-            CipherContext::ChaCha20Poly1305Enc { aad, .. }
-            | CipherContext::ChaCha20Poly1305Dec { aad, .. } => {
-                aad.extend_from_slice(aad_data);
-                true
-            }
-            _ => false,
+            | CipherContext::Aes256GcmDec { aad, .. },
+        ) => {
+            aad.extend_from_slice(aad_data);
+            true
         }
-    } else {
-        false
+        #[cfg(feature = "crypto-full")]
+        Some(
+            CipherContext::ChaCha20Poly1305Enc { aad, .. }
+            | CipherContext::ChaCha20Poly1305Dec { aad, .. },
+        ) => {
+            aad.extend_from_slice(aad_data);
+            true
+        }
+        _ => false,
     }
 }
 
@@ -2401,22 +2381,20 @@ fn cipher_get_auth_tag_impl(id: u32) -> Option<Vec<u8>> {
 
 fn cipher_set_auth_tag_impl(id: u32, tag_data: &[u8]) -> bool {
     let mut contexts = CIPHER_CONTEXTS.lock().unwrap();
-    if let Some(ctx) = contexts.get_mut(&id) {
-        match ctx {
+    match contexts.get_mut(&id) {
+        Some(
             CipherContext::Aes128GcmDec { expected_tag, .. }
-            | CipherContext::Aes256GcmDec { expected_tag, .. } => {
-                *expected_tag = Some(tag_data.to_vec());
-                true
-            }
-            #[cfg(feature = "crypto-full")]
-            CipherContext::ChaCha20Poly1305Dec { expected_tag, .. } => {
-                *expected_tag = Some(tag_data.to_vec());
-                true
-            }
-            _ => false,
+            | CipherContext::Aes256GcmDec { expected_tag, .. },
+        ) => {
+            *expected_tag = Some(tag_data.to_vec());
+            true
         }
-    } else {
-        false
+        #[cfg(feature = "crypto-full")]
+        Some(CipherContext::ChaCha20Poly1305Dec { expected_tag, .. }) => {
+            *expected_tag = Some(tag_data.to_vec());
+            true
+        }
+        _ => false,
     }
 }
 
@@ -2472,12 +2450,7 @@ fn supported_ciphers() -> Vec<&'static str> {
         "id-aes256-wrap-pad",
     ];
     #[cfg(feature = "crypto-full")]
-    ciphers.extend_from_slice(&[
-        "bf-ecb",
-        "chacha20-poly1305",
-        "des-ede3-cbc",
-        "des3-wrap",
-    ]);
+    ciphers.extend_from_slice(&["bf-ecb", "chacha20-poly1305", "des-ede3-cbc", "des3-wrap"]);
     ciphers
 }
 
@@ -2517,15 +2490,13 @@ enum KeyData {
 impl KeyData {
     fn key_type(&self) -> &'static str {
         match self {
-            KeyData::Ed25519Private(_)
-            | KeyData::EcP256Private(_) => "private",
+            KeyData::Ed25519Private(_) | KeyData::EcP256Private(_) => "private",
             #[cfg(feature = "crypto-full")]
             KeyData::EcP384Private(_)
             | KeyData::EcK256Private(_)
             | KeyData::RsaPrivate(_)
             | KeyData::DsaPrivate(_) => "private",
-            KeyData::Ed25519Public(_)
-            | KeyData::EcP256Public(_) => "public",
+            KeyData::Ed25519Public(_) | KeyData::EcP256Public(_) => "public",
             #[cfg(feature = "crypto-full")]
             KeyData::EcP384Public(_)
             | KeyData::EcK256Public(_)
@@ -2586,9 +2557,11 @@ impl KeyData {
             #[cfg(feature = "crypto-full")]
             KeyData::RsaPublic(pk) => pk.to_public_key_der().ok().map(|d| d.as_ref().to_vec()),
             #[cfg(feature = "crypto-full")]
-            KeyData::DsaPrivate(sk) => {
-                sk.verifying_key().to_public_key_der().ok().map(|d| d.as_ref().to_vec())
-            }
+            KeyData::DsaPrivate(sk) => sk
+                .verifying_key()
+                .to_public_key_der()
+                .ok()
+                .map(|d| d.as_ref().to_vec()),
             #[cfg(feature = "crypto-full")]
             KeyData::DsaPublic(pk) => pk.to_public_key_der().ok().map(|d| d.as_ref().to_vec()),
             KeyData::Secret(raw) => Some(raw.clone()),
@@ -3209,7 +3182,7 @@ fn encrypt_traditional_pem(
     let block_size = 16usize;
     let pad_len = block_size - (der.len() % block_size);
     let mut padded = der.to_vec();
-    padded.extend(std::iter::repeat(pad_len as u8).take(pad_len));
+    padded.extend(std::iter::repeat_n(pad_len as u8, pad_len));
 
     // Encrypt with AES-CBC block by block
     let mut output = Vec::new();
@@ -3281,8 +3254,7 @@ fn decrypt_traditional_pem(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
                 in_headers = false;
                 continue;
             }
-            if line.starts_with("DEK-Info: ") {
-                let info = &line["DEK-Info: ".len()..];
+            if let Some(info) = line.strip_prefix("DEK-Info: ") {
                 let parts: Vec<&str> = info.splitn(2, ',').collect();
                 if parts.len() == 2 {
                     cipher_name = parts[0].to_string();
@@ -3458,8 +3430,8 @@ fn create_private_key_from_sec1_pem(pem: &str) -> Option<u32> {
 }
 
 fn decrypt_pkcs8_pem_to_der_impl(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
-    use pkcs8::der::Decode;
     use pkcs8::EncryptedPrivateKeyInfo;
+    use pkcs8::der::Decode;
 
     let pem_trimmed = pem.trim();
     let begin_marker = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
@@ -3694,10 +3666,7 @@ fn create_public_key_from_der(der: &[u8]) -> Option<u32> {
         use pkcs8::DecodePublicKey as _;
         if let Ok(pk) = dsa::VerifyingKey::from_public_key_der(der) {
             let id = next_id();
-            KEY_STORE
-                .lock()
-                .unwrap()
-                .insert(id, KeyData::DsaPublic(pk));
+            KEY_STORE.lock().unwrap().insert(id, KeyData::DsaPublic(pk));
             return Some(id);
         }
     }
@@ -3738,10 +3707,7 @@ fn create_public_key_from_pem(pem: &str) -> Option<u32> {
         use pkcs8::DecodePublicKey as _;
         if let Ok(pk) = dsa::VerifyingKey::from_public_key_pem(pem) {
             let id = next_id();
-            KEY_STORE
-                .lock()
-                .unwrap()
-                .insert(id, KeyData::DsaPublic(pk));
+            KEY_STORE.lock().unwrap().insert(id, KeyData::DsaPublic(pk));
             return Some(id);
         }
     }
@@ -4214,8 +4180,8 @@ fn verify_final_impl(id: u32, signature: &[u8]) -> Option<bool> {
         }
         #[cfg(feature = "crypto-full")]
         VerifyContext::Dsa { key, hasher } => {
-            use signature::hazmat::PrehashVerifier;
             use pkcs8::der::Decode;
+            use signature::hazmat::PrehashVerifier;
             let digest = hasher?.finalize();
             let sig = dsa::Signature::from_der(signature).ok()?;
             Some(key.verify_prehash(&digest, &sig).is_ok())
@@ -4241,8 +4207,12 @@ fn rsa_sign(key: &RsaPrivateKey, digest: &[u8], hash_algo: &str) -> Option<Vec<u
 fn rsa_verify(key: &RsaPublicKey, digest: &[u8], signature: &[u8], hash_algo: &str) -> bool {
     use rsa::pkcs1v15::Pkcs1v15Sign;
     match hash_algo {
-        "md5" => key.verify(Pkcs1v15Sign::new::<Md5>(), digest, signature).is_ok(),
-        "sha1" => key.verify(Pkcs1v15Sign::new::<Sha1>(), digest, signature).is_ok(),
+        "md5" => key
+            .verify(Pkcs1v15Sign::new::<Md5>(), digest, signature)
+            .is_ok(),
+        "sha1" => key
+            .verify(Pkcs1v15Sign::new::<Sha1>(), digest, signature)
+            .is_ok(),
         "sha224" => key
             .verify(Pkcs1v15Sign::new::<Sha224>(), digest, signature)
             .is_ok(),
@@ -4341,12 +4311,11 @@ fn decode_spkac_der(input: &[u8]) -> Option<Vec<u8>> {
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'+' | b'/' | b'='));
 
-    if maybe_base64 {
-        if let Ok(text) = std::str::from_utf8(&compact) {
-            if let Ok(decoded) = base64ct::Base64::decode_vec(text) {
-                return Some(decoded);
-            }
-        }
+    if maybe_base64
+        && let Ok(text) = std::str::from_utf8(&compact)
+        && let Ok(decoded) = base64ct::Base64::decode_vec(text)
+    {
+        return Some(decoded);
     }
 
     Some(input.to_vec())
@@ -5106,31 +5075,57 @@ fn dh_is_group_impl(id: u32) -> bool {
 }
 
 #[cfg(not(feature = "crypto-full"))]
-fn dh_create_from_group_impl(_name: &str) -> Option<u32> { None }
+fn dh_create_from_group_impl(_name: &str) -> Option<u32> {
+    None
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_create_from_prime_impl(_prime: &[u8], _gen: &[u8]) -> u32 { 0 }
+fn dh_create_from_prime_impl(_prime: &[u8], _gen: &[u8]) -> u32 {
+    0
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_create_from_size_impl(_bits: u32) -> Result<u32, String> { Err("DH not available".into()) }
+fn dh_create_from_size_impl(_bits: u32) -> Result<u32, String> {
+    Err("DH not available".into())
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_generate_keys_impl(_id: u32) -> Option<Vec<u8>> { None }
+fn dh_generate_keys_impl(_id: u32) -> Option<Vec<u8>> {
+    None
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_compute_secret_impl(_id: u32, _other_pub: &[u8]) -> Result<Vec<u8>, String> { Err("DH not available".into()) }
+fn dh_compute_secret_impl(_id: u32, _other_pub: &[u8]) -> Result<Vec<u8>, String> {
+    Err("DH not available".into())
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_get_prime_impl(_id: u32) -> Option<Vec<u8>> { None }
+fn dh_get_prime_impl(_id: u32) -> Option<Vec<u8>> {
+    None
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_get_generator_impl(_id: u32) -> Option<Vec<u8>> { None }
+fn dh_get_generator_impl(_id: u32) -> Option<Vec<u8>> {
+    None
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_get_public_key_impl(_id: u32) -> Option<Vec<u8>> { None }
+fn dh_get_public_key_impl(_id: u32) -> Option<Vec<u8>> {
+    None
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_get_private_key_impl(_id: u32) -> Option<Vec<u8>> { None }
+fn dh_get_private_key_impl(_id: u32) -> Option<Vec<u8>> {
+    None
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_get_verify_error_impl(_id: u32) -> Option<u32> { None }
+fn dh_get_verify_error_impl(_id: u32) -> Option<u32> {
+    None
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_set_public_key_impl(_id: u32, _key: &[u8]) -> bool { false }
+fn dh_set_public_key_impl(_id: u32, _key: &[u8]) -> bool {
+    false
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_set_private_key_impl(_id: u32, _key: &[u8]) -> bool { false }
+fn dh_set_private_key_impl(_id: u32, _key: &[u8]) -> bool {
+    false
+}
 #[cfg(not(feature = "crypto-full"))]
-fn dh_is_group_impl(_id: u32) -> bool { false }
+fn dh_is_group_impl(_id: u32) -> bool {
+    false
+}
 
 // ===== ECDH =====
 
