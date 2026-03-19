@@ -246,9 +246,9 @@ export function test4() {
             return false;
         }
 
-        // Stubs should be undefined
-        if (Intl.RelativeTimeFormat !== undefined) {
-            console.log("FAIL: RelativeTimeFormat should be undefined");
+        // RelativeTimeFormat should be defined
+        if (typeof Intl.RelativeTimeFormat !== "function") {
+            console.log("FAIL: RelativeTimeFormat should be a function");
             return false;
         }
 
@@ -311,16 +311,11 @@ export function test5() {
             return false;
         }
 
-        // Must be called with new
-        try {
-            Intl.ListFormat('en');
-            console.log("FAIL: should throw without new");
+        // Can be called without new (factory function)
+        const lfNoNew = Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
+        if (lfNoNew.format(['X', 'Y']) !== "X and Y") {
+            console.log("FAIL: ListFormat without new should work");
             return false;
-        } catch (e) {
-            if (!e.message.includes("new")) {
-                console.log("FAIL: wrong error without new:", e.message);
-                return false;
-            }
         }
 
         console.log("test5 PASSED");
@@ -401,16 +396,11 @@ export function test6() {
             return false;
         }
 
-        // Must be called with new
-        try {
-            Intl.Segmenter('en');
-            console.log("FAIL: should throw without new");
+        // Can be called without new (factory function)
+        const segNoNew = Intl.Segmenter('en', { granularity: 'grapheme' });
+        if ([...segNoNew.segment('ab')].length !== 2) {
+            console.log("FAIL: Segmenter without new should work");
             return false;
-        } catch (e) {
-            if (!e.message.includes("new")) {
-                console.log("FAIL: wrong error without new:", e.message);
-                return false;
-            }
         }
 
         // Default granularity (used by string-width/yargs)

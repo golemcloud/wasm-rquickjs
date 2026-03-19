@@ -135,7 +135,7 @@ function convertHour(hour24, hour12Flag, hourCycle) {
     return { hour: h, dayPeriod: period };
 }
 
-class DateTimeFormat {
+class DateTimeFormatImpl {
     #timeZone;
     #hour12;
     #hourCycle;
@@ -338,6 +338,16 @@ class DateTimeFormat {
     }
 }
 
+function DateTimeFormat(locales, options) {
+    return new DateTimeFormatImpl(locales, options);
+}
+DateTimeFormat.prototype = DateTimeFormatImpl.prototype;
+Object.defineProperty(DateTimeFormat.prototype, "constructor", { value: DateTimeFormat, writable: true, configurable: true });
+DateTimeFormat.supportedLocalesOf = DateTimeFormatImpl.supportedLocalesOf;
+Object.defineProperty(DateTimeFormatImpl.prototype, Symbol.toStringTag, {
+    value: "Intl.DateTimeFormat", writable: false, enumerable: false, configurable: true
+});
+
 // ─── NumberFormat ───────────────────────────────────────────────────────────────
 
 function groupIntegerPart(intStr) {
@@ -372,7 +382,7 @@ function formatDecimalNumber(absVal, minInt, minFrac, maxFrac, useGrouping) {
     return { intGroups, fracPart: fracPart || "" };
 }
 
-class NumberFormat {
+class NumberFormatImpl {
     #style;
     #currency;
     #currencyDisplay;
@@ -506,9 +516,19 @@ class NumberFormat {
     }
 }
 
+function NumberFormat(locales, options) {
+    return new NumberFormatImpl(locales, options);
+}
+NumberFormat.prototype = NumberFormatImpl.prototype;
+Object.defineProperty(NumberFormat.prototype, "constructor", { value: NumberFormat, writable: true, configurable: true });
+NumberFormat.supportedLocalesOf = NumberFormatImpl.supportedLocalesOf;
+Object.defineProperty(NumberFormatImpl.prototype, Symbol.toStringTag, {
+    value: "Intl.NumberFormat", writable: false, enumerable: false, configurable: true
+});
+
 // ─── Collator ──────────────────────────────────────────────────────────────────
 
-class Collator {
+class CollatorImpl {
     #sensitivity;
     #numeric;
     #ignorePunctuation;
@@ -553,9 +573,19 @@ class Collator {
     }
 }
 
+function Collator(locales, options) {
+    return new CollatorImpl(locales, options);
+}
+Collator.prototype = CollatorImpl.prototype;
+Object.defineProperty(Collator.prototype, "constructor", { value: Collator, writable: true, configurable: true });
+Collator.supportedLocalesOf = CollatorImpl.supportedLocalesOf;
+Object.defineProperty(CollatorImpl.prototype, Symbol.toStringTag, {
+    value: "Intl.Collator", writable: false, enumerable: false, configurable: true
+});
+
 // ─── PluralRules ───────────────────────────────────────────────────────────────
 
-class PluralRules {
+class PluralRulesImpl {
     #type;
     #minimumIntegerDigits;
     #minimumFractionDigits;
@@ -608,6 +638,16 @@ class PluralRules {
     }
 }
 
+function PluralRules(locales, options) {
+    return new PluralRulesImpl(locales, options);
+}
+PluralRules.prototype = PluralRulesImpl.prototype;
+Object.defineProperty(PluralRules.prototype, "constructor", { value: PluralRules, writable: true, configurable: true });
+PluralRules.supportedLocalesOf = PluralRulesImpl.supportedLocalesOf;
+Object.defineProperty(PluralRulesImpl.prototype, Symbol.toStringTag, {
+    value: "Intl.PluralRules", writable: false, enumerable: false, configurable: true
+});
+
 // ─── ListFormat ────────────────────────────────────────────────────────────────
 
 const LIST_PATTERNS = {
@@ -628,15 +668,12 @@ const LIST_PATTERNS = {
     },
 };
 
-class ListFormat {
+class ListFormatImpl {
     #type;
     #style;
     #patterns;
 
     constructor(locales, options) {
-        if (!(this instanceof ListFormat)) {
-            throw new TypeError("Constructor Intl.ListFormat requires 'new'");
-        }
         const opts = options || {};
         this.#type = opts.type || "conjunction";
         this.#style = opts.style || "long";
@@ -700,19 +737,22 @@ class ListFormat {
     }
 }
 
-Object.defineProperty(ListFormat.prototype, Symbol.toStringTag, {
+function ListFormat(locales, options) {
+    return new ListFormatImpl(locales, options);
+}
+ListFormat.prototype = ListFormatImpl.prototype;
+Object.defineProperty(ListFormat.prototype, "constructor", { value: ListFormat, writable: true, configurable: true });
+ListFormat.supportedLocalesOf = ListFormatImpl.supportedLocalesOf;
+Object.defineProperty(ListFormatImpl.prototype, Symbol.toStringTag, {
     value: "Intl.ListFormat", writable: false, enumerable: false, configurable: true
 });
 
 // ─── Segmenter ─────────────────────────────────────────────────────────────────
 
-class Segmenter {
+class SegmenterImpl {
     #granularity;
 
     constructor(locales, options) {
-        if (!(this instanceof Segmenter)) {
-            throw new TypeError("Constructor Intl.Segmenter requires 'new'");
-        }
         const opts = options || {};
         this.#granularity = opts.granularity || "grapheme";
 
@@ -738,7 +778,13 @@ class Segmenter {
     }
 }
 
-Object.defineProperty(Segmenter.prototype, Symbol.toStringTag, {
+function Segmenter(locales, options) {
+    return new SegmenterImpl(locales, options);
+}
+Segmenter.prototype = SegmenterImpl.prototype;
+Object.defineProperty(Segmenter.prototype, "constructor", { value: Segmenter, writable: true, configurable: true });
+Segmenter.supportedLocalesOf = SegmenterImpl.supportedLocalesOf;
+Object.defineProperty(SegmenterImpl.prototype, Symbol.toStringTag, {
     value: "Intl.Segmenter", writable: false, enumerable: false, configurable: true
 });
 
@@ -794,6 +840,117 @@ class Segments {
     }
 }
 
+// ─── RelativeTimeFormat ────────────────────────────────────────────────────────
+
+const RTF_UNITS = {
+    long: { year: "year", quarter: "quarter", month: "month", week: "week", day: "day", hour: "hour", minute: "minute", second: "second" },
+    short: { year: "yr.", quarter: "qtr.", month: "mo.", week: "wk.", day: "day", hour: "hr.", minute: "min.", second: "sec." },
+    narrow: { year: "y.", quarter: "q.", month: "m.", week: "w.", day: "d.", hour: "h.", minute: "m.", second: "s." },
+};
+
+const RTF_AUTO = {
+    year: { "-1": "last year", "1": "next year" },
+    quarter: { "-1": "last quarter", "1": "next quarter" },
+    month: { "-1": "last month", "1": "next month" },
+    week: { "-1": "last week", "1": "next week" },
+    day: { "-2": "2 days ago", "-1": "yesterday", "0": "today", "1": "tomorrow", "2": "in 2 days" },
+    second: { "0": "now" },
+};
+
+const RTF_VALID_UNITS = ["year", "quarter", "month", "week", "day", "hour", "minute", "second"];
+
+class RelativeTimeFormatImpl {
+    #numeric;
+    #style;
+
+    constructor(locales, options) {
+        const opts = options || {};
+        this.#numeric = opts.numeric || "always";
+        this.#style = opts.style || "long";
+
+        if (!["always", "auto"].includes(this.#numeric)) {
+            throw new RangeError("Invalid numeric value: " + this.#numeric);
+        }
+        if (!["long", "short", "narrow"].includes(this.#style)) {
+            throw new RangeError("Invalid style: " + this.#style);
+        }
+    }
+
+    format(value, unit) {
+        return this.formatToParts(value, unit).map(p => p.value).join("");
+    }
+
+    formatToParts(value, unit) {
+        const canonicalUnit = _rtfCanonicalUnit(String(unit));
+        const n = Number(value);
+        if (!Number.isFinite(n)) {
+            throw new RangeError("Invalid value: " + value);
+        }
+
+        // numeric: "auto" — try special forms
+        if (this.#numeric === "auto") {
+            const autoMap = RTF_AUTO[canonicalUnit];
+            if (autoMap) {
+                const special = autoMap[String(n)];
+                if (special !== undefined) {
+                    return [{ type: "literal", value: special }];
+                }
+            }
+        }
+
+        // numeric formatting
+        const absVal = Math.abs(n);
+        const unitNames = RTF_UNITS[this.#style];
+        const unitWord = unitNames[canonicalUnit];
+        const pluralUnit = absVal === 1 ? unitWord : (this.#style === "long" ? canonicalUnit + "s" : unitWord);
+
+        if (n < 0) {
+            // past: "3 days ago"
+            return [
+                { type: "integer", value: String(absVal), unit: canonicalUnit },
+                { type: "literal", value: " " + pluralUnit + " ago" },
+            ];
+        } else {
+            // future: "in 3 days"
+            return [
+                { type: "literal", value: "in " },
+                { type: "integer", value: String(absVal), unit: canonicalUnit },
+                { type: "literal", value: " " + pluralUnit },
+            ];
+        }
+    }
+
+    resolvedOptions() {
+        return { locale: "en-US", numeric: this.#numeric, style: this.#style, numberingSystem: "latn" };
+    }
+
+    static supportedLocalesOf() {
+        return ["en-US"];
+    }
+}
+
+function _rtfCanonicalUnit(unit) {
+    // Accept both singular and plural forms
+    let canonical = unit;
+    if (canonical.endsWith("s")) {
+        canonical = canonical.slice(0, -1);
+    }
+    if (!RTF_VALID_UNITS.includes(canonical)) {
+        throw new RangeError("Invalid unit: " + unit);
+    }
+    return canonical;
+}
+
+function RelativeTimeFormat(locales, options) {
+    return new RelativeTimeFormatImpl(locales, options);
+}
+RelativeTimeFormat.prototype = RelativeTimeFormatImpl.prototype;
+Object.defineProperty(RelativeTimeFormat.prototype, "constructor", { value: RelativeTimeFormat, writable: true, configurable: true });
+RelativeTimeFormat.supportedLocalesOf = RelativeTimeFormatImpl.supportedLocalesOf;
+Object.defineProperty(RelativeTimeFormatImpl.prototype, Symbol.toStringTag, {
+    value: "Intl.RelativeTimeFormat", writable: false, enumerable: false, configurable: true
+});
+
 // ─── Static helpers ────────────────────────────────────────────────────────────
 
 function getCanonicalLocales(locales) {
@@ -829,10 +986,71 @@ const Intl = {
     supportedValuesOf,
 
     // Stubs for unsupported APIs
-    RelativeTimeFormat: undefined,
+    RelativeTimeFormat,
     Locale: undefined,
     DisplayNames: undefined,
     DurationFormat: undefined,
+};
+
+// Polyfill String.prototype.localeCompare to delegate to Intl.Collator
+// so that options like { numeric: true } are respected.
+const _origLocaleCompare = String.prototype.localeCompare;
+String.prototype.localeCompare = function(that, locales, options) {
+    if (this == null) throw new TypeError("String.prototype.localeCompare called on null or undefined");
+    if (arguments.length > 1) {
+        return new CollatorImpl(locales, options).compare(String(this), String(that));
+    }
+    return _origLocaleCompare.call(this, that);
+};
+
+// Polyfill Date.prototype.toLocaleString / toLocaleDateString / toLocaleTimeString
+// to delegate to Intl.DateTimeFormat when options (especially timeZone) are provided.
+// QuickJS's native implementations ignore the options parameter.
+const _toLocaleDefaults = {
+    year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "2-digit", second: "2-digit",
+};
+const _toLocaleDateDefaults = {
+    year: "numeric", month: "numeric", day: "numeric",
+};
+const _toLocaleTimeDefaults = {
+    hour: "numeric", minute: "2-digit", second: "2-digit",
+};
+const _dateTimeFields = ["year", "month", "day", "hour", "minute", "second",
+    "weekday", "era", "timeZoneName", "dateStyle", "timeStyle"];
+
+function _hasDateTimeFields(opts) {
+    for (const k of _dateTimeFields) {
+        if (opts[k] !== undefined) return true;
+    }
+    return false;
+}
+
+const _origToLocaleString = Date.prototype.toLocaleString;
+Date.prototype.toLocaleString = function(locales, options) {
+    if (options !== undefined && options !== null && typeof options === "object") {
+        const opts = _hasDateTimeFields(options) ? options : { ..._toLocaleDefaults, ...options };
+        return new DateTimeFormatImpl(locales, opts).format(this);
+    }
+    return _origToLocaleString.call(this);
+};
+
+const _origToLocaleDateString = Date.prototype.toLocaleDateString;
+Date.prototype.toLocaleDateString = function(locales, options) {
+    if (options !== undefined && options !== null && typeof options === "object") {
+        const opts = _hasDateTimeFields(options) ? options : { ..._toLocaleDateDefaults, ...options };
+        return new DateTimeFormatImpl(locales, opts).format(this);
+    }
+    return _origToLocaleDateString.call(this);
+};
+
+const _origToLocaleTimeString = Date.prototype.toLocaleTimeString;
+Date.prototype.toLocaleTimeString = function(locales, options) {
+    if (options !== undefined && options !== null && typeof options === "object") {
+        const opts = _hasDateTimeFields(options) ? options : { ..._toLocaleTimeDefaults, ...options };
+        return new DateTimeFormatImpl(locales, opts).format(this);
+    }
+    return _origToLocaleTimeString.call(this);
 };
 
 export { Intl };

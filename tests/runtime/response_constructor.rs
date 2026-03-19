@@ -10,10 +10,7 @@ fn compiled_response_constructor() -> CompiledTest {
     CompiledTest::new(path, true).expect("Failed to compile response_constructor")
 }
 
-async fn run_test(
-    compiled: &CompiledTest,
-    func_name: &str,
-) -> anyhow::Result<()> {
+async fn run_test(compiled: &CompiledTest, func_name: &str) -> anyhow::Result<()> {
     let (result, _output) = invoke_and_capture_output(
         compiled.wasm_path(),
         Some("example:response-constructor/response-constructor-exports"),

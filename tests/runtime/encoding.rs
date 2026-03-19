@@ -54,9 +54,7 @@ async fn encoding(#[tagged_as("encoding")] compiled: &CompiledTest) -> anyhow::R
 }
 
 #[test]
-async fn encoding_coercion(
-    #[tagged_as("encoding")] compiled: &CompiledTest,
-) -> anyhow::Result<()> {
+async fn encoding_coercion(#[tagged_as("encoding")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test2", &[]).await;
     let r = r?;
 

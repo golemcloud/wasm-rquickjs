@@ -146,29 +146,25 @@ fn collator_compare_impl(
     numeric: bool,
     ignore_punctuation: bool,
 ) -> i32 {
-    let mut a_str = a.to_string();
-    let mut b_str = b.to_string();
+    let a_str: String = if ignore_punctuation {
+        a.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect()
+    } else {
+        a.to_string()
+    };
+    let b_str: String = if ignore_punctuation {
+        b.chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect()
+    } else {
+        b.to_string()
+    };
 
-    if ignore_punctuation {
-        a_str = a_str.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace()).collect();
-        b_str = b_str.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace()).collect();
-    }
-
-    if numeric {
-        let a_num = extract_leading_number(&a_str);
-        let b_num = extract_leading_number(&b_str);
-        if let (Some((a_val, a_rest)), Some((b_val, b_rest))) = (a_num, b_num) {
-            if a_val != b_val {
-                return if a_val < b_val { -1 } else { 1 };
-            }
-            a_str = a_rest;
-            b_str = b_rest;
-        }
-    }
-
-    let result = match sensitivity {
-        "base" | "accent" => a_str.to_lowercase().cmp(&b_str.to_lowercase()),
-        _ => a_str.cmp(&b_str),
+    let result = if numeric {
+        natural_compare(&a_str, &b_str, sensitivity)
+    } else {
+        compare_text(&a_str, &b_str, sensitivity)
     };
 
     match result {
@@ -178,18 +174,73 @@ fn collator_compare_impl(
     }
 }
 
-fn extract_leading_number(s: &str) -> Option<(f64, String)> {
-    let num_end = s
-        .char_indices()
-        .take_while(|(_, c)| c.is_ascii_digit() || *c == '.')
-        .last()
-        .map(|(i, c)| i + c.len_utf8())
-        .unwrap_or(0);
-    if num_end == 0 {
-        return None;
+#[derive(Debug)]
+enum Segment<'a> {
+    Text(&'a str),
+    Number(&'a str), // raw digit string, compared by magnitude without parsing
+}
+
+fn split_segments(s: &str) -> Vec<Segment<'_>> {
+    let mut segments = Vec::new();
+    let mut chars = s.char_indices().peekable();
+    while chars.peek().is_some() {
+        let (start, c) = *chars.peek().unwrap();
+        if c.is_ascii_digit() {
+            // Consume digit run
+            while chars.peek().is_some_and(|(_, ch)| ch.is_ascii_digit()) {
+                chars.next();
+            }
+            let end = chars.peek().map(|(i, _)| *i).unwrap_or(s.len());
+            segments.push(Segment::Number(&s[start..end]));
+        } else {
+            // Consume non-digit run
+            chars.next();
+            while chars.peek().is_some_and(|(_, ch)| !ch.is_ascii_digit()) {
+                chars.next();
+            }
+            let end = chars.peek().map(|(i, _)| *i).unwrap_or(s.len());
+            segments.push(Segment::Text(&s[start..end]));
+        }
     }
-    let num_str = &s[..num_end];
-    num_str.parse::<f64>().ok().map(|v| (v, s[num_end..].to_string()))
+    segments
+}
+
+/// Compare two digit strings by numeric magnitude without parsing to integer.
+/// Strips leading zeros, then compares by length (longer = larger), then lexicographically.
+fn compare_numeric_strings(a: &str, b: &str) -> std::cmp::Ordering {
+    let a_trimmed = a.trim_start_matches('0');
+    let b_trimmed = b.trim_start_matches('0');
+    a_trimmed
+        .len()
+        .cmp(&b_trimmed.len())
+        .then_with(|| a_trimmed.cmp(b_trimmed))
+}
+
+fn compare_text(a: &str, b: &str, sensitivity: &str) -> std::cmp::Ordering {
+    match sensitivity {
+        "base" | "accent" => a.to_lowercase().cmp(&b.to_lowercase()),
+        _ => a.cmp(b),
+    }
+}
+
+fn natural_compare(a: &str, b: &str, sensitivity: &str) -> std::cmp::Ordering {
+    let segs_a = split_segments(a);
+    let segs_b = split_segments(b);
+
+    for (sa, sb) in segs_a.iter().zip(segs_b.iter()) {
+        let ord = match (sa, sb) {
+            (Segment::Number(da), Segment::Number(db)) => compare_numeric_strings(da, db),
+            (Segment::Text(ta), Segment::Text(tb)) => compare_text(ta, tb, sensitivity),
+            // Number segments sort before text segments
+            (Segment::Number(..), Segment::Text(_)) => std::cmp::Ordering::Less,
+            (Segment::Text(_), Segment::Number(..)) => std::cmp::Ordering::Greater,
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+
+    segs_a.len().cmp(&segs_b.len())
 }
 
 fn segment_impl(text: &str, granularity: &str) -> String {
