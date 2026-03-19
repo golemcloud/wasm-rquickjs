@@ -1210,10 +1210,25 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         escape_js_string(&init.url)
     ));
 
-    let prologue = format!(
+    // Define import.meta properties and also shim __filename/__dirname as
+    // top-level variables. Many libraries (especially Rollup-bundled CJS→ESM)
+    // reference bare __dirname/__filename which don't exist in ESM scope.
+    let mut prologue = format!(
         "Object.defineProperties(import.meta,{{{}}});",
         props.join(",")
     );
+    if let Some(ref filename) = init.filename {
+        prologue.push_str(&format!(
+            "var __filename=\"{}\";",
+            escape_js_string(filename)
+        ));
+    }
+    if let Some(ref dirname) = init.dirname {
+        prologue.push_str(&format!(
+            "var __dirname=\"{}\";",
+            escape_js_string(dirname)
+        ));
+    }
 
     if let Some(rest) = source.strip_prefix("#!") {
         if let Some(newline_pos) = rest.find('\n') {
