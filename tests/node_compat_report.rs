@@ -14,308 +14,24 @@ test_r::enable!();
 mod common;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use common::js_subtest_parser::{
     SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
 };
-use common::{setup_node_compat_test_files, strip_jsonc_comments};
-use futures::FutureExt;
+use common::{
+    PreparedComponent, TestInstance, classify_test, setup_node_compat_test_files,
+    strip_jsonc_comments, uses_node_internals,
+};
 use futures::stream::{FuturesUnordered, StreamExt};
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use test_r::test;
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
-use wasmtime::component::{Component, Linker, ResourceTable, Val};
-use wasmtime::{Engine, Store, UpdateDeadline};
-use wasmtime_wasi::cli::OutputFile;
-use wasmtime_wasi::p2::bindings;
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
-
-// --- Host type (same as common/mod.rs) ---
-
-#[derive(Clone)]
-struct Host {
-    pub table: Arc<Mutex<ResourceTable>>,
-    pub wasi: Arc<Mutex<WasiCtx>>,
-    pub wasi_http: Arc<WasiHttpCtx>,
-    pub started_at: Instant,
-    pub timeout: Duration,
-}
-
-impl WasiView for Host {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: Arc::get_mut(&mut self.wasi)
-                .expect("WasiCtx is shared and cannot be borrowed mutably")
-                .get_mut()
-                .expect("WasiCtx mutex must never fail"),
-            table: Arc::get_mut(&mut self.table)
-                .expect("ResourceTable is shared and cannot be borrowed mutably")
-                .get_mut()
-                .expect("ResourceTable mutex must never fail"),
-        }
-    }
-}
-
-impl WasiHttpView for Host {
-    fn ctx(&mut self) -> &mut WasiHttpCtx {
-        Arc::get_mut(&mut self.wasi_http)
-            .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
-    }
-
-    fn table(&mut self) -> &mut ResourceTable {
-        Arc::get_mut(&mut self.table)
-            .expect("ResourceTable is shared and cannot be borrowed mutably")
-            .get_mut()
-            .expect("ResourceTable mutex must never fail")
-    }
-}
-
-// --- Shared runner: Engine + Component + Linker created once ---
-
-struct SharedRunner {
-    engine: Engine,
-    component: Component,
-    linker: Linker<Host>,
-}
-
-impl SharedRunner {
-    fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let mut config = wasmtime::Config::default();
-        config.wasm_component_model(true);
-        config.epoch_interruption(true);
-        config.cache(Some(wasmtime::Cache::from_file(None)?));
-        let engine = Engine::new(&config)?;
-
-        // Start a background thread that increments the epoch every 10ms
-        let epoch_engine = engine.clone();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                epoch_engine.increment_epoch();
-            }
-        });
-
-        let mut linker: Linker<Host> = Linker::new(&engine);
-
-        wasmtime_wasi::p2::add_to_linker_with_options_async(
-            &mut linker,
-            &bindings::LinkOptions::default(),
-        )?;
-        wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
-
-        let component = Component::from_file(&engine, wasm_path)?;
-
-        Ok(Self {
-            engine,
-            component,
-            linker,
-        })
-    }
-
-    async fn run_test(&self, test_rel_path: &str) -> anyhow::Result<TestResult> {
-        let stdout_file = NamedUtf8TempFile::new()?;
-        let stderr_file = NamedUtf8TempFile::new()?;
-        let temp_dir = Utf8TempDir::new()?;
-
-        // Setup test files in temp dir
-        setup_node_compat_test_files(temp_dir.path(), test_rel_path)?;
-
-        // Create store with fresh WASI context
-        let ctx = WasiCtx::builder()
-            .stdout(OutputFile::new(stdout_file.reopen()?))
-            .stderr(OutputFile::new(stderr_file.reopen()?))
-            .arg("test")
-            .env("TEST_KEY", "TEST_VALUE")
-            .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
-            .inherit_network()
-            .allow_ip_name_lookup(true)
-            .build();
-        let http_ctx = WasiHttpCtx::new();
-        let host = Host {
-            table: Arc::new(Mutex::new(ResourceTable::new())),
-            wasi: Arc::new(Mutex::new(ctx)),
-            wasi_http: Arc::new(http_ctx),
-            started_at: Instant::now(),
-            timeout: Duration::from_secs(30),
-        };
-
-        let mut store = Store::new(&self.engine, host);
-        store.set_epoch_deadline(0);
-        store.epoch_deadline_callback(|cx| {
-            let data = cx.data();
-            if data.started_at.elapsed() >= data.timeout {
-                Ok(UpdateDeadline::Interrupt)
-            } else {
-                Ok(UpdateDeadline::YieldCustom(
-                    1,
-                    tokio::task::yield_now().boxed(),
-                ))
-            }
-        });
-        let instance = self
-            .linker
-            .instantiate_async(&mut store, &self.component)
-            .await?;
-
-        let guest_path = format!("/home/node/test/{}", test_rel_path);
-
-        let func = instance
-            .get_func(&mut store, "run-test")
-            .ok_or_else(|| anyhow::anyhow!("Function run-test not found"))?;
-
-        let args = [Val::String(guest_path)];
-        let mut results = vec![Val::Bool(false)];
-
-        let invoke_result = match func.call_async(&mut store, &args, &mut results).await {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                let msg = format!("{e:#}");
-                if msg.contains("epoch") || msg.contains("interrupt") {
-                    Err(anyhow::anyhow!("Timeout (epoch deadline exceeded)"))
-                } else {
-                    Err(anyhow::anyhow!(e))
-                }
-            }
-        };
-
-        let _stdout = fs::read_to_string(&stdout_file).unwrap_or_default();
-        let _stderr = fs::read_to_string(&stderr_file).unwrap_or_default();
-
-        match invoke_result {
-            Ok(()) => match &results[0] {
-                Val::String(s) => {
-                    if s.starts_with("PASS") {
-                        Ok(TestResult::Pass)
-                    } else if let Some(reason) = s.strip_prefix("SKIP:") {
-                        Ok(TestResult::Skip(reason.trim().to_string()))
-                    } else if let Some(msg) = s.strip_prefix("FAIL:") {
-                        Ok(TestResult::Fail(msg.trim().to_string()))
-                    } else {
-                        Ok(TestResult::Fail(s.clone()))
-                    }
-                }
-                other => Ok(TestResult::Fail(format!("Unexpected return: {other:?}"))),
-            },
-            Err(e) => Ok(TestResult::Error(format!("{e:#}"))),
-        }
-    }
-
-    async fn run_subtest(
-        &self,
-        test_rel_path: &str,
-        source: &str,
-        discovery: &SubtestDiscovery,
-        subtest_index: usize,
-    ) -> anyhow::Result<TestResult> {
-        let stdout_file = NamedUtf8TempFile::new()?;
-        let stderr_file = NamedUtf8TempFile::new()?;
-        let temp_dir = Utf8TempDir::new()?;
-
-        // Setup test files in temp dir
-        setup_node_compat_test_files(temp_dir.path(), test_rel_path)?;
-
-        // Rewrite the test file to isolate the target subtest
-        let rewritten = match discovery {
-            SubtestDiscovery::Block(blocks) => rewrite_for_block(source, blocks, subtest_index),
-            SubtestDiscovery::NodeTest(_) => rewrite_for_node_test(source, subtest_index),
-            SubtestDiscovery::None => source.to_string(),
-        };
-
-        // Write the rewritten file
-        let test_filename = test_rel_path.rsplit('/').next().unwrap_or(test_rel_path);
-        let suite = test_rel_path.split('/').next().unwrap_or("parallel");
-        let rewritten_path = temp_dir
-            .path()
-            .join("home")
-            .join("node")
-            .join("test")
-            .join(suite)
-            .join(test_filename);
-        fs::write(&rewritten_path, &rewritten)?;
-
-        // Create store with fresh WASI context
-        let ctx = WasiCtx::builder()
-            .stdout(OutputFile::new(stdout_file.reopen()?))
-            .stderr(OutputFile::new(stderr_file.reopen()?))
-            .arg("test")
-            .env("TEST_KEY", "TEST_VALUE")
-            .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
-            .inherit_network()
-            .allow_ip_name_lookup(true)
-            .build();
-        let http_ctx = WasiHttpCtx::new();
-        let host = Host {
-            table: Arc::new(Mutex::new(ResourceTable::new())),
-            wasi: Arc::new(Mutex::new(ctx)),
-            wasi_http: Arc::new(http_ctx),
-            started_at: Instant::now(),
-            timeout: Duration::from_secs(30),
-        };
-
-        let mut store = Store::new(&self.engine, host);
-        store.set_epoch_deadline(0);
-        store.epoch_deadline_callback(|cx| {
-            let data = cx.data();
-            if data.started_at.elapsed() >= data.timeout {
-                Ok(UpdateDeadline::Interrupt)
-            } else {
-                Ok(UpdateDeadline::YieldCustom(
-                    1,
-                    tokio::task::yield_now().boxed(),
-                ))
-            }
-        });
-        let instance = self
-            .linker
-            .instantiate_async(&mut store, &self.component)
-            .await?;
-
-        let guest_path = format!("/home/node/test/{}", test_rel_path);
-        let func = instance
-            .get_func(&mut store, "run-test")
-            .ok_or_else(|| anyhow::anyhow!("Function run-test not found"))?;
-
-        let args = [Val::String(guest_path)];
-        let mut results = vec![Val::Bool(false)];
-
-        let invoke_result = match func.call_async(&mut store, &args, &mut results).await {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                let msg = format!("{e:#}");
-                if msg.contains("epoch") || msg.contains("interrupt") {
-                    Err(anyhow::anyhow!("Timeout (epoch deadline exceeded)"))
-                } else {
-                    Err(anyhow::anyhow!(e))
-                }
-            }
-        };
-
-        match invoke_result {
-            Ok(()) => match &results[0] {
-                Val::String(s) => {
-                    if s.starts_with("PASS") {
-                        Ok(TestResult::Pass)
-                    } else if let Some(reason) = s.strip_prefix("SKIP:") {
-                        Ok(TestResult::Skip(reason.trim().to_string()))
-                    } else if let Some(msg) = s.strip_prefix("FAIL:") {
-                        Ok(TestResult::Fail(msg.trim().to_string()))
-                    } else {
-                        Ok(TestResult::Fail(s.clone()))
-                    }
-                }
-                other => Ok(TestResult::Fail(format!("Unexpected return: {other:?}"))),
-            },
-            Err(e) => Ok(TestResult::Error(format!("{e:#}"))),
-        }
-    }
-}
+use wasmtime::component::Val;
 
 #[derive(Debug, Clone)]
 enum TestResult {
@@ -732,199 +448,6 @@ fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     Ok(wasm_path)
 }
 
-/// Classify a test filename into a module category based on its name prefix.
-fn classify_test(filename: &str) -> &str {
-    // Strip "test-" prefix
-    let name = filename
-        .strip_prefix("test-")
-        .unwrap_or(filename)
-        .strip_suffix(".js")
-        .unwrap_or(filename);
-
-    if name.starts_with("path") {
-        "path"
-    } else if name.starts_with("assert") {
-        "assert"
-    } else if name.starts_with("buffer") {
-        "buffer"
-    } else if name.starts_with("stream") {
-        "stream"
-    } else if name.starts_with("string-decoder") || name.starts_with("stringdecoder") {
-        "string_decoder"
-    } else if name.starts_with("url") {
-        "url"
-    } else if name.starts_with("util") {
-        "util"
-    } else if name.starts_with("querystring") {
-        "querystring"
-    } else if name.starts_with("events") || name.starts_with("event-emitter") {
-        "events"
-    } else if name.starts_with("fs") || name.starts_with("file") {
-        "fs"
-    } else if name.starts_with("crypto") {
-        "crypto"
-    } else if name.starts_with("http") || name.starts_with("http2") || name.starts_with("https") {
-        "http"
-    } else if name.starts_with("net") {
-        "net"
-    } else if name.starts_with("dns") {
-        "dns"
-    } else if name.starts_with("os") {
-        "os"
-    } else if name.starts_with("process") {
-        "process"
-    } else if name.starts_with("child-process") || name.starts_with("child_process") {
-        "child_process"
-    } else if name.starts_with("tls") || name.starts_with("ssl") {
-        "tls"
-    } else if name.starts_with("zlib") {
-        "zlib"
-    } else if name.starts_with("console") {
-        "console"
-    } else if name.starts_with("timers")
-        || name.starts_with("settimeout")
-        || name.starts_with("setinterval")
-        || name.starts_with("setimmediate")
-    {
-        "timers"
-    } else if name.starts_with("worker") || name.starts_with("worker-threads") {
-        "worker_threads"
-    } else if name.starts_with("cluster") {
-        "cluster"
-    } else if name.starts_with("readline") {
-        "readline"
-    } else if name.starts_with("repl") {
-        "repl"
-    } else if name.starts_with("vm") {
-        "vm"
-    } else if name.starts_with("dgram") {
-        "dgram"
-    } else if name.starts_with("tty") {
-        "tty"
-    } else if name.starts_with("async-hooks")
-        || name.starts_with("async-context")
-        || name.starts_with("async-local-storage")
-    {
-        "async_hooks"
-    } else if name.starts_with("inspector") || name.starts_with("debugger") {
-        "inspector"
-    } else if name.starts_with("module")
-        || name.starts_with("require")
-        || name.starts_with("esm")
-        || name.starts_with("cjs")
-        || name.starts_with("loaders")
-    {
-        "module"
-    } else if name.starts_with("perf") || name.starts_with("performance") {
-        "perf_hooks"
-    } else if name.starts_with("diagnostics") {
-        "diagnostics_channel"
-    } else if name.starts_with("domain") {
-        "domain"
-    } else if name.starts_with("v8") {
-        "v8"
-    } else if name.starts_with("trace") {
-        "trace_events"
-    } else if name.starts_with("runner") || name.starts_with("test-runner") {
-        "test_runner"
-    } else if name.starts_with("abortcontroller")
-        || name.starts_with("abortsignal")
-        || name.starts_with("aborted")
-    {
-        "abort"
-    } else if name.starts_with("encoding")
-        || name.starts_with("textdecoder")
-        || name.starts_with("textencoder")
-    {
-        "encoding"
-    } else if name.starts_with("blob") {
-        "blob"
-    } else if name.starts_with("fetch")
-        || name.starts_with("response")
-        || name.starts_with("request")
-        || name.starts_with("headers")
-    {
-        "fetch"
-    } else if name.starts_with("readable")
-        || name.starts_with("writable")
-        || name.starts_with("transform")
-        || name.starts_with("duplex")
-    {
-        "stream"
-    } else if name.starts_with("sqlite") {
-        "sqlite"
-    } else if name.starts_with("whatwg") {
-        "whatwg"
-    } else if name.starts_with("webcrypto") {
-        "webcrypto"
-    } else if name.starts_with("permission") {
-        "permission"
-    } else if name.starts_with("promise") || name.starts_with("promises") {
-        "promises"
-    } else if name.starts_with("global") {
-        "global"
-    } else if name.starts_with("compile") {
-        "compile"
-    } else if name.starts_with("cli") {
-        "cli"
-    } else if name.starts_with("stdin") || name.starts_with("stdout") || name.starts_with("stdio") {
-        "stdio"
-    } else if name.starts_with("signal") {
-        "signal"
-    } else if name.starts_with("errors") || name.starts_with("error") {
-        "errors"
-    } else if name.starts_with("pipe")
-        || name.starts_with("socket")
-        || name.starts_with("listen")
-        || name.starts_with("tcp")
-    {
-        "net"
-    } else if name.starts_with("webstream") || name.starts_with("webstreams") {
-        "webstreams"
-    } else if name.starts_with("snapshot") {
-        "snapshot"
-    } else if name.starts_with("eslint") {
-        "eslint"
-    } else if name.starts_with("internal") {
-        "internal"
-    } else if name.starts_with("heap") {
-        "heap"
-    } else if name.starts_with("node") {
-        "node"
-    } else if name.starts_with("inspect") {
-        "inspector"
-    } else if name.starts_with("shadow-realm") {
-        "shadow_realm"
-    } else if name.starts_with("btoa") || name.starts_with("atob") {
-        "encoding"
-    } else if name.starts_with("common") {
-        "common"
-    } else {
-        "other"
-    }
-}
-
-/// Check if a test file relies on Node.js internals (not public API).
-///
-/// Detects patterns like `// Flags: --expose-internals`, `require('internal/...')`,
-/// and `internalBinding(...)` in the test source code.
-fn uses_node_internals(test_path: &str) -> bool {
-    let file_path = format!("tests/node_compat/suite/{test_path}");
-    let content = match fs::read_to_string(&file_path) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    // Only check the first 50 lines for the Flags comment (it's always near the top)
-    let header: String = content.lines().take(50).collect::<Vec<_>>().join("\n");
-    if header.contains("--expose-internals") {
-        return true;
-    }
-    // Check the full file for internal requires/bindings
-    content.contains("require('internal/")
-        || content.contains("require(\"internal/")
-        || content.contains("internalBinding(")
-}
-
 #[test]
 async fn generate_node_compat_report() -> anyhow::Result<()> {
     let total_start = Instant::now();
@@ -934,20 +457,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let wasm_path = compile_runner()?;
     println!("Runner WASM: {wasm_path}");
 
-    // Step 2: Create shared runner
+    // Step 2: Create shared prepared component
     println!("=== Loading shared runner ===");
-    let runner = SharedRunner::new(&wasm_path)?;
+    let prepared = Arc::new(PreparedComponent::new(&wasm_path)?);
     println!("Engine and component loaded.");
-
-    // Start a background thread that increments the epoch every second.
-    // This allows epoch-based interruption to enforce timeouts on spinning WASM.
-    let epoch_engine = runner.engine.clone();
-    let _epoch_handle = std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(Duration::from_secs(1));
-            epoch_engine.increment_epoch();
-        }
-    });
 
     // Step 3: Collect all .js test files from all suites
     let suites = ["parallel", "sequential", "es-module"];
@@ -1096,68 +609,194 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         }
     }
 
-    // Collect tests that need execution
-    let tests_to_run: Vec<String> = test_files
-        .iter()
-        .filter(|p| !config_impossible.contains_key(p.as_str()))
-        .cloned()
-        .collect();
+    // Build tasks for unified execution
+    struct TestTask {
+        key: String,
+        test_path: String,
+        skip_reason: Option<String>,
+        rewrite_source: Option<String>,
+        rewrite_discovery: Option<SubtestDiscovery>,
+        rewrite_index: Option<usize>,
+    }
+
+    let mut tasks: Vec<TestTask> = Vec::new();
+    for test_path in &test_files {
+        if config_impossible.contains_key(test_path) {
+            continue;
+        }
+        if let Some(_subtest_names) = config_split_entries.get(test_path) {
+            let source = fs::read_to_string(format!("tests/node_compat/suite/{}", test_path))
+                .unwrap_or_default();
+            let discovery = discover_subtests(test_path, &source);
+
+            let subtest_list: Vec<(usize, String)> = match &discovery {
+                SubtestDiscovery::None => vec![],
+                SubtestDiscovery::Block(blocks) => {
+                    blocks.iter().map(|b| (b.index, b.name.clone())).collect()
+                }
+                SubtestDiscovery::NodeTest(tests) => {
+                    tests.iter().map(|t| (t.index, t.name.clone())).collect()
+                }
+            };
+
+            if subtest_list.is_empty() {
+                eprintln!(
+                    "WARNING: split file {} has 0 discoverable subtests, running as whole file",
+                    test_path
+                );
+                tasks.push(TestTask {
+                    key: test_path.clone(),
+                    test_path: test_path.clone(),
+                    skip_reason: config_skipped.get(test_path).cloned(),
+                    rewrite_source: None,
+                    rewrite_discovery: None,
+                    rewrite_index: None,
+                });
+            } else {
+                let file_skip_reason = config_skipped.get(test_path).cloned();
+                for (idx, subtest_name) in subtest_list {
+                    tasks.push(TestTask {
+                        key: format!("{}#{}", test_path, subtest_name),
+                        test_path: test_path.clone(),
+                        skip_reason: file_skip_reason.clone(),
+                        rewrite_source: Some(source.clone()),
+                        rewrite_discovery: Some(discovery.clone()),
+                        rewrite_index: Some(idx),
+                    });
+                }
+            }
+        } else {
+            tasks.push(TestTask {
+                key: test_path.clone(),
+                test_path: test_path.clone(),
+                skip_reason: config_skipped.get(test_path).cloned(),
+                rewrite_source: None,
+                rewrite_discovery: None,
+                rewrite_index: None,
+            });
+        }
+    }
 
     let parallelism = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
+    let total_to_run = tasks.len();
     println!(
-        "\n=== Running {} tests ({} impossible, skipped), concurrency={} ===\n",
-        tests_to_run.len(),
-        test_files.len() - tests_to_run.len(),
+        "\n=== Running {} tasks ({} impossible, skipped), concurrency={} ===\n",
+        total_to_run,
+        test_files.len() - test_files.iter().filter(|p| !config_impossible.contains_key(p.as_str())).count(),
         parallelism
     );
 
-    // Run whole-file tests in parallel, limited to the number of CPU cores
-    let runner = Arc::new(runner);
     let progress = Arc::new(AtomicUsize::new(0));
-    let total_to_run = tests_to_run.len();
     let semaphore = Arc::new(tokio::sync::Semaphore::new(parallelism));
 
     let mut futures = FuturesUnordered::new();
-    for test_path in tests_to_run.clone() {
-        let runner = runner.clone();
+    for task in tasks {
+        let prepared = prepared.clone();
         let progress = progress.clone();
         let semaphore = semaphore.clone();
-        let skip_reason = config_skipped.get(&test_path).cloned();
         futures.push(tokio::spawn(async move {
             let _permit = semaphore.acquire().await.expect("semaphore closed");
             let test_start = Instant::now();
-            let r = match tokio::time::timeout(Duration::from_secs(60), runner.run_test(&test_path))
-                .await
+
+            let r = match tokio::time::timeout(Duration::from_secs(60), async {
+                let mut instance = TestInstance::from_prepared(&prepared).await?;
+                instance.set_epoch_deadline(30);
+                setup_node_compat_test_files(instance.temp_dir_path(), &task.test_path)?;
+
+                // If rewrite is provided, rewrite the test file to isolate a subtest
+                if let (Some(source), Some(discovery), Some(idx)) =
+                    (&task.rewrite_source, &task.rewrite_discovery, task.rewrite_index)
+                {
+                    let rewritten = match discovery {
+                        SubtestDiscovery::Block(blocks) => {
+                            rewrite_for_block(source, blocks, idx)
+                        }
+                        SubtestDiscovery::NodeTest(_) => rewrite_for_node_test(source, idx),
+                        SubtestDiscovery::None => source.to_string(),
+                    };
+
+                    let test_filename =
+                        task.test_path.rsplit('/').next().unwrap_or(&task.test_path);
+                    let suite = task.test_path.split('/').next().unwrap_or("parallel");
+                    let rewritten_path = instance
+                        .temp_dir_path()
+                        .join("home")
+                        .join("node")
+                        .join("test")
+                        .join(suite)
+                        .join(test_filename);
+                    fs::write(&rewritten_path, &rewritten)?;
+                }
+
+                let guest_path = format!("/home/node/test/{}", task.test_path);
+                let (result, _stdout, _stderr) = instance
+                    .invoke_and_capture_output_with_stderr(
+                        None,
+                        "run-test",
+                        &[Val::String(guest_path)],
+                    )
+                    .await;
+
+                match result {
+                    Ok(Some(Val::String(ref s))) if s.starts_with("PASS") => {
+                        Ok::<TestResult, anyhow::Error>(TestResult::Pass)
+                    }
+                    Ok(Some(Val::String(ref s))) if s.starts_with("SKIP:") => Ok(
+                        TestResult::Skip(s.strip_prefix("SKIP:").unwrap().trim().to_string()),
+                    ),
+                    Ok(Some(Val::String(ref s))) if s.starts_with("FAIL:") => Ok(
+                        TestResult::Fail(s.strip_prefix("FAIL:").unwrap().trim().to_string()),
+                    ),
+                    Ok(Some(Val::String(ref s))) => Ok(TestResult::Fail(s.clone())),
+                    Ok(other) => {
+                        Ok(TestResult::Fail(format!("Unexpected return: {other:?}")))
+                    }
+                    Err(e) => {
+                        let msg = format!("{e:#}");
+                        if msg.contains("epoch") || msg.contains("interrupt") {
+                            Ok(TestResult::Error(
+                                "Timeout (epoch deadline exceeded)".to_string(),
+                            ))
+                        } else {
+                            Ok(TestResult::Error(msg))
+                        }
+                    }
+                }
+            })
+            .await
             {
                 Ok(Ok(r)) => r,
                 Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
                 Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
             };
+
             let elapsed = test_start.elapsed();
             let p = progress.fetch_add(1, Ordering::Relaxed) + 1;
-            (test_path, r, elapsed, skip_reason, p)
+            (task.key, task.test_path, r, elapsed, task.skip_reason, p)
         }));
     }
 
     while let Some(join_result) = futures.next().await {
-        let (test_path, r, elapsed, skip_reason, p) = join_result.expect("test task panicked");
-        let filename = test_path.rsplit('/').next().unwrap_or(&test_path);
-        let is_internal = internals_tests.contains(&test_path);
+        let (key, _test_path, r, elapsed, skip_reason, p) =
+            join_result.expect("test task panicked");
+        let display_name = key.rsplit('/').next().unwrap_or(&key);
+        let base_path = key.split('#').next().unwrap_or(&key);
+        let is_internal = internals_tests.contains(base_path);
         let tag = if is_internal { " [internal]" } else { "" };
 
         let result = if let Some(reason) = skip_reason {
             match &r {
                 TestResult::Pass => {
                     println!(
-                        "[{:>4}/{total_to_run}] PASS* {filename}{tag} ({:.1}s) [was skipped: {reason}]",
+                        "[{:>4}/{total_to_run}] PASS* {display_name}{tag} ({:.1}s) [was skipped: {reason}]",
                         p,
                         elapsed.as_secs_f64()
                     );
-                    should_not_be_skipped.push(test_path.clone());
+                    should_not_be_skipped.push(key.clone());
                     skipped_observations.insert(
-                        test_path.clone(),
+                        key.clone(),
                         SkippedObservation {
                             config_reason: reason,
                             actual: r.clone(),
@@ -1181,15 +820,18 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
                     if let Some(ref imp_reason) = inferred {
                         println!(
-                            "[{:>4}/{total_to_run}] IMPOSSIBLE* {filename}{tag} (auto: {imp_reason})",
+                            "[{:>4}/{total_to_run}] IMPOSSIBLE* {display_name}{tag} (auto: {imp_reason})",
                             p
                         );
                     } else {
-                        println!("[{:>4}/{total_to_run}] SKIP  {filename}{tag} ({reason})", p);
+                        println!(
+                            "[{:>4}/{total_to_run}] SKIP  {display_name}{tag} ({reason})",
+                            p
+                        );
                     }
 
                     skipped_observations.insert(
-                        test_path.clone(),
+                        key.clone(),
                         SkippedObservation {
                             config_reason: reason.clone(),
                             actual: r.clone(),
@@ -1203,13 +845,16 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             match &r {
                 TestResult::Pass => {
                     println!(
-                        "[{:>4}/{total_to_run}] PASS  {filename}{tag} ({:.1}s)",
+                        "[{:>4}/{total_to_run}] PASS  {display_name}{tag} ({:.1}s)",
                         p,
                         elapsed.as_secs_f64()
                     );
                 }
                 TestResult::Skip(reason) => {
-                    println!("[{:>4}/{total_to_run}] SKIP  {filename}{tag} ({reason})", p);
+                    println!(
+                        "[{:>4}/{total_to_run}] SKIP  {display_name}{tag} ({reason})",
+                        p
+                    );
                 }
                 TestResult::Fail(msg) => {
                     let short_msg = if msg.len() > 120 {
@@ -1218,7 +863,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                         msg.clone()
                     };
                     println!(
-                        "[{:>4}/{total_to_run}] FAIL  {filename}{tag}: {short_msg}",
+                        "[{:>4}/{total_to_run}] FAIL  {display_name}{tag}: {short_msg}",
                         p
                     );
                 }
@@ -1229,7 +874,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                         msg.clone()
                     };
                     println!(
-                        "[{:>4}/{total_to_run}] ERROR {filename}{tag}: {short_msg}",
+                        "[{:>4}/{total_to_run}] ERROR {display_name}{tag}: {short_msg}",
                         p
                     );
                 }
@@ -1237,118 +882,8 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             r
         };
 
-        results.insert(test_path, result);
+        results.insert(key, result);
     }
-
-    // Run subtests in parallel for split files
-    println!("\n=== Running subtests for split files ===\n");
-    let subtest_progress = Arc::new(AtomicUsize::new(0));
-    let mut subtest_futures = FuturesUnordered::new();
-
-    // Prepare all subtest tasks
-    let mut total_subtests = 0usize;
-    for test_path in &test_files {
-        // Don't run subtests for impossible tests — they were never executed
-        if config_impossible.contains_key(test_path) {
-            continue;
-        }
-        if config_split_entries.contains_key(test_path) {
-            let source = fs::read_to_string(format!("tests/node_compat/suite/{}", test_path))
-                .unwrap_or_default();
-            let discovery = discover_subtests(test_path, &source);
-
-            let subtest_list: Vec<(usize, String)> = match &discovery {
-                SubtestDiscovery::None => vec![],
-                SubtestDiscovery::Block(blocks) => {
-                    blocks.iter().map(|b| (b.index, b.name.clone())).collect()
-                }
-                SubtestDiscovery::NodeTest(tests) => {
-                    tests.iter().map(|t| (t.index, t.name.clone())).collect()
-                }
-            };
-
-            for (idx, subtest_name) in subtest_list {
-                total_subtests += 1;
-                let runner = runner.clone();
-                let progress = subtest_progress.clone();
-                let semaphore = semaphore.clone();
-                let test_path = test_path.clone();
-                let source = source.clone();
-                let discovery = discovery.clone();
-                subtest_futures.push(tokio::spawn(async move {
-                    let _permit = semaphore.acquire().await.expect("semaphore closed");
-                    let sub_result = match tokio::time::timeout(
-                        Duration::from_secs(60),
-                        runner.run_subtest(&test_path, &source, &discovery, idx),
-                    )
-                    .await
-                    {
-                        Ok(Ok(r)) => r,
-                        Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-                        Err(_) => TestResult::Error("Timeout".to_string()),
-                    };
-                    let p = progress.fetch_add(1, Ordering::Relaxed) + 1;
-                    let subtest_key = format!("{}#{}", test_path, subtest_name);
-                    (subtest_key, sub_result, test_path, subtest_name, p)
-                }));
-            }
-        }
-    }
-
-    println!("Running {total_subtests} subtests in parallel...\n");
-
-    while let Some(join_result) = subtest_futures.next().await {
-        let (subtest_key, sub_result, test_path, subtest_name, p) =
-            join_result.expect("subtest task panicked");
-        let filename = test_path.rsplit('/').next().unwrap_or(&test_path);
-        let is_internal = internals_tests.contains(&test_path);
-        let sub_filename = format!("{}#{}", filename, subtest_name);
-        let sub_tag = if is_internal { " [internal]" } else { "" };
-
-        match &sub_result {
-            TestResult::Pass => {
-                println!("[{:>4}/{total_subtests}] PASS  {sub_filename}{sub_tag}", p)
-            }
-            TestResult::Skip(r) => {
-                println!(
-                    "[{:>4}/{total_subtests}] SKIP  {sub_filename}{sub_tag} ({r})",
-                    p
-                )
-            }
-            TestResult::Fail(msg) => {
-                let short = if msg.len() > 100 {
-                    &msg[..100]
-                } else {
-                    msg.as_str()
-                };
-                println!(
-                    "[{:>4}/{total_subtests}] FAIL  {sub_filename}{sub_tag}: {short}",
-                    p
-                );
-            }
-            TestResult::Error(msg) => {
-                let short = if msg.len() > 100 {
-                    &msg[..100]
-                } else {
-                    msg.as_str()
-                };
-                println!(
-                    "[{:>4}/{total_subtests}] ERROR {sub_filename}{sub_tag}: {short}",
-                    p
-                );
-            }
-        }
-
-        results.insert(subtest_key, sub_result);
-    }
-
-    // Build set of file-level paths that have subtests — we count subtests instead of
-    // the parent file entry for those, to get fine-grained numbers.
-    let files_with_subtests: BTreeSet<String> = results
-        .keys()
-        .filter(|k| k.contains('#'))
-        .map(|k| k.split('#').next().unwrap().to_string())
-        .collect();
 
     // Compute counts from collected results
     let mut pass_count = 0usize;
@@ -1364,10 +899,6 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     for (path, result) in &results {
         let base_path = path.split('#').next().unwrap_or(path);
-        // Skip file-level entries that have subtests (subtests are counted individually)
-        if !path.contains('#') && files_with_subtests.contains(path) {
-            continue;
-        }
         let is_internal = internals_tests.contains(base_path);
         let bucket = report_bucket(path, result, &skipped_observations, &config_impossible);
         match bucket {
@@ -1502,10 +1033,6 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     for (path, result) in &results {
         let base_path = path.split('#').next().unwrap_or(path);
         if internals_tests.contains(base_path) {
-            continue;
-        }
-        // Skip file-level entries that have subtests
-        if !path.contains('#') && files_with_subtests.contains(path) {
             continue;
         }
         let filename = path.rsplit('/').next().unwrap_or(path);
@@ -1948,10 +1475,6 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     report.push_str("## All Results by Module (Public + Internals)\n\n");
     let mut by_module_all: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
     for (path, result) in &results {
-        // Skip file-level entries that have subtests
-        if !path.contains('#') && files_with_subtests.contains(path) {
-            continue;
-        }
         let filename = path.rsplit('/').next().unwrap_or(path);
         let base_filename = filename.split('#').next().unwrap_or(filename);
         let module = classify_test(base_filename).to_string();

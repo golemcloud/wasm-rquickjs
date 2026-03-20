@@ -1,97 +1,97 @@
 # Node.js v22 Compatibility Report
 
-Generated: 2026-03-20 | Runtime: 4684s | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-03-20 | Runtime: 3923s | Engine: wasm-rquickjs (QuickJS)
 
 ## Summary (Public API Tests)
 
-Tests that rely on Node.js internals (`--expose-internals`, `internalBinding`, `require('internal/...')`) are excluded from the primary counts (1259 internals tests listed separately below).
+Tests that rely on Node.js internals (`--expose-internals`, `internalBinding`, `require('internal/...')`) are excluded from the primary counts (1128 internals tests listed separately below).
 
 | Result | Count | Percentage |
 |--------|-------|------------|
-| ✅ PASS | 2931 | 52.5% |
-| ⏭️ SKIP | 889 | 15.9% |
-| 🚫 IMPOSSIBLE | 982 | 17.6% |
-| ❌ FAIL | 672 | 12.0% |
-| 💥 ERROR | 114 | 2.0% |
-| **Total** | **5588** | **100%** |
+| ✅ PASS | 2889 | 54.4% |
+| ⏭️ SKIP | 1180 | 22.2% |
+| 🚫 IMPOSSIBLE | 1085 | 20.4% |
+| ❌ FAIL | 96 | 1.8% |
+| 💥 ERROR | 57 | 1.1% |
+| **Total** | **5307** | **100%** |
 
 ### All Tests (Public + Internals)
 
-Including 1259 tests that use Node.js internals (`--expose-internals`, `internalBinding`, `require('internal/...')`).
+Including 1128 tests that use Node.js internals (`--expose-internals`, `internalBinding`, `require('internal/...')`).
 
 | Result | Count | Percentage |
 |--------|-------|------------|
-| ✅ PASS | 3102 | 45.3% |
-| ⏭️ SKIP | 1085 | 15.8% |
-| 🚫 IMPOSSIBLE | 1059 | 15.5% |
-| ❌ FAIL | 1482 | 21.6% |
-| 💥 ERROR | 119 | 1.7% |
-| **Total** | **6847** | **100%** |
+| ✅ PASS | 3046 | 47.3% |
+| ⏭️ SKIP | 2062 | 32.0% |
+| 🚫 IMPOSSIBLE | 1162 | 18.1% |
+| ❌ FAIL | 108 | 1.7% |
+| 💥 ERROR | 57 | 0.9% |
+| **Total** | **6435** | **100%** |
 
 ## Results by Module
 
 | Module | Total | Pass | Fail | Error | Skip | Impossible | Pass% |
 |--------|-------|------|------|-------|------|------------|-------|
 | abort | 27 | 26 | 1 | 0 | 0 | 0 | 96.3% |
-| assert | 95 | 95 | 0 | 0 | 0 | 0 | 100.0% |
+| assert | 95 | 94 | 0 | 1 | 0 | 0 | 98.9% |
 | async_hooks | 36 | 4 | 0 | 0 | 32 | 0 | 11.1% |
 | blob | 2 | 2 | 0 | 0 | 0 | 0 | 100.0% |
-| buffer | 174 | 165 | 0 | 7 | 2 | 0 | 94.8% |
-| child_process | 194 | 30 | 64 | 27 | 0 | 73 | 15.5% |
-| cli | 30 | 11 | 11 | 0 | 8 | 0 | 36.7% |
+| buffer | 174 | 164 | 0 | 8 | 2 | 0 | 94.3% |
+| child_process | 113 | 16 | 2 | 2 | 0 | 93 | 14.2% |
+| cli | 30 | 11 | 0 | 0 | 19 | 0 | 36.7% |
 | cluster | 85 | 0 | 0 | 0 | 0 | 85 | 0.0% |
-| common | 11 | 1 | 6 | 0 | 4 | 0 | 9.1% |
+| common | 9 | 1 | 1 | 0 | 7 | 0 | 11.1% |
 | compile | 15 | 0 | 0 | 0 | 0 | 15 | 0.0% |
 | console | 30 | 29 | 0 | 0 | 1 | 0 | 96.7% |
-| crypto | 218 | 204 | 2 | 3 | 9 | 0 | 93.6% |
-| dgram | 97 | 19 | 21 | 9 | 43 | 5 | 19.6% |
+| crypto | 218 | 199 | 2 | 8 | 9 | 0 | 91.3% |
+| dgram | 97 | 19 | 4 | 4 | 65 | 5 | 19.6% |
 | diagnostics_channel | 33 | 18 | 0 | 0 | 14 | 1 | 54.5% |
-| dns | 30 | 2 | 16 | 0 | 12 | 0 | 6.7% |
-| domain | 61 | 28 | 6 | 0 | 26 | 1 | 45.9% |
+| dns | 30 | 2 | 1 | 0 | 27 | 0 | 6.7% |
+| domain | 61 | 28 | 0 | 0 | 32 | 1 | 45.9% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 100.0% |
 | errors | 2 | 0 | 0 | 0 | 2 | 0 | 0.0% |
 | eslint | 22 | 0 | 0 | 0 | 0 | 22 | 0.0% |
 | events | 61 | 59 | 0 | 0 | 2 | 0 | 96.7% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 100.0% |
-| fs | 414 | 369 | 9 | 8 | 28 | 0 | 89.1% |
+| fs | 407 | 364 | 4 | 12 | 26 | 1 | 89.4% |
 | global | 9 | 3 | 0 | 0 | 6 | 0 | 33.3% |
-| heap | 23 | 0 | 4 | 0 | 3 | 16 | 0.0% |
-| http | 831 | 257 | 106 | 20 | 176 | 272 | 30.9% |
+| heap | 19 | 0 | 0 | 0 | 0 | 19 | 0.0% |
+| http | 761 | 250 | 11 | 7 | 197 | 296 | 32.9% |
 | inspector | 89 | 1 | 0 | 0 | 0 | 88 | 1.1% |
 | internal | 1 | 0 | 0 | 0 | 1 | 0 | 0.0% |
-| module | 186 | 88 | 35 | 2 | 54 | 7 | 47.3% |
-| net | 210 | 140 | 7 | 9 | 53 | 1 | 66.7% |
+| module | 172 | 84 | 1 | 0 | 80 | 7 | 48.8% |
+| net | 210 | 137 | 2 | 6 | 64 | 1 | 65.2% |
 | node | 1 | 0 | 0 | 0 | 1 | 0 | 0.0% |
 | os | 5 | 5 | 0 | 0 | 0 | 0 | 100.0% |
-| other | 274 | 69 | 73 | 3 | 92 | 37 | 25.2% |
+| other | 270 | 74 | 3 | 0 | 146 | 47 | 27.4% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 100.0% |
-| perf_hooks | 38 | 3 | 24 | 0 | 10 | 1 | 7.9% |
-| permission | 60 | 5 | 18 | 0 | 34 | 3 | 8.3% |
-| process | 92 | 44 | 4 | 2 | 41 | 1 | 47.8% |
+| perf_hooks | 36 | 3 | 1 | 0 | 31 | 1 | 8.3% |
+| permission | 54 | 5 | 3 | 0 | 41 | 5 | 9.3% |
+| process | 89 | 40 | 0 | 0 | 47 | 2 | 44.9% |
 | promises | 23 | 1 | 0 | 0 | 22 | 0 | 4.3% |
 | querystring | 14 | 14 | 0 | 0 | 0 | 0 | 100.0% |
-| readline | 21 | 0 | 9 | 0 | 10 | 2 | 0.0% |
-| repl | 74 | 1 | 10 | 2 | 0 | 61 | 1.4% |
-| shadow_realm | 11 | 0 | 2 | 0 | 8 | 1 | 0.0% |
+| readline | 21 | 0 | 0 | 0 | 19 | 2 | 0.0% |
+| repl | 66 | 1 | 0 | 0 | 0 | 65 | 1.5% |
+| shadow_realm | 11 | 0 | 0 | 0 | 10 | 1 | 0.0% |
 | signal | 4 | 1 | 0 | 0 | 3 | 0 | 25.0% |
-| snapshot | 58 | 0 | 48 | 0 | 4 | 6 | 0.0% |
+| snapshot | 26 | 0 | 0 | 0 | 0 | 26 | 0.0% |
 | sqlite | 39 | 36 | 3 | 0 | 0 | 0 | 92.3% |
 | stdio | 23 | 14 | 0 | 0 | 9 | 0 | 60.9% |
-| stream | 746 | 709 | 24 | 3 | 9 | 1 | 95.0% |
+| stream | 746 | 709 | 21 | 4 | 11 | 1 | 95.0% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 100.0% |
-| test_runner | 149 | 92 | 43 | 1 | 13 | 0 | 61.7% |
+| test_runner | 149 | 92 | 17 | 1 | 39 | 0 | 61.7% |
 | timers | 56 | 47 | 0 | 0 | 9 | 0 | 83.9% |
-| tls | 198 | 4 | 17 | 0 | 0 | 177 | 2.0% |
+| tls | 188 | 4 | 0 | 0 | 0 | 184 | 2.1% |
 | trace_events | 30 | 15 | 0 | 0 | 14 | 1 | 50.0% |
 | tty | 3 | 0 | 0 | 0 | 3 | 0 | 0.0% |
 | url | 28 | 28 | 0 | 0 | 0 | 0 | 100.0% |
-| util | 47 | 41 | 5 | 0 | 1 | 0 | 87.2% |
-| v8 | 31 | 14 | 7 | 0 | 10 | 0 | 45.2% |
-| vm | 121 | 25 | 24 | 9 | 62 | 1 | 20.7% |
-| webcrypto | 60 | 42 | 2 | 1 | 14 | 1 | 70.0% |
+| util | 47 | 40 | 0 | 1 | 6 | 0 | 85.1% |
+| v8 | 31 | 14 | 0 | 0 | 17 | 0 | 45.2% |
+| vm | 121 | 25 | 2 | 0 | 93 | 1 | 20.7% |
+| webcrypto | 60 | 41 | 0 | 2 | 16 | 1 | 68.3% |
 | webstreams | 67 | 65 | 0 | 0 | 2 | 0 | 97.0% |
-| whatwg | 66 | 13 | 18 | 1 | 34 | 0 | 19.7% |
-| worker_threads | 181 | 19 | 52 | 7 | 0 | 103 | 10.5% |
+| whatwg | 64 | 13 | 3 | 1 | 47 | 0 | 20.3% |
+| worker_threads | 145 | 18 | 13 | 0 | 0 | 114 | 12.4% |
 | zlib | 61 | 52 | 1 | 0 | 8 | 0 | 85.2% |
 
 ## Passing Tests
@@ -120,7 +120,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `es-module/test-require-module-cached-tla.js`
 - `es-module/test-require-module-cycle-cjs-esm-esm.js`
 - `es-module/test-require-module-default-extension.js`
-- `es-module/test-require-module-defined-esmodule.js`
 - `es-module/test-require-module-defined-esmodule.js#block_00_require_esm_should_allow_the_user_override`
 - `es-module/test-require-module-defined-esmodule.js#block_01_block_01`
 - `es-module/test-require-module-detect-entry-point-aou.js`
@@ -161,35 +160,29 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-aborted-util.js#test_01_aborted_with_gc_cleanup`
 - `parallel/test-aborted-util.js#test_02_fails_with_error_if_not_provided_abortsignal`
 - `parallel/test-aborted-util.js#test_03_fails_if_not_provided_a_resource`
-- `parallel/test-abortsignal-cloneable.js`
 - `parallel/test-abortsignal-cloneable.js#test_00_can_create_a_transferable_abort_controller`
 - `parallel/test-abortsignal-cloneable.js#test_01_can_create_a_transferable_abort_signal`
 - `parallel/test-abortsignal-cloneable.js#test_02_a_cloned_abortsignal_does_not_keep_the_event_loop_open`
 - `parallel/test-arm-math-illegal-instruction.js`
-- `parallel/test-assert-async.js`
 - `parallel/test-assert-async.js#block_00_check_assert_rejects`
 - `parallel/test-assert-async.js#block_01_block_01`
 - `parallel/test-assert-async.js#block_02_block_02`
 - `parallel/test-assert-async.js#block_03_block_03`
 - `parallel/test-assert-async.js#block_04_check_assert_doesnotreject`
 - `parallel/test-assert-builtins-not-read-from-filesystem.js`
-- `parallel/test-assert-calltracker-calls.js`
 - `parallel/test-assert-calltracker-calls.js#block_00_block_00`
 - `parallel/test-assert-calltracker-calls.js#block_01_block_01`
 - `parallel/test-assert-calltracker-calls.js#block_02_block_02`
 - `parallel/test-assert-calltracker-calls.js#block_03_block_03`
 - `parallel/test-assert-calltracker-calls.js#block_04_block_04`
 - `parallel/test-assert-calltracker-calls.js#block_05_block_05`
-- `parallel/test-assert-calltracker-getCalls.js`
 - `parallel/test-assert-calltracker-getCalls.js#test_00_assert_calltracker_getcalls`
 - `parallel/test-assert-calltracker-getCalls.js#test_01_assert_calltracker_reset`
 - `parallel/test-assert-calltracker-report.js`
 - `parallel/test-assert-calltracker-verify.js`
 - `parallel/test-assert-checktag.js`
-- `parallel/test-assert-deep-with-error.js`
 - `parallel/test-assert-deep-with-error.js#test_00_handle_error_causes`
 - `parallel/test-assert-deep-with-error.js#test_01_handle_undefined_causes`
-- `parallel/test-assert-deep.js`
 - `parallel/test-assert-deep.js#test_00_deepequal`
 - `parallel/test-assert-deep.js#test_01_date`
 - `parallel/test-assert-deep.js#test_02_regexp`
@@ -230,29 +223,23 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-assert-deep.js#test_37_verify_commutativity`
 - `parallel/test-assert-deep.js#test_38_crypto`
 - `parallel/test-assert-esm-cjs-message-verify.js`
-- `parallel/test-assert-fail-deprecation.js`
 - `parallel/test-assert-fail-deprecation.js#test_00_two_args_only_operator_defaults_to`
 - `parallel/test-assert-fail-deprecation.js#test_01_three_args`
 - `parallel/test-assert-fail-deprecation.js#test_02_three_args_with_custom_error`
 - `parallel/test-assert-fail-deprecation.js#test_03_no_third_arg_but_a_fourth_arg`
 - `parallel/test-assert-fail-deprecation.js#test_04_the_stackframefunction_should_exclude_the_foo_frame`
-- `parallel/test-assert-fail.js`
 - `parallel/test-assert-fail.js#test_00_no_args`
 - `parallel/test-assert-fail.js#test_01_one_arg_message`
 - `parallel/test-assert-fail.js#test_02_one_arg_error`
 - `parallel/test-assert-fail.js#test_03_object_prototype_get`
 - `parallel/test-assert-first-line.js`
-- `parallel/test-assert-if-error.js`
 - `parallel/test-assert-if-error.js#test_00_test_that_assert_iferror_has_the_correct_stack_trace_of_both`
 - `parallel/test-assert-if-error.js#test_01_general_iferror_tests`
 - `parallel/test-assert-if-error.js#test_02_should_not_throw`
 - `parallel/test-assert-if-error.js#test_03_https_github_com_nodejs_node_v0_x_archive_issues_2893`
 - `parallel/test-assert-objects.js`
-- `parallel/test-assert-typedarray-deepequal.js`
-- `parallel/test-assert-typedarray-deepequal.js#test_00_equalarraypairs`
 - `parallel/test-assert-typedarray-deepequal.js#test_01_looseequalarraypairs`
 - `parallel/test-assert-typedarray-deepequal.js#test_02_notequalarraypairs`
-- `parallel/test-assert.js`
 - `parallel/test-assert.js#test_00_some_basics`
 - `parallel/test-assert.js#test_01_throw_message_if_the_message_is_instanceof_error`
 - `parallel/test-assert.js#test_02_errors_created_in_different_contexts_are_handled_as_any_othe`
@@ -285,7 +272,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-blocklist.js#block_15_block_15`
 - `parallel/test-blocklist.js#block_16_block_16`
 - `parallel/test-btoa-atob.js`
-- `parallel/test-buffer-alloc.js`
 - `parallel/test-buffer-alloc.js#block_00_test_offset_properties`
 - `parallel/test-buffer-alloc.js#block_01_test_creating_a_buffer_from_a_uint8array`
 - `parallel/test-buffer-alloc.js#block_02_test_creating_a_buffer_from_a_uint8array_old_constructor`
@@ -339,13 +325,11 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-buffer-alloc.js#block_50_test_that_parsearrayindex_handles_full_uint32`
 - `parallel/test-buffer-alloc.js#block_51_unpooled_buffer_replaces_slowbuffer`
 - `parallel/test-buffer-alloc.js#block_52_block_52`
-- `parallel/test-buffer-arraybuffer.js`
 - `parallel/test-buffer-arraybuffer.js#block_00_test_the_byteoffset_and_length_arguments`
 - `parallel/test-buffer-arraybuffer.js#block_01_test_the_deprecated_buffer_version_also`
 - `parallel/test-buffer-arraybuffer.js#block_02_block_02`
 - `parallel/test-buffer-arraybuffer.js#block_03_block_03`
 - `parallel/test-buffer-ascii.js`
-- `parallel/test-buffer-badhex.js`
 - `parallel/test-buffer-badhex.js#block_00_test_hex_strings_and_bad_hex_strings`
 - `parallel/test-buffer-badhex.js#block_01_block_01`
 - `parallel/test-buffer-badhex.js#block_02_block_02`
@@ -360,7 +344,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-buffer-constructor-node-modules-paths.js`
 - `parallel/test-buffer-constructor-node-modules.js`
 - `parallel/test-buffer-constructor-outside-node-modules.js`
-- `parallel/test-buffer-copy.js`
 - `parallel/test-buffer-copy.js#block_00_block_00`
 - `parallel/test-buffer-copy.js#block_01_block_01`
 - `parallel/test-buffer-copy.js#block_02_block_02`
@@ -378,11 +361,9 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-buffer-equals.js`
 - `parallel/test-buffer-failed-alloc-typed-arrays.js`
 - `parallel/test-buffer-fakes.js`
-- `parallel/test-buffer-from.js`
 - `parallel/test-buffer-from.js#block_00_block_00`
 - `parallel/test-buffer-from.js#block_01_block_01`
 - `parallel/test-buffer-from.js#block_02_block_02`
-- `parallel/test-buffer-includes.js`
 - `parallel/test-buffer-inheritance.js`
 - `parallel/test-buffer-inspect.js`
 - `parallel/test-buffer-isascii.js`
@@ -397,20 +378,17 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-buffer-parent-property.js`
 - `parallel/test-buffer-pending-deprecation.js`
 - `parallel/test-buffer-pool-untransferable.js`
-- `parallel/test-buffer-prototype-inspect.js`
 - `parallel/test-buffer-prototype-inspect.js#block_00_block_00`
 - `parallel/test-buffer-prototype-inspect.js#block_01_block_01`
 - `parallel/test-buffer-prototype-inspect.js#block_02_block_02`
 - `parallel/test-buffer-read.js`
 - `parallel/test-buffer-readdouble.js`
 - `parallel/test-buffer-readfloat.js`
-- `parallel/test-buffer-readint.js`
 - `parallel/test-buffer-readint.js#block_00_test_oob`
 - `parallel/test-buffer-readint.js#block_01_test_8_bit_signed_integers`
 - `parallel/test-buffer-readint.js#block_02_test_16_bit_integers`
 - `parallel/test-buffer-readint.js#block_03_test_32_bit_integers`
 - `parallel/test-buffer-readint.js#block_04_test_int`
-- `parallel/test-buffer-readuint.js`
 - `parallel/test-buffer-readuint.js#block_00_test_oob`
 - `parallel/test-buffer-readuint.js#block_01_test_8_bit_unsigned_integers`
 - `parallel/test-buffer-readuint.js#block_02_test_16_bit_unsigned_integers`
@@ -420,14 +398,12 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-buffer-safe-unsafe.js`
 - `parallel/test-buffer-set-inspect-max-bytes.js`
 - `parallel/test-buffer-sharedarraybuffer.js`
-- `parallel/test-buffer-slice.js`
 - `parallel/test-buffer-slice.js#block_00_block_00`
 - `parallel/test-buffer-slice.js#block_01_block_01`
 - `parallel/test-buffer-slice.js#block_02_block_02`
 - `parallel/test-buffer-slice.js#block_03_block_03`
 - `parallel/test-buffer-slice.js#block_04_block_04`
 - `parallel/test-buffer-slow.js`
-- `parallel/test-buffer-swap.js`
 - `parallel/test-buffer-swap.js#block_00_test_buffers_small_enough_to_use_the_js_implementation`
 - `parallel/test-buffer-swap.js#block_01_operates_in_place`
 - `parallel/test-buffer-swap.js#block_02_block_02`
@@ -437,24 +413,20 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-buffer-swap.js#block_06_test_native_code_with_buffers_that_are_not_memory_aligned`
 - `parallel/test-buffer-swap.js#block_07_block_07`
 - `parallel/test-buffer-swap.js#block_08_block_08`
-- `parallel/test-buffer-tojson.js`
 - `parallel/test-buffer-tojson.js#block_00_block_00`
 - `parallel/test-buffer-tojson.js#block_01_issue_gh_7849`
 - `parallel/test-buffer-tojson.js#block_02_gh_5110`
 - `parallel/test-buffer-tostring-rangeerror.js`
 - `parallel/test-buffer-tostring.js`
-- `parallel/test-buffer-write.js`
 - `parallel/test-buffer-write.js#block_00_block_00`
 - `parallel/test-buffer-write.js#block_01_block_01`
 - `parallel/test-buffer-writedouble.js`
 - `parallel/test-buffer-writefloat.js`
-- `parallel/test-buffer-writeint.js`
 - `parallel/test-buffer-writeint.js#block_00_test_8_bit`
 - `parallel/test-buffer-writeint.js#block_01_test_16_bit`
 - `parallel/test-buffer-writeint.js#block_02_test_32_bit`
 - `parallel/test-buffer-writeint.js#block_03_test_48_bit`
 - `parallel/test-buffer-writeint.js#block_04_test_int`
-- `parallel/test-buffer-writeuint.js`
 - `parallel/test-buffer-writeuint.js#block_00_block_00`
 - `parallel/test-buffer-writeuint.js#block_01_block_01`
 - `parallel/test-buffer-writeuint.js#block_02_test_16_bit`
@@ -474,28 +446,13 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-child-process-exec-maxbuf.js#block_07_block_07`
 - `parallel/test-child-process-exec-maxbuf.js#block_10_block_10`
 - `parallel/test-child-process-exec-timeout-not-expired.js`
-- `parallel/test-child-process-execfile-maxbuf.js#block_00_default_value`
-- `parallel/test-child-process-execfile-maxbuf.js#block_01_default_value`
-- `parallel/test-child-process-execfile-maxbuf.js#block_02_block_02`
-- `parallel/test-child-process-execfile-maxbuf.js#block_03_block_03`
-- `parallel/test-child-process-execfile-maxbuf.js#block_04_block_04`
-- `parallel/test-child-process-execfile-maxbuf.js#block_05_block_05`
-- `parallel/test-child-process-execfile.js#block_00_block_00`
-- `parallel/test-child-process-execfile.js#block_01_block_01`
-- `parallel/test-child-process-execfile.js#block_03_block_03`
-- `parallel/test-child-process-execfile.js#block_04_block_04`
-- `parallel/test-child-process-execfile.js#block_06_block_06`
-- `parallel/test-child-process-execfilesync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works`
 - `parallel/test-child-process-fork-and-spawn.js`
 - `parallel/test-child-process-fork-no-shell.js`
 - `parallel/test-child-process-fork-ref.js`
 - `parallel/test-child-process-fork3.js`
 - `parallel/test-child-process-send-after-close.js`
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works`
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_03_default_maxbuffer_size_is_1024_1024`
 - `parallel/test-child-process-uid-gid.js`
 - `parallel/test-cli-eval-event.js`
-- `parallel/test-cli-eval.js`
 - `parallel/test-cli-eval.js#block_00_assert_that_module_loading_works`
 - `parallel/test-cli-eval.js#block_01_regression_test_for_https_github_com_nodejs_node_issues_3574`
 - `parallel/test-cli-eval.js#block_02_regression_test_for_https_github_com_nodejs_node_issues_8534`
@@ -508,7 +465,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-console-async-write-error.js`
 - `parallel/test-console-clear.js`
 - `parallel/test-console-count.js`
-- `parallel/test-console-group.js`
 - `parallel/test-console-group.js#block_00_basic_group_functionality`
 - `parallel/test-console-group.js#block_01_group_indentation_is_tracked_per_console_instance`
 - `parallel/test-console-group.js#block_02_make_sure_labels_work`
@@ -517,7 +473,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-console-group.js#block_05_check_that_the_kgroupindent_symbol_property_is_not_enumerabl`
 - `parallel/test-console-group.js#block_06_check_custom_groupindentation`
 - `parallel/test-console-group.js#block_07_check_the_correctness_of_the_groupindentation_parameter`
-- `parallel/test-console-instance.js`
 - `parallel/test-console-instance.js#block_00_block_00`
 - `parallel/test-console-instance.js#block_01_test_calling_console_without_the_new_keyword`
 - `parallel/test-console-instance.js#block_02_test_extending_console`
@@ -538,7 +493,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-aes-wrap.js`
 - `parallel/test-crypto-async-sign-verify.js`
 - `parallel/test-crypto-authenticated-stream.js`
-- `parallel/test-crypto-authenticated.js`
 - `parallel/test-crypto-authenticated.js#block_00_non_authenticating_mode`
 - `parallel/test-crypto-authenticated.js#block_01_throw`
 - `parallel/test-crypto-authenticated.js#block_02_test_that_gcm_can_produce_shorter_authentication_tags_than_1`
@@ -546,7 +500,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-authenticated.js#block_04_authentication_tag_length_has_been_specified`
 - `parallel/test-crypto-authenticated.js#block_05_authentication_tag_has_been_specified`
 - `parallel/test-crypto-authenticated.js#block_06_test_that_setaad_throws_if_an_invalid_plaintext_length_has_b`
-- `parallel/test-crypto-authenticated.js#block_07_test_that_setaad_and_update_throw_if_the_plaintext_is_too_lo`
 - `parallel/test-crypto-authenticated.js#block_08_been_specified`
 - `parallel/test-crypto-authenticated.js#block_09_test_that_final_throws_in_ccm_mode_when_no_authentication_ta`
 - `parallel/test-crypto-authenticated.js#block_10_test_that_setauthtag_does_not_throw_in_gcm_mode_when_called_`
@@ -559,18 +512,15 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-authenticated.js#block_17_require_the_authentication_tag_before_calls_to_update_during`
 - `parallel/test-crypto-authenticated.js#block_18_no_recommended_or_approved_authentication_tag_lengths_below_`
 - `parallel/test-crypto-authenticated.js#block_19_https_github_com_nodejs_node_issues_45874`
-- `parallel/test-crypto-certificate.js`
 - `parallel/test-crypto-certificate.js#block_00_block_00`
 - `parallel/test-crypto-certificate.js#block_01_block_01`
 - `parallel/test-crypto-certificate.js#block_02_block_02`
-- `parallel/test-crypto-cipheriv-decipheriv.js`
 - `parallel/test-crypto-cipheriv-decipheriv.js#block_00_block_00`
 - `parallel/test-crypto-cipheriv-decipheriv.js#block_01_block_01`
 - `parallel/test-crypto-cipheriv-decipheriv.js#block_02_block_02`
 - `parallel/test-crypto-cipheriv-decipheriv.js#block_03_block_03`
 - `parallel/test-crypto-classes.js`
 - `parallel/test-crypto-des3-wrap.js`
-- `parallel/test-crypto-dh-constructor.js`
 - `parallel/test-crypto-dh-constructor.js#block_00_block_00`
 - `parallel/test-crypto-dh-constructor.js#block_01_block_01`
 - `parallel/test-crypto-dh-constructor.js#block_02_block_02`
@@ -584,38 +534,30 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-dh-odd-key.js`
 - `parallel/test-crypto-dh-padding.js`
 - `parallel/test-crypto-dh-shared.js`
-- `parallel/test-crypto-dh-stateless.js`
-- `parallel/test-crypto-dh.js`
 - `parallel/test-crypto-dh.js#block_00_block_00`
 - `parallel/test-crypto-dh.js#block_01_through_a_fluke_of_history_g_0_defaults_to_dh_generator_2`
 - `parallel/test-crypto-dh.js#block_02_block_02`
 - `parallel/test-crypto-domain.js`
 - `parallel/test-crypto-domains.js`
-- `parallel/test-crypto-ecb.js`
 - `parallel/test-crypto-ecb.js#block_00_block_00`
 - `parallel/test-crypto-ecb.js#block_01_block_01`
 - `parallel/test-crypto-ecdh-convert-key.js`
-- `parallel/test-crypto-encoding-validation-error.js`
 - `parallel/test-crypto-encoding-validation-error.js#block_00_block_00`
 - `parallel/test-crypto-encoding-validation-error.js#block_01_block_01`
 - `parallel/test-crypto-encoding-validation-error.js#block_02_block_02`
 - `parallel/test-crypto-encoding-validation-error.js#block_03_block_03`
-- `parallel/test-crypto-from-binary.js`
-- `parallel/test-crypto-gcm-explicit-short-tag.js`
 - `parallel/test-crypto-gcm-explicit-short-tag.js#block_00_block_00`
 - `parallel/test-crypto-gcm-explicit-short-tag.js#block_01_block_01`
 - `parallel/test-crypto-gcm-explicit-short-tag.js#block_02_block_02`
 - `parallel/test-crypto-gcm-implicit-short-tag.js`
 - `parallel/test-crypto-getcipherinfo.js`
 - `parallel/test-crypto-hash-stream-pipe.js`
-- `parallel/test-crypto-hash.js`
 - `parallel/test-crypto-hash.js#block_00_block_00`
 - `parallel/test-crypto-hash.js#block_01_test_xof_hash_functions_and_the_outputlength_option`
 - `parallel/test-crypto-hash.js#block_02_block_02`
 - `parallel/test-crypto-hash.js#block_03_block_03`
 - `parallel/test-crypto-hash.js#block_04_block_04`
 - `parallel/test-crypto-hkdf.js`
-- `parallel/test-crypto-hmac.js`
 - `parallel/test-crypto-hmac.js#block_00_block_00`
 - `parallel/test-crypto-hmac.js#block_01_block_01`
 - `parallel/test-crypto-hmac.js#block_02_check_initialized_uninitialized_state_transition_after_calli`
@@ -624,7 +566,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-hmac.js#block_05_block_05`
 - `parallel/test-crypto-hmac.js#block_06_block_06`
 - `parallel/test-crypto-key-objects-messageport.js`
-- `parallel/test-crypto-key-objects-to-crypto-key.js`
 - `parallel/test-crypto-key-objects-to-crypto-key.js#block_00_block_00`
 - `parallel/test-crypto-key-objects-to-crypto-key.js#block_01_block_01`
 - `parallel/test-crypto-key-objects-to-crypto-key.js#block_02_block_02`
@@ -652,7 +593,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-keygen-async-elliptic-curve-jwk-rsa.js`
 - `parallel/test-crypto-keygen-async-elliptic-curve-jwk.js`
 - `parallel/test-crypto-keygen-async-encrypted-private-key-der.js`
-- `parallel/test-crypto-keygen-async-encrypted-private-key.js`
 - `parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted.js.js`
 - `parallel/test-crypto-keygen-async-explicit-elliptic-curve.js`
 - `parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted.js`
@@ -663,7 +603,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-keygen-dh-classic.js`
 - `parallel/test-crypto-keygen-duplicate-deprecated-option.js`
 - `parallel/test-crypto-keygen-eddsa.js`
-- `parallel/test-crypto-keygen-empty-passphrase-no-error.js`
 - `parallel/test-crypto-keygen-invalid-parameter-encoding-dsa.js`
 - `parallel/test-crypto-keygen-invalid-parameter-encoding-ec.js`
 - `parallel/test-crypto-keygen-key-object-without-encoding.js`
@@ -676,7 +615,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-keygen-rfc8017-a-2-3.js`
 - `parallel/test-crypto-keygen-rsa-pss.js`
 - `parallel/test-crypto-keygen-sync.js`
-- `parallel/test-crypto-keygen.js`
 - `parallel/test-crypto-keygen.js#block_00_test_invalid_parameter_encoding`
 - `parallel/test-crypto-keygen.js#block_01_block_01`
 - `parallel/test-crypto-keygen.js#block_02_block_02`
@@ -696,7 +634,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-pbkdf2.js`
 - `parallel/test-crypto-private-decrypt-gh32240.js`
 - `parallel/test-crypto-psychic-signatures.js`
-- `parallel/test-crypto-random.js`
 - `parallel/test-crypto-random.js#block_00_block_00`
 - `parallel/test-crypto-random.js#block_01_block_01`
 - `parallel/test-crypto-random.js#block_02_block_02`
@@ -721,7 +658,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-random.js#block_21_block_21`
 - `parallel/test-crypto-randomfillsync-regression.js`
 - `parallel/test-crypto-randomuuid.js`
-- `parallel/test-crypto-rsa-dsa.js`
 - `parallel/test-crypto-rsa-dsa.js#block_00_test_rsa_encryption_decryption`
 - `parallel/test-crypto-rsa-dsa.js#block_01_ensure_compatibility_when_using_non_sha1_hash_functions`
 - `parallel/test-crypto-rsa-dsa.js#block_02_block_02`
@@ -729,7 +665,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-crypto-rsa-dsa.js#block_04_block_04`
 - `parallel/test-crypto-rsa-dsa.js#block_05_block_05`
 - `parallel/test-crypto-rsa-dsa.js#block_06_block_06`
-- `parallel/test-crypto-secret-keygen.js`
 - `parallel/test-crypto-secret-keygen.js#block_00_block_00`
 - `parallel/test-crypto-secret-keygen.js#block_01_block_01`
 - `parallel/test-crypto-secret-keygen.js#block_02_block_02`
@@ -757,12 +692,10 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-delayed-require.js`
 - `parallel/test-destroy-socket-in-lookup.js`
 - `parallel/test-dgram-abort-closed.js`
-- `parallel/test-dgram-address.js`
 - `parallel/test-dgram-address.js#block_00_block_00`
 - `parallel/test-dgram-address.js#block_01_block_01`
 - `parallel/test-dgram-bind-default-address.js`
 - `parallel/test-dgram-bind.js`
-- `parallel/test-dgram-createSocket-type.js`
 - `parallel/test-dgram-createSocket-type.js#block_00_ensure_buffer_sizes_can_be_set`
 - `parallel/test-dgram-createSocket-type.js#block_01_block_01`
 - `parallel/test-dgram-deprecation-error.js`
@@ -787,7 +720,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-diagnostics-channel-tracing-channel-callback-error.js`
 - `parallel/test-diagnostics-channel-tracing-channel-callback-run-stores.js`
 - `parallel/test-diagnostics-channel-tracing-channel-callback.js`
-- `parallel/test-diagnostics-channel-tracing-channel-has-subscribers.js`
 - `parallel/test-diagnostics-channel-tracing-channel-has-subscribers.js#block_00_block_00`
 - `parallel/test-diagnostics-channel-tracing-channel-has-subscribers.js#block_01_block_01`
 - `parallel/test-diagnostics-channel-tracing-channel-promise-early-exit.js`
@@ -809,7 +741,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-domain-error-types.js`
 - `parallel/test-domain-from-timer.js`
 - `parallel/test-domain-fs-enoent-stream.js`
-- `parallel/test-domain-intercept.js`
 - `parallel/test-domain-intercept.js#block_00_block_00`
 - `parallel/test-domain-intercept.js#block_01_block_01`
 - `parallel/test-domain-intercept.js#block_02_block_02`
@@ -833,11 +764,9 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-env-var-no-warnings.js`
 - `parallel/test-eval-strict-referenceerror.js`
 - `parallel/test-eval.js`
-- `parallel/test-event-emitter-add-listeners.js`
 - `parallel/test-event-emitter-add-listeners.js#block_00_block_00`
 - `parallel/test-event-emitter-add-listeners.js#block_01_just_make_sure_that_this_doesn_t_throw`
 - `parallel/test-event-emitter-add-listeners.js#block_02_block_02`
-- `parallel/test-event-emitter-check-listener-leaks.js`
 - `parallel/test-event-emitter-check-listener-leaks.js#block_00_default`
 - `parallel/test-event-emitter-check-listener-leaks.js#block_01_process_wide`
 - `parallel/test-event-emitter-check-listener-leaks.js#block_02_but_maxlisteners_still_has_precedence_over_defaultmaxlistene`
@@ -848,7 +777,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-event-emitter-invalid-listener.js`
 - `parallel/test-event-emitter-listener-count.js`
 - `parallel/test-event-emitter-listeners-side-effects.js`
-- `parallel/test-event-emitter-listeners.js`
 - `parallel/test-event-emitter-listeners.js#block_00_block_00`
 - `parallel/test-event-emitter-listeners.js#block_01_block_01`
 - `parallel/test-event-emitter-listeners.js#block_02_block_02`
@@ -869,7 +797,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-event-emitter-num-args.js`
 - `parallel/test-event-emitter-once.js`
 - `parallel/test-event-emitter-prepend.js`
-- `parallel/test-event-emitter-remove-all-listeners.js`
 - `parallel/test-event-emitter-remove-all-listeners.js#block_00_block_00`
 - `parallel/test-event-emitter-remove-all-listeners.js#block_01_block_01`
 - `parallel/test-event-emitter-remove-all-listeners.js#block_02_block_02`
@@ -877,7 +804,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-event-emitter-remove-all-listeners.js#block_04_block_04`
 - `parallel/test-event-emitter-remove-all-listeners.js#block_05_block_05`
 - `parallel/test-event-emitter-remove-all-listeners.js#block_06_block_06`
-- `parallel/test-event-emitter-remove-listeners.js`
 - `parallel/test-event-emitter-remove-listeners.js#block_00_block_00`
 - `parallel/test-event-emitter-remove-listeners.js#block_01_block_01`
 - `parallel/test-event-emitter-remove-listeners.js#block_02_block_02`
@@ -893,7 +819,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-event-emitter-subclass.js`
 - `parallel/test-event-emitter-symbols.js`
 - `parallel/test-event-target.js`
-- `parallel/test-events-getmaxlisteners.js`
 - `parallel/test-events-getmaxlisteners.js#block_00_block_00`
 - `parallel/test-events-getmaxlisteners.js#block_01_block_01`
 - `parallel/test-events-list.js`
@@ -908,7 +833,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-file-write-stream3.js`
 - `parallel/test-file-write-stream4.js`
 - `parallel/test-file-write-stream5.js`
-- `parallel/test-file.js`
 - `parallel/test-file.js#block_00_block_00`
 - `parallel/test-file.js#block_01_block_01`
 - `parallel/test-file.js#block_02_block_02`
@@ -927,12 +851,10 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-file.js#block_15_block_15`
 - `parallel/test-filehandle-close.js`
 - `parallel/test-finalization-registry-shutdown.js`
-- `parallel/test-fs-append-file-flush.js`
 - `parallel/test-fs-append-file-flush.js#test_00_synchronous_version`
 - `parallel/test-fs-append-file-flush.js#test_01_callback_version`
 - `parallel/test-fs-append-file-flush.js#test_02_promise_based_version`
 - `parallel/test-fs-append-file-sync.js`
-- `parallel/test-fs-append-file.js`
 - `parallel/test-fs-append-file.js#block_00_test_that_empty_file_will_be_created_and_have_content_added_`
 - `parallel/test-fs-append-file.js#block_01_test_that_empty_file_will_be_created_and_have_content_added_`
 - `parallel/test-fs-append-file.js#block_02_test_that_appends_data_to_a_non_empty_file_callback_api`
@@ -964,7 +886,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-makeStatsCallback.js`
 - `parallel/test-fs-mkdir-mode-mask.js`
 - `parallel/test-fs-mkdir-rmdir.js`
-- `parallel/test-fs-mkdir.js`
 - `parallel/test-fs-mkdir.js#block_00_fs_mkdir_creates_directory_using_assigned_path`
 - `parallel/test-fs-mkdir.js#block_01_fs_mkdir_creates_directory_with_assigned_mode_value`
 - `parallel/test-fs-mkdir.js#block_02_fs_mkdir_creates_directory_with_mode_passed_as_an_options_ob`
@@ -987,7 +908,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-mkdir.js#block_19_mkdirp_sync_returns_undefined_when_no_new_folders_are_create`
 - `parallel/test-fs-mkdir.js#block_20_mkdirp_promises_returns_first_folder_created_when_all_folder`
 - `parallel/test-fs-mkdtemp-prefix-check.js`
-- `parallel/test-fs-mkdtemp.js`
 - `parallel/test-fs-mkdtemp.js#block_00_test_with_plain_string`
 - `parallel/test-fs-mkdtemp.js#block_01_test_with_url_object`
 - `parallel/test-fs-mkdtemp.js#block_02_test_with_buffer`
@@ -998,14 +918,12 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-open-no-close.js`
 - `parallel/test-fs-open-numeric-flags.js`
 - `parallel/test-fs-open.js`
-- `parallel/test-fs-opendir.js`
 - `parallel/test-fs-opendir.js#block_00_check_the_opendir_sync_version`
 - `parallel/test-fs-opendir.js#block_01_check_that_passing_a_positive_integer_as_buffersize_works`
 - `parallel/test-fs-opendir.js#block_02_check_read_throw_exceptions_on_invalid_callback`
 - `parallel/test-fs-opendir.js#block_03_check_if_directory_already_closed_the_callback_should_pass_a`
 - `parallel/test-fs-opendir.js#block_04_check_if_directory_already_closed_throw_an_promise_exception`
 - `parallel/test-fs-operations-with-surrogate-pairs.js`
-- `parallel/test-fs-options-immutable.js`
 - `parallel/test-fs-options-immutable.js#block_00_block_00`
 - `parallel/test-fs-options-immutable.js#block_01_block_01`
 - `parallel/test-fs-options-immutable.js#block_02_block_02`
@@ -1025,17 +943,14 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-promises-file-handle-sync.js`
 - `parallel/test-fs-promises-file-handle-truncate.js`
 - `parallel/test-fs-promises-file-handle-write.js`
-- `parallel/test-fs-promises-file-handle-writeFile.js`
 - `parallel/test-fs-promises-readfile-empty.js`
 - `parallel/test-fs-promises-readfile-with-fd.js`
 - `parallel/test-fs-promises-watch.js`
 - `parallel/test-fs-promises-write-optional-params.js`
 - `parallel/test-fs-promises-writefile-typedarray.js`
 - `parallel/test-fs-promises-writefile-with-fd.js`
-- `parallel/test-fs-promises.js`
 - `parallel/test-fs-promises.js#block_00_block_00`
 - `parallel/test-fs-promises.js#block_01_block_01`
-- `parallel/test-fs-promisified.js`
 - `parallel/test-fs-promisified.js#block_00_block_00`
 - `parallel/test-fs-promisified.js#block_01_block_01`
 - `parallel/test-fs-promisified.js#block_02_block_02`
@@ -1046,15 +961,12 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-read-optional-params.js`
 - `parallel/test-fs-read-promises-optional-params.js`
 - `parallel/test-fs-read-stream-autoClose.js`
-- `parallel/test-fs-read-stream-concurrent-reads.js`
-- `parallel/test-fs-read-stream-double-close.js`
 - `parallel/test-fs-read-stream-double-close.js#block_00_block_00`
 - `parallel/test-fs-read-stream-double-close.js#block_01_block_01`
 - `parallel/test-fs-read-stream-encoding.js`
 - `parallel/test-fs-read-stream-err.js`
 - `parallel/test-fs-read-stream-fd-leak.js`
 - `parallel/test-fs-read-stream-fd.js`
-- `parallel/test-fs-read-stream-inherit.js`
 - `parallel/test-fs-read-stream-inherit.js#block_00_block_00`
 - `parallel/test-fs-read-stream-inherit.js#block_01_block_01`
 - `parallel/test-fs-read-stream-inherit.js#block_02_block_02`
@@ -1069,7 +981,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-read-stream-patch-open.js`
 - `parallel/test-fs-read-stream-resume.js`
 - `parallel/test-fs-read-stream-throw-type-error.js`
-- `parallel/test-fs-read-stream.js`
 - `parallel/test-fs-read-stream.js#block_00_block_00`
 - `parallel/test-fs-read-stream.js#block_01_block_01`
 - `parallel/test-fs-read-stream.js#block_02_block_02`
@@ -1091,24 +1002,19 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-readfile-eof.js`
 - `parallel/test-fs-readfile-error.js`
 - `parallel/test-fs-readfile-fd.js`
-- `parallel/test-fs-readfile-flags.js`
 - `parallel/test-fs-readfile-flags.js#block_00_block_00`
 - `parallel/test-fs-readfile-flags.js#block_01_block_01`
 - `parallel/test-fs-readfile-flags.js#block_02_block_02`
-- `parallel/test-fs-readfile-pipe-large.js`
 - `parallel/test-fs-readfile-pipe.js`
 - `parallel/test-fs-readfile-unlink.js`
 - `parallel/test-fs-readfile-zero-byte-liar.js`
-- `parallel/test-fs-readfilesync-pipe-large.js`
 - `parallel/test-fs-readlink-type-check.js`
 - `parallel/test-fs-readv-promises.js`
 - `parallel/test-fs-readv-promisify.js`
-- `parallel/test-fs-readv-sync.js`
 - `parallel/test-fs-readv-sync.js#block_00_fs_readvsync_with_array_of_buffers_with_all_parameters`
 - `parallel/test-fs-readv-sync.js#block_01_fs_readvsync_with_array_of_buffers_without_position`
 - `parallel/test-fs-readv-sync.js#block_02_block_02`
 - `parallel/test-fs-readv-sync.js#block_03_block_03`
-- `parallel/test-fs-readv.js`
 - `parallel/test-fs-readv.js#block_00_fs_readv_with_array_of_buffers_with_all_parameters`
 - `parallel/test-fs-readv.js#block_01_fs_readv_with_array_of_buffers_without_position`
 - `parallel/test-fs-readv.js#block_02_block_02`
@@ -1121,18 +1027,15 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-rename-type-check.js`
 - `parallel/test-fs-rmdir-recursive-sync-warns-not-found.js`
 - `parallel/test-fs-rmdir-recursive-sync-warns-on-file.js`
-- `parallel/test-fs-rmdir-recursive-throws-not-found.js`
 - `parallel/test-fs-rmdir-recursive-throws-not-found.js#block_00_block_00`
 - `parallel/test-fs-rmdir-recursive-throws-not-found.js#block_01_block_01`
 - `parallel/test-fs-rmdir-recursive-throws-not-found.js#block_02_block_02`
-- `parallel/test-fs-rmdir-recursive-throws-on-file.js`
 - `parallel/test-fs-rmdir-recursive-throws-on-file.js#block_00_block_00`
 - `parallel/test-fs-rmdir-recursive-throws-on-file.js#block_01_block_01`
 - `parallel/test-fs-rmdir-recursive-throws-on-file.js#block_02_block_02`
 - `parallel/test-fs-rmdir-recursive-warns-not-found.js`
 - `parallel/test-fs-rmdir-recursive-warns-on-file.js`
 - `parallel/test-fs-rmdir-type-check.js`
-- `parallel/test-fs-stat-bigint.js`
 - `parallel/test-fs-stat-bigint.js#block_00_block_00`
 - `parallel/test-fs-stat-bigint.js#block_01_block_01`
 - `parallel/test-fs-stat-bigint.js#block_02_block_02`
@@ -1142,44 +1045,35 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-stat-bigint.js#block_06_block_06`
 - `parallel/test-fs-stat-bigint.js#block_07_block_07`
 - `parallel/test-fs-stat-bigint.js#block_08_block_08`
-- `parallel/test-fs-stat.js`
 - `parallel/test-fs-stat.js#block_00_block_00`
 - `parallel/test-fs-stat.js#block_01_block_01`
 - `parallel/test-fs-stat.js#block_02_block_02`
-- `parallel/test-fs-statfs.js`
 - `parallel/test-fs-statfs.js#block_00_synchronous`
 - `parallel/test-fs-statfs.js#block_01_synchronous_bigint`
 - `parallel/test-fs-stream-construct-compat-error-read.js`
 - `parallel/test-fs-stream-construct-compat-error-write.js`
-- `parallel/test-fs-stream-construct-compat-graceful-fs.js`
 - `parallel/test-fs-stream-construct-compat-graceful-fs.js#block_00_block_00`
 - `parallel/test-fs-stream-construct-compat-graceful-fs.js#block_01_block_01`
-- `parallel/test-fs-stream-construct-compat-old-node.js`
 - `parallel/test-fs-stream-construct-compat-old-node.js#block_00_block_00`
 - `parallel/test-fs-stream-construct-compat-old-node.js#block_01_block_01`
-- `parallel/test-fs-stream-destroy-emit-error.js`
 - `parallel/test-fs-stream-destroy-emit-error.js#block_00_block_00`
 - `parallel/test-fs-stream-destroy-emit-error.js#block_01_block_01`
 - `parallel/test-fs-stream-destroy-emit-error.js#block_02_block_02`
 - `parallel/test-fs-stream-destroy-emit-error.js#block_03_block_03`
 - `parallel/test-fs-stream-double-close.js`
-- `parallel/test-fs-stream-fs-options.js`
 - `parallel/test-fs-stream-fs-options.js#block_00_block_00`
 - `parallel/test-fs-stream-fs-options.js#block_01_block_01`
 - `parallel/test-fs-stream-fs-options.js#block_02_block_02`
-- `parallel/test-fs-stream-options.js`
 - `parallel/test-fs-stream-options.js#block_00_block_00`
 - `parallel/test-fs-stream-options.js#block_01_block_01`
 - `parallel/test-fs-symlink-dir-junction-relative.js`
 - `parallel/test-fs-symlink-dir-junction.js`
 - `parallel/test-fs-symlink-longpath.js`
 - `parallel/test-fs-timestamp-parsing-error.js`
-- `parallel/test-fs-truncate-clear-file-zero.js`
 - `parallel/test-fs-truncate-clear-file-zero.js#block_00_synchronous_test`
 - `parallel/test-fs-truncate-clear-file-zero.js#block_01_asynchronous_test`
 - `parallel/test-fs-truncate-fd.js`
 - `parallel/test-fs-truncate-sync.js`
-- `parallel/test-fs-truncate.js`
 - `parallel/test-fs-truncate.js#block_00_block_00`
 - `parallel/test-fs-truncate.js#block_01_block_01`
 - `parallel/test-fs-truncate.js#block_02_block_02`
@@ -1191,11 +1085,9 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-truncate.js#block_08_block_08`
 - `parallel/test-fs-truncate.js#block_09_block_09`
 - `parallel/test-fs-unlink-type-check.js`
-- `parallel/test-fs-utimes.js`
 - `parallel/test-fs-utimes.js#block_00_utimes_only_error_cases`
 - `parallel/test-fs-utimes.js#block_01_futimes_only_error_cases`
 - `parallel/test-fs-watch-close-when-destroyed.js`
-- `parallel/test-fs-watch-encoding.js`
 - `parallel/test-fs-watch-encoding.js#block_00_block_00`
 - `parallel/test-fs-watch-encoding.js#block_01_block_01`
 - `parallel/test-fs-watch-encoding.js#block_02_block_02`
@@ -1219,7 +1111,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-watch.js`
 - `parallel/test-fs-watchfile-ref-unref.js`
 - `parallel/test-fs-whatwg-url.js`
-- `parallel/test-fs-write-buffer.js`
 - `parallel/test-fs-write-buffer.js#block_00_fs_write_with_all_parameters_provided`
 - `parallel/test-fs-write-buffer.js#block_01_fs_write_with_a_buffer_without_the_length_parameter`
 - `parallel/test-fs-write-buffer.js#block_02_fs_write_with_a_buffer_without_the_offset_and_length_paramet`
@@ -1229,7 +1120,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-write-buffer.js#block_06_fs_write_with_invalid_offset_type`
 - `parallel/test-fs-write-buffer.js#block_07_fs_write_with_a_dataview_without_the_offset_and_length_param`
 - `parallel/test-fs-write-file-buffer.js`
-- `parallel/test-fs-write-file-flush.js`
 - `parallel/test-fs-write-file-flush.js#test_00_synchronous_version`
 - `parallel/test-fs-write-file-flush.js#test_01_callback_version`
 - `parallel/test-fs-write-file-flush.js#test_02_promise_based_version`
@@ -1239,7 +1129,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-write-file-sync.js#block_03_test_writefilesync_with_flags`
 - `parallel/test-fs-write-file-sync.js#block_04_test_writefilesync_with_no_flags`
 - `parallel/test-fs-write-file-typedarrays.js`
-- `parallel/test-fs-write-file.js`
 - `parallel/test-fs-write-file.js#block_00_block_00`
 - `parallel/test-fs-write-file.js#block_01_block_01`
 - `parallel/test-fs-write-file.js#block_02_block_02`
@@ -1250,12 +1139,10 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-write-stream-autoclose-option.js`
 - `parallel/test-fs-write-stream-change-open.js`
 - `parallel/test-fs-write-stream-close-without-callback.js`
-- `parallel/test-fs-write-stream-double-close.js`
 - `parallel/test-fs-write-stream-double-close.js#block_00_block_00`
 - `parallel/test-fs-write-stream-double-close.js#block_01_block_01`
 - `parallel/test-fs-write-stream-double-close.js#block_02_block_02`
 - `parallel/test-fs-write-stream-encoding.js`
-- `parallel/test-fs-write-stream-end.js`
 - `parallel/test-fs-write-stream-end.js#block_00_block_00`
 - `parallel/test-fs-write-stream-end.js#block_01_block_01`
 - `parallel/test-fs-write-stream-end.js#block_02_block_02`
@@ -1266,29 +1153,24 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-fs-write-stream-flush.js#test_01_performs_flush`
 - `parallel/test-fs-write-stream-flush.js#test_02_does_not_perform_flush`
 - `parallel/test-fs-write-stream-flush.js#test_03_works_with_file_handles`
-- `parallel/test-fs-write-stream-fs.js`
 - `parallel/test-fs-write-stream-fs.js#block_00_block_00`
 - `parallel/test-fs-write-stream-fs.js#block_01_block_01`
 - `parallel/test-fs-write-stream-patch-open.js`
 - `parallel/test-fs-write-stream-throw-type-error.js`
-- `parallel/test-fs-write-stream.js`
 - `parallel/test-fs-write-stream.js#block_00_block_00`
 - `parallel/test-fs-write-stream.js#block_01_block_01`
 - `parallel/test-fs-write-stream.js#block_02_throws_if_data_is_not_of_type_buffer`
 - `parallel/test-fs-write-sync-optional-params.js`
 - `parallel/test-fs-write-sync.js`
-- `parallel/test-fs-writefile-with-fd.js`
 - `parallel/test-fs-writefile-with-fd.js#block_00_block_00`
 - `parallel/test-fs-writefile-with-fd.js#block_01_block_01`
 - `parallel/test-fs-writefile-with-fd.js#block_03_test_with_an_abortsignal`
 - `parallel/test-fs-writestream-open-write.js`
 - `parallel/test-fs-writev-promises.js`
-- `parallel/test-fs-writev-sync.js`
 - `parallel/test-fs-writev-sync.js#block_00_fs_writevsync_with_array_of_buffers_with_all_parameters`
 - `parallel/test-fs-writev-sync.js#block_01_fs_writevsync_with_array_of_buffers_without_position`
 - `parallel/test-fs-writev-sync.js#block_02_fs_writevsync_with_empty_array_of_buffers`
 - `parallel/test-fs-writev-sync.js#block_03_block_03`
-- `parallel/test-fs-writev.js`
 - `parallel/test-fs-writev.js#block_00_fs_writev_with_array_of_buffers_with_all_parameters`
 - `parallel/test-fs-writev.js#block_01_fs_writev_with_array_of_buffers_without_position`
 - `parallel/test-fs-writev.js#block_02_fs_writev_with_empty_array_of_buffers`
@@ -1298,13 +1180,11 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-global-webcrypto.js`
 - `parallel/test-handle-wrap-close-abort.js`
 - `parallel/test-http-1.0-keep-alive.js`
-- `parallel/test-http-1.0.js`
 - `parallel/test-http-1.0.js#block_00_block_00`
 - `parallel/test-http-1.0.js#block_01_block_01`
 - `parallel/test-http-1.0.js#block_02_block_02`
 - `parallel/test-http-abort-before-end.js`
 - `parallel/test-http-abort-stream-end.js`
-- `parallel/test-http-aborted.js`
 - `parallel/test-http-aborted.js#block_00_block_00`
 - `parallel/test-http-aborted.js#block_01_block_01`
 - `parallel/test-http-addrequest-localaddress.js`
@@ -1319,7 +1199,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-agent-null.js`
 - `parallel/test-http-agent-remove.js`
 - `parallel/test-http-agent-timeout-option.js`
-- `parallel/test-http-agent-timeout.js`
 - `parallel/test-http-agent-timeout.js#block_00_block_00`
 - `parallel/test-http-agent-timeout.js#block_01_block_01`
 - `parallel/test-http-agent-timeout.js#block_02_block_02`
@@ -1329,12 +1208,10 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-bind-twice.js`
 - `parallel/test-http-buffer-sanity.js`
 - `parallel/test-http-byteswritten.js`
-- `parallel/test-http-chunk-extensions-limit.js`
 - `parallel/test-http-chunk-extensions-limit.js#block_00_verify_that_chunk_extensions_are_limited_in_size_when_sent_a`
 - `parallel/test-http-chunk-extensions-limit.js#block_01_verify_that_chunk_extensions_are_limited_in_size_when_sent_i`
 - `parallel/test-http-chunk-extensions-limit.js#block_02_verify_the_chunk_extensions_is_correctly_reset_after_a_chunk`
 - `parallel/test-http-chunked.js`
-- `parallel/test-http-client-abort-destroy.js`
 - `parallel/test-http-client-abort-destroy.js#block_00_block_00`
 - `parallel/test-http-client-abort-destroy.js#block_01_block_01`
 - `parallel/test-http-client-abort-destroy.js#block_02_block_02`
@@ -1346,7 +1223,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-client-abort-response-event.js`
 - `parallel/test-http-client-abort.js`
 - `parallel/test-http-client-abort2.js`
-- `parallel/test-http-client-abort3.js`
 - `parallel/test-http-client-abort3.js#block_00_block_00`
 - `parallel/test-http-client-abort3.js#block_01_block_01`
 - `parallel/test-http-client-agent-abort-close-event.js`
@@ -1354,7 +1230,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-client-check-http-token.js`
 - `parallel/test-http-client-close-event.js`
 - `parallel/test-http-client-close-with-default-agent.js`
-- `parallel/test-http-client-defaults.js`
 - `parallel/test-http-client-defaults.js#block_00_block_00`
 - `parallel/test-http-client-defaults.js#block_01_block_01`
 - `parallel/test-http-client-defaults.js#block_02_block_02`
@@ -1371,7 +1246,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-client-readable.js`
 - `parallel/test-http-client-reject-unexpected-agent.js`
 - `parallel/test-http-client-request-options.js`
-- `parallel/test-http-client-res-destroyed.js`
 - `parallel/test-http-client-res-destroyed.js#block_00_block_00`
 - `parallel/test-http-client-res-destroyed.js#block_01_block_01`
 - `parallel/test-http-client-set-timeout-after-end.js`
@@ -1391,7 +1265,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-dummy-characters-smuggling.js#block_00_block_00`
 - `parallel/test-http-early-hints.js#block_02_block_02`
 - `parallel/test-http-early-hints.js#block_05_block_05`
-- `parallel/test-http-end-throw-socket-handling.js`
 - `parallel/test-http-eof-on-connect.js`
 - `parallel/test-http-extra-response.js`
 - `parallel/test-http-flush-response-headers.js`
@@ -1400,7 +1273,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-head-response-has-no-body-end-implicit-headers.js`
 - `parallel/test-http-head-response-has-no-body-end.js`
 - `parallel/test-http-head-response-has-no-body.js`
-- `parallel/test-http-head-throw-on-response-body-write.js`
 - `parallel/test-http-head-throw-on-response-body-write.js#block_00_block_00`
 - `parallel/test-http-head-throw-on-response-body-write.js#block_01_block_01`
 - `parallel/test-http-head-throw-on-response-body-write.js#block_02_block_02`
@@ -1438,7 +1310,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-outgoing-finish-writable.js`
 - `parallel/test-http-outgoing-finish.js`
 - `parallel/test-http-outgoing-finished.js`
-- `parallel/test-http-outgoing-internal-headernames-getter.js`
 - `parallel/test-http-outgoing-internal-headernames-getter.js#block_00_block_00`
 - `parallel/test-http-outgoing-internal-headernames-getter.js#block_01_block_01`
 - `parallel/test-http-outgoing-internal-headernames-setter.js`
@@ -1448,17 +1319,14 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-outgoing-properties.js#block_01_block_01`
 - `parallel/test-http-outgoing-properties.js#block_03_block_03`
 - `parallel/test-http-outgoing-properties.js#block_04_block_04`
-- `parallel/test-http-outgoing-proto.js`
 - `parallel/test-http-outgoing-proto.js#block_00_write`
 - `parallel/test-http-outgoing-proto.js#block_01_block_01`
-- `parallel/test-http-outgoing-settimeout.js`
 - `parallel/test-http-outgoing-settimeout.js#block_00_block_00`
 - `parallel/test-http-outgoing-settimeout.js#block_01_block_01`
 - `parallel/test-http-outgoing-writableFinished.js`
 - `parallel/test-http-outgoing-write-types.js`
 - `parallel/test-http-parser-bad-ref.js`
 - `parallel/test-http-parser-free.js`
-- `parallel/test-http-parser.js`
 - `parallel/test-http-parser.js#block_00_block_00`
 - `parallel/test-http-parser.js#block_01_block_01`
 - `parallel/test-http-parser.js#block_02_block_02`
@@ -1485,7 +1353,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-request-end.js`
 - `parallel/test-http-request-host-header.js#block_01_block_01`
 - `parallel/test-http-request-invalid-method-error.js`
-- `parallel/test-http-request-join-authorization-headers.js`
 - `parallel/test-http-request-join-authorization-headers.js#block_00_block_00`
 - `parallel/test-http-request-join-authorization-headers.js#block_01_block_01`
 - `parallel/test-http-request-join-authorization-headers.js#block_02_block_02`
@@ -1495,14 +1362,12 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-request-smuggling-content-length.js`
 - `parallel/test-http-res-write-end-dont-take-array.js`
 - `parallel/test-http-response-add-header-after-sent.js`
-- `parallel/test-http-response-close.js`
 - `parallel/test-http-response-close.js#block_00_block_00`
 - `parallel/test-http-response-close.js#block_01_block_01`
 - `parallel/test-http-response-close.js#block_02_block_02`
 - `parallel/test-http-response-cork.js`
 - `parallel/test-http-response-readable.js`
 - `parallel/test-http-response-remove-header-after-sent.js`
-- `parallel/test-http-response-setheaders.js`
 - `parallel/test-http-response-setheaders.js#block_00_block_00`
 - `parallel/test-http-response-setheaders.js#block_01_block_01`
 - `parallel/test-http-response-setheaders.js#block_02_block_02`
@@ -1513,20 +1378,17 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-response-splitting.js`
 - `parallel/test-http-response-statuscode.js`
 - `parallel/test-http-response-writehead-returns-this.js`
-- `parallel/test-http-server-close-idle-wait-response.js`
 - `parallel/test-http-server-delete-parser.js`
 - `parallel/test-http-server-keep-alive-defaults.js`
 - `parallel/test-http-server-keep-alive-max-requests-null.js`
 - `parallel/test-http-server-keep-alive-timeout.js`
 - `parallel/test-http-server-method.query.js`
 - `parallel/test-http-server-multiple-client-error.js`
-- `parallel/test-http-server-non-utf8-header.js`
 - `parallel/test-http-server-non-utf8-header.js#block_00_block_00`
 - `parallel/test-http-server-non-utf8-header.js#block_01_block_01`
 - `parallel/test-http-server-non-utf8-header.js#block_02_block_02`
 - `parallel/test-http-server-reject-cr-no-lf.js`
 - `parallel/test-http-server-response-standalone.js`
-- `parallel/test-http-server-timeouts-validation.js`
 - `parallel/test-http-server-timeouts-validation.js#block_00_block_00`
 - `parallel/test-http-server-timeouts-validation.js#block_01_block_01`
 - `parallel/test-http-server-timeouts-validation.js#block_02_block_02`
@@ -1544,7 +1406,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-timeout-client-warning.js`
 - `parallel/test-http-timeout-overflow.js`
 - `parallel/test-http-timeout.js`
-- `parallel/test-http-transfer-encoding-smuggling.js`
 - `parallel/test-http-transfer-encoding-smuggling.js#block_00_block_00`
 - `parallel/test-http-transfer-encoding-smuggling.js#block_01_block_01`
 - `parallel/test-http-upgrade-server.js`
@@ -1556,7 +1417,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http-url.parse-post.js`
 - `parallel/test-http-url.parse-search.js`
 - `parallel/test-http-write-empty-string.js`
-- `parallel/test-http-write-head-2.js`
 - `parallel/test-http-write-head-2.js#block_00_block_00`
 - `parallel/test-http-write-head-2.js#block_01_block_01`
 - `parallel/test-http-write-head-2.js#block_02_block_02`
@@ -1566,11 +1426,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-http2-client-upload-reject.js`
 - `parallel/test-http2-client-upload.js`
 - `parallel/test-http2-request-response-proto.js`
-- `parallel/test-https-insecure-parse-per-stream.js#block_00_test_1_the_server_sends_an_invalid_header`
-- `parallel/test-https-insecure-parse-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`
-- `parallel/test-https-insecure-parse-per-stream.js#block_04_test_5_invalid_argument_type`
-- `parallel/test-https-max-header-size-per-stream.js#block_00_test_1_the_server_sends_larger_headers_than_what_would_other`
-- `parallel/test-https-max-header-size-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`
 - `parallel/test-inspector-stops-no-file.js`
 - `parallel/test-instanceof.js`
 - `parallel/test-kill-segfault-freebsd.js`
@@ -1581,7 +1436,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-module-cache.js`
 - `parallel/test-module-children.js`
 - `parallel/test-module-circular-dependency-warning.js`
-- `parallel/test-module-create-require-multibyte.js`
 - `parallel/test-module-create-require-multibyte.js#block_00_block_00`
 - `parallel/test-module-create-require-multibyte.js#block_01_block_01`
 - `parallel/test-module-create-require.js`
@@ -1591,7 +1445,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-module-loading-error.js`
 - `parallel/test-module-main-fail.js`
 - `parallel/test-module-main-preserve-symlinks-fail.js`
-- `parallel/test-module-multi-extensions.js`
 - `parallel/test-module-multi-extensions.js#block_00_block_00`
 - `parallel/test-module-multi-extensions.js#block_01_block_01`
 - `parallel/test-module-multi-extensions.js#block_02_block_02`
@@ -1605,7 +1458,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-module-prototype-mutation.js`
 - `parallel/test-module-relative-lookup.js`
 - `parallel/test-module-run-main-monkey-patch.js`
-- `parallel/test-module-setsourcemapssupport.js`
 - `parallel/test-module-setsourcemapssupport.js#block_00_block_00`
 - `parallel/test-module-setsourcemapssupport.js#block_01_block_01`
 - `parallel/test-module-stat.js`
@@ -1614,13 +1466,11 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-module-wrap.js`
 - `parallel/test-net-access-byteswritten.js`
 - `parallel/test-net-after-close.js`
-- `parallel/test-net-allow-half-open.js`
 - `parallel/test-net-allow-half-open.js#block_00_block_00`
 - `parallel/test-net-allow-half-open.js#block_01_block_01`
 - `parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js`
 - `parallel/test-net-autoselectfamily-attempt-timeout-default-value.js`
 - `parallel/test-net-autoselectfamily-commandline-option.js`
-- `parallel/test-net-autoselectfamily-default.js`
 - `parallel/test-net-autoselectfamily-default.js#block_00_test_that_ipv4_is_reached_by_default_if_ipv6_is_not_reachabl`
 - `parallel/test-net-autoselectfamily-default.js#block_01_test_that_ipv4_is_not_reached_by_default_if_ipv6_is_not_reac`
 - `parallel/test-net-autoselectfamily-ipv4first.js`
@@ -1629,7 +1479,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-net-autoselectfamily.js#block_03_test_that_the_option_can_be_disabled`
 - `parallel/test-net-better-error-messages-listen-path.js`
 - `parallel/test-net-better-error-messages-listen.js`
-- `parallel/test-net-better-error-messages-path.js`
 - `parallel/test-net-better-error-messages-path.js#block_00_block_00`
 - `parallel/test-net-better-error-messages-path.js#block_01_block_01`
 - `parallel/test-net-better-error-messages-port-hostname.js`
@@ -1641,7 +1490,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-net-buffersize.js`
 - `parallel/test-net-bytes-read.js`
 - `parallel/test-net-bytes-stats.js`
-- `parallel/test-net-bytes-written-large.js#block_00_block_00`
 - `parallel/test-net-can-reset-timeout.js`
 - `parallel/test-net-client-bind-twice.js`
 - `parallel/test-net-connect-abort-controller.js`
@@ -1682,16 +1530,13 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-net-pause-resume-connecting.js`
 - `parallel/test-net-persistent-keepalive.js`
 - `parallel/test-net-pipe-connect-errors.js`
-- `parallel/test-net-reconnect.js`
 - `parallel/test-net-remote-address-port.js`
 - `parallel/test-net-remote-address.js`
-- `parallel/test-net-server-call-listen-multiple-times.js`
 - `parallel/test-net-server-call-listen-multiple-times.js#block_00_first_test_check_that_after_error_event_you_can_listen_right`
 - `parallel/test-net-server-call-listen-multiple-times.js#block_01_second_test_check_that_second_listen_call_throws_an_error`
 - `parallel/test-net-server-call-listen-multiple-times.js#block_02_check_that_after_the_close_call_you_can_run_listen_method_ju`
 - `parallel/test-net-server-close.js`
 - `parallel/test-net-server-listen-options.js#block_00_block_00`
-- `parallel/test-net-server-listen-path.js`
 - `parallel/test-net-server-listen-path.js#block_00_test_listen_path`
 - `parallel/test-net-server-listen-path.js#block_01_test_listen_path`
 - `parallel/test-net-server-listen-path.js#block_02_test_listen_path_cb`
@@ -1721,7 +1566,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-net-socket-reset-twice.js`
 - `parallel/test-net-socket-timeout-unref.js`
 - `parallel/test-net-socket-timeout.js`
-- `parallel/test-net-socket-write-after-close.js`
 - `parallel/test-net-socket-write-after-close.js#block_00_block_00`
 - `parallel/test-net-socket-write-after-close.js#block_01_block_01`
 - `parallel/test-net-socket-write-error.js`
@@ -1795,13 +1639,8 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-process-env-deprecation.js`
 - `parallel/test-process-env-ignore-getter-setter.js`
 - `parallel/test-process-env-symbols.js`
-- `parallel/test-process-env-windows-error-reset.js`
 - `parallel/test-process-env-windows-error-reset.js#block_00_block_00`
 - `parallel/test-process-env-windows-error-reset.js#block_01_block_01`
-- `parallel/test-process-env.js#block_00_block_00`
-- `parallel/test-process-env.js#block_01_block_01`
-- `parallel/test-process-env.js#block_02_https_github_com_nodejs_node_issues_45380`
-- `parallel/test-process-env.js#block_03_https_github_com_nodejs_node_issues_32920`
 - `parallel/test-process-exception-capture-errors.js`
 - `parallel/test-process-exit-from-before-exit.js`
 - `parallel/test-process-exit-handler.js`
@@ -1827,7 +1666,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-querystring-escape.js`
 - `parallel/test-querystring-maxKeys-non-finite.js`
 - `parallel/test-querystring-multichar-separator.js`
-- `parallel/test-querystring.js`
 - `parallel/test-querystring.js#block_00_test_the_nested_qs_in_qs_case`
 - `parallel/test-querystring.js#block_01_nested_in_colon`
 - `parallel/test-querystring.js#block_02_nested`
@@ -1846,25 +1684,21 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-ref-unref-return.js`
 - `parallel/test-regression-object-prototype.js`
 - `parallel/test-repl-syntax-error-handling.js`
-- `parallel/test-require-cache.js`
 - `parallel/test-require-cache.js#block_00_block_00`
 - `parallel/test-require-cache.js#block_01_block_01`
 - `parallel/test-require-empty-main.js`
 - `parallel/test-require-enoent-dir.js`
 - `parallel/test-require-invalid-main-no-exports.js`
 - `parallel/test-require-invalid-package.js`
-- `parallel/test-require-node-prefix.js`
 - `parallel/test-require-node-prefix.js#block_00_all_kinds_of_specifiers_should_work_without_issue`
 - `parallel/test-require-node-prefix.js#block_01_node_prefixed_require_calls_bypass_the_require_cache`
 - `parallel/test-require-nul.js`
 - `parallel/test-require-process.js`
-- `parallel/test-require-resolve-opts-paths-relative.js`
 - `parallel/test-require-resolve-opts-paths-relative.js#block_00_parent_directory_paths_work_as_intended`
 - `parallel/test-require-resolve-opts-paths-relative.js#block_01_current_directory_paths_work_as_intended`
 - `parallel/test-require-resolve-opts-paths-relative.js#block_02_sub_directory_paths_work_as_intended`
 - `parallel/test-runner-aliases.js`
 - `parallel/test-runner-assert.js#test_00_expected_methods_are_on_t_assert`
-- `parallel/test-runner-coverage.js`
 - `parallel/test-runner-coverage.js#test_00_test_coverage_report`
 - `parallel/test-runner-coverage.js#test_01_test_tap_coverage_reporter`
 - `parallel/test-runner-coverage.js#test_02_test_spec_coverage_reporter`
@@ -1877,7 +1711,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-runner-coverage.js#test_09_coverage_with_included_files`
 - `parallel/test-runner-coverage.js#test_10_coverage_with_included_and_excluded_files`
 - `parallel/test-runner-coverage.js#test_11_correctly_prints_the_coverage_report_of_files_contained_in_p`
-- `parallel/test-runner-custom-assertions.js`
 - `parallel/test-runner-custom-assertions.js#test_00_throws_if_name_is_not_a_string`
 - `parallel/test-runner-custom-assertions.js#test_01_throws_if_fn_is_not_a_function`
 - `parallel/test-runner-custom-assertions.js#test_02_invokes_a_custom_assertion_as_part_of_the_test_plan`
@@ -1947,7 +1780,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-runner-subtest-after-hook.js`
 - `parallel/test-runner-test-filepath.js#test_00_suite`
 - `parallel/test-runner-test-filepath.js#test_01_test_01`
-- `parallel/test-runner-test-fullname.js`
 - `parallel/test-runner-test-fullname.js#test_00_suite`
 - `parallel/test-runner-test-fullname.js#test_01_test_01`
 - `parallel/test-runner-typechecking.js`
@@ -1962,7 +1794,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-signal-handler-remove-on-exit.js`
 - `parallel/test-socket-write-after-fin-error.js`
 - `parallel/test-socket-write-after-fin.js`
-- `parallel/test-source-map-enable.js`
 - `parallel/test-source-map-enable.js#block_00_outputs_source_maps_when_event_loop_is_drained_with_no_async`
 - `parallel/test-source-map-enable.js#block_01_outputs_source_maps_when_process_kill_process_pid_sigint_exi`
 - `parallel/test-source-map-enable.js#block_02_outputs_source_maps_when_source_file_calls_process_exit_1`
@@ -1988,7 +1819,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-source-map-enable.js#block_22_refs_https_github_com_nodejs_node_issues_42417`
 - `parallel/test-sqlite-custom-functions.js`
 - `parallel/test-sqlite-data-types.js`
-- `parallel/test-sqlite-database-sync.js`
 - `parallel/test-sqlite-database-sync.js#test_00_databasesync_constructor`
 - `parallel/test-sqlite-database-sync.js#test_01_databasesync_prototype_open`
 - `parallel/test-sqlite-database-sync.js#test_02_databasesync_prototype_close`
@@ -2038,7 +1868,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stdout-stderr-reading.js`
 - `parallel/test-stdout-stderr-write.js`
 - `parallel/test-stream-aliases-legacy.js`
-- `parallel/test-stream-auto-destroy.js`
 - `parallel/test-stream-auto-destroy.js#block_00_block_00`
 - `parallel/test-stream-auto-destroy.js#block_01_block_01`
 - `parallel/test-stream-auto-destroy.js#block_02_block_02`
@@ -2049,10 +1878,8 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-base-typechecking.js`
 - `parallel/test-stream-big-packet.js`
 - `parallel/test-stream-big-push.js`
-- `parallel/test-stream-catch-rejections.js`
 - `parallel/test-stream-catch-rejections.js#block_00_block_00`
 - `parallel/test-stream-catch-rejections.js#block_01_block_01`
-- `parallel/test-stream-compose-operator.js`
 - `parallel/test-stream-compose-operator.js#block_00_block_00`
 - `parallel/test-stream-compose-operator.js#block_01_block_01`
 - `parallel/test-stream-compose-operator.js#block_02_block_02`
@@ -2082,7 +1909,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-compose.js#block_19_block_19`
 - `parallel/test-stream-compose.js#block_20_block_20`
 - `parallel/test-stream-compose.js#block_21_block_21`
-- `parallel/test-stream-construct.js`
 - `parallel/test-stream-construct.js#block_00_block_00`
 - `parallel/test-stream-construct.js#block_01_block_01`
 - `parallel/test-stream-construct.js#block_02_block_02`
@@ -2095,7 +1921,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-construct.js#block_09_block_09`
 - `parallel/test-stream-construct.js#block_10_block_10`
 - `parallel/test-stream-construct.js#block_11_block_11`
-- `parallel/test-stream-consumers.js`
 - `parallel/test-stream-consumers.js#block_00_block_00`
 - `parallel/test-stream-consumers.js#block_01_block_01`
 - `parallel/test-stream-consumers.js#block_02_block_02`
@@ -2114,7 +1939,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-consumers.js#block_15_block_15`
 - `parallel/test-stream-decoder-objectmode.js`
 - `parallel/test-stream-destroy-event-order.js`
-- `parallel/test-stream-destroy.js`
 - `parallel/test-stream-destroy.js#block_00_block_00`
 - `parallel/test-stream-destroy.js#block_01_block_01`
 - `parallel/test-stream-destroy.js#block_02_block_02`
@@ -2126,7 +1950,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-drop-take.js#block_03_block_03`
 - `parallel/test-stream-drop-take.js#block_04_block_04`
 - `parallel/test-stream-drop-take.js#block_05_block_05`
-- `parallel/test-stream-duplex-destroy.js`
 - `parallel/test-stream-duplex-destroy.js#block_00_block_00`
 - `parallel/test-stream-duplex-destroy.js#block_01_block_01`
 - `parallel/test-stream-duplex-destroy.js#block_02_block_02`
@@ -2143,7 +1966,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-duplex-destroy.js#block_13_block_13`
 - `parallel/test-stream-duplex-destroy.js#block_14_block_14`
 - `parallel/test-stream-duplex-destroy.js#block_15_block_15`
-- `parallel/test-stream-duplex-end.js`
 - `parallel/test-stream-duplex-end.js#block_00_block_00`
 - `parallel/test-stream-duplex-end.js#block_01_block_01`
 - `parallel/test-stream-duplex-end.js#block_02_block_02`
@@ -2169,20 +1991,16 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-duplex-from.js#block_20_block_20`
 - `parallel/test-stream-duplex-from.js#block_21_block_21`
 - `parallel/test-stream-duplex-from.js#block_22_block_22`
-- `parallel/test-stream-duplex-props.js`
 - `parallel/test-stream-duplex-props.js#block_00_block_00`
 - `parallel/test-stream-duplex-props.js#block_01_block_01`
 - `parallel/test-stream-duplex-readable-end.js`
 - `parallel/test-stream-duplex-readable-writable.js#block_00_block_00`
 - `parallel/test-stream-duplex-readable-writable.js#block_01_block_01`
-- `parallel/test-stream-duplex-writable-finished.js`
 - `parallel/test-stream-duplex-writable-finished.js#block_00_basic`
 - `parallel/test-stream-duplex-writable-finished.js#block_01_event`
-- `parallel/test-stream-duplex.js`
 - `parallel/test-stream-duplex.js#block_00_duplex_fromweb`
 - `parallel/test-stream-duplex.js#block_01_duplex_fromweb_using_utf8_and_objectmode`
 - `parallel/test-stream-duplex.js#block_02_duplex_toweb`
-- `parallel/test-stream-duplexpair.js`
 - `parallel/test-stream-duplexpair.js#block_00_block_00`
 - `parallel/test-stream-duplexpair.js#block_01_block_01`
 - `parallel/test-stream-duplexpair.js#block_02_block_02`
@@ -2190,10 +2008,8 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-duplexpair.js#block_04_because_a_zero_size_push_doesn_t_trigger_a_read`
 - `parallel/test-stream-end-of-streams.js`
 - `parallel/test-stream-end-paused.js`
-- `parallel/test-stream-error-once.js`
 - `parallel/test-stream-error-once.js#block_00_block_00`
 - `parallel/test-stream-error-once.js#block_01_block_01`
-- `parallel/test-stream-event-names.js`
 - `parallel/test-stream-event-names.js#block_00_block_00`
 - `parallel/test-stream-event-names.js#block_01_block_01`
 - `parallel/test-stream-event-names.js#block_02_block_02`
@@ -2201,7 +2017,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-event-names.js#block_04_block_04`
 - `parallel/test-stream-event-names.js#block_05_block_05`
 - `parallel/test-stream-events-prepend.js`
-- `parallel/test-stream-filter.js`
 - `parallel/test-stream-filter.js#block_00_block_00`
 - `parallel/test-stream-filter.js#block_01_block_01`
 - `parallel/test-stream-filter.js#block_02_block_02`
@@ -2249,7 +2064,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-finished.js#block_38_block_38`
 - `parallel/test-stream-finished.js#block_39_block_39`
 - `parallel/test-stream-finished.js#block_40_block_40`
-- `parallel/test-stream-flatMap.js`
 - `parallel/test-stream-flatMap.js#block_00_block_00`
 - `parallel/test-stream-flatMap.js#block_01_block_01`
 - `parallel/test-stream-flatMap.js#block_02_block_02`
@@ -2258,7 +2072,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-flatMap.js#block_05_block_05`
 - `parallel/test-stream-flatMap.js#block_06_block_06`
 - `parallel/test-stream-flatMap.js#block_07_block_07`
-- `parallel/test-stream-forEach.js`
 - `parallel/test-stream-forEach.js#block_00_block_00`
 - `parallel/test-stream-forEach.js#block_01_block_01`
 - `parallel/test-stream-forEach.js#block_02_block_02`
@@ -2287,11 +2100,9 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-map.js#block_14_block_14`
 - `parallel/test-stream-map.js#block_15_block_15`
 - `parallel/test-stream-map.js#block_16_block_16`
-- `parallel/test-stream-objectmode-undefined.js`
 - `parallel/test-stream-objectmode-undefined.js#block_00_block_00`
 - `parallel/test-stream-objectmode-undefined.js#block_01_block_01`
 - `parallel/test-stream-objectmode-undefined.js#block_02_block_02`
-- `parallel/test-stream-once-readable-pipe.js`
 - `parallel/test-stream-once-readable-pipe.js#block_00_block_00`
 - `parallel/test-stream-once-readable-pipe.js#block_01_block_01`
 - `parallel/test-stream-passthrough-drain.js`
@@ -2302,7 +2113,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-pipe-cleanup-pause.js`
 - `parallel/test-stream-pipe-cleanup.js`
 - `parallel/test-stream-pipe-deadlock.js`
-- `parallel/test-stream-pipe-error-handling.js`
 - `parallel/test-stream-pipe-error-handling.js#block_00_block_00`
 - `parallel/test-stream-pipe-error-handling.js#block_01_block_01`
 - `parallel/test-stream-pipe-error-handling.js#block_02_block_02`
@@ -2311,18 +2121,15 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-pipe-error-unhandled.js`
 - `parallel/test-stream-pipe-event.js`
 - `parallel/test-stream-pipe-flow-after-unpipe.js`
-- `parallel/test-stream-pipe-flow.js`
 - `parallel/test-stream-pipe-flow.js#block_00_block_00`
 - `parallel/test-stream-pipe-flow.js#block_01_block_01`
 - `parallel/test-stream-pipe-flow.js#block_02_block_02`
 - `parallel/test-stream-pipe-manual-resume.js`
 - `parallel/test-stream-pipe-multiple-pipes.js`
 - `parallel/test-stream-pipe-needDrain.js`
-- `parallel/test-stream-pipe-same-destination-twice.js`
 - `parallel/test-stream-pipe-same-destination-twice.js#block_00_block_00`
 - `parallel/test-stream-pipe-same-destination-twice.js#block_01_block_01`
 - `parallel/test-stream-pipe-same-destination-twice.js#block_02_block_02`
-- `parallel/test-stream-pipe-unpipe-streams.js`
 - `parallel/test-stream-pipe-unpipe-streams.js#block_00_block_00`
 - `parallel/test-stream-pipe-unpipe-streams.js#block_01_block_01`
 - `parallel/test-stream-pipeline-async-iterator.js`
@@ -2336,8 +2143,8 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-pipeline.js#block_03_block_03`
 - `parallel/test-stream-pipeline.js#block_04_block_04`
 - `parallel/test-stream-pipeline.js#block_05_block_05`
+- `parallel/test-stream-pipeline.js#block_06_block_06`
 - `parallel/test-stream-pipeline.js#block_07_block_07`
-- `parallel/test-stream-pipeline.js#block_09_block_09`
 - `parallel/test-stream-pipeline.js#block_10_block_10`
 - `parallel/test-stream-pipeline.js#block_11_block_11`
 - `parallel/test-stream-pipeline.js#block_12_block_12`
@@ -2408,7 +2215,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-pipeline.js#block_78_block_78`
 - `parallel/test-stream-pipeline.js#block_79_block_79`
 - `parallel/test-stream-preprocess.js`
-- `parallel/test-stream-promises.js`
 - `parallel/test-stream-promises.js#block_00_pipeline_success`
 - `parallel/test-stream-promises.js#block_01_pipeline_error`
 - `parallel/test-stream-promises.js#block_02_finished_success`
@@ -2420,7 +2226,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-promises.js#block_08_listenercount_should_be_1_after_calling_finish`
 - `parallel/test-stream-push-order.js`
 - `parallel/test-stream-push-strings.js`
-- `parallel/test-stream-readable-aborted.js`
 - `parallel/test-stream-readable-aborted.js#block_00_block_00`
 - `parallel/test-stream-readable-aborted.js#block_01_block_01`
 - `parallel/test-stream-readable-aborted.js#block_02_block_02`
@@ -2429,11 +2234,9 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-readable-add-chunk-during-data.js`
 - `parallel/test-stream-readable-constructor-set-methods.js`
 - `parallel/test-stream-readable-data.js`
-- `parallel/test-stream-readable-default-encoding.js`
 - `parallel/test-stream-readable-default-encoding.js#block_00_block_00`
 - `parallel/test-stream-readable-default-encoding.js#block_01_block_01`
 - `parallel/test-stream-readable-default-encoding.js#block_02_block_02`
-- `parallel/test-stream-readable-destroy.js`
 - `parallel/test-stream-readable-destroy.js#block_00_block_00`
 - `parallel/test-stream-readable-destroy.js#block_01_block_01`
 - `parallel/test-stream-readable-destroy.js#block_02_block_02`
@@ -2457,7 +2260,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-readable-destroy.js#block_20_block_20`
 - `parallel/test-stream-readable-destroy.js#block_21_block_21`
 - `parallel/test-stream-readable-destroy.js#block_22_block_22`
-- `parallel/test-stream-readable-didRead.js`
 - `parallel/test-stream-readable-didRead.js#block_00_block_00`
 - `parallel/test-stream-readable-didRead.js#block_01_block_01`
 - `parallel/test-stream-readable-didRead.js#block_02_block_02`
@@ -2465,7 +2267,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-readable-didRead.js#block_04_block_04`
 - `parallel/test-stream-readable-didRead.js#block_05_block_05`
 - `parallel/test-stream-readable-dispose.js`
-- `parallel/test-stream-readable-emit-readable-short-stream.js`
 - `parallel/test-stream-readable-emit-readable-short-stream.js#block_00_block_00`
 - `parallel/test-stream-readable-emit-readable-short-stream.js#block_01_block_01`
 - `parallel/test-stream-readable-emit-readable-short-stream.js#block_02_block_02`
@@ -2474,12 +2275,10 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-readable-emit-readable-short-stream.js#block_05_block_05`
 - `parallel/test-stream-readable-emittedReadable.js`
 - `parallel/test-stream-readable-end-destroyed.js`
-- `parallel/test-stream-readable-ended.js`
 - `parallel/test-stream-readable-ended.js#block_00_basic`
 - `parallel/test-stream-readable-ended.js#block_01_event`
 - `parallel/test-stream-readable-ended.js#block_02_verifies_no_error_triggered_on_multiple_push_null_invocation`
 - `parallel/test-stream-readable-error-end.js`
-- `parallel/test-stream-readable-event.js`
 - `parallel/test-stream-readable-event.js#block_00_block_00`
 - `parallel/test-stream-readable-event.js#block_01_block_01`
 - `parallel/test-stream-readable-event.js#block_02_block_02`
@@ -2494,43 +2293,34 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-readable-invalid-chunk.js`
 - `parallel/test-stream-readable-needReadable.js`
 - `parallel/test-stream-readable-next-no-null.js`
-- `parallel/test-stream-readable-no-unneeded-readable.js`
 - `parallel/test-stream-readable-no-unneeded-readable.js#block_00_block_00`
 - `parallel/test-stream-readable-no-unneeded-readable.js#block_01_block_01`
-- `parallel/test-stream-readable-object-multi-push-async.js`
 - `parallel/test-stream-readable-object-multi-push-async.js#block_00_block_00`
 - `parallel/test-stream-readable-object-multi-push-async.js#block_01_block_01`
 - `parallel/test-stream-readable-object-multi-push-async.js#block_02_block_02`
 - `parallel/test-stream-readable-object-multi-push-async.js#block_03_block_03`
 - `parallel/test-stream-readable-object-multi-push-async.js#block_04_block_04`
-- `parallel/test-stream-readable-pause-and-resume.js`
 - `parallel/test-stream-readable-pause-and-resume.js#block_00_block_00`
 - `parallel/test-stream-readable-pause-and-resume.js#block_01_block_01`
 - `parallel/test-stream-readable-readable-then-resume.js`
-- `parallel/test-stream-readable-readable.js`
 - `parallel/test-stream-readable-readable.js#block_00_block_00`
 - `parallel/test-stream-readable-readable.js#block_01_block_01`
 - `parallel/test-stream-readable-readable.js#block_02_block_02`
-- `parallel/test-stream-readable-reading-readingMore.js`
 - `parallel/test-stream-readable-reading-readingMore.js#block_00_block_00`
 - `parallel/test-stream-readable-reading-readingMore.js#block_01_block_01`
 - `parallel/test-stream-readable-reading-readingMore.js#block_02_block_02`
 - `parallel/test-stream-readable-resume-hwm.js`
-- `parallel/test-stream-readable-resumeScheduled.js`
 - `parallel/test-stream-readable-resumeScheduled.js#block_00_block_00`
 - `parallel/test-stream-readable-resumeScheduled.js#block_01_block_01`
 - `parallel/test-stream-readable-resumeScheduled.js#block_02_block_02`
-- `parallel/test-stream-readable-setEncoding-existing-buffers.js`
 - `parallel/test-stream-readable-setEncoding-existing-buffers.js#block_00_block_00`
 - `parallel/test-stream-readable-setEncoding-existing-buffers.js#block_01_block_01`
 - `parallel/test-stream-readable-setEncoding-existing-buffers.js#block_02_block_02`
 - `parallel/test-stream-readable-setEncoding-null.js`
-- `parallel/test-stream-readable-strategy-option.js`
 - `parallel/test-stream-readable-strategy-option.js#block_00_block_00`
 - `parallel/test-stream-readable-strategy-option.js#block_01_block_01`
 - `parallel/test-stream-readable-strategy-option.js#block_02_block_02`
 - `parallel/test-stream-readable-to-web-termination.js`
-- `parallel/test-stream-readable-unshift.js`
 - `parallel/test-stream-readable-unshift.js#block_00_block_00`
 - `parallel/test-stream-readable-unshift.js#block_01_block_01`
 - `parallel/test-stream-readable-unshift.js#block_02_block_02`
@@ -2548,7 +2338,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-reduce.js#block_06_block_06`
 - `parallel/test-stream-reduce.js#block_07_block_07`
 - `parallel/test-stream-set-default-hwm.js`
-- `parallel/test-stream-toArray.js`
 - `parallel/test-stream-toArray.js#block_00_block_00`
 - `parallel/test-stream-toArray.js#block_01_block_01`
 - `parallel/test-stream-toArray.js#block_02_block_02`
@@ -2558,7 +2347,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-toWeb-allows-server-response.js`
 - `parallel/test-stream-transform-callback-twice.js`
 - `parallel/test-stream-transform-constructor-set-methods.js`
-- `parallel/test-stream-transform-destroy.js`
 - `parallel/test-stream-transform-destroy.js#block_00_block_00`
 - `parallel/test-stream-transform-destroy.js#block_01_block_01`
 - `parallel/test-stream-transform-destroy.js#block_02_block_02`
@@ -2572,23 +2360,19 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-transform-flush-data.js`
 - `parallel/test-stream-transform-hwm0.js`
 - `parallel/test-stream-transform-objectmode-falsey-value.js`
-- `parallel/test-stream-transform-split-highwatermark.js`
 - `parallel/test-stream-transform-split-highwatermark.js#block_00_test_nan`
 - `parallel/test-stream-transform-split-highwatermark.js#block_01_test_non_duplex_streams_ignore_the_options`
 - `parallel/test-stream-transform-split-objectmode.js`
-- `parallel/test-stream-typedarray.js`
 - `parallel/test-stream-typedarray.js#block_00_block_00`
 - `parallel/test-stream-typedarray.js#block_01_block_01`
 - `parallel/test-stream-typedarray.js#block_02_block_02`
 - `parallel/test-stream-typedarray.js#block_03_block_03`
 - `parallel/test-stream-typedarray.js#block_04_block_04`
-- `parallel/test-stream-uint8array.js`
 - `parallel/test-stream-uint8array.js#block_00_block_00`
 - `parallel/test-stream-uint8array.js#block_01_block_01`
 - `parallel/test-stream-uint8array.js#block_02_block_02`
 - `parallel/test-stream-uint8array.js#block_03_block_03`
 - `parallel/test-stream-uint8array.js#block_04_block_04`
-- `parallel/test-stream-unpipe-event.js`
 - `parallel/test-stream-unpipe-event.js#block_00_block_00`
 - `parallel/test-stream-unpipe-event.js#block_01_block_01`
 - `parallel/test-stream-unpipe-event.js#block_02_block_02`
@@ -2597,14 +2381,12 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-unpipe-event.js#block_05_block_05`
 - `parallel/test-stream-unshift-empty-chunk.js`
 - `parallel/test-stream-unshift-read-race.js`
-- `parallel/test-stream-writable-aborted.js`
 - `parallel/test-stream-writable-aborted.js#block_00_block_00`
 - `parallel/test-stream-writable-aborted.js#block_01_block_01`
 - `parallel/test-stream-writable-change-default-encoding.js`
 - `parallel/test-stream-writable-clear-buffer.js`
 - `parallel/test-stream-writable-constructor-set-methods.js`
 - `parallel/test-stream-writable-decoded-encoding.js`
-- `parallel/test-stream-writable-destroy.js`
 - `parallel/test-stream-writable-destroy.js#block_00_block_00`
 - `parallel/test-stream-writable-destroy.js#block_01_block_01`
 - `parallel/test-stream-writable-destroy.js#block_02_block_02`
@@ -2633,7 +2415,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-writable-destroy.js#block_25_block_25`
 - `parallel/test-stream-writable-destroy.js#block_26_block_26`
 - `parallel/test-stream-writable-destroy.js#block_27_block_27`
-- `parallel/test-stream-writable-end-cb-error.js`
 - `parallel/test-stream-writable-end-cb-error.js#block_00_block_00`
 - `parallel/test-stream-writable-end-cb-error.js#block_01_block_01`
 - `parallel/test-stream-writable-end-cb-error.js#block_02_block_02`
@@ -2643,12 +2424,10 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-writable-final-async.js`
 - `parallel/test-stream-writable-final-destroy.js`
 - `parallel/test-stream-writable-final-throw.js`
-- `parallel/test-stream-writable-finish-destroyed.js`
 - `parallel/test-stream-writable-finish-destroyed.js#block_00_block_00`
 - `parallel/test-stream-writable-finish-destroyed.js#block_01_block_01`
 - `parallel/test-stream-writable-finish-destroyed.js#block_02_block_02`
 - `parallel/test-stream-writable-finished-state.js`
-- `parallel/test-stream-writable-finished.js`
 - `parallel/test-stream-writable-finished.js#block_00_basic`
 - `parallel/test-stream-writable-finished.js#block_01_event`
 - `parallel/test-stream-writable-finished.js#block_02_block_02`
@@ -2657,27 +2436,22 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-writable-finished.js#block_05_block_05`
 - `parallel/test-stream-writable-invalid-chunk.js`
 - `parallel/test-stream-writable-needdrain-state.js`
-- `parallel/test-stream-writable-null.js`
 - `parallel/test-stream-writable-null.js#block_00_block_00`
 - `parallel/test-stream-writable-null.js#block_01_block_01`
 - `parallel/test-stream-writable-null.js#block_02_block_02`
 - `parallel/test-stream-writable-null.js#block_03_block_03`
 - `parallel/test-stream-writable-properties.js`
-- `parallel/test-stream-writable-writable.js`
 - `parallel/test-stream-writable-writable.js#block_00_block_00`
 - `parallel/test-stream-writable-writable.js#block_01_block_01`
 - `parallel/test-stream-writable-writable.js#block_02_block_02`
 - `parallel/test-stream-writable-writable.js#block_03_block_03`
-- `parallel/test-stream-writable-write-cb-error.js`
 - `parallel/test-stream-writable-write-cb-error.js#block_00_block_00`
 - `parallel/test-stream-writable-write-cb-error.js#block_01_block_01`
 - `parallel/test-stream-writable-write-cb-error.js#block_02_block_02`
-- `parallel/test-stream-writable-write-cb-twice.js`
 - `parallel/test-stream-writable-write-cb-twice.js#block_00_block_00`
 - `parallel/test-stream-writable-write-cb-twice.js#block_01_block_01`
 - `parallel/test-stream-writable-write-cb-twice.js#block_02_block_02`
 - `parallel/test-stream-writable-write-error.js`
-- `parallel/test-stream-writable-write-writev-finish.js`
 - `parallel/test-stream-writable-write-writev-finish.js#block_00_block_00`
 - `parallel/test-stream-writable-write-writev-finish.js#block_01_block_01`
 - `parallel/test-stream-writable-write-writev-finish.js#block_02_block_02`
@@ -2693,7 +2467,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-write-final.js`
 - `parallel/test-stream-writev.js`
 - `parallel/test-stream2-base64-single-char-read-end.js`
-- `parallel/test-stream2-basic.js`
 - `parallel/test-stream2-basic.js#block_00_block_00`
 - `parallel/test-stream2-basic.js#block_01_block_01`
 - `parallel/test-stream2-basic.js#block_02_block_02`
@@ -2710,7 +2483,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream2-finish-pipe-error.js`
 - `parallel/test-stream2-finish-pipe.js`
 - `parallel/test-stream2-large-read-stall.js`
-- `parallel/test-stream2-objects.js`
 - `parallel/test-stream2-objects.js#block_00_block_00`
 - `parallel/test-stream2-objects.js#block_01_block_01`
 - `parallel/test-stream2-objects.js#block_02_block_02`
@@ -2725,7 +2497,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream2-objects.js#block_11_block_11`
 - `parallel/test-stream2-objects.js#block_12_block_12`
 - `parallel/test-stream2-objects.js#block_13_block_13`
-- `parallel/test-stream2-pipe-error-handling.js`
 - `parallel/test-stream2-pipe-error-handling.js#block_00_block_00`
 - `parallel/test-stream2-pipe-error-handling.js#block_01_block_01`
 - `parallel/test-stream2-pipe-error-once-listener.js`
@@ -2734,15 +2505,12 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream2-readable-empty-buffer-no-eof.js`
 - `parallel/test-stream2-readable-legacy-drain.js`
 - `parallel/test-stream2-readable-non-empty-end.js`
-- `parallel/test-stream2-readable-wrap-destroy.js`
 - `parallel/test-stream2-readable-wrap-destroy.js#block_00_block_00`
 - `parallel/test-stream2-readable-wrap-destroy.js#block_01_block_01`
 - `parallel/test-stream2-readable-wrap-empty.js`
-- `parallel/test-stream2-readable-wrap-error.js`
 - `parallel/test-stream2-readable-wrap-error.js#block_00_block_00`
 - `parallel/test-stream2-readable-wrap-error.js#block_01_block_01`
 - `parallel/test-stream2-readable-wrap.js`
-- `parallel/test-stream2-set-encoding.js`
 - `parallel/test-stream2-set-encoding.js#block_00_block_00`
 - `parallel/test-stream2-set-encoding.js#block_01_block_01`
 - `parallel/test-stream2-set-encoding.js#block_02_block_02`
@@ -2752,7 +2520,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream2-set-encoding.js#block_06_block_06`
 - `parallel/test-stream2-set-encoding.js#block_07_block_07`
 - `parallel/test-stream2-set-encoding.js#block_08_block_08`
-- `parallel/test-stream2-transform.js`
 - `parallel/test-stream2-transform.js#block_00_block_00`
 - `parallel/test-stream2-transform.js#block_01_block_01`
 - `parallel/test-stream2-transform.js#block_02_block_02`
@@ -2835,28 +2602,23 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-timers-throw-when-cb-not-function.js`
 - `parallel/test-timers-timeout-to-interval.js`
 - `parallel/test-timers-timeout-with-non-integer.js`
-- `parallel/test-timers-to-primitive.js`
 - `parallel/test-timers-to-primitive.js#block_00_block_00`
 - `parallel/test-timers-to-primitive.js#block_01_block_01`
 - `parallel/test-timers-uncaught-exception.js`
-- `parallel/test-timers-unenroll-unref-interval.js`
 - `parallel/test-timers-unenroll-unref-interval.js#block_00_block_00`
 - `parallel/test-timers-unenroll-unref-interval.js#block_01_block_01`
 - `parallel/test-timers-unenroll-unref-interval.js#block_02_block_02`
 - `parallel/test-timers-unenroll-unref-interval.js#block_03_block_03`
 - `parallel/test-timers-unenroll-unref-interval.js#block_04_block_04`
 - `parallel/test-timers-unref-throw-then-ref.js`
-- `parallel/test-timers-unref.js`
 - `parallel/test-timers-unref.js#block_00_block_00`
 - `parallel/test-timers-unref.js#block_01_block_01`
 - `parallel/test-timers-unref.js#block_02_see_https_github_com_nodejs_node_v0_x_archive_issues_4261`
 - `parallel/test-timers-unrefd-interval-still-fires.js`
 - `parallel/test-timers-unrefed-in-beforeexit.js`
 - `parallel/test-timers-unrefed-in-callback.js`
-- `parallel/test-timers-user-call.js`
 - `parallel/test-timers-user-call.js#block_00_block_00`
 - `parallel/test-timers-user-call.js#block_01_block_01`
-- `parallel/test-timers-zero-timeout.js`
 - `parallel/test-timers-zero-timeout.js#block_00_https_github_com_joyent_node_issues_2079_zero_timeout_drops_`
 - `parallel/test-timers-zero-timeout.js#block_01_block_01`
 - `parallel/test-timers.js`
@@ -2880,7 +2642,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-trace-events-worker-metadata-with-name.js`
 - `parallel/test-trace-events-worker-metadata.js`
 - `parallel/test-url-domain-ascii-unicode.js`
-- `parallel/test-url-fileurltopath.js`
 - `parallel/test-url-fileurltopath.js#test_00_invalid_arguments`
 - `parallel/test-url-fileurltopath.js#test_01_input_must_be_a_file_url`
 - `parallel/test-url-fileurltopath.js#test_02_fileurltopath_with_host`
@@ -2890,19 +2651,16 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-url-fileurltopath.js#test_06_options_is_null`
 - `parallel/test-url-fileurltopath.js#test_07_defaulttestcases`
 - `parallel/test-url-format-invalid-input.js`
-- `parallel/test-url-format-whatwg.js`
 - `parallel/test-url-format-whatwg.js#test_00_should_format`
 - `parallel/test-url-format-whatwg.js#test_01_handle_invalid_arguments`
 - `parallel/test-url-format-whatwg.js#test_02_any_falsy_value_other_than_undefined_will_be_treated_as_fals`
 - `parallel/test-url-format-whatwg.js#test_03_should_format_with_unicode_true`
 - `parallel/test-url-format-whatwg.js#test_04_should_format_tel_prefix`
 - `parallel/test-url-format.js`
-- `parallel/test-url-parse-format.js`
 - `parallel/test-url-parse-format.js#test_00_should_parse_and_format`
 - `parallel/test-url-parse-format.js#test_01_parse_result_should_equal_new_url_url`
 - `parallel/test-url-parse-invalid-input.js`
 - `parallel/test-url-parse-query.js`
-- `parallel/test-url-pathtofileurl.js`
 - `parallel/test-url-pathtofileurl.js#block_00_block_00`
 - `parallel/test-url-pathtofileurl.js#block_01_block_01`
 - `parallel/test-url-pathtofileurl.js#block_02_block_02`
@@ -2912,7 +2670,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-url-revokeobjecturl.js`
 - `parallel/test-url-urltooptions.js`
 - `parallel/test-utf8-scripts.js`
-- `parallel/test-util-callbackify.js`
 - `parallel/test-util-callbackify.js#block_00_block_00`
 - `parallel/test-util-callbackify.js#block_01_block_01`
 - `parallel/test-util-callbackify.js#block_02_block_02`
@@ -2923,12 +2680,10 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-util-callbackify.js#block_07_block_07`
 - `parallel/test-util-callbackify.js#block_08_block_08`
 - `parallel/test-util-deprecate-invalid-code.js`
-- `parallel/test-util-deprecate.js`
 - `parallel/test-util-deprecate.js#block_00_emits_deprecation_only_once_if_same_function_is_called`
 - `parallel/test-util-deprecate.js#block_01_emits_deprecation_twice_for_different_functions`
 - `parallel/test-util-deprecate.js#block_02_functions`
 - `parallel/test-util-getcallsite.js`
-- `parallel/test-util-getcallsites.js`
 - `parallel/test-util-getcallsites.js#block_00_block_00`
 - `parallel/test-util-getcallsites.js#block_01_block_01`
 - `parallel/test-util-getcallsites.js#block_02_guarantee_dot_left_numbers_are_ignored`
@@ -2943,12 +2698,9 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-util-getcallsites.js#block_11_block_11`
 - `parallel/test-util-getcallsites.js#block_12_block_12`
 - `parallel/test-util-inherits.js`
-- `parallel/test-util-inspect-getters-accessing-this.js`
 - `parallel/test-util-inspect-getters-accessing-this.js#block_00_block_00`
 - `parallel/test-util-inspect-getters-accessing-this.js#block_01_regression_test_for_https_github_com_nodejs_node_issues_3705`
-- `parallel/test-util-inspect-long-running.js`
 - `parallel/test-util-inspect-namespace.js`
-- `parallel/test-util-isDeepStrictEqual.js`
 - `parallel/test-util-isDeepStrictEqual.js#block_00_handle_boxed_primitives`
 - `parallel/test-util-isDeepStrictEqual.js#block_01_handle_symbols_enumerable_only`
 - `parallel/test-util-log.js`
@@ -2958,7 +2710,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-util-styletext.js`
 - `parallel/test-util-text-decoder.js`
 - `parallel/test-util-types-exists.js`
-- `parallel/test-v8-coverage.js`
 - `parallel/test-v8-coverage.js#block_00_outputs_coverage_when_event_loop_is_drained_with_no_async_lo`
 - `parallel/test-v8-coverage.js#block_01_outputs_coverage_when_error_is_thrown_in_first_tick`
 - `parallel/test-v8-coverage.js#block_02_outputs_coverage_when_process_exit_1_exits_process`
@@ -2997,7 +2748,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-vm-syntax-error-message.js`
 - `parallel/test-vm-syntax-error-stderr.js`
 - `parallel/test-weakref.js`
-- `parallel/test-webcrypto-constructors.js`
 - `parallel/test-webcrypto-constructors.js#block_00_test_cryptokey_constructor`
 - `parallel/test-webcrypto-constructors.js#block_01_test_subtlecrypto_constructor`
 - `parallel/test-webcrypto-constructors.js#block_02_test_crypto_constructor`
@@ -3017,24 +2767,19 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-webcrypto-constructors.js#block_16_test_subtlecrypto_prototype_wrapkey`
 - `parallel/test-webcrypto-constructors.js#block_17_test_subtlecrypto_prototype_unwrapkey`
 - `parallel/test-webcrypto-constructors.js#block_18_block_18`
-- `parallel/test-webcrypto-encrypt-decrypt-aes.js`
 - `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_00_test_aes_cbc_vectors`
 - `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_01_test_aes_ctr_vectors`
 - `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_02_test_aes_gcm_vectors`
 - `parallel/test-webcrypto-encrypt-decrypt-aes.js#block_03_block_03`
-- `parallel/test-webcrypto-encrypt-decrypt.js`
-- `parallel/test-webcrypto-encrypt-decrypt.js#block_00_test_encrypt_decrypt_rsa_oaep`
 - `parallel/test-webcrypto-encrypt-decrypt.js#block_01_test_encrypt_decrypt_aes_ctr`
 - `parallel/test-webcrypto-encrypt-decrypt.js#block_02_test_encrypt_decrypt_aes_cbc`
 - `parallel/test-webcrypto-encrypt-decrypt.js#block_03_test_encrypt_decrypt_aes_gcm`
-- `parallel/test-webcrypto-export-import.js`
 - `parallel/test-webcrypto-export-import.js#block_00_block_00`
 - `parallel/test-webcrypto-export-import.js#block_01_import_export_hmac_secret_key`
 - `parallel/test-webcrypto-export-import.js#block_02_import_export_aes_secret_key`
 - `parallel/test-webcrypto-export-import.js#block_03_import_export_rsa_key_pairs`
 - `parallel/test-webcrypto-export-import.js#block_04_import_export_ec_key_pairs`
 - `parallel/test-webcrypto-getRandomValues.js`
-- `parallel/test-webcrypto-random.js`
 - `parallel/test-webcrypto-random.js#block_00_block_00`
 - `parallel/test-webcrypto-random.js#block_01_block_01`
 - `parallel/test-webcrypto-random.js#block_02_block_02`
@@ -3047,7 +2792,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-websocket-disabled.js`
 - `parallel/test-webstorage.js#test_00_disabled_without_experimental_webstorage`
 - `parallel/test-webstream-string-tag.js`
-- `parallel/test-webstreams-abort-controller.js`
 - `parallel/test-webstreams-abort-controller.js#block_00_block_00`
 - `parallel/test-webstreams-abort-controller.js#block_01_block_01`
 - `parallel/test-webstreams-abort-controller.js#block_02_block_02`
@@ -3055,7 +2799,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-webstreams-abort-controller.js#block_04_block_04`
 - `parallel/test-webstreams-abort-controller.js#block_05_block_05`
 - `parallel/test-webstreams-clone-unref.js`
-- `parallel/test-webstreams-compose.js`
 - `parallel/test-webstreams-compose.js#block_00_block_00`
 - `parallel/test-webstreams-compose.js#block_01_block_01`
 - `parallel/test-webstreams-compose.js#block_02_block_02`
@@ -3076,7 +2819,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-webstreams-compose.js#block_17_block_17`
 - `parallel/test-webstreams-compose.js#block_18_block_18`
 - `parallel/test-webstreams-compose.js#block_19_block_19`
-- `parallel/test-webstreams-finished.js`
 - `parallel/test-webstreams-finished.js#block_00_block_00`
 - `parallel/test-webstreams-finished.js#block_01_block_01`
 - `parallel/test-webstreams-finished.js#block_02_block_02`
@@ -3097,7 +2839,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-webstreams-finished.js#block_17_block_17`
 - `parallel/test-webstreams-finished.js#block_18_block_18`
 - `parallel/test-webstreams-finished.js#block_19_block_19`
-- `parallel/test-webstreams-pipeline.js`
 - `parallel/test-webstreams-pipeline.js#block_00_block_00`
 - `parallel/test-webstreams-pipeline.js#block_01_block_01`
 - `parallel/test-webstreams-pipeline.js#block_02_block_02`
@@ -3133,7 +2874,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-worker-load-file-with-extension-other-than-js.js`
 - `parallel/test-worker-message-channel.js#block_00_block_00`
 - `parallel/test-worker-message-port-close-while-receiving.js`
-- `parallel/test-worker-message-port-close.js#block_03_refs_https_github_com_nodejs_node_issues_42296`
 - `parallel/test-worker-message-port-multiple-sharedarraybuffers.js`
 - `parallel/test-worker-message-port-transfer-terminate.js`
 - `parallel/test-worker-nested-uncaught.js`
@@ -3152,7 +2892,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-zlib-brotli-from-brotli.js`
 - `parallel/test-zlib-brotli-from-string.js`
 - `parallel/test-zlib-brotli-kmaxlength-rangeerror.js`
-- `parallel/test-zlib-brotli.js`
 - `parallel/test-zlib-brotli.js#block_00_block_00`
 - `parallel/test-zlib-brotli.js#block_01_block_01`
 - `parallel/test-zlib-brotli.js#block_02_block_02`
@@ -3161,19 +2900,16 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-zlib-const.js`
 - `parallel/test-zlib-convenience-methods.js`
 - `parallel/test-zlib-crc32.js`
-- `parallel/test-zlib-create-raw.js`
 - `parallel/test-zlib-create-raw.js#block_00_block_00`
 - `parallel/test-zlib-create-raw.js#block_01_block_01`
 - `parallel/test-zlib-deflate-constructors.js`
 - `parallel/test-zlib-deflate-raw-inherits.js`
 - `parallel/test-zlib-destroy.js#block_01_block_01`
-- `parallel/test-zlib-dictionary-fail.js`
 - `parallel/test-zlib-dictionary-fail.js#block_00_block_00`
 - `parallel/test-zlib-dictionary-fail.js#block_01_block_01`
 - `parallel/test-zlib-dictionary-fail.js#block_02_block_02`
 - `parallel/test-zlib-dictionary.js`
 - `parallel/test-zlib-empty-buffer.js`
-- `parallel/test-zlib-failed-init.js`
 - `parallel/test-zlib-failed-init.js#block_00_block_00`
 - `parallel/test-zlib-failed-init.js#block_01_block_01`
 - `parallel/test-zlib-flush-drain.js`
@@ -3200,7 +2936,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-zlib-write-after-end.js`
 - `parallel/test-zlib-write-after-flush.js`
 - `parallel/test-zlib-zero-byte.js`
-- `parallel/test-zlib-zero-windowBits.js`
 - `parallel/test-zlib-zero-windowBits.js#test_00_zlib_should_support_zero_windowbits`
 - `parallel/test-zlib-zero-windowBits.js#test_01_windowbits_should_be_valid`
 - `parallel/test-zlib.js`
@@ -3208,7 +2943,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `sequential/test-cli-syntax-file-not-found.js`
 - `sequential/test-cli-syntax-good.js`
 - `sequential/test-deprecation-flags.js`
-- `sequential/test-fs-opendir-recursive.js`
 - `sequential/test-fs-opendir-recursive.js#block_00_block_00`
 - `sequential/test-fs-opendir-recursive.js#block_01_block_01`
 - `sequential/test-fs-opendir-recursive.js#block_02_block_02`
@@ -3216,7 +2950,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `sequential/test-fs-opendir-recursive.js#block_04_block_04`
 - `sequential/test-fs-opendir-recursive.js#block_05_this_test_asserts_that_the_buffer_size_option_is_respected`
 - `sequential/test-fs-opendir-recursive.js#block_06_block_06`
-- `sequential/test-fs-readdir-recursive.js`
 - `sequential/test-fs-readdir-recursive.js#block_00_readdirsync_recursive`
 - `sequential/test-fs-readdir-recursive.js#block_01_readdirsync_recursive_withfiletypes`
 - `sequential/test-fs-readdir-recursive.js#block_02_readdir_recursive_callback`
@@ -3229,7 +2962,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `sequential/test-http-keep-alive-large-write.js`
 - `sequential/test-http-server-keep-alive-timeout-slow-client-headers.js`
 - `sequential/test-http-server-keep-alive-timeout-slow-server.js`
-- `sequential/test-init.js`
 - `sequential/test-init.js#block_00_block_00`
 - `sequential/test-init.js#block_01_block_01`
 - `sequential/test-init.js#block_02_block_02`
@@ -3238,8 +2970,6 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `sequential/test-net-connect-handle-econnrefused.js`
 - `sequential/test-net-connect-local-error.js`
 - `sequential/test-net-localport.js`
-- `sequential/test-net-reconnect-error.js`
-- `sequential/test-net-server-address.js`
 - `sequential/test-net-server-address.js#block_00_test_on_ipv4_server`
 - `sequential/test-net-server-address.js#block_01_test_on_ipv6_server`
 - `sequential/test-net-server-address.js#block_02_test_without_hostname_or_ip`
@@ -3260,577 +2990,90 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 
 ### abort
 
-- `parallel/test-aborted-util.js`: cannot read property 'end' of null     at <anonymous> (/home/node/test/parallel/test-aborted-util.js:89:3)     at call (native)     at runTest (node:test:498:32)     at test (node:test:731:28)     at ...
 - `parallel/test-aborted-util.js#test_04_does_not_hang_forever`: cannot read property 'end' of null     at <anonymous> (/home/node/test/parallel/test-aborted-util.js:90:3)     at call (native)     at runTest (node:test:498:32)     at test (node:test:731:28)     at ...
 
 ### child_process
 
-- `parallel/test-child-process-constructor.js#block_00_block_00`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-constructor.js#block_01_block_01`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-constructor.js#block_02_block_02`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-constructor.js#block_03_block_03`: ChildProcess is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at ChildProcess (node:child_process:1163:15)     at <anonymous> (/home/node/test/...
-- `parallel/test-child-process-cwd.js#block_00_assume_does_not_exist_doesn_t_exist_expect_exitcode_1_and_er`: Expected values to be strictly equal: + actual - expected  + 'number' - 'undefined'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'number' - 'undefined'      at testCwd...
-- `parallel/test-child-process-cwd.js#block_01_block_01`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-child-process-cwd.js:73:10)     at loadModule (node:module:1088:32)     at loc...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: DOMException...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: Error: boom ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_02_block_02`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: 'boom', -   ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_03_block_03`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-exec-abortcontroller-promisified.js:25:1...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_04_block_04`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-exec-abortcontroller-promisified.js:28:1...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_05_block_05`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   name: 'AbortError' ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_06_block_06`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: Error: boom ...
-- `parallel/test-child-process-exec-abortcontroller-promisified.js#block_07_block_07`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   cause: 'boom', -   ...
-- `parallel/test-child-process-exec-maxbuf.js`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-exec-maxbuf.js:122:3)     at loadModule (node:module:1088:32)     at localRequire (node:modul...
 - `parallel/test-child-process-exec-maxbuf.js#block_08_block_08`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-exec-maxbuf.js:61:3)     at loadModule (node:module:1088:32)     at localRequire (node:module...
 - `parallel/test-child-process-exec-maxbuf.js#block_09_block_09`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-exec-maxbuf.js:63:3)     at loadModule (node:module:1088:32)     at localRequire (node:module...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   name: 'AbortError' ...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   name: 'AbortError' ...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_02_block_02`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-execFile-promisified-abortController.js:...
-- `parallel/test-child-process-execFile-promisified-abortController.js#block_03_block_03`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-execFile-promisified-abortController.js:...
-- `parallel/test-child-process-execfile-maxbuf.js#block_06_block_06`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-execfile-maxbuf.js:38:3)     at loadModule (node:module:1088:32)     at localRequire (node:mo...
-- `parallel/test-child-process-execfile-maxbuf.js#block_07_block_07`: cannot read property 'setEncoding' of null     at <anonymous> (/home/node/test/parallel/test-child-process-execfile-maxbuf.js:40:3)     at loadModule (node:module:1088:32)     at localRequire (node:mo...
-- `parallel/test-child-process-execfile.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-child-process-ex...
-- `parallel/test-child-process-execfile.js#block_05_block_05`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-execfile.js:28:10)     at loadModule (no...
-- `parallel/test-child-process-execfile.js#block_07_verify_the_execfile_stdout_is_the_same_as_execfilesync`: Command failed: echo foo bar      at execFileSync (node:child_process:1412:112)     at <anonymous> (/home/node/test/parallel/test-child-process-execfile.js:39:45)     at forEach (native)     at <anony...
-- `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-child-process-execfilesync-maxbuf.js:20:10)     at loadModule (node:module:108...
-- `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-child-process-execfilesync-maxbuf.js:26:10)     at loadModule (node:module:108...
-- `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^  AssertionError: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^    ...
-- `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works`: execSync is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at execSync (node:child_process:1431:11)     at <anonymous> (/home/node/test/parallel...
-- `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^  AssertionError: Expected values to be strictly equal: + actual - expected  + 'ENOSYS' - 'ENOBUFS'       ^    ...
-- `parallel/test-child-process-execsync-maxbuf.js#block_03_default_maxbuffer_size_is_1024_1024`: execSync is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at execSync (node:child_process:1431:11)     at <anonymous> (/home/node/test/parallel...
-- `parallel/test-child-process-fork-args.js#block_00_and_be_of_type_string`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-fork-args.js:25:12)     at forEach (nati...
-- `parallel/test-child-process-fork-args.js#block_01_correctly_if_args_is_undefined_or_null`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TYPE', -   name: 'TypeError'   }  AssertionError: Expect...
-- `parallel/test-child-process-fork-args.js#block_02_ensure_that_the_third_argument_should_be_type_of_object_if_p`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-child-process-fork-args.js:30:7)     at forEach (nativ...
-- `parallel/test-child-process-promisified.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_03_block_03`: The expression evaluated to a falsy value:    assert(promise.child instanceof child_process.ChildProcess)  AssertionError: The expression evaluated to a falsy value:    assert(promise.child instanceof...
-- `parallel/test-child-process-promisified.js#block_04_block_04`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - '42\n'      at <anonymous> (/home/node/test/parallel/test-child-process-promisifie...
-- `parallel/test-child-process-promisified.js#block_05_block_05`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - '42\n'      at <anonymous> (/home/node/test/parallel/test-child-process-promisifie...
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`: maxBuffer should error AssertionError: maxBuffer should error     at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync-maxbuf.js:22:13)     at loadModule (node:module:1088:32)     at ...
-- `parallel/test-child-process-spawnsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`: maxBuffer should error AssertionError: maxBuffer should error     at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync-maxbuf.js:29:13)     at loadModule (node:module:1088:32)     at ...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_00_block_00`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_01_block_01`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_02_block_02`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_03_block_03`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_04_block_04`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_05_block_05`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_06_block_06`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_07_block_07`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync-validation-errors.js#block_08_block_08`: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'  AssertionError: Expected values to be strictly equal:  'ENOSYS' !== 'ENOENT'      at pass (/home/node/test/parallel/test-child-process-spa...
-- `parallel/test-child-process-spawnsync.js#block_00_block_00`: Expected values to be strictly equal:  null !== 0  AssertionError: Expected values to be strictly equal:  null !== 0      at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync.js:34:20...
-- `parallel/test-child-process-spawnsync.js#block_01_block_01`: Expected values to be strictly equal:  null !== 0  AssertionError: Expected values to be strictly equal:  null !== 0      at <anonymous> (/home/node/test/parallel/test-child-process-spawnsync.js:34:20...
-- `parallel/test-child-process-stdio.js#block_00_test_stdio_piping`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-child-process-stdio.js:45:3)     at loadModule (node:module:10...
-- `parallel/test-child-process-stdio.js#block_01_test_stdio_ignoring`: Expected values to be strictly equal: + actual - expected  + EventEmitter { +   _captureRejections: false, +   _emitData: [Function: emitData], +   _encoding: null, +   _events: [Object: null prototyp...
-- `parallel/test-child-process-stdio.js#block_02_asset_options_invariance`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-child-process-stdio.js:45:3)     at loadModule (node:module:10...
-- `parallel/test-child-process-stdio.js#block_03_test_stdout_buffering`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-child-process-stdio.js:58:3)     at loadModule (node:module:10...
-- `sequential/test-child-process-execsync.js#block_00_block_00`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_01_block_01`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_02_block_02`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_03_block_03`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_04_see_https_github_com_nodejs_node_v0_x_archive_issues_7824`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_05_see_https_github_com_nodejs_node_v0_x_archive_issues_7966`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-- `sequential/test-child-process-execsync.js#block_06_verify_the_execfilesync_behavior_when_the_child_exits_with_a`: The input did not match the regular expression /spawnSync bad_shell ENOENT/. Input:  'Error: execSync is not supported in WebAssembly environment'  AssertionError: The input did not match the regular ...
-
-### cli
-
-- `parallel/test-cli-permission-deny-fs.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_02_block_02`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_03_block_03`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-deny-fs.j...
-- `parallel/test-cli-permission-deny-fs.js#block_04_block_04`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
-- `parallel/test-cli-permission-deny-fs.js#block_05_block_05`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
-- `parallel/test-cli-permission-deny-fs.js#block_06_block_06`: Error: fs is not defined     at anonymous (<input>:3:1)     at executeInlineSource (node:child_process:402:28)     at runInline (node:child_process:687:52)     at spawnSync (node:child_process:1440:22...
-- `parallel/test-cli-permission-deny-fs.js#block_07_block_07`: The input did not match the regular expression /resource: '.*?[\\/](?:etc\|passwd)'/. Input:  "Error: ENOENT: no such file or directory, open '/etc/passwd'\n" +   '    at createSystemError (__wasm_rqui...
-- `parallel/test-cli-permission-multiple-allow.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
-- `parallel/test-cli-permission-multiple-allow.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
-- `parallel/test-cli-permission-multiple-allow.js#block_02_block_02`: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-multiple-...
 
 ### common
 
-- `parallel/test-common-gc.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-common-gc.js:7:27) ...
 - `parallel/test-common-gc.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-common-gc.js:7:27) ...
-- `parallel/test-common.js#block_00_test_for_leaked_global_detection`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:44:15)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-common.js#block_01_test_for_disabling_leaked_global_detection`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:46:15)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-common.js#block_02_test_tmpdir`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:38:15)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-common.js#block_03_must_be_last_since_it_uses_process_on_uncaughtexception`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:38:15)     at loadModule (node:module:1088:32)     at localRequire (...
 
 ### crypto
 
-- `parallel/test-crypto-sign-verify.js`: Failed to parse private key     at createPrivateKeyParseError (__wasm_rquickjs_builtin/web_crypto:1620:21)     at createPrivateKeyFromData (__wasm_rquickjs_builtin/web_crypto:5343:15)     at createPri...
 - `parallel/test-crypto-sign-verify.js#block_12_block_12`: Failed to parse private key     at createPrivateKeyParseError (__wasm_rquickjs_builtin/web_crypto:1620:21)     at createPrivateKeyFromData (__wasm_rquickjs_builtin/web_crypto:5343:15)     at createPri...
 - `parallel/test-crypto-sign-verify.js#block_18_block_18`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ERR_CRYPTO_INVALID_KEYTYPE', +   message: 'Failed to parse public key' -   code: 'ERR_OSSL_EVP_OPERATION_NOT_S...
 
 ### dgram
 
-- `parallel/test-dgram-close-signal.js#block_00_block_00`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dgram-close-signal.js:10:5)     at loadModule (node:mo...
-- `parallel/test-dgram-close-signal.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-close-signal....
-- `parallel/test-dgram-close-signal.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-close-signal....
-- `parallel/test-dgram-custom-lookup.js`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup.js:45:44)     at forEach (native) ...
 - `parallel/test-dgram-custom-lookup.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup...
 - `parallel/test-dgram-custom-lookup.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup...
 - `parallel/test-dgram-custom-lookup.js#block_02_block_02`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dgram-custom-lookup.js:20:44)     at forEach (native) ...
-- `parallel/test-dgram-membership.js#block_00_addmembership_on_closed_socket_should_throw`: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addMembership ENOSYS', -   code: 'ERR_SOCK...
-- `parallel/test-dgram-membership.js#block_01_dropmembership_on_closed_socket_should_throw`: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropMembership ENOSYS', -   code: 'ERR_SOC...
-- `parallel/test-dgram-membership.js#block_02_addmembership_with_no_argument_should_throw`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addMembership ENOSYS', +   name: 'Error' -   code: 'ERR_MISSING_ARGS', -   message: /^T...
-- `parallel/test-dgram-membership.js#block_03_dropmembership_with_no_argument_should_throw`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropMembership ENOSYS', +   name: 'Error' -   code: 'ERR_MISSING_ARGS', -   message: /^...
-- `parallel/test-dgram-membership.js#block_04_addmembership_with_invalid_multicast_address_should_throw`: The input did not match the regular expression /^Error: addMembership EINVAL$/. Input:  'Error: addMembership ENOSYS'  AssertionError: The input did not match the regular expression /^Error: addMember...
-- `parallel/test-dgram-membership.js#block_05_dropmembership_with_invalid_multicast_address_should_throw`: The input did not match the regular expression /^Error: dropMembership EINVAL$/. Input:  'Error: dropMembership ENOSYS'  AssertionError: The input did not match the regular expression /^Error: dropMem...
-- `parallel/test-dgram-membership.js#block_06_addsourcespecificmembership_with_invalid_sourceaddress_shoul`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addSourceSpecificMembership ENOSYS' -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The...
-- `parallel/test-dgram-membership.js#block_07_addsourcespecificmembership_with_invalid_sourceaddress_shoul`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addSourceSpecificMembership ENOSYS' -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The...
-- `parallel/test-dgram-membership.js#block_08_addsourcespecificmembership_with_invalid_groupaddress_should`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addSourceSpecificMembership ENOSYS' -   code: 'EINVAL', -   message: 'addSourceSpecific...
-- `parallel/test-dgram-membership.js#block_09_dropsourcespecificmembership_with_invalid_sourceaddress_shou`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropSourceSpecificMembership ENOSYS' -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'Th...
-- `parallel/test-dgram-membership.js#block_10_dropsourcespecificmembership_with_invalid_groupaddress_shoul`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropSourceSpecificMembership ENOSYS' -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'Th...
-- `parallel/test-dgram-membership.js#block_11_dropsourcespecificmembership_with_invalid_udp_should_throw`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'dropSourceSpecificMembership ENOSYS' -   code: 'EINVAL', -   message: 'dropSourceSpecif...
-- `parallel/test-dgram-multicast-loopback.js#block_00_block_00`: The input did not match the regular expression /^Error: setMulticastLoopback EBADF$/. Input:  'Error: setMulticastLoopback ENOSYS'  AssertionError: The input did not match the regular expression /^Err...
 - `parallel/test-dgram-multicast-set-interface.js#block_01_block_01`: Unhandled promise rejection: AssertionError: The input did not match the regular expression /Not running/. Input:  'Error: setMulticastInterface ENOSYS'      at <anonymous> (/home/node/test/parallel/t...
-- `parallel/test-dgram-setBroadcast.js#block_00_block_00`: The input did not match the regular expression /^Error: setBroadcast EBADF$/. Input:  'Error: setBroadcast ENOSYS'  AssertionError: The input did not match the regular expression /^Error: setBroadcast...
 
 ### dns
 
-- `parallel/test-dns-setlocaladdress.js`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-dns-setlocaladdress.js:19:10)     at loadModule (node:module:1...
 - `parallel/test-dns-setlocaladdress.js#block_01_verify_that_setlocaladdress_throws_if_called_with_an_invalid`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-dns-setlocaladdress.js:14:10)     at loadModule (node:module:1...
-- `parallel/test-dns-setservers-type-check.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'servers must be an array', -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The "servers" argument must be a...
-- `parallel/test-dns-setservers-type-check.js#block_01_block_01`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dns-setservers-type-check.js:30:7)     at forEach (nat...
-- `parallel/test-dns-setservers-type-check.js#block_02_this_test_for_dns_promises`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dns-setservers-type-check.js:41:12)     at forEach (na...
-- `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_03_block_03`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_04_block_04`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_05_dns_lookup_should_accept_only_falsey_and_string_values`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_06_dns_lookup_should_accept_falsey_values`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_07_block_07`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_08_block_08`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_09_block_09`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_10_block_10`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-- `parallel/test-dns.js#block_11_block_11`: The expression evaluated to a falsy value:    assert(existing.length > 0)  AssertionError: The expression evaluated to a falsy value:    assert(existing.length > 0)      at <anonymous> (/home/node/tes...
-
-### domain
-
-- `parallel/test-domain-promise.js#block_00_block_00`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - Domain { -   _captureRejections: false, -   _disposed: false, -   _events: [Object...
-- `parallel/test-domain-promise.js#block_01_block_01`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - Domain { -   _captureRejections: false, -   _disposed: false, -   _events: [Object...
-- `parallel/test-domain-promise.js#block_03_block_03`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - Domain { -   _captureRejections: false, -   _disposed: false, -   _events: [Object...
-- `parallel/test-domain-promise.js#block_05_block_05`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - Domain { -   _captureRejections: false, -   _disposed: false, -   _events: [Object...
-- `parallel/test-domain-promise.js#block_06_block_06`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - Domain { -   _captureRejections: false, -   _disposed: false, -   _events: [Object...
-- `parallel/test-domain-promise.js#block_09_block_09`: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (/home/node/test/parallel/test-domain-promise.js:34:24)     at apply (native)     at wrapper (/home/node/test/common/...
 
 ### fs
 
-- `parallel/test-fs-write-file-sync.js`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-fs-write-file-sync.js:134:7)     at loadModule (node:module:1088:32)     at lo...
 - `parallel/test-fs-write-file-sync.js#block_05_test_writefilesync_with_an_invalid_input`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-fs-write-file-sync.js:70:7)     at loadModule (node:module:1088:32)     at loc...
-- `parallel/test-fs-write.js#block_00_block_00`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_01_block_01`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_02_block_02`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_03_block_03`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
-- `parallel/test-fs-write.js#block_04_block_04`: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-fs-write.js:44:23)    ...
 - `parallel/test-fs-writefile-with-fd.js#block_02_test_read_only_file_descriptor`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-fs-writefile-wit...
 - `sequential/test-fs-watch.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/sequential/test-fs-watch.js:62:40...
 - `sequential/test-fs-watch.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 2     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/sequential/test-fs-watch.js:66:48...
 
-### heap
-
-- `sequential/test-heapdump.js#block_00_block_00`: v8.writeHeapSnapshot is not supported in WASM environment     at writeHeapSnapshot (node:v8:104:15)     at <anonymous> (/home/node/test/sequential/test-heapdump.js:19:3)     at loadModule (node:module...
-- `sequential/test-heapdump.js#block_01_block_01`: v8.writeHeapSnapshot is not supported in WASM environment     at writeHeapSnapshot (node:v8:104:15)     at <anonymous> (/home/node/test/sequential/test-heapdump.js:21:20)     at loadModule (node:modul...
-- `sequential/test-heapdump.js#block_02_block_02`: Expected values to be strictly equal: + actual - expected  + undefined - 'EISDIR'  AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - 'EISDIR'      at <anonymous>...
-- `sequential/test-heapdump.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'v8.writeHeapSnapshot is not supported in WASM environment', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TY...
-
 ### http
 
-- `parallel/test-http-client-aborted-event.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-client-aborted...
-- `parallel/test-http-client-aborted-event.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-client-aborted...
-- `parallel/test-http-early-hints.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
 - `parallel/test-http-early-hints.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
 - `parallel/test-http-early-hints.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
 - `parallel/test-http-early-hints.js#block_03_block_03`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
 - `parallel/test-http-early-hints.js#block_04_block_04`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-early-hints.js...
-- `parallel/test-http-generic-streams.js#block_00_test_1_simple_http_test_no_keep_alive`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
-- `parallel/test-http-generic-streams.js#block_01_test_2_keep_alive_for_2_requests`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
-- `parallel/test-http-generic-streams.js#block_02_test_3_connection_close_request_response_with_chunked`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
-- `parallel/test-http-generic-streams.js#block_03_the_same_as_test_3_but_with_content_length_headers`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
-- `parallel/test-http-generic-streams.js#block_04_test_5_the_client_sends_garbage`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-generic-stream...
-- `parallel/test-http-insecure-parser-per-stream.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-insecure-parse...
 - `parallel/test-http-insecure-parser-per-stream.js#block_02_test_3_the_client_sends_an_invalid_header`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-insecure-parse...
 - `parallel/test-http-insecure-parser-per-stream.js#block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-insecure-parse...
-- `parallel/test-http-max-header-size-per-stream.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-max-header-siz...
 - `parallel/test-http-max-header-size-per-stream.js#block_02_test_3_the_client_sends_larger_headers_than_what_would_other`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-max-header-siz...
 - `parallel/test-http-max-header-size-per-stream.js#block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-max-header-siz...
-- `parallel/test-http-req-res-close.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-req-res-close....
 - `parallel/test-http-req-res-close.js#block_00_after_res`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-req-res-close....
 - `parallel/test-http-req-res-close.js#block_01_req_should_emit_close_after_res`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-req-res-close....
-- `parallel/test-http2-alpn.js#block_00_block_00`: The validation function is expected to return "true". Received false  Caught error:  Error: http2 is not supported in WebAssembly environment AssertionError: The validation function is expected to ret...
-- `parallel/test-http2-alpn.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-capture-rejection.js#block_03_block_03`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setLocalWindowSize.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setLocalWindowSize.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-client-setLocalWindowSize.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-expect-continue.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-expect-continue.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-headers.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverrequest-headers.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_03_block_03`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_04_block_04`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_05_block_05`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_06_block_06`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_07_block_07`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_08_block_08`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-end.js#block_09_block_09`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-write.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-write.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-write.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead-array.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead-array.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-serverresponse-writehead-array.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-compat-write-early-hints.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_00_check_for_session_connect_callback_and_event`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_01_check_for_session_connect_callback_on_already_connected_sock`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_02_check_for_https_as_protocol`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_03_check_for_session_connect_callback_on_already_connected_tls_`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_04_check_for_error_for_init_settings_error`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-connect.js#block_05_check_for_error_for_an_invalid_protocol_not_http_or_https`: Expected values to be strictly deep-equal: + actual - expected    Comparison { -   code: 'ERR_HTTP2_UNSUPPORTED_PROTOCOL',     name: 'Error'   }  AssertionError: Expected values to be strictly deep-eq...
-- `parallel/test-http2-connect.js#block_06_authority_host_and_authority_port`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-create-client-connect.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-create-client-connect.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_01_check_if_multiple_custom_settings_can_be_set`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_03_check_for_not_passing_settings`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_04_block_04`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_05_block_05`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_06_block_06`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_07_block_07`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_08_block_08`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_09_verify_that_passing_validate_true_does_not_throw`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-getpackedsettings.js#block_10_check_for_maxframesize_failing_the_max_number`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-https-fallback.js#block_00_http_2_http_1_1_server`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-http2-https-fallback.js#block_01_http_2_only_server`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-http2-invalidheaderfield.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfield.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfield.js#block_02_block_02`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-invalidheaderfield.js#block_03_block_03`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_01_test_automatically_sending_origin_on_connection_start`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_02_originset`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-origin.js#block_03_send_them_but_client_will_ignore_them`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-perform-server-handshake.js#block_00_basic_test`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-perform-server-handshake.js#block_01_double_bind_should_fail`: not a function     at <anonymous> (/home/node/test/parallel/test-http2-perform-server-handshake.js:23:32)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTe...
-- `parallel/test-http2-server-errors.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-errors.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-settimeout-no-callback.js#block_00_test_with_server`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-settimeout-no-callback.js#block_01_test_with_secure_server`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_00_test_the_plaintext_server_socket_timeout`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_01_test_that_http2_createserver_supports_net_server_options`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_02_test_the_secure_server_socket_timeout`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-server-startup.js#block_03_test_that_http2_createsecureserver_supports_net_server_optio`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-too-many-settings.js#block_00_block_00`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-http2-too-many-settings.js#block_01_block_01`: http2 is not supported in WebAssembly environment     at <anonymous> (node:http2:4:33)
-- `parallel/test-https-agent-create-connection.js#block_00_use_option_connect`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-create-connection.js#block_01_use_port_and_option_connect`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-create-connection.js#block_02_use_port_and_host_and_option_connect`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-create-connection.js#block_03_use_port_and_host_and_option_does_not_have_agentkey`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-create-connection.js#block_04_options_is_null`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-create-connection.js#block_05_options_is_undefined`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-agent-create-connection.js#block_06_options_should_not_be_modified`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-argument-of-creating.js#block_00_test_for_immutable_opts`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-argument-of-creating.js#block_01_validate_that_createserver_can_work_with_the_only_argument_r`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-argument-of-creating.js#block_02_validate_that_createserver_can_work_with_no_arguments`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-argument-of-creating.js#block_03_validate_that_createserver_only_uses_defaults_when_appropria`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-insecure-parse-per-stream.js#block_02_test_3_the_client_sends_an_invalid_header`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-insecure-parse-per-stream.js#block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-max-header-size-per-stream.js#block_02_test_3_the_client_sends_larger_headers_than_what_would_other`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
-- `parallel/test-https-max-header-size-per-stream.js#block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_`: https.createServer is not supported in WebAssembly environment     at <anonymous> (node:https:6:33)
+- `parallel/test-http-server-close-idle-wait-response.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-http-server-close-i...
 
 ### module
 
-- `es-module/test-require-module-conditional-exports.js#block_00_if_only_require_exports_are_defined_return_require_exports`: Cannot find module 'dep'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/fixtures/es-modules/exports-require-only/load.cjs:1:79)     at loadModule (node:module:1088:32)  ...
-- `es-module/test-require-module-conditional-exports.js#block_01_if_both_are_defined_require_is_used`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'MODULE_NOT_FOUND' -   code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'   }  AssertionError: Expected values to be strictl...
-- `es-module/test-require-module-conditional-exports.js#block_02_if_import_and_default_are_defined_default_is_used`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'MODULE_NOT_FOUND' -   code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'   }  AssertionError: Expected values to be strictl...
-- `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_00_a_mjs_b_cjs_c_mjs_a_mjs`: - stderr did not match /Cannot import Module \.\/a\.mjs in a cycle\. \(from .*c\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-cjs-esm-esm.js:13:16)     at loadMod...
-- `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_01_b_cjs_c_mjs_a_mjs_b_cjs`: - stderr did not match /Cannot import CommonJS Module \.\/b\.cjs in a cycle\. \(from .*a\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-cjs-esm-esm.js:16:16)     a...
-- `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_02_c_mjs_a_mjs_b_cjs_c_mjs`: - stderr did not match /Cannot require\(\) ES Module .*c\.mjs in a cycle\. \(from .*b\.cjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-cjs-esm-esm.js:19:16)     at l...
-- `es-module/test-require-module-cycle-esm-cjs-esm.js#block_00_require_a_cjs_a_mjs_b_cjs_a_mjs`: - stderr did not match /Cannot require\(\) ES Module .*a\.mjs in a cycle\. \(from .*require-a\.cjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-cjs-esm.js:13:16)     ...
-- `es-module/test-require-module-cycle-esm-cjs-esm.js#block_01_require_b_cjs_b_cjs_a_mjs_b_cjs`: - stderr did not match /Cannot import CommonJS Module \.\/b\.cjs in a cycle\. \(from .*a\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-cjs-esm.js:16:16)     at lo...
-- `es-module/test-require-module-cycle-esm-cjs-esm.js#block_02_a_mjs_b_cjs_a_mjs`: - stderr did not match /Cannot require\(\) ES Module .*a\.mjs in a cycle\. \(from .*b\.cjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-cjs-esm.js:19:16)     at loadM...
-- `es-module/test-require-module-cycle-esm-cjs-esm.js#block_03_b_cjs_a_mjs_b_cjs`: - stderr did not match /Cannot import CommonJS Module \.\/b\.cjs in a cycle\. \(from .*a\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-cjs-esm.js:22:16)     at lo...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js#block_00_a_mjs_b_mjs_c_cjs_z_mjs_a_mjs`: - stderr did not match /Cannot import Module \.\/a\.mjs in a cycle\. \(from .*z\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js:13:16)     at loa...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js#block_01_b_mjs_c_cjs_z_mjs_a_mjs_b_mjs`: - stderr did not match /Cannot import Module \.\/b\.mjs in a cycle\. \(from .*a\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js:16:16)     at loa...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js#block_02_c_cjs_z_mjs_a_mjs_b_mjs_c_cjs`: - stderr did not match /Cannot import CommonJS Module \.\/c\.cjs in a cycle\. \(from .*b\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js:19:16)  ...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js#block_03_z_mjs_a_mjs_b_mjs_c_cjs_z_mjs`: - stderr did not match /Cannot require\(\) ES Module .*z\.mjs in a cycle\. \(from .*c\.cjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js:23:16)     ...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_02_c_mjs_d_mjs_c_mjs`: - stderr did not match /Cannot import Module \.\/c\.mjs in a cycle\. \(from .*d\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-esm-cjs-esm.js:20:16)     at loadMod...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_03_d_mjs_c_mjs_d_mjs`: - stderr did not match /Cannot require\(\) ES Module .*d\.mjs in a cycle\. \(from .*c\.mjs\)/     at <anonymous> (/home/node/test/es-module/test-require-module-cycle-esm-esm-cjs-esm.js:24:16)     at l...
-- `es-module/test-require-module-tla.js`: - stderr did not match expectation, checker throws: AssertionError: The input did not match the regular expression /I am executed/. Input:  'Error: require() cannot be used on an ESM graph with top-le...
 - `es-module/test-require-module-tla.js#block_01_block_01`: - stderr did not match expectation, checker throws: AssertionError: The input did not match the regular expression /I am executed/. Input:  'Error: require() cannot be used on an ESM graph with top-le...
-- `es-module/test-require-module-with-detection.js#block_00_block_00`: Unexpected token 'export'     at /home/node/test/fixtures/es-modules/loose.js:4:10     at compileCjs (node:module:978:30)     at loadModule (node:module:1054:41)     at localRequire (node:module:1272:...
-- `es-module/test-require-module-with-detection.js#block_01_block_01`: Unexpected token 'export'     at /home/node/test/fixtures/es-modules/package-without-type/noext-esm:2:10     at compileCjs (node:module:978:30)     at loadModule (node:module:1054:41)     at localRequ...
-- `es-module/test-require-module.js#block_02_test_esm_that_import_cjs`: Could not find export 'π' in module 'home/node/test/fixtures/es-modules/exports-cases.js'     at loadModule (node:module:1043:60)     at localRequire (node:module:1272:34)     at <anonymous> (/home/n...
-- `es-module/test-require-module.js#block_04_also_test_default_export`: Cannot find module 'dep-without-package-json/dep.js'     at loadModule (node:module:1043:60)     at localRequire (node:module:1272:34)     at <anonymous> (/home/node/test/es-module/test-require-module...
-- `parallel/test-require-resolve.js#block_00_test_require_resolve_paths`: Expected values to be strictly equal: + actual - expected  + '/root/.node_modules' - '/home/node/test/fixtures/node_modules'  AssertionError: Expected values to be strictly equal: + actual - expected ...
-- `parallel/test-require-resolve.js#block_01_block_01`: Expected values to be strictly equal: + actual - expected  + '/root/.node_modules' - '/home/node/test/fixtures/node_modules'  AssertionError: Expected values to be strictly equal: + actual - expected ...
-- `sequential/test-module-loading.js#block_00_block_00`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_01_block_01`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_02_block_02`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_03_block_03`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_04_block_04`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_05_block_05`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_06_block_06`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_07_block_07`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_08_block_08`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_09_block_09`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
-- `sequential/test-module-loading.js#block_10_block_10`: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           PIPE: ...
 
 ### net
 
-- `parallel/test-net-connect-options-port.js#block_00_test_wrong_type_of_ports`: Missing expected exception (TypeError): createConnectionWithCb(true) AssertionError: Missing expected exception (TypeError): createConnectionWithCb(true)     at syncFailToConnect (/home/node/test/para...
-- `parallel/test-net-connect-options-port.js#block_01_test_out_of_range_ports`: Missing expected exception (RangeError): createConnectionWithCb() AssertionError: Missing expected exception (RangeError): createConnectionWithCb()     at syncFailToConnect (/home/node/test/parallel/t...
-- `parallel/test-net-connect-options-port.js#block_02_test_invalid_hints`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-net-connect-options-port.js:41:19)     at loadModule (...
-- `parallel/test-net-perf_hooks.js#block_00_block_00`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-net-perf_hooks.js:38:22)     at emit (...
-- `parallel/test-net-perf_hooks.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-net-perf_hooks.js:38:22)     at emit (...
-- `parallel/test-net-server-listen-options.js#block_01_block_01`: Unhandled promise rejection (likely cause of mustCall failure):     at doListen (node:net:1060:36)     at listen (node:net:1079:31)     at <anonymous> (/home/node/test/parallel/test-net-server-listen-...
-- `parallel/test-net-server-listen-options.js#block_02_block_02`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at shouldFailToListen (/home/node/test/parallel/test-net-server-listen-options.js:33:21)     at <ano...
+- `parallel/test-net-reconnect.js`: Expected values to be strictly equal:  42 !== 51  AssertionError: Expected values to be strictly equal:  42 !== 51      at <anonymous> (/home/node/test/parallel/test-net-reconnect.js:85:44)     at emi...
+- `sequential/test-net-reconnect-error.js`: mustCall verification failed: mustCall: expected exactly 21 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/sequential/test-net-reconnect-er...
 
 ### other
 
-- `parallel/test-blocklist.js#block_00_block_00`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-blocklist.js:16:12)     at forEach (native)     at <anonymous> (/home/node/tes...
-- `parallel/test-blocklist.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(!blockList.check('8592:757c:efae:4e45:fb5d:d62a:0d00:8e17'))  AssertionError: The expression evaluated to a falsy value:    assert(!blockList.check...
-- `parallel/test-blocklist.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(!blockList.check('8592:757c:efae:4e45:fb5d:d62a:0d00:8e17'))  AssertionError: The expression evaluated to a falsy value:    assert(!blockList.check...
-- `parallel/test-blocklist.js#block_03_block_03`: ::1 check failed AssertionError: ::1 check failed     at <anonymous> (/home/node/test/parallel/test-blocklist.js:31:19)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
-- `parallel/test-blocklist.js#block_04_block_04`: ::1 check failed AssertionError: ::1 check failed     at <anonymous> (/home/node/test/parallel/test-blocklist.js:38:19)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
-- `parallel/test-blocklist.js#block_05_block_05`: The expression evaluated to a falsy value:    assert(blockList.check('::ffff:1.1.0.1', 'ipv6'))  AssertionError: The expression evaluated to a falsy value:    assert(blockList.check('::ffff:1.1.0.1', ...
-- `parallel/test-blocklist.js#block_06_block_06`: The expression evaluated to a falsy value:    assert(blockList.check('::ffff:1.1.0.1', 'ipv6'))  AssertionError: The expression evaluated to a falsy value:    assert(blockList.check('::ffff:1.1.0.1', ...
-- `parallel/test-blocklist.js#block_07_block_07`: Expected values to be strictly deep-equal: + actual - expected    [ +   'Address: ipv4 1.1.1.1', +   'Range: ipv4 10.0.0.1-10.0.0.10', +   'Subnet: IpV6 8592:757c:efae:4e45::/64' -   'Subnet: IPv6 859...
-- `parallel/test-blocklist.js#block_08_block_08`: The expression evaluated to a falsy value:    assert(blockList.check('8592:757c:efaf:0:0:0:0:0', 'ipv6'))  AssertionError: The expression evaluated to a falsy value:    assert(blockList.check('8592:75...
-- `parallel/test-blocklist.js#block_09_block_09`: The expression evaluated to a falsy value:    assert(blockList.check('::ffff:0a00:0002', 'ipv6'))  AssertionError: The expression evaluated to a falsy value:    assert(blockList.check('::ffff:0a00:000...
-- `parallel/test-blocklist.js#block_10_block_10`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-blocklist.js:34:10)     at loadModule (node:module:1088:32)     at localRequir...
-- `parallel/test-blocklist.js#block_11_block_11`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-blocklist.js:36:10)     at loadModule (node:module:1088:32)     at localRequir...
-- `parallel/test-blocklist.js#block_12_block_12`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-blocklist.js:38:10)     at loadModule (node:module:1088:32)     at localRequir...
-- `parallel/test-broadcastchannel-custom-inspect.js#block_00_block_00`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-broadcastchannel-custom-inspect.js:11:...
-- `parallel/test-broadcastchannel-custom-inspect.js#block_01_block_01`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-broadcastchannel-custom-inspect.js:13:...
-- `parallel/test-broadcastchannel-custom-inspect.js#block_02_block_02`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-broadcastchannel-custom-inspect.js:15:...
-- `parallel/test-broadcastchannel-custom-inspect.js#block_03_block_03`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-broadcastchannel-custom-inspect.js:17:...
-- `parallel/test-domexception-cause.js`: Expected values to be strictly equal: + actual - expected  + { +   cause: undefined, +   name: 'abc' + } - 'abc'  AssertionError: Expected values to be strictly equal: + actual - expected  + { +   cau...
 - `parallel/test-domexception-cause.js#block_01_block_01`: Expected values to be strictly equal: + actual - expected  + { +   cause: undefined, +   name: 'abc' + } - 'abc'  AssertionError: Expected values to be strictly equal: + actual - expected  + { +   cau...
 - `parallel/test-domexception-cause.js#block_02_block_02`: Expected values to be strictly equal: + actual - expected  + { +   cause: 'foo', +   name: 'abc' + } - 'abc'  AssertionError: Expected values to be strictly equal: + actual - expected  + { +   cause: ...
 - `parallel/test-domexception-cause.js#block_03_block_03`: Expected values to be strictly equal: + actual - expected  + { +   cause: { +     reason: 'foo' +   }, +   name: 'abc' + } - 'abc'  AssertionError: Expected values to be strictly equal: + actual - exp...
-- `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-freeze-intrinsics.js:7:3)     at loadModule (node:modu...
-- `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-freeze-intrinsics.js:7:3)     at loadModule (node:modu...
-- `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-freeze-intrinsics.js:7:3)     at loadModule (node:modu...
-- `parallel/test-freeze-intrinsics.js#block_03_ensure_that_we_cannot_override_console_properties`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-freeze-intrinsics.js:7:3)     at loadModule (node:modu...
-- `parallel/test-queue-microtask.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
-- `parallel/test-queue-microtask.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
-- `parallel/test-release-changelog.js#block_00_check_changelog_v_md`: ENOENT: no such file or directory, open '/home/node/src/node_version.h'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileSyn...
-- `parallel/test-release-changelog.js#block_01_main_changelog_md_checks`: ENOENT: no such file or directory, open '/home/node/src/node_version.h'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileSyn...
-- `parallel/test-set-incoming-message-header.js#block_02_addheaderlines_function_set_a_header_correctly`: not a function     at <anonymous> (/home/node/test/parallel/test-set-incoming-message-header.js:17:6)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (...
-- `parallel/test-single-executable-blob-config-errors.js#block_00_block_00`: The input did not match the regular expression /Cannot read single executable configuration from non-existent-relative\.json/. Input:  "Error: Cannot find module '/tmp/w/non-existent-relative.json' fr...
-- `parallel/test-single-executable-blob-config-errors.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(     stderr.includes(       `Cannot read single executable configuration from ${config}`     )   )  AssertionError: The expression evaluated to a f...
-- `parallel/test-single-executable-blob-config-errors.js#block_02_block_02`: The input did not match the regular expression /SyntaxError: Expected ':' after property name/. Input:  "Error: Cannot parse JSON module '/tmp/w/invalid.json': Expected ':' after property name in JSON...
-- `parallel/test-single-executable-blob-config-errors.js#block_03_block_03`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_04_block_04`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_05_block_05`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_06_block_06`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_07_block_07`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_08_block_08`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_09_block_09`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config-errors.js#block_10_block_10`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-single-executable-blob-config-errors.j...
-- `parallel/test-single-executable-blob-config.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_03_block_03`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-single-executable-blob-config.js#block_04_block_04`: The expression evaluated to a falsy value:    assert(existsSync(output))  AssertionError: The expression evaluated to a falsy value:    assert(existsSync(output))      at <anonymous> (/home/node/test/...
-- `parallel/test-source-map-api.js#block_00_it_should_throw_with_invalid_args`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'not a function', -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The "payload" argument must be of type obj...
-- `parallel/test-source-map-api.js#block_01_findsourcemap_should_return_undefined_when_no_source_map_is_`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:20:37)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-source-map-api.js#block_02_non_exceptional_case`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:20:13)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-source-map-api.js#block_03_source_map_attached_to_error`: undefined == true AssertionError [ERR_ASSERTION]: undefined == true
-- `parallel/test-source-map-api.js#block_04_sourcemap_can_be_instantiated_with_source_map_v3_object_as_p`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:31:25)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-source-map-api.js#block_05_error_when_receiving_a_malformed_mappings`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:34:25)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-source-map-api.js#block_06_sourcemap_can_be_instantiated_with_index_source_map_v3_objec`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:35:25)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-source-map-api.js#block_07_test_various_known_decodings_to_ensure_decodevlq_works_corre`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:69:52)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-source-map-api.js#block_08_observed_see_https_github_com_mozilla_source_map_pull_92`: not a function     at <anonymous> (/home/node/test/parallel/test-source-map-api.js:53:5)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-r...
-- `parallel/test-startup-large-pages.js#block_00_block_00`: Expected values to be strictly equal:  'undefined' !== '42'  AssertionError: Expected values to be strictly equal:  'undefined' !== '42'      at <anonymous> (/home/node/test/parallel/test-startup-larg...
-- `parallel/test-startup-large-pages.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 9  AssertionError: Expected values to be strictly equal:  0 !== 9      at <anonymous> (/home/node/test/parallel/test-startup-large-pages.js:14:22)     at l...
-- `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_04_localstorage_throws_without_localstorage_file`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_05_localstorage_is_not_persisted_if_it_is_unused`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_06_localstorage_is_persisted_if_it_is_used`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-webstorage.js#test_07_webstorage_quota_for_localstorage_and_sessionstorage`: 2 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at <anonymous> (node:test:678:36)     at apply (native)     at call (native)     at wrapped (node:async_hooks:...
-- `parallel/test-x509-escaping.js#block_00_test_that_all_certificate_chains_provided_by_the_reporter_ar`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:94:22)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-r...
-- `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:102:22)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:100:22)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-...
-- `parallel/test-x509-escaping.js#block_04_the_internal_parsing_logic_must_match_the_json_specification`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'tls is not supported in WebAssembly environment' -   code: 'ERR_TLS_CERT_ALTNAME_FORMAT', -   message: 'Inv...
-- `parallel/test-x509-escaping.js#block_05_correctly_i_e_not_simply_split_at_commas`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-x509-escaping.js#block_06_the_subject_must_be_ignored_if_a_dnsname_subject_alternative`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:41:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-r...
-- `parallel/test-x509-escaping.js#block_07_exists_even_if_other_subject_alternative_names_exist`: not a function     at <anonymous> (/home/node/test/parallel/test-x509-escaping.js:45:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-r...
-- `sequential/test-single-executable-application-assets.js#block_00_block_00`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/sequentia...
-- `sequential/test-single-executable-application-assets.js#block_01_block_01`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/sequentia...
-- `sequential/test-single-executable-application-assets.js#block_02_block_02`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/sequentia...
-- `sequential/test-single-executable-application-snapshot.js#block_00_block_00`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/sequentia...
-- `sequential/test-single-executable-application-snapshot.js#block_01_block_01`: Cannot find module '../common/sea' from '/home/node/test/sequential'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/sequentia...
 
 ### perf_hooks
 
-- `parallel/test-perf-hooks-histogram.js#block_00_block_00`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:19:13)     at load...
-- `parallel/test-perf-hooks-histogram.js#block_01_block_01`: monitorEventLoopDelay is not supported in WebAssembly environment     at monitorEventLoopDelay (node:perf_hooks:170:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:21:13)...
-- `parallel/test-perf-hooks-histogram.js#block_02_block_02`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:23:13)     at load...
-- `parallel/test-perf-hooks-histogram.js#block_03_block_03`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:26:13)     at load...
-- `parallel/test-perf-hooks-histogram.js#block_04_block_04`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
-- `parallel/test-perf-hooks-histogram.js#block_05_block_05`: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:29:14)     at load...
-- `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_03_custom_getters_math`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-perf-hooks-resourcetiming.js#block_04_using_performanceobserver`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-perf-hooks-usertiming.js#block_00_block_00`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
-- `parallel/test-perf-hooks-usertiming.js#block_01_block_01`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
-- `parallel/test-perf-hooks-usertiming.js#block_02_block_02`: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/parall...
-- `parallel/test-performance-function.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:18:34)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-c...
-- `parallel/test-performance-function.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:23:25)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-c...
-- `parallel/test-performance-function.js#block_02_block_02`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:22:34)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-c...
-- `parallel/test-performance-function.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'not a function', -   code: 'ERR_INVALID_ARG_TYPE', -   message: /The "fn" argument must be of type function...
-- `parallel/test-performance-function.js#block_04_function_can_be_wrapped_many_times_also_check_length_and_nam`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:27:34)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-c...
-- `parallel/test-performance-function.js#block_05_regression_tests_for_https_github_com_nodejs_node_issues_406`: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:70:43)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-c...
-- `parallel/test-performance-gc.js`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-perfor...
 - `parallel/test-performance-gc.js#block_00_adding_an_observer_should_force_at_least_one_gc_to_appear`: mustCall verification failed: mustCallAtLeast: expected at least 1 calls, got 0     at mustCallAtLeast (/home/node/test/common/index.js:521:28)     at <anonymous> (/home/node/test/parallel/test-perfor...
-- `sequential/test-perf-hooks.js#block_00_block_00`: EBADF: bad file descriptor, write     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at writeSync (node:fs:1113:37)     at log (/home/node/test/sequential/test-perf-hooks....
-- `sequential/test-perf-hooks.js#block_01_block_01`: EBADF: bad file descriptor, write     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at writeSync (node:fs:1113:37)     at log (/home/node/test/sequential/test-perf-hooks....
 
 ### permission
 
-- `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-allow-child-process-cli.js:28:13)     at loadModule (node:module:1088:32)     at localRequire (node...
-- `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`: execSync is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at execSync (node:child_process:1431:11)     at <anonymous> (/home/node/test/parallel...
-- `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`: Cannot find module 'wasi'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-permission-allow-wasi-cli.js:12:18)     at loadModule (node:module:1088:32)     at...
-- `parallel/test-permission-allow-wasi-cli.js#block_01_to_create_wasi_instance_unless_allow_wasi_is_sent`: Cannot find module 'wasi'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-permission-allow-wasi-cli.js:12:18)     at loadModule (node:module:1088:32)     at...
-- `parallel/test-permission-allow-worker-cli.js#block_00_guarantee_the_initial_state`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-allow-worker-cli.js:14:13)     at loadModule (node:module:1088:32)     at localRequire (node:module...
-- `parallel/test-permission-child-process-cli.js#block_00_guarantee_the_initial_state`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-child-process-cli.js:20:10)     at loadModule (node:module:1088:32)     at localRequire (node:modul...
-- `parallel/test-permission-child-process-cli.js#block_01_to_spawn`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-permission-child-process-cli.js:26:13)     at loadModule (node:module:1088:32)...
-- `parallel/test-permission-fs-read.js`: AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/fixtures/permission/fs-read.js:34:37)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34) ...
 - `parallel/test-permission-fs-read.js#block_01_block_01`: AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/fixtures/permission/fs-read.js:34:37)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34) ...
-- `parallel/test-permission-fs-require.js`: 0 !== 1  AssertionError:   0 !== 1      at <anonymous> (/home/node/test/parallel/test-permission-fs-require.js:46:40)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34) ...
 - `parallel/test-permission-fs-require.js#block_01_block_01`: 0 !== 1  AssertionError:   0 !== 1      at <anonymous> (/home/node/test/parallel/test-permission-fs-require.js:31:40)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34) ...
 - `parallel/test-permission-fs-require.js#block_03_block_03`: 0 !== 1  AssertionError:   0 !== 1      at <anonymous> (/home/node/test/parallel/test-permission-fs-require.js:35:40)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34) ...
-- `parallel/test-permission-fs-wildcard.js#block_00_block_00`: Error: Cannot find module '/tmp/*' from '/'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at runMain (node:module:1539:23)     at runInline (node:child_proc...
-- `parallel/test-permission-fs-wildcard.js#block_01_block_01`: Error: Cannot find module '/tmp/*' from '/'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at runMain (node:module:1539:23)     at runInline (node:child_proc...
-- `parallel/test-permission-fs-write-report.js#block_00_block_00`: The validation function is expected to return "true". Received false  Caught error:  TypeError: cannot read property 'writeReport' of undefined AssertionError: The validation function is expected to r...
-- `parallel/test-permission-fs-write-report.js#block_01_block_01`: The validation function is expected to return "true". Received false  Caught error:  TypeError: cannot read property 'writeReport' of undefined AssertionError: The validation function is expected to r...
-- `parallel/test-permission-fs-write-v8.js#block_00_block_00`: The validation function is expected to return "true". Received false  Caught error:  Error: v8.writeHeapSnapshot is not supported in WASM environment AssertionError: The validation function is expecte...
-- `parallel/test-permission-fs-write-v8.js#block_01_block_01`: The validation function is expected to return "true". Received false  Caught error:  Error: v8.writeHeapSnapshot is not supported in WASM environment AssertionError: The validation function is expecte...
-- `parallel/test-permission-has.js#block_00_block_00`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-has.js:9:13)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     ...
-- `parallel/test-permission-has.js#block_01_block_01`: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-has.js:11:10)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)    ...
-
-### process
-
-- `parallel/test-process-env-allowed-flags.js#block_00_assert_legit_flags_are_allowed_and_bogus_flags_are_disallowe`: flag should be in set: --perf_basic_prof  false !== true  AssertionError: flag should be in set: --perf_basic_prof  false !== true      at <anonymous> (/home/node/test/parallel/test-process-env-allowe...
-- `parallel/test-process-env-allowed-flags.js#block_02_assert_immutability_of_process_allowednodeenvironmentflags`: Expected values to be strictly equal:  false !== true  AssertionError: Expected values to be strictly equal:  false !== true      at <anonymous> (/home/node/test/parallel/test-process-env-allowed-flag...
-- `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-timer-lifetime.js:8:30)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:...
-- `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-timer-lifetime.js:10:30)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272...
-
-### readline
-
-- `parallel/test-readline-emit-keypress-events.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
-- `parallel/test-readline-emit-keypress-events.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
-- `parallel/test-readline-emit-keypress-events.js#block_02_block_02`: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f'...
-- `parallel/test-readline.js#block_00_block_00`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_01_block_01`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_02_block_02`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_03_block_03`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_04_block_04`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js#block_05_block_05`: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-
-### repl
-
-- `parallel/test-repl-context.js#block_00_test_context_when_useglobal_is_false`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-context.js:13:18)     at loadModule (node:module:1088:32)     at l...
-- `parallel/test-repl-context.js#block_01_test_for_context_side_effects`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-context.js:16:23)     at loadModule (node:module:1088:32)     at l...
-- `parallel/test-repl-tab-complete-import.js#block_00_block_00`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete-import.js:24:21)     at loadModule (node:module:1088:...
-- `parallel/test-repl-tab-complete-import.js#block_01_block_01`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete-import.js:24:21)     at loadModule (node:module:1088:...
-- `parallel/test-repl-tab-complete-import.js#block_02_test_tab_completion_for_import_relative_to_the_current_direc`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete-import.js:24:21)     at loadModule (node:module:1088:...
-- `parallel/test-repl-tab-complete.js#block_00_block_00`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-repl-tab-complete.js#block_01_block_01`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-repl-tab-complete.js#block_02_test_tab_completion_for_require_relative_to_the_current_dire`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-repl-tab-complete.js#block_03_tab_completion_for_files_directories`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:1088:32)    ...
-- `parallel/test-repl-tab-complete.js#block_04_block_04`: repl is not supported in WebAssembly environment     at start (node:repl:7:15)     at <anonymous> (/home/node/test/parallel/test-repl-tab-complete.js:58:21)     at loadModule (node:module:1088:32)    ...
-
-### shadow_realm
-
-- `parallel/test-shadow-realm-prepare-stack-trace.js#block_00_block_00`: ShadowRealm is not defined ReferenceError: ShadowRealm is not defined     at [object CallSite]     at [object CallSite]     at [object CallSite]     at [object CallSite]
-- `parallel/test-shadow-realm-prepare-stack-trace.js#block_01_block_01`: ShadowRealm is not defined ReferenceError: ShadowRealm is not defined     at [object CallSite]     at [object CallSite]     at [object CallSite]     at [object CallSite]
-
-### snapshot
-
-- `parallel/test-snapshot-api.js#block_00_block_00`: cannot read property 'isBuildingSnapshot' of undefined     at <anonymous> (/home/node/test/parallel/test-snapshot-api.js:16:1)     at loadModule (node:module:1088:32)     at localRequire (node:module:...
-- `parallel/test-snapshot-api.js#block_01_block_01`: cannot read property 'isBuildingSnapshot' of undefined     at <anonymous> (/home/node/test/parallel/test-snapshot-api.js:16:1)     at loadModule (node:module:1088:32)     at localRequire (node:module:...
-- `parallel/test-snapshot-argv1.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-argv1.js:31:24)     at loadMo...
-- `parallel/test-snapshot-argv1.js#block_01_block_01`: Unexpected end of JSON input     at <input>:1:1     at parse (native)     at <anonymous> (/home/node/test/parallel/test-snapshot-argv1.js:33:53)     at loadModule (node:module:1088:32)     at localReq...
-- `parallel/test-snapshot-basic.js#block_00_by_default_the_snapshot_blob_path_is_cwd_snapshot_blob`: - process terminated with status 1, expected 9     at <anonymous> (/home/node/test/parallel/test-snapshot-basic.js:24:20)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:...
-- `parallel/test-snapshot-basic.js#block_01_block_01`: - process terminated with status 1, expected 9     at <anonymous> (/home/node/test/parallel/test-snapshot-basic.js:24:20)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:...
-- `parallel/test-snapshot-basic.js#block_02_block_02`: - process terminated with status 1, expected 9     at <anonymous> (/home/node/test/parallel/test-snapshot-basic.js:24:20)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:...
-- `parallel/test-snapshot-basic.js#block_03_block_03`: - process terminated with status 1, expected 9     at <anonymous> (/home/node/test/parallel/test-snapshot-basic.js:24:20)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:...
-- `parallel/test-snapshot-child-process-sync.js#block_00_block_00`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-child-process-sync.js:23:22)     at loadModule (node:module:1088:32)     at localRequire (node...
-- `parallel/test-snapshot-child-process-sync.js#block_01_block_01`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-child-process-sync.js:24:22)     at loadModule (node:module:1088:32)     at localRequire (node...
-- `parallel/test-snapshot-cjs-main.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-cjs-main.js:31:24)     at loa...
-- `parallel/test-snapshot-cjs-main.js#block_01_block_01`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-cjs-main.js:33:24)     at loa...
-- `parallel/test-snapshot-config.js#block_00_block_00`: - stderr did not match /Cannot read snapshot configuration from snapshot\.json/     at <anonymous> (/home/node/test/parallel/test-snapshot-config.js:23:20)     at loadModule (node:module:1088:32)     ...
-- `parallel/test-snapshot-config.js#block_01_block_01`: - stderr did not match /"builder" field of .+snapshot\.json is not a non-empty string/     at <anonymous> (/home/node/test/parallel/test-snapshot-config.js:31:20)     at loadModule (node:module:1088:3...
-- `parallel/test-snapshot-config.js#block_02_block_02`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-config.js:34:32)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272...
-- `parallel/test-snapshot-config.js#block_03_block_03`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-config.js:37:32)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272...
-- `parallel/test-snapshot-cwd.js#block_00_block_00`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-cwd.js:21:22)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
-- `parallel/test-snapshot-cwd.js#block_01_block_01`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-cwd.js:22:22)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
-- `parallel/test-snapshot-dns-lookup-localhost-promise.js#block_00_block_00`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-dns-lookup-localhost-promise.js#block_01_block_01`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-dns-lookup-localhost.js#block_00_block_00`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-dns-lookup-localhost.js#block_01_block_01`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-dns-resolve-localhost-promise.js#block_00_block_00`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-dns-resolve-localhost-promise.js#block_01_block_01`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-dns-resolve-localhost.js#block_00_block_00`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-dns-resolve-localhost.js#block_01_block_01`: Cannot find module '../common/snapshot' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
-- `parallel/test-snapshot-error.js#block_00_build_snapshot_should_be_run_with_an_entry_point`: Expected values to be strictly equal:  1 !== 9  AssertionError: Expected values to be strictly equal:  1 !== 9      at <anonymous> (/home/node/test/parallel/test-snapshot-error.js:30:22)     at loadMo...
-- `parallel/test-snapshot-error.js#block_01_loading_a_non_existent_snapshot_should_fail`: Expected values to be strictly equal:  1 !== 14  AssertionError: Expected values to be strictly equal:  1 !== 14      at <anonymous> (/home/node/test/parallel/test-snapshot-error.js:33:22)     at load...
-- `parallel/test-snapshot-error.js#block_02_running_an_script_that_throws_an_error_should_result_in_an_e`: The input did not match the regular expression /error\.js:1/. Input:  "Error: Cannot find module '/tmp/w/snapshot.blob' from '/'\n" +   '    at resolveFilename (node:module:602:80)\n' +   '    at loca...
-- `parallel/test-snapshot-eval.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-eval.js:30:24)     at loadMod...
-- `parallel/test-snapshot-eval.js#block_01_block_01`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-eval.js:33:24)     at loadMod...
-- `parallel/test-snapshot-eval.js#block_02_block_02`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-eval.js:35:24)     at loadMod...
-- `parallel/test-snapshot-gzip.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-gzip.js:36:22)     at loadMod...
-- `parallel/test-snapshot-gzip.js#block_01_block_01`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-gzip.js:36:22)     at loadMod...
-- `parallel/test-snapshot-incompatible.js#block_00_is_chosen_here_because_it_s_stable_enough_and_makes_a_differ`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-incompatible.js:34:24)     at...
-- `parallel/test-snapshot-incompatible.js#block_01_block_01`: The input did not match the regular expression /Failed to load the startup snapshot/. Input:  "Error: Cannot find module '/tmp/w/snapshot.blob' from '/'\n" +   '    at resolveFilename (node:module:602...
-- `parallel/test-snapshot-incompatible.js#block_02_block_02`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-incompatible.js:40:24)     at...
-- `parallel/test-snapshot-net.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-net.js:28:24)     at loadModu...
-- `parallel/test-snapshot-net.js#block_01_block_01`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-net.js:33:22)     at loadModu...
-- `parallel/test-snapshot-stack-trace-limit.js#block_00_block_00`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-stack-trace-limit.js:20:14)     at loadModule (node:module:1088:32)     at localRequire (node:...
-- `parallel/test-snapshot-stack-trace-limit.js#block_01_block_01`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-stack-trace-limit.js:17:22)     at loadModule (node:module:1088:32)     at localRequire (node:...
-- `parallel/test-snapshot-typescript.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-typescript.js:37:22)     at l...
-- `parallel/test-snapshot-typescript.js#block_01_block_01`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-typescript.js:41:22)     at l...
-- `parallel/test-snapshot-umd.js#block_00_block_00`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-umd.js:30:22)     at loadModu...
-- `parallel/test-snapshot-umd.js#block_01_block_01`: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-snapshot-umd.js:35:22)     at loadModu...
-- `parallel/test-snapshot-warning.js#block_00_block_00`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-warning.js:22:32)     at loadModule (node:module:1088:32)     at localRequire (node:module:127...
-- `parallel/test-snapshot-warning.js#block_01_block_01`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-warning.js:26:22)     at loadModule (node:module:1088:32)     at localRequire (node:module:127...
-- `parallel/test-snapshot-warning.js#block_02_block_02`: - process terminated with status 1, expected 0     at <anonymous> (/home/node/test/parallel/test-snapshot-warning.js:31:22)     at loadModule (node:module:1088:32)     at localRequire (node:module:127...
 
 ### sqlite
 
-- `parallel/test-sqlite-session.js`: 2 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at executeSuite (node:test:691:25)     at runSuite (node:test:595:64)     at describe (node:test:799:29)     a...
 - `parallel/test-sqlite-session.js#test_05_conflict_resolution`: 2 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at executeSuite (node:test:691:25)     at runSuite (node:test:595:64)     at describe (node:test:799:29)     a...
-- `parallel/test-sqlite-statement-sync.js`: Cannot mix named parameters object with positional arguments     at #processParams (node:sqlite:435:33)     at run (node:sqlite:446:44)     at <anonymous> (/home/node/test/parallel/test-sqlite-stateme...
 - `parallel/test-sqlite-statement-sync.js#test_06_statementsync_prototype_expandedsql`: Cannot mix named parameters object with positional arguments     at #processParams (node:sqlite:435:33)     at run (node:sqlite:446:44)     at <anonymous> (/home/node/test/parallel/test-sqlite-stateme...
-- `parallel/test-sqlite.js`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
 - `parallel/test-sqlite.js#test_00_accessing_the_node_sqlite_module`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
 
 ### stream
 
-- `parallel/test-stream-compose.js`: Unhandled promise rejection:     at ERR_INVALID_RETURN_VALUE (__wasm_rquickjs_builtin/internal/errors:840:109)     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/duplex:237:35)     at apply ...
 - `parallel/test-stream-compose.js#block_17_block_17`: Unhandled promise rejection:     at ERR_INVALID_RETURN_VALUE (__wasm_rquickjs_builtin/internal/errors:840:109)     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/duplex:237:35)     at apply ...
-- `parallel/test-stream-drop-take.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-drop-take.js...
 - `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-drop-take.js...
-- `parallel/test-stream-duplex-from.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-duplex-from....
 - `parallel/test-stream-duplex-from.js#block_17_block_17`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-duplex-from....
-- `parallel/test-stream-duplex-readable-writable.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-duplex-reada...
 - `parallel/test-stream-duplex-readable-writable.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-duplex-reada...
 - `parallel/test-stream-finished.js#block_08_block_08`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished....
 - `parallel/test-stream-finished.js#block_21_block_21`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
@@ -3838,10 +3081,8 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-finished.js#block_23_block_23`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
 - `parallel/test-stream-finished.js#block_24_block_24`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
 - `parallel/test-stream-finished.js#block_41_block_41`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-finished.js:...
-- `parallel/test-stream-map.js`: mustCall verification failed: mustCall: expected exactly 5 call(s), got 6     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-map.js:63:28...
 - `parallel/test-stream-map.js#block_03_block_03`: mustCall verification failed: mustCall: expected exactly 5 call(s), got 6     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-map.js:40:28...
 - `parallel/test-stream-map.js#block_09_block_09`: mustCall verification failed: mustCall: expected exactly 2 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-map.js:53:44...
-- `parallel/test-stream-pipeline.js#block_06_block_06`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline.js:...
 - `parallel/test-stream-pipeline.js#block_75_block_75`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustSucceed (/home/node/test/common/index.js:545:28)     at <anonymous> (/home/node/test/parallel/test-stream-pipeline....
 - `parallel/test-stream-readable-async-iterators.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at tests (/home/node/test/parallel/test-stream-readable-async-ite...
 - `parallel/test-stream-readable-async-iterators.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at tests (/home/node/test/parallel/test-stream-readable-async-ite...
@@ -3849,26 +3090,12 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-stream-readable-async-iterators.js#block_03_block_03`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: + actual - expected  + 'ERR_ASSERTION' - 'ERR_STREAM_PREMATURE_CLOSE'        ^    ...
 - `parallel/test-stream-readable-async-iterators.js#block_04_asynciterator_non_destroying_iterator`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at tests (/home/node/test/parallel/test-stream-readable-async-ite...
 - `parallel/test-stream-readable-async-iterators.js#block_06_block_06`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at tests (/home/node/test/parallel/test-stream-readable-async-ite...
-- `parallel/test-stream-reduce.js`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 4     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-reduce.js:56...
 - `parallel/test-stream-reduce.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 3 call(s), got 4     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-stream-reduce.js:18...
-- `parallel/test-stream2-writable.js`: not a function     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/readable:704:10)     at <anonymous> (/home/node/test/parallel/test-stream2-writable.js:301:10)     at loadModule (node:modul...
 - `parallel/test-stream2-writable.js#block_13_block_13`: not a function     at <anonymous> (__wasm_rquickjs_builtin/internal/streams/readable:704:10)     at <anonymous> (/home/node/test/parallel/test-stream2-writable.js:87:10)     at loadModule (node:module...
-- `parallel/test-streams-highwatermark.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison {     code: 'ERR_INVALID_ARG_VALUE', +   message: `The property 'options.highWaterMark' is invalid. Received "5"`, -   mess...
-- `parallel/test-streams-highwatermark.js#block_04_block_04`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-streams-highwatermark.js:27:14)     at loadModule (node:module:1088:32)     at...
 
 ### test_runner
 
-- `parallel/test-runner-assert.js`: The input did not match the regular expression /t\.assert\.ok\(1 === 2\)/. Input:  'AssertionError [ERR_ASSERTION]: false == true'  AssertionError: The input did not match the regular expression /t\.a...
 - `parallel/test-runner-assert.js#test_01_t_assert_ok_correctly_parses_the_stacktrace`: The input did not match the regular expression /t\.assert\.ok\(1 === 2\)/. Input:  'AssertionError [ERR_ASSERTION]: false == true'  AssertionError: The input did not match the regular expression /t\.a...
-- `parallel/test-runner-cli-concurrency.js#test_00_default_concurrency`: The input did not match the regular expression /concurrency: true,/. Input:  ''  AssertionError: The input did not match the regular expression /concurrency: true,/. Input:  ''      at <anonymous> (/h...
-- `parallel/test-runner-cli-concurrency.js#test_01_concurrency_of_one`: The input did not match the regular expression /concurrency: 1,/. Input:  ''  AssertionError: The input did not match the regular expression /concurrency: 1,/. Input:  ''      at <anonymous> (/home/no...
-- `parallel/test-runner-cli-concurrency.js#test_02_concurrency_of_two`: The input did not match the regular expression /concurrency: 2,/. Input:  ''  AssertionError: The input did not match the regular expression /concurrency: 2,/. Input:  ''      at <anonymous> (/home/no...
-- `parallel/test-runner-cli-concurrency.js#test_03_isolation_none_uses_a_concurrency_of_one`: The input did not match the regular expression /concurrency: 1,/. Input:  ''  AssertionError: The input did not match the regular expression /concurrency: 1,/. Input:  ''      at <anonymous> (/home/no...
-- `parallel/test-runner-cli-concurrency.js#test_04_isolation_none_overrides_test_concurrency`: The input did not match the regular expression /concurrency: 1,/. Input:  ''  AssertionError: The input did not match the regular expression /concurrency: 1,/. Input:  ''      at <anonymous> (/home/no...
-- `parallel/test-runner-cli-timeout.js#test_00_default_timeout_infinity`: The input did not match the regular expression /timeout: Infinity,/. Input:  ''  AssertionError: The input did not match the regular expression /timeout: Infinity,/. Input:  ''      at <anonymous> (/h...
-- `parallel/test-runner-cli-timeout.js#test_01_timeout_of_10ms`: The input did not match the regular expression /timeout: 10,/. Input:  "Could not find '10'\n"  AssertionError: The input did not match the regular expression /timeout: 10,/. Input:  "Could not find '...
-- `parallel/test-runner-cli-timeout.js#test_02_isolation_none_uses_the_test_timeout_flag`: The input did not match the regular expression /timeout: 10,/. Input:  ''  AssertionError: The input did not match the regular expression /timeout: 10,/. Input:  ''      at <anonymous> (/home/node/tes...
-- `parallel/test-runner-cli.js`: Expected values to be strictly equal:  null !== 1  AssertionError: Expected values to be strictly equal:  null !== 1      at <anonymous> (/home/node/test/parallel/test-runner-cli.js:33:24)     at load...
 - `parallel/test-runner-cli.js#block_00_block_00`: Expected values to be strictly equal:  null !== 1  AssertionError: Expected values to be strictly equal:  null !== 1      at <anonymous> (/home/node/test/parallel/test-runner-cli.js:33:24)     at load...
 - `parallel/test-runner-cli.js#block_01_block_01`: Expected values to be strictly equal:  null !== 1  AssertionError: Expected values to be strictly equal:  null !== 1      at <anonymous> (/home/node/test/parallel/test-runner-cli.js:33:24)     at load...
 - `parallel/test-runner-cli.js#block_02_block_02`: Expected values to be strictly equal:  null !== 1  AssertionError: Expected values to be strictly equal:  null !== 1      at <anonymous> (/home/node/test/parallel/test-runner-cli.js:33:24)     at load...
@@ -3880,165 +3107,27 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-runner-cli.js#block_08_block_08`: Expected values to be strictly equal:  null !== 1  AssertionError: Expected values to be strictly equal:  null !== 1      at <anonymous> (/home/node/test/parallel/test-runner-cli.js:33:24)     at load...
 - `parallel/test-runner-cli.js#block_09_block_09`: Expected values to be strictly equal:  null !== 1  AssertionError: Expected values to be strictly equal:  null !== 1      at <anonymous> (/home/node/test/parallel/test-runner-cli.js:33:24)     at load...
 - `parallel/test-runner-cli.js#block_10_block_10`: Expected values to be strictly equal:  null !== 1  AssertionError: Expected values to be strictly equal:  null !== 1      at <anonymous> (/home/node/test/parallel/test-runner-cli.js:33:24)     at load...
-- `parallel/test-runner-concurrency.js#test_00_concurrency_option_boolean_true`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-runner-concurrency....
-- `parallel/test-runner-concurrency.js#test_01_concurrency_option_boolean_false`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-runner-concurrency....
-- `parallel/test-runner-concurrency.js#test_02_concurrency_true_implies_infinity`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-runner-concurrency....
-- `parallel/test-runner-concurrency.js#test_03_test_multiple_files`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-runner-concurrency....
-- `parallel/test-runner-error-reporter.js#test_00_all_tests_failures_reported_without_fail_fast_flag`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-runner-error-reporter.js:20:22)     at...
-- `parallel/test-runner-error-reporter.js#test_01_fail_fast_stops_test_execution_after_first_failure`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-runner-error-reporter.js:32:22)     at...
-- `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`: The input did not match the regular expression /Error: Test "extraneous async activity test" at .+extraneous_set_immediate_async\.mjs:3:1 generated asynchronous activity after the test ended/m. Input:...
-- `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`: The input did not match the regular expression /Error: Test "extraneous async activity test" at .+extraneous_set_timeout_async\.mjs:3:1 generated asynchronous activity after the test ended/m. Input:  ...
-- `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`: The input did not match the regular expression /Error: Test hook "before" at .+async-error-in-test-hook\.mjs:3:1 generated asynchronous activity after the test ended/m. Input:  ''  AssertionError: The...
-- `parallel/test-runner-extraneous-async-activity.js#block_03_block_03`: The input did not match the regular expression /Error: Test hook "before" at .+async-error-in-test-hook\.mjs:3:1 generated asynchronous activity after the test ended/m. Input:  ''  AssertionError: The...
-- `parallel/test-runner-force-exit-flush.js#test_00_junit_reporter`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at runWithReporter (/home/node/test/parallel/test-runner-force-exit-flush.js:22:15) ...
-- `parallel/test-runner-force-exit-flush.js#test_01_spec_reporter`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at runWithReporter (/home/node/test/parallel/test-runner-force-exit-flush.js:22:15) ...
-- `parallel/test-runner-force-exit-flush.js#test_02_tap_reporter`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at runWithReporter (/home/node/test/parallel/test-runner-force-exit-flush.js:22:15) ...
-- `parallel/test-runner-mocking.js`: The input did not match the regular expression /TypeError: Cannot read private member #privateValue /. Input:  "TypeError: private class field '#privateValue' does not exist"  AssertionError: The inpu...
 - `parallel/test-runner-mocking.js#test_21_mocks_a_constructor`: The input did not match the regular expression /TypeError: Cannot read private member #privateValue /. Input:  "TypeError: private class field '#privateValue' does not exist"  AssertionError: The inpu...
-- `parallel/test-runner-module-mocking.js`: The module is already mocked     at _registerModuleMock (node:module:362:23)     at module (node:test:1275:50)     at <anonymous> (/home/node/test/parallel/test-runner-module-mocking.js:465:47)     at...
 - `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
 - `parallel/test-runner-module-mocking.js#test_16_wrong_import_syntax_should_throw_error_after_module_mocking`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
 - `parallel/test-runner-module-mocking.js#test_17_should_throw_err_access_denied_when_permission_model_is_enab`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
 - `parallel/test-runner-module-mocking.js#test_18_should_work_when_allow_worker_is_passed_and_permission_model`: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/in...
-- `parallel/test-runner-no-isolation-filtering.js#test_00_works_with_test_only`: The input did not match the regular expression /# tests 2/. Input:  ''  AssertionError: The input did not match the regular expression /# tests 2/. Input:  ''      at <anonymous> (/home/node/test/para...
-- `parallel/test-runner-no-isolation-filtering.js#test_01_works_with_test_name_pattern`: The input did not match the regular expression /# tests 0/. Input:  ''  AssertionError: The input did not match the regular expression /# tests 0/. Input:  ''      at <anonymous> (/home/node/test/para...
-- `parallel/test-runner-no-isolation-filtering.js#test_02_works_with_test_skip_pattern`: The input did not match the regular expression /# tests 1/. Input:  ''  AssertionError: The input did not match the regular expression /# tests 1/. Input:  ''      at <anonymous> (/home/node/test/para...
-- `parallel/test-runner-snapshot-file-tests.js#test_00_t_assert_filesnapshot_validation`: 4 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at executeSuite (node:test:691:25)     at runSuite (node:test:595:64)     at describe (node:test:799:29)     a...
-- `parallel/test-runner-snapshot-file-tests.js#test_01_t_assert_filesnapshot_update_read_flow`: 3 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at <anonymous> (node:test:678:36)     at apply (native)     at call (native)     at wrapped (node:async_hooks:...
-- `parallel/test-runner-test-filepath.js`: Expected values to be strictly equal: + actual - expected  + '/tmp/w/temp.js' - '/home/node/test/parallel/test-runner-test-filepath.js'  AssertionError: Expected values to be strictly equal: + actual ...
-
-### tls
-
-- `parallel/test-tls-basic-validations.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'tls is not supported in WebAssembly environment', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TYPE', -   m...
-- `parallel/test-tls-basic-validations.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'tls is not supported in WebAssembly environment', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TYPE', -   m...
-- `parallel/test-tls-basic-validations.js#block_02_block_02`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'tls is not supported in WebAssembly environment', +   name: 'Error' -   code: 'ERR_INVALID_ARG_TYPE', -   m...
-- `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-external-accessor.js#block_00_ensure_accessing_external_doesn_t_hit_an_assert_in_the_acces`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-external-accessor.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-tls-external-accessor.js:13:20)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-...
-- `parallel/test-tls-server-parent-constructor-options.js#block_00_block_00`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-server-parent-constructor-options.js#block_01_block_01`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-socket-allow-half-open-option.js#block_00_block_00`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-socket-allow-half-open-option.js#block_01_block_01`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-socket-allow-half-open-option.js#block_02_block_02`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-socket-allow-half-open-option.js#block_03_block_03`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `parallel/test-tls-translate-peer-certificate.js#block_00_block_00`: Cannot find module '_tls_common'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-tls-translate-peer-certificate.js:9:38)     at loadModule (node:module:1088...
-- `parallel/test-tls-translate-peer-certificate.js#block_01_block_01`: Cannot find module '_tls_common'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-tls-translate-peer-certificate.js:9:38)     at loadModule (node:module:1088...
-- `sequential/test-tls-connect.js#block_00_uncatchable_exception_on_tls_connection_error`: tls is not supported in WebAssembly environment     at <anonymous> (node:tls:6:33)
-- `sequential/test-tls-connect.js#block_01_ssl_accept_ssl_connect_error_handling`: The input did not match the regular expression /no cipher match/i. Input:  'Error: tls is not supported in WebAssembly environment'  AssertionError: The input did not match the regular expression /no ...
-
-### util
-
-- `parallel/test-util-format.js#block_00_block_00`: Expected values to be strictly equal: + actual - expected  + 'Error: foo\n' + +   '    at <anonymous> (/home/node/test/parallel/test-util-format.js:364:17)\n' + +   '    at loadModule (node:module:108...
-- `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`: Expected values to be strictly equal: + actual - expected  + 'Error: foo\n' + +   '    at <anonymous> (/home/node/test/parallel/test-util-format.js:410:17)\n' + +   '    at loadModule (node:module:108...
-- `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`: Expected values to be strictly equal: + actual - expected  + 'Error: foo\n' + +   '    at <anonymous> (/home/node/test/parallel/test-util-format.js:351:17)\n' + +   '    at loadModule (node:module:108...
-- `parallel/test-util-format.js#block_03_block_03`: Expected values to be strictly equal: + actual - expected  + 'Error: foo\n' + +   '    at <anonymous> (/home/node/test/parallel/test-util-format.js:337:17)\n' + +   '    at loadModule (node:module:108...
-- `parallel/test-util-format.js#block_04_block_04`: Expected values to be strictly equal: + actual - expected  + 'Error: foo\n' + +   '    at <anonymous> (/home/node/test/parallel/test-util-format.js:341:17)\n' + +   '    at loadModule (node:module:108...
-
-### v8
-
-- `parallel/test-v8-collect-gc-profile-exit-before-stop.js#block_00_test_if_it_makes_the_process_crash`: not a function     at <anonymous> (/home/node/test/parallel/test-v8-collect-gc-profile-exit-before-stop.js:7:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     a...
-- `parallel/test-v8-collect-gc-profile-exit-before-stop.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-v8-collect-gc-profile-exit-before-stop.js:8:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     a...
-- `parallel/test-v8-query-objects.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + actual...
-- `parallel/test-v8-query-objects.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-v8-query-objects.js:24:38)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compa...
-- `parallel/test-v8-query-objects.js#block_02_block_02`: not a function     at <anonymous> (/home/node/test/parallel/test-v8-query-objects.js:27:35)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compa...
-- `parallel/test-v8-query-objects.js#block_03_block_03`: not a function     at <anonymous> (/home/node/test/parallel/test-v8-query-objects.js:27:38)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compa...
-- `parallel/test-v8-query-objects.js#block_04_block_04`: not a function     at <anonymous> (/home/node/test/parallel/test-v8-query-objects.js:35:35)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compa...
 
 ### vm
 
-- `parallel/test-vm-basic.js#block_00_vm_runinnewcontext`: Expected values to be strictly deep-equal: + actual - expected  + {} - { -   foo: 'bar', -   typeofProcess: 'undefined' - }  AssertionError: Expected values to be strictly deep-equal: + actual - expec...
-- `parallel/test-vm-basic.js#block_01_vm_runincontext`: Expected values to be strictly deep-equal: + actual - expected    { +   [Symbol(vm.context)]: 1, -   baz: 'bar',     foo: 'bar', -   typeofProcess: 'undefined'   }  AssertionError: Expected values to ...
-- `parallel/test-vm-basic.js#block_02_vm_runinthiscontext`: Expected values to be strictly equal: + actual - expected  + '[object Object]' - '[object process]'            ^  AssertionError: Expected values to be strictly equal: + actual - expected  + '[object ...
-- `parallel/test-vm-basic.js#block_03_vm_runinnewcontext`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-vm-basic.js:59:42)     at forEach (native)     at <ano...
-- `parallel/test-vm-basic.js#block_04_vm_createcontext`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-vm-basic.js:57:42)     at forEach (native)     at <ano...
-- `parallel/test-vm-basic.js#block_05_run_script_with_filename`: The "checkErr" validation function is expected to return "true". Received false  Caught error:  Error: boom AssertionError: The "checkErr" validation function is expected to return "true". Received fa...
-- `parallel/test-vm-basic.js#block_06_vm_compilefunction`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-vm-basic.js:53:42)     at forEach (native)     at <ano...
-- `parallel/test-vm-codegen.js#block_00_block_00`: WebAssembly is not defined     at <anonymous> (eval_script:1:19)     at <eval> (eval_script:1:64)     at runInContext (__wasm_rquickjs_builtin/vm:260:54)     at <anonymous> (/home/node/test/parallel/t...
-- `parallel/test-vm-codegen.js#block_01_block_01`: The "EvalError" validation function is expected to return "true". Received EvalError: ReferenceError: x is not defined     at call (native)     at expectedException (node:assert:2013:31)     at expect...
-- `parallel/test-vm-codegen.js#block_02_block_02`: WebAssembly is not defined     at <anonymous> (eval_script:1:19)     at <eval> (eval_script:1:64)     at runInContext (__wasm_rquickjs_builtin/vm:260:54)     at <anonymous> (/home/node/test/parallel/t...
-- `parallel/test-vm-context-dont-contextify.js#block_00_block_00`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:13:36)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-vm-context-dont-contextify.js#block_01_block_01`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:15:36)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-vm-context-dont-contextify.js#block_02_block_02`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:17:36)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-vm-context-dont-contextify.js#block_03_block_03`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:21:24)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-vm-context-dont-contextify.js#block_04_block_04`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:22:5)     at loadModule (node:module:1088:32)     at localRequire (n...
-- `parallel/test-vm-context-dont-contextify.js#block_05_block_05`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:23:36)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-vm-context-dont-contextify.js#block_06_block_06`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:76:36)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-vm-context-dont-contextify.js#block_07_block_07`: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:78:36)     at loadModule (node:module:1088:32)     at localRequire (...
-- `parallel/test-vm-measure-memory-lazy.js#block_00_or_otherwise_these_may_not_resolve`: Cannot find module '../common/measure-memory' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/...
-- `parallel/test-vm-measure-memory-lazy.js#block_01_block_01`: Cannot find module '../common/measure-memory' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/...
-- `parallel/test-vm-measure-memory-lazy.js#block_02_block_02`: Cannot find module '../common/measure-memory' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/...
-- `parallel/test-vm-measure-memory-lazy.js#block_03_block_03`: Cannot find module '../common/measure-memory' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/...
-- `parallel/test-vm-new-script-new-context.js`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-vm-new-script-new-context.js:71:22)   ...
 - `parallel/test-vm-new-script-new-context.js#block_04_block_04`: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-vm-new-script-new-context.js:47:22)   ...
 - `parallel/test-vm-new-script-new-context.js#block_07_block_07`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-vm-new-script-new-context.js:45:10)     at loadModule (node:module:1088:32)   ...
 
-### webcrypto
-
-- `parallel/test-webcrypto-export-import-ec.js#block_00_block_00`: Unhandled promise rejection (likely cause of mustCall failure):     at createDataError (__wasm_rquickjs_builtin/web_crypto:3186:21)     at toCryptoKey (__wasm_rquickjs_builtin/web_crypto:3151:27)     ...
-- `parallel/test-webcrypto-export-import-ec.js#block_01_bad_private_keys`: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'Failed to parse private key...
-
 ### whatwg
 
-- `parallel/test-whatwg-events-add-event-listener-options-passive.js#block_00_block_00`: The expression evaluated to a falsy value:    ok(supportsPassive)  AssertionError: The expression evaluated to a falsy value:    ok(supportsPassive)      at <anonymous> (/home/node/test/parallel/test-...
-- `parallel/test-whatwg-events-add-event-listener-options-signal.js`: The listener was still removed  1 !== 0  AssertionError: The listener was still removed  1 !== 0      at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:1...
 - `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_06_block_06`: The listener was still removed  1 !== 0  AssertionError: The listener was still removed  1 !== 0      at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:3...
 - `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_09_block_09`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-add-event-listener-options-signal.js:32:...
-- `parallel/test-whatwg-events-customevent.js`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-customevent.js:22:3)     at loadModule (...
 - `parallel/test-whatwg-events-customevent.js#block_01_block_01`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-events-customevent.js:13:3)     at loadModule (...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_00_block_00`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_01_block_01`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_02_block_02`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js#block_03_block_03`: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-buffers-...
-- `parallel/test-whatwg-url-custom-searchparams-constructor.js#block_00_block_00`: not a function     at parseToDict (__wasm_rquickjs_builtin/url:236:20)     at URLSearchParamsPolyfill (__wasm_rquickjs_builtin/url:21:46)     at <anonymous> (/home/node/test/parallel/test-whatwg-url-c...
-- `parallel/test-whatwg-url-custom-searchparams-constructor.js#block_01_block_01`: The input did not match the regular expression /^TypeError: Cannot convert a Symbol value to a string$/. Input:  'TypeError: not a function'  AssertionError: The input did not match the regular expres...
-- `parallel/test-whatwg-url-custom-searchparams-delete.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: 'Value...
-- `parallel/test-whatwg-url-custom-searchparams-delete.js#block_01_emptying_searchparams_should_correctly_update_url_s_query`: Expected values to be strictly equal: + actual - expected  + 'var=1&var=2&var=3' - ''  AssertionError: Expected values to be strictly equal: + actual - expected  + 'var=1&var=2&var=3' - ''      at <an...
-- `parallel/test-whatwg-url-custom-searchparams-stringifier.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: 'Value...
-- `parallel/test-whatwg-url-custom-searchparams-stringifier.js#block_01_different_percent_encoding_rules_than_the_url_itself`: Expected values to be strictly equal: + actual - expected  + '?foo=~bar' - '?foo=%7Ebar'         ^  AssertionError: Expected values to be strictly equal: + actual - expected  + '?foo=~bar' - '?foo=%7E...
-- `parallel/test-whatwg-url-properties.js#block_00_block_00`: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (/home/node/test/parallel/test-whatwg-url-properti...
-- `parallel/test-whatwg-url-properties.js#block_01_block_01`: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (/home/node/test/parallel/test-whatwg-url-properti...
-- `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED' - }  AssertionError: Expected values to be strictly deep-equal: + ...
-- `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED' - }  AssertionError: Expected values to be strictly deep-equal: + ...
 
 ### worker_threads
 
-- `parallel/test-worker-broadcastchannel-wpt.js#block_00_block_00`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-worker-broadcastchannel-wpt.js:10:18) ...
-- `parallel/test-worker-broadcastchannel-wpt.js#block_01_block_01`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-worker-broadcastchannel-wpt.js:35:18) ...
-- `parallel/test-worker-broadcastchannel-wpt.js#block_02_block_02`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-worker-broadcastchannel-wpt.js:15:18) ...
-- `parallel/test-worker-broadcastchannel-wpt.js#block_03_block_03`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-worker-broadcastchannel-wpt.js:17:18) ...
-- `parallel/test-worker-broadcastchannel-wpt.js#block_04_block_04`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-worker-broadcastchannel-wpt.js:19:18) ...
-- `parallel/test-worker-broadcastchannel-wpt.js#block_05_block_05`: worker_threads is not supported in WebAssembly environment     at BroadcastChannel (node:worker_threads:263:19)     at <anonymous> (/home/node/test/parallel/test-worker-broadcastchannel-wpt.js:24:20) ...
-- `parallel/test-worker-broadcastchannel.js#block_00_block_00`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_02_block_02`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_03_block_03`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_04_block_04`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_05_block_05`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_06_block_06`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_07_block_07`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-broadcastchannel.js#block_08_block_08`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'worker_threads is not supported in WebAssembly environment' -   message: /Cannot convert a Symbol value to ...
-- `parallel/test-worker-execargv-invalid.js#block_00_block_00`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-worker-execargv-invalid.js:13:10)     at loadModule (n...
-- `parallel/test-worker-execargv-invalid.js#block_01_block_01`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-worker-execargv-invalid.js:14:10)     at loadModule (node:modu...
-- `parallel/test-worker-execargv-invalid.js#block_02_block_02`: Missing expected exception (Error). AssertionError: Missing expected exception (Error).     at <anonymous> (/home/node/test/parallel/test-worker-execargv-invalid.js:16:10)     at loadModule (node:modu...
-- `parallel/test-worker-message-channel.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-worker-message-chan...
 - `parallel/test-worker-message-channel.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-worker-message-chan...
 - `parallel/test-worker-message-channel.js#block_02_block_02`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-worker-message-chan...
-- `parallel/test-worker-message-event.js#block_00_block_00`: MessageEvent is not defined     at <anonymous> (/home/node/test/parallel/test-worker-message-event.js:52:20)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at ru...
-- `parallel/test-worker-message-event.js#block_01_block_01`: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'MessageEvent is not defined', +   name: 'ReferenceError' -   message: /MessageEvent constructor: Expected e...
-- `parallel/test-worker-message-event.js#block_02_block_02`: MessageEvent is not defined     at <anonymous> (/home/node/test/parallel/test-worker-message-event.js:12:14)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at ru...
-- `parallel/test-worker-message-mark-as-uncloneable.js#block_00_uncloneables_cannot_be_cloned_during_message_posting`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-mark-as-uncloneable.js:13:21)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at r...
-- `parallel/test-worker-message-mark-as-uncloneable.js#block_01_uncloneables_cannot_be_cloned_during_structured_cloning`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-mark-as-uncloneable.js:23:21)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at r...
-- `parallel/test-worker-message-mark-as-uncloneable.js#block_02_markasuncloneable_cannot_affect_arraybuffer`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-mark-as-uncloneable.js:20:21)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at r...
-- `parallel/test-worker-message-mark-as-uncloneable.js#block_03_markasuncloneable_can_affect_node_js_built_in_object_like_bl`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-mark-as-uncloneable.js:30:21)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at r...
-- `parallel/test-worker-message-port-close.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-port-close.js:21:9)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (no...
-- `parallel/test-worker-message-port-close.js#block_01_block_01`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-worker-message-port...
-- `parallel/test-worker-message-port-close.js#block_02_block_02`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-worker-message-port-close.js:19:10)     at loadModule (node:module:1088:32)   ...
-- `parallel/test-worker-message-port-transfer-duplicate.js#block_00_block_00`: The input did not match the regular expression /^DataCloneError: Transfer list contains duplicate MessagePort$/. Input:  'DataCloneError: Transfer list item is not transferable'  AssertionError: The i...
-- `parallel/test-worker-message-port-transfer-duplicate.js#block_01_block_01`: The input did not match the regular expression /^DataCloneError: Transfer list contains duplicate ArrayBuffer$/. Input:  'DataCloneError: Transfer list item appears more than once'  AssertionError: Th...
-- `parallel/test-worker-message-port-wasm-threads.js#block_00_block_00`: WebAssembly is not defined     at <anonymous> (/home/node/test/parallel/test-worker-message-port-wasm-threads.js:11:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
-- `parallel/test-worker-message-port-wasm-threads.js#block_01_block_01`: WebAssembly is not defined     at <anonymous> (/home/node/test/parallel/test-worker-message-port-wasm-threads.js:11:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
-- `parallel/test-worker-message-port.js`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-port.js:22:40)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-co...
 - `parallel/test-worker-message-port.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-worker-message-port...
 - `parallel/test-worker-message-port.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-port.js:11:40)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-co...
 - `parallel/test-worker-message-port.js#block_02_block_02`: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - <ref *1> MessagePort { -   _target: MessagePort { -     _target: [Circular *1] -  ...
@@ -4048,33 +3137,22 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-worker-message-port.js#block_06_block_06`: Expected values to be strictly equal:  10 !== 0  AssertionError: Expected values to be strictly equal:  10 !== 0      at <anonymous> (/home/node/test/parallel/test-worker-message-port.js:40:24)     at...
 - `parallel/test-worker-message-port.js#block_07_block_07`: Transfer list item is not transferable     at DOMException (__wasm_rquickjs_builtin/abort_controller:27:9)     at dataCloneError (__wasm_rquickjs_builtin/structured_clone:243:16)     at structuredClon...
 - `parallel/test-worker-message-port.js#block_08_block_08`: Expected values to be strictly deep-equal: + actual - expected    [ +   '_enqueueDelivery',     'close',     'constructor', +   'on', +   'once', -   'hasRef',     'onmessage',     'onmessageerror',  ...
-- `parallel/test-worker-message-transfer-port-mark-as-untransferable.js#block_00_block_00`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-transfer-port-mark-as-untransferable.js:10:38)     at loadModule (node:module:1088:32)     at localRequire (node:module:...
-- `parallel/test-worker-message-transfer-port-mark-as-untransferable.js#block_01_block_01`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-transfer-port-mark-as-untransferable.js:13:38)     at loadModule (node:module:1088:32)     at localRequire (node:module:...
-- `parallel/test-worker-message-transfer-port-mark-as-untransferable.js#block_02_block_02`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-transfer-port-mark-as-untransferable.js:13:41)     at loadModule (node:module:1088:32)     at localRequire (node:module:...
-- `parallel/test-worker-message-transfer-port-mark-as-untransferable.js#block_03_block_03`: not a function     at <anonymous> (/home/node/test/parallel/test-worker-message-transfer-port-mark-as-untransferable.js:16:38)     at loadModule (node:module:1088:32)     at localRequire (node:module:...
-- `parallel/test-worker-unsupported-path.js#block_00_block_00`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-worker-unsupported-path.js:14:10)     at loadModule (n...
-- `parallel/test-worker-unsupported-path.js#block_01_block_01`: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-worker-unsupported-path.js:12:5)     at loadModule (node:module:1088:32)     a...
-- `parallel/test-worker-unsupported-path.js#block_02_block_02`: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-worker-unsupported-path.js:17:10)     at loadModule (n...
-- `parallel/test-worker-workerdata-messageport.js`: Expected values to be strictly equal:  4 !== 0  AssertionError: Expected values to be strictly equal:  4 !== 0      at <anonymous> (/home/node/test/parallel/test-worker-workerdata-messageport.js:44:22...
 - `parallel/test-worker-workerdata-messageport.js#block_02_block_02`: Expected values to be strictly equal:  4 !== 0  AssertionError: Expected values to be strictly equal:  4 !== 0      at <anonymous> (/home/node/test/parallel/test-worker-workerdata-messageport.js:34:22...
 - `parallel/test-worker-workerdata-messageport.js#block_03_block_03`: Missing expected exception (DataCloneError). AssertionError: Missing expected exception (DataCloneError).     at <anonymous> (/home/node/test/parallel/test-worker-workerdata-messageport.js:35:14)     ...
 
 ### zlib
 
-- `parallel/test-zlib-destroy.js`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-zlib-destroy.js:17:...
 - `parallel/test-zlib-destroy.js#block_00_block_00`: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-zlib-destroy.js:17:...
 
 ## Error Tests (runtime/instantiation errors)
 
-135 tests had runtime errors.
+57 tests had runtime errors.
 
 <details>
 <summary>Click to expand</summary>
 
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf50570 - node_compat_runner.wasm!__assert_fail     2: 0xe8aa5d - node_compat_runner.wasm!js_inner_modu...
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_01_b_mjs_c_mjs_d_mjs_c_mjs`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf50570 - node_compat_runner.wasm!__assert_fail     2: 0xe8aa5d - node_compat_runner.wasm!js_inner_modu...
-- `parallel/test-abortcontroller.js`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf50570 - node_compat_runner.wasm!__assert_fail     2: 0xde9801 - node_compat_runner.wasm!gc_scan     3...
-- `parallel/test-buffer-indexof.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-assert-typedarray-deepequal.js#test_00_equalarraypairs`: Timeout (epoch deadline exceeded)
+- `parallel/test-buffer-includes.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-buffer-indexof.js#block_00_block_00`: Timeout (epoch deadline exceeded)
 - `parallel/test-buffer-indexof.js#block_01_block_01`: Timeout (epoch deadline exceeded)
 - `parallel/test-buffer-indexof.js#block_02_block_02`: Timeout (epoch deadline exceeded)
@@ -4084,128 +3162,52 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 - `parallel/test-buffer-indexof.js#block_06_see_https_github_com_nodejs_node_issues_32753`: Timeout (epoch deadline exceeded)
 - `parallel/test-child-process-exec-timeout-expire.js`: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-child-process-exec-timeout-kill.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_03_block_03`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_04_block_04`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-abort-signal.js#block_05_block_05`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-fork-timeout-kill-signal.js#block_03_block_03`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-send-returns-boolean.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-send-returns-boolean.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_03_block_03`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_04_block_04`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_05_block_05`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_06_block_06`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_07_block_07`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-controller.js#block_08_block_08`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-child-process-spawn-timeout-kill-signal.js#block_03_block_03`: Timeout (epoch deadline exceeded)
-- `parallel/test-crypto-key-objects.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-crypto-authenticated.js#block_07_test_that_setaad_and_update_throw_if_the_plaintext_is_too_lo`: Timeout (epoch deadline exceeded)
+- `parallel/test-crypto-dh-stateless.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-crypto-from-binary.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-key-objects.js#block_05_block_05`: Timeout (epoch deadline exceeded)
+- `parallel/test-crypto-keygen-async-encrypted-private-key.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-dgram-blocklist.js#block_00_block_00`: error while executing at wasm backtrace:     0: 0x635480 - node_compat_runner.wasm!<wasip2::imports::wasi::sockets::udp::IncomingDatagramStream as wasip2::imports::_rt::WasmResource>::drop::hf92992a4b...
-- `parallel/test-dgram-blocklist.js#block_01_block_01`: Timeout
-- `parallel/test-dgram-blocklist.js#block_02_block_02`: Timeout
-- `parallel/test-dgram-multicast-loopback.js#block_01_block_01`: Timeout
-- `parallel/test-dgram-multicast-set-interface.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`: Timeout
-- `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`: Timeout
-- `parallel/test-dgram-multicast-set-interface.js#block_03_block_03`: Timeout
-- `parallel/test-dgram-setBroadcast.js#block_01_block_01`: Timeout
-- `parallel/test-dgram-unref.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-dgram-unref.js#block_00_block_00`: Timeout
+- `parallel/test-crypto-keygen-empty-passphrase-no-error.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-multicast-set-interface.js#block_03_block_03`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-dgram-unref.js#block_00_block_00`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-fs-promises-file-handle-writeFile.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-promises-writefile.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-fs-read-stream-concurrent-reads.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-read-stream-pos.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-fs-readfile.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-fs-readfile-pipe-large.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_00_readfile_and_readfilesync_should_fail_if_the_file_is_too_big`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_01_block_01`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_02_block_02`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-readfile.js#block_03_block_03`: Timeout (epoch deadline exceeded)
+- `parallel/test-fs-readfilesync-pipe-large.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-fs-sir-writes-alot.js`: Timeout (epoch deadline exceeded)
-- `parallel/test-fs-write-stream-flush.js`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-http-dummy-characters-smuggling.js#block_01_block_01`: Timeout
-- `parallel/test-http-missing-header-separator-cr.js#block_00_block_00`: Timeout
-- `parallel/test-http-missing-header-separator-cr.js#block_01_block_01`: Timeout
-- `parallel/test-http-missing-header-separator-cr.js#block_02_block_02`: Timeout
-- `parallel/test-http-missing-header-separator-lf.js#block_00_block_00`: Timeout
-- `parallel/test-http-missing-header-separator-lf.js#block_01_block_01`: Timeout
-- `parallel/test-http-missing-header-separator-lf.js#block_02_block_02`: Timeout
-- `parallel/test-http-outgoing-destroyed.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-http-outgoing-destroyed.js#block_00_block_00`: Timeout
-- `parallel/test-http-outgoing-destroyed.js#block_01_block_01`: Timeout
-- `parallel/test-http-outgoing-message-capture-rejection.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-http-outgoing-message-capture-rejection.js#block_00_block_00`: Timeout
-- `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01`: Timeout
-- `parallel/test-http-outgoing-properties.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-http-outgoing-properties.js#block_02_block_02`: Timeout
-- `parallel/test-http-request-host-header.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-http-request-host-header.js#block_00_block_00`: Timeout
-- `parallel/test-http-response-multi-content-length.js#block_00_test_adding_an_extra_content_length_header_using_setheader`: Timeout
-- `parallel/test-http-response-multi-content-length.js#block_01_test_adding_an_extra_content_length_header_using_writehead`: Timeout
-- `parallel/test-http-server-capture-rejections.js#block_00_block_00`: Timeout
-- `parallel/test-http-server-capture-rejections.js#block_01_block_01`: Timeout
-- `parallel/test-http-server-capture-rejections.js#block_02_block_02`: Timeout
-- `parallel/test-http-server-connection-list-when-close.js#block_00_block_00`: Timeout
-- `parallel/test-http-server-connection-list-when-close.js#block_01_block_01`: Timeout
-- `parallel/test-net-autoselectfamily.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-net-autoselectfamily.js#block_01_test_that_only_the_last_successful_connection_is_established`: Timeout
-- `parallel/test-net-blocklist.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips`: Timeout
-- `parallel/test-net-bytes-written-large.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-http-end-throw-socket-handling.js`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-outgoing-destroyed.js#block_00_block_00`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-outgoing-destroyed.js#block_01_block_01`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-outgoing-message-capture-rejection.js#block_00_block_00`: Timeout (epoch deadline exceeded)
+- `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-outgoing-properties.js#block_02_block_02`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-http-request-host-header.js#block_00_block_00`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-net-autoselectfamily.js#block_01_test_that_only_the_last_successful_connection_is_established`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-net-bytes-written-large.js#block_00_block_00`: Timeout (epoch deadline exceeded)
 - `parallel/test-net-bytes-written-large.js#block_01_block_01`: Timeout (epoch deadline exceeded)
 - `parallel/test-net-bytes-written-large.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `parallel/test-net-connect-options-port.js#block_03_test_valid_combinations_of_connect_port_and_connect_port_hos`: Timeout
-- `parallel/test-net-server-listen-options-signal.js#block_00_block_00`: Timeout
-- `parallel/test-net-server-listen-options-signal.js#block_01_block_01`: Timeout
-- `parallel/test-net-server-listen-options-signal.js#block_02_block_02`: Timeout
 - `parallel/test-net-server-max-connections-close-makes-more-available.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`: Timeout
-- `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01`: Timeout
-- `parallel/test-repl-require.js#block_00_block_00`: Timeout
-- `parallel/test-repl-require.js#block_01_in_repl_we_shouldn_t_look_up_relative_modules_from_node_modu`: Timeout
-- `parallel/test-runner-wait-for.js`: Timeout (epoch deadline exceeded)
 - `parallel/test-runner-wait-for.js#test_05_sets_last_failure_as_error_cause_on_timeouts`: Timeout (epoch deadline exceeded)
-- `parallel/test-stream-finished.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-stream-finished.js#block_34_block_34`: Timeout
-- `parallel/test-stream-pipeline.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-stream-pipeline.js#block_08_block_08`: Timeout
-- `parallel/test-stream-readable-async-iterators.js`: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-stream-readable-async-iterators.js#block_05_block_05`: Timeout
-- `parallel/test-stringbytes-external.js#block_00_block_00`: Timeout (epoch deadline exceeded)
-- `parallel/test-stringbytes-external.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-stringbytes-external.js#block_02_https_github_com_nodejs_node_issues_1024`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_00_check_inspection_of_the_instance`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_01_block_01`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_02_check_dependencies_getter_returns_same_object_every_time`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_03_check_the_impossibility_of_creating_an_abstract_instance_of_`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_04_check_to_throws_invalid_exportnames`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_05_https_github_com_nodejs_node_issues_32806`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_06_check_to_throws_invalid_evaluatecallback`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_07_check_to_throws_invalid_options`: Timeout (epoch deadline exceeded)
-- `parallel/test-vm-module-basic.js#block_08_test_compilefunction_importmoduledynamically`: Timeout (epoch deadline exceeded)
-- `parallel/test-webcrypto-sign-verify.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-stream-finished.js#block_34_block_34`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-stream-pipeline.js#block_08_block_08`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-stream-pipeline.js#block_09_block_09`: Timeout (epoch deadline exceeded)
+- `parallel/test-stream-readable-async-iterators.js#block_05_block_05`: Timeout (tokio 60s deadline exceeded)
+- `parallel/test-util-inspect-long-running.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-webcrypto-encrypt-decrypt.js#block_00_test_encrypt_decrypt_rsa_oaep`: Timeout (epoch deadline exceeded)
 - `parallel/test-webcrypto-sign-verify.js#block_01_test_sign_verify_rsa_pss`: Timeout (epoch deadline exceeded)
-- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_08_block_08`: error while executing at wasm backtrace:     0: 0xe12c06 - node_compat_runner.wasm!JS_CallInternal     1: 0xde758b - node_compat_runner.wasm!JS_Call     2: 0xf0c98d - node_compat_runner.wasm!js_array_...
-- `parallel/test-worker-eval-typescript.js#test_00_worker_eval_module_typescript_without_input_type`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_01_worker_eval_module_typescript_with_input_type_module_typescr`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_02_worker_eval_module_typescript_with_input_type_commonjs_types`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_03_worker_eval_module_typescript_with_input_type_module`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_04_worker_eval_commonjs_typescript_without_input_type`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_05_worker_eval_commonjs_typescript_with_input_type_commonjs_typ`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `parallel/test-worker-eval-typescript.js#test_06_worker_eval_commonjs_typescript_with_input_type_module_types`: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8     2...
-- `sequential/test-fs-watch.js`: Timeout (epoch deadline exceeded)
+- `parallel/test-whatwg-events-add-event-listener-options-signal.js#block_08_block_08`: error while executing at wasm backtrace:     0: 0xe12c09 - node_compat_runner.wasm!JS_CallInternal     1: 0xde758e - node_compat_runner.wasm!JS_Call     2: 0xf0c990 - node_compat_runner.wasm!js_array_...
 - `sequential/test-fs-watch.js#block_02_block_02`: Timeout (epoch deadline exceeded)
-- `sequential/test-net-server-bind.js`: Timeout (tokio 60s deadline exceeded)
 
 </details>
 
@@ -4214,7 +3216,7 @@ Including 1259 tests that use Node.js internals (`--expose-internals`, `internal
 These tests were added by `migrate_config_split` but have not been manually evaluated.
 The report ran each test and captured the actual error. Tests are grouped by error pattern.
 
-### Auto-classified as impossible (40 tests)
+### Auto-classified as impossible (50 tests)
 
 These tests fail with errors indicating features fundamentally unavailable in WASM.
 They are counted as IMPOSSIBLE in the summary.
@@ -4224,58 +3226,53 @@ They are counted as IMPOSSIBLE in the summary.
 | cluster not available in WASM | 6 | `test-dgram-bind-socket-close-before-cluster-reply.js`, `test-dgram-cluster-close-during-bind.js`, `test-dgram-cluster-close-in-listening.js`, ... (+3) |
 | http2 not available in WASM | 2 | `test-h2-large-header-cause-client-to-hangup.js`, `test-h2leak-destroy-session-on-socket-ended.js` |
 | https server not available in WASM | 1 | `test-async-wrap-tlssocket-asyncreset.js` |
-| inspector not available in WASM | 27 | `test-disable-sigusr1.js`, `test-domain-dep0097.js`, `test-heap-prof-basic.js`, ... (+24) |
-| tls not available in WASM | 3 | `test-double-tls-client.js`, `test-gc-tls-external-memory.js`, `test-x509-escaping.js` |
-| worker_threads not available in WASM | 1 | `test-broadcastchannel-custom-inspect.js` |
+| inspector not available in WASM | 33 | `test-disable-sigusr1.js`, `test-domain-dep0097.js`, `test-heap-prof-basic.js`, ... (+30) |
+| tls not available in WASM | 4 | `test-double-tls-client.js`, `test-gc-tls-external-memory.js`, `test-x509-escaping.js#block_00_test_that_all_certificate_chains_provided_by_the_reporter_ar`, ... (+1) |
+| worker_threads not available in WASM | 4 | `test-broadcastchannel-custom-inspect.js#block_00_block_00`, `test-broadcastchannel-custom-inspect.js#block_01_block_01`, `test-broadcastchannel-custom-inspect.js#block_02_block_02`, ... (+1) |
 
-### Needs investigation (490 tests)
+### Needs investigation (419 tests)
 
 These unevaluated tests fail with errors that may be fixable.
 
 | Error Pattern | Count | Example tests |
 |---------------|-------|---------------|
-| Expected values to be strictly equal: | 62 | `test-async-hooks-close-during-destroy.js`, `test-async-hooks-promise-enable-disable.js`, `test-async-hooks-recursive-stack-runInAsyncScope.js`, ... (+59) |
-| Expected values to be strictly deep-equal: | 43 | `test-require-module-error-catching.js`, `test-async-hooks-correctly-switch-promise-hook.js`, `test-c-ares.js`, ... (+40) |
-| not a function | 41 | `test-async-local-storage-snapshot.js`, `test-cli-syntax-piped-bad.js`, `test-cwd-enoent-preload.js`, ... (+38) |
-| Unhandled promise rejection (likely cause of mustCall failure): | 27 | `test-require-module-dynamic-import-2.js`, `test-vm-source-text-module-leak.js`, `test-domain-promise.js`, ... (+24) |
+| Expected values to be strictly equal: | 53 | `test-async-hooks-close-during-destroy.js`, `test-async-hooks-promise-enable-disable.js`, `test-async-hooks-recursive-stack-runInAsyncScope.js`, ... (+50) |
+| not a function | 36 | `test-async-local-storage-snapshot.js`, `test-cli-syntax-piped-bad.js`, `test-cwd-enoent-preload.js`, ... (+33) |
+| Expected values to be strictly deep-equal: | 33 | `test-require-module-error-catching.js`, `test-async-hooks-correctly-switch-promise-hook.js`, `test-c-ares.js`, ... (+30) |
+| Unhandled promise rejection (likely cause of mustCall failure): | 26 | `test-require-module-dynamic-import-2.js`, `test-vm-source-text-module-leak.js`, `test-filehandle-readablestream.js`, ... (+23) |
 | Timeout (epoch deadline exceeded) | 16 | `test-require-module-retry-import-errored.js`, `test-require-module-retry-import-evaluating.js`, `test-gc-http-client-connaborted.js`, ... (+13) |
-| Missing expected exception (TypeError). | 14 | `test-async-hooks-asyncresource-constructor.js`, `test-async-hooks-constructor.js`, `test-async-wrap-constructor.js`, ... (+11) |
-| Missing expected exception. | 13 | `test-async-local-storage-bind.js`, `test-asyncresource-bind.js`, `test-blocklist.js`, ... (+10) |
+| Missing expected exception (TypeError). | 12 | `test-async-hooks-asyncresource-constructor.js`, `test-async-hooks-constructor.js`, `test-async-wrap-constructor.js`, ... (+9) |
 | Unhandled promise rejection: | 12 | `test-require-module-tla-retry-import-2.js`, `test-require-module-tla-retry-import.js`, `test-vm-synthetic-module-leak.js`, ... (+9) |
-| The expression evaluated to a falsy value: | 11 | `test-cli-options-negation.js`, `test-common-must-not-call.js`, `test-math-random.js`, ... (+8) |
-| Timeout (tokio 60s deadline exceeded) | 11 | `test-double-tls-server.js`, `test-listen-fd-detached-inherit.js`, `test-listen-fd-detached.js`, ... (+8) |
+| Missing expected exception. | 10 | `test-async-local-storage-bind.js`, `test-asyncresource-bind.js`, `test-disable-proto-throw.js`, ... (+7) |
+| The expression evaluated to a falsy value: | 9 | `test-cli-options-negation.js`, `test-common-must-not-call.js`, `test-math-random.js`, ... (+6) |
+| Timeout (tokio 60s deadline exceeded) | 9 | `test-double-tls-server.js`, `test-listen-fd-detached-inherit.js`, `test-listen-fd-detached.js`, ... (+6) |
 | error while executing at wasm backtrace: | 9 | `test-async-local-storage-deep-stack.js`, `test-async-wrap-pop-id-during-load.js`, `test-cli-node-options.js`, ... (+6) |
-| missing Intl | 9 | `test-icu-transcode.js`, `test-intl-v8BreakIterator.js`, `test-tz-version.js`, ... (+6) |
 | mustCall verification failed: | 9 | `test-common-expect-warning.js`, `test-diagnostics-channel-http.js`, `test-diagnostics-channel-net.js`, ... (+6) |
-| readline is not yet supported in WebAssembly environment | 8 | `test-readline-carriage-return-between-chunks.js`, `test-readline-interface-escapecodetimeout.js`, `test-readline-keys.js`, ... (+5) |
-| Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equa... | 7 | `test-diagnostics-channel-module-import-error.js`, `test-diagnostics-channel-module-import.js`, `test-webcrypto-derivebits-hkdf.js`, ... (+4) |
-| Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: | 7 | `test-async-hooks-promise-triggerid.js`, `test-sync-io-option.js`, `test-trace-exit.js`, ... (+4) |
-| cannot read property 'has' of undefined | 5 | `test-permission-allow-child-process-cli.js`, `test-permission-allow-worker-cli.js`, `test-permission-child-process-cli.js`, ... (+2) |
+| readline is not yet supported in WebAssembly environment | 7 | `test-readline-carriage-return-between-chunks.js`, `test-readline-interface-escapecodetimeout.js`, `test-readline-keys.js`, ... (+4) |
+| Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equa... | 6 | `test-diagnostics-channel-module-import-error.js`, `test-diagnostics-channel-module-import.js`, `test-webcrypto-derivebits-hkdf.js`, ... (+3) |
+| Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: | 6 | `test-async-hooks-promise-triggerid.js`, `test-sync-io-option.js`, `test-trace-exit.js`, ... (+3) |
+| missing Intl | 6 | `test-intl-v8BreakIterator.js`, `test-tz-version.js`, `test-whatwg-encoding-custom-textdecoder-fatal.js`, ... (+3) |
 | - stderr did not match expectation, checker throws: | 4 | `test-require-module-errors.js`, `test-require-module-warning.js`, `test-trace-env.js`, ... (+1) |
-| Only --eval/-e, --input-type, and script files are supported in WASM child emulation | 4 | `test-cjs-esm-warn.js`, `test-runner-root-duration.js`, `test-trace-atomic-deprecation.js`, ... (+1) |
-| WebAssembly is not defined | 4 | `test-wasm-memory-out-of-bound.js`, `test-wasm-simple.js`, `test-wasm-web-api.js`, ... (+1) |
 | cannot read property 'end' of null | 4 | `test-force-repl.js`, `test-preload.js`, `test-stdin-pipe-large.js`, ... (+1) |
-| insufficient privileges | 4 | `test-permission-fs-symlink-target-write.js`, `test-permission-fs-symlink.js`, `test-permission-fs-traversal-path.js`, ... (+1) |
 | Cannot convert undefined or null to object | 3 | `test-vm-main-context-default-loader.js`, `test-v8-startup-snapshot-api.js`, `test-vm-getters.js` |
-| Cannot find module '../common/measure-memory' from '<path> | 3 | `test-vm-measure-memory-lazy.js`, `test-vm-measure-memory-multi-context.js`, `test-vm-measure-memory.js` |
 | Cannot find module '../common/wpt' from '<path> | 3 | `test-whatwg-events-event-constructors.js`, `test-whatwg-events-eventtarget-this-of-listener.js`, `test-whatwg-url-custom-searchparams-sort.js` |
-| ENOENT: no such file or directory, open '<path> | 3 | `test-cli-node-options-docs.js`, `test-process-env-allowed-flags-are-documented.js`, `test-release-changelog.js` |
-| Expected "actual" to be reference-equal to "expected": | 3 | `test-performance-global.js`, `test-vm-global-identity.js`, `test-module-loading.js` |
 | Expected "actual" to be strictly unequal to: | 3 | `test-require-extensions-same-filename-as-dir-trailing-slash.js`, `test-require-extensions-same-filename-as-dir.js`, `test-vm-access-process-env.js` |
-| ShadowRealm is not defined | 3 | `test-shadow-realm-globals.js`, `test-shadow-realm-prepare-stack-trace.js`, `test-shadow-realm.js` |
+| Only --eval/-e, --input-type, and script files are supported in WASM child emulation | 3 | `test-cjs-esm-warn.js`, `test-runner-root-duration.js`, `test-trace-atomic-deprecation.js` |
+| WebAssembly is not defined | 3 | `test-wasm-memory-out-of-bound.js`, `test-wasm-simple.js`, `test-wasm-web-api.js` |
 | foo | 3 | `test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`, `test-process-exception-capture-should-abort-on-uncaught.js`, `test-process-exception-capture.js` |
 | no IPv6 support | 3 | `test-dgram-ipv6only.js`, `test-dgram-udp6-link-local-address.js`, `test-dgram-udp6-send-default-host.js` |
 | process.binding is not supported in WASM environment | 3 | `test-err-name-deprecation.js`, `test-process-binding-internalbinding-allowlist.js`, `test-process-binding-util.js` |
 | undefined | 3 | `test-pipe-abstract-socket-http.js`, `test-pipe-abstract-socket.js`, `test-trace-events-net-abstract-socket.js` |
 | 9 test(s) failed | 2 | `test-find-package-json.js`, `test-runner-mock-timers-date.js` |
+| Cannot find module '../common/measure-memory' from '<path> | 2 | `test-vm-measure-memory-multi-context.js`, `test-vm-measure-memory.js` |
 | Cannot find module '../common/v8' from '<path> | 2 | `test-v8-collect-gc-profile-in-worker.js`, `test-v8-collect-gc-profile.js` |
 | Cannot find module '<path> from '<path> | 2 | `test-icu-minimum-version.js`, `test-require-unicode.js` |
 | Cannot find module 'pkgexports/no-addons' | 2 | `test-permission-allow-addons-cli.js`, `test-permission-no-addons.js` |
-| Cannot find module 'wasi' | 2 | `test-permission-allow-wasi-cli.js`, `test-permission-wasi.js` |
-| Could not find export 'π' in module 'home/node/test/fixtures/es-modules/exports-cases.js | 2 | `test-require-module-twice.js`, `test-require-module.js` |
+| ENOENT: no such file or directory, open '<path> | 2 | `test-cli-node-options-docs.js`, `test-process-env-allowed-flags-are-documented.js` |
+| Expected "actual" to be reference-equal to "expected": | 2 | `test-performance-global.js`, `test-vm-global-identity.js` |
 | Expected values to be loosely deep-equal: | 2 | `test-vm-global-property-interceptors.js`, `test-vm-global-property-prototype.js` |
+| ShadowRealm is not defined | 2 | `test-shadow-realm-globals.js`, `test-shadow-realm.js` |
 | The input did not match the regular expression /The "initHook" argument must be of type function/. Input: | 2 | `test-promise-hook-create-hook.js`, `test-promise-hook-on-init.js` |
-| The validation function is expected to return "true". Received false | 2 | `test-permission-fs-write-report.js`, `test-permission-fs-write-v8.js` |
 | Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected "actual" to be strictly unequal... | 2 | `test-async-hooks-enable-before-promise-resolve.js`, `test-async-hooks-enable-disable-enable.js` |
 | Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection. | 2 | `test-vm-dynamic-import-callback-missing-flag.js`, `test-vm-no-dynamic-import-callback.js` |
 | Unhandled promise rejection: AssertionError: false == true | 2 | `test-trace-events-console.js`, `test-trace-events-environment.js` |
@@ -4291,7 +3288,6 @@ These unevaluated tests fail with errors that may be fixable.
 | 10 test(s) failed | 1 | `test-dotenv-edge-cases.js` |
 | 11 test(s) failed | 1 | `test-node-run.js` |
 | 2 test(s) failed | 1 | `test-dotenv-node-options.js` |
-| 4 test(s) failed | 1 | `test-runner-snapshot-file-tests.js` |
 | 6 test(s) failed | 1 | `test-process-load-env-file.js` |
 | 7 test(s) failed | 1 | `test-runner-mock-timers-scheduler.js` |
 | App Sandbox is only available on Darwin | 1 | `test-macos-app-sandbox.js` |
@@ -4306,14 +3302,13 @@ These unevaluated tests fail with errors that may be fixable.
 | Cannot find module '/usr/local/bin/node/file.js' from '<path> | 1 | `test-vfs.js` |
 | Cannot find module '_http_outgoing' | 1 | `test-outgoing-message-pipe.js` |
 | Cannot find module '_stream_wrap' | 1 | `test-warn-stream-wrap.js` |
-| Cannot find module 'dep' | 1 | `test-require-module-conditional-exports.js` |
 | Cannot find module 'import-module-require' | 1 | `test-require-module-conditional-exports-module.js` |
 | Cannot find module 'punycode' | 1 | `test-punycode.js` |
+| Cannot find module 'wasi' | 1 | `test-permission-wasi.js` |
 | Case 0 failed: Object.keys | 1 | `test-vm-global-property-enumerator.js` |
-| EBADF: bad file descriptor, write | 1 | `test-perf-hooks.js` |
+| Could not find export 'π' in module 'home/node/test/fixtures/es-modules/exports-cases.js | 1 | `test-require-module-twice.js` |
 | EIO: input/output error, open '<path> | 1 | `test-memory-usage-emfile.js` |
 | Error from proxy | 1 | `test-promises-unhandled-proxy-rejections.js` |
-| Error: Cannot find module '<path> from '/' | 1 | `test-permission-fs-wildcard.js` |
 | Error: cannot read property 'has' of undefined | 1 | `test-permission-fs-write.js` |
 | Error: cannot read property 'loopCount' of undefined | 1 | `test-performance-nodetiming-uvmetricsinfo.js` |
 | Error: invalid redefinition of parameter name | 1 | `test-vm-cached-data.js` |
@@ -4325,22 +3320,16 @@ These unevaluated tests fail with errors that may be fixable.
 | Test index 0 failed: Error: execSync is not supported in WebAssembly environment | 1 | `test-domain-abort-on-uncaught.js` |
 | The "body" argument must be of type function or an instance of Blob, Stream, Iterable, AsyncIterable, or Promise or { re... | 1 | `test-stdout-pipeline-destroy.js` |
 | The error is expected to be an instance of "TypeError". Received "ReferenceError" | 1 | `test-messageevent-brandcheck.js` |
-| The input did not match the regular expression /Error: Test "extraneous async activity test" at .+extraneous_set_immedia... | 1 | `test-runner-extraneous-async-activity.js` |
 | The input did not match the regular expression /No such module/. Input: | 1 | `test-internal-process-binding.js` |
 | The input did not match the regular expression /SecurityWarning: The flag --allow-addons must be used with extreme cauti... | 1 | `test-permission-warning-flags.js` |
 | The input did not match the regular expression /TAP version 13/. Input: | 1 | `test-runner-reporters.js` |
 | The input did not match the regular expression /The "afterHook" argument must be of type function/. Input: | 1 | `test-promise-hook-on-after.js` |
 | The input did not match the regular expression /The "beforeHook" argument must be of type function/. Input: | 1 | `test-promise-hook-on-before.js` |
 | The input did not match the regular expression /The "settledHook" argument must be of type function/. Input: | 1 | `test-promise-hook-on-resolve.js` |
-| The input did not match the regular expression /^Error: setBroadcast EBADF$/. Input: | 1 | `test-dgram-setBroadcast.js` |
-| The input did not match the regular expression /^Error: setMulticastLoopback EBADF$/. Input: | 1 | `test-dgram-multicast-loopback.js` |
 | The input did not match the regular expression /^Sat Apr 14 2018 14:34:56 GMT\+0200 \(.+\)$/. Input: | 1 | `test-process-env-tz.js` |
-| The input did not match the regular expression /concurrency: true,/. Input: | 1 | `test-runner-cli-concurrency.js` |
 | The input did not match the regular expression /tests3/. Input: | 1 | `test-runner-exit-code.js` |
-| The input did not match the regular expression /timeout:Infinity,/. Input: | 1 | `test-runner-cli-timeout.js` |
 | This is test exists only on Linux/Win32/macOS | 1 | `test-stdin-from-file-spawn.js` |
 | This test is specific to Windows to test winapi_strerror | 1 | `test-debug-process.js` |
-| Unexpected token 'export' | 1 | `test-require-module-with-detection.js` |
 | Unhandled promise rejection (likely cause of mustCall failure): 42 | 1 | `test-promises-warning-on-unhandled-rejection.js` |
 | Unhandled promise rejection (likely cause of mustCall failure): AssertionError: The input did not match the regular expr... | 1 | `test-directory-import.js` |
 | Unhandled promise rejection (likely cause of mustCall failure): Error: Cannot find module '' | 1 | `test-vm-module-dynamic-namespace.js` |
@@ -4352,23 +3341,22 @@ These unevaluated tests fail with errors that may be fixable.
 | access: | 1 | `test-trace-events-fs-async.js` |
 | b is not defined | 1 | `test-vm-not-strict.js` |
 | boom | 1 | `test-domain-stack-empty-in-process-uncaughtexception.js` |
-| cannot read property 'DONT_CONTEXTIFY' of undefined | 1 | `test-vm-context-dont-contextify.js` |
+| cannot read property 'has' of undefined | 1 | `test-permission-worker-threads-cli.js` |
 | cannot read property 'on' of null | 1 | `test-stdout-close-catch.js` |
 | cannot read property 'onInit' of undefined | 1 | `test-promise-hook-exceptions.js` |
 | cannot read property 'setEncoding' of undefined | 1 | `test-process-exec-argv.js` |
 | cannot read property 'slice' of undefined | 1 | `test-bootstrap-modules.js` |
 | cannot read property 'triggerId' of undefined | 1 | `test-async-hooks-promise.js` |
 | cannot read property 'write' of null | 1 | `test-stdin-pipe-resume.js` |
-| createHistogram is not supported in WebAssembly environment | 1 | `test-perf-hooks-histogram.js` |
 | execSync is not supported in WebAssembly environment | 1 | `test-setproctitle.js` |
 | expecting surrogate pair | 1 | `test-whatwg-url-custom-searchparams.js` |
 | false == true | 1 | `test-force-repl-with-eval.js` |
-| flag should be in set: --perf_basic_prof | 1 | `test-process-env-allowed-flags.js` |
 | fs.FSWatcher was exposed but is neither on the supported list of the permission model nor on the ignore list. | 1 | `test-permission-fs-supported.js` |
 | fs.sync.access: | 1 | `test-trace-events-fs-sync.js` |
 | getter is not defined | 1 | `test-vm-create-context-accessors.js` |
 | ifError got unwanted exception: spawnSync(/usr/local/bin/node) is not supported in WebAssembly environment | 1 | `test-bash-completion.js` |
 | init | 1 | `test-async-hooks-fatal-error.js` |
+| insufficient privileges | 1 | `test-require-symlink.js` |
 | linux only | 1 | `test-strace-openat-openssl.js` |
 | node compiled without FIPS OpenSSL. | 1 | `test-dsa-fips-invalid-key.js` |
 | nonexistentFunc is not defined | 1 | `test-exception-handler2.js` |
@@ -4382,7 +3370,6 @@ These unevaluated tests fail with errors that may be fixable.
 | unexpected token in expression: '%' | 1 | `test-v8-flags.js` |
 | v8.getHeapSnapshot is not supported in WASM environment | 1 | `test-v8-getheapsnapshot-twice.js` |
 | whoops | 1 | `test-vm-proxy-failure-CP.js` |
-| windows UNC path test | 1 | `test-permission-fs-windows-path.js` |
 | x is not defined | 1 | `test-vm-global-non-writable-properties.js` |
 
 <details>
@@ -4390,7 +3377,6 @@ These unevaluated tests fail with errors that may be fixable.
 
 - `es-module/test-cjs-esm-warn.js`: FAIL: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/com...
 - `es-module/test-require-module-conditional-exports-module.js`: FAIL: Cannot find module 'import-module-require'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/es-module/test-require-module-conditional-exports-module.js:9:27)     at ...
-- `es-module/test-require-module-conditional-exports.js`: FAIL: Cannot find module 'dep'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/fixtures/es-modules/exports-require-only/load.cjs:1:79)     at loadModule (node:module:1088...
 - `es-module/test-require-module-dynamic-import-2.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at loadModule (node:module:1043:60)     at localRequire (node:module:1272:34)     at <anonymous> (/home/node/test/es-module/te...
 - `es-module/test-require-module-error-catching.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'Unexpected string' -   message: 'hello'   }  AssertionError: Expected values to be strictly deep-equa...
 - `es-module/test-require-module-errors.js`: FAIL: - stderr did not match expectation, checker throws: AssertionError: The input did not match the regular expression /var foo bar;/. Input:  "Error: expecting ';'\n" +   '    at /home/node/test/fi...
@@ -4403,8 +3389,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `es-module/test-require-module-tla-retry-import.js`: FAIL: Unhandled promise rejection:     at mustNotCall (/home/node/test/common/index.js:531:23)     at apply (native)     at call (native)     at wrapped (node:async_hooks:143:53)     at _restoreContex...
 - `es-module/test-require-module-twice.js`: FAIL: Could not find export 'π' in module 'home/node/test/fixtures/es-modules/exports-cases.js'     at loadModule (node:module:1043:60)     at localRequire (node:module:1272:34)     at <anonymous> (/...
 - `es-module/test-require-module-warning.js`: FAIL: - stderr did not match expectation, checker throws: AssertionError: The input did not match the regular expression /ExperimentalWarning: CommonJS module .*require-module\.js is loading ES Module...
-- `es-module/test-require-module-with-detection.js`: FAIL: Unexpected token 'export'     at /home/node/test/fixtures/es-modules/loose.js:4:10     at compileCjs (node:module:978:30)     at loadModule (node:module:1054:41)     at localRequire (node:module...
-- `es-module/test-require-module.js`: FAIL: Could not find export 'π' in module 'home/node/test/fixtures/es-modules/exports-cases.js'     at loadModule (node:module:1043:60)     at localRequire (node:module:1272:34)     at <anonymous> (/...
 - `es-module/test-require-node-modules-warning.js`: FAIL: - stderr did not match /Support for loading ES Module in require\(\)/     at <anonymous> (/home/node/test/es-module/test-require-node-modules-warning.js:19:14)     at loadModule (node:module:108...
 - `es-module/test-vm-compile-function-lineoffset.js`: FAIL: Missing expected exception (RangeError). AssertionError: Missing expected exception (RangeError).     at <anonymous> (/home/node/test/es-module/test-vm-compile-function-lineoffset.js:15:3)     a...
 - `es-module/test-vm-main-context-default-loader.js`: FAIL: Cannot convert undefined or null to object     at <anonymous> (/home/node/test/es-module/test-vm-main-context-default-loader.js:15:12)     at loadModule (node:module:1088:32)     at localRequire...
@@ -4428,30 +3412,26 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-async-hooks-top-level-clearimmediate.js`: FAIL: Expected values to be strictly equal: + actual - expected  + Timeout { +   __idleTimeout: 0, +   __onTimeout: [Function: wrapped], +   _args: [], +   _bound: [Function: bound wrapped], +   _call...
 - `parallel/test-async-local-storage-bind.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-async-local-storage-bind.js:8:10)     at forEach (native)     at <anonym...
 - `parallel/test-async-local-storage-contexts.js`: FAIL: Unhandled promise rejection:     at <anonymous> (<input>:7:34)
-- `parallel/test-async-local-storage-deep-stack.js`: ERROR: error while executing at wasm backtrace:     0: 0xe328b8 - node_compat_runner.wasm!js_strict_eq2     1: 0xe6e91c - node_compat_runner.wasm!js_same_value_zero     2: 0xe90d30 - node_compat_runne...
+- `parallel/test-async-local-storage-deep-stack.js`: ERROR: error while executing at wasm backtrace:     0: 0xe328bb - node_compat_runner.wasm!js_strict_eq2     1: 0xe6e91f - node_compat_runner.wasm!js_same_value_zero     2: 0xe90d33 - node_compat_runne...
 - `parallel/test-async-local-storage-snapshot.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-async-local-storage-snapshot.js:9:70)     at apply (native)     at wrapper (/home/node/test/common/index.js:512:34)     at run (n...
 - `parallel/test-async-wrap-constructor.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-async-wrap-constructor.js:13:12)     at loadModu...
-- `parallel/test-async-wrap-pop-id-during-load.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c06 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ea - node_compat_runner.wasm!JS_CallInternal     2: 0xde7beb - node_compat_runner...
+- `parallel/test-async-wrap-pop-id-during-load.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c09 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ed - node_compat_runner.wasm!JS_CallInternal     2: 0xde7bee - node_compat_runner...
 - `parallel/test-asyncresource-bind.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-asyncresource-bind.js:19:10)     at forEach (native)     at <anonymous> ...
 - `parallel/test-atomics-wake.js`: FAIL: Atomics is not defined     at <anonymous> (/home/node/test/parallel/test-atomics-wake.js:7:20)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (n...
 - `parallel/test-bash-completion.js`: FAIL: ifError got unwanted exception: spawnSync(/usr/local/bin/node) is not supported in WebAssembly environment AssertionError: ifError got unwanted exception: spawnSync(/usr/local/bin/node) is not s...
 - `parallel/test-benchmark-cli.js`: FAIL: Cannot find module '../../benchmark/_cli.js' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/...
 - `parallel/test-blocklist-clone.js`: FAIL: Unhandled promise rejection: AssertionError: Expected "actual" not to be reference-equal to "expected":  BlockList {   _rules: [     {       address: '123.123.123.123',       family: 'ipv4',    ...
-- `parallel/test-blocklist.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-blocklist.js:16:12)     at forEach (native)     at <anonymous> (/home/no...
 - `parallel/test-bootstrap-modules.js`: FAIL: cannot read property 'slice' of undefined     at <anonymous> (/home/node/test/parallel/test-bootstrap-modules.js:1:62)     at loadModule (node:module:1088:32)     at localRequire (node:module:12...
 - `parallel/test-c-ares.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'callback must be a function', -   code: 'ERR_INVALID_ARG_VALUE', -   message: "The argument 'rrtype' ...
 - `parallel/test-cli-bad-options.js`: FAIL: Expected values to be strictly equal:  1 !== 9  AssertionError: Expected values to be strictly equal:  1 !== 9      at requiresArgument (/home/node/test/parallel/test-cli-bad-options.js:31:22)  ...
 - `parallel/test-cli-node-options-docs.js`: FAIL: ENOENT: no such file or directory, open '/home/node/doc/api/cli.md'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileS...
-- `parallel/test-cli-node-options.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c06 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ea - node_compat_runner.wasm!JS_CallInternal     2: 0xe161ea - node_compat_runner...
+- `parallel/test-cli-node-options.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c09 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ed - node_compat_runner.wasm!JS_CallInternal     2: 0xe161ed - node_compat_runner...
 - `parallel/test-cli-options-negation.js`: FAIL: The expression evaluated to a falsy value:    assert(proc.stderr.toString().includes('Buffer() is deprecated'))  AssertionError: The expression evaluated to a falsy value:    assert(proc.stderr....
 - `parallel/test-cli-options-precedence.js`: FAIL: Expected values to be strictly equal:  '' !== '5678'  AssertionError: Expected values to be strictly equal:  '' !== '5678'      at <anonymous> (/home/node/test/parallel/test-cli-options-preceden...
-- `parallel/test-cli-permission-deny-fs.js`: FAIL: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-den...
-- `parallel/test-cli-permission-multiple-allow.js`: FAIL: Expected values to be strictly equal:  '' !== 'false'  AssertionError: Expected values to be strictly equal:  '' !== 'false'      at <anonymous> (/home/node/test/parallel/test-cli-permission-mul...
 - `parallel/test-cli-syntax-piped-bad.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-cli-syntax-piped-bad.js:26:19)     at forEach (native)     at <anonymous> (/home/node/test/parallel/test-cli-syntax-piped-bad.js:...
 - `parallel/test-cli-syntax-piped-good.js`: FAIL: Expected values to be strictly equal: + actual - expected  + Buffer(0) [Uint8Array] [] - ''  AssertionError: Expected values to be strictly equal: + actual - expected  + Buffer(0) [Uint8Array] [...
 - `parallel/test-common-expect-warning.js`: FAIL: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-common-expect...
 - `parallel/test-common-must-not-call.js`: FAIL: The expression evaluated to a falsy value:    assert.ok(e.message.startsWith(prefix))  AssertionError: The expression evaluated to a falsy value:    assert.ok(e.message.startsWith(prefix))      ...
-- `parallel/test-common.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-common.js:52:15)     at loadModule (node:module:1088:32)     at localReq...
 - `parallel/test-coverage-with-inspector-disabled.js`: FAIL: Expected values to be strictly equal:  false !== true  AssertionError: Expected values to be strictly equal:  false !== true      at <anonymous> (/home/node/test/parallel/test-coverage-with-insp...
 - `parallel/test-cwd-enoent-preload.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-cwd-enoent-preload.js:29:18)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (no...
 - `parallel/test-cwd-enoent-repl.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-cwd-enoent-repl.js:27:18)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-...
@@ -4459,12 +3439,8 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-datetime-change-notify.js`: SKIP: Intl not present.
 - `parallel/test-debug-process.js`: SKIP: This test is specific to Windows to test winapi_strerror
 - `parallel/test-dgram-bind-socket-close-before-lookup.js`: FAIL: Unhandled promise rejection:     at mustNotCall (/home/node/test/common/index.js:531:23)     at apply (native)     at emit (node:events:332:36)     at apply (native)     at emit (node:domain:103...
-- `parallel/test-dgram-close-signal.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-dgram-close-signal.js:10:5)     at loadModule (n...
 - `parallel/test-dgram-ipv6only.js`: SKIP: no IPv6 support
-- `parallel/test-dgram-membership.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'ENOSYS', +   message: 'addMembership ENOSYS', +   name: 'Error' -   code: 'ERR_MISSING_ARGS', -   messag...
-- `parallel/test-dgram-multicast-loopback.js`: FAIL: The input did not match the regular expression /^Error: setMulticastLoopback EBADF$/. Input:  'Error: setMulticastLoopback ENOSYS'  AssertionError: The input did not match the regular expression...
-- `parallel/test-dgram-send-cb-quelches-error.js`: ERROR: error while executing at wasm backtrace:     0: 0x635480 - node_compat_runner.wasm!<wasip2::imports::wasi::sockets::udp::IncomingDatagramStream as wasip2::imports::_rt::WasmResource>::drop::hf9...
-- `parallel/test-dgram-setBroadcast.js`: FAIL: The input did not match the regular expression /^Error: setBroadcast EBADF$/. Input:  'Error: setBroadcast ENOSYS'  AssertionError: The input did not match the regular expression /^Error: setBro...
+- `parallel/test-dgram-send-cb-quelches-error.js`: ERROR: error while executing at wasm backtrace:     0: 0x635483 - node_compat_runner.wasm!<wasip2::imports::wasi::sockets::udp::IncomingDatagramStream as wasip2::imports::_rt::WasmResource>::drop::hf9...
 - `parallel/test-dgram-udp6-link-local-address.js`: SKIP: no IPv6 support
 - `parallel/test-dgram-udp6-send-default-host.js`: SKIP: no IPv6 support
 - `parallel/test-diagnostics-channel-http.js`: FAIL: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-diagnostics-c...
@@ -4488,7 +3464,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-domain-no-error-handler-abort-on-uncaught-7.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-domain-no-error-handler-abort-on-uncaught-7.js:25:10)     at loadModule (node:module:1088:32)     at localRequire (node:module:12...
 - `parallel/test-domain-no-error-handler-abort-on-uncaught-8.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-domain-no-error-handler-abort-on-uncaught-8.js:25:10)     at loadModule (node:module:1088:32)     at localRequire (node:module:12...
 - `parallel/test-domain-no-error-handler-abort-on-uncaught-9.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-domain-no-error-handler-abort-on-uncaught-9.js:26:10)     at loadModule (node:module:1088:32)     at localRequire (node:module:12...
-- `parallel/test-domain-promise.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (/home/node/test/parallel/test-domain-promise.js:136:24)     at apply (native)     at wrapper (/home/node/test/...
 - `parallel/test-domain-set-uncaught-exception-capture-after-load.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-domain-set-uncaught-exception-capture-after-load.js:12:3)     at loadMod...
 - `parallel/test-domain-stack-empty-in-process-uncaughtexception.js`: FAIL: boom     at <anonymous> (/home/node/test/parallel/test-domain-stack-empty-in-process-uncaughtexception.js:24:13)     at apply (native)     at run (node:domain:167:29)     at <anonymous> (/home/n...
 - `parallel/test-domain-vm-promise-isolation.js`: FAIL: Unhandled promise rejection: AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - Domain { -   _captureRejections: false, -   _disposed: false, -   _events: [...
@@ -4499,7 +3474,7 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-dsa-fips-invalid-key.js`: SKIP: node compiled without FIPS OpenSSL.
 - `parallel/test-err-name-deprecation.js`: FAIL: process.binding is not supported in WASM environment     at binding (node:process:227:15)     at <anonymous> (/home/node/test/parallel/test-err-name-deprecation.js:16:9)     at loadModule (node:...
 - `parallel/test-error-prepare-stack-trace.js`: FAIL: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'      ...
-- `parallel/test-error-reporting.js`: ERROR: error while executing at wasm backtrace:     0: 0xf4ebe4 - node_compat_runner.wasm!abort     1: 0xf45883 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd...
+- `parallel/test-error-reporting.js`: ERROR: error while executing at wasm backtrace:     0: 0xf4ebe7 - node_compat_runner.wasm!abort     1: 0xf45886 - node_compat_runner.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd...
 - `parallel/test-eval-disallow-code-generation-from-strings.js`: FAIL: Missing expected exception (EvalError). AssertionError: Missing expected exception (EvalError).     at <anonymous> (/home/node/test/parallel/test-eval-disallow-code-generation-from-strings.js:9:...
 - `parallel/test-event-capture-rejections.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-event-capture-rejections.js:21:46)     at forEac...
 - `parallel/test-eventemitter-asyncresource.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_THIS' - }  AssertionError: Expected values to be strictly deep-equal: + actu...
@@ -4509,7 +3484,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-find-package-json.js`: FAIL: 9 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at <anonymous> (node:test:678:36)     at apply (native)     at call (native)     at wrapped (node:async_...
 - `parallel/test-force-repl-with-eval.js`: FAIL: false == true AssertionError: false == true     at <anonymous> (/home/node/test/parallel/test-force-repl-with-eval.js:22:10)     at emit (node:events:332:36)     at emit (node:domain:103:32)    ...
 - `parallel/test-force-repl.js`: FAIL: cannot read property 'end' of null     at <anonymous> (/home/node/test/parallel/test-force-repl.js:22:1)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at ...
-- `parallel/test-freeze-intrinsics.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-freeze-intrinsics.js:7:3)     at loadModule (nod...
 - `parallel/test-gc-http-client-connaborted.js`: ERROR: Timeout (epoch deadline exceeded)
 - `parallel/test-gc-net-timeout.js`: ERROR: Timeout (epoch deadline exceeded)
 - `parallel/test-global-console-exists.js`: FAIL: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at <anonymous> (/home/node/test/parallel/test-global-console-exists.js:26:22) ...
@@ -4520,7 +3494,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-global.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + Set(85) { +   'AbortController', +   'AbortSignal', +   'Blob', +   'Buffer', +   'ByteLengthQueuingStrategy', +   'CountQueuing...
 - `parallel/test-icu-env.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-icu-env.js:28:29)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-compat-r...
 - `parallel/test-icu-minimum-version.js`: FAIL: Cannot find module '/home/node/tools/icu/icu_versions.json' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymou...
-- `parallel/test-icu-transcode.js`: SKIP: missing Intl
 - `parallel/test-internal-process-binding.js`: FAIL: The input did not match the regular expression /No such module/. Input:  'Error: process.binding is not supported in WASM environment'  AssertionError: The input did not match the regular expres...
 - `parallel/test-intl-v8BreakIterator.js`: SKIP: missing Intl
 - `parallel/test-intl.js`: SKIP: Intl tests because Intl object not present.
@@ -4541,37 +3514,21 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-node-run.js`: FAIL: 11 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at <anonymous> (node:test:678:36)     at apply (native)     at call (native)     at wrapped (node:async...
 - `parallel/test-openssl-ca-options.js`: FAIL: Expected values to be strictly equal: + actual - expected  + '' - '/usr/local/bin/node: either --use-openssl-ca or --use-bundled-ca can be used, not both\n'  AssertionError: Expected values to b...
 - `parallel/test-outgoing-message-pipe.js`: FAIL: Cannot find module '_http_outgoing'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-outgoing-message-pipe.js:4:25)     at loadModule (node:module:1088...
-- `parallel/test-perf-hooks-histogram.js`: FAIL: createHistogram is not supported in WebAssembly environment     at createHistogram (node:perf_hooks:174:15)     at <anonymous> (/home/node/test/parallel/test-perf-hooks-histogram.js:19:13)     a...
-- `parallel/test-perf-hooks-resourcetiming.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-perf-hooks-resourcetiming.js:15:8)     at loadModule (node:module:1088:3...
-- `parallel/test-perf-hooks-usertiming.js`: FAIL: The expression evaluated to a falsy value:    assert(PerformanceMark)  AssertionError: The expression evaluated to a falsy value:    assert(PerformanceMark)      at <anonymous> (/home/node/test/...
 - `parallel/test-performance-eventlooputil.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-performance-eventlooputil.js:13:13)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runT...
 - `parallel/test-performance-function-async.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function-async.js:35:29)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at run...
-- `parallel/test-performance-function.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-performance-function.js:18:34)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (...
-- `parallel/test-performance-global.js`: FAIL: Expected "actual" to be reference-equal to "expected": + actual - expected    { +   now: [Function: now], -   clearMarks: [Function: clearMarks], +   timeOrigin: 1.666083 -   clearMeasures: [Fun...
+- `parallel/test-performance-global.js`: FAIL: Expected "actual" to be reference-equal to "expected": + actual - expected    { +   now: [Function: now], -   clearMarks: [Function: clearMarks], +   timeOrigin: 1.302333 -   clearMeasures: [Fun...
 - `parallel/test-performance-nodetiming-uvmetricsinfo.js`: FAIL: Error: cannot read property 'loopCount' of undefined     at <anonymous> (/home/node/test/fixtures/test-nodetiming-uvmetricsinfo.js:18:22)     at loadModule (node:module:1088:32)     at localRequ...
 - `parallel/test-performance-nodetiming.js`: FAIL: The expression evaluated to a falsy value:    assert.ok(nodeTiming.duration >= now)  AssertionError: The expression evaluated to a falsy value:    assert.ok(nodeTiming.duration >= now)      at <...
 - `parallel/test-performance-resourcetimingbufferfull.js`: FAIL: Unhandled promise rejection:     at main (/home/node/test/parallel/test-performance-resourcetimingbufferfull.js:36:15)     at <anonymous> (/home/node/test/parallel/test-performance-resourcetimin...
 - `parallel/test-performance-resourcetimingbuffersize.js`: FAIL: Unhandled promise rejection:     at main (/home/node/test/parallel/test-performance-resourcetimingbuffersize.js:43:45)     at <anonymous> (/home/node/test/parallel/test-performance-resourcetimin...
 - `parallel/test-permission-allow-addons-cli.js`: FAIL: Cannot find module 'pkgexports/no-addons'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-permission-allow-addons-cli.js:19:15)     at loadModule (nod...
-- `parallel/test-permission-allow-child-process-cli.js`: FAIL: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-allow-child-process-cli.js:28:13)     at loadModule (node:module:1088:32)     at localRequire...
-- `parallel/test-permission-allow-wasi-cli.js`: FAIL: Cannot find module 'wasi'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-permission-allow-wasi-cli.js:12:18)     at loadModule (node:module:1088:32) ...
-- `parallel/test-permission-allow-worker-cli.js`: FAIL: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-allow-worker-cli.js:14:13)     at loadModule (node:module:1088:32)     at localRequire (node:...
-- `parallel/test-permission-child-process-cli.js`: FAIL: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-child-process-cli.js:20:10)     at loadModule (node:module:1088:32)     at localRequire (node...
 - `parallel/test-permission-dc-worker-threads.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-permission-dc-worker-threads.js:15:13)     at loadModule (node:module:10...
 - `parallel/test-permission-fs-absolute-path.js`: FAIL: Expected values to be strictly equal:  '' !== 'true'  AssertionError: Expected values to be strictly equal:  '' !== 'true'      at <anonymous> (/home/node/test/parallel/test-permission-fs-absolu...
 - `parallel/test-permission-fs-relative-path.js`: FAIL: Expected values to be strictly equal:  '' !== 'true'  AssertionError: Expected values to be strictly equal:  '' !== 'true'      at <anonymous> (/home/node/test/parallel/test-permission-fs-relati...
 - `parallel/test-permission-fs-repeat-path.js`: FAIL: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-permission-fs-repeat-path.js:39:...
 - `parallel/test-permission-fs-supported.js`: FAIL: fs.FSWatcher was exposed but is neither on the supported list of the permission model nor on the ignore list. AssertionError: fs.FSWatcher was exposed but is neither on the supported list of the...
 - `parallel/test-permission-fs-symlink-relative.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   code: 'EEXIST', +   message: "EEXIST: file already exists, symlink 'a' -> '/home/node/test/parallel/test-permis...
-- `parallel/test-permission-fs-symlink-target-write.js`: SKIP: insufficient privileges
-- `parallel/test-permission-fs-symlink.js`: SKIP: insufficient privileges
-- `parallel/test-permission-fs-traversal-path.js`: SKIP: insufficient privileges
-- `parallel/test-permission-fs-wildcard.js`: FAIL: Error: Cannot find module '/tmp/*' from '/'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at runMain (node:module:1539:23)     at runInline (node:chil...
-- `parallel/test-permission-fs-windows-path.js`: SKIP: windows UNC path test
-- `parallel/test-permission-fs-write-report.js`: FAIL: The validation function is expected to return "true". Received false  Caught error:  TypeError: cannot read property 'writeReport' of undefined AssertionError: The validation function is expecte...
-- `parallel/test-permission-fs-write-v8.js`: FAIL: The validation function is expected to return "true". Received false  Caught error:  Error: v8.writeHeapSnapshot is not supported in WASM environment AssertionError: The validation function is e...
 - `parallel/test-permission-fs-write.js`: FAIL: Error: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/fixtures/permission/fs-write.js:24:10)     at loadModule (node:module:1088:32)     at localRequire (node:module...
-- `parallel/test-permission-has.js`: FAIL: cannot read property 'has' of undefined     at <anonymous> (/home/node/test/parallel/test-permission-has.js:9:13)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
 - `parallel/test-permission-no-addons.js`: FAIL: Cannot find module 'pkgexports/no-addons'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-permission-no-addons.js:19:15)     at loadModule (node:modul...
 - `parallel/test-permission-processbinding.js`: FAIL: AssertionError: The validation function is expected to return "true". Received false  Caught error:  Error: process.binding is not supported in WASM environment     at <anonymous> (/home/node/te...
 - `parallel/test-permission-warning-flags.js`: FAIL: The input did not match the regular expression /SecurityWarning: The flag --allow-addons must be used with extreme caution/. Input:  ''  AssertionError: The input did not match the regular expre...
@@ -4586,7 +3543,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-process-binding-util.js`: FAIL: process.binding is not supported in WASM environment     at binding (node:process:227:15)     at <anonymous> (/home/node/test/parallel/test-process-binding-util.js:6:29)     at loadModule (node:...
 - `parallel/test-process-constants-noatime.js`: FAIL: The expression evaluated to a falsy value:    assert(!('O_NOATIME' in constants))  AssertionError: The expression evaluated to a falsy value:    assert(!('O_NOATIME' in constants))      at <anon...
 - `parallel/test-process-env-allowed-flags-are-documented.js`: FAIL: ENOENT: no such file or directory, open '/home/node/doc/api/cli.md'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readFileS...
-- `parallel/test-process-env-allowed-flags.js`: FAIL: flag should be in set: --perf_basic_prof  false !== true  AssertionError: flag should be in set: --perf_basic_prof  false !== true      at <anonymous> (/home/node/test/parallel/test-process-env-...
 - `parallel/test-process-env-tz.js`: FAIL: The input did not match the regular expression /^Sat Apr 14 2018 14:34:56 GMT\+0200 \(.+\)$/. Input:  'Sat Apr 14 2018 12:34:56 GMT+0000'  AssertionError: The input did not match the regular exp...
 - `parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`: FAIL: foo     at <anonymous> (/home/node/test/parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js:13:11)     at loadModule (node:module:1088:32)     at localRequire ...
 - `parallel/test-process-exception-capture-should-abort-on-uncaught.js`: FAIL: foo     at <anonymous> (/home/node/test/parallel/test-process-exception-capture-should-abort-on-uncaught.js:12:11)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:3...
@@ -4603,7 +3559,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-process-getactiveresources-track-active-requests.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-active-requests.js:11:28)     at loadModule (node:module:1088:32)     at localRequire (node:modu...
 - `parallel/test-process-getactiveresources-track-interval-lifetime.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-interval-lifetime.js:7:28)     at loadModule (node:module:1088:32)     at localRequire (node:mod...
 - `parallel/test-process-getactiveresources-track-multiple-timers.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-multiple-timers.js:12:28)     at loadModule (node:module:1088:32)     at localRequire (node:modu...
-- `parallel/test-process-getactiveresources-track-timer-lifetime.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources-track-timer-lifetime.js:8:30)     at loadModule (node:module:1088:32)     at localRequire (node:module...
 - `parallel/test-process-getactiveresources.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-process-getactiveresources.js:9:32)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runT...
 - `parallel/test-process-kill-null.js`: FAIL: process.kill is not supported in WASI environment     at _makeError (node:process:47:19)     at kill (node:process:566:15)     at <anonymous> (/home/node/test/parallel/test-process-kill-null.js:...
 - `parallel/test-process-load-env-file.js`: FAIL: 6 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at <anonymous> (node:test:678:36)     at apply (native)     at call (native)     at wrapped (node:async_...
@@ -4612,7 +3567,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-process-really-exit.js`: FAIL: Expected values to be strictly equal: + actual - expected  + '' - 'really exited'  AssertionError: Expected values to be strictly equal: + actual - expected  + '' - 'really exited'      at <anon...
 - `parallel/test-process-ref-unref.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-process-ref-unref.js:42:17)     at call (native)     at runTest (node:test:498:32)     at runNext (node:test:658:34)     at execu...
 - `parallel/test-process-title-cli.js`: FAIL: Expected values to be strictly equal: + actual - expected  + 'wasm-rquickjs' - 'foo'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'wasm-rquickjs' - 'foo'      at...
-- `parallel/test-process-uncaught-exception-monitor.js`: ERROR: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-process-versions.js`: FAIL: Cannot find module '../../deps/acorn/acorn/package.json' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> ...
 - `parallel/test-promise-handled-rejection-no-warning.js`: FAIL: Unhandled promise rejection:     at <anonymous> (/home/node/test/parallel/test-promise-handled-rejection-no-warning.js:7:20)     at loadModule (node:module:1088:32)     at localRequire (node:mod...
 - `parallel/test-promise-hook-create-hook.js`: FAIL: The input did not match the regular expression /The "initHook" argument must be of type function/. Input:  "TypeError: cannot read property 'createHook' of undefined"  AssertionError: The input ...
@@ -4622,7 +3576,7 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-promise-hook-on-init.js`: FAIL: The input did not match the regular expression /The "initHook" argument must be of type function/. Input:  "TypeError: cannot read property 'onInit' of undefined"  AssertionError: The input did ...
 - `parallel/test-promise-hook-on-resolve.js`: FAIL: The input did not match the regular expression /The "settledHook" argument must be of type function/. Input:  "TypeError: cannot read property 'onSettled' of undefined"  AssertionError: The inpu...
 - `parallel/test-promise-reject-callback-exception.js`: FAIL: stdout: <> AssertionError: stdout: <>     at <anonymous> (/home/node/test/parallel/test-promise-reject-callback-exception.js:28:11)     at loadModule (node:module:1088:32)     at localRequire (n...
-- `parallel/test-promise-unhandled-flag.js`: ERROR: error while executing at wasm backtrace:     0: 0xe10d99 - node_compat_runner.wasm!get_proxy_method     1: 0xea13b9 - node_compat_runner.wasm!js_proxy_get     2: 0xe0895c - node_compat_runner.w...
+- `parallel/test-promise-unhandled-flag.js`: ERROR: error while executing at wasm backtrace:     0: 0xe10d9c - node_compat_runner.wasm!get_proxy_method     1: 0xea13bc - node_compat_runner.wasm!js_proxy_get     2: 0xe0895f - node_compat_runner.w...
 - `parallel/test-promise-unhandled-silent-no-hook.js`: FAIL: Unhandled promise rejection:     at <anonymous> (/home/node/test/parallel/test-promise-unhandled-silent-no-hook.js:11:13)     at Promise (native)     at <anonymous> (/home/node/test/parallel/tes...
 - `parallel/test-promise-unhandled-silent.js`: FAIL: Unhandled promise rejection:     at <anonymous> (/home/node/test/parallel/test-promise-unhandled-silent.js:10:13)     at Promise (native)     at <anonymous> (/home/node/test/parallel/test-promis...
 - `parallel/test-promise-unhandled-warn-no-hook.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (/home/node/test/parallel/test-promise-unhandled-warn-no-hook.js:9:13)     at Promise (native)     at <anonymou...
@@ -4633,20 +3587,16 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-promises-warning-on-unhandled-rejection.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): 42
 - `parallel/test-punycode.js`: FAIL: Cannot find module 'punycode'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/parallel/test-punycode.js:32:18)     at loadModule (node:module:1088:32)     at localR...
 - `parallel/test-queue-microtask-uncaught-asynchooks.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'init', -   'after', -   'before', -   'destroy' - ]  AssertionError: Expected values to be strictly deep-equal: + ac...
-- `parallel/test-queue-microtask.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + ...
 - `parallel/test-readline-async-iterators-backpressure.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-async-iterators-destroy.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-async-iterators.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-carriage-return-between-chunks.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline-emit-keypress-events.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'f', -   'o', -   'o' - ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -...
 - `parallel/test-readline-input-onerror.js`: FAIL: Unhandled promise rejection:     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-interface-escapecodetimeout.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-keys.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-reopen.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-set-raw-mode.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
 - `parallel/test-readline-undefined-columns.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-readline.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-release-changelog.js`: FAIL: ENOENT: no such file or directory, open '/home/node/src/node_version.h'     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at openSync (node:fs:1028:33)     at readF...
 - `parallel/test-release-npm.js`: FAIL: npm is not ready for this release and is going to print warnings to users: Error: Cannot find module '/home/node/deps/npm/bin/npm-cli.js' from '/'     at resolveFilename (node:module:602:80)    ...
 - `parallel/test-require-delete-array-iterator.js`: FAIL: Cannot find module '../common/fixtures' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/...
 - `parallel/test-require-dot.js`: FAIL: Cannot find module '.'     at localRequire (node:module:1283:59)     at <anonymous> (/home/node/test/fixtures/module-require/relative/dot.js:1:79)     at loadModule (node:module:1088:32)     at ...
@@ -4657,26 +3607,17 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-require-json.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "Cannot parse JSON module '/home/node/test/fixtures/invalid.json': Expected ',' or '}' after property ...
 - `parallel/test-require-long-path.js`: SKIP: this test is Windows-specific.
 - `parallel/test-require-mjs.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison {     code: 'ERR_REQUIRE_ESM', +   message: 'require() of ES Module /home/node/test/fixtures/es-modules/test-esm-ok.m...
-- `parallel/test-require-resolve.js`: FAIL: Expected values to be strictly equal: + actual - expected  + '/root/.node_modules' - '/home/node/test/fixtures/node_modules'  AssertionError: Expected values to be strictly equal: + actual - exp...
 - `parallel/test-require-symlink.js`: SKIP: insufficient privileges
 - `parallel/test-require-unicode.js`: FAIL: Cannot find module '/tmp/w/中文目录' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test...
 - `parallel/test-resource-usage.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-resource-usage.js:5:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-co...
-- `parallel/test-runner-cli-concurrency.js`: FAIL: The input did not match the regular expression /concurrency: true,/. Input:  ''  AssertionError: The input did not match the regular expression /concurrency: true,/. Input:  ''      at <anonymou...
-- `parallel/test-runner-cli-timeout.js`: FAIL: The input did not match the regular expression /timeout: Infinity,/. Input:  ''  AssertionError: The input did not match the regular expression /timeout: Infinity,/. Input:  ''      at <anonymou...
-- `parallel/test-runner-error-reporter.js`: FAIL: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-runner-error-reporter.js:19:22) ...
 - `parallel/test-runner-exit-code.js`: FAIL: The input did not match the regular expression /tests 3/. Input:  ''  AssertionError: The input did not match the regular expression /tests 3/. Input:  ''      at <anonymous> (/home/node/test/pa...
-- `parallel/test-runner-extraneous-async-activity.js`: FAIL: The input did not match the regular expression /Error: Test "extraneous async activity test" at .+extraneous_set_immediate_async\.mjs:3:1 generated asynchronous activity after the test ended/m. ...
 - `parallel/test-runner-force-exit-failure.js`: FAIL: Expected values to be strictly equal: + actual - expected  + 'Error: fails\n' + +   '    at <anonymous> (/home/node/test/fixtures/test-runner/throws_sync_and_async.js:9:13)\n' + +   '    at call...
-- `parallel/test-runner-force-exit-flush.js`: FAIL: Expected values to be strictly equal:  0 !== 1  AssertionError: Expected values to be strictly equal:  0 !== 1      at runWithReporter (/home/node/test/parallel/test-runner-force-exit-flush.js:2...
 - `parallel/test-runner-import-no-scheme.js`: FAIL: Expected values to be strictly equal: + actual - expected  + '<ref *1> [Function: test] {\n' + +   '  skip: [Function (anonymous)],\n' + +   '  todo: [Function (anonymous)],\n' + +   '  only: [F...
 - `parallel/test-runner-mock-timers-date.js`: FAIL: 9 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at executeSuite (node:test:691:25)     at runSuite (node:test:595:64)     at describe (node:test:799:29)...
 - `parallel/test-runner-mock-timers-scheduler.js`: FAIL: 7 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at <anonymous> (node:test:678:36)     at apply (native)     at call (native)     at wrapped (node:async_...
-- `parallel/test-runner-no-isolation-filtering.js`: FAIL: Expected values to be strictly equal:  1 !== 0  AssertionError: Expected values to be strictly equal:  1 !== 0      at <anonymous> (/home/node/test/parallel/test-runner-no-isolation-filtering.js...
 - `parallel/test-runner-reporters.js`: FAIL: The input did not match the regular expression /TAP version 13/. Input:  ''  AssertionError: The input did not match the regular expression /TAP version 13/. Input:  ''      at <anonymous> (/hom...
 - `parallel/test-runner-root-duration.js`: FAIL: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/com...
-- `parallel/test-runner-snapshot-file-tests.js`: FAIL: 4 test(s) failed     at finalize (node:test:641:29)     at runNext (node:test:688:16)     at executeSuite (node:test:691:25)     at runSuite (node:test:595:64)     at describe (node:test:799:29)...
 - `parallel/test-security-revert-unknown.js`: FAIL: Expected values to be strictly equal:  null !== 12  AssertionError: Expected values to be strictly equal:  null !== 12      at <anonymous> (/home/node/test/parallel/test-security-revert-unknown....
-- `parallel/test-set-incoming-message-header.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-set-incoming-message-header.js:25:6)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at run...
 - `parallel/test-setproctitle.js`: FAIL: execSync is not supported in WebAssembly environment     at createNotSupportedError (node:child_process:18:34)     at execSync (node:child_process:1431:11)     at <anonymous> (/home/node/test/pa...
 - `parallel/test-shadow-realm-allowed-builtin-modules.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at main (/home/node/test/parallel/test-shadow-realm-allowed-builtin-modules.js:8:21)     at <anonymous> (/home/node/test/paral...
 - `parallel/test-shadow-realm-custom-loaders.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/common/index.js:205:38) ...
@@ -4685,7 +3626,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-shadow-realm-globals.js`: FAIL: ShadowRealm is not defined     at <anonymous> (/home/node/test/parallel/test-shadow-realm-globals.js:9:25)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     a...
 - `parallel/test-shadow-realm-import-value-resolve.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at main (/home/node/test/parallel/test-shadow-realm-import-value-resolve.js:13:21)     at <anonymous> (/home/node/test/paralle...
 - `parallel/test-shadow-realm-module.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at main (/home/node/test/parallel/test-shadow-realm-module.js:8:21)     at <anonymous> (/home/node/test/parallel/test-shadow-r...
-- `parallel/test-shadow-realm-prepare-stack-trace.js`: FAIL: ShadowRealm is not defined ReferenceError: ShadowRealm is not defined     at [object CallSite]     at [object CallSite]     at [object CallSite]     at [object CallSite]
 - `parallel/test-shadow-realm.js`: FAIL: ShadowRealm is not defined     at <anonymous> (/home/node/test/parallel/test-shadow-realm.js:8:25)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTes...
 - `parallel/test-sigint-infinite-loop.js`: ERROR: Timeout (epoch deadline exceeded)
 - `parallel/test-signal-args.js`: FAIL: process.kill is not supported in WASI environment     at _makeError (node:process:47:19)     at kill (node:process:566:15)     at <anonymous> (/home/node/test/parallel/test-signal-args.js:20:14)...
@@ -4694,11 +3634,9 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-socket-address.js`: ERROR: Timeout (tokio 60s deadline exceeded)
 - `parallel/test-socket-options-invalid.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-socket-options-invalid.js:24:20)     at forEach ...
 - `parallel/test-socket-writes-before-passed-to-tls-socket.js`: ERROR: Timeout (tokio 60s deadline exceeded)
-- `parallel/test-source-map-api.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'not a function', -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The "payload" argument must be of ty...
 - `parallel/test-source-map-cjs-require-cache.js`: FAIL: not a function     at run (/home/node/test/parallel/test-source-map-cjs-require-cache.js:25:39)     at <anonymous> (/home/node/test/parallel/test-source-map-cjs-require-cache.js:29:5)     at loa...
 - `parallel/test-spawn-cmd-named-pipe.js`: SKIP: this test is Windows-specific.
-- `parallel/test-stack-size-limit.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c06 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ea - node_compat_runner.wasm!JS_CallInternal     2: 0xe161ea - node_compat_runner...
-- `parallel/test-startup-large-pages.js`: FAIL: Expected values to be strictly equal:  'undefined' !== '42'  AssertionError: Expected values to be strictly equal:  'undefined' !== '42'      at <anonymous> (/home/node/test/parallel/test-startu...
+- `parallel/test-stack-size-limit.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c09 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ed - node_compat_runner.wasm!JS_CallInternal     2: 0xe161ed - node_compat_runner...
 - `parallel/test-stdin-from-file-spawn.js`: SKIP: This is test exists only on Linux/Win32/macOS
 - `parallel/test-stdin-pipe-large.js`: FAIL: cannot read property 'end' of null     at <anonymous> (/home/node/test/parallel/test-stdin-pipe-large.js:18:1)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)  ...
 - `parallel/test-stdin-pipe-resume.js`: FAIL: cannot read property 'write' of null     at <anonymous> (/home/node/test/parallel/test-stdin-pipe-resume.js:20:3)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34...
@@ -4708,8 +3646,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-stdout-close-unref.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-stdout-close-unref.js:38:18)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (no...
 - `parallel/test-stdout-pipeline-destroy.js`: FAIL: The "body" argument must be of type function or an instance of Blob, Stream, Iterable, AsyncIterable, or Promise or { readable, writable } pair. Received an instance of Object     at ERR_INVALID...
 - `parallel/test-strace-openat-openssl.js`: SKIP: linux only
-- `parallel/test-streams-highwatermark.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison {     code: 'ERR_INVALID_ARG_VALUE', +   message: `The property 'options.highWaterMark' is invalid. Received "5"`, - ...
-- `parallel/test-stringbytes-external.js`: ERROR: Timeout (epoch deadline exceeded)
 - `parallel/test-structuredClone-global.js`: FAIL: Missing expected exception. AssertionError: Missing expected exception.     at <anonymous> (/home/node/test/parallel/test-structuredClone-global.js:12:8)     at loadModule (node:module:1088:32) ...
 - `parallel/test-sync-io-option.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal:  undefined !== ''      at <anonymous> (/home/node/test/parallel/test-sync-io...
 - `parallel/test-tick-processor-arguments.js`: SKIP: skipped due to memory requirements
@@ -4731,18 +3667,16 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-tracing-no-crash.js`: FAIL: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at <anonymous> (/home/node/test/parallel/test-tracing-no-cr...
 - `parallel/test-tty-stdin-end.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-tty-stdin-end.js:7:15)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest (node-com...
 - `parallel/test-tty-stdin-pipe.js`: FAIL: readline is not yet supported in WebAssembly environment     at <anonymous> (node:readline:4:33)
-- `parallel/test-ttywrap-stack.js`: ERROR: error while executing at wasm backtrace:     0: 0xe096ba - node_compat_runner.wasm!shape_initial_hash     1: 0xe08d89 - node_compat_runner.wasm!find_hashed_shape_proto     2: 0xdec78e - node_co...
+- `parallel/test-ttywrap-stack.js`: ERROR: error while executing at wasm backtrace:     0: 0xe096bd - node_compat_runner.wasm!shape_initial_hash     1: 0xe08d8c - node_compat_runner.wasm!find_hashed_shape_proto     2: 0xdec791 - node_co...
 - `parallel/test-tz-version.js`: SKIP: missing Intl
 - `parallel/test-unhandled-exception-rethrow-error.js`: FAIL: Expected values to be strictly equal:  1 !== 7  AssertionError: Expected values to be strictly equal:  1 !== 7      at <anonymous> (/home/node/test/parallel/test-unhandled-exception-rethrow-erro...
 - `parallel/test-unhandled-exception-with-worker-inuse.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-unhandled-exception-with-worker-inuse.js:31:37)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)...
-- `parallel/test-v8-collect-gc-profile-exit-before-stop.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-v8-collect-gc-profile-exit-before-stop.js:7:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)...
 - `parallel/test-v8-collect-gc-profile-in-worker.js`: FAIL: Cannot find module '../common/v8' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
 - `parallel/test-v8-collect-gc-profile.js`: FAIL: Cannot find module '../common/v8' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/parall...
 - `parallel/test-v8-deserialize-buffer.js`: FAIL: v8.serialize is not supported in WASM environment     at serialize (node:v8:116:15)     at <anonymous> (/home/node/test/parallel/test-v8-deserialize-buffer.js:7:36)     at loadModule (node:modul...
 - `parallel/test-v8-flag-type-check.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'The "flags" argument must be of type string', -   code: 'ERR_INVALID_ARG_TYPE', -   message: 'The "fl...
 - `parallel/test-v8-flags.js`: FAIL: unexpected token in expression: '%'     at <input>:1:1     at <anonymous> (/home/node/test/parallel/test-v8-flags.js:11:8)     at loadModule (node:module:1088:32)     at localRequire (node:modul...
 - `parallel/test-v8-getheapsnapshot-twice.js`: FAIL: v8.getHeapSnapshot is not supported in WASM environment     at getHeapSnapshot (node:v8:65:15)     at <anonymous> (/home/node/test/parallel/test-v8-getheapsnapshot-twice.js:8:4)     at loadModul...
-- `parallel/test-v8-query-objects.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_TYPE' - }  AssertionError: Expected values to be strictly deep-equal: + ...
 - `parallel/test-v8-serialize-leak.js`: FAIL: v8.serialize is not supported in WASM environment     at serialize (node:v8:116:15)     at <anonymous> (/home/node/test/parallel/test-v8-serialize-leak.js:16:6)     at loadModule (node:module:10...
 - `parallel/test-v8-startup-snapshot-api.js`: FAIL: Cannot convert undefined or null to object     at <anonymous> (/home/node/test/parallel/test-v8-startup-snapshot-api.js:4:16)     at loadModule (node:module:1088:32)     at localRequire (node:mo...
 - `parallel/test-v8-stats.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + [] - [ -   'code_large_object_space', -   'code_space', -   'large_object_space', -   'new_large_object_space', -   'new_space',...
@@ -4750,10 +3684,7 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-vfs.js`: FAIL: Cannot find module '/usr/local/bin/node/file.js' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/n...
 - `parallel/test-vm-access-process-env.js`: FAIL: Expected "actual" to be strictly unequal to:  undefined AssertionError: Expected "actual" to be strictly unequal to:  undefined     at <anonymous> (/home/node/test/parallel/test-vm-access-proces...
 - `parallel/test-vm-attributes-property-not-on-sandbox.js`: FAIL: cannot read property 'get' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-attributes-property-not-on-sandbox.js:18:20)     at loadModule (node:module:1088:32)     at localRequ...
-- `parallel/test-vm-basic.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + {} - { -   foo: 'bar', -   typeofProcess: 'undefined' - }  AssertionError: Expected values to be strictly deep-equal: + actual -...
 - `parallel/test-vm-cached-data.js`: FAIL: Error: invalid redefinition of parameter name     at <input>:6:5     at Function (native)     at executeInlineSource (node:child_process:401:74)     at runInline (node:child_process:687:52)     ...
-- `parallel/test-vm-codegen.js`: FAIL: WebAssembly is not defined     at <anonymous> (eval_script:1:19)     at <eval> (eval_script:1:64)     at runInContext (__wasm_rquickjs_builtin/vm:260:54)     at <anonymous> (/home/node/test/para...
-- `parallel/test-vm-context-dont-contextify.js`: FAIL: cannot read property 'DONT_CONTEXTIFY' of undefined     at <anonymous> (/home/node/test/parallel/test-vm-context-dont-contextify.js:13:36)     at loadModule (node:module:1088:32)     at localReq...
 - `parallel/test-vm-context-property-forwarding.js`: FAIL: Expected values to be strictly equal:  undefined !== 4  AssertionError: Expected values to be strictly equal:  undefined !== 4      at <anonymous> (/home/node/test/parallel/test-vm-context-prope...
 - `parallel/test-vm-context.js`: FAIL: Expected values to be strictly equal:  'bar' !== 3  AssertionError: Expected values to be strictly equal:  'bar' !== 3      at <anonymous> (/home/node/test/parallel/test-vm-context.js:42:20)    ...
 - `parallel/test-vm-create-and-run-in-context.js`: FAIL: Expected values to be strictly equal:  'bar' !== 3  AssertionError: Expected values to be strictly equal:  'bar' !== 3      at <anonymous> (/home/node/test/parallel/test-vm-create-and-run-in-con...
@@ -4775,11 +3706,9 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-vm-indexed-properties.js`: FAIL: Expected values to be strictly equal:  undefined !== 20  AssertionError: Expected values to be strictly equal:  undefined !== 20      at <anonymous> (/home/node/test/parallel/test-vm-indexed-pro...
 - `parallel/test-vm-inherited_properties.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    [     'z', -   'x'   ]  AssertionError: Expected values to be strictly deep-equal: + actual - expected    [     'z', -   'x'   ]...
 - `parallel/test-vm-is-context.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-vm-is-context.js:30:10)     at loadModule (node:...
-- `parallel/test-vm-low-stack-space.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c06 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ea - node_compat_runner.wasm!JS_CallInternal     2: 0xe161ea - node_compat_runner...
-- `parallel/test-vm-measure-memory-lazy.js`: FAIL: Cannot find module '../common/measure-memory' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node...
+- `parallel/test-vm-low-stack-space.js`: ERROR: error while executing at wasm backtrace:     0: 0xe12c09 - node_compat_runner.wasm!JS_CallInternal     1: 0xe161ed - node_compat_runner.wasm!JS_CallInternal     2: 0xe161ed - node_compat_runner...
 - `parallel/test-vm-measure-memory-multi-context.js`: FAIL: Cannot find module '../common/measure-memory' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node...
 - `parallel/test-vm-measure-memory.js`: FAIL: Cannot find module '../common/measure-memory' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node...
-- `parallel/test-vm-module-basic.js`: ERROR: Timeout (epoch deadline exceeded)
 - `parallel/test-vm-module-cached-data.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-vm-module-cached-data.js:12:24)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runTest ...
 - `parallel/test-vm-module-dynamic-import.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: + actual - expected  + 'ERR_MODULE_NOT_FOUND' - 'ERR_VM_DYNAMIC_IMPORT_CALLB...
 - `parallel/test-vm-module-dynamic-namespace.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): Error: Cannot find module ''
@@ -4818,33 +3747,26 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-webcrypto-digest.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'Digest method not sup...
 - `parallel/test-webcrypto-encrypt-decrypt-rsa.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: + actual - expected  + 2048 - undefined      at testEncryption (/home/node/t...
 - `parallel/test-webcrypto-export-import-cfrg.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at importKey (__wasm_rquickjs_builtin/web_crypto:8252:82)     at testImportRaw (/home/node/test/parallel/test-webcrypto-export...
-- `parallel/test-webcrypto-export-import-ec.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'Failed to parse priva...
 - `parallel/test-webcrypto-export-import-rsa.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: + actual - expected  + undefined - 1024      at testImportSpki (/home/node/t...
 - `parallel/test-webcrypto-sign-verify-ecdsa.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at createDataError (__wasm_rquickjs_builtin/web_crypto:3186:21)     at toCryptoKey (__wasm_rquickjs_builtin/web_crypto:3151:27...
 - `parallel/test-webcrypto-sign-verify-eddsa.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Buffer(114) [Uint8Array] [ +   237, +   96, +   ...
 - `parallel/test-webcrypto-sign-verify-hmac.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: 'The requested operati...
-- `parallel/test-webcrypto-sign-verify-rsa.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly equal: + actual - expected  + 'Error' - 'OperationError'      at <anonymous> (/home...
+- `parallel/test-webcrypto-sign-verify-rsa.js`: ERROR: Timeout (epoch deadline exceeded)
 - `parallel/test-websocket.js`: FAIL: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'undefined' - 'function'      ...
-- `parallel/test-webstorage.js`: FAIL: Only --eval/-e, --input-type, and script files are supported in WASM child emulation     at parseInlineEvalArgs (/home/node/test/common/index.js:123:19)     at runInlineEval (/home/node/test/com...
 - `parallel/test-webstream-encoding-inspect.js`: FAIL: not a function     at <anonymous> (/home/node/test/parallel/test-webstream-encoding-inspect.js:9:31)     at loadModule (node:module:1088:32)     at localRequire (node:module:1272:34)     at runT...
 - `parallel/test-webstream-readable-from.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { -   code: 'ERR_ARG_NOT_ITERABLE',     name: 'TypeError'   }  AssertionError: Expected values to be strictly deep-eq...
-- `parallel/test-whatwg-encoding-custom-fatal-streaming.js`: SKIP: missing Intl
 - `parallel/test-whatwg-encoding-custom-textdecoder-api-invalid-label.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED',     name: 'RangeError'   }  AssertionError: Expected values to be strictly ...
 - `parallel/test-whatwg-encoding-custom-textdecoder-fatal.js`: SKIP: missing Intl
 - `parallel/test-whatwg-encoding-custom-textdecoder-invalid-arg.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-encoding-custom-textdecoder-invalid-arg.j...
 - `parallel/test-whatwg-encoding-custom-textdecoder-streaming.js`: FAIL: Expected values to be strictly equal: + actual - expected  + '\x00123ABCabc��������������������' - '\x00123ABCabc\x80ÿĀက�𐀀􏿿'                 ^...
 - `parallel/test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js`: SKIP: missing Intl
-- `parallel/test-whatwg-events-add-event-listener-options-passive.js`: FAIL: The expression evaluated to a falsy value:    ok(supportsPassive)  AssertionError: The expression evaluated to a falsy value:    ok(supportsPassive)      at <anonymous> (/home/node/test/parallel...
 - `parallel/test-whatwg-events-event-constructors.js`: FAIL: Cannot find module '../common/wpt' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/paral...
 - `parallel/test-whatwg-events-eventtarget-this-of-listener.js`: FAIL: Cannot find module '../common/wpt' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/paral...
-- `parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js`: FAIL: Expected values to be strictly equal:  0 !== 2  AssertionError: Expected values to be strictly equal:  0 !== 2      at <anonymous> (/home/node/test/parallel/test-whatwg-readablebytestream-bad-bu...
 - `parallel/test-whatwg-url-custom-global.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected ... Skipped lines    {     configurable: true, +   enumerable: true, -   enumerable: false,     value: [Function: URL] {       canP...
 - `parallel/test-whatwg-url-custom-href-side-effect.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   name: 'Error' -   name: 'TypeError'   }  AssertionError: Expected values to be strictly deep-equal: + actual - ...
 - `parallel/test-whatwg-url-custom-inspect.js`: SKIP: missing Intl
 - `parallel/test-whatwg-url-custom-parsing.js`: SKIP: missing Intl
 - `parallel/test-whatwg-url-custom-searchparams-append.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: ...
-- `parallel/test-whatwg-url-custom-searchparams-constructor.js`: FAIL: not a function     at parseToDict (__wasm_rquickjs_builtin/url:236:20)     at URLSearchParamsPolyfill (__wasm_rquickjs_builtin/url:21:46)     at <anonymous> (/home/node/test/parallel/test-whatwg...
-- `parallel/test-whatwg-url-custom-searchparams-delete.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: ...
 - `parallel/test-whatwg-url-custom-searchparams-entries.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-url-custom-searchparams-entries.js:28:8) ...
 - `parallel/test-whatwg-url-custom-searchparams-foreach.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property 'toString' of undefined", -   code: 'ERR_INVALID_THIS', -   message: 'Value of "...
 - `parallel/test-whatwg-url-custom-searchparams-get.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: ...
@@ -4854,15 +3776,11 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-whatwg-url-custom-searchparams-keys.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-url-custom-searchparams-keys.js:30:8)    ...
 - `parallel/test-whatwg-url-custom-searchparams-set.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: ...
 - `parallel/test-whatwg-url-custom-searchparams-sort.js`: FAIL: Cannot find module '../common/wpt' from '/home/node/test/parallel'     at resolveFilename (node:module:602:80)     at localRequire (node:module:1271:44)     at <anonymous> (/home/node/test/paral...
-- `parallel/test-whatwg-url-custom-searchparams-stringifier.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "cannot read property '__URLSearchParams__' of undefined", -   code: 'ERR_INVALID_THIS', -   message: ...
 - `parallel/test-whatwg-url-custom-searchparams-values.js`: FAIL: Missing expected exception (TypeError). AssertionError: Missing expected exception (TypeError).     at <anonymous> (/home/node/test/parallel/test-whatwg-url-custom-searchparams-values.js:30:8)  ...
 - `parallel/test-whatwg-url-custom-searchparams.js`: FAIL: expecting surrogate pair     at encodeURIComponent (native)     at encode (node:url:187:31)     at <anonymous> (node:url:71:44)     at <anonymous> (/home/node/test/parallel/test-whatwg-url-custo...
-- `parallel/test-whatwg-url-custom-setters.js`: SKIP: missing Intl
 - `parallel/test-whatwg-url-custom-tostringtag.js`: FAIL: undefined !== URL  undefined !== 'URL'  AssertionError: undefined !== URL  undefined !== 'URL'      at <anonymous> (/home/node/test/parallel/test-whatwg-url-custom-tostringtag.js:27:22)     at f...
 - `parallel/test-whatwg-url-invalidthis.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected    Comparison { +   message: "Error converting from js 'array' into type 'URL'", -   message: /Receiver must be an instance of clas...
-- `parallel/test-whatwg-url-properties.js`: FAIL: Expected values to be strictly equal:  '' !== 'toString'  AssertionError: Expected values to be strictly equal:  '' !== 'toString'      at testMethod (/home/node/test/parallel/test-whatwg-url-pr...
 - `parallel/test-whatwg-webstreams-compression.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_INVALID_ARG_VALUE' - }  AssertionError: Expected values to be strictly deep-equal: +...
-- `parallel/test-whatwg-webstreams-encoding.js`: FAIL: Expected values to be strictly deep-equal: + actual - expected  + Comparison {} - Comparison { -   code: 'ERR_ENCODING_NOT_SUPPORTED' - }  AssertionError: Expected values to be strictly deep-equ...
 - `parallel/test-windows-abort-exitcode.js`: SKIP: test is windows specific
 - `parallel/test-windows-failed-heap-allocation.js`: SKIP: Windows-only
 - `sequential/test-cli-syntax-require.js`: FAIL: - process terminated with status 0, expected 1     at <anonymous> (/home/node/test/sequential/test-cli-syntax-require.js:20:22)     at forEach (native)     at <anonymous> (/home/node/test/sequen...
@@ -4870,10 +3788,8 @@ These unevaluated tests fail with errors that may be fixable.
 - `sequential/test-gc-http-client-onerror.js`: ERROR: Timeout (epoch deadline exceeded)
 - `sequential/test-gc-http-client-timeout.js`: ERROR: Timeout (epoch deadline exceeded)
 - `sequential/test-gc-http-client.js`: ERROR: Timeout (epoch deadline exceeded)
-- `sequential/test-module-loading.js`: FAIL: Expected "actual" to be reference-equal to "expected": + actual - expected  + <ref *1> { - <ref *2> {     children: [ +     { -     <ref *1> {         children: [],         exports: {           ...
 - `sequential/test-next-tick-error-spin.js`: ERROR: Timeout (epoch deadline exceeded)
-- `sequential/test-perf-hooks.js`: FAIL: EBADF: bad file descriptor, write     at createSystemError (__wasm_rquickjs_builtin/internal/fs/shared:42:21)     at writeSync (node:fs:1113:37)     at log (/home/node/test/sequential/test-perf-...
-- `sequential/test-pipe.js`: ERROR: Timeout (tokio 60s deadline exceeded)
+- `sequential/test-pipe.js`: ERROR: Timeout (epoch deadline exceeded)
 - `sequential/test-process-title.js`: FAIL: Expected values to be strictly equal: + actual - expected  + 'undefined' - '/usr/local/bin/node'  AssertionError: Expected values to be strictly equal: + actual - expected  + 'undefined' - '/usr...
 - `sequential/test-util-debug.js`: FAIL: mustCall verification failed: mustCall: expected exactly 1 call(s), got 0     at mustCall (/home/node/test/common/index.js:506:28)     at child (/home/node/test/sequential/test-util-debug.js:121...
 - `sequential/test-vm-timeout-escape-promise-module-2.js`: FAIL: Unhandled promise rejection (likely cause of mustCall failure):     at <anonymous> (<input>:4:19)     at apply (native)     at call (native)     at wrapped (node:async_hooks:143:53)     at _rest...
@@ -4883,7 +3799,7 @@ These unevaluated tests fail with errors that may be fixable.
 
 ## Skipped Tests
 
-431 tests are manually skipped with known reasons.
+407 tests are manually skipped with known reasons.
 
 <details>
 <summary>Click to expand</summary>
@@ -4893,10 +3809,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `es-module/test-esm-cjs-exports.js`: [manual] This test requires Node.js's native ESM-CJS interop, which cannot be replicated in WASM/QuickJS. Specifically:
 - `es-module/test-esm-import-meta-resolve.mjs`: [manual] The test uses `spawn` from `child_process` and `spawnPromisified` (lines 61-119) to launch real Node.js child processes with CLI flags (`--input-type=module`, `--eval`, `--import`). Child ...
 - `es-module/test-esm-undefined-cjs-global-like-variables.js`: [manual] This test requires three fundamental features our runtime intentionally does not implement:
-- `es-module/test-require-module-cycle-esm-cjs-esm-esm.js`: QuickJS module system does not support ESM-CJS interop cycle detection
-- `es-module/test-require-module-cycle-esm-cjs-esm.js`: QuickJS module system does not support ESM-CJS interop cycle detection
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js`: QuickJS module system does not support ESM-CJS interop cycle detection
-- `es-module/test-require-module-cycle-esm-esm-cjs-esm.js`: QuickJS module system does not support ESM-CJS interop cycle detection
 - `es-module/test-require-module-dynamic-import-1.js`: requires CJS named export analysis (cjs-module-lexer) for ESM import of CJS modules
 - `parallel/test-async-hooks-destroy-on-gc.js`: async_hooks not fully implemented
 - `parallel/test-async-hooks-disable-during-promise.js`: async_hooks not fully implemented
@@ -4927,7 +3839,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-crypto-webcrypto-aes-decrypt-tag-too-small.js`: requires WebCrypto AES-GCM with specific tag length validation
 - `parallel/test-crypto.js`: requires tls module which is not available in WASM
 - `parallel/test-dgram-bind-error-repeat.js`: wasi:sockets UDP implementation crashes in wasmtime
-- `parallel/test-dgram-blocklist.js`: wasi:sockets UDP implementation crashes in wasmtime
 - `parallel/test-dgram-bytes-length.js`: wasi:sockets UDP implementation hangs in wasmtime
 - `parallel/test-dgram-close-in-listening.js`: dgram implementation incomplete
 - `parallel/test-dgram-close-is-not-callback.js`: dgram implementation incomplete
@@ -4985,8 +3896,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-dns-resolveany.js`: dns resolver implementation incomplete
 - `parallel/test-dns-resolvens-typeerror.js`: requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented)
 - `parallel/test-dns-setserver-when-querying.js`: requires dgram and DNS protocol-level testing
-- `parallel/test-dns-setservers-type-check.js`: requires common/internet module and detailed ERR_INVALID_ARG_TYPE checks on setServers
-- `parallel/test-dns.js`: requires dgram module, common/dns utilities, and detailed setServers validation (ERR_INVALID_IP_ADDRESS)
 - `parallel/test-domain-async-id-map-leak.js`: requires --expose-gc flag
 - `parallel/test-domain-ee.js`: second block requires EventEmitter captureRejections constructor option which is not implemented
 - `parallel/test-domain-http-server.js`: requires HTTP server functionality, we only support clients
@@ -5004,10 +3913,8 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-events-uncaught-exception-stack.js`: requires process.on('uncaughtException') hooks
 - `parallel/test-eventsource.js`: requires --experimental-eventsource flag and EventSource global which is not implemented (needs HTTP streaming/SSE support)
 - `parallel/test-eventtarget-once-twice.js`: requires --expose-internals and internal/event_target
-- `parallel/test-fs-copyfile-respect-permissions.js`: as this test should not be run as `root`
 - `parallel/test-fs-lchmod.js`: lchmod is only available on macOS
 - `parallel/test-fs-long-path.js`: this test is Windows-specific.
-- `parallel/test-fs-mkdir-recursive-eaccess.js`: as this test should not be run as `root`
 - `parallel/test-fs-read-file-sync-hostname.js`: Test is linux specific.
 - `parallel/test-fs-read-stream-file-handle.js`: fs edge case
 - `parallel/test-fs-readdir-buffer.js`: this tests works only on MacOS
@@ -5048,7 +3955,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-http-client-abort-keep-alive-queued-tcp-socket.js`: hangs: relies on keep-alive connection reuse not fully implemented
 - `parallel/test-http-client-abort-keep-alive-queued-unix-socket.js`: hangs: requires unix socket support
 - `parallel/test-http-client-abort-unix-socket.js`: hangs: requires unix socket support
-- `parallel/test-http-client-aborted-event.js`: http edge case not yet handled
 - `parallel/test-http-client-agent-end-close-event.js`: hangs: relies on Agent connection lifecycle not fully implemented
 - `parallel/test-http-client-default-headers-exist.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-client-error-rawbytes.js`: hangs: test sends raw TCP bytes and expects clientError events
@@ -5084,7 +3990,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-http-dont-set-default-headers-with-setHost.js`: [manual] batch other-1: cannot fix
 - `parallel/test-http-dont-set-default-headers.js`: [manual] batch other-1: cannot fix
 - `parallel/test-http-double-content-length.js`: http edge case not yet handled
-- `parallel/test-http-dummy-characters-smuggling.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-dump-req-when-res-ends.js`: hangs: relies on response stream cleanup behavior
 - `parallel/test-http-early-hints-invalid-argument.js`: hangs: test calls server.close() from server handler without consuming client response, causing WASM event loop to not drain
 - `parallel/test-http-exceptions.js`: hangs: relies on uncaughtException handling in request callbacks
@@ -5092,7 +3997,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-http-expect-handling.js`: hangs: Expect header handling not fully implemented
 - `parallel/test-http-flush-headers.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-full-response.js`: hangs: test uses raw TCP for full response verification
-- `parallel/test-http-generic-streams.js`: http edge case not yet handled
 - `parallel/test-http-header-badrequest.js`: hangs: test sends raw TCP bytes for malformed headers
 - `parallel/test-http-header-overflow.js`: hangs: test sends raw TCP bytes to trigger header overflow
 - `parallel/test-http-host-header-ipv6-fail.js`: hangs: relies on IPv6 connection failure behavior
@@ -5116,8 +4020,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-http-max-header-size.js`: [manual] amp batch made no code changes
 - `parallel/test-http-max-headers-count.js`: [manual] amp batch made no code changes
 - `parallel/test-http-max-sockets.js`: [manual] amp batch made no code changes
-- `parallel/test-http-missing-header-separator-cr.js`: requires HTTP server functionality, we only support clients
-- `parallel/test-http-missing-header-separator-lf.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-multi-line-headers.js`: requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them
 - `parallel/test-http-multiple-headers.js`: hangs: test uses raw TCP to verify multiple header handling
 - `parallel/test-http-mutable-headers.js`: hangs: test uses raw TCP to verify mutable headers
@@ -5139,19 +4041,16 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-http-remove-header-stays-removed.js`: hangs: test uses raw TCP for header removal verification
 - `parallel/test-http-req-close-robust-from-tampering.js`: hangs: relies on close event tampering edge case
 - `parallel/test-http-res-write-after-end.js`: hangs: relies on write-after-end error handling
-- `parallel/test-http-response-multi-content-length.js`: wasi:http does not produce HPE_UNEXPECTED_CONTENT_LENGTH error code for duplicate content-length headers
 - `parallel/test-http-response-multiheaders.js`: [manual] wasmtime's `wasi:http` implementation strips `host` and `proxy-authorization` headers from HTTP responses (treating them as forbidden/hop-by-hop headers). The test asserts all 17 "norepeat...
 - `parallel/test-http-response-no-headers.js`: test uses raw TCP (net.createServer) with HTTP/0.9 responses that wasi:http cannot parse
 - `parallel/test-http-response-status-message.js`: [manual] amp fix attempt failed verification
 - `parallel/test-http-same-map.js`: test uses V8-specific percent-encoded module syntax
 - `parallel/test-http-server-async-dispose.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
-- `parallel/test-http-server-capture-rejections.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-clear-timer.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-client-error.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-close-all.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-close-destroy-timeout.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-close-idle.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
-- `parallel/test-http-server-connection-list-when-close.js`: requires HTTP server functionality, we only support clients
 - `parallel/test-http-server-connections-checking-leak.js`: http edge case not yet handled
 - `parallel/test-http-server-consumed-timeout.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
 - `parallel/test-http-server-de-chunked-trailer.js`: [manual] requires HTTP server (net.listen) which is unavailable in WASM
@@ -5208,11 +4107,9 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-module-circular-symlinks.js`: module resolution edge case
 - `parallel/test-module-loading-globalpaths.js`: [manual] This test requires `child_process.execFileSync` to spawn real Node.js child processes from copied binaries, testing module resolution from global paths (`$HOME/.node_modules`, `$HOME/.node...
 - `parallel/test-module-readonly.js`: test only runs on Windows
-- `parallel/test-module-strip-types.js`: Requires Amaro
 - `parallel/test-net-connect-memleak.js`: requires process.memoryUsage()
 - `parallel/test-net-connect-nodelay.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-connect-options-ipv6.js`: requires DNS lookup for IPv6
-- `parallel/test-net-connect-options-port.js`: requires DNS lookup
 - `parallel/test-net-connect-paused-connection.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-connect-reset.js`: net edge case not yet handled
 - `parallel/test-net-during-close.js`: net.js TCP implementation incomplete - needs event handling and API fixes
@@ -5226,7 +4123,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-net-listen-twice.js`: requires cluster
 - `parallel/test-net-localerror.js`: requires DNS lookup
 - `parallel/test-net-onread-static-buffer.js`: requires onread option with buffer/callback
-- `parallel/test-net-perf_hooks.js`: requires perf_hooks.PerformanceObserver with net detail
 - `parallel/test-net-pingpong.js`: net edge case not yet handled
 - `parallel/test-net-reuseport.js`: requires reusePort option and cluster
 - `parallel/test-net-server-blocklist.js`: requires net.BlockList
@@ -5236,8 +4132,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-net-server-drop-connections-in-cluster.js`: requires cluster
 - `parallel/test-net-server-drop-connections.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-server-keepalive.js`: requires internal/test/binding
-- `parallel/test-net-server-listen-options-signal.js`: missing AbortSignal validation for listen
-- `parallel/test-net-server-listen-options.js`: missing ERR_INVALID_ARG_TYPE validation for listen options
 - `parallel/test-net-server-nodelay.js`: net edge case not yet handled
 - `parallel/test-net-server-reset.js`: net.js TCP implementation incomplete - needs event handling and API fixes
 - `parallel/test-net-server-unref-persistent.js`: net.js TCP implementation incomplete - needs event handling and API fixes
@@ -5274,7 +4168,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-promise-unhandled-throw.js`: requires --unhandled-rejections=throw flag
 - `parallel/test-readable-from-iterator-closing.js`: stream edge case
 - `parallel/test-require-extension-over-directory.js`: regression: was enabled but started failing
-- `parallel/test-runner-concurrency.js`: test runner edge case
 - `parallel/test-runner-coverage-source-map.js`: Inspector not available in WASM
 - `parallel/test-runner-coverage-thresholds.js`: Inspector not available in WASM
 - `parallel/test-runner-filetest-location.js`: test runner edge case
@@ -5299,7 +4192,6 @@ These unevaluated tests fail with errors that may be fixable.
 - `parallel/test-timers-unref-active.js`: requires timer.unref() and _unrefActive
 - `parallel/test-timers-unref-remove-other-unref-timers-only-one-fires.js`: requires timer.unref() which is not implemented
 - `parallel/test-timers-unref-remove-other-unref-timers.js`: requires timer.unref() which is not implemented
-- `parallel/test-util-format.js`: util.format output formatting differences
 - `parallel/test-webcrypto-wrap-unwrap.js`: requires CFRG key (Ed448/X25519/X448) DER export support
 - `parallel/test-whatwg-readablebytestreambyob.js`: WHATWG streams edge case
 - `parallel/test-zlib-bytes-read.js`: zlib edge case not yet handled
@@ -5326,20 +4218,20 @@ These unevaluated tests fail with errors that may be fixable.
 
 | File | Subtests | Pass | Fail | Error | Skip |
 |------|----------|------|------|-------|------|
-| test-esm-loader-modulemap.js | 5 | 0 | 5 | 0 | 0 |
-| test-require-module-conditional-exports.js | 3 | 0 | 3 | 0 | 0 |
-| test-require-module-cycle-esm-cjs-esm-esm.js | 3 | 0 | 3 | 0 | 0 |
-| test-require-module-cycle-esm-cjs-esm.js | 4 | 0 | 4 | 0 | 0 |
-| test-require-module-cycle-esm-esm-cjs-esm-esm.js | 4 | 0 | 4 | 0 | 0 |
-| test-require-module-cycle-esm-esm-cjs-esm.js | 4 | 0 | 2 | 2 | 0 |
+| test-esm-loader-modulemap.js | 5 | 0 | 0 | 0 | 5 |
+| test-require-module-conditional-exports.js | 3 | 0 | 0 | 0 | 3 |
+| test-require-module-cycle-esm-cjs-esm-esm.js | 3 | 0 | 0 | 0 | 3 |
+| test-require-module-cycle-esm-cjs-esm.js | 4 | 0 | 0 | 0 | 4 |
+| test-require-module-cycle-esm-esm-cjs-esm-esm.js | 4 | 0 | 0 | 0 | 4 |
+| test-require-module-cycle-esm-esm-cjs-esm.js | 4 | 0 | 0 | 0 | 4 |
 | test-require-module-defined-esmodule.js | 2 | 2 | 0 | 0 | 0 |
 | test-require-module-tla.js | 2 | 1 | 1 | 0 | 0 |
-| test-require-module-with-detection.js | 2 | 0 | 2 | 0 | 0 |
-| test-require-module.js | 6 | 4 | 2 | 0 | 0 |
+| test-require-module-with-detection.js | 2 | 0 | 0 | 0 | 2 |
+| test-require-module.js | 6 | 4 | 0 | 0 | 2 |
 | test-abortcontroller.js | 19 | 19 | 0 | 0 | 0 |
 | test-aborted-util.js | 5 | 4 | 1 | 0 | 0 |
 | test-abortsignal-cloneable.js | 3 | 3 | 0 | 0 | 0 |
-| test-accessor-properties.js | 2 | 0 | 2 | 0 | 0 |
+| test-accessor-properties.js | 2 | 0 | 0 | 0 | 2 |
 | test-assert-async.js | 5 | 5 | 0 | 0 | 0 |
 | test-assert-calltracker-calls.js | 6 | 6 | 0 | 0 | 0 |
 | test-assert-calltracker-getCalls.js | 2 | 2 | 0 | 0 | 0 |
@@ -5348,11 +4240,11 @@ These unevaluated tests fail with errors that may be fixable.
 | test-assert-fail-deprecation.js | 5 | 5 | 0 | 0 | 0 |
 | test-assert-fail.js | 4 | 4 | 0 | 0 | 0 |
 | test-assert-if-error.js | 4 | 4 | 0 | 0 | 0 |
-| test-assert-typedarray-deepequal.js | 3 | 3 | 0 | 0 | 0 |
+| test-assert-typedarray-deepequal.js | 3 | 2 | 0 | 1 | 0 |
 | test-assert.js | 18 | 18 | 0 | 0 | 0 |
-| test-blob.js | 22 | 0 | 22 | 0 | 0 |
-| test-blocklist.js | 17 | 4 | 13 | 0 | 0 |
-| test-broadcastchannel-custom-inspect.js | 4 | 0 | 4 | 0 | 0 |
+| test-blob.js | 22 | 0 | 0 | 0 | 22 |
+| test-blocklist.js | 17 | 4 | 0 | 0 | 13 |
+| test-broadcastchannel-custom-inspect.js | 4 | 0 | 0 | 0 | 4 |
 | test-buffer-alloc.js | 53 | 53 | 0 | 0 | 0 |
 | test-buffer-arraybuffer.js | 4 | 4 | 0 | 0 | 0 |
 | test-buffer-badhex.js | 4 | 4 | 0 | 0 | 0 |
@@ -5369,38 +4261,16 @@ These unevaluated tests fail with errors that may be fixable.
 | test-buffer-write.js | 2 | 2 | 0 | 0 | 0 |
 | test-buffer-writeint.js | 5 | 5 | 0 | 0 | 0 |
 | test-buffer-writeuint.js | 6 | 6 | 0 | 0 | 0 |
-| test-child-process-bad-stdio.js | 3 | 0 | 3 | 0 | 0 |
-| test-child-process-constructor.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-cwd.js | 2 | 0 | 2 | 0 | 0 |
-| test-child-process-exec-abortcontroller-promisified.js | 8 | 0 | 8 | 0 | 0 |
 | test-child-process-exec-maxbuf.js | 11 | 9 | 2 | 0 | 0 |
-| test-child-process-execFile-promisified-abortController.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-execfile-maxbuf.js | 8 | 6 | 2 | 0 | 0 |
-| test-child-process-execfile.js | 8 | 5 | 3 | 0 | 0 |
-| test-child-process-execfilesync-maxbuf.js | 3 | 1 | 2 | 0 | 0 |
-| test-child-process-execsync-maxbuf.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-fork-abort-signal.js | 6 | 0 | 0 | 6 | 0 |
-| test-child-process-fork-args.js | 3 | 0 | 3 | 0 | 0 |
-| test-child-process-fork-timeout-kill-signal.js | 4 | 0 | 0 | 4 | 0 |
-| test-child-process-promisified.js | 6 | 0 | 6 | 0 | 0 |
-| test-child-process-send-returns-boolean.js | 2 | 0 | 0 | 2 | 0 |
-| test-child-process-spawn-controller.js | 9 | 0 | 0 | 9 | 0 |
-| test-child-process-spawn-timeout-kill-signal.js | 4 | 0 | 0 | 4 | 0 |
-| test-child-process-spawnsync-maxbuf.js | 4 | 2 | 2 | 0 | 0 |
-| test-child-process-spawnsync-validation-errors.js | 9 | 0 | 9 | 0 | 0 |
-| test-child-process-spawnsync.js | 2 | 0 | 2 | 0 | 0 |
-| test-child-process-stdio.js | 4 | 0 | 4 | 0 | 0 |
-| test-child-process-validate-stdio.js | 3 | 0 | 3 | 0 | 0 |
-| test-child-process-windows-hide.js | 3 | 0 | 3 | 0 | 0 |
 | test-cli-eval.js | 5 | 5 | 0 | 0 | 0 |
-| test-cli-permission-deny-fs.js | 8 | 0 | 8 | 0 | 0 |
-| test-cli-permission-multiple-allow.js | 3 | 0 | 3 | 0 | 0 |
+| test-cli-permission-deny-fs.js | 8 | 0 | 0 | 0 | 8 |
+| test-cli-permission-multiple-allow.js | 3 | 0 | 0 | 0 | 3 |
 | test-common-gc.js | 2 | 1 | 1 | 0 | 0 |
-| test-common.js | 4 | 0 | 4 | 0 | 0 |
-| test-compression-decompression-stream.js | 2 | 0 | 2 | 0 | 0 |
+| test-common.js | 4 | 0 | 0 | 0 | 4 |
+| test-compression-decompression-stream.js | 2 | 0 | 0 | 0 | 2 |
 | test-console-group.js | 8 | 8 | 0 | 0 | 0 |
 | test-console-instance.js | 4 | 4 | 0 | 0 | 0 |
-| test-crypto-authenticated.js | 20 | 20 | 0 | 0 | 0 |
+| test-crypto-authenticated.js | 20 | 19 | 0 | 1 | 0 |
 | test-crypto-certificate.js | 3 | 3 | 0 | 0 | 0 |
 | test-crypto-cipheriv-decipheriv.js | 4 | 4 | 0 | 0 | 0 |
 | test-crypto-dh-constructor.js | 3 | 3 | 0 | 0 | 0 |
@@ -5419,46 +4289,46 @@ These unevaluated tests fail with errors that may be fixable.
 | test-crypto-scrypt.js | 4 | 0 | 0 | 0 | 4 |
 | test-crypto-secret-keygen.js | 3 | 3 | 0 | 0 | 0 |
 | test-crypto-sign-verify.js | 19 | 16 | 2 | 0 | 1 |
-| test-crypto-x509.js | 3 | 0 | 3 | 0 | 0 |
+| test-crypto-x509.js | 3 | 0 | 0 | 0 | 3 |
 | test-dgram-address.js | 2 | 2 | 0 | 0 | 0 |
-| test-dgram-bind-fd-error.js | 2 | 0 | 2 | 0 | 0 |
-| test-dgram-blocklist.js | 3 | 0 | 0 | 3 | 0 |
-| test-dgram-close-signal.js | 3 | 0 | 3 | 0 | 0 |
-| test-dgram-create-socket-handle-fd.js | 3 | 0 | 3 | 0 | 0 |
-| test-dgram-create-socket-handle.js | 3 | 0 | 3 | 0 | 0 |
+| test-dgram-bind-fd-error.js | 2 | 0 | 0 | 0 | 2 |
+| test-dgram-blocklist.js | 3 | 0 | 0 | 0 | 3 |
+| test-dgram-close-signal.js | 3 | 0 | 0 | 0 | 3 |
+| test-dgram-create-socket-handle-fd.js | 3 | 0 | 0 | 0 | 3 |
+| test-dgram-create-socket-handle.js | 3 | 0 | 0 | 0 | 3 |
 | test-dgram-createSocket-type.js | 2 | 2 | 0 | 0 | 0 |
 | test-dgram-custom-lookup.js | 3 | 0 | 3 | 0 | 0 |
-| test-dgram-membership.js | 12 | 0 | 12 | 0 | 0 |
-| test-dgram-multicast-loopback.js | 2 | 0 | 1 | 1 | 0 |
+| test-dgram-membership.js | 12 | 0 | 0 | 0 | 12 |
+| test-dgram-multicast-loopback.js | 2 | 0 | 0 | 0 | 2 |
 | test-dgram-multicast-set-interface.js | 8 | 4 | 1 | 3 | 0 |
-| test-dgram-setBroadcast.js | 2 | 0 | 1 | 1 | 0 |
-| test-dgram-socket-buffer-size.js | 6 | 1 | 2 | 3 | 0 |
+| test-dgram-setBroadcast.js | 2 | 0 | 0 | 0 | 2 |
+| test-dgram-socket-buffer-size.js | 6 | 1 | 0 | 0 | 5 |
 | test-dgram-unref.js | 2 | 1 | 0 | 1 | 0 |
 | test-diagnostics-channel-tracing-channel-has-subscribers.js | 2 | 2 | 0 | 0 | 0 |
-| test-dns-lookup.js | 3 | 0 | 3 | 0 | 0 |
+| test-dns-lookup.js | 3 | 0 | 0 | 0 | 3 |
 | test-dns-setlocaladdress.js | 2 | 1 | 1 | 0 | 0 |
-| test-dns-setservers-type-check.js | 3 | 0 | 3 | 0 | 0 |
-| test-dns.js | 12 | 0 | 12 | 0 | 0 |
+| test-dns-setservers-type-check.js | 3 | 0 | 0 | 0 | 3 |
+| test-dns.js | 12 | 0 | 0 | 0 | 12 |
 | test-domain-intercept.js | 3 | 3 | 0 | 0 | 0 |
-| test-domain-promise.js | 10 | 4 | 6 | 0 | 0 |
+| test-domain-promise.js | 10 | 4 | 0 | 0 | 6 |
 | test-domexception-cause.js | 4 | 1 | 3 | 0 | 0 |
 | test-error-aggregateTwoErrors.js | 6 | 2 | 4 | 0 | 0 |
 | test-errors-aborterror.js | 3 | 1 | 2 | 0 | 0 |
-| test-errors-hide-stack-frames.js | 11 | 0 | 11 | 0 | 0 |
-| test-errors-systemerror.js | 15 | 0 | 15 | 0 | 0 |
+| test-errors-hide-stack-frames.js | 11 | 0 | 0 | 0 | 11 |
+| test-errors-systemerror.js | 15 | 0 | 0 | 0 | 15 |
 | test-event-emitter-add-listeners.js | 3 | 3 | 0 | 0 | 0 |
 | test-event-emitter-check-listener-leaks.js | 3 | 3 | 0 | 0 | 0 |
 | test-event-emitter-listeners.js | 10 | 10 | 0 | 0 | 0 |
 | test-event-emitter-remove-all-listeners.js | 7 | 7 | 0 | 0 | 0 |
 | test-event-emitter-remove-listeners.js | 10 | 10 | 0 | 0 | 0 |
-| test-events-customevent.js | 26 | 0 | 26 | 0 | 0 |
+| test-events-customevent.js | 26 | 0 | 0 | 0 | 26 |
 | test-events-getmaxlisteners.js | 2 | 2 | 0 | 0 | 0 |
-| test-events-static-geteventlisteners.js | 4 | 0 | 4 | 0 | 0 |
-| test-eventtarget-memoryleakwarning.js | 8 | 0 | 8 | 0 | 0 |
-| test-eventtarget.js | 61 | 0 | 61 | 0 | 0 |
+| test-events-static-geteventlisteners.js | 4 | 0 | 0 | 0 | 4 |
+| test-eventtarget-memoryleakwarning.js | 8 | 0 | 0 | 0 | 8 |
+| test-eventtarget.js | 61 | 0 | 0 | 0 | 61 |
 | test-file.js | 16 | 16 | 0 | 0 | 0 |
-| test-fixed-queue.js | 3 | 0 | 3 | 0 | 0 |
-| test-freeze-intrinsics.js | 4 | 0 | 4 | 0 | 0 |
+| test-fixed-queue.js | 3 | 0 | 0 | 0 | 3 |
+| test-freeze-intrinsics.js | 4 | 0 | 0 | 0 | 4 |
 | test-fs-access.js | 3 | 0 | 0 | 0 | 3 |
 | test-fs-append-file-flush.js | 3 | 3 | 0 | 0 | 0 |
 | test-fs-append-file.js | 8 | 8 | 0 | 0 | 0 |
@@ -5507,11 +4377,10 @@ These unevaluated tests fail with errors that may be fixable.
 | test-fs-write-stream-flush.js | 4 | 4 | 0 | 0 | 0 |
 | test-fs-write-stream-fs.js | 2 | 2 | 0 | 0 | 0 |
 | test-fs-write-stream.js | 3 | 3 | 0 | 0 | 0 |
-| test-fs-write.js | 5 | 0 | 5 | 0 | 0 |
 | test-fs-writefile-with-fd.js | 4 | 3 | 1 | 0 | 0 |
 | test-fs-writev-sync.js | 4 | 4 | 0 | 0 | 0 |
 | test-fs-writev.js | 4 | 4 | 0 | 0 | 0 |
-| test-handle-wrap-hasref.js | 6 | 0 | 6 | 0 | 0 |
+| test-handle-wrap-hasref.js | 6 | 0 | 0 | 0 | 6 |
 | test-heap-prof-invalid-args.js | 3 | 0 | 0 | 0 | 3 |
 | test-http-1.0.js | 3 | 3 | 0 | 0 | 0 |
 | test-http-aborted.js | 2 | 2 | 0 | 0 | 0 |
@@ -5519,17 +4388,17 @@ These unevaluated tests fail with errors that may be fixable.
 | test-http-chunk-extensions-limit.js | 3 | 3 | 0 | 0 | 0 |
 | test-http-client-abort-destroy.js | 6 | 6 | 0 | 0 | 0 |
 | test-http-client-abort3.js | 2 | 2 | 0 | 0 | 0 |
-| test-http-client-aborted-event.js | 2 | 0 | 2 | 0 | 0 |
+| test-http-client-aborted-event.js | 2 | 0 | 0 | 0 | 2 |
 | test-http-client-defaults.js | 3 | 3 | 0 | 0 | 0 |
 | test-http-client-res-destroyed.js | 2 | 2 | 0 | 0 | 0 |
-| test-http-dummy-characters-smuggling.js | 2 | 1 | 0 | 1 | 0 |
+| test-http-dummy-characters-smuggling.js | 2 | 1 | 0 | 0 | 1 |
 | test-http-early-hints.js | 6 | 2 | 4 | 0 | 0 |
-| test-http-generic-streams.js | 5 | 0 | 5 | 0 | 0 |
+| test-http-generic-streams.js | 5 | 0 | 0 | 0 | 5 |
 | test-http-head-throw-on-response-body-write.js | 3 | 3 | 0 | 0 | 0 |
 | test-http-insecure-parser-per-stream.js | 5 | 3 | 2 | 0 | 0 |
 | test-http-max-header-size-per-stream.js | 4 | 2 | 2 | 0 | 0 |
-| test-http-missing-header-separator-cr.js | 3 | 0 | 0 | 3 | 0 |
-| test-http-missing-header-separator-lf.js | 3 | 0 | 0 | 3 | 0 |
+| test-http-missing-header-separator-cr.js | 3 | 0 | 0 | 0 | 3 |
+| test-http-missing-header-separator-lf.js | 3 | 0 | 0 | 0 | 3 |
 | test-http-outgoing-destroyed.js | 3 | 1 | 0 | 2 | 0 |
 | test-http-outgoing-internal-headernames-getter.js | 2 | 2 | 0 | 0 | 0 |
 | test-http-outgoing-internal-headers.js | 3 | 3 | 0 | 0 | 0 |
@@ -5543,52 +4412,25 @@ These unevaluated tests fail with errors that may be fixable.
 | test-http-request-host-header.js | 2 | 1 | 0 | 1 | 0 |
 | test-http-request-join-authorization-headers.js | 3 | 3 | 0 | 0 | 0 |
 | test-http-response-close.js | 3 | 3 | 0 | 0 | 0 |
-| test-http-response-multi-content-length.js | 2 | 0 | 0 | 2 | 0 |
+| test-http-response-multi-content-length.js | 2 | 0 | 0 | 0 | 2 |
 | test-http-response-setheaders.js | 7 | 7 | 0 | 0 | 0 |
-| test-http-server-capture-rejections.js | 3 | 0 | 0 | 3 | 0 |
-| test-http-server-connection-list-when-close.js | 2 | 0 | 0 | 2 | 0 |
+| test-http-server-capture-rejections.js | 3 | 0 | 0 | 0 | 3 |
+| test-http-server-connection-list-when-close.js | 2 | 0 | 0 | 0 | 2 |
 | test-http-server-non-utf8-header.js | 3 | 3 | 0 | 0 | 0 |
-| test-http-server-options-highwatermark.js | 2 | 0 | 2 | 0 | 0 |
+| test-http-server-options-highwatermark.js | 2 | 0 | 0 | 0 | 2 |
 | test-http-server-timeouts-validation.js | 7 | 7 | 0 | 0 | 0 |
 | test-http-transfer-encoding-smuggling.js | 2 | 2 | 0 | 0 | 0 |
 | test-http-write-head-2.js | 4 | 4 | 0 | 0 | 0 |
-| test-http2-alpn.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-capture-rejection.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-client-destroy.js | 9 | 0 | 9 | 0 | 0 |
-| test-http2-client-setLocalWindowSize.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-compat-expect-continue.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-compat-serverrequest-headers.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-compat-serverresponse-end.js | 10 | 0 | 10 | 0 | 0 |
-| test-http2-compat-serverresponse-write.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-compat-serverresponse-writehead-array.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-compat-write-early-hints.js | 3 | 0 | 3 | 0 | 0 |
-| test-http2-connect.js | 7 | 0 | 7 | 0 | 0 |
-| test-http2-create-client-connect.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-getpackedsettings.js | 11 | 0 | 11 | 0 | 0 |
-| test-http2-https-fallback.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-invalidheaderfield.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-origin.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-perform-server-handshake.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-server-errors.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-server-settimeout-no-callback.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-server-startup.js | 4 | 0 | 4 | 0 | 0 |
-| test-http2-too-many-settings.js | 2 | 0 | 2 | 0 | 0 |
-| test-http2-util-headers-list.js | 9 | 0 | 9 | 0 | 0 |
-| test-http2-util-update-options-buffer.js | 2 | 0 | 2 | 0 | 0 |
-| test-https-agent-create-connection.js | 7 | 0 | 7 | 0 | 0 |
-| test-https-argument-of-creating.js | 4 | 0 | 4 | 0 | 0 |
-| test-https-insecure-parse-per-stream.js | 5 | 3 | 2 | 0 | 0 |
-| test-https-max-header-size-per-stream.js | 4 | 2 | 2 | 0 | 0 |
-| test-icu-data-dir.js | 2 | 0 | 2 | 0 | 0 |
+| test-icu-data-dir.js | 2 | 0 | 0 | 0 | 2 |
 | test-icu-transcode.js | 5 | 0 | 0 | 0 | 5 |
-| test-internal-error-original-names.js | 3 | 0 | 3 | 0 | 0 |
-| test-internal-errors.js | 8 | 0 | 8 | 0 | 0 |
-| test-internal-fs-syncwritestream.js | 8 | 0 | 8 | 0 | 0 |
-| test-internal-fs.js | 2 | 0 | 2 | 0 | 0 |
-| test-internal-socket-list-receive.js | 4 | 0 | 4 | 0 | 0 |
-| test-internal-socket-list-send.js | 6 | 0 | 6 | 0 | 0 |
-| test-internal-util-objects.js | 2 | 1 | 1 | 0 | 0 |
-| test-internal-validators-validateoneof.js | 6 | 0 | 6 | 0 | 0 |
+| test-internal-error-original-names.js | 3 | 0 | 0 | 0 | 3 |
+| test-internal-errors.js | 8 | 0 | 0 | 0 | 8 |
+| test-internal-fs-syncwritestream.js | 8 | 0 | 0 | 0 | 8 |
+| test-internal-fs.js | 2 | 0 | 0 | 0 | 2 |
+| test-internal-socket-list-receive.js | 4 | 0 | 0 | 0 | 4 |
+| test-internal-socket-list-send.js | 6 | 0 | 0 | 0 | 6 |
+| test-internal-util-objects.js | 2 | 1 | 0 | 0 | 1 |
+| test-internal-validators-validateoneof.js | 6 | 0 | 0 | 0 | 6 |
 | test-module-create-require-multibyte.js | 2 | 2 | 0 | 0 | 0 |
 | test-module-multi-extensions.js | 7 | 7 | 0 | 0 | 0 |
 | test-module-setsourcemapssupport.js | 2 | 2 | 0 | 0 | 0 |
@@ -5598,117 +4440,88 @@ These unevaluated tests fail with errors that may be fixable.
 | test-net-autoselectfamily.js | 4 | 3 | 0 | 1 | 0 |
 | test-net-better-error-messages-path.js | 2 | 2 | 0 | 0 | 0 |
 | test-net-blocklist.js | 4 | 3 | 0 | 1 | 0 |
-| test-net-bytes-written-large.js | 3 | 1 | 0 | 2 | 0 |
-| test-net-connect-options-port.js | 4 | 0 | 3 | 1 | 0 |
-| test-net-normalize-args.js | 2 | 0 | 2 | 0 | 0 |
-| test-net-perf_hooks.js | 2 | 0 | 2 | 0 | 0 |
+| test-net-bytes-written-large.js | 3 | 0 | 0 | 3 | 0 |
+| test-net-connect-options-port.js | 4 | 0 | 0 | 0 | 4 |
+| test-net-normalize-args.js | 2 | 0 | 0 | 0 | 2 |
+| test-net-perf_hooks.js | 2 | 0 | 0 | 0 | 2 |
 | test-net-server-call-listen-multiple-times.js | 3 | 3 | 0 | 0 | 0 |
-| test-net-server-listen-handle.js | 2 | 0 | 2 | 0 | 0 |
-| test-net-server-listen-options-signal.js | 3 | 0 | 0 | 3 | 0 |
-| test-net-server-listen-options.js | 3 | 1 | 2 | 0 | 0 |
+| test-net-server-listen-handle.js | 2 | 0 | 0 | 0 | 2 |
+| test-net-server-listen-options-signal.js | 3 | 0 | 0 | 0 | 3 |
+| test-net-server-listen-options.js | 3 | 1 | 0 | 0 | 2 |
 | test-net-server-listen-path.js | 6 | 6 | 0 | 0 | 0 |
 | test-net-socket-write-after-close.js | 2 | 2 | 0 | 0 | 0 |
-| test-nodeeventtarget.js | 7 | 0 | 7 | 0 | 0 |
-| test-perf-hooks-histogram.js | 6 | 0 | 6 | 0 | 0 |
-| test-perf-hooks-resourcetiming.js | 5 | 0 | 5 | 0 | 0 |
-| test-perf-hooks-usertiming.js | 3 | 0 | 3 | 0 | 0 |
-| test-performance-function.js | 6 | 0 | 6 | 0 | 0 |
+| test-nodeeventtarget.js | 7 | 0 | 0 | 0 | 7 |
+| test-perf-hooks-histogram.js | 6 | 0 | 0 | 0 | 6 |
+| test-perf-hooks-resourcetiming.js | 5 | 0 | 0 | 0 | 5 |
+| test-perf-hooks-usertiming.js | 3 | 0 | 0 | 0 | 3 |
+| test-performance-function.js | 6 | 0 | 0 | 0 | 6 |
 | test-performance-gc.js | 2 | 1 | 1 | 0 | 0 |
-| test-performanceobserver.js | 2 | 0 | 2 | 0 | 0 |
-| test-permission-allow-child-process-cli.js | 2 | 0 | 2 | 0 | 0 |
-| test-permission-allow-wasi-cli.js | 2 | 0 | 2 | 0 | 0 |
-| test-permission-allow-worker-cli.js | 2 | 1 | 1 | 0 | 0 |
-| test-permission-child-process-cli.js | 2 | 0 | 2 | 0 | 0 |
+| test-performanceobserver.js | 2 | 0 | 0 | 0 | 2 |
+| test-permission-allow-child-process-cli.js | 2 | 0 | 0 | 0 | 2 |
+| test-permission-allow-wasi-cli.js | 2 | 0 | 0 | 0 | 2 |
+| test-permission-allow-worker-cli.js | 2 | 1 | 0 | 0 | 1 |
+| test-permission-child-process-cli.js | 2 | 0 | 0 | 0 | 2 |
 | test-permission-fs-read.js | 3 | 2 | 1 | 0 | 0 |
 | test-permission-fs-require.js | 4 | 2 | 2 | 0 | 0 |
 | test-permission-fs-symlink-target-write.js | 2 | 0 | 0 | 0 | 2 |
 | test-permission-fs-symlink.js | 4 | 0 | 0 | 0 | 4 |
 | test-permission-fs-traversal-path.js | 3 | 0 | 0 | 0 | 3 |
-| test-permission-fs-wildcard.js | 2 | 0 | 2 | 0 | 0 |
+| test-permission-fs-wildcard.js | 2 | 0 | 0 | 0 | 2 |
 | test-permission-fs-windows-path.js | 4 | 0 | 0 | 0 | 4 |
-| test-permission-fs-write-report.js | 2 | 0 | 2 | 0 | 0 |
-| test-permission-fs-write-v8.js | 2 | 0 | 2 | 0 | 0 |
-| test-permission-has.js | 2 | 0 | 2 | 0 | 0 |
+| test-permission-fs-write-report.js | 2 | 0 | 0 | 0 | 2 |
+| test-permission-fs-write-v8.js | 2 | 0 | 0 | 0 | 2 |
+| test-permission-has.js | 2 | 0 | 0 | 0 | 2 |
 | test-permission-inspector-brk.js | 2 | 0 | 0 | 0 | 2 |
 | test-permission-inspector.js | 2 | 0 | 0 | 0 | 2 |
-| test-primordials-apply.js | 6 | 0 | 6 | 0 | 0 |
-| test-primordials-promise.js | 2 | 0 | 2 | 0 | 0 |
-| test-primordials-regexp.js | 11 | 0 | 11 | 0 | 0 |
-| test-priority-queue.js | 6 | 0 | 6 | 0 | 0 |
-| test-process-env-allowed-flags.js | 3 | 1 | 2 | 0 | 0 |
+| test-primordials-apply.js | 6 | 0 | 0 | 0 | 6 |
+| test-primordials-promise.js | 2 | 0 | 0 | 0 | 2 |
+| test-primordials-regexp.js | 11 | 0 | 0 | 0 | 11 |
+| test-priority-queue.js | 6 | 0 | 0 | 0 | 6 |
+| test-process-env-allowed-flags.js | 3 | 1 | 0 | 0 | 2 |
 | test-process-env-windows-error-reset.js | 2 | 2 | 0 | 0 | 0 |
-| test-process-env.js | 4 | 4 | 0 | 0 | 0 |
-| test-process-getactiveresources-track-timer-lifetime.js | 2 | 0 | 2 | 0 | 0 |
-| test-process-uncaught-exception-monitor.js | 2 | 0 | 0 | 2 | 0 |
+| test-process-getactiveresources-track-timer-lifetime.js | 2 | 0 | 0 | 0 | 2 |
+| test-process-uncaught-exception-monitor.js | 2 | 0 | 0 | 0 | 2 |
 | test-querystring.js | 11 | 11 | 0 | 0 | 0 |
-| test-queue-microtask.js | 2 | 0 | 2 | 0 | 0 |
-| test-readline-emit-keypress-events.js | 3 | 0 | 3 | 0 | 0 |
-| test-readline-interface.js | 42 | 0 | 42 | 0 | 0 |
-| test-readline-promises-interface.js | 33 | 0 | 33 | 0 | 0 |
-| test-readline-tab-complete.js | 2 | 0 | 2 | 0 | 0 |
-| test-readline.js | 6 | 0 | 6 | 0 | 0 |
-| test-release-changelog.js | 2 | 0 | 2 | 0 | 0 |
-| test-repl-context.js | 2 | 0 | 2 | 0 | 0 |
-| test-repl-require.js | 2 | 0 | 0 | 2 | 0 |
-| test-repl-tab-complete-import.js | 3 | 0 | 3 | 0 | 0 |
-| test-repl-tab-complete.js | 5 | 0 | 5 | 0 | 0 |
+| test-queue-microtask.js | 2 | 0 | 0 | 0 | 2 |
+| test-readline-emit-keypress-events.js | 3 | 0 | 0 | 0 | 3 |
+| test-readline-interface.js | 42 | 0 | 0 | 0 | 42 |
+| test-readline-promises-interface.js | 33 | 0 | 0 | 0 | 33 |
+| test-readline-tab-complete.js | 2 | 0 | 0 | 0 | 2 |
+| test-readline.js | 6 | 0 | 0 | 0 | 6 |
+| test-release-changelog.js | 2 | 0 | 0 | 0 | 2 |
 | test-require-cache.js | 2 | 2 | 0 | 0 | 0 |
 | test-require-node-prefix.js | 2 | 2 | 0 | 0 | 0 |
 | test-require-resolve-opts-paths-relative.js | 3 | 3 | 0 | 0 | 0 |
-| test-require-resolve.js | 2 | 0 | 2 | 0 | 0 |
+| test-require-resolve.js | 2 | 0 | 0 | 0 | 2 |
 | test-runner-assert.js | 2 | 1 | 1 | 0 | 0 |
-| test-runner-cli-concurrency.js | 5 | 0 | 5 | 0 | 0 |
-| test-runner-cli-timeout.js | 3 | 0 | 3 | 0 | 0 |
+| test-runner-cli-concurrency.js | 5 | 0 | 0 | 0 | 5 |
+| test-runner-cli-timeout.js | 3 | 0 | 0 | 0 | 3 |
 | test-runner-cli.js | 11 | 0 | 11 | 0 | 0 |
-| test-runner-concurrency.js | 4 | 0 | 4 | 0 | 0 |
+| test-runner-concurrency.js | 4 | 0 | 0 | 0 | 4 |
 | test-runner-coverage.js | 12 | 12 | 0 | 0 | 0 |
 | test-runner-custom-assertions.js | 5 | 5 | 0 | 0 | 0 |
-| test-runner-error-reporter.js | 2 | 0 | 2 | 0 | 0 |
-| test-runner-extraneous-async-activity.js | 4 | 0 | 4 | 0 | 0 |
-| test-runner-force-exit-flush.js | 3 | 0 | 3 | 0 | 0 |
+| test-runner-error-reporter.js | 2 | 0 | 0 | 0 | 2 |
+| test-runner-extraneous-async-activity.js | 4 | 0 | 0 | 0 | 4 |
+| test-runner-force-exit-flush.js | 3 | 0 | 0 | 0 | 3 |
 | test-runner-mocking.js | 43 | 42 | 1 | 0 | 0 |
 | test-runner-module-mocking.js | 19 | 15 | 4 | 0 | 0 |
-| test-runner-no-isolation-filtering.js | 3 | 0 | 3 | 0 | 0 |
-| test-runner-snapshot-file-tests.js | 2 | 0 | 2 | 0 | 0 |
-| test-runner-snapshot-tests.js | 6 | 0 | 6 | 0 | 0 |
+| test-runner-no-isolation-filtering.js | 3 | 0 | 0 | 0 | 3 |
+| test-runner-snapshot-file-tests.js | 2 | 0 | 0 | 0 | 2 |
+| test-runner-snapshot-tests.js | 6 | 0 | 0 | 0 | 6 |
 | test-runner-test-filepath.js | 2 | 2 | 0 | 0 | 0 |
 | test-runner-test-fullname.js | 2 | 2 | 0 | 0 | 0 |
 | test-runner-wait-for.js | 7 | 6 | 0 | 1 | 0 |
-| test-set-http-max-http-headers.js | 3 | 1 | 0 | 2 | 0 |
-| test-set-incoming-message-header.js | 3 | 2 | 1 | 0 | 0 |
-| test-shadow-realm-prepare-stack-trace.js | 2 | 0 | 2 | 0 | 0 |
-| test-single-executable-blob-config-errors.js | 11 | 0 | 11 | 0 | 0 |
-| test-single-executable-blob-config.js | 5 | 0 | 5 | 0 | 0 |
-| test-snapshot-api.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-argv1.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-basic.js | 4 | 0 | 4 | 0 | 0 |
-| test-snapshot-child-process-sync.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-cjs-main.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-config.js | 4 | 0 | 4 | 0 | 0 |
-| test-snapshot-console.js | 2 | 0 | 0 | 0 | 2 |
-| test-snapshot-coverage.js | 2 | 0 | 0 | 0 | 2 |
-| test-snapshot-cwd.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-dns-lookup-localhost-promise.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-dns-lookup-localhost.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-dns-resolve-localhost-promise.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-dns-resolve-localhost.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-error.js | 3 | 0 | 3 | 0 | 0 |
-| test-snapshot-eval.js | 3 | 0 | 3 | 0 | 0 |
-| test-snapshot-gzip.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-incompatible.js | 3 | 0 | 3 | 0 | 0 |
-| test-snapshot-net.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-stack-trace-limit.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-typescript.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-umd.js | 2 | 0 | 2 | 0 | 0 |
-| test-snapshot-warning.js | 3 | 0 | 3 | 0 | 0 |
-| test-source-map-api.js | 9 | 0 | 9 | 0 | 0 |
+| test-set-http-max-http-headers.js | 3 | 1 | 0 | 0 | 2 |
+| test-set-incoming-message-header.js | 3 | 2 | 0 | 0 | 1 |
+| test-shadow-realm-prepare-stack-trace.js | 2 | 0 | 0 | 0 | 2 |
+| test-source-map-api.js | 9 | 0 | 0 | 0 | 9 |
 | test-source-map-enable.js | 23 | 23 | 0 | 0 | 0 |
 | test-sqlite-database-sync.js | 5 | 5 | 0 | 0 | 0 |
 | test-sqlite-session.js | 14 | 13 | 1 | 0 | 0 |
 | test-sqlite-statement-sync.js | 9 | 8 | 1 | 0 | 0 |
 | test-sqlite.js | 6 | 5 | 1 | 0 | 0 |
-| test-startup-empty-regexp-statics.js | 3 | 0 | 3 | 0 | 0 |
-| test-startup-large-pages.js | 2 | 0 | 2 | 0 | 0 |
+| test-startup-empty-regexp-statics.js | 3 | 0 | 0 | 0 | 3 |
+| test-startup-large-pages.js | 2 | 0 | 0 | 0 | 2 |
 | test-stream-add-abort-signal.js | 2 | 2 | 0 | 0 | 0 |
 | test-stream-auto-destroy.js | 5 | 5 | 0 | 0 | 0 |
 | test-stream-catch-rejections.js | 2 | 2 | 0 | 0 | 0 |
@@ -5739,7 +4552,7 @@ These unevaluated tests fail with errors that may be fixable.
 | test-stream-pipe-flow.js | 3 | 3 | 0 | 0 | 0 |
 | test-stream-pipe-same-destination-twice.js | 3 | 3 | 0 | 0 | 0 |
 | test-stream-pipe-unpipe-streams.js | 2 | 2 | 0 | 0 | 0 |
-| test-stream-pipeline.js | 80 | 77 | 2 | 1 | 0 |
+| test-stream-pipeline.js | 80 | 77 | 1 | 2 | 0 |
 | test-stream-promises.js | 9 | 9 | 0 | 0 | 0 |
 | test-stream-readable-aborted.js | 5 | 5 | 0 | 0 | 0 |
 | test-stream-readable-async-iterators.js | 7 | 0 | 6 | 1 | 0 |
@@ -5765,7 +4578,7 @@ These unevaluated tests fail with errors that may be fixable.
 | test-stream-typedarray.js | 5 | 5 | 0 | 0 | 0 |
 | test-stream-uint8array.js | 5 | 5 | 0 | 0 | 0 |
 | test-stream-unpipe-event.js | 6 | 6 | 0 | 0 | 0 |
-| test-stream-wrap-encoding.js | 2 | 0 | 2 | 0 | 0 |
+| test-stream-wrap-encoding.js | 2 | 0 | 0 | 0 | 2 |
 | test-stream-writable-aborted.js | 2 | 2 | 0 | 0 | 0 |
 | test-stream-writable-destroy.js | 28 | 28 | 0 | 0 | 0 |
 | test-stream-writable-end-cb-error.js | 3 | 3 | 0 | 0 | 0 |
@@ -5784,146 +4597,150 @@ These unevaluated tests fail with errors that may be fixable.
 | test-stream2-set-encoding.js | 9 | 9 | 0 | 0 | 0 |
 | test-stream2-transform.js | 17 | 17 | 0 | 0 | 0 |
 | test-stream2-writable.js | 24 | 23 | 1 | 0 | 0 |
-| test-streams-highwatermark.js | 6 | 4 | 2 | 0 | 0 |
-| test-stringbytes-external.js | 3 | 0 | 0 | 3 | 0 |
-| test-tick-processor-version-check.js | 2 | 0 | 2 | 0 | 0 |
-| test-timers-immediate-promisified.js | 8 | 0 | 8 | 0 | 0 |
-| test-timers-interval-promisified.js | 12 | 0 | 12 | 0 | 0 |
-| test-timers-refresh.js | 6 | 0 | 6 | 0 | 0 |
-| test-timers-timeout-promisified.js | 8 | 0 | 8 | 0 | 0 |
+| test-streams-highwatermark.js | 6 | 4 | 0 | 0 | 2 |
+| test-stringbytes-external.js | 3 | 0 | 0 | 0 | 3 |
+| test-tick-processor-version-check.js | 2 | 0 | 0 | 0 | 2 |
+| test-timers-immediate-promisified.js | 8 | 0 | 0 | 0 | 8 |
+| test-timers-interval-promisified.js | 12 | 0 | 0 | 0 | 12 |
+| test-timers-refresh.js | 6 | 0 | 0 | 0 | 6 |
+| test-timers-timeout-promisified.js | 8 | 0 | 0 | 0 | 8 |
 | test-timers-to-primitive.js | 2 | 2 | 0 | 0 | 0 |
 | test-timers-unenroll-unref-interval.js | 5 | 5 | 0 | 0 | 0 |
 | test-timers-unref.js | 3 | 3 | 0 | 0 | 0 |
 | test-timers-user-call.js | 2 | 2 | 0 | 0 | 0 |
 | test-timers-zero-timeout.js | 2 | 2 | 0 | 0 | 0 |
-| test-tls-basic-validations.js | 3 | 0 | 3 | 0 | 0 |
-| test-tls-connect-allow-half-open-option.js | 2 | 0 | 2 | 0 | 0 |
-| test-tls-external-accessor.js | 2 | 0 | 2 | 0 | 0 |
-| test-tls-server-parent-constructor-options.js | 2 | 0 | 2 | 0 | 0 |
-| test-tls-socket-allow-half-open-option.js | 4 | 0 | 4 | 0 | 0 |
-| test-tls-translate-peer-certificate.js | 2 | 0 | 2 | 0 | 0 |
 | test-url-fileurltopath.js | 8 | 8 | 0 | 0 | 0 |
 | test-url-format-whatwg.js | 5 | 5 | 0 | 0 | 0 |
 | test-url-parse-format.js | 2 | 2 | 0 | 0 | 0 |
 | test-url-pathtofileurl.js | 5 | 5 | 0 | 0 | 0 |
 | test-util-callbackify.js | 9 | 9 | 0 | 0 | 0 |
 | test-util-deprecate.js | 3 | 3 | 0 | 0 | 0 |
-| test-util-format.js | 5 | 0 | 5 | 0 | 0 |
+| test-util-format.js | 5 | 0 | 0 | 0 | 5 |
 | test-util-getcallsites.js | 13 | 13 | 0 | 0 | 0 |
 | test-util-inspect-getters-accessing-this.js | 2 | 2 | 0 | 0 | 0 |
-| test-util-inspect.js | 99 | 0 | 99 | 0 | 0 |
+| test-util-inspect.js | 99 | 0 | 0 | 0 | 99 |
 | test-util-isDeepStrictEqual.js | 2 | 2 | 0 | 0 | 0 |
 | test-util-promisify.js | 19 | 19 | 0 | 0 | 0 |
 | test-util-types.js | 3 | 3 | 0 | 0 | 0 |
-| test-uv-unmapped-exception.js | 2 | 0 | 2 | 0 | 0 |
-| test-v8-collect-gc-profile-exit-before-stop.js | 2 | 0 | 2 | 0 | 0 |
+| test-uv-unmapped-exception.js | 2 | 0 | 0 | 0 | 2 |
+| test-v8-collect-gc-profile-exit-before-stop.js | 2 | 0 | 0 | 0 | 2 |
 | test-v8-coverage.js | 9 | 9 | 0 | 0 | 0 |
-| test-v8-query-objects.js | 5 | 0 | 5 | 0 | 0 |
-| test-v8-serdes.js | 14 | 0 | 14 | 0 | 0 |
-| test-validators.js | 7 | 0 | 7 | 0 | 0 |
-| test-vm-basic.js | 7 | 0 | 7 | 0 | 0 |
-| test-vm-codegen.js | 3 | 0 | 3 | 0 | 0 |
-| test-vm-context-dont-contextify.js | 8 | 0 | 8 | 0 | 0 |
-| test-vm-measure-memory-lazy.js | 4 | 0 | 4 | 0 | 0 |
-| test-vm-module-basic.js | 9 | 0 | 0 | 9 | 0 |
+| test-v8-query-objects.js | 5 | 0 | 0 | 0 | 5 |
+| test-v8-serdes.js | 14 | 0 | 0 | 0 | 14 |
+| test-validators.js | 7 | 0 | 0 | 0 | 7 |
+| test-vm-basic.js | 7 | 0 | 0 | 0 | 7 |
+| test-vm-codegen.js | 3 | 0 | 0 | 0 | 3 |
+| test-vm-context-dont-contextify.js | 8 | 0 | 0 | 0 | 8 |
+| test-vm-measure-memory-lazy.js | 4 | 0 | 0 | 0 | 4 |
+| test-vm-module-basic.js | 9 | 0 | 0 | 0 | 9 |
 | test-vm-new-script-new-context.js | 8 | 6 | 2 | 0 | 0 |
 | test-webcrypto-constructors.js | 19 | 19 | 0 | 0 | 0 |
 | test-webcrypto-derivebits.js | 4 | 2 | 2 | 0 | 0 |
 | test-webcrypto-derivekey.js | 6 | 3 | 3 | 0 | 0 |
 | test-webcrypto-encrypt-decrypt-aes.js | 4 | 4 | 0 | 0 | 0 |
-| test-webcrypto-encrypt-decrypt.js | 4 | 4 | 0 | 0 | 0 |
-| test-webcrypto-export-import-ec.js | 2 | 0 | 2 | 0 | 0 |
+| test-webcrypto-encrypt-decrypt.js | 4 | 3 | 0 | 1 | 0 |
+| test-webcrypto-export-import-ec.js | 2 | 0 | 0 | 0 | 2 |
 | test-webcrypto-export-import.js | 5 | 5 | 0 | 0 | 0 |
-| test-webcrypto-keygen.js | 8 | 0 | 8 | 0 | 0 |
 | test-webcrypto-random.js | 4 | 4 | 0 | 0 | 0 |
 | test-webcrypto-sign-verify.js | 6 | 5 | 0 | 1 | 0 |
-| test-webcrypto-webidl.js | 28 | 0 | 28 | 0 | 0 |
-| test-webstorage.js | 8 | 1 | 7 | 0 | 0 |
+| test-webcrypto-webidl.js | 28 | 0 | 0 | 0 | 28 |
+| test-webstorage.js | 8 | 1 | 0 | 0 | 7 |
 | test-webstreams-abort-controller.js | 6 | 6 | 0 | 0 | 0 |
 | test-webstreams-compose.js | 20 | 20 | 0 | 0 | 0 |
 | test-webstreams-finished.js | 20 | 20 | 0 | 0 | 0 |
 | test-webstreams-pipeline.js | 17 | 17 | 0 | 0 | 0 |
 | test-whatwg-encoding-custom-fatal-streaming.js | 2 | 0 | 0 | 0 | 2 |
-| test-whatwg-encoding-custom-interop.js | 4 | 3 | 1 | 0 | 0 |
-| test-whatwg-encoding-custom-textdecoder.js | 12 | 0 | 12 | 0 | 0 |
-| test-whatwg-events-add-event-listener-options-passive.js | 2 | 0 | 1 | 0 | 1 |
+| test-whatwg-encoding-custom-interop.js | 4 | 3 | 0 | 0 | 1 |
+| test-whatwg-encoding-custom-textdecoder.js | 12 | 0 | 0 | 0 | 12 |
+| test-whatwg-events-add-event-listener-options-passive.js | 2 | 0 | 0 | 0 | 2 |
 | test-whatwg-events-add-event-listener-options-signal.js | 10 | 7 | 2 | 1 | 0 |
 | test-whatwg-events-customevent.js | 3 | 2 | 1 | 0 | 0 |
-| test-whatwg-readablebytestream-bad-buffers-and-views.js | 4 | 0 | 4 | 0 | 0 |
-| test-whatwg-readablebytestream.js | 11 | 2 | 9 | 0 | 0 |
-| test-whatwg-readablestream.js | 82 | 0 | 82 | 0 | 0 |
-| test-whatwg-transformstream.js | 7 | 0 | 7 | 0 | 0 |
-| test-whatwg-url-custom-searchparams-constructor.js | 2 | 0 | 2 | 0 | 0 |
-| test-whatwg-url-custom-searchparams-delete.js | 2 | 0 | 2 | 0 | 0 |
-| test-whatwg-url-custom-searchparams-stringifier.js | 2 | 0 | 2 | 0 | 0 |
+| test-whatwg-readablebytestream-bad-buffers-and-views.js | 4 | 0 | 0 | 0 | 4 |
+| test-whatwg-readablebytestream.js | 11 | 2 | 0 | 0 | 9 |
+| test-whatwg-readablestream.js | 82 | 0 | 0 | 0 | 82 |
+| test-whatwg-transformstream.js | 7 | 0 | 0 | 0 | 7 |
+| test-whatwg-url-custom-searchparams-constructor.js | 2 | 0 | 0 | 0 | 2 |
+| test-whatwg-url-custom-searchparams-delete.js | 2 | 0 | 0 | 0 | 2 |
+| test-whatwg-url-custom-searchparams-stringifier.js | 2 | 0 | 0 | 0 | 2 |
 | test-whatwg-url-custom-setters.js | 2 | 0 | 0 | 0 | 2 |
-| test-whatwg-url-properties.js | 2 | 0 | 2 | 0 | 0 |
-| test-whatwg-webstreams-adapters-streambase.js | 4 | 0 | 4 | 0 | 0 |
-| test-whatwg-webstreams-adapters-to-readablestream.js | 8 | 0 | 8 | 0 | 0 |
-| test-whatwg-webstreams-adapters-to-readablewritablepair.js | 12 | 0 | 12 | 0 | 0 |
-| test-whatwg-webstreams-adapters-to-streamduplex.js | 9 | 0 | 9 | 0 | 0 |
-| test-whatwg-webstreams-adapters-to-streamreadable.js | 9 | 0 | 9 | 0 | 0 |
-| test-whatwg-webstreams-adapters-to-streamwritable.js | 9 | 0 | 9 | 0 | 0 |
-| test-whatwg-webstreams-adapters-to-writablestream.js | 9 | 0 | 9 | 0 | 0 |
-| test-whatwg-webstreams-encoding.js | 2 | 0 | 2 | 0 | 0 |
-| test-whatwg-webstreams-transfer.js | 13 | 0 | 13 | 0 | 0 |
-| test-whatwg-writablestream.js | 7 | 0 | 7 | 0 | 0 |
-| test-worker-broadcastchannel-wpt.js | 6 | 0 | 6 | 0 | 0 |
-| test-worker-broadcastchannel.js | 9 | 0 | 9 | 0 | 0 |
-| test-worker-eval-typescript.js | 7 | 0 | 0 | 7 | 0 |
-| test-worker-execargv-invalid.js | 3 | 0 | 3 | 0 | 0 |
+| test-whatwg-url-properties.js | 2 | 0 | 0 | 0 | 2 |
+| test-whatwg-webstreams-adapters-streambase.js | 4 | 0 | 0 | 0 | 4 |
+| test-whatwg-webstreams-adapters-to-readablestream.js | 8 | 0 | 0 | 0 | 8 |
+| test-whatwg-webstreams-adapters-to-readablewritablepair.js | 12 | 0 | 0 | 0 | 12 |
+| test-whatwg-webstreams-adapters-to-streamduplex.js | 9 | 0 | 0 | 0 | 9 |
+| test-whatwg-webstreams-adapters-to-streamreadable.js | 9 | 0 | 0 | 0 | 9 |
+| test-whatwg-webstreams-adapters-to-streamwritable.js | 9 | 0 | 0 | 0 | 9 |
+| test-whatwg-webstreams-adapters-to-writablestream.js | 9 | 0 | 0 | 0 | 9 |
+| test-whatwg-webstreams-encoding.js | 2 | 0 | 0 | 0 | 2 |
+| test-whatwg-webstreams-transfer.js | 13 | 0 | 0 | 0 | 13 |
+| test-whatwg-writablestream.js | 7 | 0 | 0 | 0 | 7 |
 | test-worker-message-channel.js | 3 | 1 | 2 | 0 | 0 |
-| test-worker-message-event.js | 3 | 0 | 3 | 0 | 0 |
-| test-worker-message-mark-as-uncloneable.js | 4 | 0 | 4 | 0 | 0 |
-| test-worker-message-port-close.js | 4 | 1 | 3 | 0 | 0 |
-| test-worker-message-port-transfer-duplicate.js | 2 | 0 | 2 | 0 | 0 |
-| test-worker-message-port-transfer-native.js | 2 | 0 | 2 | 0 | 0 |
-| test-worker-message-port-wasm-threads.js | 2 | 0 | 2 | 0 | 0 |
+| test-worker-message-port-transfer-native.js | 2 | 0 | 0 | 0 | 2 |
 | test-worker-message-port.js | 9 | 0 | 9 | 0 | 0 |
-| test-worker-message-transfer-port-mark-as-untransferable.js | 4 | 0 | 4 | 0 | 0 |
-| test-worker-unsupported-path.js | 3 | 0 | 3 | 0 | 0 |
 | test-worker-workerdata-messageport.js | 5 | 3 | 2 | 0 | 0 |
-| test-wrap-js-stream-destroy.js | 3 | 0 | 3 | 0 | 0 |
-| test-wrap-js-stream-duplex.js | 2 | 0 | 2 | 0 | 0 |
-| test-x509-escaping.js | 8 | 0 | 8 | 0 | 0 |
+| test-wrap-js-stream-destroy.js | 3 | 0 | 0 | 0 | 3 |
+| test-wrap-js-stream-duplex.js | 2 | 0 | 0 | 0 | 2 |
+| test-x509-escaping.js | 8 | 0 | 0 | 0 | 8 |
 | test-zlib-brotli.js | 3 | 3 | 0 | 0 | 0 |
 | test-zlib-create-raw.js | 2 | 2 | 0 | 0 | 0 |
 | test-zlib-destroy.js | 2 | 1 | 1 | 0 | 0 |
 | test-zlib-dictionary-fail.js | 3 | 3 | 0 | 0 | 0 |
 | test-zlib-failed-init.js | 2 | 2 | 0 | 0 | 0 |
 | test-zlib-zero-windowBits.js | 2 | 2 | 0 | 0 | 0 |
-| test-async-wrap-getasyncid.js | 18 | 0 | 18 | 0 | 0 |
-| test-child-process-execsync.js | 7 | 0 | 7 | 0 | 0 |
-| test-cpu-prof-invalid-options.js | 2 | 0 | 0 | 0 | 2 |
+| test-async-wrap-getasyncid.js | 18 | 0 | 0 | 0 | 18 |
 | test-crypto-timing-safe-equal.js | 3 | 3 | 0 | 0 | 0 |
 | test-diagnostic-dir-cpu-prof.js | 2 | 0 | 0 | 0 | 2 |
 | test-diagnostic-dir-heap-prof.js | 2 | 0 | 0 | 0 | 2 |
-| test-error-serdes.js | 2 | 0 | 2 | 0 | 0 |
+| test-error-serdes.js | 2 | 0 | 0 | 0 | 2 |
 | test-fs-opendir-recursive.js | 7 | 7 | 0 | 0 | 0 |
 | test-fs-readdir-recursive.js | 6 | 6 | 0 | 0 | 0 |
 | test-fs-watch.js | 6 | 3 | 2 | 1 | 0 |
-| test-heapdump.js | 4 | 0 | 4 | 0 | 0 |
 | test-init.js | 3 | 3 | 0 | 0 | 0 |
-| test-module-loading.js | 11 | 0 | 11 | 0 | 0 |
+| test-module-loading.js | 11 | 0 | 0 | 0 | 11 |
 | test-net-server-address.js | 5 | 5 | 0 | 0 | 0 |
 | test-net-server-bind.js | 5 | 5 | 0 | 0 | 0 |
-| test-perf-hooks.js | 2 | 0 | 2 | 0 | 0 |
-| test-performance-eventloopdelay.js | 3 | 0 | 3 | 0 | 0 |
-| test-single-executable-application-assets.js | 3 | 0 | 3 | 0 | 0 |
-| test-single-executable-application-snapshot.js | 2 | 0 | 2 | 0 | 0 |
-| test-tls-connect.js | 2 | 0 | 2 | 0 | 0 |
+| test-perf-hooks.js | 2 | 0 | 0 | 0 | 2 |
+| test-performance-eventloopdelay.js | 3 | 0 | 0 | 0 | 3 |
 
 ## Tests That Were Auto-Enabled
 
 These tests were marked with `"skip": true` in `config.jsonc` but actually pass.
 The report has automatically removed the skip flag.
 
-4 test(s) were auto-enabled:
+32 test(s) were auto-enabled:
 
-- `parallel/test-http-server-close-idle-wait-response.js`
-- `parallel/test-stream2-large-read-stall.js`
-- `parallel/test-http-zero-length-write.js`
-- `parallel/test-process-env.js#block_00_block_00`
+- `parallel/test-blocklist.js#block_13_block_13`
+- `parallel/test-blocklist.js#block_14_block_14`
+- `parallel/test-blocklist.js#block_15_block_15`
+- `parallel/test-blocklist.js#block_16_block_16`
+- `parallel/test-dgram-socket-buffer-size.js#block_03_block_03`
+- `parallel/test-domain-promise.js#block_02_block_02`
+- `parallel/test-domain-promise.js#block_04_block_04`
+- `parallel/test-domain-promise.js#block_07_block_07`
+- `parallel/test-domain-promise.js#block_08_block_08`
+- `es-module/test-require-module.js#block_03_test_esm_that_require_cjs`
+- `es-module/test-require-module.js#block_05_test_data_import`
+- `parallel/test-internal-util-objects.js#block_01_block_01`
+- `parallel/test-process-env-allowed-flags.js#block_01_assert_all_canonical_flags_begin_with_dash_es`
+- `parallel/test-net-server-listen-options.js#block_00_block_00`
+- `parallel/test-set-http-max-http-headers.js#test_00_test_00`
+- `parallel/test-set-incoming-message-header.js#block_00_headers_setter_function_set_a_header_correctly`
+- `parallel/test-set-incoming-message-header.js#block_01_trailers_setter_function_set_a_header_correctly`
+- `parallel/test-streams-highwatermark.js#block_03_block_03`
+- `parallel/test-streams-highwatermark.js#block_05_block_05`
+- `parallel/test-streams-highwatermark.js#block_01_block_01`
+- `parallel/test-streams-highwatermark.js#block_02_block_02`
+- `parallel/test-http-dummy-characters-smuggling.js#block_00_block_00`
+- `parallel/test-permission-allow-worker-cli.js#block_01_to_spawn_unless_allow_worker_is_sent`
+- `parallel/test-whatwg-encoding-custom-interop.js#block_00_test_textencoder`
+- `parallel/test-whatwg-encoding-custom-interop.js#block_01_block_01`
+- `parallel/test-whatwg-encoding-custom-interop.js#block_02_block_02`
+- `parallel/test-whatwg-readablebytestream.js#block_09_block_09`
+- `parallel/test-whatwg-readablebytestream.js#block_10_block_10`
+- `parallel/test-webstorage.js#test_00_disabled_without_experimental_webstorage`
+- `es-module/test-require-module.js#block_00_test_named_exports`
+- `es-module/test-require-module.js#block_01_test_esm_that_import_esm`
+- `parallel/test-stream-pipeline.js#block_06_block_06`
 
 ## Passing Tests Auto-Added to Config
 
@@ -5937,64 +4754,64 @@ _All passing tests are already in config.jsonc._
 | Module | Total | Pass | Fail | Error | Skip | Impossible | Pass% |
 |--------|-------|------|------|-------|------|------------|-------|
 | abort | 28 | 26 | 1 | 0 | 1 | 0 | 92.9% |
-| assert | 95 | 95 | 0 | 0 | 0 | 0 | 100.0% |
+| assert | 95 | 94 | 0 | 1 | 0 | 0 | 98.9% |
 | async_hooks | 38 | 4 | 0 | 0 | 34 | 0 | 10.5% |
-| blob | 25 | 2 | 22 | 0 | 1 | 0 | 8.0% |
-| buffer | 181 | 172 | 0 | 7 | 2 | 0 | 95.0% |
-| child_process | 211 | 30 | 73 | 27 | 0 | 81 | 14.2% |
-| cli | 32 | 12 | 11 | 0 | 9 | 0 | 37.5% |
+| blob | 24 | 2 | 0 | 0 | 22 | 0 | 8.3% |
+| buffer | 180 | 170 | 0 | 8 | 2 | 0 | 94.4% |
+| child_process | 121 | 16 | 2 | 2 | 0 | 101 | 13.2% |
+| cli | 32 | 12 | 0 | 0 | 20 | 0 | 37.5% |
 | cluster | 87 | 0 | 0 | 0 | 0 | 87 | 0.0% |
-| common | 11 | 1 | 6 | 0 | 4 | 0 | 9.1% |
+| common | 9 | 1 | 1 | 0 | 7 | 0 | 11.1% |
 | compile | 15 | 0 | 0 | 0 | 0 | 15 | 0.0% |
 | console | 31 | 30 | 0 | 0 | 1 | 0 | 96.8% |
-| crypto | 243 | 218 | 7 | 3 | 15 | 0 | 89.7% |
-| dgram | 122 | 20 | 31 | 12 | 53 | 6 | 16.4% |
+| crypto | 239 | 212 | 3 | 8 | 16 | 0 | 88.7% |
+| dgram | 118 | 20 | 4 | 4 | 84 | 6 | 16.9% |
 | diagnostics_channel | 33 | 18 | 0 | 0 | 14 | 1 | 54.5% |
-| dns | 43 | 2 | 19 | 0 | 22 | 0 | 4.7% |
-| domain | 61 | 28 | 6 | 0 | 26 | 1 | 45.9% |
+| dns | 42 | 2 | 1 | 0 | 39 | 0 | 4.8% |
+| domain | 61 | 28 | 0 | 0 | 32 | 1 | 45.9% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 100.0% |
-| errors | 51 | 3 | 36 | 0 | 12 | 0 | 5.9% |
+| errors | 46 | 3 | 6 | 0 | 37 | 0 | 6.5% |
 | eslint | 24 | 0 | 0 | 0 | 0 | 24 | 0.0% |
-| events | 95 | 59 | 30 | 0 | 6 | 0 | 62.1% |
+| events | 93 | 59 | 0 | 0 | 34 | 0 | 63.4% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 100.0% |
-| fs | 493 | 443 | 9 | 8 | 33 | 0 | 89.9% |
+| fs | 478 | 431 | 4 | 12 | 30 | 1 | 90.2% |
 | global | 11 | 3 | 0 | 0 | 8 | 0 | 27.3% |
-| heap | 23 | 0 | 4 | 0 | 3 | 16 | 0.0% |
-| http | 900 | 267 | 128 | 20 | 184 | 301 | 29.7% |
+| heap | 19 | 0 | 0 | 0 | 0 | 19 | 0.0% |
+| http | 807 | 258 | 11 | 7 | 206 | 325 | 32.0% |
 | inspector | 95 | 1 | 0 | 0 | 0 | 94 | 1.1% |
-| internal | 61 | 3 | 38 | 0 | 20 | 0 | 4.9% |
-| module | 199 | 88 | 40 | 2 | 62 | 7 | 44.2% |
-| net | 225 | 140 | 11 | 9 | 64 | 1 | 62.2% |
-| node | 9 | 0 | 7 | 0 | 2 | 0 | 0.0% |
+| internal | 53 | 3 | 0 | 0 | 50 | 0 | 5.7% |
+| module | 184 | 84 | 1 | 0 | 92 | 7 | 45.7% |
+| net | 223 | 137 | 2 | 6 | 77 | 1 | 61.4% |
+| node | 8 | 0 | 0 | 0 | 8 | 0 | 0.0% |
 | os | 6 | 6 | 0 | 0 | 0 | 0 | 100.0% |
-| other | 472 | 77 | 219 | 5 | 134 | 37 | 16.3% |
+| other | 449 | 82 | 3 | 0 | 317 | 47 | 18.3% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 100.0% |
-| perf_hooks | 45 | 3 | 29 | 0 | 12 | 1 | 6.7% |
-| permission | 61 | 5 | 18 | 0 | 35 | 3 | 8.2% |
-| process | 93 | 44 | 4 | 2 | 42 | 1 | 47.3% |
+| perf_hooks | 41 | 3 | 1 | 0 | 36 | 1 | 7.3% |
+| permission | 55 | 5 | 3 | 0 | 42 | 5 | 9.1% |
+| process | 90 | 40 | 0 | 0 | 48 | 2 | 44.4% |
 | promises | 23 | 1 | 0 | 0 | 22 | 0 | 4.3% |
 | querystring | 14 | 14 | 0 | 0 | 0 | 0 | 100.0% |
-| readline | 104 | 0 | 86 | 0 | 16 | 2 | 0.0% |
-| repl | 85 | 1 | 10 | 2 | 0 | 72 | 1.2% |
-| shadow_realm | 11 | 0 | 2 | 0 | 8 | 1 | 0.0% |
+| readline | 101 | 0 | 0 | 0 | 99 | 2 | 0.0% |
+| repl | 77 | 1 | 0 | 0 | 0 | 76 | 1.3% |
+| shadow_realm | 11 | 0 | 0 | 0 | 10 | 1 | 0.0% |
 | signal | 5 | 1 | 0 | 0 | 4 | 0 | 20.0% |
-| snapshot | 59 | 0 | 48 | 0 | 4 | 7 | 0.0% |
+| snapshot | 27 | 0 | 0 | 0 | 0 | 27 | 0.0% |
 | sqlite | 39 | 36 | 3 | 0 | 0 | 0 | 92.3% |
 | stdio | 23 | 14 | 0 | 0 | 9 | 0 | 60.9% |
-| stream | 755 | 712 | 26 | 3 | 13 | 1 | 94.3% |
+| stream | 753 | 711 | 21 | 4 | 16 | 1 | 94.4% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 100.0% |
-| test_runner | 158 | 92 | 49 | 1 | 16 | 0 | 58.2% |
-| timers | 101 | 50 | 34 | 0 | 17 | 0 | 49.5% |
-| tls | 207 | 4 | 17 | 0 | 0 | 186 | 1.9% |
+| test_runner | 157 | 92 | 17 | 1 | 47 | 0 | 58.6% |
+| timers | 97 | 50 | 0 | 0 | 47 | 0 | 51.5% |
+| tls | 197 | 4 | 0 | 0 | 0 | 193 | 2.0% |
 | trace_events | 35 | 16 | 0 | 0 | 17 | 2 | 45.7% |
 | tty | 5 | 0 | 0 | 0 | 5 | 0 | 0.0% |
 | url | 29 | 29 | 0 | 0 | 0 | 0 | 100.0% |
-| util | 177 | 71 | 104 | 0 | 2 | 0 | 40.1% |
-| v8 | 46 | 14 | 21 | 0 | 11 | 0 | 30.4% |
-| vm | 121 | 25 | 24 | 9 | 62 | 1 | 20.7% |
-| webcrypto | 111 | 47 | 45 | 1 | 16 | 2 | 42.3% |
+| util | 174 | 68 | 0 | 1 | 105 | 0 | 39.1% |
+| v8 | 45 | 14 | 0 | 0 | 31 | 0 | 31.1% |
+| vm | 121 | 25 | 2 | 0 | 93 | 1 | 20.7% |
+| webcrypto | 100 | 46 | 5 | 2 | 45 | 2 | 46.0% |
 | webstreams | 68 | 65 | 0 | 0 | 3 | 0 | 95.6% |
-| whatwg | 280 | 18 | 209 | 1 | 52 | 0 | 6.4% |
-| worker_threads | 190 | 19 | 54 | 7 | 1 | 109 | 10.0% |
+| whatwg | 264 | 18 | 3 | 1 | 242 | 0 | 6.8% |
+| worker_threads | 153 | 18 | 13 | 0 | 2 | 120 | 11.8% |
 | zlib | 61 | 52 | 1 | 0 | 8 | 0 | 85.2% |
 

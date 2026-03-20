@@ -785,7 +785,7 @@ impl CompiledTest {
 }
 
 #[derive(Clone)]
-struct Host {
+pub struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<WasiHttpCtx>,
@@ -883,4 +883,198 @@ fn plug(
     }
 
     Ok(())
+}
+
+/// Classify a test filename into a module category based on its name prefix.
+pub fn classify_test(filename: &str) -> &str {
+    // Strip "test-" prefix
+    let name = filename
+        .strip_prefix("test-")
+        .unwrap_or(filename)
+        .strip_suffix(".js")
+        .unwrap_or(filename);
+
+    if name.starts_with("path") {
+        "path"
+    } else if name.starts_with("assert") {
+        "assert"
+    } else if name.starts_with("buffer") {
+        "buffer"
+    } else if name.starts_with("stream") {
+        "stream"
+    } else if name.starts_with("string-decoder") || name.starts_with("stringdecoder") {
+        "string_decoder"
+    } else if name.starts_with("url") {
+        "url"
+    } else if name.starts_with("util") {
+        "util"
+    } else if name.starts_with("querystring") {
+        "querystring"
+    } else if name.starts_with("events") || name.starts_with("event-emitter") {
+        "events"
+    } else if name.starts_with("fs") || name.starts_with("file") {
+        "fs"
+    } else if name.starts_with("crypto") {
+        "crypto"
+    } else if name.starts_with("http") || name.starts_with("http2") || name.starts_with("https") {
+        "http"
+    } else if name.starts_with("net") {
+        "net"
+    } else if name.starts_with("dns") {
+        "dns"
+    } else if name.starts_with("os") {
+        "os"
+    } else if name.starts_with("process") {
+        "process"
+    } else if name.starts_with("child-process") || name.starts_with("child_process") {
+        "child_process"
+    } else if name.starts_with("tls") || name.starts_with("ssl") {
+        "tls"
+    } else if name.starts_with("zlib") {
+        "zlib"
+    } else if name.starts_with("console") {
+        "console"
+    } else if name.starts_with("timers")
+        || name.starts_with("settimeout")
+        || name.starts_with("setinterval")
+        || name.starts_with("setimmediate")
+    {
+        "timers"
+    } else if name.starts_with("worker") || name.starts_with("worker-threads") {
+        "worker_threads"
+    } else if name.starts_with("cluster") {
+        "cluster"
+    } else if name.starts_with("readline") {
+        "readline"
+    } else if name.starts_with("repl") {
+        "repl"
+    } else if name.starts_with("vm") {
+        "vm"
+    } else if name.starts_with("dgram") {
+        "dgram"
+    } else if name.starts_with("tty") {
+        "tty"
+    } else if name.starts_with("async-hooks")
+        || name.starts_with("async-context")
+        || name.starts_with("async-local-storage")
+    {
+        "async_hooks"
+    } else if name.starts_with("inspector") || name.starts_with("debugger") {
+        "inspector"
+    } else if name.starts_with("module")
+        || name.starts_with("require")
+        || name.starts_with("esm")
+        || name.starts_with("cjs")
+        || name.starts_with("loaders")
+    {
+        "module"
+    } else if name.starts_with("perf") || name.starts_with("performance") {
+        "perf_hooks"
+    } else if name.starts_with("diagnostics") {
+        "diagnostics_channel"
+    } else if name.starts_with("domain") {
+        "domain"
+    } else if name.starts_with("v8") {
+        "v8"
+    } else if name.starts_with("trace") {
+        "trace_events"
+    } else if name.starts_with("runner") || name.starts_with("test-runner") {
+        "test_runner"
+    } else if name.starts_with("abortcontroller")
+        || name.starts_with("abortsignal")
+        || name.starts_with("aborted")
+    {
+        "abort"
+    } else if name.starts_with("encoding")
+        || name.starts_with("textdecoder")
+        || name.starts_with("textencoder")
+    {
+        "encoding"
+    } else if name.starts_with("blob") {
+        "blob"
+    } else if name.starts_with("fetch")
+        || name.starts_with("response")
+        || name.starts_with("request")
+        || name.starts_with("headers")
+    {
+        "fetch"
+    } else if name.starts_with("readable")
+        || name.starts_with("writable")
+        || name.starts_with("transform")
+        || name.starts_with("duplex")
+    {
+        "stream"
+    } else if name.starts_with("sqlite") {
+        "sqlite"
+    } else if name.starts_with("whatwg") {
+        "whatwg"
+    } else if name.starts_with("webcrypto") {
+        "webcrypto"
+    } else if name.starts_with("permission") {
+        "permission"
+    } else if name.starts_with("promise") || name.starts_with("promises") {
+        "promises"
+    } else if name.starts_with("global") {
+        "global"
+    } else if name.starts_with("compile") {
+        "compile"
+    } else if name.starts_with("cli") {
+        "cli"
+    } else if name.starts_with("stdin") || name.starts_with("stdout") || name.starts_with("stdio")
+    {
+        "stdio"
+    } else if name.starts_with("signal") {
+        "signal"
+    } else if name.starts_with("errors") || name.starts_with("error") {
+        "errors"
+    } else if name.starts_with("pipe")
+        || name.starts_with("socket")
+        || name.starts_with("listen")
+        || name.starts_with("tcp")
+    {
+        "net"
+    } else if name.starts_with("webstream") || name.starts_with("webstreams") {
+        "webstreams"
+    } else if name.starts_with("snapshot") {
+        "snapshot"
+    } else if name.starts_with("eslint") {
+        "eslint"
+    } else if name.starts_with("internal") {
+        "internal"
+    } else if name.starts_with("heap") {
+        "heap"
+    } else if name.starts_with("node") {
+        "node"
+    } else if name.starts_with("inspect") {
+        "inspector"
+    } else if name.starts_with("shadow-realm") {
+        "shadow_realm"
+    } else if name.starts_with("btoa") || name.starts_with("atob") {
+        "encoding"
+    } else if name.starts_with("common") {
+        "common"
+    } else {
+        "other"
+    }
+}
+
+/// Check if a test file relies on Node.js internals (not public API).
+///
+/// Detects patterns like `// Flags: --expose-internals`, `require('internal/...')`,
+/// and `internalBinding(...)` in the test source code.
+pub fn uses_node_internals(test_path: &str) -> bool {
+    let file_path = format!("tests/node_compat/suite/{test_path}");
+    let content = match fs::read_to_string(&file_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    // Only check the first 50 lines for the Flags comment (it's always near the top)
+    let header: String = content.lines().take(50).collect::<Vec<_>>().join("\n");
+    if header.contains("--expose-internals") {
+        return true;
+    }
+    // Check the full file for internal requires/bindings
+    content.contains("require('internal/")
+        || content.contains("require(\"internal/")
+        || content.contains("internalBinding(")
 }
