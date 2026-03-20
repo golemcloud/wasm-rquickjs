@@ -49,6 +49,7 @@ if (!EventEmitter.prototype[_patched]) {
     EventEmitter.prototype.emit = function emit(event, ...args) {
         if (
             event === 'error' &&
+            typeof this.listenerCount === 'function' &&
             this.listenerCount('error') === 0 &&
             this.domain &&
             this.domain !== this &&
