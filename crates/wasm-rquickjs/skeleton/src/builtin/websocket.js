@@ -1,6 +1,3 @@
-// Browser-standard WebSocket API implemented on top of golem:websocket/client WIT interface.
-// The native module bridges rquickjs to golem_rust::bindings::golem::websocket::client,
-// which is always available when the golem feature is enabled.
 import { ws_connect } from '__wasm_rquickjs_builtin/websocket_native';
 
 // readyState constants
