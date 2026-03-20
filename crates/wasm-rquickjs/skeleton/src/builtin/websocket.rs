@@ -1,4 +1,4 @@
-use golem_rust::bindings::golem::websocket::client::{
+use crate::bindings::golem::websocket::client::{
     Error as WsError, Message, WebsocketConnection,
 };
 use rquickjs::class::Trace;
@@ -85,11 +85,11 @@ impl WsConnection {
     ///   "timeout" → data is null
     ///   "closed"  → data is { code, reason }
     ///   "error"   → data is an error description string
-    pub fn receive_with_timeout(
+    pub fn receive_with_timeout<'js>(
         &self,
-        ctx: Ctx<'_>,
+        ctx: Ctx<'js>,
         timeout_ms: u64,
-    ) -> rquickjs::Result<rquickjs::Value<'_>> {
+    ) -> rquickjs::Result<rquickjs::Value<'js>> {
         let inner = self.inner.borrow();
         let conn = inner
             .as_ref()
@@ -177,5 +177,3 @@ pub const WIRE_JS: &str = r#"
         globalThis.WebSocket = _WS;
     }
 "#;
-
-pub use native_module as js_native_module;
