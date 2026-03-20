@@ -26,8 +26,8 @@ use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use test_r::test;
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
@@ -684,7 +684,11 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     println!(
         "\n=== Running {} tasks ({} impossible, skipped), concurrency={} ===\n",
         total_to_run,
-        test_files.len() - test_files.iter().filter(|p| !config_impossible.contains_key(p.as_str())).count(),
+        test_files.len()
+            - test_files
+                .iter()
+                .filter(|p| !config_impossible.contains_key(p.as_str()))
+                .count(),
         parallelism
     );
 
@@ -706,13 +710,13 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 setup_node_compat_test_files(instance.temp_dir_path(), &task.test_path)?;
 
                 // If rewrite is provided, rewrite the test file to isolate a subtest
-                if let (Some(source), Some(discovery), Some(idx)) =
-                    (&task.rewrite_source, &task.rewrite_discovery, task.rewrite_index)
-                {
+                if let (Some(source), Some(discovery), Some(idx)) = (
+                    &task.rewrite_source,
+                    &task.rewrite_discovery,
+                    task.rewrite_index,
+                ) {
                     let rewritten = match discovery {
-                        SubtestDiscovery::Block(blocks) => {
-                            rewrite_for_block(source, blocks, idx)
-                        }
+                        SubtestDiscovery::Block(blocks) => rewrite_for_block(source, blocks, idx),
                         SubtestDiscovery::NodeTest(_) => rewrite_for_node_test(source, idx),
                         SubtestDiscovery::None => source.to_string(),
                     };
@@ -743,16 +747,14 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                     Ok(Some(Val::String(ref s))) if s.starts_with("PASS") => {
                         Ok::<TestResult, anyhow::Error>(TestResult::Pass)
                     }
-                    Ok(Some(Val::String(ref s))) if s.starts_with("SKIP:") => Ok(
-                        TestResult::Skip(s.strip_prefix("SKIP:").unwrap().trim().to_string()),
-                    ),
-                    Ok(Some(Val::String(ref s))) if s.starts_with("FAIL:") => Ok(
-                        TestResult::Fail(s.strip_prefix("FAIL:").unwrap().trim().to_string()),
-                    ),
+                    Ok(Some(Val::String(ref s))) if s.starts_with("SKIP:") => Ok(TestResult::Skip(
+                        s.strip_prefix("SKIP:").unwrap().trim().to_string(),
+                    )),
+                    Ok(Some(Val::String(ref s))) if s.starts_with("FAIL:") => Ok(TestResult::Fail(
+                        s.strip_prefix("FAIL:").unwrap().trim().to_string(),
+                    )),
                     Ok(Some(Val::String(ref s))) => Ok(TestResult::Fail(s.clone())),
-                    Ok(other) => {
-                        Ok(TestResult::Fail(format!("Unexpected return: {other:?}")))
-                    }
+                    Ok(other) => Ok(TestResult::Fail(format!("Unexpected return: {other:?}"))),
                     Err(e) => {
                         let msg = format!("{e:#}");
                         if msg.contains("epoch") || msg.contains("interrupt") {

@@ -11,7 +11,7 @@ class Event {
         this.defaultPrevented = false;
         this.target = null;
         this.currentTarget = null;
-        this.eventPhase = 0; // Event.NONE
+        this.eventPhase = 0;
         this.timeStamp = Date.now();
         _eventTrusted.set(this, false);
         this._stopPropagation = false;
@@ -40,7 +40,6 @@ class Event {
         this._stopImmediatePropagation = true;
         this._stopPropagation = true;
     }
-
 }
 
 Object.defineProperties(Event, {
@@ -144,16 +143,14 @@ class CustomEvent extends Event {
 'use strict';
 
 function _makeTypeError(name, expected, actual) {
-    var msg = 'The "' + name + '" argument must be of type ' + expected + '. Received ' +
-        (actual === null ? 'null' : actual === undefined ? 'undefined' : typeof actual);
-    var err = new TypeError(msg);
+    const display = actual === null ? 'null' : actual === undefined ? 'undefined' : typeof actual;
+    const err = new TypeError(`The "${name}" argument must be of type ${expected}. Received ${display}`);
     err.code = 'ERR_INVALID_ARG_TYPE';
     return err;
 }
 
 function _makeRangeError(name, range, actual) {
-    var msg = 'The value of "' + name + '" is out of range. It must be ' + range + '. Received ' + actual;
-    var err = new RangeError(msg);
+    const err = new RangeError(`The value of "${name}" is out of range. It must be ${range}. Received ${actual}`);
     err.code = 'ERR_OUT_OF_RANGE';
     return err;
 }
@@ -186,36 +183,19 @@ function _onceWrap(target, type, listener) {
     return wrapper;
 }
 
-function _arrayClone(arr) {
-    var copy = new Array(arr.length);
-    for (var i = 0; i < arr.length; i++) copy[i] = arr[i];
-    return copy;
-}
-
-function _unwrapListeners(arr) {
-    var ret = new Array(arr.length);
-    for (var i = 0; i < arr.length; i++) {
-        ret[i] = arr[i].listener || arr[i];
-    }
-    return ret;
-}
-
 function _addCaptureRejection(emitter, promise) {
     promise.then(undefined, function(err) {
         try {
-            var rejectionHandler = emitter[EventEmitter.captureRejectionSymbol];
+            const rejectionHandler = emitter[EventEmitter.captureRejectionSymbol];
             if (typeof rejectionHandler === 'function') {
                 rejectionHandler.call(emitter, err);
             } else {
-                // Temporarily disable capture to avoid infinite recursion
-                // if the 'error' handler also rejects
-                var prev = emitter._captureRejections;
+                const prev = emitter._captureRejections;
                 emitter._captureRejections = false;
                 emitter.emit('error', err);
                 emitter._captureRejections = prev;
             }
         } catch (e) {
-            // Last resort: throw to unhandled rejection
             throw e;
         }
     });
@@ -246,7 +226,7 @@ EventEmitter.init = function init(opts) {
 
 EventEmitter._domainInit = null;
 
-var _defaultMaxListeners = 10;
+let _defaultMaxListeners = 10;
 Object.defineProperty(EventEmitter, 'defaultMaxListeners', {
     enumerable: true,
     get: function() { return _defaultMaxListeners; },
@@ -271,36 +251,35 @@ EventEmitter.prototype.getMaxListeners = function getMaxListeners() {
 };
 
 EventEmitter.prototype.emit = function emit(type) {
-    var events = this._events;
+    let events = this._events;
     if (events === undefined) events = Object.create(null);
-    var doError = (type === 'error');
+    const doError = (type === 'error');
 
-    // Emit on errorMonitor for 'error' events regardless of listeners
     if (doError && events[EventEmitter.errorMonitor] !== undefined) {
-        var monitorArgs = [];
-        for (var mi = 1; mi < arguments.length; mi++) monitorArgs.push(arguments[mi]);
-        var monitors = events[EventEmitter.errorMonitor];
+        const monitorArgs = [];
+        for (let mi = 1; mi < arguments.length; mi++) monitorArgs.push(arguments[mi]);
+        const monitors = events[EventEmitter.errorMonitor];
         if (typeof monitors === 'function') {
             monitors.apply(this, monitorArgs);
         } else {
-            var monitorsCopy = _arrayClone(monitors);
-            for (var mj = 0; mj < monitorsCopy.length; mj++) {
+            const monitorsCopy = monitors.slice();
+            for (let mj = 0; mj < monitorsCopy.length; mj++) {
                 monitorsCopy[mj].apply(this, monitorArgs);
             }
         }
     }
 
-    var handler = events[type];
+    const handler = events[type];
 
     if (handler === undefined) {
         if (doError) {
-            var er = arguments[1];
+            const er = arguments[1];
             if (er instanceof Error) {
                 throw er;
             }
-            var stringifiedEr;
+            let stringifiedEr;
             try {
-                var util = require('node:util');
+                const util = require('node:util');
                 stringifiedEr = util.inspect(er);
             } catch (e) {
                 try {
@@ -309,7 +288,7 @@ EventEmitter.prototype.emit = function emit(type) {
                     stringifiedEr = '[object Object]';
                 }
             }
-            var err = new Error('Unhandled error.' + (er !== undefined ? ' (' + stringifiedEr + ')' : ''));
+            const err = new Error('Unhandled error.' + (er !== undefined ? ` (${stringifiedEr})` : ''));
             err.code = 'ERR_UNHANDLED_ERROR';
             err.context = er;
             throw err;
@@ -317,35 +296,25 @@ EventEmitter.prototype.emit = function emit(type) {
         return false;
     }
 
-    var capture = this._captureRejections || EventEmitter.captureRejections;
-    var needCapture = capture && !doError && type !== EventEmitter.errorMonitor;
+    const capture = this._captureRejections || EventEmitter.captureRejections;
+    const needCapture = capture && !doError && type !== EventEmitter.errorMonitor;
 
-    var args;
+    let args;
     if (arguments.length > 1) {
         args = new Array(arguments.length - 1);
-        for (var ai = 1; ai < arguments.length; ai++) args[ai - 1] = arguments[ai];
+        for (let ai = 1; ai < arguments.length; ai++) args[ai - 1] = arguments[ai];
     }
 
     if (typeof handler === 'function') {
-        var result;
-        if (args) {
-            result = handler.apply(this, args);
-        } else {
-            result = handler.call(this);
-        }
+        const result = args ? handler.apply(this, args) : handler.call(this);
         if (needCapture && result != null && typeof result.then === 'function') {
             _addCaptureRejection(this, result);
         }
     } else {
-        var listeners = _arrayClone(handler);
-        var len = listeners.length;
-        for (var i = 0; i < len; i++) {
-            var result;
-            if (args) {
-                result = listeners[i].apply(this, args);
-            } else {
-                result = listeners[i].call(this);
-            }
+        const listeners = handler.slice();
+        const len = listeners.length;
+        for (let i = 0; i < len; i++) {
+            const result = args ? listeners[i].apply(this, args) : listeners[i].call(this);
             if (needCapture && result != null && typeof result.then === 'function') {
                 _addCaptureRejection(this, result);
             }
@@ -358,18 +327,16 @@ EventEmitter.prototype.emit = function emit(type) {
 function _addListener(target, type, listener, prepend) {
     _validateListener(listener);
 
-    var events = target._events;
+    let events = target._events;
     if (events === undefined) {
         events = target._events = Object.create(null);
         target._eventsCount = 0;
     }
 
-    var existing = events[type];
+    let existing = events[type];
 
-    // Emit newListener before adding
     if (events.newListener !== undefined && typeof target.emit === 'function') {
         target.emit('newListener', type, listener.listener ? listener.listener : listener);
-        // Re-read after newListener handlers may have mutated
         events = target._events;
         existing = events[type];
     }
@@ -380,26 +347,20 @@ function _addListener(target, type, listener, prepend) {
     } else {
         if (typeof existing === 'function') {
             existing = events[type] = prepend ? [listener, existing] : [existing, listener];
+        } else if (prepend) {
+            existing.unshift(listener);
         } else {
-            if (prepend) {
-                existing.unshift(listener);
-            } else {
-                existing.push(listener);
-            }
+            existing.push(listener);
         }
 
-        // Check for listener leak
-        var m = (typeof target.getMaxListeners === 'function')
+        const m = (typeof target.getMaxListeners === 'function')
             ? target.getMaxListeners()
             : (target._maxListeners !== undefined ? target._maxListeners : EventEmitter.defaultMaxListeners);
         if (m > 0 && existing.length > m && !existing.warned) {
             existing.warned = true;
-            var w = new Error(
-                'Possible EventEmitter memory leak detected. ' +
-                existing.length + ' ' + String(type) + ' listeners added to ' +
-                '[' + (target.constructor ? target.constructor.name : 'EventEmitter') + ']' +
-                '. MaxListeners is ' + m +
-                '. Use emitter.setMaxListeners() to increase limit'
+            const ctorName = target.constructor ? target.constructor.name : 'EventEmitter';
+            const w = new Error(
+                `Possible EventEmitter memory leak detected. ${existing.length} ${String(type)} listeners added to [${ctorName}]. MaxListeners is ${m}. Use emitter.setMaxListeners() to increase limit`
             );
             w.name = 'MaxListenersExceededWarning';
             w.emitter = target;
@@ -441,10 +402,10 @@ EventEmitter.prototype.prependOnceListener = function prependOnceListener(type, 
 EventEmitter.prototype.removeListener = function removeListener(type, listener) {
     _validateListener(listener);
 
-    var events = this._events;
+    const events = this._events;
     if (events === undefined) return this;
 
-    var list = events[type];
+    const list = events[type];
     if (list === undefined) return this;
 
     if (list === listener || list.listener === listener) {
@@ -456,8 +417,8 @@ EventEmitter.prototype.removeListener = function removeListener(type, listener) 
                 this.emit('removeListener', type, list.listener || list);
         }
     } else if (typeof list !== 'function') {
-        var position = -1;
-        for (var i = list.length - 1; i >= 0; i--) {
+        let position = -1;
+        for (let i = list.length - 1; i >= 0; i--) {
             if (list[i] === listener || list[i].listener === listener) {
                 position = i;
                 break;
@@ -466,7 +427,7 @@ EventEmitter.prototype.removeListener = function removeListener(type, listener) 
 
         if (position < 0) return this;
 
-        var originalListener = list[position].listener || list[position];
+        const originalListener = list[position].listener || list[position];
 
         if (position === 0) {
             list.shift();
@@ -492,10 +453,9 @@ EventEmitter.prototype.removeListener = function removeListener(type, listener) 
 EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
 
 EventEmitter.prototype.removeAllListeners = function removeAllListeners(type) {
-    var events = this._events;
+    const events = this._events;
     if (events === undefined) return this;
 
-    // No removeListener listeners — fast path
     if (events.removeListener === undefined) {
         if (arguments.length === 0) {
             this._events = Object.create(null);
@@ -510,32 +470,26 @@ EventEmitter.prototype.removeAllListeners = function removeAllListeners(type) {
         return this;
     }
 
-    // Emit removeListener for all listeners
     if (arguments.length === 0) {
-        // Remove all except removeListener first
-        var keys = Object.keys(events);
-        var symKeys = Object.getOwnPropertySymbols ? Object.getOwnPropertySymbols(events) : [];
-        var allKeys = keys.concat(symKeys);
-        for (var ki = 0; ki < allKeys.length; ki++) {
-            var key = allKeys[ki];
+        const allKeys = Object.keys(events).concat(Object.getOwnPropertySymbols(events));
+        for (let ki = 0; ki < allKeys.length; ki++) {
+            const key = allKeys[ki];
             if (key === 'removeListener') continue;
             this.removeAllListeners(key);
         }
-        // Now remove removeListener listeners
         this.removeAllListeners('removeListener');
         this._events = Object.create(null);
         this._eventsCount = 0;
         return this;
     }
 
-    var listeners = events[type];
+    const listeners = events[type];
     if (listeners === undefined) return this;
 
     if (typeof listeners === 'function') {
         this.removeListener(type, listeners);
     } else {
-        // LIFO order
-        for (var i = listeners.length - 1; i >= 0; i--) {
+        for (let i = listeners.length - 1; i >= 0; i--) {
             this.removeListener(type, listeners[i]);
         }
     }
@@ -544,36 +498,36 @@ EventEmitter.prototype.removeAllListeners = function removeAllListeners(type) {
 };
 
 EventEmitter.prototype.listeners = function listeners(type) {
-    var events = this._events;
+    const events = this._events;
     if (events === undefined) return [];
 
-    var evlistener = events[type];
+    const evlistener = events[type];
     if (evlistener === undefined) return [];
 
     if (typeof evlistener === 'function')
         return [evlistener.listener || evlistener];
 
-    return _unwrapListeners(evlistener);
+    return evlistener.map(e => e.listener || e);
 };
 
 EventEmitter.prototype.rawListeners = function rawListeners(type) {
-    var events = this._events;
+    const events = this._events;
     if (events === undefined) return [];
 
-    var evlistener = events[type];
+    const evlistener = events[type];
     if (evlistener === undefined) return [];
 
     if (typeof evlistener === 'function')
         return [evlistener];
 
-    return _arrayClone(evlistener);
+    return evlistener.slice();
 };
 
 EventEmitter.prototype.listenerCount = function listenerCount(type, listener) {
-    var events = this._events;
+    const events = this._events;
     if (events === undefined) return 0;
 
-    var evlistener = events[type];
+    const evlistener = events[type];
     if (evlistener === undefined) return 0;
 
     if (typeof evlistener === 'function') {
@@ -583,8 +537,8 @@ EventEmitter.prototype.listenerCount = function listenerCount(type, listener) {
 
     if (listener === undefined) return evlistener.length;
 
-    var count = 0;
-    for (var i = 0; i < evlistener.length; i++) {
+    let count = 0;
+    for (let i = 0; i < evlistener.length; i++) {
         if (evlistener[i] === listener || evlistener[i].listener === listener) count++;
     }
     return count;
@@ -592,11 +546,7 @@ EventEmitter.prototype.listenerCount = function listenerCount(type, listener) {
 
 EventEmitter.prototype.eventNames = function eventNames() {
     if (this._eventsCount === 0) return [];
-    var names = Object.keys(this._events);
-    if (Object.getOwnPropertySymbols) {
-        return names.concat(Object.getOwnPropertySymbols(this._events));
-    }
-    return names;
+    return Object.keys(this._events).concat(Object.getOwnPropertySymbols(this._events));
 };
 
 // Legacy static listenerCount
@@ -607,13 +557,13 @@ EventEmitter.listenerCount = function(emitter, eventName) {
 
 EventEmitter.once = function(emitter, name, options) {
     return new Promise(function(resolve, reject) {
-        var signal = options && options.signal;
+        const signal = options && options.signal;
         if (signal && signal.aborted) {
             reject(signal.reason);
             return;
         }
 
-        var onAbort;
+        let onAbort;
 
         function eventHandler() {
             if (errorHandler) emitter.removeListener('error', errorHandler);
@@ -621,7 +571,7 @@ EventEmitter.once = function(emitter, name, options) {
             resolve(Array.prototype.slice.call(arguments));
         }
 
-        var errorHandler;
+        let errorHandler;
         if (name !== 'error') {
             errorHandler = function(err) {
                 emitter.removeListener(name, eventHandler);
@@ -645,14 +595,14 @@ EventEmitter.once = function(emitter, name, options) {
 };
 
 EventEmitter.on = function(emitter, event, options) {
-    var signal = options && options.signal;
-    var unconsumedEvents = [];
-    var unconsumedPromises = [];
-    var done = false;
-    var error = null;
+    const signal = options && options.signal;
+    const unconsumedEvents = [];
+    let unconsumedPromises = [];
+    let done = false;
+    let error = null;
 
     function eventHandler() {
-        var args = Array.prototype.slice.call(arguments);
+        const args = Array.prototype.slice.call(arguments);
         if (unconsumedPromises.length > 0) {
             unconsumedPromises.shift().resolve(args);
         } else {
@@ -677,7 +627,7 @@ EventEmitter.on = function(emitter, event, options) {
         emitter.removeListener(event, eventHandler);
         emitter.removeListener('error', errorHandler);
         if (signal) signal.removeEventListener('abort', abortHandler);
-        for (var i = 0; i < unconsumedPromises.length; i++) {
+        for (let i = 0; i < unconsumedPromises.length; i++) {
             unconsumedPromises[i].resolve({ value: undefined, done: true });
         }
         unconsumedPromises = [];
@@ -690,14 +640,14 @@ EventEmitter.on = function(emitter, event, options) {
         else signal.addEventListener('abort', abortHandler, { once: true });
     }
 
-    var iterator = {
+    const iterator = {
         next: function() {
             if (unconsumedEvents.length > 0) {
                 return Promise.resolve({ value: unconsumedEvents.shift(), done: false });
             }
             if (done) return Promise.resolve({ value: undefined, done: true });
             if (error) {
-                var err = error;
+                const err = error;
                 error = null;
                 return Promise.reject(err);
             }
@@ -744,13 +694,13 @@ EventEmitter.getMaxListeners = function(emitterOrTarget) {
 
 EventEmitter.setMaxListeners = function(n) {
     _validateMaxListeners(n, 'n');
-    var targets = [];
-    for (var i = 1; i < arguments.length; i++) targets.push(arguments[i]);
+    const targets = [];
+    for (let i = 1; i < arguments.length; i++) targets.push(arguments[i]);
     if (targets.length === 0) {
         EventEmitter.defaultMaxListeners = n;
     } else {
-        for (var j = 0; j < targets.length; j++) {
-            var target = targets[j];
+        for (let j = 0; j < targets.length; j++) {
+            const target = targets[j];
             if (target == null || (typeof target !== 'object' && typeof target !== 'function')) {
                 throw _makeTypeError('target', 'EventEmitter', target);
             }
@@ -774,14 +724,14 @@ EventEmitter.addAbortListener = function(signal, listener) {
 
 EventEmitter.EventEmitter = EventEmitter;
 
-var once = EventEmitter.once;
-var on = EventEmitter.on;
-var getEventListeners = EventEmitter.getEventListeners;
-var getMaxListeners = EventEmitter.getMaxListeners;
-var setMaxListeners = EventEmitter.setMaxListeners;
-var addAbortListener = EventEmitter.addAbortListener;
-var errorMonitor = EventEmitter.errorMonitor;
-var captureRejections = EventEmitter.captureRejections;
+const once = EventEmitter.once;
+const on = EventEmitter.on;
+const getEventListeners = EventEmitter.getEventListeners;
+const getMaxListeners = EventEmitter.getMaxListeners;
+const setMaxListeners = EventEmitter.setMaxListeners;
+const addAbortListener = EventEmitter.addAbortListener;
+const errorMonitor = EventEmitter.errorMonitor;
+const captureRejections = EventEmitter.captureRejections;
 
 export {
     EventEmitter,

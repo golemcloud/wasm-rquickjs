@@ -72,7 +72,7 @@ pub mod native_module {
                     host.to_string()
                 }
             } else {
-                "".to_string()
+                String::new()
             }
         }
 

@@ -1,7 +1,8 @@
 // node:readline/promises stub
-const NOT_SUPPORTED = new Error('readline/promises is not yet supported in WebAssembly environment');
 
-export function createInterface(options) {
+const NOT_SUPPORTED = new Error('node:readline/promises is not yet supported in WebAssembly environment');
+
+export function createInterface() {
     throw NOT_SUPPORTED;
 }
 

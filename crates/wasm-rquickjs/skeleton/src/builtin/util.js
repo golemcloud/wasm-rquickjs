@@ -47,13 +47,9 @@ const _ArrayIsArray = Array.isArray;
 const _DatePrototypeGetTime = Date.prototype.getTime;
 
 const _TypedArrayToStringTagGetter = (function() {
-    try {
-        const typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype);
-        const desc = Object.getOwnPropertyDescriptor(typedArrayProto, Symbol.toStringTag);
-        return desc && typeof desc.get === 'function' ? desc.get : null;
-    } catch (_) {
-        return null;
-    }
+    const typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype);
+    const desc = Object.getOwnPropertyDescriptor(typedArrayProto, Symbol.toStringTag);
+    return desc && typeof desc.get === 'function' ? desc.get : null;
 })();
 
 const getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
@@ -373,10 +369,6 @@ function _hasOwnProp(obj, prop) {
     return _hasOwn.call(obj, prop);
 }
 
-function _isView(v) {
-    return ArrayBuffer.isView(v);
-}
-
 function _getTypedArrayBrand(v) {
     if (!ArrayBuffer.isView(v) || v instanceof DataView) {
         return '';
@@ -496,7 +488,7 @@ function _isQuickJSProtoNullArtifact(obj) {
     if (_ArrayIsArray(obj)) return false;
     if (_ObjectPrototypeToString.call(obj) !== '[object Object]') return false;
     if (_ObjectGetPrototypeOf(obj) !== Object.prototype) return false;
-    var d = _ObjectGetOwnPropertyDescriptor(obj, '__proto__');
+    const d = _ObjectGetOwnPropertyDescriptor(obj, '__proto__');
     if (!d || d.get || d.set) return false;
     if (d.value !== null || d.enumerable !== true) return false;
     return true;
@@ -504,14 +496,14 @@ function _isQuickJSProtoNullArtifact(obj) {
 
 function _normalizeProtoNullArtifact(obj) {
     if (!_isQuickJSProtoNullArtifact(obj)) return obj;
-    var clone = Object.create(null);
-    var names = _ObjectGetOwnPropertyNames(obj);
-    for (var i = 0; i < names.length; i++) {
+    const clone = Object.create(null);
+    const names = _ObjectGetOwnPropertyNames(obj);
+    for (let i = 0; i < names.length; i++) {
         if (names[i] === '__proto__') continue;
         _ObjectDefineProperty(clone, names[i], _ObjectGetOwnPropertyDescriptor(obj, names[i]));
     }
-    var syms = _ObjectGetOwnPropertySymbols(obj);
-    for (var i = 0; i < syms.length; i++) {
+    const syms = _ObjectGetOwnPropertySymbols(obj);
+    for (let i = 0; i < syms.length; i++) {
         _ObjectDefineProperty(clone, syms[i], _ObjectGetOwnPropertyDescriptor(obj, syms[i]));
     }
     return clone;
@@ -781,7 +773,7 @@ function _deepObjEquiv(a, b, strict, memo) {
         return true;
     }
 
-    if (_isView(a) && _isView(b)) {
+    if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
         if (a.byteLength !== b.byteLength) return false;
         if (aTypedBrand === '' || bTypedBrand === '') {
             if (strict) {
@@ -1250,8 +1242,7 @@ function _isInternalUtilCallSite(scriptName) {
     return scriptName === 'node:util' ||
         scriptName === 'util' ||
         scriptName.indexOf('__wasm_rquickjs_builtin/util.js') !== -1 ||
-        scriptName.indexOf('/builtin/util.js') !== -1 ||
-        scriptName.indexOf('\\builtin\\util.js') !== -1;
+        scriptName.indexOf('/builtin/util.js') !== -1;
 }
 
 function _hasExecArgvFlag(flag) {

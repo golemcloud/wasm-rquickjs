@@ -167,7 +167,7 @@ export const serialize = (value, {json, lossy} = {}) => {
   return serializer(!(json || lossy), !!json, new Map, _)(value), _;
 };
 
-const env = typeof self === 'object' ? self : globalThis;
+const env = globalThis;
 
 const deserializer = ($, _) => {
   const as = (out, index) => {
@@ -239,9 +239,6 @@ const deserializer = ($, _) => {
 export const deserialize = serialized => deserializer(new Map, serialized)(0);
 
 const dataCloneError = (message) => {
-  if (typeof DOMException === 'function') {
-    return new DOMException(message, 'DataCloneError');
-  }
   const e = new Error(message);
   e.name = 'DataCloneError';
   return e;
@@ -250,11 +247,12 @@ const dataCloneError = (message) => {
 const _TRANSFER_MARKER_KEY = '__wasm_rquickjs_sc_transfer__';
 
 function _isTransferableType(item) {
-  if (item instanceof ArrayBuffer) return true;
-  if (typeof ReadableStream !== 'undefined' && item instanceof ReadableStream) return true;
-  if (typeof WritableStream !== 'undefined' && item instanceof WritableStream) return true;
-  if (typeof TransformStream !== 'undefined' && item instanceof TransformStream) return true;
-  return false;
+  return (
+    item instanceof ArrayBuffer ||
+    item instanceof ReadableStream ||
+    item instanceof WritableStream ||
+    item instanceof TransformStream
+  );
 }
 
 function _replaceTransferItems(value, itemToMarker, visited) {
@@ -316,10 +314,8 @@ const structuredClone = (any, options) => {
       if (!_isTransferableType(item)) {
         throw dataCloneError('Transfer list item is not transferable');
       }
-      if (item instanceof ArrayBuffer) {
-        if (typeof item.detached === 'boolean' && item.detached) {
-          throw dataCloneError('ArrayBuffer is already detached');
-        }
+      if (item instanceof ArrayBuffer && item.detached) {
+        throw dataCloneError('ArrayBuffer is already detached');
       }
       if (seen.has(item)) {
         throw dataCloneError('Transfer list item appears more than once');

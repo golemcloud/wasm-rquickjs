@@ -234,21 +234,19 @@ export const encode = function(input) {
 	return output.join('');
 };
 
-export const toUnicode = function(input) {
-	return mapDomain(input, function(string) {
-		return regexPunycode.test(string)
+export const toUnicode = (input) =>
+	mapDomain(input, (string) =>
+		regexPunycode.test(string)
 			? decode(string.slice(4).toLowerCase())
-			: string;
-	});
-};
+			: string
+	);
 
-export const toASCII = function(input) {
-	return mapDomain(input, function(string) {
-		return regexNonASCII.test(string)
+export const toASCII = (input) =>
+	mapDomain(input, (string) =>
+		regexNonASCII.test(string)
 			? 'xn--' + encode(string)
-			: string;
-	});
-};
+			: string
+	);
 
 export const ucs2 = {
 	'decode': ucs2decode,

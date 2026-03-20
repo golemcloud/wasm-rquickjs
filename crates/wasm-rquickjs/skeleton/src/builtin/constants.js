@@ -3,7 +3,7 @@ import { constants as osConstants } from 'node:os';
 import { constants as fsConstants } from 'node:fs';
 import { constants as cryptoConstants } from 'node:crypto';
 
-const _constants = Object.assign(
+const allConstants = Object.freeze(Object.assign(
     {},
     osConstants.dlopen,
     osConstants.errno,
@@ -11,7 +11,7 @@ const _constants = Object.assign(
     osConstants.signals,
     fsConstants,
     cryptoConstants,
-);
+));
 
 // Named exports for each constant
 export const {
@@ -71,6 +71,6 @@ export const {
     RSA_PKCS1_OAEP_PADDING, RSA_X931_PADDING, RSA_PKCS1_PSS_PADDING,
     RSA_PSS_SALTLEN_DIGEST, RSA_PSS_SALTLEN_MAX_SIGN, RSA_PSS_SALTLEN_AUTO,
     POINT_CONVERSION_COMPRESSED, POINT_CONVERSION_UNCOMPRESSED, POINT_CONVERSION_HYBRID,
-} = _constants;
+} = allConstants;
 
-export default _constants;
+export default allConstants;

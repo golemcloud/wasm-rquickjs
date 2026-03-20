@@ -1020,8 +1020,7 @@ pub fn classify_test(filename: &str) -> &str {
         "compile"
     } else if name.starts_with("cli") {
         "cli"
-    } else if name.starts_with("stdin") || name.starts_with("stdout") || name.starts_with("stdio")
-    {
+    } else if name.starts_with("stdin") || name.starts_with("stdout") || name.starts_with("stdio") {
         "stdio"
     } else if name.starts_with("signal") {
         "signal"

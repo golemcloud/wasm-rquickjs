@@ -866,9 +866,7 @@ impl TcpListener {
                     AsyncPollable::new(pollable).wait_for().await;
                     {
                         let mut inner = self.inner.borrow_mut();
-                        if inner.waiters > 0 {
-                            inner.waiters -= 1;
-                        }
+                        inner.waiters -= 1;
                         if inner.closed || inner.generation != start_gen {
                             inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
@@ -1135,9 +1133,7 @@ impl TcpListener {
                     AsyncPollable::new(pollable).wait_for().await;
                     {
                         let mut inner = self.inner.borrow_mut();
-                        if inner.waiters > 0 {
-                            inner.waiters -= 1;
-                        }
+                        inner.waiters -= 1;
                         if inner.closed || inner.generation != start_gen {
                             inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
@@ -1242,9 +1238,7 @@ impl TcpListener {
                     AsyncPollable::new(pollable).wait_for().await;
                     {
                         let mut inner = self.inner.borrow_mut();
-                        if inner.waiters > 0 {
-                            inner.waiters -= 1;
-                        }
+                        inner.waiters -= 1;
                         if inner.closed || inner.generation != start_gen {
                             inner.finalize_close_if_ready();
                             return Err(throw_socket_error(

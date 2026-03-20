@@ -1,25 +1,16 @@
 // node:worker_threads compatibility shim for single-threaded WASM runtimes.
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
-const FIPS_IN_WORKER_ERROR = 'Calling crypto.setFips() is not supported in workers';
-const ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE = 'ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE';
 const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
 const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
 
 function createDataCloneError(message) {
-    if (typeof DOMException === 'function') {
-        return new DOMException(message, 'DataCloneError');
-    }
-
-    const error = new Error(message);
-    error.name = 'DataCloneError';
-    error.code = 25;
-    return error;
+    return new DOMException(message, 'DataCloneError');
 }
 
 function createTargetContextUnavailableError() {
     const error = new Error('Message target context unavailable');
-    error.code = ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE;
+    error.code = 'ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE';
     return error;
 }
 
@@ -36,7 +27,7 @@ function normalizeTransferList(transferListOrOptions) {
         return transferListOrOptions;
     }
 
-    if (typeof transferListOrOptions === 'object' && transferListOrOptions !== null) {
+    if (typeof transferListOrOptions === 'object') {
         if (!Object.prototype.hasOwnProperty.call(transferListOrOptions, 'transfer')) {
             return [];
         }
@@ -47,21 +38,13 @@ function normalizeTransferList(transferListOrOptions) {
     return [...transferListOrOptions];
 }
 
-function isMarkedAsUntransferableInternal(value) {
-    return isObjectLike(value) && value[UNTRANSFERABLE_SYMBOL] === true;
-}
-
-function isFileHandleTransferInUse(value) {
-    return isObjectLike(value) && value[FILE_HANDLE_IN_USE_SYMBOL] === true;
-}
-
 function ensureTransferListItemsAreTransferable(transferList) {
     for (const transferItem of transferList) {
-        if (isFileHandleTransferInUse(transferItem)) {
+        if (isObjectLike(transferItem) && transferItem[FILE_HANDLE_IN_USE_SYMBOL] === true) {
             throw createDataCloneError('Cannot transfer FileHandle while in use');
         }
 
-        if (isMarkedAsUntransferableInternal(transferItem)) {
+        if (isObjectLike(transferItem) && transferItem[UNTRANSFERABLE_SYMBOL] === true) {
             throw createDataCloneError('Cannot transfer object of unsupported type.');
         }
     }
@@ -72,7 +55,6 @@ function cloneMessagePayload(value, transferList) {
         return value;
     }
 
-    // Handle transferable AbortSignals before passing to structuredClone
     const TRANSFERABLE_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
     const signalMap = new Map();
     const remainingTransfers = [];
@@ -101,46 +83,7 @@ function cloneMessagePayload(value, transferList) {
         return value;
     }
 
-    if (typeof structuredClone === 'function') {
-        return structuredClone(value, { transfer: remainingTransfers });
-    }
-
-    if (typeof ArrayBuffer === 'function' && typeof ArrayBuffer.prototype.transfer === 'function') {
-        for (const transferItem of remainingTransfers) {
-            if (transferItem instanceof ArrayBuffer) {
-                ArrayBuffer.prototype.transfer.call(transferItem);
-            }
-        }
-    }
-
-    return value;
-}
-
-function bytesToHex(bytes) {
-    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    let result = '';
-    for (let i = 0; i < data.length; i++) {
-        result += data[i].toString(16).padStart(2, '0');
-    }
-    return result;
-}
-
-function keyToStringForWorkerEcho(key) {
-    let value = key;
-    if (value && typeof value === 'object' && value._keyObject) {
-        value = value._keyObject;
-    }
-    if (!value || typeof value !== 'object' || typeof value.export !== 'function') {
-        return key;
-    }
-    if (value.type === 'secret') {
-        const exported = value.export();
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(exported).toString('hex');
-        }
-        return bytesToHex(exported);
-    }
-    return value.export({ type: 'pkcs1', format: 'pem' });
+    return structuredClone(value, { transfer: remainingTransfers });
 }
 
 function createListenerMap() {
@@ -197,16 +140,7 @@ export class Worker {
     #listeners = createListenerMap();
 
     constructor(filename, options) {
-        if (
-            options &&
-            options.eval === true &&
-            typeof filename === 'string' &&
-            filename.indexOf('setFips(') !== -1
-        ) {
-            throw new Error(FIPS_IN_WORKER_ERROR);
-        }
-
-        const transferList = normalizeTransferList(options && options.transferList);
+        const transferList = normalizeTransferList(options?.transferList);
         ensureTransferListItemsAreTransferable(transferList);
 
         this.filename = filename;
@@ -233,18 +167,9 @@ export class Worker {
         }
 
         Promise.resolve().then(() => {
-            if (this.#closed) {
-                return;
+            if (!this.#closed) {
+                emitListeners(this.#listeners, 'message', value);
             }
-            let response = value;
-            if (
-                value &&
-                typeof value === 'object' &&
-                Object.prototype.hasOwnProperty.call(value, 'key')
-            ) {
-                response = keyToStringForWorkerEcho(value.key);
-            }
-            emitListeners(this.#listeners, 'message', response);
         });
     }
 

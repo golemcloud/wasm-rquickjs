@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import dns from 'node:dns';
+import process from 'node:process';
 import { create_socket } from '__wasm_rquickjs_builtin/dgram_native';
 import {
     ERR_INVALID_ARG_TYPE,
@@ -58,20 +59,7 @@ function parseNativeError(e) {
 }
 
 function isBufferType(v) {
-    return typeof v === 'string' ||
-        Buffer.isBuffer(v) ||
-        v instanceof Uint8Array ||
-        v instanceof Uint8ClampedArray ||
-        v instanceof Int8Array ||
-        v instanceof Uint16Array ||
-        v instanceof Int16Array ||
-        v instanceof Uint32Array ||
-        v instanceof Int32Array ||
-        v instanceof Float32Array ||
-        v instanceof Float64Array ||
-        v instanceof BigInt64Array ||
-        v instanceof BigUint64Array ||
-        (v && v.buffer instanceof ArrayBuffer && v.byteLength !== undefined);
+    return typeof v === 'string' || Buffer.isBuffer(v) || ArrayBuffer.isView(v);
 }
 
 function toBuffer(v) {
@@ -81,9 +69,7 @@ function toBuffer(v) {
     return Buffer.from(v);
 }
 
-function nextTick(fn, ...args) {
-    Promise.resolve().then(() => fn(...args));
-}
+const nextTick = process.nextTick;
 
 function Socket(type, listener) {
     EventEmitter.call(this);

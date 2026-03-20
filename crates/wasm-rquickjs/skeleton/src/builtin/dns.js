@@ -188,7 +188,7 @@ export function resolve(hostname, rrtypeOrCallback, callback) {
     }
 }
 
-export function resolve4(hostname, optionsOrCallback, callback) {
+function resolveByFamily(hostname, familyFilter, syscall, optionsOrCallback, callback) {
     let options = {};
     let cb;
     if (typeof optionsOrCallback === 'function') {
@@ -204,9 +204,9 @@ export function resolve4(hostname, optionsOrCallback, callback) {
     (async () => {
         try {
             let results = await native_resolve(hostname);
-            results = results.filter(r => r.family === 4);
+            results = results.filter(r => r.family === familyFilter);
             if (results.length === 0) {
-                cb(makeDnsError('ENODATA', hostname, 'queryA'));
+                cb(makeDnsError('ENODATA', hostname, syscall));
                 return;
             }
             if (options.ttl) {
@@ -215,41 +215,17 @@ export function resolve4(hostname, optionsOrCallback, callback) {
                 cb(null, results.map(r => r.address));
             }
         } catch (e) {
-            cb(parseNativeError(e, hostname, 'queryA'));
+            cb(parseNativeError(e, hostname, syscall));
         }
     })();
 }
 
-export function resolve6(hostname, optionsOrCallback, callback) {
-    let options = {};
-    let cb;
-    if (typeof optionsOrCallback === 'function') {
-        cb = optionsOrCallback;
-    } else {
-        options = optionsOrCallback || {};
-        cb = callback;
-    }
-    if (typeof cb !== 'function') {
-        throw new TypeError('callback must be a function');
-    }
+export function resolve4(hostname, optionsOrCallback, callback) {
+    resolveByFamily(hostname, 4, 'queryA', optionsOrCallback, callback);
+}
 
-    (async () => {
-        try {
-            let results = await native_resolve(hostname);
-            results = results.filter(r => r.family === 6);
-            if (results.length === 0) {
-                cb(makeDnsError('ENODATA', hostname, 'queryAaaa'));
-                return;
-            }
-            if (options.ttl) {
-                cb(null, results.map(r => ({ address: r.address, ttl: 0 })));
-            } else {
-                cb(null, results.map(r => r.address));
-            }
-        } catch (e) {
-            cb(parseNativeError(e, hostname, 'queryAaaa'));
-        }
-    })();
+export function resolve6(hostname, optionsOrCallback, callback) {
+    resolveByFamily(hostname, 6, 'queryAaaa', optionsOrCallback, callback);
 }
 
 function unsupportedRecordType(syscall) {
@@ -276,15 +252,7 @@ export const resolveSrv = unsupportedRecordType('querySrv');
 export const resolveTxt = unsupportedRecordType('queryTxt');
 export const resolveTlsa = unsupportedRecordType('queryTlsa');
 
-export function reverse(ip, callback) {
-    if (typeof callback !== 'function') {
-        throw new TypeError('callback must be a function');
-    }
-    queueMicrotask(() => callback(Object.assign(
-        new Error(`getHostByAddr ${NOT_SUPPORTED_ERROR_MSG}`),
-        { code: 'ENOTIMP', hostname: ip }
-    )));
-}
+export const reverse = unsupportedRecordType('getHostByAddr');
 
 export function lookupService(address, port, callback) {
     if (typeof callback !== 'function') {
@@ -376,6 +344,13 @@ export class Resolver {
     reverse(ip, callback) { return reverse(ip, callback); }
 }
 
+function _unsupportedPromise(syscall, hostname) {
+    return Promise.reject(Object.assign(
+        new Error(`${syscall} ${NOT_SUPPORTED_ERROR_MSG}`),
+        { code: 'ENOTIMP', hostname }
+    ));
+}
+
 // Promise-based API
 export const promises = {
     lookup(hostname, options) {
@@ -439,12 +414,7 @@ export const promises = {
     resolveSrv(hostname) { return _unsupportedPromise('querySrv', hostname); },
     resolveTxt(hostname) { return _unsupportedPromise('queryTxt', hostname); },
 
-    reverse(ip) {
-        return Promise.reject(Object.assign(
-            new Error(`getHostByAddr ${NOT_SUPPORTED_ERROR_MSG}`),
-            { code: 'ENOTIMP', hostname: ip }
-        ));
-    },
+    reverse(ip) { return _unsupportedPromise('getHostByAddr', ip); },
 
     setServers,
     getServers,
@@ -484,13 +454,6 @@ export const promises = {
         reverse(ip) { return promises.reverse(ip); }
     },
 };
-
-function _unsupportedPromise(syscall, hostname) {
-    return Promise.reject(Object.assign(
-        new Error(`${syscall} ${NOT_SUPPORTED_ERROR_MSG}`),
-        { code: 'ENOTIMP', hostname }
-    ));
-}
 
 export default {
     lookup,

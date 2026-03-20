@@ -24,7 +24,7 @@ function updateActive() {
 function decorateError(err, props) {
     if (err != null && (typeof err === 'object' || typeof err === 'function')) {
         try {
-            for (var key in props) {
+            for (const key in props) {
                 if (key === 'domain') {
                     Object.defineProperty(err, 'domain', {
                         value: props[key],
@@ -46,21 +46,20 @@ const _patched = Symbol('domain.patched');
 // Monkey-patch EventEmitter.prototype.emit to route unhandled 'error' events
 // through the emitter's domain (if set).
 if (!EventEmitter.prototype[_patched]) {
-    EventEmitter.prototype.emit = function emit(event) {
+    EventEmitter.prototype.emit = function emit(event, ...args) {
         if (
             event === 'error' &&
-            typeof this.listenerCount === 'function' &&
             this.listenerCount('error') === 0 &&
             this.domain &&
             this.domain !== this &&
             typeof this.domain.emit === 'function' &&
             !this.domain._disposed
         ) {
-            var err = arguments[1];
+            let err = args[0];
             if (!err) {
                 err = new Error('Unhandled error.');
             }
-            var theDomain = this.domain;
+            const theDomain = this.domain;
             decorateError(err, {
                 domain: theDomain,
                 domainEmitter: this,
@@ -69,30 +68,17 @@ if (!EventEmitter.prototype[_patched]) {
             // Error handlers run outside their domain's context.
             // Unwind the stack to the state before theDomain was entered,
             // then restore after the handler.
-            var savedStack = _stack.slice();
-            var savedActive = active;
+            const savedStack = _stack.slice();
+            const savedActive = active;
             // Remove theDomain and everything above it from the stack
-            var idx = -1;
-            for (var si = _stack.length - 1; si >= 0; si--) {
-                if (_stack[si] === theDomain) {
-                    idx = si;
-                    break;
-                }
-            }
-            if (idx >= 0) {
-                _stack.length = idx;
-            } else {
-                _stack.length = 0;
-            }
+            const idx = _stack.lastIndexOf(theDomain);
+            _stack.length = idx >= 0 ? idx : 0;
             updateActive();
             try {
                 theDomain.emit('error', err);
             } finally {
-                // Restore stack
                 _stack.length = 0;
-                for (var ri = 0; ri < savedStack.length; ri++) {
-                    _stack.push(savedStack[ri]);
-                }
+                _stack.push(...savedStack);
                 active = savedActive;
                 if (globalThis.process) {
                     globalThis.process.domain = active || undefined;
@@ -100,7 +86,7 @@ if (!EventEmitter.prototype[_patched]) {
             }
             return false;
         }
-        return _origEmit.apply(this, arguments);
+        return _origEmit.call(this, event, ...args);
     };
     EventEmitter.prototype[_patched] = true;
 }
@@ -114,35 +100,25 @@ EventEmitter._domainInit = function(emitter) {
     }
 };
 
-// Patch setTimeout/setInterval/process.nextTick to auto-bind callbacks
-// to the active domain. In Node.js, domains integrate with nextTick
-// through the async hooks system; in our runtime we patch it directly.
-var _origSetTimeout = globalThis.setTimeout;
-var _origSetInterval = globalThis.setInterval;
+// Patch setTimeout/setInterval to auto-bind callbacks to the active domain.
+const _origSetTimeout = globalThis.setTimeout;
+const _origSetInterval = globalThis.setInterval;
 
 if (_origSetTimeout) {
-    globalThis.setTimeout = function domainSetTimeout(callback, delay) {
+    globalThis.setTimeout = function domainSetTimeout(callback, delay, ...rest) {
         if (active && typeof callback === 'function') {
             callback = active.bind(callback);
         }
-        var args = [callback, delay];
-        for (var i = 2; i < arguments.length; i++) {
-            args.push(arguments[i]);
-        }
-        return _origSetTimeout.apply(globalThis, args);
+        return _origSetTimeout.call(globalThis, callback, delay, ...rest);
     };
 }
 
 if (_origSetInterval) {
-    globalThis.setInterval = function domainSetInterval(callback, delay) {
+    globalThis.setInterval = function domainSetInterval(callback, delay, ...rest) {
         if (active && typeof callback === 'function') {
             callback = active.bind(callback);
         }
-        var args = [callback, delay];
-        for (var i = 2; i < arguments.length; i++) {
-            args.push(arguments[i]);
-        }
-        return _origSetInterval.apply(globalThis, args);
+        return _origSetInterval.call(globalThis, callback, delay, ...rest);
     };
 }
 
@@ -154,16 +130,12 @@ class Domain extends EventEmitter {
         this.parent = null;
     }
 
-    run(fn) {
+    run(fn, ...args) {
         if (this._disposed) return;
-        var errorCaught = false;
-        var caughtErr;
+        let errorCaught = false;
+        let caughtErr;
         this.enter();
         try {
-            var args = [];
-            for (var i = 1; i < arguments.length; i++) {
-                args.push(arguments[i]);
-            }
             return fn.apply(this, args);
         } catch (err) {
             errorCaught = true;
@@ -201,7 +173,7 @@ class Domain extends EventEmitter {
     }
 
     remove(emitter) {
-        var idx = this.members.indexOf(emitter);
+        const idx = this.members.indexOf(emitter);
         if (idx !== -1) {
             this.members.splice(idx, 1);
         }
@@ -217,68 +189,62 @@ class Domain extends EventEmitter {
     }
 
     bind(callback) {
-        var self = this;
-        var wrapper = function () {
-            var errorCaught = false;
-            var caughtErr;
-            self.enter();
+        const wrapper = (...wrapperArgs) => {
+            let errorCaught = false;
+            let caughtErr;
+            this.enter();
             try {
-                return callback.apply(this, arguments);
+                return callback.apply(this, wrapperArgs);
             } catch (err) {
                 errorCaught = true;
                 caughtErr = err;
             } finally {
-                self.exit();
+                this.exit();
             }
             if (errorCaught) {
                 decorateError(caughtErr, {
-                    domain: self,
+                    domain: this,
                     domainThrown: true,
                 });
-                self.emit('error', caughtErr);
+                this.emit('error', caughtErr);
             }
         };
-        wrapper.domain = self;
+        wrapper.domain = this;
         return wrapper;
     }
 
     intercept(callback) {
-        var self = this;
-        var intercepted = function (err) {
+        const intercepted = (err, ...rest) => {
             if (err) {
                 decorateError(err, {
-                    domain: self,
+                    domain: this,
                     domainBound: callback,
                     domainThrown: false,
                 });
-                self.emit('error', err);
+                this.emit('error', err);
                 return;
             }
-            var errorCaught = false;
-            var caughtErr;
-            self.enter();
+            let errorCaught = false;
+            let caughtErr;
+            this.enter();
             try {
-                var args = [];
-                for (var i = 1; i < arguments.length; i++) {
-                    args.push(arguments[i]);
-                }
-                return callback.apply(this, args);
+                return callback.apply(this, rest);
             } catch (e) {
                 errorCaught = true;
                 caughtErr = e;
             } finally {
-                self.exit();
+                this.exit();
             }
             if (errorCaught) {
                 decorateError(caughtErr, {
-                    domain: self,
+                    domain: this,
                     domainBound: callback,
                     domainThrown: true,
                 });
-                self.emit('error', caughtErr);
+                this.emit('error', caughtErr);
             }
         };
-        intercepted.domain = self;
+        intercepted.domain = this;
         return intercepted;
     }
 
@@ -294,13 +260,7 @@ class Domain extends EventEmitter {
     exit() {
         // Node.js behavior: find this domain in the stack and pop it
         // + everything above. If not found, it's a no-op.
-        var idx = -1;
-        for (var i = _stack.length - 1; i >= 0; i--) {
-            if (_stack[i] === this) {
-                idx = i;
-                break;
-            }
-        }
+        const idx = _stack.lastIndexOf(this);
         if (idx === -1) return; // not in stack, no-op
         _stack.splice(idx);
         updateActive();
@@ -311,13 +271,13 @@ class Domain extends EventEmitter {
         this._disposed = true;
 
         // Remove all members
-        var members = this.members.slice();
-        for (var i = 0; i < members.length; i++) {
+        const members = this.members.slice();
+        for (let i = 0; i < members.length; i++) {
             this.remove(members[i]);
         }
 
         // Remove from stack if present
-        for (var j = _stack.length - 1; j >= 0; j--) {
+        for (let j = _stack.length - 1; j >= 0; j--) {
             if (_stack[j] === this) {
                 _stack.splice(j, 1);
             }

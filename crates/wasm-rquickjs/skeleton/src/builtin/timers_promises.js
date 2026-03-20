@@ -3,11 +3,11 @@ export function setTimeout(delay, value, options) {
         return Promise.reject(options.signal.reason);
     }
     return new Promise((resolve, reject) => {
+        let onAbort;
         const id = globalThis.setTimeout(() => {
             if (onAbort) options.signal.removeEventListener('abort', onAbort);
             resolve(value);
         }, delay);
-        let onAbort;
         if (options && options.signal) {
             onAbort = () => {
                 globalThis.clearTimeout(id);
@@ -35,15 +35,11 @@ export async function* setInterval(delay, value, options) {
         }, { once: true });
     }
     while (!aborted) {
-        try {
-            await new Promise((resolve, reject) => {
-                rejectCurrent = reject;
-                globalThis.setTimeout(() => { rejectCurrent = null; resolve(); }, delay);
-            });
-            yield value;
-        } catch (e) {
-            throw e;
-        }
+        await new Promise((resolve, reject) => {
+            rejectCurrent = reject;
+            globalThis.setTimeout(() => { rejectCurrent = null; resolve(); }, delay);
+        });
+        yield value;
     }
 }
 

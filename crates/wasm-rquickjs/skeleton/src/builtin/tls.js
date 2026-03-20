@@ -3,16 +3,18 @@
 
 import net from 'node:net';
 
-const NOT_SUPPORTED_ERROR = new Error('tls is not supported in WebAssembly environment');
+function notSupported() {
+    return new Error('tls is not supported in WebAssembly environment');
+}
 
 export class SecureContext {
     constructor() {
-        throw NOT_SUPPORTED_ERROR;
+        throw notSupported();
     }
 }
 
 export function TLSSocket() {
-    throw NOT_SUPPORTED_ERROR;
+    throw notSupported();
 }
 
 // Keep the same inheritance shape as Node.js:
@@ -22,24 +24,24 @@ Object.setPrototypeOf(TLSSocket, net.Socket);
 
 export class Server {
     constructor() {
-        throw NOT_SUPPORTED_ERROR;
+        throw notSupported();
     }
 }
 
-export function connect(options, callback) {
-    throw NOT_SUPPORTED_ERROR;
+export function connect() {
+    throw notSupported();
 }
 
-export function createServer(options, secureConnectionListener) {
-    throw NOT_SUPPORTED_ERROR;
+export function createServer() {
+    throw notSupported();
 }
 
-export function createSecureContext(options) {
-    throw NOT_SUPPORTED_ERROR;
+export function createSecureContext() {
+    throw notSupported();
 }
 
-export function checkServerIdentity(hostname, cert) {
-    throw NOT_SUPPORTED_ERROR;
+export function checkServerIdentity() {
+    throw notSupported();
 }
 
 export function getCiphers() {

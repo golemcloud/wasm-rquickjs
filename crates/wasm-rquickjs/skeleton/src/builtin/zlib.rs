@@ -517,8 +517,7 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
                 // Z_PARTIAL_FLUSH / Z_SYNC_FLUSH / Z_FULL_FLUSH
                 encoder.flush().ok()?;
             }
-            let result = encoder.get_ref().clone();
-            encoder.get_mut().clear();
+            let result = std::mem::take(encoder.get_mut());
             Some(result)
         }
         ZlibStreamKind::RawStored { buffer } => {
@@ -557,8 +556,7 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
                 // Z_PARTIAL_FLUSH / Z_SYNC_FLUSH / Z_FULL_FLUSH — flush buffered data
                 encoder.flush().ok()?;
             }
-            let result = encoder.get_ref().clone();
-            encoder.get_mut().clear();
+            let result = std::mem::take(encoder.get_mut());
             Some(result)
         }
         ZlibStreamKind::GzipDecompress {

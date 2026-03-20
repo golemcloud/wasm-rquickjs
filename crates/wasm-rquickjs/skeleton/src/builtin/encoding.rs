@@ -5,7 +5,6 @@ use rquickjs::class::Trace;
 use std::ptr;
 use std::ptr::NonNull;
 
-// Native functions for the encoding implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     use rquickjs::convert::Coerced;
@@ -46,7 +45,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn encode(string: String, ctx: Ctx<'_>) -> TypedArray<'_, u8> {
-        TypedArray::new_copy(ctx, super::encode_impl(&string))
+        TypedArray::new_copy(ctx, string.as_bytes())
             .expect("failed to create UInt8Array from string")
     }
 
@@ -66,10 +65,6 @@ pub struct EncodeIntoResult {
     pub read: usize,
     #[qjs(get, enumerable)]
     pub written: usize,
-}
-
-fn encode_impl(string: &str) -> &[u8] {
-    string.as_bytes()
 }
 
 fn encode_into_impl(string: &str, target_len: usize, target: NonNull<u8>) -> EncodeIntoResult {
@@ -166,10 +161,8 @@ fn decode_impl(
     }
 }
 
-// JS functions for the Encoding API implementation
 pub const ENCODING_JS: &str = include_str!("encoding.js");
 
-// JS code wiring the encoding module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_encoding from '__wasm_rquickjs_builtin/encoding';
         globalThis.TextDecoder = __wasm_rquickjs_encoding.TextDecoder;

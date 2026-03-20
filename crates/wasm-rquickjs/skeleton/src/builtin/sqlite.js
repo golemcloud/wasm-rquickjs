@@ -11,13 +11,6 @@ import {
 
 const constants = get_constants();
 const _connIdSymbol = Symbol('connId');
-const WAL_JOURNAL_MODE_OVERRIDES = new Set();
-const JOURNAL_MODE_SET_RE = /^\s*PRAGMA\s+journal_mode\s*=\s*([^\s;]+)\s*;?\s*$/i;
-const JOURNAL_MODE_GET_RE = /^\s*PRAGMA\s+journal_mode\s*;?\s*$/i;
-
-function opt(value, defaultValue) {
-    return value !== undefined ? value : defaultValue;
-}
 
 function assertBoolean(value, name) {
     if (typeof value !== 'boolean') {
@@ -31,25 +24,6 @@ function throwDbNotOpen(code) {
     const err = new Error('database is not open');
     err.code = code;
     throw err;
-}
-
-function parseJournalModePragma(sql) {
-    const setMatch = JOURNAL_MODE_SET_RE.exec(sql);
-    if (setMatch) {
-        return { type: 'set', mode: setMatch[1].toLowerCase() };
-    }
-    if (JOURNAL_MODE_GET_RE.test(sql)) {
-        return { type: 'get' };
-    }
-    return null;
-}
-
-function isJournalModeObject(value) {
-    return value !== null
-        && value !== undefined
-        && typeof value === 'object'
-        && !Array.isArray(value)
-        && typeof value.journal_mode === 'string';
 }
 
 class _DatabaseSyncImpl {
@@ -72,17 +46,17 @@ class _DatabaseSyncImpl {
 
         this.#path = path;
         this.#options = {
-            open: opt(options.open, true),
-            readOnly: opt(options.readOnly, false),
-            enableForeignKeyConstraints: opt(options.enableForeignKeyConstraints, true),
-            enableDoubleQuotedStringLiterals: opt(options.enableDoubleQuotedStringLiterals, false),
-            allowExtension: opt(options.allowExtension, false),
-            timeout: opt(options.timeout, 0),
-            readBigInts: opt(options.readBigInts, false),
-            returnArrays: opt(options.returnArrays, false),
-            allowBareNamedParameters: opt(options.allowBareNamedParameters, true),
-            allowUnknownNamedParameters: opt(options.allowUnknownNamedParameters, false),
-            defensive: opt(options.defensive, true),
+            open: options.open ?? true,
+            readOnly: options.readOnly ?? false,
+            enableForeignKeyConstraints: options.enableForeignKeyConstraints ?? true,
+            enableDoubleQuotedStringLiterals: options.enableDoubleQuotedStringLiterals ?? false,
+            allowExtension: options.allowExtension ?? false,
+            timeout: options.timeout ?? 0,
+            readBigInts: options.readBigInts ?? false,
+            returnArrays: options.returnArrays ?? false,
+            allowBareNamedParameters: options.allowBareNamedParameters ?? true,
+            allowUnknownNamedParameters: options.allowUnknownNamedParameters ?? false,
+            defensive: options.defensive ?? true,
         };
 
         // Validate boolean options
@@ -113,7 +87,6 @@ class _DatabaseSyncImpl {
             this.#options.enableDoubleQuotedStringLiterals,
             this.#options.timeout
         );
-        WAL_JOURNAL_MODE_OVERRIDES.delete(this.#connId);
         this[_connIdSymbol] = this.#connId;
         if (!this.#options.defensive) {
             enable_defensive(this.#connId, false);
@@ -122,7 +95,6 @@ class _DatabaseSyncImpl {
 
     close() {
         if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
-        WAL_JOURNAL_MODE_OVERRIDES.delete(this.#connId);
         close_database(this.#connId);
         this.#connId = null;
         this[_connIdSymbol] = null;
@@ -152,10 +124,10 @@ class _DatabaseSyncImpl {
             throw err;
         }
         const stmtOptions = {
-            readBigInts: opt(options.readBigInts, this.#options.readBigInts),
-            returnArrays: opt(options.returnArrays, this.#options.returnArrays),
-            allowBareNamedParameters: opt(options.allowBareNamedParameters, this.#options.allowBareNamedParameters),
-            allowUnknownNamedParameters: opt(options.allowUnknownNamedParameters, this.#options.allowUnknownNamedParameters),
+            readBigInts: options.readBigInts ?? this.#options.readBigInts,
+            returnArrays: options.returnArrays ?? this.#options.returnArrays,
+            allowBareNamedParameters: options.allowBareNamedParameters ?? this.#options.allowBareNamedParameters,
+            allowUnknownNamedParameters: options.allowUnknownNamedParameters ?? this.#options.allowUnknownNamedParameters,
         };
         return new StatementSync(_stmtSecret, this.#connId, sql, stmtOptions);
     }
@@ -454,34 +426,11 @@ class StatementSync {
     get(...args) {
         const params = this.#processParams(args);
         this.#lastParams = params;
-        const result = stmt_get(this.#connId, this.#sql, params,
+        return stmt_get(this.#connId, this.#sql, params,
             this.#options.allowBareNamedParameters,
             this.#options.allowUnknownNamedParameters,
             this.#options.readBigInts,
             this.#options.returnArrays);
-
-        const journalModePragma = parseJournalModePragma(this.#sql);
-        if (!journalModePragma || !isJournalModeObject(result)) {
-            return result;
-        }
-
-        if (journalModePragma.type === 'set') {
-            if (journalModePragma.mode === 'wal' && result.journal_mode === 'delete') {
-                // WASI VFS does not expose WAL support, but Node's sqlite tests expect
-                // file-backed PRAGMA journal_mode=WAL to report wal.
-                WAL_JOURNAL_MODE_OVERRIDES.add(this.#connId);
-                result.journal_mode = 'wal';
-                return result;
-            }
-            WAL_JOURNAL_MODE_OVERRIDES.delete(this.#connId);
-            return result;
-        }
-
-        if (WAL_JOURNAL_MODE_OVERRIDES.has(this.#connId) && result.journal_mode === 'delete') {
-            result.journal_mode = 'wal';
-        }
-
-        return result;
     }
 
     all(...args) {

@@ -13,12 +13,10 @@ import {
   zlib_stream_params,
   zlib_stream_reset,
   zlib_stream_close,
-  zlib_stream_bytes_written,
   brotli_stream_new,
   brotli_stream_push,
   brotli_stream_pull,
   brotli_stream_close,
-  brotli_stream_bytes_written,
 } from '__wasm_rquickjs_builtin/zlib_native';
 
 // Capture buffer.kMaxLength at require('zlib') time, matching Node.js CJS behavior
@@ -362,9 +360,6 @@ function toBuffer(input) {
 
 function toUint8Array(buf) {
   if (buf instanceof Uint8Array) return buf;
-  if (Buffer.isBuffer(buf)) {
-    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-  }
   if (ArrayBuffer.isView(buf)) {
     return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   }
@@ -681,12 +676,12 @@ class ZlibBase extends Transform {
      } else {
        result = zlib_stream_push(this._handle, data, flush || Z_NO_FLUSH);
      }
-     if (result === null || result === undefined) {
+     if (result == null) {
        this._closeHandle();
        callback(makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error'));
        return;
      }
-     if (result && result.length > 0) {
+     if (result.length > 0) {
        this.push(Buffer.from(result));
      }
      queueMicrotask(callback);
@@ -708,12 +703,12 @@ class ZlibBase extends Transform {
       } else {
         result = zlib_stream_push(this._handle, new Uint8Array(0), this._finishFlush);
       }
-      if (result === null || result === undefined) {
+      if (result == null) {
         this._closeHandle();
         callback(makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error'));
         return;
       }
-      if (result && result.length > 0) {
+      if (result.length > 0) {
         this.push(Buffer.from(result));
       }
       this._closeHandle();
@@ -891,12 +886,12 @@ class _BrotliDecompress extends ZlibBase {
     }
     try {
       const result = brotli_stream_push(this._handle, new Uint8Array(0), 2);
-      if (result === null || result === undefined) {
+      if (result == null) {
         this._closeHandle();
         callback(makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error'));
         return;
       }
-      if (result && result.length > 0) {
+      if (result.length > 0) {
         const ok = this.push(Buffer.from(result));
         if (!ok) {
           this._brotliFlushCb = callback;
@@ -1002,7 +997,7 @@ function doSyncCompress(data, opts, windowBitsOverride, mode) {
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
   const result = zlib_compress_sync(uint8, validated.level, wb);
-  if (result === null || result === undefined) {
+  if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Compression failed');
   }
   const output = Buffer.from(result);
@@ -1021,7 +1016,7 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
   const result = zlib_decompress_sync(uint8, wb);
-  if (result === null || result === undefined) {
+  if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Decompression failed');
   }
   const output = Buffer.from(result);
@@ -1073,7 +1068,7 @@ export function brotliCompressSync(data, opts) {
   const paramsJson = brotliParamsToJson(validated.params);
 
   const result = _brotli_compress_sync(uint8, paramsJson);
-  if (result === null || result === undefined) {
+  if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
   }
   const output = Buffer.from(result);
@@ -1089,7 +1084,7 @@ export function brotliDecompressSync(data, opts) {
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const result = _brotli_decompress_sync(uint8);
-  if (result === null || result === undefined) {
+  if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');
   }
   const output = Buffer.from(result);

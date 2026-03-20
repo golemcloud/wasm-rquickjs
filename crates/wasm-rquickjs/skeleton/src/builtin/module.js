@@ -271,7 +271,7 @@ function _mockCanonicalKey(specifier, base) {
     if (typeof specifier !== 'string') return null;
 
     // Check if it's a builtin (with or without node: prefix)
-    var bare = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
+    const bare = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
     if (builtinModuleMap[bare] !== undefined || builtinModuleMap['node:' + bare] !== undefined) {
         return 'builtin:' + bare;
     }
@@ -279,7 +279,7 @@ function _mockCanonicalKey(specifier, base) {
     // file:// URL
     if (specifier.startsWith('file://')) {
         try {
-            var filePath = nodeUrl.fileURLToPath(specifier);
+            const filePath = nodeUrl.fileURLToPath(specifier);
             return 'path:' + pathModule.resolve(filePath);
         } catch (e) {
             return 'path:' + specifier;
@@ -293,7 +293,7 @@ function _mockCanonicalKey(specifier, base) {
 
     // Relative path — resolve against base (from ESM resolver) or current module context
     if (specifier.startsWith('./') || specifier.startsWith('../')) {
-        var baseDir = '/';
+        let baseDir = '/';
         if (typeof base === 'string' && base) {
             try {
                 if (base.startsWith('file://')) {
@@ -306,7 +306,7 @@ function _mockCanonicalKey(specifier, base) {
             }
         }
         if (baseDir === '/') {
-            var ctx = globalThis.__wasm_rquickjs_current_module;
+            const ctx = globalThis.__wasm_rquickjs_current_module;
             if (ctx && ctx.filename) {
                 baseDir = pathModule.dirname(ctx.filename);
             }
@@ -322,16 +322,16 @@ function _detectMockModuleKind(canonicalKey) {
     if (!canonicalKey) return 'esm';
     if (canonicalKey.startsWith('builtin:')) return 'cjs';
     if (!canonicalKey.startsWith('path:')) return 'esm';
-    var filename = canonicalKey.slice(5);
+    const filename = canonicalKey.slice(5);
     if (filename.endsWith('.mjs')) return 'esm';
     // Default to CJS for .js, .cjs, and everything else
     return 'cjs';
 }
 
 function _materializeCjsMock(entry) {
-    var result;
-    var hasDefault = 'defaultExport' in entry;
-    var hasNamed = entry.namedExports !== undefined;
+    let result;
+    const hasDefault = 'defaultExport' in entry;
+    const hasNamed = entry.namedExports !== undefined;
 
     if (hasDefault) {
         result = entry.defaultExport;
@@ -341,12 +341,12 @@ function _materializeCjsMock(entry) {
 
     if (hasNamed) {
         if (result === null || (typeof result !== 'object' && typeof result !== 'function')) {
-            var err = new Error('Cannot create mock: named exports cannot be applied to non-object defaultExport');
+            const err = new Error('Cannot create mock: named exports cannot be applied to non-object defaultExport');
             err.code = 'ERR_INVALID_STATE';
             throw err;
         }
-        var keys = Object.keys(entry.namedExports);
-        for (var i = 0; i < keys.length; i++) {
+        const keys = Object.keys(entry.namedExports);
+        for (let i = 0; i < keys.length; i++) {
             result[keys[i]] = entry.namedExports[keys[i]];
         }
     }
@@ -355,18 +355,18 @@ function _materializeCjsMock(entry) {
 }
 
 function _registerModuleMock(specifier, options) {
-    var key = _mockCanonicalKey(specifier);
+    const key = _mockCanonicalKey(specifier);
     if (!key) return null;
 
     if (_moduleMockRegistry[key]) {
-        var err = new Error('The module is already mocked');
+        const err = new Error('The module is already mocked');
         err.code = 'ERR_INVALID_STATE';
         throw err;
     }
 
-    var id = _moduleMockNextId++;
-    var kind = _detectMockModuleKind(key);
-    var entry = {
+    const id = _moduleMockNextId++;
+    const kind = _detectMockModuleKind(key);
+    const entry = {
         id: id,
         canonicalKey: key,
         specifier: specifier,
@@ -390,7 +390,7 @@ function _registerModuleMock(specifier, options) {
             delete _moduleMockRegistry[key];
             delete _moduleMockRegistryById[id];
             // Clean up ESM storage
-            var storageKey = '__wasm_rquickjs_mock_data_' + id;
+            const storageKey = '__wasm_rquickjs_mock_data_' + id;
             delete globalThis[storageKey];
             entry._cachedCjsResult = undefined;
             entry._cachedCjsReady = false;
@@ -401,7 +401,7 @@ function _registerModuleMock(specifier, options) {
 function _resolveRequireMock(id) {
     // CJS require() does not support file:// URLs — don't intercept them
     if (typeof id === 'string' && id.startsWith('file://')) return null;
-    var key = _mockCanonicalKey(id);
+    const key = _mockCanonicalKey(id);
     if (!key) return null;
     return _moduleMockRegistry[key] || null;
 }
@@ -418,7 +418,7 @@ globalThis.__wasm_rquickjs_get_mock_module_entry = function(mockId) {
 
 // Generate ESM module source for a mock entry (called from Rust MockModuleLoader)
 globalThis.__wasm_rquickjs_get_mock_module_source = function(mockId) {
-    var entry = _moduleMockRegistryById[mockId];
+    const entry = _moduleMockRegistryById[mockId];
     if (!entry) {
         throw new Error('Mock entry not found for id: ' + mockId);
     }
@@ -426,10 +426,10 @@ globalThis.__wasm_rquickjs_get_mock_module_source = function(mockId) {
 };
 
 function _generateMockEsmSource(entry) {
-    var storageKey = '__wasm_rquickjs_mock_data_' + entry.id;
+    const storageKey = '__wasm_rquickjs_mock_data_' + entry.id;
     globalThis[storageKey] = entry;
 
-    var lines = [];
+    const lines = [];
     lines.push('var __entry = globalThis["' + storageKey + '"];');
     lines.push('var __named = __entry.namedExports;');
     lines.push('var __hasDefault = "defaultExport" in __entry;');
@@ -448,9 +448,9 @@ function _generateMockEsmSource(entry) {
         lines.push('export default __result;');
         // Also export named entries individually for ESM consumers
         if (entry.namedExports) {
-            var nkeys = Object.keys(entry.namedExports);
-            for (var i = 0; i < nkeys.length; i++) {
-                var k = nkeys[i];
+            const nkeys = Object.keys(entry.namedExports);
+            for (let i = 0; i < nkeys.length; i++) {
+                const k = nkeys[i];
                 if (k === 'default') continue;
                 if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k)) {
                     lines.push('export var ' + k + ' = __named["' + k + '"];');
@@ -460,9 +460,9 @@ function _generateMockEsmSource(entry) {
     } else {
         // ESM-style mock: named exports are independent, default is separate
         if (entry.namedExports) {
-            var nkeys = Object.keys(entry.namedExports);
-            for (var i = 0; i < nkeys.length; i++) {
-                var k = nkeys[i];
+            const nkeys = Object.keys(entry.namedExports);
+            for (let i = 0; i < nkeys.length; i++) {
+                const k = nkeys[i];
                 if (k === 'default') {
                     lines.push('export default __named["default"];');
                 } else if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k)) {
@@ -494,9 +494,6 @@ const publicBuiltinIdSet = new Set();
 const publicBuiltinWithoutSchemeSet = new Set();
 for (let _i = 0; _i < builtinModuleNames.length; _i++) {
     const _name = builtinModuleNames[_i];
-    if (_name.startsWith('internal/')) continue;
-    if (_name.startsWith('node:')) continue;
-    if (_name.startsWith('__wasm_rquickjs_builtin')) continue;
     publicBuiltinIdSet.add(_name);
     if (!schemelessBlockList.has(_name)) {
         publicBuiltinWithoutSchemeSet.add(_name);
@@ -531,35 +528,35 @@ requireExtensions['.node'] = function _defaultNode(mod, filename) { /* built-in 
 const _defaultExtHandlers = new Set([requireExtensions['.js'], requireExtensions['.json'], requireExtensions['.node']]);
 
 // Path cache (settable; used by tests to reset resolution state)
-var _pathCache = Object.create(null);
+let _pathCache = Object.create(null);
 
 function findLongestRegisteredExtension(filename) {
-    var name = pathModule.basename(filename);
-    var startIndex = 0;
-    var index;
+    const name = pathModule.basename(filename);
+    let startIndex = 0;
+    let index;
     while ((index = name.indexOf('.', startIndex)) !== -1) {
         startIndex = index + 1;
         if (index === 0) continue; // Skip leading dot (dotfiles)
-        var ext = name.slice(index);
+        const ext = name.slice(index);
         if (requireExtensions[ext]) return ext;
     }
     return '.js';
 }
 
 function getPackageScopeType(filename) {
-    var dir = pathModule.dirname(filename);
+    let dir = pathModule.dirname(filename);
     while (true) {
-        var pkgPath = pathModule.join(dir, 'package.json');
-        var pkgContent = tryReadFile(pkgPath);
+        const pkgPath = pathModule.join(dir, 'package.json');
+        const pkgContent = tryReadFile(pkgPath);
         if (pkgContent !== null) {
             try {
-                var pkg = JSON.parse(pkgContent);
+                const pkg = JSON.parse(pkgContent);
                 return pkg.type || 'commonjs';
             } catch (e) {
                 return 'commonjs';
             }
         }
-        var parent = pathModule.dirname(dir);
+        const parent = pathModule.dirname(dir);
         if (parent === dir) break;
         dir = parent;
     }
@@ -567,22 +564,19 @@ function getPackageScopeType(filename) {
 }
 
 function resolveFilename(id, parentDir) {
-    var candidate;
-    if (pathModule.isAbsolute(id)) {
-        candidate = pathModule.normalize(id);
-    } else {
-        candidate = pathModule.resolve(parentDir, id);
-    }
+    const candidate = pathModule.isAbsolute(id)
+        ? pathModule.normalize(id)
+        : pathModule.resolve(parentDir, id);
 
     // Try exact path
-    var content = tryReadFile(candidate);
+    let content = tryReadFile(candidate);
     if (content !== null) {
         return { filename: candidate, content: content };
     }
 
     // Try with each registered extension
-    var exts = Object.keys(requireExtensions);
-    for (var i = 0; i < exts.length; i++) {
+    const exts = Object.keys(requireExtensions);
+    for (let i = 0; i < exts.length; i++) {
         content = tryReadFile(candidate + exts[i]);
         if (content !== null) {
             return { filename: candidate + exts[i], content: content };
@@ -599,25 +593,25 @@ function resolveFilename(id, parentDir) {
         return { filename: pathModule.join(candidate, 'index.json'), content: content };
     }
 
-    var err = new Error("Cannot find module '" + id + "' from '" + parentDir + "'");
+    const err = new Error("Cannot find module '" + id + "' from '" + parentDir + "'");
     err.code = 'MODULE_NOT_FOUND';
     throw err;
 }
 
 function hasAllowNativesSyntaxFlag() {
-    var runtimeFlags = globalThis.__wasm_rquickjs_v8_runtime_flags;
+    const runtimeFlags = globalThis.__wasm_rquickjs_v8_runtime_flags;
     if (runtimeFlags && runtimeFlags.allowNativesSyntax === true) {
         return true;
     }
 
-    var processObject = globalThis.process;
+    const processObject = globalThis.process;
     if (!processObject || !Array.isArray(processObject.execArgv)) {
         return false;
     }
 
-    var enabled = false;
-    for (var i = 0; i < processObject.execArgv.length; i++) {
-        var arg = String(processObject.execArgv[i]).replace(/_/g, '-');
+    let enabled = false;
+    for (let i = 0; i < processObject.execArgv.length; i++) {
+        const arg = String(processObject.execArgv[i]).replace(/_/g, '-');
         if (arg === '--allow-natives-syntax') {
             enabled = true;
             continue;
@@ -644,7 +638,7 @@ function stripV8OptimizationIntrinsics(source) {
 }
 
 function _iaSkipStr(s, i) {
-    var q = s.charCodeAt(i);
+    const q = s.charCodeAt(i);
     i++;
     while (i < s.length) {
         if (s.charCodeAt(i) === 0x5C) { i += 2; }
@@ -657,12 +651,12 @@ function _iaSkipStr(s, i) {
 function _iaSkipTpl(s, i) {
     i++;
     while (i < s.length) {
-        var c = s.charCodeAt(i);
+        let c = s.charCodeAt(i);
         if (c === 0x5C) { i += 2; }
         else if (c === 0x60) { return i + 1; }
         else if (c === 0x24 && i + 1 < s.length && s.charCodeAt(i + 1) === 0x7B) {
             i += 2;
-            var d = 1;
+            let d = 1;
             while (i < s.length && d > 0) {
                 c = s.charCodeAt(i);
                 if (c === 0x27 || c === 0x22) { i = _iaSkipStr(s, i); }
@@ -677,26 +671,27 @@ function _iaSkipTpl(s, i) {
 }
 
 function stripImportAttributes(source) {
-    var len = source.length;
-    var out = [];
-    var i = 0;
+    const len = source.length;
+    const out = [];
+    let i = 0;
     while (i < len) {
-        var ch = source.charCodeAt(i);
+        let ch = source.charCodeAt(i);
         if (ch === 0x27 || ch === 0x22) {
-            var s = i; i = _iaSkipStr(source, i); out.push(source.substring(s, i)); continue;
+            const s = i; i = _iaSkipStr(source, i); out.push(source.substring(s, i)); continue;
         }
         if (ch === 0x60) {
-            var s = i; i = _iaSkipTpl(source, i); out.push(source.substring(s, i)); continue;
+            const s = i; i = _iaSkipTpl(source, i); out.push(source.substring(s, i)); continue;
         }
         if (ch === 0x2F && i + 1 < len) {
-            var nc = source.charCodeAt(i + 1);
-            if (nc === 0x2F) { var s = i; while (i < len && source.charCodeAt(i) !== 0x0A) i++; out.push(source.substring(s, i)); continue; }
-            if (nc === 0x2A) { var s = i; i += 2; while (i + 1 < len && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++; if (i + 1 < len) i += 2; out.push(source.substring(s, i)); continue; }
+            const nc = source.charCodeAt(i + 1);
+            if (nc === 0x2F) { const s = i; while (i < len && source.charCodeAt(i) !== 0x0A) i++; out.push(source.substring(s, i)); continue; }
+            if (nc === 0x2A) { const s = i; i += 2; while (i + 1 < len && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++; if (i + 1 < len) i += 2; out.push(source.substring(s, i)); continue; }
         }
         if (ch === 0x69 && i + 7 <= len && source.substring(i, i + 7) === 'import(' &&
             (i === 0 || !((ch = source.charCodeAt(i - 1)) >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch >= 97 && ch <= 122 || ch === 95 || ch === 36))) {
             i += 7;
-            var depth = 1, commaPos = -1, argStart = i;
+            let depth = 1, commaPos = -1;
+            const argStart = i;
             while (i < len && depth > 0) {
                 ch = source.charCodeAt(i);
                 if (ch === 0x27 || ch === 0x22) { i = _iaSkipStr(source, i); }
@@ -709,8 +704,8 @@ function stripImportAttributes(source) {
                 else { i++; }
             }
             if (commaPos > -1) {
-                var firstArg = source.substring(argStart, commaPos);
-                var secondArg = source.substring(commaPos + 1, i - 1);
+                const firstArg = source.substring(argStart, commaPos);
+                const secondArg = source.substring(commaPos + 1, i - 1);
                 out.push('(globalThis.__wasm_rquickjs_validate_import_attrs(');
                 out.push(firstArg);
                 out.push(',');
@@ -719,7 +714,7 @@ function stripImportAttributes(source) {
                 out.push(firstArg);
                 out.push('))');
             } else {
-                var spec = source.substring(argStart, i - 1);
+                const spec = source.substring(argStart, i - 1);
                 out.push('(globalThis.__wasm_rquickjs_validate_import_attrs(');
                 out.push(spec);
                 out.push(') || import(');
@@ -735,14 +730,14 @@ function stripImportAttributes(source) {
 }
 
 function hasExecArgvFlag(flag) {
-    var processObject = globalThis.process;
+    const processObject = globalThis.process;
     if (!processObject || !Array.isArray(processObject.execArgv)) {
         return false;
     }
 
-    var prefixed = flag + '=';
-    for (var i = 0; i < processObject.execArgv.length; i++) {
-        var arg = String(processObject.execArgv[i]);
+    const prefixed = flag + '=';
+    for (let i = 0; i < processObject.execArgv.length; i++) {
+        const arg = String(processObject.execArgv[i]);
         if (arg === flag || arg.indexOf(prefixed) === 0) {
             return true;
         }
@@ -764,7 +759,7 @@ function isSourceMapsEnabled() {
 }
 
 function getSimpleSourceMapRegistry() {
-    var registry = globalThis.__wasm_rquickjs_simple_source_maps;
+    let registry = globalThis.__wasm_rquickjs_simple_source_maps;
     if (!registry || typeof registry !== 'object') {
         registry = Object.create(null);
         globalThis.__wasm_rquickjs_simple_source_maps = registry;
@@ -773,7 +768,7 @@ function getSimpleSourceMapRegistry() {
 }
 
 function getCjsLineOffsetRegistry() {
-    var registry = globalThis.__wasm_rquickjs_cjs_line_offsets;
+    let registry = globalThis.__wasm_rquickjs_cjs_line_offsets;
     if (!registry || typeof registry !== 'object') {
         registry = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = registry;
@@ -782,8 +777,8 @@ function getCjsLineOffsetRegistry() {
 }
 
 function countMatches(text, charCode) {
-    var count = 0;
-    for (var i = 0; i < text.length; i++) {
+    let count = 0;
+    for (let i = 0; i < text.length; i++) {
         if (text.charCodeAt(i) === charCode) {
             count += 1;
         }
@@ -796,14 +791,14 @@ function transpileTypeScriptModule(filename, source) {
         return source;
     }
 
-    var lines = String(source).split('\n');
-    var transformedLines = [];
-    var generatedLineToOriginalLine = Object.create(null);
-    var insideInterface = false;
-    var interfaceDepth = 0;
+    const lines = String(source).split('\n');
+    const transformedLines = [];
+    const generatedLineToOriginalLine = Object.create(null);
+    let insideInterface = false;
+    let interfaceDepth = 0;
 
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
 
         if (insideInterface) {
             interfaceDepth += countMatches(line, 123) - countMatches(line, 125);
@@ -814,7 +809,7 @@ function transpileTypeScriptModule(filename, source) {
             continue;
         }
 
-        var trimmed = line.trim();
+        const trimmed = line.trim();
         if (/^interface\s+[A-Za-z_$][A-Za-z0-9_$]*\b/.test(trimmed)) {
             interfaceDepth = countMatches(line, 123) - countMatches(line, 125);
             if (interfaceDepth > 0) {
@@ -831,8 +826,8 @@ function transpileTypeScriptModule(filename, source) {
         generatedLineToOriginalLine[transformedLines.length] = i + 1;
     }
 
-    var transformed = transformedLines.join('\n');
-    var sourceMapRegistry = getSimpleSourceMapRegistry();
+    const transformed = transformedLines.join('\n');
+    const sourceMapRegistry = getSimpleSourceMapRegistry();
     if (isSourceMapsEnabled()) {
         sourceMapRegistry[filename] = {
             generatedLineToOriginalLine,
@@ -845,12 +840,12 @@ function transpileTypeScriptModule(filename, source) {
 }
 
 function getArrowMessagePrivateSymbol() {
-    var privateSymbols = globalThis.__wasm_rquickjs_internal_private_symbols;
+    const privateSymbols = globalThis.__wasm_rquickjs_internal_private_symbols;
     if (!privateSymbols || typeof privateSymbols !== 'object') {
         return undefined;
     }
 
-    var arrowMessageSymbol = privateSymbols.arrow_message_private_symbol;
+    const arrowMessageSymbol = privateSymbols.arrow_message_private_symbol;
     return typeof arrowMessageSymbol === 'symbol' ? arrowMessageSymbol : undefined;
 }
 
@@ -863,13 +858,13 @@ function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
         return;
     }
 
-    var arrowMessageSymbol = getArrowMessagePrivateSymbol();
+    const arrowMessageSymbol = getArrowMessagePrivateSymbol();
     if (arrowMessageSymbol === undefined || err[arrowMessageSymbol] !== undefined) {
         return;
     }
 
-    var line = 1;
-    var column = 1;
+    let line = 1;
+    let column = 1;
 
     if (typeof err.lineNumber === 'number' && Number.isFinite(err.lineNumber) && err.lineNumber > 0) {
         line = Math.floor(err.lineNumber);
@@ -879,7 +874,7 @@ function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
     }
 
     if (typeof err.stack === 'string') {
-        var stackMatch = err.stack.match(new RegExp(escapeRegExp(filename) + ':(\\d+)(?::(\\d+))?'));
+        const stackMatch = err.stack.match(new RegExp(escapeRegExp(filename) + ':(\\d+)(?::(\\d+))?'));
         if (stackMatch) {
             line = parseInt(stackMatch[1], 10);
             if (stackMatch[2] !== undefined) {
@@ -888,8 +883,8 @@ function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
         }
     }
 
-    var sourceLines = String(source).split('\n');
-    var sourceLine = '';
+    const sourceLines = String(source).split('\n');
+    let sourceLine = '';
     if (line >= 1 && line <= sourceLines.length) {
         sourceLine = sourceLines[line - 1].replace(/\r$/, '');
     }
@@ -898,7 +893,7 @@ function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
         column = 1;
     }
 
-    var arrowMessage = filename + ':' + line;
+    let arrowMessage = filename + ':' + line;
     if (sourceLine.length > 0) {
         arrowMessage += '\n' + sourceLine + '\n' + ' '.repeat(column - 1) + '^';
     }
@@ -922,11 +917,11 @@ function wrapEsmNamespace(ns) {
         return ns;
     } catch (_) {}
     // Namespace is sealed — create a plain wrapper that looks like a module namespace
-    var wrapped = Object.create(null);
+    const wrapped = Object.create(null);
     Object.defineProperty(wrapped, Symbol.toStringTag, { value: 'Module' });
-    var keys = Object.keys(ns);
-    for (var i = 0; i < keys.length; i++) {
-        var k = keys[i];
+    const keys = Object.keys(ns);
+    for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
         Object.defineProperty(wrapped, k, {
             get: (function(key) { return function() { return ns[key]; }; })(k),
             enumerable: true,
@@ -946,13 +941,13 @@ function wrapEsmNamespace(ns) {
 // QuickJS: "unsupported keyword: export" → Node.js: "Unexpected token 'export'"
 function normalizeEsmSyntaxError(err) {
     if (!err || typeof err.message !== 'string') return;
-    var m = err.message.match(/^unsupported keyword: (\w+)$/);
+    const m = err.message.match(/^unsupported keyword: (\w+)$/);
     if (m) {
         err.message = "Unexpected token '" + m[1] + "'";
     }
 }
 
-var wrapper = [
+const wrapper = [
     '(function (exports, require, module, __filename, __dirname) { ',
     '\n});'
 ];
@@ -971,24 +966,24 @@ function compileCjs(filename, source) {
     source = stripV8OptimizationIntrinsics(source);
     source = stripImportAttributes(source);
 
-    var cjsLineOffsets = getCjsLineOffsetRegistry();
+    const cjsLineOffsets = getCjsLineOffsetRegistry();
     cjsLineOffsets[filename] = 2;
 
-    var wrappedSource = wrap(source + '\n//# sourceURL=' + filename + '\n');
+    const wrappedSource = wrap(source + '\n//# sourceURL=' + filename + '\n');
     return _evalWithFilename(wrappedSource, filename);
 }
 
 function loadModule(resolvedFilename, source, parentModule) {
     // Check cache
     if (moduleCache[resolvedFilename]) {
-        var cached = moduleCache[resolvedFilename];
+        const cached = moduleCache[resolvedFilename];
         if (parentModule && parentModule.children && !parentModule.children.includes(cached)) {
             parentModule.children.push(cached);
         }
         return cached;
     }
 
-    var mod = {
+    const mod = {
         id: resolvedFilename,
         filename: resolvedFilename,
         path: pathModule.dirname(resolvedFilename),
@@ -1006,8 +1001,8 @@ function loadModule(resolvedFilename, source, parentModule) {
     }
 
     // Check for custom extension handler
-    var ext = findLongestRegisteredExtension(resolvedFilename);
-    var handler = requireExtensions[ext];
+    const ext = findLongestRegisteredExtension(resolvedFilename);
+    const handler = requireExtensions[ext];
     if (handler && !_defaultExtHandlers.has(handler)) {
         try {
             handler(mod, resolvedFilename);
@@ -1023,16 +1018,16 @@ function loadModule(resolvedFilename, source, parentModule) {
             mod.exports = JSON.parse(source);
         } catch (e) {
             delete moduleCache[resolvedFilename];
-            var err = new Error("Cannot parse JSON module '" + resolvedFilename + "': " + e.message);
+            const err = new Error("Cannot parse JSON module '" + resolvedFilename + "': " + e.message);
             err.code = 'ERR_INVALID_JSON';
             throw err;
         }
     } else {
-        var isEsm = resolvedFilename.endsWith('.mjs') ||
+        const isEsm = resolvedFilename.endsWith('.mjs') ||
             (resolvedFilename.endsWith('.js') && getPackageScopeType(resolvedFilename) === 'module');
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
             delete moduleCache[resolvedFilename];
-            var esmErr = new Error(
+            const esmErr = new Error(
                 "require() of ES Module " + resolvedFilename + " not supported."
             );
             esmErr.code = 'ERR_REQUIRE_ESM';
@@ -1046,10 +1041,10 @@ function loadModule(resolvedFilename, source, parentModule) {
                 throw err;
             }
         } else {
-            var dirname = pathModule.dirname(resolvedFilename);
-            var childRequire = makeRequire(dirname, mod);
-            var compiledFn;
-            var cjsSyntaxError = null;
+            const dirname = pathModule.dirname(resolvedFilename);
+            const childRequire = makeRequire(dirname, mod);
+            let compiledFn;
+            let cjsSyntaxError = null;
             try {
                 compiledFn = compileCjs(resolvedFilename, source);
             } catch (err) {
@@ -1077,12 +1072,12 @@ function loadModule(resolvedFilename, source, parentModule) {
                     throw cjsSyntaxError;
                 }
             } else if (compiledFn) {
-                var previousModuleContext = globalThis.__wasm_rquickjs_current_module;
+                const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
                 globalThis.__wasm_rquickjs_current_module = {
                     filename: resolvedFilename,
                     source: source
                 };
-                var previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
+                const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
                 globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
                 try {
                     compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
@@ -1117,32 +1112,32 @@ const mainModule = {
 function splitPackageName(id) {
     // Scoped packages: @scope/pkg or @scope/pkg/subpath
     if (id.charAt(0) === '@') {
-        var slashIdx = id.indexOf('/');
+        const slashIdx = id.indexOf('/');
         if (slashIdx === -1) return { name: id, subpath: '' };
-        var secondSlash = id.indexOf('/', slashIdx + 1);
+        const secondSlash = id.indexOf('/', slashIdx + 1);
         if (secondSlash === -1) return { name: id, subpath: '' };
         return { name: id.substring(0, secondSlash), subpath: id.substring(secondSlash + 1) };
     }
     // Regular packages: pkg or pkg/subpath
-    var idx = id.indexOf('/');
+    const idx = id.indexOf('/');
     if (idx === -1) return { name: id, subpath: '' };
     return { name: id.substring(0, idx), subpath: id.substring(idx + 1) };
 }
 
 function resolveFromNodeModules(id, parentDir, parentFilename) {
-    var dirs = _nodeModulePaths(parentDir);
+    const dirs = _nodeModulePaths(parentDir);
 
     // Split into package name and subpath for packages with subpath specifiers
-    var parts = splitPackageName(id);
-    var hasSubpath = parts.subpath.length > 0;
+    const parts = splitPackageName(id);
+    const hasSubpath = parts.subpath.length > 0;
 
-    for (var i = 0; i < dirs.length; i++) {
+    for (let i = 0; i < dirs.length; i++) {
         // If there's a subpath, try resolving it relative to the package directory
         if (hasSubpath) {
-            var pkgDir = pathModule.join(dirs[i], parts.name);
-            var subCandidate = pathModule.join(pkgDir, parts.subpath);
+            const pkgDir = pathModule.join(dirs[i], parts.name);
+            const subCandidate = pathModule.join(pkgDir, parts.subpath);
             // Try exact subpath
-            var content = tryReadFile(subCandidate);
+            let content = tryReadFile(subCandidate);
             if (content !== null) return { filename: subCandidate, content: content };
             // Try with extensions
             content = tryReadFile(subCandidate + '.js');
@@ -1158,31 +1153,31 @@ function resolveFromNodeModules(id, parentDir, parentFilename) {
             if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content };
         }
 
-        var candidate = pathModule.join(dirs[i], id);
+        const candidate = pathModule.join(dirs[i], id);
 
         // Try as directory: check package.json "main" field
-        var pkgJsonPath = pathModule.join(candidate, 'package.json');
-        var pkgJson = tryReadFile(pkgJsonPath);
+        const pkgJsonPath = pathModule.join(candidate, 'package.json');
+        const pkgJson = tryReadFile(pkgJsonPath);
         if (pkgJson !== null) {
             try {
-                var pkg = JSON.parse(pkgJson);
+                const pkg = JSON.parse(pkgJson);
                 if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string') {
-                    var mainPath = pathModule.resolve(candidate, pkg.main);
-                    var mainCandidates = [
+                    const mainPath = pathModule.resolve(candidate, pkg.main);
+                    const mainCandidates = [
                         mainPath,
                         mainPath + '.js',
                         mainPath + '.json',
                         pathModule.join(mainPath, 'index.js'),
                         pathModule.join(mainPath, 'index.json'),
                     ];
-                    for (var m = 0; m < mainCandidates.length; m++) {
-                        var content = tryReadFile(mainCandidates[m]);
+                    for (let m = 0; m < mainCandidates.length; m++) {
+                        const content = tryReadFile(mainCandidates[m]);
                         if (content !== null) return { filename: mainCandidates[m], content: content };
                     }
                 }
             } catch (e) {
-                var fromPart = parentFilename || parentDir;
-                var pkgErr = new Error(
+                const fromPart = parentFilename || parentDir;
+                const pkgErr = new Error(
                     'Invalid package config ' + pkgJsonPath +
                     ' while importing "' + id + '" from ' + fromPart + '.' +
                     (e.message ? ' ' + e.message : '')
@@ -1193,11 +1188,11 @@ function resolveFromNodeModules(id, parentDir, parentFilename) {
         }
 
         // Try as directory: index.js / index.json
-        var indexJs = pathModule.join(candidate, 'index.js');
-        var content = tryReadFile(indexJs);
+        const indexJs = pathModule.join(candidate, 'index.js');
+        let content = tryReadFile(indexJs);
         if (content !== null) return { filename: indexJs, content: content };
 
-        var indexJson = pathModule.join(candidate, 'index.json');
+        const indexJson = pathModule.join(candidate, 'index.json');
         content = tryReadFile(indexJson);
         if (content !== null) return { filename: indexJson, content: content };
 
@@ -1212,13 +1207,13 @@ function resolveFromNodeModules(id, parentDir, parentFilename) {
 }
 
 function makeRequire(parentDir, parentModule, parentFilenameOverride) {
-    var parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
+    const parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
     function localRequire(id) {
         if (typeof id !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
         }
         if (id === '') {
-            var argErr = new TypeError("The argument 'id' must be a non-empty string. Received ''");
+            const argErr = new TypeError("The argument 'id' must be a non-empty string. Received ''");
             argErr.code = 'ERR_INVALID_ARG_VALUE';
             throw argErr;
         }
@@ -1229,12 +1224,12 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         }
 
         // Check module mock registry
-        var mockEntry = _resolveRequireMock(id);
+        const mockEntry = _resolveRequireMock(id);
         if (mockEntry) {
             if (mockEntry.cache && mockEntry._cachedCjsReady) {
                 return mockEntry._cachedCjsResult;
             }
-            var mockResult = _materializeCjsMock(mockEntry);
+            const mockResult = _materializeCjsMock(mockEntry);
             if (mockEntry.cache) {
                 mockEntry._cachedCjsResult = mockResult;
                 mockEntry._cachedCjsReady = true;
@@ -1244,43 +1239,43 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
 
         // node:-prefixed requires always go to builtins, bypassing cache
         if (id.startsWith('node:')) {
-            var builtin = builtinModuleMap[id];
+            const builtin = builtinModuleMap[id];
             if (builtin !== undefined) {
                 return builtin;
             }
-            var err = new Error('No such built-in module: ' + id);
+            const err = new Error('No such built-in module: ' + id);
             err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
             throw err;
         }
 
         // Check require.cache before builtins for non-node: specifiers
         // (allows shadowing builtins via require.cache)
-        var cached = moduleCache[id];
+        const cached = moduleCache[id];
         if (cached !== undefined) {
             return cached.exports;
         }
 
         // Builtin modules
-        var builtin = builtinModuleMap[id];
+        const builtin = builtinModuleMap[id];
         if (builtin !== undefined) {
             return builtin;
         }
 
         // Relative or absolute file paths
         if (id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
-            var resolved = resolveFilename(id, parentDir);
-            var mod = loadModule(resolved.filename, resolved.content, parentModule || null);
+            const resolved = resolveFilename(id, parentDir);
+            const mod = loadModule(resolved.filename, resolved.content, parentModule || null);
             return mod.exports;
         }
 
         // node_modules resolution for bare specifiers
-        var nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
+        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
         if (nmResolved) {
-            var mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
+            const mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
             return mod.exports;
         }
 
-        var err = new Error("Cannot find module '" + id + "'");
+        const err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
         throw err;
     }
@@ -1296,44 +1291,44 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
             return id;
         }
         if (id.startsWith('node:')) {
-            var err = new Error('No such built-in module: ' + id);
+            const err = new Error('No such built-in module: ' + id);
             err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
             throw err;
         }
         // If paths option is provided, resolve relative to each path
         if (options && options.paths) {
-            var searchPaths = options.paths;
-            var isRelative = id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/');
-            for (var pi = 0; pi < searchPaths.length; pi++) {
-                var searchDir = pathModule.resolve(searchPaths[pi]);
+            const searchPaths = options.paths;
+            const isRelative = id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/');
+            for (let pi = 0; pi < searchPaths.length; pi++) {
+                const searchDir = pathModule.resolve(searchPaths[pi]);
                 if (isRelative) {
                     // Relative/absolute: resolve directly against the search path
                     try {
-                        var resolved = resolveFilename(id, searchDir);
+                        const resolved = resolveFilename(id, searchDir);
                         return resolved.filename;
                     } catch (e) {
                         // Try next path
                     }
                 } else {
                     // Bare specifier: use node_modules resolution from search path
-                    var nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
+                    const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
                     if (nmResolved) return nmResolved.filename;
                 }
             }
-            var err = new Error("Cannot find module '" + id + "'");
+            const err = new Error("Cannot find module '" + id + "'");
             err.code = 'MODULE_NOT_FOUND';
             throw err;
         }
         if (id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
-            var resolved = resolveFilename(id, parentDir);
+            const resolved = resolveFilename(id, parentDir);
             return resolved.filename;
         }
         // node_modules resolution for bare specifiers
-        var nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
+        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
         if (nmResolved) {
             return nmResolved.filename;
         }
-        var err = new Error("Cannot find module '" + id + "'");
+        const err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
         throw err;
     };
@@ -1366,8 +1361,8 @@ export function require(id) {
 }
 
 export function createRequire(filename) {
-    var filepath;
-    var isUrlObj = filename instanceof URL ||
+    let filepath;
+    const isUrlObj = filename instanceof URL ||
         (filename !== null && typeof filename === 'object' &&
          typeof filename.href === 'string' && typeof filename.protocol === 'string');
 
@@ -1375,17 +1370,17 @@ export function createRequire(filename) {
         try {
             filepath = nodeUrl.fileURLToPath(filename);
         } catch (e) {
-            var inspected = typeof filename === 'string' ? "'" + filename + "'" :
+            const inspected = typeof filename === 'string' ? "'" + filename + "'" :
                 (typeof util.inspect === 'function' ? util.inspect(filename) : String(filename));
-            var err = new TypeError(
+            const err = new TypeError(
                 "The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received " + inspected
             );
             err.code = 'ERR_INVALID_ARG_VALUE';
             throw err;
         }
     } else if (typeof filename !== 'string') {
-        var inspected2 = typeof util.inspect === 'function' ? util.inspect(filename) : String(filename);
-        var err2 = new TypeError(
+        const inspected2 = typeof util.inspect === 'function' ? util.inspect(filename) : String(filename);
+        const err2 = new TypeError(
             "The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received " + inspected2
         );
         err2.code = 'ERR_INVALID_ARG_VALUE';
@@ -1393,7 +1388,7 @@ export function createRequire(filename) {
     } else {
         filepath = filename;
     }
-    var dir = pathModule.dirname(filepath);
+    const dir = pathModule.dirname(filepath);
     return makeRequire(dir, null, filepath);
 }
 
@@ -1414,9 +1409,9 @@ function _nodeModulePaths(from) {
         return ['/node_modules'];
     }
 
-    var paths = [];
-    for (var i = from.length - 1, p = 0, last = from.length; i >= 0; --i) {
-        var code = from.charCodeAt(i);
+    const paths = [];
+    for (let i = from.length - 1, p = 0, last = from.length; i >= 0; --i) {
+        const code = from.charCodeAt(i);
         if (code === 47) { // '/'
             if (p !== nmLen) {
                 paths.push(from.slice(0, last) + '/node_modules');
@@ -1444,12 +1439,12 @@ function _resolveLookupPaths(request, parent) {
 
     // Check if request is a relative path (starts with ./ or ../)
     // On non-Windows, .\ is NOT a relative path separator
-    var isRelative = false;
+    let isRelative = false;
     if (request.length > 0 && request.charAt(0) === '.') {
         if (request.length === 1) {
             isRelative = true;
         } else {
-            var second = request.charAt(1);
+            const second = request.charAt(1);
             if (second === '/' || second === '.') {
                 isRelative = true;
             }
@@ -1457,7 +1452,7 @@ function _resolveLookupPaths(request, parent) {
     }
 
     if (!isRelative) {
-        var paths;
+        let paths;
         if (parent && parent.paths && parent.paths.length) {
             paths = parent.paths.concat(globalPaths);
         } else {
@@ -1471,7 +1466,7 @@ function _resolveLookupPaths(request, parent) {
         return ['.'];
     }
 
-    var parentDir = pathModule.dirname(parent.filename);
+    const parentDir = pathModule.dirname(parent.filename);
     return [parentDir].concat(parent.paths || []);
 }
 
@@ -1485,7 +1480,7 @@ function setSourceMapsSupport(enabled, options) {
     if (options === null || typeof options !== 'object' || Array.isArray(options)) {
         throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
     }
-    var { nodeModules, generatedCode } = options;
+    const { nodeModules, generatedCode } = options;
     if (nodeModules !== undefined && typeof nodeModules !== 'boolean') {
         throw new ERR_INVALID_ARG_TYPE('options.nodeModules', 'boolean', nodeModules);
     }
@@ -1494,28 +1489,28 @@ function setSourceMapsSupport(enabled, options) {
     }
 }
 
-var globalPaths = [];
+const globalPaths = [];
 
 function _initPaths() {
-    var nodePath = globalThis.process && globalThis.process.env && globalThis.process.env.NODE_PATH;
-    var paths = [];
+    const nodePath = globalThis.process && globalThis.process.env && globalThis.process.env.NODE_PATH;
+    const paths = [];
     if (nodePath) {
-        var parts = nodePath.split(':');
-        for (var i = 0; i < parts.length; i++) {
-            var p = parts[i].trim();
+        const parts = nodePath.split(':');
+        for (let i = 0; i < parts.length; i++) {
+            const p = parts[i].trim();
             if (p.length > 0) {
                 paths.push(pathModule.resolve(p));
             }
         }
     }
 
-    var homeDir = (globalThis.process && globalThis.process.env && globalThis.process.env.HOME) || '/root';
+    const homeDir = (globalThis.process && globalThis.process.env && globalThis.process.env.HOME) || '/root';
     paths.push(pathModule.resolve(homeDir, '.node_modules'));
     paths.push(pathModule.resolve(homeDir, '.node_libraries'));
     paths.push('/usr/local/lib/node');
 
     globalPaths.length = 0;
-    for (var j = 0; j < paths.length; j++) {
+    for (let j = 0; j < paths.length; j++) {
         globalPaths.push(paths[j]);
     }
 }
@@ -1524,7 +1519,7 @@ _initPaths();
 
 function _stat(filename) {
     try {
-        var st = fsModule.statSync(filename);
+        const st = fsModule.statSync(filename);
         if (st.isDirectory()) return 1;
         if (st.isFile()) return 0;
         return -2;
@@ -1534,7 +1529,7 @@ function _stat(filename) {
 }
 
 function runMain() {
-    var mainScript = process.argv[1];
+    const mainScript = process.argv[1];
     if (mainScript) {
         globalRequire(mainScript);
     }

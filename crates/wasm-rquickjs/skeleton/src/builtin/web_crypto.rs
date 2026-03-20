@@ -80,7 +80,8 @@ impl HashContext {
         self.finalize_with_output_length(None)
     }
 
-    fn finalize_with_output_length(self, _output_length: Option<u32>) -> Vec<u8> {
+    #[cfg_attr(not(feature = "crypto-full"), allow(unused_variables))]
+    fn finalize_with_output_length(self, output_length: Option<u32>) -> Vec<u8> {
         match self {
             HashContext::Md5(h) => h.finalize().to_vec(),
             HashContext::Sha1(h) => h.finalize().to_vec(),
@@ -90,7 +91,7 @@ impl HashContext {
             HashContext::Sha512(h) => h.finalize().to_vec(),
             #[cfg(feature = "crypto-full")]
             HashContext::Shake128(h) => {
-                let len = _output_length.unwrap_or(16) as usize;
+                let len = output_length.unwrap_or(16) as usize;
                 let mut result = vec![0u8; len];
                 let mut reader = h.finalize_xof();
                 reader.read(&mut result);
@@ -98,7 +99,7 @@ impl HashContext {
             }
             #[cfg(feature = "crypto-full")]
             HashContext::Shake256(h) => {
-                let len = _output_length.unwrap_or(32) as usize;
+                let len = output_length.unwrap_or(32) as usize;
                 let mut result = vec![0u8; len];
                 let mut reader = h.finalize_xof();
                 reader.read(&mut result);
@@ -6189,9 +6190,6 @@ pub const REEXPORT_JS: &str = r#"import * as _crypto from '__wasm_rquickjs_built
 
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"
-        import * as __wasm_rquickjs_web_crypto from '__wasm_rquickjs_builtin/web_crypto';
-        globalThis.crypto = __wasm_rquickjs_web_crypto.webcrypto;
-        globalThis.Crypto = __wasm_rquickjs_web_crypto.Crypto;
-        globalThis.SubtleCrypto = __wasm_rquickjs_web_crypto.SubtleCrypto;
-        globalThis.CryptoKey = __wasm_rquickjs_web_crypto.CryptoKey;
+        import { webcrypto as __wasm_rquickjs_webcrypto } from '__wasm_rquickjs_builtin/web_crypto';
+        globalThis.crypto = __wasm_rquickjs_webcrypto;
     "#;

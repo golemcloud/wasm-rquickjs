@@ -61,9 +61,9 @@ function utf8CheckByte(byte) {
 // incomplete multi-byte UTF-8 character. The total number of bytes (2, 3, or 4)
 // needed to complete the UTF-8 character (if applicable) are returned.
 function utf8CheckIncomplete(self, buf, i) {
-  var j = buf.length - 1;
+  let j = buf.length - 1;
   if (j < i) return 0;
-  var nb = utf8CheckByte(buf[j]);
+  let nb = utf8CheckByte(buf[j]);
   if (nb >= 0) {
     if (nb > 0) self.lastNeed = nb - 1;
     return nb;
@@ -89,24 +89,24 @@ function utf8CheckIncomplete(self, buf, i) {
 // Attempts to complete a multi-byte UTF-8 character using bytes from a Buffer.
 // Uses the native V8 DFA to determine exact replacement character count.
 function utf8FillLast(buf) {
-  var p = this.lastTotal - this.lastNeed;
+  const p = this.lastTotal - this.lastNeed;
   // Check how many new bytes from buf are valid continuations
-  var consumed = 0;
+  let consumed = 0;
   while (consumed < this.lastNeed && consumed < buf.length) {
     if ((buf[consumed] & 0xc0) !== 0x80) break;
     consumed++;
   }
   // Did a non-continuation byte break the sequence?
-  var broken = consumed < this.lastNeed && consumed < buf.length;
+  const broken = consumed < this.lastNeed && consumed < buf.length;
   if (broken) {
     // A non-continuation byte was found — the sequence is invalid.
     // Build a temp buffer with buffered bytes + consumed continuations and
     // decode via the native DFA to get correct replacement char count.
-    var totalBytes = p + consumed;
-    var tmp = new Uint8Array(totalBytes);
-    for (var k = 0; k < p; k++) tmp[k] = this.lastChar[k];
-    for (var k = 0; k < consumed; k++) tmp[p + k] = buf[k];
-    var r = nativeUtf8Decode(tmp, 0, totalBytes);
+    const totalBytes = p + consumed;
+    const tmp = new Uint8Array(totalBytes);
+    for (let k = 0; k < p; k++) tmp[k] = this.lastChar[k];
+    for (let k = 0; k < consumed; k++) tmp[p + k] = buf[k];
+    const r = nativeUtf8Decode(tmp, 0, totalBytes);
     this.lastNeed = consumed;  // write() will use this as 'i' offset into buf
     return r;
   }
@@ -124,19 +124,17 @@ function utf8FillLast(buf) {
 // Uses the native Rust DFA decoder (ported from V8's utf8-decoder.h) which
 // implements the "maximal subpart" rule for U+FFFD emission.
 function utf8Decode(buf, start, end) {
-  // The native function expects a Uint8Array
-  var u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-  return nativeUtf8Decode(u8, start, end);
+  return nativeUtf8Decode(buf, start, end);
 }
 
 // Returns all complete UTF-8 characters in a Buffer. If the Buffer ended on a
 // partial character, the character's bytes are buffered until the required
 // number of bytes are available.
 function utf8Text(buf, i) {
-  var total = utf8CheckIncomplete(this, buf, i);
+  const total = utf8CheckIncomplete(this, buf, i);
   if (!this.lastNeed) return utf8Decode(buf, i, buf.length);
   this.lastTotal = total;
-  var end = buf.length - (total - this.lastNeed);
+  const end = buf.length - (total - this.lastNeed);
   buf.copy(this.lastChar, 0, end);
   return utf8Decode(buf, i, end);
 }
@@ -144,7 +142,7 @@ function utf8Text(buf, i) {
 // For UTF-8, a replacement character is added when ending on a partial
 // character.
 function utf8End(buf) {
-  var r = buf && buf.length ? this.write(buf) : '';
+  let r = buf && buf.length ? this.write(buf) : '';
   if (this.lastNeed) {
     r += '\ufffd';
     this.lastNeed = 0;
@@ -159,9 +157,9 @@ function utf8End(buf) {
 // decode the last character properly.
 function utf16Text(buf, i) {
   if ((buf.length - i) % 2 === 0) {
-    var r = buf.toString('utf16le', i);
+    const r = buf.toString('utf16le', i);
     if (r) {
-      var c = r.charCodeAt(r.length - 1);
+      const c = r.charCodeAt(r.length - 1);
       if (c >= 0xd800 && c <= 0xdbff) {
         this.lastNeed = 2;
         this.lastTotal = 4;
@@ -179,11 +177,11 @@ function utf16Text(buf, i) {
 }
 
 // For UTF-16LE we do not explicitly append special replacement characters if we
-// end on a partial character, we simply let v8 handle that.
+// end on a partial character, we simply let the decoder handle that.
 function utf16End(buf) {
-  var r = buf && buf.length ? this.write(buf) : '';
+  let r = buf && buf.length ? this.write(buf) : '';
   if (this.lastNeed) {
-    var end = this.lastTotal - this.lastNeed;
+    const end = this.lastTotal - this.lastNeed;
     r += this.lastChar.toString('utf16le', 0, end);
     this.lastNeed = 0;
     this.lastTotal = 0;
@@ -192,7 +190,7 @@ function utf16End(buf) {
 }
 
 function base64Text(buf, i) {
-  var n = (buf.length - i) % 3;
+  const n = (buf.length - i) % 3;
   if (n === 0) return buf.toString(this.encoding, i);
   this.lastNeed = 3 - n;
   this.lastTotal = 3;
@@ -206,7 +204,7 @@ function base64Text(buf, i) {
 }
 
 function base64End(buf) {
-  var r = buf && buf.length ? this.write(buf) : '';
+  let r = buf && buf.length ? this.write(buf) : '';
   if (this.lastNeed) {
     r += this.lastChar.toString(this.encoding, 0, 3 - this.lastNeed);
     this.lastNeed = 0;
@@ -238,7 +236,7 @@ function fillLast(buf) {
 // buffers into a series of JS strings without breaking apart multi-byte
 // characters.
 export function StringDecoder(encoding) {
-  var enc = normalizeEncoding(encoding);
+  const enc = normalizeEncoding(encoding);
   if (enc === undefined) {
     throw new ERR_UNKNOWN_ENCODING(encoding);
   }
@@ -246,7 +244,7 @@ export function StringDecoder(encoding) {
   this.encoding = enc;
   this[kDecoder] = true;
 
-  var nb;
+  let nb;
   switch (enc) {
     case 'utf16le':
       this.text = utf16Text;
@@ -281,8 +279,8 @@ StringDecoder.prototype.write = function write(buf) {
   buf = coerceToBuffer(buf);
 
   if (buf.length === 0) return '';
-  var r;
-  var i;
+  let r;
+  let i;
   if (this.lastNeed) {
     r = this.fillLast(buf);
     if (r === undefined) return '';

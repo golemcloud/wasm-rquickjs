@@ -1,43 +1,6 @@
 // Minimal v8 module stub for Node.js compatibility
 // Most v8 internals are not available in QuickJS/WASM
 
-function getRuntimeFlags() {
-    var flags = globalThis.__wasm_rquickjs_v8_runtime_flags;
-    if (!flags || typeof flags !== 'object') {
-        flags = {
-            allowNativesSyntax: false,
-        };
-        globalThis.__wasm_rquickjs_v8_runtime_flags = flags;
-    }
-    return flags;
-}
-
-function syncAllowNativesSyntaxExecArgv(enabled) {
-    var processObject = globalThis.process;
-    if (!processObject || !Array.isArray(processObject.execArgv)) {
-        return;
-    }
-
-    var filtered = [];
-    for (var i = 0; i < processObject.execArgv.length; i++) {
-        var arg = String(processObject.execArgv[i]).replace(/_/g, '-');
-        if (
-            arg === '--allow-natives-syntax' ||
-            arg === '--noallow-natives-syntax' ||
-            arg === '--no-allow-natives-syntax'
-        ) {
-            continue;
-        }
-        filtered.push(processObject.execArgv[i]);
-    }
-
-    if (enabled) {
-        filtered.push('--allow-natives-syntax');
-    }
-
-    processObject.execArgv = filtered;
-}
-
 export function getHeapStatistics() {
     return {
         total_heap_size: 0,
@@ -78,26 +41,7 @@ export function setFlagsFromString(flags) {
     if (typeof flags !== 'string') {
         throw new TypeError('The "flags" argument must be of type string');
     }
-
-    var tokens = flags.match(/\S+/g);
-    if (!tokens) {
-        return;
-    }
-
-    var runtimeFlags = getRuntimeFlags();
-    for (var i = 0; i < tokens.length; i++) {
-        var token = tokens[i].replace(/_/g, '-');
-        if (token === '--allow-natives-syntax') {
-            runtimeFlags.allowNativesSyntax = true;
-            continue;
-        }
-
-        if (token === '--noallow-natives-syntax' || token === '--no-allow-natives-syntax') {
-            runtimeFlags.allowNativesSyntax = false;
-        }
-    }
-
-    syncAllowNativesSyntaxExecArgv(runtimeFlags.allowNativesSyntax);
+    // No-op: V8 flags cannot be set in QuickJS/WASM
 }
 
 export function writeHeapSnapshot() {

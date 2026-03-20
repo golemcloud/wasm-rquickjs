@@ -87,9 +87,9 @@ function formatMonthValue(month, style) {
     }
 }
 
-function formatWeekdayValue(chroneWeekday, style) {
+function formatWeekdayValue(chronoWeekday, style) {
     // chrono weekday: 1=Mon..7=Sun; arrays: 0=Sun,1=Mon..6=Sat
-    const dow = chroneWeekday === 7 ? 0 : chroneWeekday;
+    const dow = chronoWeekday === 7 ? 0 : chronoWeekday;
     switch (style) {
         case "long": return WEEKDAY_NAMES_LONG[dow];
         case "short": return WEEKDAY_NAMES_SHORT[dow];
