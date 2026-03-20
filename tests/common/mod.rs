@@ -11,7 +11,7 @@ use std::fs;
 use std::io::Write;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
@@ -19,7 +19,8 @@ use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{
     Component, Func, Instance, Linker, ResourceAny, ResourceTable, ResourceType, Val,
 };
-use wasmtime::{Engine, Store, StoreContextMut};
+use futures::FutureExt;
+use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
@@ -235,12 +236,12 @@ impl PreparedComponent {
         config.cache(Some(wasmtime::Cache::from_file(None)?));
         let engine = Engine::new(&config)?;
 
-        // Start a background thread that increments the epoch every second,
+        // Start a background thread that increments the epoch every 10ms,
         // enabling epoch-based interruption to enforce timeouts on spinning WASM.
         let epoch_engine = engine.clone();
         std::thread::spawn(move || {
             loop {
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                std::thread::sleep(std::time::Duration::from_millis(10));
                 epoch_engine.increment_epoch();
             }
         });
@@ -505,10 +506,23 @@ impl TestInstance {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(http_ctx),
+            started_at: Instant::now(),
+            timeout: Duration::from_secs(120),
         };
 
         let mut store = Store::new(engine, host);
-        store.set_epoch_deadline(120); // default: 120 ticks (~120 seconds with 1s epoch thread)
+        store.set_epoch_deadline(0);
+        store.epoch_deadline_callback(|cx| {
+            let data = cx.data();
+            if data.started_at.elapsed() >= data.timeout {
+                Ok(UpdateDeadline::Interrupt)
+            } else {
+                Ok(UpdateDeadline::YieldCustom(
+                    1,
+                    tokio::task::yield_now().boxed(),
+                ))
+            }
+        });
 
         let instance = linker.instantiate_async(&mut store, component).await?;
 
@@ -566,8 +580,9 @@ impl TestInstance {
         )
     }
 
-    pub fn set_epoch_deadline(&mut self, ticks: u64) {
-        self.store.set_epoch_deadline(ticks);
+    pub fn set_epoch_deadline(&mut self, timeout_secs: u64) {
+        self.store.data_mut().timeout = Duration::from_secs(timeout_secs);
+        self.store.data_mut().started_at = Instant::now();
     }
 
     pub fn temp_dir_path(&self) -> &Utf8Path {
@@ -774,6 +789,8 @@ struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<WasiHttpCtx>,
+    pub started_at: Instant,
+    pub timeout: Duration,
 }
 
 impl WasiView for Host {
