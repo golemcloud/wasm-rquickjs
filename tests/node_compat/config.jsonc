@@ -1286,19 +1286,13 @@
     "parallel/test-timers-immediate-unref.js": {},
     "parallel/test-timers-immediate-unref-nested-once.js": {},
     "parallel/test-timers-immediate-unref-simple.js": {},
-    "parallel/test-timers-interval-throw.js": {
-      "skip": true,
-      "reason": "requires process.on('uncaughtException') hooks"
-    },
+    "parallel/test-timers-interval-throw.js": {},
     "parallel/test-timers-max-duration-warning.js": {},
     "parallel/test-timers-enroll-invalid-msecs.js": {
       "skip": true,
       "reason": "requires timers.enroll which is not implemented"
     },
-    "parallel/test-timers-enroll-second-time.js": {
-      "skip": true,
-      "reason": "requires timers.enroll which is not implemented"
-    },
+    "parallel/test-timers-enroll-second-time.js": {},
     "parallel/test-timers-reset-process-domain-on-throw.js": {},
     "parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js": {},
     "parallel/test-timers-to-primitive.js": {
@@ -1886,23 +1880,20 @@
         "block_06_special_tests_for_rsa_pkcs1_pss_padding": {},
         "block_07_https_www_emc_com_emc_plus_rsa_labs_standards_initiatives_pk": {},
         "block_08_test_exceptions_for_invalid_padding_and_saltlength_values": {},
-        "block_09_test_throws_exception_when_key_options_is_null": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
-        "block_10_block_10": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
-        "block_11_block_11": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
+        "block_09_test_throws_exception_when_key_options_is_null": {},
+        "block_10_block_10": {},
+        "block_11_block_11": {},
         "block_12_block_12": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_13_early_if_no_openssl_binary_is_found": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
         "block_14_block_14": {},
-        "block_15_regression_test_for_https_github_com_nodejs_node_issues_4079": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
+        "block_15_regression_test_for_https_github_com_nodejs_node_issues_4079": {},
         "block_16_block_16": {},
-        "block_17_block_17": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" },
+        "block_17_block_17": {},
         "block_18_block_18": { "skip": true, "reason": "inherited: requires one-shot crypto.sign/verify, RSA-PSS padding/saltLength options, child_process.exec, generateKeyPairSync('rsa'), dsaEncoding option" }
       }
     },
     "parallel/test-crypto-stream.js": {},
-    "parallel/test-crypto-subtle-zero-length.js": {
-      "skip": true,
-      "reason": "requires WebCrypto subtle with AES-CBC and zero-length input"
-    },
+    "parallel/test-crypto-subtle-zero-length.js": {},
     "parallel/test-crypto-update-encoding.js": {},
     "parallel/test-crypto-verify-failure.js": {
       "skip": true,
@@ -6437,7 +6428,7 @@
     "es-module/test-esm-url-extname.js": { "skip": true, "reason": "[manual] The test requires `node:internal/modules/esm/get_format`, a Node.js internal module (accessed via `--expose-internals` flag). Per project policy, we only implement the public Node.js API —..." },
     "es-module/test-esm-windows.js": {},
     "es-module/test-loaders-hidden-from-users.js": { "skip": true, "reason": "[manual] requires --expose-internals (Node.js internal APIs)" },
-    "es-module/test-require-module-cached-tla.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-cached-tla.js": {},
     "es-module/test-require-module-conditional-exports-module.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-conditional-exports.js": {
       "skip": true,
@@ -6518,11 +6509,11 @@
     "es-module/test-require-module-synchronous-rejection-handling.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-tla-retry-import-2.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-tla-retry-import.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-tla-retry-require.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "es-module/test-require-module-tla-retry-require.js": {},
     "es-module/test-require-module-tla.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "spawnSyncAndExit block - QuickJS evaluates TLA module body before detecting TLA, so _rawDebug runs" },
+        "block_00_block_00": {},
         "block_01_block_01": { "skip": true, "reason": "spawnSyncAndExit with --experimental-print-required-tla not supported" }
       }
     },
@@ -7098,7 +7089,7 @@
     "parallel/test-global-setters.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-global-webcrypto-classes.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-global-webcrypto-disbled.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-global-webcrypto.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-global-webcrypto.js": {},
     "parallel/test-global-webstreams.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-global.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
     "parallel/test-h2-large-header-cause-client-to-hangup.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9784,7 +9775,7 @@
         "block_01_test_hkdf_key_derivation": {},
         "block_02_test_pbkdf2_key_derivation": {},
         "block_03_test_default_key_lengths": { "skip": true, "reason": "needs evaluation" },
-        "block_04_block_04": { "skip": true, "reason": "needs evaluation" },
+        "block_04_block_04": {},
         "block_05_test_x25519_and_x448_key_derivation": { "skip": true, "reason": "X25519/X448 DH not yet implemented in native Rust" }
       }
     },
@@ -9829,7 +9820,7 @@
         "block_04_import_export_ec_key_pairs": {}
       }
     },
-    "parallel/test-webcrypto-getRandomValues.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-webcrypto-getRandomValues.js": {},
     "parallel/test-webcrypto-keygen.js": {
       "impossible": true,
       "reason": "requires --expose-internals and internal/crypto/util module",
@@ -9866,7 +9857,7 @@
         "block_02_test_sign_verify_ecdsa": {},
         "block_03_test_sign_verify_hmac": {},
         "block_04_test_sign_verify_ed25519": {},
-        "block_05_test_sign_verify_ed448": { "skip": true, "reason": "Ed448 key generation not yet implemented" }
+        "block_05_test_sign_verify_ed448": {}
       }
     },
     "parallel/test-webcrypto-util.js": { "skip": true, "reason": "newly discovered, not yet evaluated" },
@@ -9978,8 +9969,8 @@
       "split": true,
       "subtests": {
         "block_00_test_textencoder": {},
-        "block_01_block_01": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
-        "block_02_block_02": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" },
+        "block_01_block_01": {},
+        "block_02_block_02": {},
         "block_03_block_03": { "skip": true, "reason": "inherited: newly discovered, not yet evaluated" }
       }
     },
