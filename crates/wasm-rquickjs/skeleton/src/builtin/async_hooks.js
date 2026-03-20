@@ -137,8 +137,10 @@ function _captureContext() {
     return snapshot;
 }
 
+const FunctionPrototypeApply = Function.prototype.apply;
+
 function _restoreContext(snapshot, fn, thisArg, args) {
-    let wrapped = () => fn.apply(thisArg, args);
+    let wrapped = () => FunctionPrototypeApply.call(fn, thisArg, args);
     for (const [als, value] of snapshot) {
         const inner = wrapped;
         wrapped = () => als.run(value, inner);

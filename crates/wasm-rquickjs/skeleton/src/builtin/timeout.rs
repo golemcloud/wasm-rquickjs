@@ -14,11 +14,24 @@ pub mod native_module {
     pub fn schedule(
         ctx: Ctx<'_>,
         code_or_fn: Persistent<Value<'static>>,
-        delay: u32,
+        delay: Value<'_>,
         periodic: bool,
         args: Persistent<Vec<Value<'static>>>,
     ) -> usize {
         let state = get_js_state();
+        let delay: u32 = if delay.is_null() || delay.is_undefined() {
+            0
+        } else if let Some(n) = delay.as_number() {
+            if n.is_finite() && n > 0.0 {
+                n as u32
+            } else {
+                0
+            }
+        } else if let Some(n) = delay.as_int() {
+            if n > 0 { n as u32 } else { 0 }
+        } else {
+            0
+        };
 
         let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
 
