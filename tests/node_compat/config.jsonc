@@ -3030,7 +3030,7 @@
       "reason": "requires child_process.spawn for child env verification",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "skip": true, "reason": "inherited: requires child_process.spawn for child env verification" },
+        "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_https_github_com_nodejs_node_issues_45380": {},
         "block_03_https_github_com_nodejs_node_issues_32920": {}
@@ -4828,7 +4828,7 @@
     },
     "parallel/test-http-server-client-error.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "parallel/test-http-server-close-all.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
-    "parallel/test-http-server-close-idle-wait-response.js": { "skip": true, "reason": "http edge case not yet handled" },
+    "parallel/test-http-server-close-idle-wait-response.js": {},
     "parallel/test-http-server-close-idle.js": { "skip": true, "reason": "[manual] requires HTTP server (net.listen) which is unavailable in WASM" },
     "parallel/test-http-server-connection-list-when-close.js": {
       "skip": true,
@@ -4938,7 +4938,7 @@
       "skip": true,
       "reason": "[manual] The test asserts `response.rawHeaders.includes('Test')` (line 78) — requiring header name case preservation through the HTTP transport. In wasi:http, all header names are normalized to low..."
     },
-    "parallel/test-http-zero-length-write.js": { "skip": true, "reason": "[manual] amp batch made no code changes" },
+    "parallel/test-http-zero-length-write.js": {},
     "parallel/test-http-zerolengthbuffer.js": {},
     "parallel/test-http2-autoselect-protocol.js": { "impossible": true, "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-connecting-to-http.js": { "impossible": true, "reason": "[manual] http2/https not implemented" },
@@ -9139,7 +9139,7 @@
       }
     },
     "parallel/test-stream2-compatibility.js": {},
-    "parallel/test-stream2-large-read-stall.js": { "skip": true, "reason": "hangs forever - test execution never completes" },
+    "parallel/test-stream2-large-read-stall.js": {},
     "parallel/test-stream2-unpipe-leak.js": {},
     "parallel/test-stream2-writable.js": {
       "split": true,

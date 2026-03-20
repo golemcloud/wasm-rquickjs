@@ -19,16 +19,19 @@ use common::js_subtest_parser::{
     SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
 };
 use common::{setup_node_compat_test_files, strip_jsonc_comments};
+use futures::FutureExt;
+use futures::stream::{FuturesUnordered, StreamExt};
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use test_r::test;
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{Component, Linker, ResourceTable, Val};
-use wasmtime::{Engine, Store};
+use wasmtime::{Engine, Store, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
@@ -41,6 +44,8 @@ struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<WasiHttpCtx>,
+    pub started_at: Instant,
+    pub timeout: Duration,
 }
 
 impl WasiView for Host {
@@ -87,6 +92,16 @@ impl SharedRunner {
         config.epoch_interruption(true);
         config.cache(Some(wasmtime::Cache::from_file(None)?));
         let engine = Engine::new(&config)?;
+
+        // Start a background thread that increments the epoch every 10ms
+        let epoch_engine = engine.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                epoch_engine.increment_epoch();
+            }
+        });
+
         let mut linker: Linker<Host> = Linker::new(&engine);
 
         wasmtime_wasi::p2::add_to_linker_with_options_async(
@@ -127,11 +142,23 @@ impl SharedRunner {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(http_ctx),
+            started_at: Instant::now(),
+            timeout: Duration::from_secs(30),
         };
 
         let mut store = Store::new(&self.engine, host);
-        // Set epoch deadline: allow 30 ticks (each tick is ~1 second via background thread)
-        store.set_epoch_deadline(30);
+        store.set_epoch_deadline(0);
+        store.epoch_deadline_callback(|cx| {
+            let data = cx.data();
+            if data.started_at.elapsed() >= data.timeout {
+                Ok(UpdateDeadline::Interrupt)
+            } else {
+                Ok(UpdateDeadline::YieldCustom(
+                    1,
+                    tokio::task::yield_now().boxed(),
+                ))
+            }
+        });
         let instance = self
             .linker
             .instantiate_async(&mut store, &self.component)
@@ -228,10 +255,23 @@ impl SharedRunner {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(http_ctx),
+            started_at: Instant::now(),
+            timeout: Duration::from_secs(30),
         };
 
         let mut store = Store::new(&self.engine, host);
-        store.set_epoch_deadline(30);
+        store.set_epoch_deadline(0);
+        store.epoch_deadline_callback(|cx| {
+            let data = cx.data();
+            if data.started_at.elapsed() >= data.timeout {
+                Ok(UpdateDeadline::Interrupt)
+            } else {
+                Ok(UpdateDeadline::YieldCustom(
+                    1,
+                    tokio::task::yield_now().boxed(),
+                ))
+            }
+        });
         let instance = self
             .linker
             .instantiate_async(&mut store, &self.component)
@@ -1037,73 +1077,82 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     }
     test_files.sort();
 
-    // Recompute totals after adding config-skipped files
-    let total_tests = test_files.len();
-    let total_internals = internals_tests.len();
-    let total_public = total_tests - total_internals;
-
-    // Step 4: Run all tests
+    // Step 4: Run all tests in parallel
     let mut results: BTreeMap<String, TestResult> = BTreeMap::new();
-    let mut pass_count = 0usize;
-    let mut fail_count = 0usize;
-    let mut skip_count = 0usize;
-    let mut impossible_count = 0usize;
-    let mut error_count = 0usize;
-    let mut internals_pass = 0usize;
-    let mut internals_fail = 0usize;
-    let mut internals_skip = 0usize;
-    let mut internals_impossible = 0usize;
-    let mut internals_error = 0usize;
-
-    // Track skipped tests that actually pass (should be unskipped)
     let mut should_not_be_skipped: Vec<String> = Vec::new();
-    // Track actual results for config-skipped tests
     let mut skipped_observations: BTreeMap<String, SkippedObservation> = BTreeMap::new();
 
-    // Run all tests sequentially
-    let mut progress = 0usize;
+    // First pass: handle impossible tests without execution
     for test_path in &test_files {
-        progress += 1;
-        let filename = test_path.rsplit('/').next().unwrap_or(test_path);
-        let is_internal = internals_tests.contains(test_path);
-        let tag = if is_internal { " [internal]" } else { "" };
-
-        // Impossible tests are never executed
         if let Some(reason) = config_impossible.get(test_path) {
-            println!(
-                "[{:>4}/{total_tests}] IMPOSSIBLE {filename}{tag} ({reason})",
-                progress
+            let is_internal = internals_tests.contains(test_path);
+            let filename = test_path.rsplit('/').next().unwrap_or(test_path);
+            let tag = if is_internal { " [internal]" } else { "" };
+            println!("IMPOSSIBLE {filename}{tag} ({reason})");
+            results.insert(
+                test_path.clone(),
+                TestResult::Skip(format!("impossible: {reason}")),
             );
-            let result = TestResult::Skip(format!("impossible: {reason}"));
-            if is_internal {
-                internals_impossible += 1;
-            } else {
-                impossible_count += 1;
-            }
-            results.insert(test_path.clone(), result);
-            continue;
         }
+    }
 
-        let skip_reason = config_skipped.get(test_path).cloned();
+    // Collect tests that need execution
+    let tests_to_run: Vec<String> = test_files
+        .iter()
+        .filter(|p| !config_impossible.contains_key(p.as_str()))
+        .cloned()
+        .collect();
 
-        let test_start = Instant::now();
-        let r =
-            match tokio::time::timeout(Duration::from_secs(60), runner.run_test(test_path)).await {
+    let parallelism = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    println!(
+        "\n=== Running {} tests ({} impossible, skipped), concurrency={} ===\n",
+        tests_to_run.len(),
+        test_files.len() - tests_to_run.len(),
+        parallelism
+    );
+
+    // Run whole-file tests in parallel, limited to the number of CPU cores
+    let runner = Arc::new(runner);
+    let progress = Arc::new(AtomicUsize::new(0));
+    let total_to_run = tests_to_run.len();
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(parallelism));
+
+    let mut futures = FuturesUnordered::new();
+    for test_path in tests_to_run.clone() {
+        let runner = runner.clone();
+        let progress = progress.clone();
+        let semaphore = semaphore.clone();
+        let skip_reason = config_skipped.get(&test_path).cloned();
+        futures.push(tokio::spawn(async move {
+            let _permit = semaphore.acquire().await.expect("semaphore closed");
+            let test_start = Instant::now();
+            let r = match tokio::time::timeout(Duration::from_secs(60), runner.run_test(&test_path))
+                .await
+            {
                 Ok(Ok(r)) => r,
                 Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
                 Err(_) => TestResult::Error("Timeout (tokio 60s deadline exceeded)".to_string()),
             };
+            let elapsed = test_start.elapsed();
+            let p = progress.fetch_add(1, Ordering::Relaxed) + 1;
+            (test_path, r, elapsed, skip_reason, p)
+        }));
+    }
 
-        let elapsed = test_start.elapsed();
+    while let Some(join_result) = futures.next().await {
+        let (test_path, r, elapsed, skip_reason, p) = join_result.expect("test task panicked");
+        let filename = test_path.rsplit('/').next().unwrap_or(&test_path);
+        let is_internal = internals_tests.contains(&test_path);
+        let tag = if is_internal { " [internal]" } else { "" };
 
-        // If the test is marked as skipped in config.jsonc, check if it actually passes
         let result = if let Some(reason) = skip_reason {
             match &r {
                 TestResult::Pass => {
-                    // Test passes despite being marked as skipped — count as pass
                     println!(
-                        "[{:>4}/{total_tests}] PASS* {filename}{tag} ({:.1}s) [was skipped: {reason}]",
-                        progress,
+                        "[{:>4}/{total_to_run}] PASS* {filename}{tag} ({:.1}s) [was skipped: {reason}]",
+                        p,
                         elapsed.as_secs_f64()
                     );
                     should_not_be_skipped.push(test_path.clone());
@@ -1118,7 +1167,6 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                     TestResult::Pass
                 }
                 _ => {
-                    // Infer impossible for unevaluated tests
                     let inferred = if is_unevaluated_reason(&reason) {
                         let msg = match &r {
                             TestResult::Fail(m) | TestResult::Error(m) | TestResult::Skip(m) => {
@@ -1133,14 +1181,11 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
                     if let Some(ref imp_reason) = inferred {
                         println!(
-                            "[{:>4}/{total_tests}] IMPOSSIBLE* {filename}{tag} (auto: {imp_reason})",
-                            progress
+                            "[{:>4}/{total_to_run}] IMPOSSIBLE* {filename}{tag} (auto: {imp_reason})",
+                            p
                         );
                     } else {
-                        println!(
-                            "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
-                            progress
-                        );
+                        println!("[{:>4}/{total_to_run}] SKIP  {filename}{tag} ({reason})", p);
                     }
 
                     skipped_observations.insert(
@@ -1158,16 +1203,13 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             match &r {
                 TestResult::Pass => {
                     println!(
-                        "[{:>4}/{total_tests}] PASS  {filename}{tag} ({:.1}s)",
-                        progress,
+                        "[{:>4}/{total_to_run}] PASS  {filename}{tag} ({:.1}s)",
+                        p,
                         elapsed.as_secs_f64()
                     );
                 }
                 TestResult::Skip(reason) => {
-                    println!(
-                        "[{:>4}/{total_tests}] SKIP  {filename}{tag} ({reason})",
-                        progress
-                    );
+                    println!("[{:>4}/{total_to_run}] SKIP  {filename}{tag} ({reason})", p);
                 }
                 TestResult::Fail(msg) => {
                     let short_msg = if msg.len() > 120 {
@@ -1176,8 +1218,8 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                         msg.clone()
                     };
                     println!(
-                        "[{:>4}/{total_tests}] FAIL  {filename}{tag}: {short_msg}",
-                        progress
+                        "[{:>4}/{total_to_run}] FAIL  {filename}{tag}: {short_msg}",
+                        p
                     );
                 }
                 TestResult::Error(msg) => {
@@ -1187,22 +1229,147 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                         msg.clone()
                     };
                     println!(
-                        "[{:>4}/{total_tests}] ERROR {filename}{tag}: {short_msg}",
-                        progress
+                        "[{:>4}/{total_to_run}] ERROR {filename}{tag}: {short_msg}",
+                        p
                     );
                 }
             }
-
             r
         };
 
-        // Use report_bucket for counting
-        let bucket = report_bucket(
-            test_path,
-            &result,
-            &skipped_observations,
-            &config_impossible,
-        );
+        results.insert(test_path, result);
+    }
+
+    // Run subtests in parallel for split files
+    println!("\n=== Running subtests for split files ===\n");
+    let subtest_progress = Arc::new(AtomicUsize::new(0));
+    let mut subtest_futures = FuturesUnordered::new();
+
+    // Prepare all subtest tasks
+    let mut total_subtests = 0usize;
+    for test_path in &test_files {
+        // Don't run subtests for impossible tests — they were never executed
+        if config_impossible.contains_key(test_path) {
+            continue;
+        }
+        if config_split_entries.contains_key(test_path) {
+            let source = fs::read_to_string(format!("tests/node_compat/suite/{}", test_path))
+                .unwrap_or_default();
+            let discovery = discover_subtests(test_path, &source);
+
+            let subtest_list: Vec<(usize, String)> = match &discovery {
+                SubtestDiscovery::None => vec![],
+                SubtestDiscovery::Block(blocks) => {
+                    blocks.iter().map(|b| (b.index, b.name.clone())).collect()
+                }
+                SubtestDiscovery::NodeTest(tests) => {
+                    tests.iter().map(|t| (t.index, t.name.clone())).collect()
+                }
+            };
+
+            for (idx, subtest_name) in subtest_list {
+                total_subtests += 1;
+                let runner = runner.clone();
+                let progress = subtest_progress.clone();
+                let semaphore = semaphore.clone();
+                let test_path = test_path.clone();
+                let source = source.clone();
+                let discovery = discovery.clone();
+                subtest_futures.push(tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.expect("semaphore closed");
+                    let sub_result = match tokio::time::timeout(
+                        Duration::from_secs(60),
+                        runner.run_subtest(&test_path, &source, &discovery, idx),
+                    )
+                    .await
+                    {
+                        Ok(Ok(r)) => r,
+                        Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
+                        Err(_) => TestResult::Error("Timeout".to_string()),
+                    };
+                    let p = progress.fetch_add(1, Ordering::Relaxed) + 1;
+                    let subtest_key = format!("{}#{}", test_path, subtest_name);
+                    (subtest_key, sub_result, test_path, subtest_name, p)
+                }));
+            }
+        }
+    }
+
+    println!("Running {total_subtests} subtests in parallel...\n");
+
+    while let Some(join_result) = subtest_futures.next().await {
+        let (subtest_key, sub_result, test_path, subtest_name, p) =
+            join_result.expect("subtest task panicked");
+        let filename = test_path.rsplit('/').next().unwrap_or(&test_path);
+        let is_internal = internals_tests.contains(&test_path);
+        let sub_filename = format!("{}#{}", filename, subtest_name);
+        let sub_tag = if is_internal { " [internal]" } else { "" };
+
+        match &sub_result {
+            TestResult::Pass => {
+                println!("[{:>4}/{total_subtests}] PASS  {sub_filename}{sub_tag}", p)
+            }
+            TestResult::Skip(r) => {
+                println!(
+                    "[{:>4}/{total_subtests}] SKIP  {sub_filename}{sub_tag} ({r})",
+                    p
+                )
+            }
+            TestResult::Fail(msg) => {
+                let short = if msg.len() > 100 {
+                    &msg[..100]
+                } else {
+                    msg.as_str()
+                };
+                println!(
+                    "[{:>4}/{total_subtests}] FAIL  {sub_filename}{sub_tag}: {short}",
+                    p
+                );
+            }
+            TestResult::Error(msg) => {
+                let short = if msg.len() > 100 {
+                    &msg[..100]
+                } else {
+                    msg.as_str()
+                };
+                println!(
+                    "[{:>4}/{total_subtests}] ERROR {sub_filename}{sub_tag}: {short}",
+                    p
+                );
+            }
+        }
+
+        results.insert(subtest_key, sub_result);
+    }
+
+    // Build set of file-level paths that have subtests — we count subtests instead of
+    // the parent file entry for those, to get fine-grained numbers.
+    let files_with_subtests: BTreeSet<String> = results
+        .keys()
+        .filter(|k| k.contains('#'))
+        .map(|k| k.split('#').next().unwrap().to_string())
+        .collect();
+
+    // Compute counts from collected results
+    let mut pass_count = 0usize;
+    let mut fail_count = 0usize;
+    let mut skip_count = 0usize;
+    let mut impossible_count = 0usize;
+    let mut error_count = 0usize;
+    let mut internals_pass = 0usize;
+    let mut internals_fail = 0usize;
+    let mut internals_skip = 0usize;
+    let mut internals_impossible = 0usize;
+    let mut internals_error = 0usize;
+
+    for (path, result) in &results {
+        let base_path = path.split('#').next().unwrap_or(path);
+        // Skip file-level entries that have subtests (subtests are counted individually)
+        if !path.contains('#') && files_with_subtests.contains(path) {
+            continue;
+        }
+        let is_internal = internals_tests.contains(base_path);
+        let bucket = report_bucket(path, result, &skipped_observations, &config_impossible);
         match bucket {
             ReportBucket::Pass => {
                 if is_internal {
@@ -1240,70 +1407,15 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 }
             }
         }
-
-        results.insert(test_path.clone(), result);
-
-        // If this is a split file, also run subtests individually
-        if config_split_entries.contains_key(test_path) {
-            let source = fs::read_to_string(format!("tests/node_compat/suite/{}", test_path))
-                .unwrap_or_default();
-            let discovery = discover_subtests(test_path, &source);
-
-            let subtest_list = match &discovery {
-                SubtestDiscovery::None => vec![],
-                SubtestDiscovery::Block(blocks) => {
-                    blocks.iter().map(|b| (b.index, b.name.clone())).collect()
-                }
-                SubtestDiscovery::NodeTest(tests) => {
-                    tests.iter().map(|t| (t.index, t.name.clone())).collect()
-                }
-            };
-
-            for (idx, subtest_name) in &subtest_list {
-                let subtest_key = format!("{}#{}", test_path, subtest_name);
-                let sub_result = match tokio::time::timeout(
-                    Duration::from_secs(60),
-                    runner.run_subtest(test_path, &source, &discovery, *idx),
-                )
-                .await
-                {
-                    Ok(Ok(r)) => r,
-                    Ok(Err(e)) => TestResult::Error(format!("{e:#}")),
-                    Err(_) => TestResult::Error("Timeout".to_string()),
-                };
-
-                let sub_filename = format!("{}#{}", filename, subtest_name);
-                let sub_tag = if is_internal { " [internal]" } else { "" };
-
-                match &sub_result {
-                    TestResult::Pass => println!("         ├─ PASS  {sub_filename}{sub_tag}"),
-                    TestResult::Skip(r) => {
-                        println!("         ├─ SKIP  {sub_filename}{sub_tag} ({r})")
-                    }
-                    TestResult::Fail(msg) => {
-                        let short = if msg.len() > 100 {
-                            &msg[..100]
-                        } else {
-                            msg.as_str()
-                        };
-                        println!("         ├─ FAIL  {sub_filename}{sub_tag}: {short}");
-                    }
-                    TestResult::Error(msg) => {
-                        let short = if msg.len() > 100 {
-                            &msg[..100]
-                        } else {
-                            msg.as_str()
-                        };
-                        println!("         ├─ ERROR {sub_filename}{sub_tag}: {short}");
-                    }
-                }
-
-                results.insert(subtest_key, sub_result);
-            }
-        }
     }
 
     let total_elapsed = total_start.elapsed();
+
+    // Recompute totals based on the subtest-expanded counts
+    let total_public = pass_count + fail_count + skip_count + impossible_count + error_count;
+    let total_internals =
+        internals_pass + internals_fail + internals_skip + internals_impossible + internals_error;
+    let total_tests = total_public + total_internals;
 
     // Step 5: Generate report
     println!("\n=== Generating report ===");
@@ -1390,6 +1502,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     for (path, result) in &results {
         let base_path = path.split('#').next().unwrap_or(path);
         if internals_tests.contains(base_path) {
+            continue;
+        }
+        // Skip file-level entries that have subtests
+        if !path.contains('#') && files_with_subtests.contains(path) {
             continue;
         }
         let filename = path.rsplit('/').next().unwrap_or(path);
@@ -1832,6 +1948,10 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     report.push_str("## All Results by Module (Public + Internals)\n\n");
     let mut by_module_all: BTreeMap<String, Vec<(&String, &TestResult)>> = BTreeMap::new();
     for (path, result) in &results {
+        // Skip file-level entries that have subtests
+        if !path.contains('#') && files_with_subtests.contains(path) {
+            continue;
+        }
         let filename = path.rsplit('/').next().unwrap_or(path);
         let base_filename = filename.split('#').next().unwrap_or(filename);
         let module = classify_test(base_filename).to_string();

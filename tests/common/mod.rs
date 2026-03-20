@@ -5,6 +5,7 @@ use crate::common::WasmSource::Precompiled;
 use anyhow::anyhow;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
+use futures::FutureExt;
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -19,7 +20,6 @@ use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{
     Component, Func, Instance, Linker, ResourceAny, ResourceTable, ResourceType, Val,
 };
-use futures::FutureExt;
 use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;

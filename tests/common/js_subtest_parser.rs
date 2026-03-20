@@ -20,7 +20,7 @@ pub struct TestInfo {
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SubtestDiscovery {
     None,
     Block(Vec<BlockInfo>),
