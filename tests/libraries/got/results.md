@@ -2,7 +2,7 @@
 
 **Package:** `got`
 **Version:** `14.6.6`
-**Tested on:** 2026-03-11
+**Tested on:** 2026-03-20
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -44,5 +44,5 @@
 - Missing APIs: `node:tls` (throws at import time)
 - Behavioral differences: N/A (runtime execution did not reach library code)
 - Blockers:
-  - Previous blocker (`Intl` not defined / `Intl.ListFormat` missing) has been resolved
-  - New blocker: `got` bundles eagerly import `node:tls`, and the runtime's `node:tls` stub throws `"tls is not supported in WebAssembly environment"` at module init, aborting before any test code runs
+  - `got` bundles eagerly import `node:tls`, and the runtime's `node:tls` stub throws `"tls is not supported in WebAssembly environment"` at module init, aborting before any test code runs
+  - All tests use mock transports (never actually connect via TLS), but the eager import prevents even mock-based usage

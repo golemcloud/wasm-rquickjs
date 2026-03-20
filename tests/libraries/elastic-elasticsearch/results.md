@@ -2,7 +2,7 @@
 
 **Package:** `@elastic/elasticsearch`
 **Version:** `9.3.4`
-**Tested on:** 2026-03-18
+**Tested on:** 2026-03-20
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -51,19 +51,7 @@
 
 ## Integration Tests (Docker)
 
-**Service:** `docker.elastic.co/elasticsearch/elasticsearch:9.3.0` on port `19200`
-
-### test-integration-04-docker-connect.js — real cluster `ping/info/cluster.health`
-- **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Request aborted`
-- **Root cause:** HTTP transport aborts in wasm-rquickjs even against a real Elasticsearch server.
-
-### test-integration-05-docker-crud.js — real CRUD + bulk + search + count
-- **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Request aborted`
-- **Root cause:** Same HTTP abort issue prevents end-to-end Elasticsearch operations in wasm-rquickjs.
+Docker integration tests (`test-integration-04-docker-connect.js`, `test-integration-05-docker-crud.js`) were skipped in this re-test run. Previous results (2026-03-18) showed the same `Request aborted` failures as the HTTP mock tests.
 
 ## Live Service Tests
 
@@ -73,11 +61,12 @@
 
 - Offline tests passed in Node.js: 5/5
 - Offline tests passed in wasm-rquickjs: 5/5
-- Integration tests passed in Node.js: 5/5 (HTTP mock 3/3, Docker 2/2)
-- Integration tests passed in wasm-rquickjs: 0/5 (HTTP mock 0/3, Docker 0/2)
+- HTTP mock integration tests passed in Node.js: 3/3
+- HTTP mock integration tests passed in wasm-rquickjs: 0/3
+- Docker integration tests: skipped (same root cause as HTTP mock failures)
 - Missing APIs: None identified from offline API-surface usage
 - Behavioral differences: HTTP transport requests from `@elastic/elasticsearch` consistently abort in wasm-rquickjs (`JavaScript error: Request aborted`)
-- Blockers: Real HTTP communication (both mock HTTP server and Docker Elasticsearch) is currently non-functional for this package in wasm-rquickjs
+- Blockers: Real HTTP communication is currently non-functional for this package in wasm-rquickjs
 
 ## Build Notes
 

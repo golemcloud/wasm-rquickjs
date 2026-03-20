@@ -2,7 +2,7 @@
 
 **Package:** `@google-cloud/text-to-speech`
 **Version:** `6.4.0`
-**Tested on:** 2026-03-18
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -33,20 +33,20 @@
 ### test-integration-01-list-voices.js — `listVoices()` against local mock
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Error converting from js 'object' into type 'string'`
-- **Root cause:** HTTP request handling in wasm-rquickjs fails in Google client transport code (`#prepareRequest` / `requestAsync`) before response assertions run.
+- **Error:** `wasm trap: out of bounds memory access` (deep `JS_CallInternal` recursion — 596+ frames)
+- **Root cause:** The Google Cloud client's HTTP request path (via `google-gax` fallback transport) triggers deep recursive JS call chains that overflow the WASM linear memory stack.
 
 ### test-integration-02-synthesize.js — `synthesizeSpeech()` against local mock
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Error converting from js 'object' into type 'string'`
-- **Root cause:** Same JS object-to-string conversion failure in the HTTP request path.
+- **Error:** `wasm trap: out of bounds memory access` (same deep recursion crash)
+- **Root cause:** Same stack overflow in the HTTP request path.
 
 ### test-integration-03-error-handling.js — expected HTTP 500 propagation
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `AssertionError: Expected values to be strictly equal: undefined !== 500`
-- **Root cause:** wasm-rquickjs error objects in this path do not preserve expected status metadata (`error.code` is `undefined`).
+- **Error:** `wasm trap: out of bounds memory access` (same deep recursion crash)
+- **Root cause:** Same stack overflow in the HTTP request path.
 
 ## Live Service Tests
 
@@ -55,8 +55,8 @@
 ### test-live-01-list-voices.js — real `listVoices()` request to Google Cloud Text-to-Speech endpoint
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Unexpected live API status: -1; message=Error converting from js 'object' into type 'string'`
-- **Root cause:** Live HTTP request path in wasm-rquickjs hits the same object-to-string conversion failure as HTTP mock integration tests.
+- **Error:** `wasm trap: out of bounds memory access` (same deep recursion crash)
+- **Root cause:** Same stack overflow as HTTP mock integration tests — the Google client's HTTP transport triggers deep recursive JS calls that exceed the WASM stack.
 
 ## Summary
 
@@ -65,5 +65,5 @@
 - Docker integration tests passed: N/A — HTTP API client library
 - Live service tests passed: 0/1
 - Missing APIs: none observed in covered offline paths
-- Behavioral differences: HTTP request/error handling in wasm-rquickjs fails with `Error converting from js 'object' into type 'string'`; error objects can lose expected `code` metadata.
-- Blockers: Text-to-Speech HTTP request paths (mock and live) cannot currently complete in wasm-rquickjs due HTTP error-object conversion behavior.
+- Behavioral differences: All HTTP request paths (mock and live) crash with `wasm trap: out of bounds memory access` due to deep `JS_CallInternal` recursion (~596+ frames) in the `google-gax` fallback HTTP transport code.
+- Blockers: The `google-gax` fallback transport's HTTP request handling triggers stack overflow in the WASM runtime. All offline/construction/protobuf features work correctly.

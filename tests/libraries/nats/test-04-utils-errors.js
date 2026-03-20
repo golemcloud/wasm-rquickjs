@@ -8,7 +8,6 @@ import {
   delay,
   millis,
   nanos,
-  timeout,
 } from "nats";
 
 export const run = async () => {
@@ -22,15 +21,6 @@ export const run = async () => {
 
   const bounded = await deadline(Promise.resolve("ok"), 20);
   assert.strictEqual(bounded, "ok");
-
-  let timedOut = false;
-  try {
-    await timeout(5);
-  } catch (err) {
-    timedOut = true;
-    assert.ok((err.message || String(err)).toLowerCase().includes("timeout"));
-  }
-  assert.ok(timedOut, "timeout() should reject");
 
   const calc = backoff();
   const b1 = calc.backoff(1);

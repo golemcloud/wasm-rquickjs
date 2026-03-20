@@ -2,7 +2,7 @@
 
 **Package:** `nock`
 **Version:** `14.0.11`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -10,35 +10,35 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: cannot read property 'bind' of undefined`
-- **Root cause:** `nock` depends on Node `http.ClientRequest` internals (`createConnection` path) that are not fully compatible in the runtime.
+- **Root cause:** `nock` monkey-patches `node:http` internals. During `ClientRequest` construction, the `createConnection` callback provided by nock calls `.bind()` on a property that is `undefined` in the wasm-rquickjs `node:http` implementation.
 
 ### test-02-query-and-headers.js — Query + header matcher behavior
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: cannot read property 'bind' of undefined`
-- **Root cause:** Same `node:http` client internals mismatch during request initialization.
+- **Root cause:** Same `node:http` `createConnection` path failure.
 
 ### test-03-times-and-persist.js — Repetition and persistence controls
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: cannot read property 'bind' of undefined`
-- **Root cause:** Request never reaches `nock` matcher logic because `http` request setup fails first.
+- **Root cause:** Same `node:http` `createConnection` path failure.
 
 ### test-04-optionally.js — Optional interceptors and done state
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: cannot read property 'bind' of undefined`
-- **Root cause:** Same low-level `node:http` failure before mock response behavior can run.
+- **Root cause:** Same `node:http` `createConnection` path failure.
 
 ### test-05-global-state.js — Global pending mocks and done state
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: cannot read property 'bind' of undefined`
-- **Root cause:** Runtime aborts in `node:http` request creation path used by `nock`.
+- **Root cause:** Same `node:http` `createConnection` path failure.
 
 ## Summary
 
 - Tests passed: 0/5 in wasm-rquickjs (5/5 in Node.js)
-- Missing APIs: Node `http` request internals required by `nock` monkey-patching (`createConnection` path)
-- Behavioral differences: `nock` interception cannot initialize because the underlying `node:http` request flow fails before matching/reply
-- Blockers: Runtime panic during `run()` with `JavaScript error: cannot read property 'bind' of undefined` followed by wasm trap (`unreachable`)
+- Missing APIs: `node:http` `ClientRequest` internal `createConnection` callback path — nock monkey-patches `http.ClientRequest` and injects a custom `createConnection` option; the runtime's `_initializeCustomConnection` calls `.bind()` on a property that doesn't exist in the patched context.
+- Behavioral differences: None observable — all tests fail before nock's interception logic runs.
+- Blockers: `nock` fundamentally relies on monkey-patching `node:http` internals (`ClientRequest`, `request`, `get`). The runtime's `node:http` implementation does not expose the same internal structure (specifically the `createConnection` option handling), causing all nock interception to fail.

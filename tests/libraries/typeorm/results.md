@@ -2,7 +2,7 @@
 
 **Package:** `typeorm`
 **Version:** `0.3.28`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-20
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -11,7 +11,7 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: The "path" argument must be of type string. Received undefined` at `ERR_INVALID_ARG_TYPE` → `validateString` → `dirname (node:path:1040:20)` → `resolve (bundle/script_module:5870:32)` → `appRootPath$1`
-- **Root cause:** The `createRequire` issue is fixed. The `app-root-path` library passes `undefined` to `path.dirname`, which throws because the runtime correctly validates the argument type.
+- **Root cause:** The `app-root-path` library (a TypeORM dependency) passes `undefined` to `path.dirname` during module initialization, because it cannot resolve a filesystem root in the WASM environment.
 
 ### test-02-validation.js — Decorator validation and metadata registration
 - **Node.js:** ✅ PASS
@@ -37,7 +37,6 @@
 
 - Tests passed on Node.js: 5/5
 - Tests passed on wasm-rquickjs: 0/5
-- Previous blocker (`createRequire(import.meta.url)` failure) is **fixed**
-- **Current blocker:** The `app-root-path` library passes `undefined` to `path.dirname`, likely because it cannot resolve a filesystem root in the WASM environment.
+- **Blocker:** All bundles fail during initialization when the `app-root-path` library (a TypeORM dependency) calls `path.dirname(undefined)`. The `app-root-path` library tries to resolve a module's filesystem path using `require.resolve` or `__dirname`-style lookups; in the WASM environment these resolve to `undefined`, which then fails validation in `path.dirname`.
 - Behavioral differences: N/A (runtime execution not reached)
-- Blockers: All bundles fail during initialization when `app-root-path` calls `path.dirname(undefined)`.
+- Blockers: All bundles fail during initialization via `app-root-path` → `path.dirname(undefined)`.

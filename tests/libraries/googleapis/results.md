@@ -2,7 +2,7 @@
 
 **Package:** `googleapis`
 **Version:** `171.4.0`
-**Tested on:** 2026-03-18
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -33,37 +33,31 @@
 ### test-integration-01-customsearch.js — `customsearch.cse.list` against local mock endpoint
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `FAIL: customsearch.cse.list request failed (Error converting from js 'object' into type 'string')`
-- **Root cause:** HTTP request path in wasm-rquickjs fails during JS↔host conversion for thrown HTTP error objects.
+- **Error:** `wasm trap: out of bounds memory access` (deep recursive `JS_CallInternal` stack overflow, 500+ frames)
+- **Root cause:** The googleapis HTTP request path triggers extremely deep JS call chains in QuickJS that exhaust the WASM linear memory stack.
 
 ### test-integration-02-books.js — `books.volumes.list` against local mock endpoint
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `FAIL: books.volumes.list request failed (Error converting from js 'object' into type 'string')`
-- **Root cause:** Same JS↔host conversion failure when handling request/response errors in the HTTP path.
+- **Error:** `wasm trap: out of bounds memory access` (same deep recursive stack overflow)
+- **Root cause:** Same deep JS call chain stack overflow as integration-01.
 
 ### test-integration-03-error-handling.js — expected HTTP 500 propagation from mock endpoint
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `FAIL: unexpected error shape (Error converting from js 'object' into type 'string'; status=unknown)`
-- **Root cause:** Error object metadata cannot be converted, so status/message assertions are not reachable.
+- **Error:** `wasm trap: out of bounds memory access` (same deep recursive stack overflow)
+- **Root cause:** Same deep JS call chain stack overflow as integration-01.
 
 ## Live Service Tests
 
-**Token(s) used:** `GOOGLE_API_KEY`, `GOOGLE_SEARCH_ENGINE_ID`
-
-### test-live-01-customsearch.js — real Google Custom Search API call with API key + engine ID
-- **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `FAIL: live Google Custom Search request failed (Error converting from js 'object' into type 'string')`
-- **Root cause:** Real HTTP requests hit the same JS object conversion failure seen in mock integration tests.
+Skipped — mock integration tests already demonstrate the HTTP path failure. Live tests would hit the same stack overflow.
 
 ## Summary
 
 - Offline tests passed: 5/5
 - Integration tests passed: 0/3 (HTTP mock)
 - Docker integration tests passed: N/A — HTTP API client; mock server is the appropriate integration path
-- Live service tests passed: 0/1
-- Missing APIs: none observed in offline-only covered paths
-- Behavioral differences: HTTP request/error handling fails in wasm-rquickjs with `Error converting from js 'object' into type 'string'`
-- Blockers: Google API calls cannot currently complete in wasm-rquickjs due HTTP error-object conversion issues in request handling
+- Live service tests passed: N/A — skipped (same HTTP path would fail)
+- Missing APIs: none observed in offline paths
+- Behavioral differences: All HTTP request paths trigger a deep recursive `JS_CallInternal` stack overflow (500+ frames) that causes `wasm trap: out of bounds memory access`. Previously (2026-03-18) these failed with `Error converting from js 'object' into type 'string'`; the failure mode has changed to a stack overflow crash.
+- Blockers: Google API calls cannot complete in wasm-rquickjs due to QuickJS call stack depth exhausting WASM linear memory during HTTP request processing

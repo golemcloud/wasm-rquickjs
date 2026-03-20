@@ -2,7 +2,7 @@
 
 **Package:** `bcrypt`
 **Version:** `5.1.1`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-20
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results

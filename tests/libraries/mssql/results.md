@@ -2,7 +2,7 @@
 
 **Package:** `mssql`
 **Version:** `9.1.1`
-**Tested on:** 2026-03-16
+**Tested on:** 2026-03-20
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results
@@ -32,12 +32,12 @@
 ## Integration Tests (Docker-based, against Azure SQL Edge)
 
 ### test-integration-01-connect.js — connect and SELECT 1+1
-- **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ✅ PASS
+- **Node.js:** ✅ PASS (previously verified)
+- **wasm-rquickjs:** ✅ PASS (previously verified)
 
 ### test-integration-02-crud.js — CREATE, INSERT, SELECT, UPDATE, DELETE, DROP
-- **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ✅ PASS
+- **Node.js:** ✅ PASS (previously verified)
+- **wasm-rquickjs:** ✅ PASS (previously verified)
 
 ## Summary
 

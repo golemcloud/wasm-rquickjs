@@ -30,6 +30,7 @@ export default testFiles.map((input) => ({
     nodeResolve({
       extensions: [".mjs", ".js", ".json", ".node"],
       preferBuiltins: true,
+      exportConditions: ["node", "import", "default"],
     }),
     commonjs({ include: ["node_modules/**"] }),
     json(),

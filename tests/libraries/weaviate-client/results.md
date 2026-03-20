@@ -2,7 +2,7 @@
 
 **Package:** `weaviate-client`
 **Version:** `3.12.0`
-**Tested on:** 2026-03-17
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -28,18 +28,6 @@
 - **Error:** `JavaScript error: Weaviate startup failed with message: Weaviate failed to startup with message: tls is not supported in WebAssembly environment`
 - **Root cause:** Cloud connection setup requires TLS (`node:tls`) which is not supported by the current wasm runtime.
 
-## Integration Tests (Docker)
-
-**Service:** `semitechnologies/weaviate:1.30.3` on ports `18090` (HTTP) and `15051` (gRPC)
-
-### test-integration-04-docker-connect.js — connect and check `/v1/meta` + readiness against real Weaviate
-- **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ✅ PASS
-
-### test-integration-05-docker-crud.js — create collection, insert object, verify existence, delete collection
-- **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ✅ PASS
-
 ## Integration Tests (HTTP Mock)
 
 **Mock server:** `mock-server.mjs` on port `18080`
@@ -56,6 +44,20 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ✅ PASS
 
+## Integration Tests (Docker)
+
+**Service:** `semitechnologies/weaviate:1.30.3` on ports `18090` (HTTP) and `15051` (gRPC)
+
+> Docker tests were skipped per request (not re-run in this session). Previous results from 2026-03-17 shown below.
+
+### test-integration-04-docker-connect.js — connect and check `/v1/meta` + readiness against real Weaviate
+- **Node.js:** ✅ PASS (previous run)
+- **wasm-rquickjs:** ✅ PASS (previous run)
+
+### test-integration-05-docker-crud.js — create collection, insert object, verify existence, delete collection
+- **Node.js:** ✅ PASS (previous run)
+- **wasm-rquickjs:** ✅ PASS (previous run)
+
 ## Untestable Features
 
 No `WEAVIATE_API_KEY` or Weaviate Cloud URL token pair is present in `tests/libraries/.tokens.json`, so live Weaviate Cloud API tests were not run.
@@ -68,7 +70,7 @@ To fully test live cloud behavior:
 ## Summary
 
 - Offline tests passed: 4/5
-- Integration tests passed: 5/5 (Docker 2/2, HTTP mock 3/3)
+- Integration tests passed: 5/5 (HTTP mock 3/3, Docker 2/2 from previous run)
 - Live service tests passed: N/A — no Weaviate credentials in `tests/libraries/.tokens.json`
 - Missing APIs: TLS support for cloud connection path (`node:tls`)
 - Behavioral differences: `connectToWeaviateCloud()` works in Node.js but fails in wasm due TLS unsupported
