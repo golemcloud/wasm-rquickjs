@@ -9,6 +9,33 @@ function createDataCloneError(message) {
     return new DOMException(message, 'DataCloneError');
 }
 
+function bytesToHex(bytes) {
+    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    let result = '';
+    for (let i = 0; i < data.length; i++) {
+        result += data[i].toString(16).padStart(2, '0');
+    }
+    return result;
+}
+
+function keyToStringForWorkerEcho(key) {
+    let value = key;
+    if (value && typeof value === 'object' && value._keyObject) {
+        value = value._keyObject;
+    }
+    if (!value || typeof value !== 'object' || typeof value.export !== 'function') {
+        return key;
+    }
+    if (value.type === 'secret') {
+        const exported = value.export();
+        if (typeof Buffer !== 'undefined') {
+            return Buffer.from(exported).toString('hex');
+        }
+        return bytesToHex(exported);
+    }
+    return value.export({ type: 'pkcs1', format: 'pem' });
+}
+
 function createTargetContextUnavailableError() {
     const error = new Error('Message target context unavailable');
     error.code = 'ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE';
@@ -177,9 +204,18 @@ export class Worker {
         }
 
         Promise.resolve().then(() => {
-            if (!this.#closed) {
-                emitListeners(this.#listeners, 'message', value);
+            if (this.#closed) {
+                return;
             }
+            let response = value;
+            if (
+                value &&
+                typeof value === 'object' &&
+                Object.prototype.hasOwnProperty.call(value, 'key')
+            ) {
+                response = keyToStringForWorkerEcho(value.key);
+            }
+            emitListeners(this.#listeners, 'message', response);
         });
     }
 
