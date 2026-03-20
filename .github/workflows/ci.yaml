@@ -107,7 +107,7 @@ jobs:
       - name: Vendor Node.js test suite
         run: bash tests/node_compat/vendor.sh
       - name: Node compat tests (shard ${{ matrix.shard }}/8)
-        run: cargo test --test node_compat -- --test-threads=1 --nocapture --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
+        run: cargo test --test node_compat -- --nocapture --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
