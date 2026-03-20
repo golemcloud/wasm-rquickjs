@@ -2061,7 +2061,7 @@ export class ClientRequest extends OutgoingMessage {
             bodyChunk = Buffer.from(String(chunk), 'utf8');
         }
 
-        if (bodyChunk) {
+        if (bodyChunk && bodyChunk.length > 0) {
             this._bodyLength += bodyChunk.length;
             this._bodyChunks.push(bodyChunk);
 
@@ -2072,6 +2072,8 @@ export class ClientRequest extends OutgoingMessage {
                 this._bufferedBytes += bodyChunk.length;
                 this._scheduleFlush();
             }
+        } else if (typeof callback === 'function') {
+            callback();
         }
 
         if (this._useSocketTransport) {
