@@ -1,0 +1,5 @@
+package test:lib-meilisearch;
+
+world lib-meilisearch {
+  export run: func() -> string;
+}

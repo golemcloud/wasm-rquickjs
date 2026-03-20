@@ -22,12 +22,43 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 const _toString = Object.prototype.toString;
+const _getPrototypeOf = Object.getPrototypeOf;
 
 const _isObjectLike = (value) =>
     value !== null && typeof value === "object";
 
 const _isFunctionLike = (value) =>
     value !== null && typeof value === "function";
+
+const _isPrototypeInChain = (value, prototype) => {
+    if (!_isObjectLike(value) || prototype === null) {
+        return false;
+    }
+
+    let current = _getPrototypeOf(value);
+    while (current !== null) {
+        if (current === prototype) {
+            return true;
+        }
+        current = _getPrototypeOf(current);
+    }
+
+    return false;
+};
+
+const _mapIteratorPrototype = (() => {
+    if (typeof Map !== "function") {
+        return null;
+    }
+    return _getPrototypeOf(new Map().keys());
+})();
+
+const _setIteratorPrototype = (() => {
+    if (typeof Set !== "function") {
+        return null;
+    }
+    return _getPrototypeOf(new Set().values());
+})();
 
 export function isAnyArrayBuffer(value) {
     return (
@@ -54,7 +85,14 @@ export function isAsyncFunction(value) {
 }
 
 export function isBooleanObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Boolean]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof Boolean.prototype.valueOf.call(value) === "boolean";
+    } catch {
+        return false;
+    }
 }
 
 export function isBoxedPrimitive(value) {
@@ -87,12 +125,26 @@ export function isGeneratorObject(value) {
 }
 
 export function isMap(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Map]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        // `Object.prototype.toString` alone is too permissive for QuickJS and
+        // matches objects inheriting from `Map.prototype`.
+        Map.prototype.has.call(value, undefined);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function isMapIterator(value) {
     return (
-        _isObjectLike(value) && _toString.call(value) === "[object Map Iterator]"
+        _isObjectLike(value) &&
+        (
+            _isPrototypeInChain(value, _mapIteratorPrototype) ||
+            _toString.call(value) === "[object Map Iterator]"
+        )
     );
 }
 
@@ -105,11 +157,25 @@ export function isNativeError(value) {
 }
 
 export function isNumberObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Number]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof Number.prototype.valueOf.call(value) === "number";
+    } catch {
+        return false;
+    }
 }
 
 export function isBigIntObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object BigInt]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof BigInt.prototype.valueOf.call(value) === "bigint";
+    } catch {
+        return false;
+    }
 }
 
 export function isPromise(value) {
@@ -121,12 +187,25 @@ export function isRegExp(value) {
 }
 
 export function isSet(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Set]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        // Mirror `isMap` semantics for Set objects as well.
+        Set.prototype.has.call(value, undefined);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function isSetIterator(value) {
     return (
-        _isObjectLike(value) && _toString.call(value) === "[object Set Iterator]"
+        _isObjectLike(value) &&
+        (
+            _isPrototypeInChain(value, _setIteratorPrototype) ||
+            _toString.call(value) === "[object Set Iterator]"
+        )
     );
 }
 
@@ -138,11 +217,25 @@ export function isSharedArrayBuffer(value) {
 }
 
 export function isStringObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object String]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof String.prototype.valueOf.call(value) === "string";
+    } catch {
+        return false;
+    }
 }
 
 export function isSymbolObject(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Symbol]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        return typeof Symbol.prototype.valueOf.call(value) === "symbol";
+    } catch {
+        return false;
+    }
 }
 
 export function isWeakMap(value) {
@@ -201,7 +294,7 @@ export function isInt32Array(value) {
 export function isTypedArray(value) {
     /** Used to match `toStringTag` values of typed arrays. */
     const reTypedTag =
-        /^\[object (?:Float(?:32|64)|(?:Int|Uint)(?:8|16|32)|Uint8Clamped)Array\]$/;
+        /^\[object (?:Float(?:32|64)|(?:Int|Uint)(?:8|16|32)|Uint8Clamped|Big(?:Uint|Int)64)Array\]$/;
     return _isObjectLike(value) && reTypedTag.test(_toString.call(value));
 }
 

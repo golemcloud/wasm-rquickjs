@@ -1,0 +1,5 @@
+package test:lib-compression;
+
+world lib-compression {
+  export run: func() -> string;
+}

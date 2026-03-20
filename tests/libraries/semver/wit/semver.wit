@@ -1,0 +1,5 @@
+package test:lib-semver;
+
+world lib-semver {
+  export run: func() -> string;
+}

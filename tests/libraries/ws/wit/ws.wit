@@ -1,0 +1,5 @@
+package test:lib-ws;
+
+world lib-ws {
+  export run: func() -> string;
+}

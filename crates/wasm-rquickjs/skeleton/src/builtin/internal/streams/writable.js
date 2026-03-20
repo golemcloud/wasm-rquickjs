@@ -17,7 +17,12 @@ import {
     ERR_STREAM_NULL_VALUES,
     ERR_STREAM_WRITE_AFTER_END,
     ERR_UNKNOWN_ENCODING,
+    ERR_STREAM_PREMATURE_CLOSE,
+    AbortError,
 } from "__wasm_rquickjs_builtin/internal/errors";
+import { isDestroyed, isWritable, isWritableEnded } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { validateObject, validateBoolean } from "__wasm_rquickjs_builtin/internal/validators";
+import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
 import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
@@ -108,6 +113,9 @@ function WritableState(options, stream, isDuplex) {
     // encoding is 'binary' so we have to make this configurable.
     // Everything else in the universe uses 'utf8', though.
     this.defaultEncoding = (options && options.defaultEncoding) || "utf8";
+    if (!Buffer.isEncoding(this.defaultEncoding)) {
+      throw new ERR_UNKNOWN_ENCODING(this.defaultEncoding);
+    }
 
     // Not an actual buffer we keep track of, but a measurement
     // of how much we're waiting to get pushed to some underlying
@@ -220,6 +228,18 @@ function Writable(options) {
         return new Writable(options);
     }
 
+    // Pre-initialize _events with well-known event slots to preserve
+    // property insertion order (matching Node.js v22 behavior).
+    if (!this._events) {
+        this._events = Object.create(null);
+        this._events.close = undefined;
+        this._events.error = undefined;
+        this._events.prefinish = undefined;
+        this._events.finish = undefined;
+        this._events.drain = undefined;
+        this._eventsCount = 0;
+    }
+
     this._writableState = new WritableState(options, this, isDuplex);
 
     if (options) {
@@ -242,12 +262,13 @@ function Writable(options) {
         if (typeof options.construct === "function") {
             this._construct = options.construct;
         }
-        if (options.signal) {
-            addAbortSignalNoValidate(options.signal, this);
-        }
     }
 
     Stream.call(this, options);
+
+    if (options && options.signal) {
+        addAbortSignalNoValidate(options.signal, this);
+    }
 
     destroyImpl.construct(this, () => {
         const state = this._writableState;
@@ -282,35 +303,41 @@ function _write(stream, chunk, encoding, cb) {
 
     if (typeof encoding === "function") {
         cb = encoding;
-        encoding = state.defaultEncoding;
-    } else {
-        if (!encoding) {
-            encoding = state.defaultEncoding;
-        } else if (encoding !== "buffer" && !Buffer.isEncoding(encoding)) {
-            throw new ERR_UNKNOWN_ENCODING(encoding);
-        }
-        if (typeof cb !== "function") {
-            cb = nop;
-        }
+        encoding = null;
+    }
+
+    if (typeof cb !== "function") {
+        cb = nop;
     }
 
     if (chunk === null) {
         throw new ERR_STREAM_NULL_VALUES();
     } else if (!state.objectMode) {
+        if (!encoding) {
+            encoding = state.defaultEncoding;
+        } else if (encoding !== "buffer" && !Buffer.isEncoding(encoding)) {
+            throw new ERR_UNKNOWN_ENCODING(encoding);
+        }
+
         if (typeof chunk === "string") {
+            if (encoding === "buffer") {
+                const err = new TypeError('Second argument must be a buffer');
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
             if (state.decodeStrings !== false) {
                 chunk = Buffer.from(chunk, encoding);
                 encoding = "buffer";
             }
         } else if (chunk instanceof Buffer) {
             encoding = "buffer";
-        } else if (isUint8Array(chunk)) {
-            chunk = _uint8ArrayToBuffer(chunk);
+        } else if (ArrayBuffer.isView(chunk)) {
+            chunk = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
             encoding = "buffer";
         } else {
             throw new ERR_INVALID_ARG_TYPE(
                 "chunk",
-                ["string", "Buffer", "Uint8Array"],
+                ["string", "Buffer", "TypedArray", "DataView"],
                 chunk,
             );
         }
@@ -503,7 +530,7 @@ function afterWrite(stream, state, count, cb) {
 
     while (count-- > 0) {
         state.pendingcb--;
-        cb();
+        cb(null);
     }
 
     if (state.destroyed) {
@@ -523,12 +550,12 @@ function errorBuffer(state) {
         const { chunk, callback } = state.buffered[n];
         const len = state.objectMode ? 1 : chunk.length;
         state.length -= len;
-        callback(new ERR_STREAM_DESTROYED("write"));
+        callback(state.errored ?? new ERR_STREAM_DESTROYED("write"));
     }
 
     const onfinishCallbacks = state[kOnFinished].splice(0);
     for (let i = 0; i < onfinishCallbacks.length; i++) {
-        onfinishCallbacks[i](new ERR_STREAM_DESTROYED("end"));
+        onfinishCallbacks[i](state.errored ?? new ERR_STREAM_DESTROYED("end"));
     }
 
     resetBuffer(state);
@@ -649,6 +676,8 @@ Writable.prototype.end = function (chunk, encoding, cb) {
     if (typeof cb === "function") {
         if (err || state.finished) {
             nextTick(cb, err);
+        } else if (state.errored) {
+            nextTick(cb, state.errored);
         } else {
             state[kOnFinished].push(cb);
         }
@@ -717,7 +746,7 @@ function callFinal(stream, state) {
             }
         }
     } catch (err) {
-        onFinish(stream, state, err);
+        onFinish(err);
     }
 
     state.sync = false;
@@ -755,7 +784,7 @@ function finish(stream, state) {
 
     const onfinishCallbacks = state[kOnFinished].splice(0);
     for (let i = 0; i < onfinishCallbacks.length; i++) {
-        onfinishCallbacks[i]();
+        onfinishCallbacks[i](null);
     }
 
     stream.emit("finish");
@@ -856,6 +885,28 @@ Object.defineProperties(Writable.prototype, {
             return this._writableState && this._writableState.length;
         },
     },
+
+    writableAborted: {
+        enumerable: false,
+        get: function () {
+            return !!(this._writableState.writable !== false &&
+                (this._writableState.destroyed || this._writableState.errored) &&
+                !this._writableState.finished);
+        },
+    },
+
+    errored: {
+        enumerable: false,
+        get() {
+            return this._writableState ? this._writableState.errored : null;
+        },
+    },
+
+    closed: {
+        get() {
+            return this._writableState ? this._writableState.closed : false;
+        },
+    },
 });
 
 const destroy = destroyImpl.destroy;
@@ -884,7 +935,221 @@ Writable.prototype[EventEmitter.captureRejectionSymbol] = function (err) {
     this.destroy(err);
 };
 
+function newStreamWritableFromWritableStream(writableStream, options = {}) {
+    if (!(writableStream instanceof WritableStream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            'writableStream',
+            'WritableStream',
+            writableStream);
+    }
+
+    validateObject(options, 'options');
+    const {
+        highWaterMark,
+        decodeStrings = true,
+        objectMode = false,
+        signal,
+    } = options;
+
+    validateBoolean(objectMode, 'options.objectMode');
+    validateBoolean(decodeStrings, 'options.decodeStrings');
+
+    const writer = writableStream.getWriter();
+    let closed = false;
+
+    const writable = new Writable({
+        highWaterMark,
+        objectMode,
+        decodeStrings,
+        signal,
+
+        write(chunk, encoding, callback) {
+            if (typeof chunk === 'string' && decodeStrings && !objectMode) {
+                chunk = Buffer.from(chunk, encoding);
+                chunk = new Uint8Array(
+                    chunk.buffer,
+                    chunk.byteOffset,
+                    chunk.byteLength,
+                );
+            }
+
+            function done(error) {
+                try {
+                    callback(error);
+                } catch (error) {
+                    destroyImpl.destroyer(writable, error);
+                }
+            }
+
+            writer.ready.then(
+                () => {
+                    return writer.write(chunk).then(done, done);
+                },
+                done);
+        },
+
+        destroy(error, callback) {
+            function done() {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => { throw error; });
+                }
+            }
+
+            if (!closed) {
+                if (error != null) {
+                    writer.abort(error).then(done, done);
+                } else {
+                    writer.close().then(done, done);
+                }
+                return;
+            }
+
+            done();
+        },
+
+        final(callback) {
+            function done(error) {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => { destroyImpl.destroyer(writable, error); });
+                }
+            }
+
+            if (!closed) {
+                writer.close().then(done, done);
+            }
+        },
+    });
+
+    writer.closed.then(
+        () => {
+            closed = true;
+            if (!isWritableEnded(writable))
+                destroyImpl.destroyer(writable, new ERR_STREAM_PREMATURE_CLOSE());
+        },
+        (error) => {
+            closed = true;
+            destroyImpl.destroyer(writable, error);
+        });
+
+    return writable;
+}
+
+
+function newWritableStreamFromStreamWritable(streamWritable) {
+    if (typeof streamWritable?.write !== 'function' ||
+        typeof streamWritable?.on !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE(
+            'streamWritable',
+            'stream.Writable',
+            streamWritable);
+    }
+
+    if (isDestroyed(streamWritable) || !isWritable(streamWritable)) {
+        const writable = new WritableStream();
+        writable.close();
+        return writable;
+    }
+
+    const highWaterMark = streamWritable.writableHighWaterMark;
+    const strategy = streamWritable.writableObjectMode
+        ? new CountQueuingStrategy({ highWaterMark })
+        : { highWaterMark };
+
+    let controller;
+    let backpressureResolve;
+    let backpressureReject;
+
+    function onDrain() {
+        if (backpressureResolve !== undefined) {
+            backpressureResolve();
+            backpressureResolve = undefined;
+            backpressureReject = undefined;
+        }
+    }
+
+    const cleanup = eos(streamWritable, (error) => {
+        cleanup();
+        streamWritable.on('error', () => {});
+
+        if (error != null) {
+            if (backpressureReject !== undefined) {
+                backpressureReject(error);
+                backpressureResolve = undefined;
+                backpressureReject = undefined;
+            }
+            controller.error(error);
+            controller = undefined;
+            return;
+        }
+
+        controller.error(new AbortError());
+        controller = undefined;
+    });
+
+    streamWritable.on('drain', onDrain);
+
+    return new WritableStream({
+        start(c) { controller = c; },
+
+        write(chunk) {
+            if (streamWritable.writableNeedDrain || !streamWritable.write(chunk)) {
+                return new Promise((resolve, reject) => {
+                    backpressureResolve = resolve;
+                    backpressureReject = reject;
+                }).finally(() => {
+                    backpressureResolve = undefined;
+                    backpressureReject = undefined;
+                });
+            }
+        },
+
+        abort(reason) {
+            destroyImpl.destroyer(streamWritable, reason);
+        },
+
+        close() {
+            if (!isWritableEnded(streamWritable)) {
+                return new Promise((resolve, reject) => {
+                    streamWritable.end();
+                    eos(streamWritable, (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+            }
+
+            controller = undefined;
+            return Promise.resolve();
+        },
+    }, strategy);
+}
+
+Writable.fromWeb = function(writableStream, options) {
+    return newStreamWritableFromWritableStream(writableStream, options);
+};
+
+Writable.toWeb = function(streamWritable) {
+    return newWritableStreamFromStreamWritable(streamWritable);
+};
+
 Writable.WritableState = WritableState;
 
+if (typeof Symbol.asyncDispose !== 'undefined') {
+    Writable.prototype[Symbol.asyncDispose] = async function() {
+        let error;
+        if (!this.destroyed) {
+            error = this.writableFinished ? null : new AbortError();
+            this.destroy(error);
+        }
+        await new Promise((resolve, reject) =>
+            eos(this, (err) => (err && err.name !== 'AbortError' ? reject(err) : resolve(null))),
+        );
+    };
+}
+
 export default Writable;
-export { Writable, WritableState };
+export { Writable, WritableState, newStreamWritableFromWritableStream as fromWeb, newWritableStreamFromStreamWritable as toWeb };

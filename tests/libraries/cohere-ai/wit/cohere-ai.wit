@@ -1,0 +1,5 @@
+package test:lib-cohere-ai;
+
+world lib-cohere-ai {
+  export run: func() -> string;
+}

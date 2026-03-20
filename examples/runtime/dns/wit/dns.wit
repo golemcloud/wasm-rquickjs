@@ -1,0 +1,5 @@
+package quickjs:dns;
+
+world dns {
+  export test: func() -> string;
+}

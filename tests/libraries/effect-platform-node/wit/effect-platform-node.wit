@@ -1,0 +1,5 @@
+package test:lib-effect-platform-node;
+
+world lib-effect-platform-node {
+  export run: func() -> string;
+}

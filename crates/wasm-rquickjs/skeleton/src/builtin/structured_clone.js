@@ -91,7 +91,8 @@ const serializer = (strict, json, $, _) => {
         if (type) {
           let spread = value;
           if (type === 'DataView') {
-            spread = new Uint8Array(value.buffer);
+            const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+            return as([type, {bytes: [...bytes], byteOffset: 0, byteLength: value.byteLength}], value);
           }
           else if (type === 'ArrayBuffer') {
             spread = new Uint8Array(value);
@@ -166,7 +167,7 @@ export const serialize = (value, {json, lossy} = {}) => {
   return serializer(!(json || lossy), !!json, new Map, _)(value), _;
 };
 
-const env = typeof self === 'object' ? self : globalThis;
+const env = globalThis;
 
 const deserializer = ($, _) => {
   const as = (out, index) => {
@@ -222,10 +223,11 @@ const deserializer = ($, _) => {
       case 'BigInt':
         return as(Object(BigInt(value)), index);
       case 'ArrayBuffer':
-        return as(new Uint8Array(value).buffer, value);
+        return as(new Uint8Array(value).buffer, index);
       case 'DataView': {
-        const { buffer } = new Uint8Array(value);
-        return as(new DataView(buffer), value);
+        const {bytes, byteOffset, byteLength} = value;
+        const buf = new Uint8Array(bytes).buffer;
+        return as(new DataView(buf, byteOffset, byteLength), index);
       }
     }
     return as(new env[type](value), index);
@@ -236,11 +238,132 @@ const deserializer = ($, _) => {
 
 export const deserialize = serialized => deserializer(new Map, serialized)(0);
 
-const structuredClone = (any, options) => {
-  if (options && ('json' in options || 'lossy' in options)) {
-    return deserialize(serialize(any, options));
+const dataCloneError = (message) => {
+  const e = new Error(message);
+  e.name = 'DataCloneError';
+  return e;
+};
+
+const _TRANSFER_MARKER_KEY = '__wasm_rquickjs_sc_transfer__';
+
+function _isTransferableType(item) {
+  return (
+    item instanceof ArrayBuffer ||
+    item instanceof ReadableStream ||
+    item instanceof WritableStream ||
+    item instanceof TransformStream
+  );
+}
+
+function _replaceTransferItems(value, itemToMarker, visited) {
+  if (value == null || typeof value !== 'object') return value;
+  if (visited.has(value)) return value;
+  if (itemToMarker.has(value)) return itemToMarker.get(value);
+  visited.add(value);
+  if (Array.isArray(value)) {
+    const result = new Array(value.length);
+    for (let i = 0; i < value.length; i++) {
+      result[i] = _replaceTransferItems(value[i], itemToMarker, visited);
+    }
+    return result;
   }
-  return deserialize(serialize(any, {}));
+  const proto = Object.getPrototypeOf(value);
+  if (proto === Object.prototype || proto === null) {
+    const result = {};
+    for (const key of Object.keys(value)) {
+      result[key] = _replaceTransferItems(value[key], itemToMarker, visited);
+    }
+    return result;
+  }
+  return value;
+}
+
+function _restoreTransferItems(value, reverseMap, visited) {
+  if (value == null || typeof value !== 'object') return value;
+  if (visited.has(value)) return value;
+  if (value[_TRANSFER_MARKER_KEY] !== undefined) {
+    return reverseMap.get(value[_TRANSFER_MARKER_KEY]);
+  }
+  visited.add(value);
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      value[i] = _restoreTransferItems(value[i], reverseMap, visited);
+    }
+  } else {
+    for (const key of Object.keys(value)) {
+      value[key] = _restoreTransferItems(value[key], reverseMap, visited);
+    }
+  }
+  return value;
+}
+
+const structuredClone = (any, options) => {
+  // Detect file-backed Blobs (from fs.openAsBlob) and reject them
+  const kFileBackedBlob = Symbol.for('kFileBackedBlob');
+  if (any && typeof any === 'object' && any[kFileBackedBlob]) {
+    const err = new Error('Invalid state: File-backed Blobs are not cloneable');
+    err.code = 'ERR_INVALID_STATE';
+    throw err;
+  }
+
+  const transferList = options && options.transfer;
+
+  if (transferList != null) {
+    const seen = new Set();
+    for (const item of transferList) {
+      if (!_isTransferableType(item)) {
+        throw dataCloneError('Transfer list item is not transferable');
+      }
+      if (item instanceof ArrayBuffer && item.detached) {
+        throw dataCloneError('ArrayBuffer is already detached');
+      }
+      if (seen.has(item)) {
+        throw dataCloneError('Transfer list item appears more than once');
+      }
+      seen.add(item);
+    }
+  }
+
+  // Build maps for non-ArrayBuffer transferables (streams etc.)
+  const itemToMarker = new Map();
+  const reverseMap = new Map();
+  if (transferList != null) {
+    let idx = 0;
+    for (const item of transferList) {
+      if (!(item instanceof ArrayBuffer)) {
+        const marker = { [_TRANSFER_MARKER_KEY]: idx };
+        itemToMarker.set(item, marker);
+        reverseMap.set(idx, item);
+        idx++;
+      }
+    }
+  }
+
+  // Pre-process: replace non-ArrayBuffer transfer items with markers
+  const processedValue = itemToMarker.size > 0
+    ? _replaceTransferItems(any, itemToMarker, new Set())
+    : any;
+
+  const cloneOpts = options && ('json' in options || 'lossy' in options) ? options : {};
+  let result = deserialize(serialize(processedValue, cloneOpts));
+
+  // Post-process: replace markers with original transferred objects
+  if (reverseMap.size > 0) {
+    result = _restoreTransferItems(result, reverseMap, new Set());
+  }
+
+  // Transfer ArrayBuffers (detach originals)
+  if (transferList != null) {
+    for (const item of transferList) {
+      if (item instanceof ArrayBuffer) {
+        if (typeof ArrayBuffer.prototype.transfer === 'function') {
+          ArrayBuffer.prototype.transfer.call(item);
+        }
+      }
+    }
+  }
+
+  return result;
 };
 
 export default structuredClone;

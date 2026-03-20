@@ -1,0 +1,5 @@
+package test:lib-papaparse;
+
+world lib-papaparse {
+  export run: func() -> string;
+}

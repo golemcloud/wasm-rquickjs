@@ -1,0 +1,5 @@
+package test:lib-aws-sdk-client-s3;
+
+world lib-aws-sdk-client-s3 {
+  export run: func() -> string;
+}

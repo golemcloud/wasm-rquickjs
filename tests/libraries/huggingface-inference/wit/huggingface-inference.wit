@@ -1,0 +1,5 @@
+package test:lib-huggingface-inference;
+
+world lib-huggingface-inference {
+  export run: func() -> string;
+}

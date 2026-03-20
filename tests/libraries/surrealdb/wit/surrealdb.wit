@@ -1,0 +1,5 @@
+package test:lib-surrealdb;
+
+world lib-surrealdb {
+  export run: func() -> string;
+}

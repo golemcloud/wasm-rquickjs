@@ -1,0 +1,5 @@
+package test:lib-passport;
+
+world lib-passport {
+  export run: func() -> string;
+}

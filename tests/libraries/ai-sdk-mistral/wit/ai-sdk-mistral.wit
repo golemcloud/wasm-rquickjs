@@ -1,0 +1,5 @@
+package test:lib-ai-sdk-mistral;
+
+world lib-ai-sdk-mistral {
+  export run: func() -> string;
+}

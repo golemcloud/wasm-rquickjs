@@ -1,0 +1,5 @@
+package test:lib-yargs;
+
+world lib-yargs {
+  export run: func() -> string;
+}

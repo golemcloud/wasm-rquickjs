@@ -1,0 +1,5 @@
+package test:lib-crewai;
+
+world lib-crewai {
+  export run: func() -> string;
+}

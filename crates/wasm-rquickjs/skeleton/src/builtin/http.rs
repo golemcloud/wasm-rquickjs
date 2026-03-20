@@ -14,6 +14,7 @@ use golem_wasi_http::{
     Version,
 };
 use rquickjs::class::Trace;
+use rquickjs::convert::Coerced;
 use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 use std::cell::RefCell;
@@ -258,9 +259,10 @@ impl Default for HttpRequest {
 #[rquickjs::methods(rename_all = "camelCase")]
 impl HttpRequest {
     #[qjs(constructor)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new<'js>(
         ctx: Ctx<'js>,
-        url: String,
+        url: Coerced<String>,
         method: String,
         headers: HashMap<String, String>,
         version: String,
@@ -270,6 +272,7 @@ impl HttpRequest {
         credentials: CredentialsMode,
         redirect_policy: RedirectPolicy,
     ) -> rquickjs::Result<Self> {
+        let url = url.0;
         let url: Url = url
             .parse()
             .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
@@ -527,7 +530,7 @@ impl HttpRequest {
 
             if let Some(body_bytes) = &self.body_bytes {
                 *request.body_mut() = Some(Body::from(body_bytes.clone()));
-            } else if let Some(_) = &self.body {
+            } else if self.body.is_some() {
                 // NOTE: if the request body was not buffered, we were only able to use it once
                 // not for followed redirects.
                 *request.body_mut() = self.body.take();
@@ -554,7 +557,7 @@ impl HttpRequest {
 
                 let location = response
                     .headers()
-                    .get(&HeaderName::from_bytes(b"location").unwrap());
+                    .get(HeaderName::from_bytes(b"location").unwrap());
                 if let Some(location) = location {
                     let location_str = location.to_str().unwrap_or("");
                     match Url::parse(location_str).or_else(|_| self.url.join(location_str)) {
@@ -562,11 +565,9 @@ impl HttpRequest {
                             let mut new_method = self.method.clone();
                             let mut drop_body = false;
 
-                            if status_code == 303 {
-                                new_method = Method::GET;
-                                drop_body = true;
-                            } else if (status_code == 301 || status_code == 302)
-                                && self.method == Method::POST
+                            if status_code == 303
+                                || ((status_code == 301 || status_code == 302)
+                                    && self.method == Method::POST)
                             {
                                 new_method = Method::GET;
                                 drop_body = true;
@@ -715,7 +716,7 @@ impl HttpResponse {
         let status = response.status();
 
         HttpResponse {
-            body_source: ResponseBodySource::Native(response),
+            body_source: ResponseBodySource::Native(Box::new(response)),
             headers,
             status,
             is_opaque: false,
@@ -772,6 +773,7 @@ impl HttpResponse {
             .to_string()
     }
 
+    #[allow(clippy::await_holding_refcell_ref)]
     pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ArrayBuffer<'js>> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         let bytes = match source {
@@ -885,6 +887,7 @@ impl HttpResponse {
         }
     }
 
+    #[allow(clippy::await_holding_refcell_ref)]
     pub async fn text<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<String> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
@@ -929,7 +932,8 @@ impl HttpResponse {
 
     /// Create a redirect response
     #[qjs(static)]
-    pub fn redirect(url: String, status: Option<u16>) -> Self {
+    pub fn redirect(url: Coerced<String>, status: Option<u16>) -> Self {
+        let url = url.0;
         let status_code = status
             .and_then(|code| golem_wasi_http::StatusCode::from_u16(code).ok())
             .unwrap_or(golem_wasi_http::StatusCode::FOUND);
@@ -976,7 +980,7 @@ impl HttpResponse {
             ),
             ResponseBodySource::Native(response) => {
                 let shared = Rc::new(RefCell::new(SharedResponse {
-                    response: Some(response),
+                    response: Some(*response),
                     stream: None,
                     buffer: Vec::new(),
                     finished: false,
@@ -994,7 +998,7 @@ impl HttpResponse {
                 (ResponseBodySource::Consumed, ResponseBodySource::Consumed)
             }
         };
-        let _ = std::mem::replace(&mut self.body_source, updated_body_source);
+        self.body_source = updated_body_source;
         Self {
             body_source: cloned_body_source,
             headers: self.headers.clone(),
@@ -1023,7 +1027,7 @@ pub struct SharedStream {
 /// Represents the source of response body data
 pub enum ResponseBodySource {
     /// Response from native HTTP call
-    Native(golem_wasi_http::Response),
+    Native(Box<golem_wasi_http::Response>),
     /// Buffered response body as bytes
     Bytes(Vec<u8>),
     /// Response has been consumed
@@ -1036,7 +1040,7 @@ pub enum BodySource {
     Native {
         stream: golem_wasi_http::InputStream,
         body: golem_wasi_http::IncomingBody,
-        response: golem_wasi_http::Response,
+        response: Box<golem_wasi_http::Response>,
     },
     SharedNative {
         shared_stream: Rc<RefCell<SharedStream>>,
@@ -1073,6 +1077,7 @@ impl ResponseBodyStream {
         "bytes".to_string()
     }
 
+    #[allow(clippy::await_holding_refcell_ref)]
     pub async fn pull<'js>(
         &mut self,
         ctx: Ctx<'js>,
@@ -1205,7 +1210,7 @@ impl ResponseBodyStream {
                                 )),
                                 Some(BodySource::SharedNative {
                                     shared_stream: rc_shared_stream.clone(),
-                                    position: position,
+                                    position,
                                 }),
                             ),
                         }
@@ -1443,8 +1448,8 @@ fn apply_credentials_filtering(
     match credentials {
         CredentialsMode::Omit => {
             // Remove Authorization and Cookie headers
-            headers.remove(&HeaderName::from_bytes(b"authorization").expect("valid header name"));
-            headers.remove(&HeaderName::from_bytes(b"cookie").expect("valid header name"));
+            headers.remove(HeaderName::from_bytes(b"authorization").expect("valid header name"));
+            headers.remove(HeaderName::from_bytes(b"cookie").expect("valid header name"));
         }
         CredentialsMode::SameOrigin | CredentialsMode::Include => {
             // Keep all headers as-is for these modes
@@ -1454,12 +1459,9 @@ fn apply_credentials_filtering(
     }
 }
 
-// JS functions for the console implementation
 pub const HTTP_JS: &str = include_str!("http.js");
 pub const FETCH_BLOB_JS: &str = include_str!("fetch-blob-4.0.0.js");
 pub const FORMDATA_JS: &str = include_str!("formdata-polyfill-4.0.10.js");
-
-// JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_http from '__wasm_rquickjs_builtin/http';
         import * as __wasm_rquickjs_http_blob from '__wasm_rquickjs_builtin/http_blob';

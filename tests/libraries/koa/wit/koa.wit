@@ -1,0 +1,5 @@
+package test:lib-koa;
+
+world lib-koa {
+  export run: func() -> string;
+}

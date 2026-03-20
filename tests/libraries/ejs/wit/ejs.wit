@@ -1,0 +1,5 @@
+package test:lib-ejs;
+
+world lib-ejs {
+  export run: func() -> string;
+}

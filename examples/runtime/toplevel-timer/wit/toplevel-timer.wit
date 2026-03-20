@@ -1,0 +1,5 @@
+package quickjs:toplevel-timer;
+
+world toplevel-timer {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-date-fns;
+
+world lib-date-fns {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-graphql;
+
+world lib-graphql {
+  export run: func() -> string;
+}

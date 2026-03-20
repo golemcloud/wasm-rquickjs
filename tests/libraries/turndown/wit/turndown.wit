@@ -1,0 +1,5 @@
+package test:lib-turndown;
+
+world lib-turndown {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-grpc-js;
+
+world lib-grpc-js {
+  export run: func() -> string;
+}

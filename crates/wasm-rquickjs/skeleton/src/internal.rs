@@ -1,17 +1,1361 @@
 use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
 use rquickjs::function::{Args, Constructor};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, ScriptLoader};
+use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
     Object, Promise, Value, async_with,
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
+
+/// Resolver that passes `data:` URLs through as-is.
+struct DataUrlResolver;
+
+impl Resolver for DataUrlResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        _base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if name.starts_with("data:") {
+            Ok(name.to_string())
+        } else {
+            Err(Error::new_resolving(_base, name))
+        }
+    }
+}
+
+/// Loader for `data:` URL modules (e.g. `data:text/javascript,export default 42`).
+struct DataUrlLoader;
+
+impl DataUrlLoader {
+    fn percent_decode(encoded: &str) -> Option<String> {
+        let bytes = encoded.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%'
+                && i + 2 < bytes.len()
+                && let (Some(hi), Some(lo)) = (
+                    FileUrlResolver::hex_val(bytes[i + 1]),
+                    FileUrlResolver::hex_val(bytes[i + 2]),
+                )
+            {
+                decoded.push(hi << 4 | lo);
+                i += 3;
+                continue;
+            }
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+        String::from_utf8(decoded).ok()
+    }
+
+    fn js_string_escape(s: &str) -> String {
+        let mut result = String::with_capacity(s.len());
+        for ch in s.chars() {
+            match ch {
+                '\'' => result.push_str("\\'"),
+                '\\' => result.push_str("\\\\"),
+                '\n' => result.push_str("\\n"),
+                '\r' => result.push_str("\\r"),
+                '\t' => result.push_str("\\t"),
+                '\0' => result.push_str("\\0"),
+                _ => result.push(ch),
+            }
+        }
+        result
+    }
+
+    fn is_valid_json(s: &str) -> bool {
+        let s = s.trim();
+        if s.is_empty() {
+            return false;
+        }
+        let bytes = s.as_bytes();
+        let (ok, pos) = Self::skip_json_value(bytes, 0);
+        if !ok {
+            return false;
+        }
+        // Valid if we consumed the entire input
+        let end = Self::skip_whitespace(bytes, pos);
+        end == bytes.len()
+    }
+
+    fn skip_whitespace(bytes: &[u8], mut i: usize) -> usize {
+        while i < bytes.len() && matches!(bytes[i], b' ' | b'\t' | b'\n' | b'\r') {
+            i += 1;
+        }
+        i
+    }
+
+    fn skip_json_value(bytes: &[u8], i: usize) -> (bool, usize) {
+        let i = Self::skip_whitespace(bytes, i);
+        if i >= bytes.len() {
+            return (false, i);
+        }
+        match bytes[i] {
+            b'"' => Self::skip_json_string(bytes, i),
+            b'{' => Self::skip_json_object(bytes, i),
+            b'[' => Self::skip_json_array(bytes, i),
+            b't' => Self::skip_literal(bytes, i, b"true"),
+            b'f' => Self::skip_literal(bytes, i, b"false"),
+            b'n' => Self::skip_literal(bytes, i, b"null"),
+            b'-' | b'0'..=b'9' => Self::skip_json_number(bytes, i),
+            _ => (false, i),
+        }
+    }
+
+    fn skip_json_string(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        if i >= bytes.len() || bytes[i] != b'"' {
+            return (false, i);
+        }
+        i += 1;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' => {
+                    i += 1;
+                    if i >= bytes.len() {
+                        return (false, i);
+                    }
+                    if bytes[i] == b'u' {
+                        i += 1;
+                        for _ in 0..4 {
+                            if i >= bytes.len() || !bytes[i].is_ascii_hexdigit() {
+                                return (false, i);
+                            }
+                            i += 1;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                b'"' => return (true, i + 1),
+                _ => i += 1,
+            }
+        }
+        (false, i) // unterminated string
+    }
+
+    fn skip_json_object(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        i += 1; // skip '{'
+        i = Self::skip_whitespace(bytes, i);
+        if i < bytes.len() && bytes[i] == b'}' {
+            return (true, i + 1);
+        }
+        loop {
+            i = Self::skip_whitespace(bytes, i);
+            let (ok, next) = Self::skip_json_string(bytes, i);
+            if !ok {
+                return (false, next);
+            }
+            i = Self::skip_whitespace(bytes, next);
+            if i >= bytes.len() || bytes[i] != b':' {
+                return (false, i);
+            }
+            i += 1;
+            let (ok, next) = Self::skip_json_value(bytes, i);
+            if !ok {
+                return (false, next);
+            }
+            i = Self::skip_whitespace(bytes, next);
+            if i >= bytes.len() {
+                return (false, i);
+            }
+            if bytes[i] == b'}' {
+                return (true, i + 1);
+            }
+            if bytes[i] != b',' {
+                return (false, i);
+            }
+            i += 1;
+        }
+    }
+
+    fn skip_json_array(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        i += 1; // skip '['
+        i = Self::skip_whitespace(bytes, i);
+        if i < bytes.len() && bytes[i] == b']' {
+            return (true, i + 1);
+        }
+        loop {
+            let (ok, next) = Self::skip_json_value(bytes, i);
+            if !ok {
+                return (false, next);
+            }
+            i = Self::skip_whitespace(bytes, next);
+            if i >= bytes.len() {
+                return (false, i);
+            }
+            if bytes[i] == b']' {
+                return (true, i + 1);
+            }
+            if bytes[i] != b',' {
+                return (false, i);
+            }
+            i += 1;
+        }
+    }
+
+    fn skip_literal(bytes: &[u8], i: usize, expected: &[u8]) -> (bool, usize) {
+        if i + expected.len() <= bytes.len() && &bytes[i..i + expected.len()] == expected {
+            (true, i + expected.len())
+        } else {
+            (false, i)
+        }
+    }
+
+    fn skip_json_number(bytes: &[u8], mut i: usize) -> (bool, usize) {
+        if i < bytes.len() && bytes[i] == b'-' {
+            i += 1;
+        }
+        if i >= bytes.len() || !bytes[i].is_ascii_digit() {
+            return (false, i);
+        }
+        if bytes[i] == b'0' {
+            i += 1;
+        } else {
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+        }
+        if i < bytes.len() && bytes[i] == b'.' {
+            i += 1;
+            if i >= bytes.len() || !bytes[i].is_ascii_digit() {
+                return (false, i);
+            }
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+        }
+        if i < bytes.len() && (bytes[i] == b'e' || bytes[i] == b'E') {
+            i += 1;
+            if i < bytes.len() && (bytes[i] == b'+' || bytes[i] == b'-') {
+                i += 1;
+            }
+            if i >= bytes.len() || !bytes[i].is_ascii_digit() {
+                return (false, i);
+            }
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+        }
+        (true, i)
+    }
+
+    fn make_json_error_module(source: &str) -> String {
+        let bytes = source.as_bytes();
+        let msg = if bytes.is_empty() {
+            "Unexpected end of JSON input".to_string()
+        } else if bytes[0] == b'"' {
+            let (ok, pos) = Self::skip_json_string(bytes, 0);
+            if !ok {
+                format!("Unterminated string in JSON at position {}", pos)
+            } else {
+                let (_, pos) = Self::skip_json_value(bytes, 0);
+                if pos >= bytes.len() {
+                    "Unexpected end of JSON input".to_string()
+                } else {
+                    format!(
+                        "Unexpected token {} in JSON at position {}",
+                        bytes[pos] as char, pos
+                    )
+                }
+            }
+        } else {
+            let (_, pos) = Self::skip_json_value(bytes, 0);
+            if pos >= bytes.len() {
+                "Unexpected end of JSON input".to_string()
+            } else {
+                format!(
+                    "Unexpected token {} in JSON at position {}",
+                    bytes[pos] as char, pos
+                )
+            }
+        };
+        let escaped_msg = Self::js_string_escape(&msg);
+        format!("await Promise.reject(new SyntaxError('{escaped_msg}'));\n")
+    }
+}
+
+impl Loader for DataUrlLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        let rest = path
+            .strip_prefix("data:")
+            .ok_or_else(|| Error::new_loading(path))?;
+
+        // Find the comma separating metadata from content
+        let comma_pos = rest.find(',').ok_or_else(|| Error::new_loading(path))?;
+        let metadata = &rest[..comma_pos];
+        let raw_content = &rest[comma_pos + 1..];
+
+        // Parse metadata: e.g. "text/javascript" or "text/javascript;base64"
+        let is_base64 = metadata.ends_with(";base64");
+
+        let source = if is_base64 {
+            // Simple base64 decoder for ASCII content
+            let decoded = base64_decode(raw_content).ok_or_else(|| Error::new_loading(path))?;
+            String::from_utf8(decoded).map_err(|_| Error::new_loading(path))?
+        } else {
+            Self::percent_decode(raw_content).ok_or_else(|| Error::new_loading(path))?
+        };
+
+        // Extract base MIME type (before any parameters)
+        let base_mime = metadata.split(';').next().unwrap_or(metadata).trim();
+
+        if base_mime == "application/json" {
+            // Validate JSON by attempting a simple parse check.
+            // For valid JSON: embed directly as a JS literal.
+            // For invalid JSON: throw a SyntaxError with V8-compatible message.
+            let json_valid = Self::is_valid_json(&source);
+            let module_source = if json_valid {
+                let escaped = Self::js_string_escape(&source);
+                format!("export default JSON.parse('{escaped}');\n")
+            } else {
+                Self::make_json_error_module(&source)
+            };
+            Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
+        } else if base_mime == "text/javascript" || base_mime == "application/javascript" {
+            // Check for static import attributes (e.g., `import "spec" with { type: "json" }`)
+            // QuickJS doesn't support import attributes syntax, so we preprocess:
+            // - If `with { ... }` is found and attributes are invalid, generate an error module
+            // - If valid, strip the `with { ... }` clause
+            // - `assert { ... }` is left as-is (QuickJS will throw SyntaxError, as expected)
+            let source = process_static_import_attrs(&source, path);
+
+            let init = ImportMetaInit {
+                url: path.to_string(),
+                filename: None,
+                dirname: None,
+                include_resolve: true,
+            };
+            let injected = inject_import_meta_prologue(&init, &source);
+            Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
+        } else {
+            let escaped_mime = Self::js_string_escape(base_mime);
+            let escaped_path = Self::js_string_escape(path);
+            let module_source = format!(
+                "await Promise.reject(Object.assign(new TypeError('Unknown module format: {escaped_mime} for URL {escaped_path}'), {{code: 'ERR_UNKNOWN_MODULE_FORMAT'}}));\n"
+            );
+            Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
+        }
+    }
+}
+
+fn base64_decode(input: &str) -> Option<Vec<u8>> {
+    let mut buf = Vec::with_capacity(input.len() * 3 / 4);
+    let mut accum: u32 = 0;
+    let mut bits: u32 = 0;
+    for b in input.bytes() {
+        let val = match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' | b'\n' | b'\r' | b' ' => continue,
+            _ => return None,
+        };
+        accum = (accum << 6) | val as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            buf.push((accum >> bits) as u8);
+            accum &= (1 << bits) - 1;
+        }
+    }
+    Some(buf)
+}
+
+/// Process static import attributes in JavaScript module source code.
+///
+/// Handles patterns like `import "specifier" with { type: "json" }`.
+/// - If `with { ... }` is found and attributes are invalid, returns an error module source.
+/// - If valid, strips the `with { ... }` clause so QuickJS can parse it.
+/// - `assert { ... }` is left unchanged (QuickJS will throw SyntaxError).
+fn process_static_import_attrs(source: &str, module_path: &str) -> String {
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut result = String::with_capacity(len);
+    let mut i = 0;
+
+    while i < len {
+        // Look for 'import' keyword
+        if bytes[i] == b'i'
+            && i + 6 <= len
+            && &source[i..i + 6] == "import"
+            && (i == 0 || !is_id_char(bytes[i - 1]))
+            && (i + 6 >= len
+                || !is_id_char(bytes[i + 6])
+                || bytes[i + 6] == b'"'
+                || bytes[i + 6] == b'\'')
+        {
+            let import_start = i;
+            i += 6;
+
+            // Skip whitespace
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+
+            // Check for string literal (bare import: import "spec")
+            if i < len && (bytes[i] == b'"' || bytes[i] == b'\'') {
+                let quote = bytes[i];
+                i += 1;
+                let spec_start = i;
+                while i < len && bytes[i] != quote {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                let spec_end = i;
+                if i < len {
+                    i += 1; // skip closing quote
+                }
+                let specifier = &source[spec_start..spec_end];
+
+                // Skip whitespace
+                let after_spec = i;
+                while i < len && bytes[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+
+                // Check for 'with' keyword (not 'with(' which is a with-statement)
+                if i + 4 <= len
+                    && &source[i..i + 4] == "with"
+                    && (i + 4 >= len || !is_id_char(bytes[i + 4]) || bytes[i + 4] == b'{')
+                {
+                    let with_start = i;
+                    i += 4;
+                    while i < len && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i < len && bytes[i] == b'{' {
+                        i += 1;
+                        let attrs_start = i;
+                        let mut depth = 1u32;
+                        while i < len && depth > 0 {
+                            match bytes[i] {
+                                b'{' => depth += 1,
+                                b'}' => depth -= 1,
+                                b'"' | b'\'' => {
+                                    let q = bytes[i];
+                                    i += 1;
+                                    while i < len && bytes[i] != q {
+                                        if bytes[i] == b'\\' {
+                                            i += 1;
+                                        }
+                                        i += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                            i += 1;
+                        }
+                        let attrs_content = &source[attrs_start..if i > 0 { i - 1 } else { i }];
+
+                        // Parse the type value from attributes
+                        let type_value = extract_attr_type_value(attrs_content);
+                        let format = determine_data_url_format(specifier);
+
+                        // Validate
+                        if let Some(error_module) = validate_static_import_attrs(
+                            type_value.as_deref(),
+                            format,
+                            specifier,
+                            module_path,
+                        ) {
+                            return error_module;
+                        }
+
+                        // Valid: strip the with clause, keep everything else
+                        result.push_str(&source[import_start..after_spec]);
+                        // Skip any remaining content after the with block
+                        // and append the rest of the source
+                        while i < len && bytes[i].is_ascii_whitespace() {
+                            i += 1;
+                        }
+                        result.push_str(&source[i..]);
+                        return result;
+                    } else {
+                        // 'with' not followed by '{', not import attrs
+                        i = with_start;
+                        result.push_str(&source[import_start..i]);
+                        continue;
+                    }
+                }
+                // No 'with' keyword, output as-is
+                result.push_str(&source[import_start..i]);
+                continue;
+            }
+
+            // Not a bare import string - check for named/namespace imports with 'from'
+            // For now, scan for 'from' followed by a string and then 'with'
+            // Skip complex patterns and output as-is
+            result.push_str(&source[import_start..i]);
+            continue;
+        }
+
+        result.push(bytes[i] as char);
+        i += 1;
+    }
+
+    result
+}
+
+fn is_id_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$'
+}
+
+/// Extract the value of the `type` key from a simple attributes string like `type:"json"`.
+fn extract_attr_type_value(attrs: &str) -> Option<String> {
+    // Look for `type` key followed by `:` and a string value
+    let bytes = attrs.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        // Skip whitespace
+        while i < len && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') {
+            i += 1;
+        }
+        if i >= len {
+            break;
+        }
+
+        // Read key (identifier or quoted string)
+        let key_start = i;
+        if bytes[i] == b'"' || bytes[i] == b'\'' {
+            let q = bytes[i];
+            i += 1;
+            while i < len && bytes[i] != q {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+        } else {
+            while i < len && is_id_char(bytes[i]) {
+                i += 1;
+            }
+        }
+        let key = attrs[key_start..i].trim_matches(|c: char| c == '"' || c == '\'');
+
+        // Skip whitespace and colon
+        while i < len && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i < len && bytes[i] == b':' {
+            i += 1;
+        }
+        while i < len && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+
+        // Read value (string)
+        if i < len && (bytes[i] == b'"' || bytes[i] == b'\'') {
+            let q = bytes[i];
+            i += 1;
+            let val_start = i;
+            while i < len && bytes[i] != q {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            let val = &attrs[val_start..i];
+            if i < len {
+                i += 1;
+            }
+
+            if key == "type" {
+                return Some(val.to_string());
+            }
+        } else {
+            // Skip non-string values
+            while i < len && bytes[i] != b',' && bytes[i] != b'}' {
+                i += 1;
+            }
+        }
+    }
+    None
+}
+
+/// Determine module format from a data URL specifier.
+fn determine_data_url_format(specifier: &str) -> Option<&'static str> {
+    if let Some(rest) = specifier.strip_prefix("data:") {
+        if let Some(comma_pos) = rest.find(',') {
+            let metadata = &rest[..comma_pos];
+            let base_mime = metadata.split(';').next().unwrap_or(metadata).trim();
+            return match base_mime {
+                "application/json" => Some("json"),
+                "text/javascript" | "application/javascript" => Some("module"),
+                "text/css" => Some("css"),
+                _ => None,
+            };
+        }
+    } else if specifier.ends_with(".json") {
+        return Some("json");
+    }
+    None
+}
+
+/// Validate static import attributes. Returns Some(error_module_source) if invalid, None if valid.
+fn validate_static_import_attrs(
+    type_value: Option<&str>,
+    format: Option<&str>,
+    specifier: &str,
+    _module_path: &str,
+) -> Option<String> {
+    if let Some(tv) = type_value {
+        match tv {
+            "json" => {
+                if format == Some("module") {
+                    return Some(
+                        "await Promise.reject(Object.assign(new TypeError('Cannot use import attributes to change the type of a JavaScript module'), {code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE'}));\n".to_string()
+                    );
+                }
+            }
+            "css" => {
+                // CSS is a recognized type, let loader handle it
+            }
+            other => {
+                let escaped_type = DataUrlLoader::js_string_escape(other);
+                return Some(format!(
+                    "await Promise.reject(Object.assign(new TypeError('Import attribute type \"{escaped_type}\" is not supported'), {{code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED'}}));\n"
+                ));
+            }
+        }
+    }
+
+    // Check for missing required attributes (JSON without type: "json")
+    if format == Some("json") && type_value != Some("json") {
+        let escaped = DataUrlLoader::js_string_escape(specifier);
+        return Some(format!(
+            "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
+        ));
+    }
+
+    None
+}
+
+/// Resolver that strips `file://` URL prefixes so that `import('file:///path/to/mod.mjs')`
+/// resolves to the filesystem path `/path/to/mod.mjs`.
+struct FileUrlResolver;
+
+impl FileUrlResolver {
+    /// Decode a `file://` URL into a filesystem path, handling percent-encoding.
+    fn file_url_to_path(url: &str) -> Option<String> {
+        let encoded = url.strip_prefix("file://")?;
+        let bytes = encoded.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%'
+                && i + 2 < bytes.len()
+                && let (Some(hi), Some(lo)) =
+                    (Self::hex_val(bytes[i + 1]), Self::hex_val(bytes[i + 2]))
+            {
+                decoded.push(hi << 4 | lo);
+                i += 3;
+                continue;
+            }
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+        String::from_utf8(decoded).ok()
+    }
+
+    fn hex_val(b: u8) -> Option<u8> {
+        match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            _ => None,
+        }
+    }
+}
+
+impl Resolver for FileUrlResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        _base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if let Some(path) = Self::file_url_to_path(name) {
+            Ok(path)
+        } else {
+            Err(Error::new_resolving(_base, name))
+        }
+    }
+}
+
+/// Resolver that handles bare specifier imports by walking up the directory tree
+/// looking for `node_modules/<name>/` directories, reading their `package.json`
+/// to find the entry point.
+/// Resolver that guards against dynamic import from contexts without a module referrer.
+///
+/// QuickJS currently reports `<input>` for both direct and indirect eval, so we
+/// conservatively enforce Node's missing-callback error for `node:` specifiers.
+/// This is enough for Node's `Promise.resolve(...).then(eval)` realm test case
+/// while preserving successful direct-eval imports in CommonJS modules.
+struct RealmGuardResolver;
+
+impl Resolver for RealmGuardResolver {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        if base != "<input>" {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        if !name.starts_with("node:") {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let globals = ctx.globals();
+        let current_module: Value = globals
+            .get("__wasm_rquickjs_current_module")
+            .unwrap_or_else(|_| Value::new_undefined(ctx.clone()));
+
+        if !current_module.is_undefined() && !current_module.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let eval_script: Value = globals
+            .get("__wasm_rquickjs_current_eval_script_name")
+            .unwrap_or_else(|_| Value::new_undefined(ctx.clone()));
+        if !eval_script.is_undefined() && !eval_script.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let type_error_ctor: Function = globals.get("TypeError")?;
+        let error_obj: Object =
+            type_error_ctor.call(("A dynamic import callback was not specified.",))?;
+        error_obj.set("code", "ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING")?;
+        Err(ctx.throw(error_obj.into_value()))
+    }
+}
+
+/// Resolver that intercepts module resolution for mocked modules.
+/// Checks `globalThis.__wasm_rquickjs_module_mocks` registry via JS helpers.
+struct MockModuleResolver;
+
+impl Resolver for MockModuleResolver {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        let globals = ctx.globals();
+
+        let canonical_key_fn: Function = globals
+            .get::<_, Function>("__wasm_rquickjs_mock_canonical_key")
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let key: Value = canonical_key_fn
+            .call((name, base))
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        if key.is_null() || key.is_undefined() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let key_str: String = key
+            .get::<String>()
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let registry: Object = globals
+            .get::<_, Object>("__wasm_rquickjs_module_mocks")
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let entry: Value = registry
+            .get::<_, Value>(&key_str as &str)
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        if entry.is_undefined() || entry.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let entry_obj: Object = entry
+            .into_object()
+            .ok_or_else(|| Error::new_resolving(base, name))?;
+
+        let mock_id: i64 = entry_obj
+            .get::<_, i64>("id")
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let cache: bool = entry_obj.get::<_, bool>("cache").unwrap_or(false);
+
+        if cache {
+            Ok(format!("__wasm_rquickjs_mock__:{}", mock_id))
+        } else {
+            let seq_key = "__wasm_rquickjs_mock_seq";
+            let seq: i64 = globals.get::<_, i64>(seq_key).unwrap_or(0);
+            let next_seq = seq + 1;
+            let _ = globals.set(seq_key, next_seq);
+            Ok(format!("__wasm_rquickjs_mock__:{}:{}", mock_id, next_seq))
+        }
+    }
+}
+
+/// Loader that handles synthetic mock module IDs produced by MockModuleResolver.
+/// Generates ESM source from the JS-side mock registry.
+struct MockModuleLoader;
+
+impl Loader for MockModuleLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.starts_with("__wasm_rquickjs_mock__:") {
+            return Err(Error::new_loading(path));
+        }
+
+        let rest = &path["__wasm_rquickjs_mock__:".len()..];
+        let mock_id_str = rest.split(':').next().unwrap_or(rest);
+        let mock_id: i64 = mock_id_str.parse().map_err(|_| Error::new_loading(path))?;
+
+        let globals = ctx.globals();
+        let gen_fn: Function = globals
+            .get::<_, Function>("__wasm_rquickjs_get_mock_module_source")
+            .map_err(|_| Error::new_loading(path))?;
+
+        let source: String = gen_fn
+            .call::<_, String>((mock_id,))
+            .map_err(|_| Error::new_loading(path))?;
+
+        Module::declare(ctx.clone(), path, source.as_bytes().to_vec())
+    }
+}
+
+/// Resolver that handles relative path imports from eval'd CJS code.
+/// When base is `<input>` (from eval) and there's a CJS module context,
+/// resolves relative paths against the module's directory.
+struct CjsEvalResolver;
+
+impl CjsEvalResolver {
+    fn normalize_path(path: &std::path::Path) -> String {
+        use std::path::Component;
+        let mut parts: Vec<String> = Vec::new();
+        let is_absolute = path.has_root();
+
+        for component in path.components() {
+            match component {
+                Component::RootDir | Component::Prefix(_) => {}
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    parts.pop();
+                }
+                Component::Normal(part) => {
+                    parts.push(part.to_string_lossy().into_owned());
+                }
+            }
+        }
+
+        if is_absolute {
+            format!("/{}", parts.join("/"))
+        } else {
+            parts.join("/")
+        }
+    }
+}
+
+impl Resolver for CjsEvalResolver {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        if base != "<input>" {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        if !name.starts_with("./") && !name.starts_with("../") {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let globals = ctx.globals();
+        let import_dir: Value = globals
+            .get("__wasm_rquickjs_cjs_import_dir")
+            .unwrap_or_else(|_| Value::new_undefined(ctx.clone()));
+
+        if import_dir.is_undefined() || import_dir.is_null() {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let dir_str: String = import_dir
+            .get::<String>()
+            .map_err(|_| Error::new_resolving(base, name))?;
+
+        let module_dir = std::path::Path::new(&dir_str);
+        let resolved = module_dir.join(name);
+        let normalized = Self::normalize_path(&resolved);
+
+        let candidates = [
+            normalized.clone(),
+            format!("{}.js", normalized),
+            format!("{}.mjs", normalized),
+        ];
+
+        for candidate in &candidates {
+            if std::path::Path::new(candidate).is_file() {
+                return Ok(candidate.clone());
+            }
+        }
+
+        Err(Error::new_resolving(base, name))
+    }
+}
+
+/// Resolver that provides Node.js-style error codes for failed module resolution.
+/// This should be the LAST resolver in the chain, catching everything that
+/// preceding resolvers couldn't handle.
+struct NodeModuleErrorResolver;
+
+impl Resolver for NodeModuleErrorResolver {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        _base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        let globals = ctx.globals();
+
+        if name.starts_with("node:") {
+            let msg = format!("No such built-in module: {}", name);
+            let type_error_ctor: Function = globals.get("TypeError")?;
+            let error_obj: Object = type_error_ctor.call((&msg,))?;
+            error_obj.set("code", "ERR_UNKNOWN_BUILTIN_MODULE")?;
+            return Err(ctx.throw(error_obj.into_value()));
+        }
+
+        if let Some(scheme_end) = name.find("://") {
+            let scheme = &name[..scheme_end];
+            if scheme != "file" && scheme != "data" {
+                let msg = format!(
+                    "Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol '{}:'",
+                    scheme
+                );
+                let error_ctor: Function = globals.get("Error")?;
+                let error_obj: Object = error_ctor.call((&msg,))?;
+                error_obj.set("code", "ERR_UNSUPPORTED_ESM_URL_SCHEME")?;
+                return Err(ctx.throw(error_obj.into_value()));
+            }
+        }
+
+        let msg = format!("Cannot find module '{}'", name);
+        let error_ctor: Function = globals.get("Error")?;
+        let error_obj: Object = error_ctor.call((&msg,))?;
+        error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+        Err(ctx.throw(error_obj.into_value()))
+    }
+}
+
+struct NodeModulesResolver;
+
+impl NodeModulesResolver {
+    fn try_resolve(&self, base: &str, name: &str) -> Option<String> {
+        use std::path::{Path, PathBuf};
+
+        // Only handle bare specifiers (not relative, absolute, or URL)
+        if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
+            return None;
+        }
+
+        // Extract directory from base module path
+        let base_dir = Path::new(base).parent()?;
+
+        // Walk up directory tree looking for node_modules
+        let mut dir = base_dir.to_path_buf();
+        loop {
+            let nm_dir = dir.join("node_modules").join(name);
+            if nm_dir.is_dir() {
+                // Try package.json main field
+                let pkg_path = nm_dir.join("package.json");
+                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path)
+                    && let Some(main) = Self::extract_json_string_field(&pkg_content, "main")
+                {
+                    // Try the main entry with various extensions
+                    let main_path = nm_dir.join(&main);
+                    let candidates = [
+                        main_path.clone(),
+                        main_path.with_extension("mjs"),
+                        main_path.with_extension("js"),
+                        main_path.join("index.mjs"),
+                        main_path.join("index.js"),
+                    ];
+                    for candidate in &candidates {
+                        if candidate.is_file() {
+                            return Some(candidate.to_string_lossy().into_owned());
+                        }
+                    }
+                }
+
+                // Fallback: index.mjs, index.js
+                let fallbacks: [PathBuf; 2] = [nm_dir.join("index.mjs"), nm_dir.join("index.js")];
+                for fallback in &fallbacks {
+                    if fallback.is_file() {
+                        return Some(fallback.to_string_lossy().into_owned());
+                    }
+                }
+            }
+
+            if !dir.pop() {
+                break;
+            }
+        }
+
+        None
+    }
+
+    /// Extract a simple string field value from a JSON object string.
+    fn extract_json_string_field(json: &str, field: &str) -> Option<String> {
+        let pattern = format!("\"{}\"", field);
+        let idx = json.find(&pattern)?;
+        let after_key = &json[idx + pattern.len()..];
+        let after_colon = after_key.trim_start();
+        let after_colon = after_colon.strip_prefix(':')?;
+        let after_colon = after_colon.trim_start();
+        let after_colon = after_colon.strip_prefix('"')?;
+        let end = after_colon.find('"')?;
+        Some(after_colon[..end].to_string())
+    }
+}
+
+impl Resolver for NodeModulesResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        self.try_resolve(base, name)
+            .ok_or_else(|| Error::new_resolving(base, name))
+    }
+}
+
+/// Loader that wraps CJS `.js` and `.cjs` files in ESM-compatible wrappers when loaded via `import()`.
+/// This enables ESM modules to import CJS packages from `node_modules`.
+struct CjsCompatLoader;
+
+impl Loader for CjsCompatLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        let is_cjs_ext = path.ends_with(".cjs");
+        if !path.ends_with(".js") && !is_cjs_ext {
+            return Err(Error::new_loading(path));
+        }
+
+        let source = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let globals = ctx.globals();
+                let msg = format!("Cannot find module '{}'", path);
+                let error_ctor: Function = globals.get("Error")?;
+                let error_obj: Object = error_ctor.call((&msg,))?;
+                error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+                return Err(ctx.throw(error_obj.into_value()));
+            }
+            Err(_) => return Err(Error::new_loading(path)),
+        };
+
+        let abs_path = ensure_absolute_path(path);
+        let std_path = std::path::Path::new(&abs_path);
+        let filename = Some(abs_path.clone());
+        let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
+        let url = path_to_file_url(path);
+
+        let init = ImportMetaInit {
+            url,
+            filename,
+            dirname,
+            include_resolve: true,
+        };
+
+        // .cjs files are always CommonJS; for .js files, detect CJS patterns
+        let is_cjs = is_cjs_ext
+            || source.contains("module.exports")
+            || source.contains("exports.")
+            || (source.contains("require(") && !source.contains("import "));
+
+        if !is_cjs {
+            // Treat as ESM — inject import.meta prologue (handles shebangs)
+            let injected = inject_import_meta_prologue(&init, &source);
+            return Module::declare(ctx.clone(), path, injected.as_bytes().to_vec());
+        }
+
+        // Strip shebang before wrapping in IIFE (it would be invalid inside the wrapper)
+        let cjs_source = if let Some(rest) = source.strip_prefix("#!") {
+            if let Some(newline_pos) = rest.find('\n') {
+                // Replace shebang with a comment to preserve line numbers
+                format!(
+                    "//{}{}",
+                    &source[2..2 + newline_pos + 1],
+                    &source[2 + newline_pos + 1..]
+                )
+            } else {
+                String::new()
+            }
+        } else {
+            source
+        };
+
+        // Wrap CJS source in ESM-compatible wrapper, with import.meta prologue before the wrapper
+        let prologue = inject_import_meta_prologue(&init, "");
+        let wrapped = format!(
+            r#"{}
+var module = {{ exports: {{}} }};
+var exports = module.exports;
+(function(module, exports) {{
+{}
+}})(module, exports);
+var __cjs_default = module.exports;
+export default __cjs_default;
+export var __esModule = __cjs_default && __cjs_default.__esModule;
+"#,
+            prologue.trim(),
+            cjs_source
+        );
+
+        Module::declare(ctx.clone(), path, wrapped.as_bytes().to_vec())
+    }
+}
+
+struct ImportMetaInit {
+    url: String,
+    filename: Option<String>,
+    dirname: Option<String>,
+    include_resolve: bool,
+}
+
+/// Ensure a path is absolute. If relative, prepend `/` (WASI cwd is `/`).
+fn ensure_absolute_path(path: &str) -> String {
+    if path.starts_with('/') {
+        path.to_string()
+    } else {
+        format!("/{}", path)
+    }
+}
+
+fn path_to_file_url(path: &str) -> String {
+    let abs_path = ensure_absolute_path(path);
+    let mut url = String::from("file://");
+    for byte in abs_path.as_bytes() {
+        match byte {
+            b'%' => url.push_str("%25"),
+            b' ' => url.push_str("%20"),
+            b'#' => url.push_str("%23"),
+            b'?' => url.push_str("%3F"),
+            // Unreserved characters + path separators
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' | b':' => {
+                url.push(*byte as char)
+            }
+            _ if *byte > 0x7F => {
+                // Non-ASCII: percent-encode each byte
+                url.push_str(&format!("%{:02X}", byte));
+            }
+            _ => {
+                // Other ASCII special chars: percent-encode
+                url.push_str(&format!("%{:02X}", byte));
+            }
+        }
+    }
+    url
+}
+
+fn escape_js_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{0008}' => out.push_str("\\b"),
+            '\u{000C}' => out.push_str("\\f"),
+            c if c < '\u{0020}' => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            '\u{2028}' => out.push_str("\\u2028"),
+            '\u{2029}' => out.push_str("\\u2029"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
+    let mut props = Vec::new();
+
+    if let Some(ref dirname) = init.dirname {
+        props.push(format!(
+            "dirname:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+            escape_js_string(dirname)
+        ));
+    }
+
+    if let Some(ref filename) = init.filename {
+        props.push(format!(
+            "filename:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+            escape_js_string(filename)
+        ));
+    }
+
+    if init.include_resolve {
+        props.push(format!(
+            "resolve:{{value:(s)=>globalThis.__wasm_rquickjs_import_meta_resolve(\"{}\",s),writable:true,enumerable:true,configurable:true}}",
+            escape_js_string(&init.url)
+        ));
+    }
+
+    props.push(format!(
+        "url:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+        escape_js_string(&init.url)
+    ));
+
+    // Define import.meta properties and also shim __filename/__dirname as
+    // top-level variables. Many libraries (especially Rollup-bundled CJS→ESM)
+    // reference bare __dirname/__filename which don't exist in ESM scope.
+    let mut prologue = format!(
+        "Object.defineProperties(import.meta,{{{}}});",
+        props.join(",")
+    );
+    if let Some(ref filename) = init.filename {
+        prologue.push_str(&format!(
+            "var __filename=\"{}\";",
+            escape_js_string(filename)
+        ));
+    }
+    if let Some(ref dirname) = init.dirname {
+        prologue.push_str(&format!("var __dirname=\"{}\";", escape_js_string(dirname)));
+    }
+
+    if let Some(rest) = source.strip_prefix("#!") {
+        if let Some(newline_pos) = rest.find('\n') {
+            let shebang_line = &source[..2 + newline_pos + 1];
+            let remaining = &source[2 + newline_pos + 1..];
+            format!("{}{}\n{}", shebang_line, prologue, remaining)
+        } else {
+            // Shebang with no newline — entire file is the shebang
+            format!("{}\n{}", source, prologue)
+        }
+    } else {
+        format!("{}\n{}", prologue, source)
+    }
+}
+
+struct ImportMetaLoader;
+
+impl Loader for ImportMetaLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.ends_with(".mjs") {
+            return Err(Error::new_loading(path));
+        }
+
+        let source = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let globals = ctx.globals();
+                let msg = format!("Cannot find module '{}'", path);
+                let error_ctor: Function = globals.get("Error")?;
+                let error_obj: Object = error_ctor.call((&msg,))?;
+                error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+                return Err(ctx.throw(error_obj.into_value()));
+            }
+            Err(_) => return Err(Error::new_loading(path)),
+        };
+
+        let abs_path = ensure_absolute_path(path);
+        let std_path = std::path::Path::new(&abs_path);
+        let filename = Some(abs_path.clone());
+        let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
+        let url = path_to_file_url(path);
+
+        let init = ImportMetaInit {
+            url,
+            filename,
+            dirname,
+            include_resolve: true,
+        };
+
+        // Check if there's a cached compilation error for this module.
+        // When a module fails to compile (e.g. SyntaxError), we cache the
+        // error so subsequent imports throw the exact same error object,
+        // matching Node.js/V8 behavior (ES spec §16.2.1.5.2).
+        let globals = ctx.globals();
+        if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache")
+            && let Ok(cached_error) = cache.get::<_, Value>(path)
+            && !cached_error.is_undefined()
+        {
+            return Err(ctx.throw(cached_error));
+        }
+
+        let injected = inject_import_meta_prologue(&init, &source);
+        match Module::declare(ctx.clone(), path, injected.as_bytes().to_vec()) {
+            Ok(module) => Ok(module),
+            Err(Error::Exception) => {
+                let exception = ctx.catch();
+
+                let cache: Object = match globals.get::<_, Value>("__esm_error_cache") {
+                    Ok(v) if v.is_object() => v.into_object().unwrap(),
+                    _ => {
+                        let obj = Object::new(ctx.clone()).map_err(|_| Error::new_loading(path))?;
+                        globals
+                            .set("__esm_error_cache", obj.clone())
+                            .map_err(|_| Error::new_loading(path))?;
+                        obj
+                    }
+                };
+                cache
+                    .set(path, exception.clone())
+                    .map_err(|_| Error::new_loading(path))?;
+
+                Err(ctx.throw(exception))
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Loader that handles `.json` files imported via `import()` with `type: 'json'`.
+/// Wraps JSON content in a synthetic ESM module with a default export.
+struct JsonFileLoader;
+
+impl Loader for JsonFileLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.ends_with(".json") {
+            return Err(Error::new_loading(path));
+        }
+
+        let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
+        let module_source = if DataUrlLoader::is_valid_json(&source) {
+            let escaped = DataUrlLoader::js_string_escape(&source);
+            format!("export default JSON.parse('{escaped}');\n")
+        } else {
+            DataUrlLoader::make_json_error_module(&source)
+        };
+        Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
+    }
+}
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
@@ -25,111 +1369,262 @@ pub struct JsState {
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
-}
-
-impl Default for JsState {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub unrefed_timers: RefCell<HashSet<usize>>,
+    pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
 impl JsState {
-    pub fn new() -> Self {
-        block_on(async {
-            let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
-            let ctx = AsyncContext::full(&rt)
-                .await
-                .expect("Failed to create AsyncContext");
+    /// Phase 1: Create the runtime, context, resolvers, loaders, and all Rust-side
+    /// state. Does NOT evaluate any JavaScript — safe to publish to `STATE` before
+    /// JS module initialization runs.
+    async fn new_base() -> Self {
+        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+        // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
+        // shape refcount bug during heavy async/promise workloads. The default
+        // threshold (0xFF) causes GC to run too frequently, which can trigger
+        // a use-after-free in the shape reference counting code path.
+        rt.set_gc_threshold(256 * 1024 * 1024).await;
+        let ctx = AsyncContext::full(&rt)
+            .await
+            .expect("Failed to create AsyncContext");
 
-            async_with!(ctx => |ctx| {
-                Module::evaluate(
-                    ctx.clone(),
-                    "dispose",
-                    format!(r#"
-                    const dispose = Symbol.for("dispose");
-                    globalThis.{DISPOSE_SYMBOL} = dispose;
-                    Symbol.dispose = dispose;
-                    "#)
-                ).catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
-                .finish::<()>()
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
-            })
-                .await;
-            rt.idle().await;
+        let mut builtin_resolver =
+            BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
+        for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+            builtin_resolver = builtin_resolver.with_module(name.to_string());
+        }
+        let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
+        let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
 
-            let mut resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
-            for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-                resolver = resolver.with_module(name.to_string());
-            }
-            let resolver = crate::modules::add_native_module_resolvers(resolver);
-            let resolver = crate::builtin::add_module_resolvers(resolver);
+        let file_resolver = FileResolver::default()
+            .with_path("/")
+            .with_pattern("{}.js")
+            .with_pattern("{}.mjs")
+            .with_pattern("{}.json");
 
-            let mut builtin_loader = BuiltinLoader::default()
-                .with_module(crate::JS_EXPORT_MODULE_NAME, crate::JS_EXPORT_MODULE);
-            for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
-                builtin_loader = builtin_loader.with_module(name.to_string(), (get_module)());
-            }
+        let resolver = (
+            (
+                RealmGuardResolver,
+                MockModuleResolver,
+                DataUrlResolver,
+                FileUrlResolver,
+                builtin_resolver,
+                NodeModulesResolver,
+            ),
+            (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
+        );
 
-            let loader = (
-                builtin_loader,
-                crate::modules::module_loader(),
-                crate::builtin::module_loader(),
-                ScriptLoader::default(),
+        let mut builtin_loader = BuiltinLoader::default().with_module(
+            crate::JS_EXPORT_MODULE_NAME,
+            inject_import_meta_prologue(
+                &ImportMetaInit {
+                    url: format!(
+                        "file:///__wasm_rquickjs_virtual__/{}.mjs",
+                        crate::JS_EXPORT_MODULE_NAME
+                    ),
+                    filename: None,
+                    dirname: None,
+                    include_resolve: true,
+                },
+                crate::JS_EXPORT_MODULE,
+            ),
+        );
+        for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
+            let source = (get_module)();
+            let injected = inject_import_meta_prologue(
+                &ImportMetaInit {
+                    url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
+                    filename: None,
+                    dirname: None,
+                    include_resolve: true,
+                },
+                &source,
             );
+            builtin_loader = builtin_loader.with_module(name.to_string(), injected);
+        }
 
-            rt.set_loader(resolver, loader).await;
+        let loader = (
+            MockModuleLoader,
+            builtin_loader,
+            crate::modules::module_loader(),
+            crate::builtin::module_loader(),
+            DataUrlLoader,
+            JsonFileLoader,
+            CjsCompatLoader,
+            ImportMetaLoader,
+        );
 
-            async_with!(ctx => |ctx| {
-                let global = ctx.globals();
+        rt.set_loader(resolver, loader).await;
 
-                global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
-                    .expect("Failed to initialize resource table");
+        async_with!(ctx => |ctx| {
+            let global = ctx.globals();
 
-                let wiring = crate::builtin::wire_builtins();
-                Module::evaluate(
-                    ctx.clone(),
-                    "test",
-                    format!(r#"
-                    {wiring}
-                    import * as userModule from '{}';
-                    globalThis.userModule = userModule;
-                    "#, crate::JS_EXPORT_MODULE_NAME),
-                )
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
-                .finish::<()>()
-                .catch(&ctx)
-                .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
+            global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
+                .expect("Failed to initialize resource table");
 
-                for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-                  Module::import(&ctx, name.to_string())
-                     .catch(&ctx)
-                     .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
-                     .finish::<()>()
-                     .catch(&ctx)
-                     .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
+            global.set("__wasm_rquickjs_mock_seq", 0i64)
+                .expect("Failed to initialize mock sequence counter");
+        })
+        .await;
+
+        rt.set_host_promise_rejection_tracker(Some(Box::new(
+            |ctx, promise, reason, is_handled| {
+                if let Ok(handler) = ctx
+                    .globals()
+                    .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
+                {
+                    let _ = handler.call::<_, Value>((promise, reason, is_handled));
                 }
-            })
-                .await;
-            rt.idle().await;
+            },
+        )))
+        .await;
 
-            let (resource_drop_queue_tx, resource_drop_queue_rx) =
-                futures::channel::mpsc::unbounded();
+        let (resource_drop_queue_tx, resource_drop_queue_rx) = futures::channel::mpsc::unbounded();
 
-            let last_resource_id = AtomicUsize::new(1);
-            Self {
-                rt,
-                ctx,
-                last_resource_id,
-                resource_drop_queue_tx,
-                resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
-                abort_handles: RefCell::new(HashMap::new()),
-                last_abort_id: AtomicUsize::new(0),
+        let last_resource_id = AtomicUsize::new(1);
+        Self {
+            rt,
+            ctx,
+            last_resource_id,
+            resource_drop_queue_tx,
+            resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
+            abort_handles: RefCell::new(HashMap::new()),
+            last_abort_id: AtomicUsize::new(0),
+            unrefed_timers: RefCell::new(HashSet::new()),
+            gc_pending: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Phase 2: Evaluate all JavaScript — dispose symbols, builtin wiring, user
+    /// module import. Must be called after `STATE` is published so that any
+    /// re-entrant `get_js_state()` calls (e.g. from `setTimeout` during module
+    /// init) find the already-published state instead of recursing.
+    async fn finish_init(&self) {
+        // Dispose symbols must be initialized before builtins, since builtin
+        // modules use [Symbol.dispose] in their class definitions.
+        async_with!(self.ctx => |ctx| {
+            Module::evaluate(
+                ctx.clone(),
+                "dispose",
+                format!(r#"
+                const dispose = Symbol.for("dispose");
+                globalThis.{DISPOSE_SYMBOL} = dispose;
+                Symbol.dispose = dispose;
+                const asyncDispose = Symbol.for("asyncDispose");
+                Symbol.asyncDispose = asyncDispose;
+                "#)
+            ).catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
+        })
+            .await;
+        self.rt.idle().await;
+
+        async_with!(self.ctx => |ctx| {
+            // Wire built-in globals (globalThis.require, Buffer, process, etc.)
+            // This must complete before user code runs, because bundled CJS-in-ESM code
+            // (e.g. esbuild's __require shim) checks `typeof require` at the top level
+            // during module evaluation. ES module semantics hoist all imports and evaluate
+            // them before the module body, so wiring and user import cannot share a single
+            // Module::evaluate call.
+            let wiring = crate::builtin::wire_builtins();
+            Module::evaluate(
+                ctx.clone(),
+                "__wasm_rquickjs_init_wiring",
+                wiring,
+            )
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
+
+            // Import the user module (now globalThis.require is available)
+            Module::evaluate(
+                ctx.clone(),
+                "__wasm_rquickjs_init_entry",
+                format!(r#"
+                import * as userModule from '{}';
+                globalThis.userModule = userModule;
+                "#, crate::JS_EXPORT_MODULE_NAME),
+            )
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
+
+            for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+              Module::import(&ctx, name.to_string())
+                 .catch(&ctx)
+                 .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
+                 .finish::<()>()
+                 .catch(&ctx)
+                 .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
             }
         })
+            .await;
+        drain_and_idle(self).await;
     }
+}
+
+fn abort_unrefed_timers(js_state: &JsState) {
+    let unrefed = js_state.unrefed_timers.borrow().clone();
+    let mut abort_handles = js_state.abort_handles.borrow_mut();
+    let mut unrefed_mut = js_state.unrefed_timers.borrow_mut();
+    for id in unrefed.iter() {
+        if let Some(handle) = abort_handles.remove(id) {
+            handle.abort();
+        }
+        unrefed_mut.remove(id);
+    }
+}
+
+/// Runs GC if it was requested from JS (deferred to avoid re-entrancy issues).
+async fn run_pending_gc(js_state: &JsState) {
+    if js_state
+        .gc_pending
+        .swap(false, std::sync::atomic::Ordering::Relaxed)
+    {
+        async_with!(js_state.ctx => |ctx| {
+            ctx.run_gc();
+        })
+        .await;
+    }
+}
+
+/// Spawns a sentinel task that waits for all ref'd timers to complete,
+/// then aborts remaining unref'd timers so that `idle()` can return.
+async fn drain_and_idle(js_state: &JsState) {
+    run_pending_gc(js_state).await;
+    if js_state.unrefed_timers.borrow().is_empty() {
+        js_state.rt.idle().await;
+        return;
+    }
+    // Spawn a sentinel that polls until only unref'd timers remain, then aborts them.
+    async_with!(js_state.ctx => |ctx| {
+        ctx.spawn(async {
+            loop {
+                wstd::task::sleep(wstd::time::Duration::from_millis(1)).await;
+                let state = get_js_state();
+                let abort_count = state.abort_handles.borrow().len();
+                let unref_count = state.unrefed_timers.borrow().len();
+                // When the only remaining abort handles are for unref'd timers,
+                // abort them all (the sentinel itself is not tracked in abort_handles).
+                if abort_count > 0 && abort_count == unref_count {
+                    abort_unrefed_timers(state);
+                    break;
+                }
+                if unref_count == 0 {
+                    break;
+                }
+            }
+        });
+    })
+    .await;
+    js_state.rt.idle().await;
 }
 
 static mut STATE: Option<JsState> = None;
@@ -138,7 +1633,13 @@ static mut STATE: Option<JsState> = None;
 pub fn get_js_state() -> &'static JsState {
     unsafe {
         if STATE.is_none() {
-            STATE = Some(JsState::new());
+            // Phase 1: Create the runtime and all Rust-side state (no JS evaluation).
+            STATE = Some(block_on(JsState::new_base()));
+
+            // Phase 2: Evaluate JS modules. STATE is already published, so any
+            // re-entrant get_js_state() calls (e.g. setTimeout during module init)
+            // will find the existing state instead of recursing into new_base().
+            block_on(STATE.as_ref().unwrap().finish_init());
         }
         STATE.as_ref().unwrap()
     }
@@ -291,7 +1792,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    drain_and_idle(js_state).await;
     result
 }
 
@@ -345,7 +1846,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    drain_and_idle(js_state).await;
     result
 }
 
@@ -497,7 +1998,7 @@ where
             }
         }
     }).await;
-    js_state.rt.idle().await;
+    drain_and_idle(js_state).await;
     result
 }
 

@@ -1,0 +1,5 @@
+package test:lib-opentelemetry-api;
+
+world lib-opentelemetry-api {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-handlebars;
+
+world lib-handlebars {
+  export run: func() -> string;
+}

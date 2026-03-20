@@ -1,0 +1,5 @@
+package test:lib-cron-parser;
+
+world lib-cron-parser {
+  export run: func() -> string;
+}

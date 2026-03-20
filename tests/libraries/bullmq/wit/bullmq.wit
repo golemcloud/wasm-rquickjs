@@ -1,0 +1,5 @@
+package test:lib-bullmq;
+
+world lib-bullmq {
+  export run: func() -> string;
+}

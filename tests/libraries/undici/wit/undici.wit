@@ -1,0 +1,5 @@
+package test:lib-undici;
+
+world lib-undici {
+  export run: func() -> string;
+}

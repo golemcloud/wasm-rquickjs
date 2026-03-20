@@ -13,7 +13,9 @@ wasm-rquickjs/
 │   │   ├── skeleton/           # Embedded skeleton crate (separate project)
 │   │   └── src/
 │   └── wasi-logging/           # WASI logging support crate
-├── examples/                   # Example projects
+├── examples/
+│   ├── runtime/                # Examples used by runtime tests
+│   └── compilation/            # Examples only tested via compilation
 ├── src/                        # CLI binary source (main.rs)
 ├── tests/                      # Integration tests
 ├── Cargo.toml                  # Workspace root
@@ -21,52 +23,9 @@ wasm-rquickjs/
 └── README.md                   # Main documentation
 ```
 
-## Important Notes About @crates/wasm-rquickjs/skeleton
+## Skeleton Crate
 
-The `skeleton` crate is a **separate project** that is embedded within the `wasm-rquickjs` crate. It is crucial to understand the following:
-
-### Cargo.toml Naming Convention
-
-**The skeleton's `Cargo.toml` MUST be renamed to `Cargo.toml_` in the repository.**
-
-- The file is stored as `Cargo.toml_` to avoid conflicts with Rust packaging when embedded
-- When working on the skeleton locally, rename it to `Cargo.toml` before building
-- Before committing changes back, rename it back to `Cargo.toml_`
-- The embedded file in the final package uses the renamed `Cargo.toml_`
-
-### Building and Testing the Skeleton
-
-The skeleton crate can be compiled separately from the main project:
-
-```bash
-cd crates/wasm-rquickjs/skeleton
-
-# Rename Cargo.toml_ to Cargo.toml for local development
-mv Cargo.toml_ Cargo.toml
-
-# Build/test the skeleton
-cargo build
-cargo test
-
-# Rename back before committing
-mv Cargo.toml Cargo.toml_
-```
-
-### Runtime tests
-To test the builtin module of the skeleton, first define an example in `examples`, consisting of a pair of a JS file and a WIT interface,
-and then add one or more tests in `tests/runtime.rs` that use the example.
-
-### Cleaning Skeleton Build Artifacts
-
-After compiling the skeleton for testing, **always clean its build artifacts** before compiling the main `wasm-rquickjs` crate:
-
-```bash
-./cleanup-skeleton.sh
-```
-
-**Why?** The `include_dir!` macro embeds the entire skeleton directory into the main package during compilation. If the skeleton's `target/` directory is present, it will be embedded, causing:
-- Dramatically slower compilation times
-- Significantly larger resulting binaries
+The `skeleton` crate (`crates/wasm-rquickjs/skeleton/`) is a **separate project** embedded via `include_dir!`. It has special build requirements — **load the `skeleton-development` skill** for the full workflow (Cargo.toml_ convention, cleanup, test rules).
 
 ## Build Commands
 
@@ -80,13 +39,9 @@ cargo build --release
 cargo test
 ```
 
-### Build specific test harness
-```bash
-cargo test --test compilation
-cargo test --test runtime
-cargo test --test dts
-cargo test --test errors
-```
+### ⚠️ CRITICAL TEST RULES
+
+**DO NOT run `cargo test` without arguments** — it runs everything and takes too long. **ALWAYS filter** to a specific test harness and module. Load the `skeleton-development` skill for full test rules and examples.
 
 ### Generate code for a JavaScript module
 ```bash
@@ -155,14 +110,9 @@ The workspace is configured in the root `Cargo.toml` with the following members:
 
 ## Development Workflow
 
-### When working on the skeleton (JavaScript APIs, core functionality):
+### When working on the skeleton:
 
-1. Navigate to the skeleton directory
-2. Rename `Cargo.toml_` to `Cargo.toml`
-3. Make changes and test with `cargo build`/`cargo test`
-4. When done, run from the repo root: `./cleanup-skeleton.sh`
-5. Rename skeleton's `Cargo.toml` back to `Cargo.toml_`
-6. Commit your changes
+Load the `skeleton-development` skill. For Node.js compat test work, also load `fixing-node-compat-test`. For adding new modules, load `adding-builtin-module`.
 
 ### When working on code generation:
 
@@ -175,6 +125,59 @@ The workspace is configured in the root `Cargo.toml` with the following members:
 1. Modify `src/main.rs`
 2. Build with `cargo build --release`
 3. Test with `cargo test --test compilation` or `cargo test --test runtime`
+
+### Updating the Supported APIs Documentation
+
+When adding a new built-in API — such as a new Node.js-compatible module or a new exported function in an existing module — **always update the list of supported APIs in `README.md`** to reflect the change.
+
+## Regenerating DTS Goldenfiles
+
+Load the `regenerating-goldenfiles` skill for the workflow.
+
+## Node.js Compatibility Tests
+
+The `tests/node_compat/` directory contains vendored Node.js test files used to verify our Node.js API compatibility. Important rules:
+
+- **Never modify vendored test files** in `tests/node_compat/suite/`. These are upstream Node.js tests fetched via `vendor.sh` and must remain unmodified.
+- **We only implement the public Node.js API.** Tests that exercise Node.js internals (internal modules, private APIs, implementation details) are out of scope. Only tests for the public-facing Node.js API surface are relevant.
+- The `config.jsonc` allowlist controls which tests are run. Add or remove entries there rather than modifying test files.
+- Tests are **dynamically generated** by `tests/node_compat.rs` using test-r's `#[test_gen]`: one test case per entry in `config.jsonc`. A shared `PreparedComponent` (compiled WASM) is created once as a test dependency and reused across all tests.
+- Tests with `"skip": true` in `config.jsonc` are marked as `is_ignored` and reported as `IGNORED` by the test runner.
+- Test names follow the pattern `gen_node_compat_tests::<suite>__<test_file>` (e.g., `parallel__test_btoa_atob_js`).
+
+Load the `fixing-node-compat-test` skill for the full workflow when making a test pass.
+
+### ⚠️ Keeping `node_compat` and `node_compat_report` in sync
+
+The `tests/node_compat.rs` test harness and the `tests/node_compat_report.rs` report generator are **two separate runners** with independent Host types, linker setups, and WASI context configurations. **Whenever you change the WASI context, linker setup, or Host configuration in `tests/common/mod.rs` (used by `node_compat`), you MUST apply the same change to `tests/node_compat_report.rs`** — otherwise the two runners will produce different results.
+
+## Built-in Module Architecture
+
+### Hybrid Native + JS Pattern
+
+Built-in modules follow a two-layer architecture:
+- **Native bridge (Rust)**: Low-level operations implemented in Rust using `#[rquickjs::module]`. These are registered under internal paths like `__wasm_rquickjs_builtin/<name>_native`.
+- **JS wrapper**: A companion `.js` file imports from the native bridge and implements the high-level Node.js-compatible API (classes, streams, convenience methods, validation).
+
+This separation keeps Rust code focused on performance-critical operations while JS handles API surface compatibility.
+
+### How to Add a New Built-in Module
+
+Load the `adding-builtin-module` skill for the full checklist, code templates, and gotchas.
+
+### ⚠️ node:http Transport Rule
+
+**Never use a loopback transport for `node:http`.** Every `node:http` client request MUST go through `wasi:http` (the native Rust `NodeHttpClientRequest`). Do NOT add any fallback that bypasses `wasi:http` by creating direct `node:net` socket connections for loopback/localhost addresses.
+
+### ⚠️ No Localhost Side-Channels
+
+**NEVER introduce side-channels that pass metadata between the server and client based on localhost detection.** The `wasi:http` protocol has inherent limitations (e.g., no status message, no HTTP version, no raw headers beyond what the protocol exposes). These limitations are real and affect all users. Do NOT work around them by:
+- Intercepting socket writes to capture HTTP response metadata (status messages, raw headers, connection headers)
+- Storing captured metadata in global queues keyed by port number
+- Checking `isLoopbackHostname()` to selectively apply captured metadata only for localhost
+- Using any `globalThis.__wasm_rquickjs_*` side-channel to pass data between server and client
+
+If a vendored node_compat test fails because it relies on HTTP features that `wasi:http` cannot provide (e.g., custom status messages, HTTP version negotiation, informational 1xx responses), **mark the test as skipped** in `config.jsonc` with an explicit reason like `"reason": "wasi:http does not expose status messages"` rather than faking the behavior for localhost only.
 
 ## Key Files
 

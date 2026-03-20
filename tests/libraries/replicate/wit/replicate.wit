@@ -1,0 +1,5 @@
+package test:lib-replicate;
+
+world lib-replicate {
+  export run: func() -> string;
+}

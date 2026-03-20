@@ -1,0 +1,5 @@
+package test:lib-nestjs-config;
+
+world lib-nestjs-config {
+  export run: func() -> string;
+}

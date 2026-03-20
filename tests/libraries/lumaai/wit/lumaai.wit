@@ -1,0 +1,5 @@
+package test:lib-lumaai;
+
+world lib-lumaai {
+  export run: func() -> string;
+}

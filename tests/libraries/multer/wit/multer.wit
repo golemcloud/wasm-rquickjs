@@ -1,0 +1,5 @@
+package test:lib-multer;
+
+world lib-multer {
+  export run: func() -> string;
+}

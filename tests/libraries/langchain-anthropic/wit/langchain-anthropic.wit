@@ -1,0 +1,5 @@
+package test:lib-langchain-anthropic;
+
+world lib-langchain-anthropic {
+  export run: func() -> string;
+}

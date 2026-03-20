@@ -1,0 +1,5 @@
+package test:lib-dayjs;
+
+world lib-dayjs {
+  export run: func() -> string;
+}

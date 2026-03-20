@@ -1,0 +1,5 @@
+package test:lib-llamaindex;
+
+world lib-llamaindex {
+  export run: func() -> string;
+}

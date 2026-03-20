@@ -1,0 +1,5 @@
+package test:lib-yup;
+
+world lib-yup {
+  export run: func() -> string;
+}

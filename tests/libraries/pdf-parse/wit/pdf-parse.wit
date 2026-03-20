@@ -1,0 +1,5 @@
+package test:lib-pdf-parse;
+
+world lib-pdf-parse {
+  export run: func() -> string;
+}

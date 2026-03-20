@@ -1,0 +1,5 @@
+package test:lib-modelcontextprotocol-sdk;
+
+world lib-modelcontextprotocol-sdk {
+  export run: func() -> string;
+}

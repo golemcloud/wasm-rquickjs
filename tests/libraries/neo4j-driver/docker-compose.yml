@@ -1,0 +1,14 @@
+services:
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "17687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/testpassword123
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p testpassword123 'RETURN 1;' || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    tmpfs:
+      - /data

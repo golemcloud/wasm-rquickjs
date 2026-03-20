@@ -4,11 +4,15 @@
 
 const kIsDisturbed = Symbol("kIsDisturbed");
 
-function isReadableNodeStream(obj) {
+function isReadableNodeStream(obj, strict = false) {
     return !!(
         obj &&
         typeof obj.pipe === "function" &&
         typeof obj.on === "function" &&
+        (
+            !strict ||
+            (typeof obj.pause === 'function' && typeof obj.resume === 'function')
+        ) &&
         (!obj._writableState || obj._readableState?.readable !== false) && // Duplex
         (!obj._writableState || obj._readableState) // Writable has .pipe.
     );
@@ -42,6 +46,38 @@ function isNodeStream(obj) {
             (typeof obj.pipe === "function" && typeof obj.on === "function")
         )
     );
+}
+
+function isReadableStream(obj) {
+    return !!(
+        obj &&
+        !isNodeStream(obj) &&
+        typeof obj.pipeThrough === 'function' &&
+        typeof obj.getReader === 'function' &&
+        typeof obj.cancel === 'function'
+    );
+}
+
+function isWritableStream(obj) {
+    return !!(
+        obj &&
+        !isNodeStream(obj) &&
+        typeof obj.getWriter === 'function' &&
+        typeof obj.abort === 'function'
+    );
+}
+
+function isTransformStream(obj) {
+    return !!(
+        obj &&
+        !isNodeStream(obj) &&
+        typeof obj.readable === 'object' &&
+        typeof obj.writable === 'object'
+    );
+}
+
+function isWebStream(obj) {
+    return isReadableStream(obj) || isWritableStream(obj) || isTransformStream(obj);
 }
 
 function isIterable(obj, isAsync) {
@@ -127,6 +163,18 @@ function isWritable(stream) {
     return r && stream.writable && !isWritableEnded(stream);
 }
 
+function isErrored(stream) {
+    if (!isNodeStream(stream)) {
+        return null;
+    }
+    const wState = stream._writableState;
+    const rState = stream._readableState;
+    return !!(
+        (rState && rState.errored) ||
+        (wState && wState.errored)
+    );
+}
+
 function isFinished(stream, opts) {
     if (!isNodeStream(stream)) {
         return null;
@@ -210,6 +258,7 @@ function willEmitClose(stream) {
 
 export default {
     isDisturbed,
+    isErrored,
     kIsDisturbed,
     isClosed,
     isDestroyed,
@@ -218,11 +267,15 @@ export default {
     isIterable,
     isReadable,
     isReadableNodeStream,
+    isReadableStream,
     isReadableEnded,
     isReadableFinished,
     isNodeStream,
+    isTransformStream,
+    isWebStream,
     isWritable,
     isWritableNodeStream,
+    isWritableStream,
     isWritableEnded,
     isWritableFinished,
     isServerRequest,
@@ -234,6 +287,7 @@ export {
     isDestroyed,
     isDisturbed,
     isDuplexNodeStream,
+    isErrored,
     isFinished,
     isIterable,
     isNodeStream,
@@ -241,12 +295,16 @@ export {
     isReadableEnded,
     isReadableFinished,
     isReadableNodeStream,
+    isReadableStream,
     isServerRequest,
     isServerResponse,
+    isTransformStream,
+    isWebStream,
     isWritable,
     isWritableEnded,
     isWritableFinished,
     isWritableNodeStream,
+    isWritableStream,
     kIsDisturbed,
     willEmitClose,
 };

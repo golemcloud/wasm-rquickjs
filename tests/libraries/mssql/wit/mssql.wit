@@ -1,0 +1,5 @@
+package test:lib-mssql;
+
+world lib-mssql {
+  export run: func() -> string;
+}

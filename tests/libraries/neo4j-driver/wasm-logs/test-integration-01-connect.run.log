@@ -1,0 +1,47 @@
+
+thread '<unnamed>' (1) panicked at src/internal.rs:1738:41:
+Exception during awaiting call result for run:
+JavaScript error: Failed to connect to server. Please ensure that your database is listening on the correct host and port and that you have compatible encryption settings both on Neo4j server and driver. Note that the default encryption setting has changed in Neo4j 4.0. Caused by: getaddrinfo ESERVFAIL localhost
+Stack:
+    at call (native)
+    at GQLError (bundle/script_module:333:58)
+    at call (native)
+    at Neo4jError (bundle/script_module:427:34)
+    at newError (bundle/script_module:482:370)
+    at <anonymous> (bundle/script_module:25568:58)
+    at apply (native)
+    at emit (node:events:332:36)
+    at call (native)
+    at emit (node:net:195:28)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: failed to run main module `tmp/lib-test-neo4j-driver-int01/target/wasm32-wasip1/debug/lib_neo4j_driver.wasm`
+
+Caused by:
+    0: error while executing at wasm backtrace:
+           0: 0xbf350e - lib_neo4j_driver.wasm!abort
+           1: 0xbea4ed - lib_neo4j_driver.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8
+           2: 0xbe282b - lib_neo4j_driver.wasm!std::process::abort::h52a756c95aa1ed34
+           3: 0xbe28a7 - lib_neo4j_driver.wasm!__rustc[4425a7e20b4c8619]::__rust_abort
+           4: 0xbe265b - lib_neo4j_driver.wasm!__rustc[4425a7e20b4c8619]::__rust_start_panic
+           5: 0xbe267e - lib_neo4j_driver.wasm!__rustc[4425a7e20b4c8619]::rust_panic
+           6: 0xbec722 - lib_neo4j_driver.wasm!std::panicking::panic_with_hook::h046cb6b5bb1ae87d
+           7: 0xbea9bc - lib_neo4j_driver.wasm!std::panicking::panic_handler::{{closure}}::h8c2da803f45c255c
+           8: 0xbe2996 - lib_neo4j_driver.wasm!std::sys::backtrace::__rust_end_short_backtrace::h4575429eed93cb20
+           9: 0xbe298a - lib_neo4j_driver.wasm!__rustc[4425a7e20b4c8619]::rust_begin_unwind
+          10: 0xc04518 - lib_neo4j_driver.wasm!core::panicking::panic_fmt::h45db92ad3ae804a3
+          11: 0x3cf4b8 - lib_neo4j_driver.wasm!lib_neo4j_driver::internal::call_js_export_internal::{{closure}}::{{closure}}::{{closure}}::ha3639b51d0273b94
+          12: 0x3630c3 - lib_neo4j_driver.wasm!<core::pin::Pin<P> as core::future::future::Future>::poll::hc5ad595281accd22
+          13: 0x244b1d - lib_neo4j_driver.wasm!<rquickjs_core::context::async::future::WithFuture<F,R> as core::future::future::Future>::poll::h44146c3357b7c57a
+          14: 0x3cbd91 - lib_neo4j_driver.wasm!lib_neo4j_driver::internal::call_js_export_internal::{{closure}}::h80e7ae060aed1281
+          15: 0x3cbaf7 - lib_neo4j_driver.wasm!lib_neo4j_driver::internal::call_js_export::{{closure}}::h047d2b2ab35acf36
+          16: 0x1a32de - lib_neo4j_driver.wasm!<lib_neo4j_driver::Component as lib_neo4j_driver::bindings::Guest>::run::{{closure}}::h0a7d1a834ea846eb
+          17: 0x113b35 - lib_neo4j_driver.wasm!<futures_concurrency::future::join::tuple::Join2<A,B> as core::future::future::Future>::poll::had3e4d872a1d3ed2
+          18: 0x3cde61 - lib_neo4j_driver.wasm!lib_neo4j_driver::internal::async_exported_function::{{closure}}::heff91cc0c8b8bb27
+          19: 0x213d9d - lib_neo4j_driver.wasm!wstd::runtime::block_on::block_on::h9c3007997731a0e7
+          20: 0x3cdbe3 - lib_neo4j_driver.wasm!lib_neo4j_driver::internal::async_exported_function::hbd58387310210fe2
+          21: 0x24164e - lib_neo4j_driver.wasm!<lib_neo4j_driver::Component as lib_neo4j_driver::bindings::Guest>::run::h83af352fa009f50d
+          22: 0x22c151 - lib_neo4j_driver.wasm!lib_neo4j_driver::bindings::_export_run_cabi::h93552f67a2a65997
+          23: 0x24176c - lib_neo4j_driver.wasm!run
+       note: using the `WASMTIME_BACKTRACE_DETAILS=1` environment variable may show more debugging information
+    1: wasm trap: wasm `unreachable` instruction executed

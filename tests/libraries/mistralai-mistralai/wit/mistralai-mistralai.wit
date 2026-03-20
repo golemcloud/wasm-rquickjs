@@ -1,0 +1,5 @@
+package test:lib-mistralai-mistralai;
+
+world lib-mistralai-mistralai {
+  export run: func() -> string;
+}

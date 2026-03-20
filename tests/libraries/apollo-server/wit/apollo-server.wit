@@ -1,0 +1,5 @@
+package test:lib-apollo-server;
+
+world lib-apollo-server {
+  export run: func() -> string;
+}

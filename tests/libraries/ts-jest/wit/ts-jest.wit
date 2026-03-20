@@ -1,0 +1,5 @@
+package test:lib-ts-jest;
+
+world lib-ts-jest {
+  export run: func() -> string;
+}

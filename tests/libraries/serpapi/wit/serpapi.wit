@@ -1,0 +1,5 @@
+package test:lib-serpapi;
+
+world lib-serpapi {
+  export run: func() -> string;
+}

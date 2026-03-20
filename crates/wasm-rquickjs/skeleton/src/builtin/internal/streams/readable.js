@@ -8,18 +8,25 @@ import { debuglog } from "__wasm_rquickjs_builtin/internal/util/debuglog";
 import { getDefaultHighWaterMark, getHighWaterMark } from "__wasm_rquickjs_builtin/internal/streams/state";
 import { prependListener, Stream } from "__wasm_rquickjs_builtin/internal/streams/legacy";
 import { StringDecoder } from "string_decoder";
-import { validateObject } from "__wasm_rquickjs_builtin/internal/validators";
+import { validateObject, validateBoolean, validateAbortSignal, validateInteger } from "__wasm_rquickjs_builtin/internal/validators";
 import {
+    AbortError,
+    aggregateTwoErrors,
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
     ERR_METHOD_NOT_IMPLEMENTED,
+    ERR_OUT_OF_RANGE,
     ERR_STREAM_PUSH_AFTER_EOF,
     ERR_STREAM_UNSHIFT_AFTER_END_EVENT,
+    ERR_UNKNOWN_ENCODING,
 } from "__wasm_rquickjs_builtin/internal/errors";
 import _from from "__wasm_rquickjs_builtin/internal/streams/from";
 import BufferList from "__wasm_rquickjs_builtin/internal/streams/buffer_list";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
 import { nextTick } from "node:process";
+import { isDestroyed, isReadable } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 
 let debug = debuglog("stream", (fn) => {
     debug = fn;
@@ -116,6 +123,9 @@ function ReadableState(options, stream, isDuplex) {
     // encoding is 'binary' so we have to make this configurable.
     // Everything else in the universe uses 'utf8', though.
     this.defaultEncoding = (options && options.defaultEncoding) || "utf8";
+    if (!Buffer.isEncoding(this.defaultEncoding)) {
+        throw new ERR_UNKNOWN_ENCODING(this.defaultEncoding);
+    }
 
     // Ref the piped dest which we need a drain event on it
     // type: null | Writable | Set<Writable>.
@@ -141,6 +151,18 @@ function Readable(options) {
         return new Readable(options);
     }
 
+    // Pre-initialize _events with well-known event slots to preserve
+    // property insertion order (matching Node.js v22 behavior).
+    if (!this._events) {
+        this._events = Object.create(null);
+        this._events.close = undefined;
+        this._events.error = undefined;
+        this._events.data = undefined;
+        this._events.end = undefined;
+        this._events.readable = undefined;
+        this._eventsCount = 0;
+    }
+
     // Checking for a Stream.Duplex instance is faster here instead of inside
     // the ReadableState constructor, at least with V8 6.5.
     const isDuplex = this instanceof Stream.Duplex;
@@ -159,12 +181,13 @@ function Readable(options) {
         if (typeof options.construct === "function") {
             this._construct = options.construct;
         }
-        if (options.signal && !isDuplex) {
-            addAbortSignalNoValidate(options.signal, this);
-        }
     }
 
     Stream.call(this, options);
+
+    if (options && options.signal && !isDuplex) {
+        addAbortSignalNoValidate(options.signal, this);
+    }
 
     destroyImpl.construct(this, () => {
         if (this._readableState.needReadable) {
@@ -219,13 +242,13 @@ function readableAddChunk(stream, chunk, encoding, addToFront) {
             }
         } else if (chunk instanceof Buffer) {
             encoding = "";
-        } else if (Stream._isUint8Array(chunk)) {
+        } else if (ArrayBuffer.isView(chunk)) {
             chunk = Stream._uint8ArrayToBuffer(chunk);
             encoding = "";
         } else if (chunk != null) {
             err = new ERR_INVALID_ARG_TYPE(
                 "chunk",
-                ["string", "Buffer", "Uint8Array"],
+                ["string", "Buffer", "TypedArray", "DataView"],
                 chunk,
             );
         }
@@ -474,7 +497,11 @@ Readable.prototype.read = function (n) {
         }
 
         // Call internal read method
-        this._read(state.highWaterMark);
+        try {
+            this._read(state.highWaterMark);
+        } catch (err) {
+            errorOrDestroy(this, err);
+        }
 
         state.sync = false;
         // If _read pushed data synchronously, then `reading` will be false,
@@ -802,9 +829,7 @@ Readable.prototype.pipe = function (dest, pipeOpts) {
     // Start the flow if it hasn't been started already.
 
     if (dest.writableNeedDrain === true) {
-        if (state.flowing) {
-            pause();
-        }
+        pause();
     } else if (!state.flowing) {
         debug("pipe resume");
         src.resume();
@@ -908,6 +933,15 @@ Readable.prototype.on = function (ev, fn) {
     return res;
 };
 Readable.prototype.addListener = Readable.prototype.on;
+
+Readable.prototype.once = function (ev, fn) {
+    const onceWrapper = (...args) => {
+        this.removeListener(ev, onceWrapper);
+        fn.apply(this, args);
+    };
+    onceWrapper.listener = fn;
+    return this.on(ev, onceWrapper);
+};
 
 Readable.prototype.removeListener = function (ev, fn) {
     const res = Stream.prototype.removeListener.call(this, ev, fn);
@@ -1086,19 +1120,43 @@ function streamToAsyncIterator(stream, options) {
         stream = Readable.wrap(stream, { objectMode: true });
     }
 
-    const iter = createAsyncIterator(stream, options);
-    iter.stream = stream;
-    return iter;
-}
-
-async function* createAsyncIterator(stream, options) {
-    let callback = nop;
-
     const opts = {
         destroyOnReturn: true,
         destroyOnError: true,
         ...options,
     };
+
+    const gen = createAsyncIterator(stream, opts);
+
+    // Wrap the async generator to perform synchronous cleanup in return().
+    // QuickJS does not properly await async generator return() in
+    // for-await-of when the loop body throws, so we mark the stream
+    // as destroyed synchronously. The actual destroy() call still happens
+    // in the generator's finally block to avoid triggering side effects
+    // (like eos callbacks) before the error has propagated.
+    const iter = {
+        stream: stream,
+        next: gen.next.bind(gen),
+        return: function () {
+            if (opts.destroyOnReturn) {
+                const state = stream._readableState;
+                if (state && !state.destroyed) {
+                    if (state.autoDestroy || !state.endEmitted) {
+                        state.destroyed = true;
+                    }
+                }
+            }
+            return gen.return();
+        },
+        throw: gen.throw.bind(gen),
+        [Symbol.asyncIterator]() { return this; },
+    };
+
+    return iter;
+}
+
+async function* createAsyncIterator(stream, opts) {
+    let callback = nop;
 
     function next(resolve) {
         if (this === stream) {
@@ -1109,41 +1167,30 @@ async function* createAsyncIterator(stream, options) {
         }
     }
 
-    const state = stream._readableState;
+    stream.on("readable", next);
 
-    let error = state.errored;
-    let errorEmitted = state.errorEmitted;
-    let endEmitted = state.endEmitted;
-    let closeEmitted = state.closeEmitted;
+    // Use eos (end-of-stream) to detect premature close.
+    // When a stream is destroyed without emitting 'end', eos generates
+    // ERR_STREAM_PREMATURE_CLOSE. The error variable uses three states:
+    //   undefined = still waiting
+    //   null      = clean end (stream ended normally)
+    //   truthy    = error occurred (throw it)
+    let error;
+    const cleanup = eos(stream, { writable: false }, (err) => {
+        error = err ? aggregateTwoErrors(error, err) : null;
+        callback();
+        callback = nop;
+    });
 
-    stream
-        .on("readable", next)
-        .on("error", function (err) {
-            error = err;
-            errorEmitted = true;
-            next.call(this);
-        })
-        .on("end", function () {
-            endEmitted = true;
-            next.call(this);
-        })
-        .on("close", function () {
-            closeEmitted = true;
-            next.call(this);
-        });
-
-    let errorThrown = false;
     try {
         while (true) {
             const chunk = stream.destroyed ? null : stream.read();
             if (chunk !== null) {
                 yield chunk;
-            } else if (errorEmitted) {
+            } else if (error) {
                 throw error;
-            } else if (endEmitted) {
-                break;
-            } else if (closeEmitted) {
-                break;
+            } else if (error === null) {
+                return;
             } else {
                 await new Promise(next);
             }
@@ -1152,15 +1199,17 @@ async function* createAsyncIterator(stream, options) {
         if (opts.destroyOnError) {
             destroyImpl.destroyer(stream, err);
         }
-        errorThrown = true;
-        throw err;
+        error = aggregateTwoErrors(error, err);
+        throw error;
     } finally {
-        if (!errorThrown && opts.destroyOnReturn) {
-            if (state.autoDestroy || !endEmitted) {
-                // TODO(ronag): ERR_PREMATURE_CLOSE?
+        if (error === undefined && opts.destroyOnReturn) {
+            const state = stream._readableState;
+            if (state.autoDestroy || !state.endEmitted) {
                 destroyImpl.destroyer(stream, null);
             }
         }
+        stream.off("readable", next);
+        cleanup();
     }
 }
 
@@ -1273,6 +1322,19 @@ Object.defineProperties(Readable.prototype, {
         enumerable: false,
         get() {
             return this._readableState ? this._readableState.endEmitted : false;
+        },
+    },
+
+    errored: {
+        enumerable: false,
+        get() {
+            return this._readableState ? this._readableState.errored : null;
+        },
+    },
+
+    closed: {
+        get() {
+            return this._readableState ? this._readableState.closed : false;
         },
     },
 });
@@ -1391,11 +1453,1120 @@ function wrap(src, options) {
     }).wrap(src);
 }
 
+function newStreamReadableFromReadableStream(readableStream, options = {}) {
+    if (!(readableStream instanceof ReadableStream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            'readableStream',
+            'ReadableStream',
+            readableStream);
+    }
+
+    validateObject(options, 'options');
+    const {
+        highWaterMark,
+        encoding,
+        objectMode = false,
+        signal,
+    } = options;
+
+    if (encoding !== undefined && !Buffer.isEncoding(encoding))
+        throw new ERR_INVALID_ARG_VALUE('options.encoding', encoding);
+    validateBoolean(objectMode, 'options.objectMode');
+
+    const reader = readableStream.getReader();
+    let closed = false;
+
+    const readable = new Readable({
+        objectMode,
+        highWaterMark,
+        encoding,
+        signal,
+
+        read() {
+            reader.read().then(
+                (chunk) => {
+                    if (chunk.done) {
+                        readable.push(null);
+                    } else {
+                        readable.push(chunk.value);
+                    }
+                },
+                (error) => destroyImpl.destroyer(readable, error));
+        },
+
+        destroy(error, callback) {
+            function done() {
+                try {
+                    callback(error);
+                } catch (error) {
+                    nextTick(() => { throw error; });
+                }
+            }
+
+            if (!closed) {
+                reader.cancel(error).then(done, done);
+                return;
+            }
+            done();
+        },
+    });
+
+    reader.closed.then(
+        () => {
+            closed = true;
+        },
+        (error) => {
+            closed = true;
+            destroyImpl.destroyer(readable, error);
+        });
+
+    return readable;
+}
+
+
+function newReadableStreamFromStreamReadable(streamReadable, options = {}) {
+    if (typeof streamReadable?._readableState !== 'object') {
+        throw new ERR_INVALID_ARG_TYPE(
+            'streamReadable',
+            'stream.Readable',
+            streamReadable);
+    }
+
+    if (isDestroyed(streamReadable) || !isReadable(streamReadable)) {
+        const readable = new ReadableStream();
+        readable.cancel();
+        return readable;
+    }
+
+    const objectMode = streamReadable.readableObjectMode;
+    const highWaterMark = streamReadable.readableHighWaterMark;
+
+    const strategy = objectMode
+        ? new CountQueuingStrategy({ highWaterMark })
+        : { highWaterMark };
+
+    let controller;
+    let wasCanceled = false;
+
+    function onData(chunk) {
+        if (Buffer.isBuffer(chunk) && !objectMode)
+            chunk = new Uint8Array(chunk);
+        controller.enqueue(chunk);
+        if (controller.desiredSize <= 0)
+            streamReadable.pause();
+    }
+
+    streamReadable.pause();
+
+    const cleanup = eos(streamReadable, (error) => {
+        cleanup();
+        streamReadable.on('error', () => {});
+        if (error)
+            return controller.error(error);
+        if (wasCanceled) {
+            return;
+        }
+        controller.close();
+    });
+
+    streamReadable.on('data', onData);
+
+    return new ReadableStream({
+        start(c) { controller = c; },
+
+        pull() { streamReadable.resume(); },
+
+        cancel(reason) {
+            wasCanceled = true;
+            destroyImpl.destroyer(streamReadable, reason);
+        },
+    }, strategy);
+}
+
+// --- Readable helper methods (Node.js stream.Readable iterator helpers) ---
+
+function throwIfAborted(signal) {
+    if (signal?.aborted) throw new AbortError(signal.reason);
+}
+
+function validateConcurrency(options) {
+    let concurrency = 1;
+    if (options?.concurrency != null) {
+        concurrency = Math.floor(options.concurrency);
+    }
+    validateInteger(concurrency, 'options.concurrency', 1);
+    return concurrency;
+}
+
+Readable.prototype.map = function map(fn, options) {
+    if (typeof fn !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('fn', ['Function', 'AsyncFunction'], fn);
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const concurrency = validateConcurrency(options);
+    const signal = options?.signal;
+    let outHWM = concurrency - 1;
+    if (options?.highWaterMark != null) {
+        outHWM = Math.floor(options.highWaterMark);
+    }
+    validateInteger(outHWM, 'options.highWaterMark', 0);
+    const queueHWM = outHWM + concurrency;
+    const src = this;
+
+    return readableFrom((async function* () {
+        throwIfAborted(signal);
+
+        const ac = new AbortController();
+        let cleanupSignal;
+        if (signal) {
+            const onAbort = () => { ac.abort(signal.reason); };
+            if (signal.aborted) { ac.abort(signal.reason); }
+            else {
+                signal.addEventListener('abort', onAbort, { once: true });
+                cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+            }
+        }
+        const combinedSignal = ac.signal;
+
+        try {
+            const queue = [];
+            let sourceDone = false;
+            let inFlight = 0;
+            let errorOccurred = null;
+            let resolveNext = null;
+            let pumpScheduled = false;
+            let pumping = false;
+            let repumpRequested = false;
+
+            const it = src[Symbol.asyncIterator]();
+
+            function onSlotReady() {
+                if (resolveNext) {
+                    const r = resolveNext;
+                    resolveNext = null;
+                    r();
+                }
+            }
+
+            function schedulePump() {
+                if (pumping) {
+                    repumpRequested = true;
+                    return;
+                }
+
+                if (!pumpScheduled) {
+                    pumpScheduled = true;
+                    Promise.resolve().then(() => {
+                        pumpScheduled = false;
+                        pump();
+                    });
+                }
+            }
+
+            async function pump() {
+                if (pumping) {
+                    repumpRequested = true;
+                    return;
+                }
+
+                pumping = true;
+                try {
+                    while (!sourceDone && !combinedSignal.aborted && !errorOccurred && inFlight < concurrency && queue.length < queueHWM) {
+                        let step;
+                        try {
+                            step = await it.next();
+                        } catch (e) {
+                            errorOccurred = e;
+                            onSlotReady();
+                            return;
+                        }
+
+                        if (step.done) {
+                            sourceDone = true;
+                            onSlotReady();
+                            return;
+                        }
+
+                        const slot = { resolved: false, value: undefined, error: null };
+                        queue.push(slot);
+                        inFlight++;
+                        const chunk = step.value;
+
+                        let mapped;
+                        try {
+                            if (combinedSignal.aborted) throw new AbortError(combinedSignal.reason);
+                            mapped = Promise.resolve(fn(chunk, { signal: combinedSignal }));
+                        } catch (e) {
+                            mapped = Promise.reject(e);
+                        }
+
+                        mapped.then(
+                            (result) => {
+                                slot.value = result;
+                            },
+                            (e) => {
+                                slot.error = e;
+                                if (!errorOccurred) errorOccurred = e;
+                            },
+                        ).finally(() => {
+                            slot.resolved = true;
+                            inFlight--;
+                            onSlotReady();
+                            schedulePump();
+                        });
+                    }
+                } finally {
+                    pumping = false;
+                    if (repumpRequested) {
+                        repumpRequested = false;
+                        schedulePump();
+                    }
+                }
+            }
+
+            schedulePump();
+
+            while (true) {
+                while (queue.length === 0 || !queue[0].resolved) {
+                    if (errorOccurred) throw errorOccurred;
+                    if (sourceDone && queue.length === 0) return;
+                    if (combinedSignal.aborted) throw new AbortError(combinedSignal.reason);
+                    await new Promise((r) => { resolveNext = r; });
+                }
+
+                const slot = queue.shift();
+                if (slot.error) throw slot.error;
+                yield slot.value;
+                schedulePump();
+            }
+        } finally {
+            if (cleanupSignal) cleanupSignal();
+        }
+    })(), { objectMode: true });
+};
+
+Readable.prototype.filter = function filter(fn, options) {
+    if (typeof fn !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('fn', ['Function', 'AsyncFunction'], fn);
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const concurrency = validateConcurrency(options);
+    const signal = options?.signal;
+    const hwm = options?.highWaterMark;
+    const outHWM = hwm != null ? hwm : concurrency - 1;
+    const src = this;
+
+    return readableFrom((async function* () {
+        throwIfAborted(signal);
+
+        const ac = new AbortController();
+        let cleanupSignal;
+        if (signal) {
+            const onAbort = () => { ac.abort(signal.reason); };
+            if (signal.aborted) { ac.abort(signal.reason); }
+            else {
+                signal.addEventListener('abort', onAbort, { once: true });
+                cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+            }
+        }
+        const combinedSignal = ac.signal;
+
+        try {
+            const queue = [];
+            let sourceDone = false;
+            let inFlight = 0;
+            let errorOccurred = null;
+            let resolveNext = null;
+            let pumpScheduled = false;
+
+            const it = src[Symbol.asyncIterator]();
+
+            function onSlotReady() {
+                if (resolveNext) {
+                    const r = resolveNext;
+                    resolveNext = null;
+                    r();
+                }
+            }
+
+            function schedulePump() {
+                if (!pumpScheduled) {
+                    pumpScheduled = true;
+                    Promise.resolve().then(() => {
+                        pumpScheduled = false;
+                        pump();
+                    });
+                }
+            }
+
+            async function pump() {
+                while (!sourceDone && !ac.signal.aborted && !errorOccurred && inFlight < concurrency && queue.length < concurrency + outHWM) {
+                    let step;
+                    try {
+                        step = await it.next();
+                    } catch (e) {
+                        errorOccurred = e;
+                        onSlotReady();
+                        return;
+                    }
+
+                    if (step.done) {
+                        sourceDone = true;
+                        onSlotReady();
+                        return;
+                    }
+
+                    const slot = { resolved: false, include: false, chunk: step.value, error: null };
+                    queue.push(slot);
+                    inFlight++;
+                    const chunk = step.value;
+
+                    Promise.resolve().then(async () => {
+                        try {
+                            if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                            const result = await fn(chunk, { signal: combinedSignal });
+                            slot.include = !!result;
+                        } catch (e) {
+                            slot.error = e;
+                            if (!errorOccurred) errorOccurred = e;
+                        } finally {
+                            slot.resolved = true;
+                            inFlight--;
+                            onSlotReady();
+                            schedulePump();
+                        }
+                    });
+                }
+            }
+
+            pump();
+
+            while (true) {
+                while (queue.length === 0 || !queue[0].resolved) {
+                    if (errorOccurred) throw errorOccurred;
+                    if (sourceDone && queue.length === 0) return;
+                    if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                    await new Promise(r => { resolveNext = r; });
+                }
+
+                const slot = queue.shift();
+                if (slot.error) throw slot.error;
+                if (slot.include) yield slot.chunk;
+                schedulePump();
+            }
+        } finally {
+            if (cleanupSignal) cleanupSignal();
+        }
+    })(), { objectMode: true, highWaterMark: outHWM });
+};
+
+Readable.prototype.flatMap = function flatMap(fn, options) {
+    if (typeof fn !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('fn', ['Function', 'AsyncFunction'], fn);
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const concurrency = validateConcurrency(options);
+    const signal = options?.signal;
+    const hwm = options?.highWaterMark;
+    const outHWM = hwm != null ? hwm : concurrency - 1;
+    const src = this;
+
+    return readableFrom((async function* () {
+        throwIfAborted(signal);
+
+        const ac = new AbortController();
+        let cleanupSignal;
+        if (signal) {
+            const onAbort = () => { ac.abort(signal.reason); };
+            if (signal.aborted) { ac.abort(signal.reason); }
+            else {
+                signal.addEventListener('abort', onAbort, { once: true });
+                cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+            }
+        }
+        const combinedSignal = ac.signal;
+
+        try {
+            const queue = [];
+            let sourceDone = false;
+            let inFlight = 0;
+            let errorOccurred = null;
+            let resolveNext = null;
+            let pumpScheduled = false;
+
+            const it = src[Symbol.asyncIterator]();
+
+            function onSlotReady() {
+                if (resolveNext) {
+                    const r = resolveNext;
+                    resolveNext = null;
+                    r();
+                }
+            }
+
+            function schedulePump() {
+                if (!pumpScheduled) {
+                    pumpScheduled = true;
+                    Promise.resolve().then(() => {
+                        pumpScheduled = false;
+                        pump();
+                    });
+                }
+            }
+
+            async function pump() {
+                while (!sourceDone && !ac.signal.aborted && !errorOccurred && inFlight < concurrency && queue.length < concurrency + outHWM) {
+                    let step;
+                    try {
+                        step = await it.next();
+                    } catch (e) {
+                        errorOccurred = e;
+                        onSlotReady();
+                        return;
+                    }
+
+                    if (step.done) {
+                        sourceDone = true;
+                        onSlotReady();
+                        return;
+                    }
+
+                    const slot = { resolved: false, value: undefined, error: null };
+                    queue.push(slot);
+                    inFlight++;
+                    const chunk = step.value;
+
+                    Promise.resolve().then(async () => {
+                        try {
+                            if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                            const result = await fn(chunk, { signal: combinedSignal });
+                            slot.value = result;
+                        } catch (e) {
+                            slot.error = e;
+                            if (!errorOccurred) errorOccurred = e;
+                        } finally {
+                            slot.resolved = true;
+                            inFlight--;
+                            onSlotReady();
+                            schedulePump();
+                        }
+                    });
+                }
+            }
+
+            pump();
+
+            while (true) {
+                while (queue.length === 0 || !queue[0].resolved) {
+                    if (errorOccurred) throw errorOccurred;
+                    if (sourceDone && queue.length === 0) return;
+                    if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                    await new Promise(r => { resolveNext = r; });
+                }
+
+                const slot = queue.shift();
+                if (slot.error) throw slot.error;
+                const out = slot.value;
+                if (out && typeof out[Symbol.asyncIterator] === 'function') {
+                    yield* out;
+                } else if (out && typeof out[Symbol.iterator] === 'function') {
+                    yield* out;
+                } else {
+                    yield out;
+                }
+                schedulePump();
+            }
+        } finally {
+            if (cleanupSignal) cleanupSignal();
+        }
+    })(), { objectMode: true, highWaterMark: outHWM });
+};
+
+Readable.prototype.take = function take(n, options) {
+    n = +n;
+    if (n < 0 || n === -Infinity) {
+        throw new ERR_OUT_OF_RANGE('number', '>= 0', n);
+    }
+    if (Number.isNaN(n)) n = 0;
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const signal = options?.signal;
+    const src = this;
+
+    return readableFrom((async function* () {
+        throwIfAborted(signal);
+        let i = 0;
+        for await (const chunk of src) {
+            throwIfAborted(signal);
+            if (i++ >= n) break;
+            yield chunk;
+        }
+    })(), { objectMode: true });
+};
+
+Readable.prototype.drop = function drop(n, options) {
+    n = +n;
+    if (n < 0 || n === -Infinity) {
+        throw new ERR_OUT_OF_RANGE('number', '>= 0', n);
+    }
+    if (Number.isNaN(n)) n = 0;
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const signal = options?.signal;
+    const src = this;
+
+    return readableFrom((async function* () {
+        throwIfAborted(signal);
+        let i = 0;
+        for await (const chunk of src) {
+            throwIfAborted(signal);
+            if (i++ < n) continue;
+            yield chunk;
+        }
+    })(), { objectMode: true });
+};
+
+Readable.prototype.toArray = async function toArray(options) {
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const signal = options?.signal;
+    throwIfAborted(signal);
+    const out = [];
+    for await (const chunk of this) {
+        throwIfAborted(signal);
+        out.push(chunk);
+    }
+    return out;
+};
+
+Readable.prototype.forEach = async function forEach(fn, options) {
+    if (typeof fn !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('fn', ['Function', 'AsyncFunction'], fn);
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const concurrency = validateConcurrency(options);
+    const signal = options?.signal;
+    const src = this;
+
+    const ac = new AbortController();
+    let cleanupSignal;
+    if (signal) {
+        const onAbort = () => { ac.abort(signal.reason); };
+        if (signal.aborted) { ac.abort(signal.reason); }
+        else {
+            signal.addEventListener('abort', onAbort, { once: true });
+            cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+        }
+    }
+    const combinedSignal = ac.signal;
+
+    try {
+        throwIfAborted(signal);
+        const queue = [];
+        let sourceDone = false;
+        let inFlight = 0;
+        let errorOccurred = null;
+        let resolveNext = null;
+        let pumpScheduled = false;
+
+        const it = src[Symbol.asyncIterator]();
+
+        function onSlotReady() {
+            if (resolveNext) {
+                const r = resolveNext;
+                resolveNext = null;
+                r();
+            }
+        }
+
+        function schedulePump() {
+            if (!pumpScheduled) {
+                pumpScheduled = true;
+                Promise.resolve().then(() => {
+                    pumpScheduled = false;
+                    pump();
+                });
+            }
+        }
+
+        async function pump() {
+            while (!sourceDone && !ac.signal.aborted && !errorOccurred && inFlight < concurrency && queue.length < concurrency) {
+                let step;
+                try {
+                    step = await it.next();
+                } catch (e) {
+                    errorOccurred = e;
+                    onSlotReady();
+                    return;
+                }
+
+                if (step.done) {
+                    sourceDone = true;
+                    onSlotReady();
+                    return;
+                }
+
+                const slot = { resolved: false, error: null };
+                queue.push(slot);
+                inFlight++;
+                const chunk = step.value;
+
+                Promise.resolve().then(async () => {
+                    try {
+                        if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                        await fn(chunk, { signal: combinedSignal });
+                    } catch (e) {
+                        slot.error = e;
+                        if (!errorOccurred) errorOccurred = e;
+                    } finally {
+                        slot.resolved = true;
+                        inFlight--;
+                        onSlotReady();
+                        schedulePump();
+                    }
+                });
+            }
+        }
+
+        pump();
+
+        while (true) {
+            while (queue.length === 0 || !queue[0].resolved) {
+                if (errorOccurred) throw errorOccurred;
+                if (sourceDone && queue.length === 0) return;
+                if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                await new Promise(r => { resolveNext = r; });
+            }
+
+            const slot = queue.shift();
+            if (slot.error) throw slot.error;
+            schedulePump();
+        }
+    } finally {
+        if (cleanupSignal) cleanupSignal();
+    }
+};
+
+Readable.prototype.reduce = async function reduce(fn, initialValue, options) {
+    if (typeof fn !== 'function') {
+        throw new TypeError('fn must be a function');
+    }
+    const hasInitial = arguments.length >= 2;
+    if (typeof arguments[arguments.length - 1] === 'object' && arguments[arguments.length - 1] !== null) {
+        options = arguments[arguments.length - 1];
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const signal = options?.signal;
+
+    if (signal?.aborted) {
+        this.destroy();
+        throw new AbortError(signal.reason);
+    }
+
+    let acc;
+    let started = hasInitial;
+    if (started) acc = initialValue;
+
+    let cleanupSignal;
+    if (signal) {
+        const onAbort = () => {
+            this.destroy();
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+    }
+
+    try {
+        for await (const chunk of this) {
+            throwIfAborted(signal);
+            if (!started) {
+                acc = chunk;
+                started = true;
+                continue;
+            }
+            acc = await fn(acc, chunk, { signal });
+        }
+        throwIfAborted(signal);
+    } finally {
+        if (cleanupSignal) cleanupSignal();
+    }
+
+    if (!started) throw new TypeError('Reduce of empty stream with no initial value');
+    return acc;
+};
+
+Readable.prototype.some = async function some(fn, options) {
+    if (typeof fn !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('fn', ['Function', 'AsyncFunction'], fn);
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const concurrency = validateConcurrency(options);
+    const signal = options?.signal;
+    const src = this;
+
+    const ac = new AbortController();
+    let cleanupSignal;
+    if (signal) {
+        const onAbort = () => { ac.abort(signal.reason); };
+        if (signal.aborted) { ac.abort(signal.reason); }
+        else {
+            signal.addEventListener('abort', onAbort, { once: true });
+            cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+        }
+    }
+    const combinedSignal = ac.signal;
+
+    try {
+        throwIfAborted(signal);
+        let found = false;
+        const queue = [];
+        let sourceDone = false;
+        let inFlight = 0;
+        let errorOccurred = null;
+        let resolveNext = null;
+        let pumpScheduled = false;
+
+        const it = src[Symbol.asyncIterator]();
+
+        function onSlotReady() {
+            if (resolveNext) {
+                const r = resolveNext;
+                resolveNext = null;
+                r();
+            }
+        }
+
+        function schedulePump() {
+            if (!pumpScheduled) {
+                pumpScheduled = true;
+                Promise.resolve().then(() => {
+                    pumpScheduled = false;
+                    pump();
+                });
+            }
+        }
+
+        async function pump() {
+            while (!sourceDone && !found && !ac.signal.aborted && !errorOccurred && inFlight < concurrency) {
+                let step;
+                try {
+                    step = await it.next();
+                } catch (e) {
+                    errorOccurred = e;
+                    onSlotReady();
+                    return;
+                }
+
+                if (step.done) {
+                    sourceDone = true;
+                    onSlotReady();
+                    return;
+                }
+
+                const slot = { resolved: false, result: false, error: null };
+                queue.push(slot);
+                inFlight++;
+                const chunk = step.value;
+
+                Promise.resolve().then(async () => {
+                    try {
+                        if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                        slot.result = !!(await fn(chunk, { signal: combinedSignal }));
+                        if (slot.result) found = true;
+                    } catch (e) {
+                        slot.error = e;
+                        if (!errorOccurred) errorOccurred = e;
+                    } finally {
+                        slot.resolved = true;
+                        inFlight--;
+                        onSlotReady();
+                        if (!found) schedulePump();
+                    }
+                });
+            }
+        }
+
+        pump();
+
+        while (true) {
+            while (queue.length === 0 || !queue[0].resolved) {
+                if (errorOccurred) throw errorOccurred;
+                if (sourceDone && queue.length === 0) return false;
+                if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                await new Promise(r => { resolveNext = r; });
+            }
+
+            const slot = queue.shift();
+            if (slot.error) throw slot.error;
+            if (slot.result) return true;
+            schedulePump();
+        }
+    } finally {
+        if (cleanupSignal) cleanupSignal();
+    }
+};
+
+Readable.prototype.every = async function every(fn, options) {
+    if (typeof fn !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('fn', ['Function', 'AsyncFunction'], fn);
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const concurrency = validateConcurrency(options);
+    const signal = options?.signal;
+    const src = this;
+
+    const ac = new AbortController();
+    let cleanupSignal;
+    if (signal) {
+        const onAbort = () => { ac.abort(signal.reason); };
+        if (signal.aborted) { ac.abort(signal.reason); }
+        else {
+            signal.addEventListener('abort', onAbort, { once: true });
+            cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+        }
+    }
+    const combinedSignal = ac.signal;
+
+    try {
+        throwIfAborted(signal);
+        let failed = false;
+        const queue = [];
+        let sourceDone = false;
+        let inFlight = 0;
+        let errorOccurred = null;
+        let resolveNext = null;
+        let pumpScheduled = false;
+
+        const it = src[Symbol.asyncIterator]();
+
+        function onSlotReady() {
+            if (resolveNext) {
+                const r = resolveNext;
+                resolveNext = null;
+                r();
+            }
+        }
+
+        function schedulePump() {
+            if (!pumpScheduled) {
+                pumpScheduled = true;
+                Promise.resolve().then(() => {
+                    pumpScheduled = false;
+                    pump();
+                });
+            }
+        }
+
+        async function pump() {
+            while (!sourceDone && !failed && !ac.signal.aborted && !errorOccurred && inFlight < concurrency) {
+                let step;
+                try {
+                    step = await it.next();
+                } catch (e) {
+                    errorOccurred = e;
+                    onSlotReady();
+                    return;
+                }
+
+                if (step.done) {
+                    sourceDone = true;
+                    onSlotReady();
+                    return;
+                }
+
+                const slot = { resolved: false, result: true, error: null };
+                queue.push(slot);
+                inFlight++;
+                const chunk = step.value;
+
+                Promise.resolve().then(async () => {
+                    try {
+                        if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                        slot.result = !!(await fn(chunk, { signal: combinedSignal }));
+                        if (!slot.result) failed = true;
+                    } catch (e) {
+                        slot.error = e;
+                        if (!errorOccurred) errorOccurred = e;
+                    } finally {
+                        slot.resolved = true;
+                        inFlight--;
+                        onSlotReady();
+                        if (!failed) schedulePump();
+                    }
+                });
+            }
+        }
+
+        pump();
+
+        while (true) {
+            while (queue.length === 0 || !queue[0].resolved) {
+                if (errorOccurred) throw errorOccurred;
+                if (sourceDone && queue.length === 0) return true;
+                if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                await new Promise(r => { resolveNext = r; });
+            }
+
+            const slot = queue.shift();
+            if (slot.error) throw slot.error;
+            if (!slot.result) return false;
+            schedulePump();
+        }
+    } finally {
+        if (cleanupSignal) cleanupSignal();
+    }
+};
+
+Readable.prototype.find = async function find(fn, options) {
+    if (typeof fn !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('fn', ['Function', 'AsyncFunction'], fn);
+    }
+    if (options != null) validateObject(options, 'options');
+    if (options?.signal != null) validateAbortSignal(options.signal, 'options.signal');
+    const concurrency = validateConcurrency(options);
+    const signal = options?.signal;
+    const src = this;
+
+    const ac = new AbortController();
+    let cleanupSignal;
+    if (signal) {
+        const onAbort = () => { ac.abort(signal.reason); };
+        if (signal.aborted) { ac.abort(signal.reason); }
+        else {
+            signal.addEventListener('abort', onAbort, { once: true });
+            cleanupSignal = () => signal.removeEventListener('abort', onAbort);
+        }
+    }
+    const combinedSignal = ac.signal;
+
+    try {
+        throwIfAborted(signal);
+        let found = false;
+        let foundChunk;
+        const queue = [];
+        let sourceDone = false;
+        let inFlight = 0;
+        let errorOccurred = null;
+        let resolveNext = null;
+        let pumpScheduled = false;
+
+        const it = src[Symbol.asyncIterator]();
+
+        function onSlotReady() {
+            if (resolveNext) {
+                const r = resolveNext;
+                resolveNext = null;
+                r();
+            }
+        }
+
+        function schedulePump() {
+            if (!pumpScheduled) {
+                pumpScheduled = true;
+                Promise.resolve().then(() => {
+                    pumpScheduled = false;
+                    pump();
+                });
+            }
+        }
+
+        async function pump() {
+            while (!sourceDone && !found && !ac.signal.aborted && !errorOccurred && inFlight < concurrency) {
+                let step;
+                try {
+                    step = await it.next();
+                } catch (e) {
+                    errorOccurred = e;
+                    onSlotReady();
+                    return;
+                }
+
+                if (step.done) {
+                    sourceDone = true;
+                    onSlotReady();
+                    return;
+                }
+
+                const slot = { resolved: false, matched: false, chunk: step.value, error: null };
+                queue.push(slot);
+                inFlight++;
+                const chunk = step.value;
+
+                Promise.resolve().then(async () => {
+                    try {
+                        if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                        slot.matched = !!(await fn(chunk, { signal: combinedSignal }));
+                        if (slot.matched) found = true;
+                    } catch (e) {
+                        slot.error = e;
+                        if (!errorOccurred) errorOccurred = e;
+                    } finally {
+                        slot.resolved = true;
+                        inFlight--;
+                        onSlotReady();
+                        if (!found) schedulePump();
+                    }
+                });
+            }
+        }
+
+        pump();
+
+        while (true) {
+            while (queue.length === 0 || !queue[0].resolved) {
+                if (errorOccurred) throw errorOccurred;
+                if (sourceDone && queue.length === 0) return undefined;
+                if (ac.signal.aborted) throw new AbortError(ac.signal.reason);
+                await new Promise(r => { resolveNext = r; });
+            }
+
+            const slot = queue.shift();
+            if (slot.error) throw slot.error;
+            if (slot.matched) return slot.chunk;
+            schedulePump();
+        }
+    } finally {
+        if (cleanupSignal) cleanupSignal();
+    }
+};
+
+// Readable.prototype.compose is set in stream.js to avoid circular dependency
+
+// --- Symbol.asyncDispose support ---
+
+if (typeof Symbol.asyncDispose !== 'undefined') {
+    Readable.prototype[Symbol.asyncDispose] = async function() {
+        let error;
+        if (!this.destroyed) {
+            error = this.readableEnded ? null : new AbortError();
+            this.destroy(error);
+        }
+        await new Promise((resolve, reject) =>
+            eos(this, (err) => (err && err.name !== 'AbortError' ? reject(err) : resolve(null))),
+        );
+    };
+}
+
 // Exposed for testing purposes only.
 Readable._fromList = fromList;
 Readable.ReadableState = ReadableState;
 Readable.from = readableFrom;
 Readable.wrap = wrap;
 
+Readable.fromWeb = function(readableStream, options) {
+    return newStreamReadableFromReadableStream(readableStream, options);
+};
+
+Readable.toWeb = function(streamReadable, options) {
+    return newReadableStreamFromStreamReadable(streamReadable, options);
+};
+
 export default Readable;
-export { fromList as _fromList, readableFrom as from, ReadableState, wrap };
+export { fromList as _fromList, readableFrom as from, ReadableState, wrap, newStreamReadableFromReadableStream as fromWeb, newReadableStreamFromStreamReadable as toWeb };

@@ -1,0 +1,5 @@
+package test:lib-mustache;
+
+world lib-mustache {
+  export run: func() -> string;
+}

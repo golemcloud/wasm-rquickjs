@@ -37,6 +37,44 @@ function emitWarningIfNeeded(set) {
     }
 }
 
+function pad(value) {
+    return String(value).padStart(2, "0");
+}
+
+const kSecond = 1000;
+const kMinute = 60 * kSecond;
+const kHour = 60 * kMinute;
+
+export function formatTime(ms) {
+    let hours = 0;
+    let minutes = 0;
+    let seconds = 0;
+
+    if (ms >= kSecond) {
+        if (ms >= kMinute) {
+            if (ms >= kHour) {
+                hours = Math.floor(ms / kHour);
+                ms = ms % kHour;
+            }
+            minutes = Math.floor(ms / kMinute);
+            ms = ms % kMinute;
+        }
+        seconds = ms / kSecond;
+    }
+
+    if (hours !== 0 || minutes !== 0) {
+        ({ 0: seconds, 1: ms } = seconds.toFixed(3).split(".", 2));
+        const res = hours !== 0 ? `${hours}:${pad(minutes)}` : minutes;
+        return `${res}:${pad(seconds)}.${ms} (${hours !== 0 ? "h:m" : ""}m:ss.mmm)`;
+    }
+
+    if (seconds !== 0) {
+        return `${seconds.toFixed(3)}s`;
+    }
+
+    return `${Number(ms.toFixed(3))}ms`;
+}
+
 const noop = () => { };
 
 function debuglogImpl(enabled, set) {
@@ -102,4 +140,4 @@ let debugEnv = env["NODE_DEBUG"] ?? "";
 
 initializeDebugEnv(debugEnv);
 
-export default { debuglog };
+export default { debuglog, formatTime };

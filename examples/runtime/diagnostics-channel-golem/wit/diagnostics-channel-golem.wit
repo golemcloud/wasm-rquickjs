@@ -1,0 +1,5 @@
+package quickjs:diagnostics-channel-golem;
+
+world diagnostics-channel-golem {
+  export test: func() -> string;
+}

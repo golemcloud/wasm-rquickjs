@@ -1,0 +1,5 @@
+package test:lib-algoliasearch;
+
+world lib-algoliasearch {
+  export run: func() -> string;
+}

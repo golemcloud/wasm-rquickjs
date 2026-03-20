@@ -1,0 +1,5 @@
+package test:lib-microsoft-cognitiveservices-speech-sdk;
+
+world lib-microsoft-cognitiveservices-speech-sdk {
+  export run: func() -> string;
+}

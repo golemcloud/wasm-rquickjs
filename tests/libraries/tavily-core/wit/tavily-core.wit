@@ -1,0 +1,5 @@
+package test:lib-tavily-core;
+
+world lib-tavily-core {
+  export run: func() -> string;
+}

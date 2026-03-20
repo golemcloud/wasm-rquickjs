@@ -1,0 +1,5 @@
+package test:lib-google-generative-ai;
+
+world lib-google-generative-ai {
+  export run: func() -> string;
+}

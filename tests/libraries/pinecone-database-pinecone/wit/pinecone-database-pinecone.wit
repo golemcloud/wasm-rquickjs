@@ -1,0 +1,5 @@
+package test:lib-pinecone-database-pinecone;
+
+world lib-pinecone-database-pinecone {
+  export run: func() -> string;
+}

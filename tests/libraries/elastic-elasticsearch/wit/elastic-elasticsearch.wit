@@ -1,0 +1,5 @@
+package test:lib-elastic-elasticsearch;
+
+world lib-elastic-elasticsearch {
+  export run: func() -> string;
+}

@@ -23,6 +23,7 @@ anyhow = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }
 bytes = { workspace = true }
 camino-tempfile = { workspace = true }
+chrono = { workspace = true }
 futures = { workspace = true }
 goldenfile = { workspace = true }
 heck = { workspace = true }
@@ -38,8 +39,12 @@ test-r = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 uuid = { version = "1.18.1", features = ["v4"] }
+oxc_parser = { workspace = true }
+oxc_allocator = { workspace = true }
+oxc_ast = { workspace = true }
+oxc_span = { workspace = true }
 wac-graph = { workspace = true }
-wasmtime = { workspace = true, features = ["async", "component-model"] }
+wasmtime = { workspace = true, features = ["async", "component-model", "cache"] }
 wasmtime-wasi = { workspace = true }
 wasmtime-wasi-http = { workspace = true }
 
@@ -57,6 +62,22 @@ harness = false
 
 [[test]]
 name = "errors"
+harness = false
+
+[[test]]
+name = "node_compat"
+harness = false
+
+[[test]]
+name = "node_compat_report"
+harness = false
+
+[[test]]
+name = "migrate_config_split"
+harness = false
+
+[[test]]
+name = "js_subtest_parser"
 harness = false
 
 [workspace]
@@ -81,6 +102,7 @@ axum = "0.8.4"
 bytes = "1.10.1"
 camino = "1.1.10"
 camino-tempfile = "1.4.1"
+chrono = "0.4"
 fs_extra = "1.3.0"
 futures = "0.3.31"
 goldenfile = "1.8.0"
@@ -97,7 +119,7 @@ rand = "0.9.2"
 serde = "1.0.219"
 serde_json = "1.0.142"
 syn = "2.0.101"
-test-r = "2.3.1"
+test-r = "3.0.3"
 tokio = "1.47.1"
 tokio-util = "0.7.16"
 toml_edit = "0.22.27"
@@ -108,3 +130,7 @@ wasmtime-wasi-http = "42.0.1"
 wit-bindgen-core = "0.43.0"
 wit-encoder = "0.235.0"
 wit-parser = "0.235.0"
+oxc_parser = "0.115"
+oxc_allocator = "0.115"
+oxc_ast = "0.115"
+oxc_span = "0.115"

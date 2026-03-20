@@ -1,0 +1,5 @@
+package test:lib-mocha;
+
+world lib-mocha {
+  export run: func() -> string;
+}

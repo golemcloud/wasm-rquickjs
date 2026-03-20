@@ -2,12 +2,19 @@ use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 
 pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
     resolver
+        .with_module("__wasm_rquickjs_builtin/internal/http")
+        .with_module("internal/http")
         .with_module("__wasm_rquickjs_builtin/internal/errors")
+        .with_module("__wasm_rquickjs_builtin/internal/fs/utils")
+        .with_module("__wasm_rquickjs_builtin/internal/fs/shared")
         .with_module("__wasm_rquickjs_builtin/internal/normalize_encoding")
+        .with_module("__wasm_rquickjs_builtin/internal/url")
         .with_module("__wasm_rquickjs_builtin/internal/util")
         .with_module("__wasm_rquickjs_builtin/internal/validators")
         .with_module("__wasm_rquickjs_builtin/internal/streams/add-abort-signal")
+        .with_module("__wasm_rquickjs_builtin/internal/binding/util_native")
         .with_module("__wasm_rquickjs_builtin/internal/binding/util")
+        .with_module("__wasm_rquickjs_builtin/internal/test/binding")
         .with_module("__wasm_rquickjs_builtin/internal/streams/buffer_list")
         .with_module("__wasm_rquickjs_builtin/internal/streams/compose")
         .with_module("__wasm_rquickjs_builtin/internal/streams/destroy")
@@ -26,17 +33,35 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/util/debuglog")
         .with_module("__wasm_rquickjs_builtin/internal/util/inspect")
         .with_module("__wasm_rquickjs_builtin/internal/util/types")
+        .with_module("__wasm_rquickjs_builtin/internal/webstreams/util")
 }
 
 pub fn module_loader() -> BuiltinLoader {
     BuiltinLoader::default()
         .with_module(
+            "__wasm_rquickjs_builtin/internal/http",
+            include_str!("http.js"),
+        )
+        .with_module("internal/http", include_str!("http.js"))
+        .with_module(
             "__wasm_rquickjs_builtin/internal/errors",
             include_str!("errors.js"),
         )
         .with_module(
+            "__wasm_rquickjs_builtin/internal/fs/utils",
+            include_str!("fs/utils.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/fs/shared",
+            include_str!("fs/shared.js"),
+        )
+        .with_module(
             "__wasm_rquickjs_builtin/internal/normalize_encoding",
             include_str!("normalize_encoding.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/url",
+            include_str!("url.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/util",
@@ -49,6 +74,10 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/binding/util",
             include_str!("binding/util.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/test/binding",
+            include_str!("test/binding.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/streams/add-abort-signal",
@@ -125,5 +154,9 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/util/types",
             include_str!("util/types.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/webstreams/util",
+            include_str!("webstreams_util.js"),
         )
 }

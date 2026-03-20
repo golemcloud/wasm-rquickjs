@@ -1,0 +1,5 @@
+package test:lib-zod;
+
+world lib-zod {
+  export run: func() -> string;
+}

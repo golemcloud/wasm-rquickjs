@@ -4,7 +4,7 @@ use crate::common::{FeatureCombination, collect_example_paths};
 use camino::Utf8Path;
 use std::process::Command;
 use test_r::core::{DynamicTestRegistration, TestProperties};
-use test_r::test_gen;
+use test_r::{add_test, test_gen};
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 
 #[allow(dead_code)]
@@ -12,25 +12,23 @@ mod common;
 
 #[test_gen]
 fn gen_compilation_tests(r: &mut DynamicTestRegistration) {
-    for example_path in collect_example_paths().unwrap() {
+    for example_path in collect_example_paths(&["examples/compilation"]).unwrap() {
         for feature_combination in FeatureCombination::all() {
             let example_path_clone = example_path.clone();
             let example_name = example_path.file_name().unwrap().to_string();
             let label = feature_combination.label();
 
-            r.add_sync_test(
+            add_test!(
+                r,
                 format!("{example_name}_{label}"),
                 TestProperties {
                     ..TestProperties::unit_test()
                 },
-                move |_deps| {
+                || {
                     let example_name = example_name.clone();
                     let example_path_clone = example_path_clone.clone();
-                    let gen_fn = move || {
-                        compilation_test(&example_name, &example_path_clone, feature_combination)
-                    };
-                    gen_fn()
-                },
+                    compilation_test(&example_name, &example_path_clone, feature_combination)
+                }
             );
         }
     }

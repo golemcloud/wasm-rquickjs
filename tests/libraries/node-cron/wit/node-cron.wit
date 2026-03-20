@@ -1,0 +1,5 @@
+package test:lib-node-cron;
+
+world lib-node-cron {
+  export run: func() -> string;
+}

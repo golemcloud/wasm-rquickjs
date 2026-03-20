@@ -1,0 +1,5 @@
+package test:lib-envalid;
+
+world lib-envalid {
+  export run: func() -> string;
+}

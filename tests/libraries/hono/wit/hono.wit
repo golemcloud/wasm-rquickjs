@@ -1,0 +1,5 @@
+package test:lib-hono;
+
+world lib-hono {
+  export run: func() -> string;
+}

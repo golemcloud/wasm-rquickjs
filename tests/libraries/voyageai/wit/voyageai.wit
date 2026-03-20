@@ -1,0 +1,5 @@
+package test:lib-voyageai;
+
+world lib-voyageai {
+  export run: func() -> string;
+}

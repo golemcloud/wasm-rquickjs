@@ -1,0 +1,1 @@
+"PASS: driver and session can be created without immediate network I/O"

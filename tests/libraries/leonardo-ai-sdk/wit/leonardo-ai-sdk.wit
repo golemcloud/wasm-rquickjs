@@ -1,0 +1,5 @@
+package test:lib-leonardo-ai-sdk;
+
+world lib-leonardo-ai-sdk {
+  export run: func() -> string;
+}

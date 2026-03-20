@@ -14,76 +14,129 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  WASI_SDK_VERSION: "25"
+  WASI_SDK_PATH: /opt/wasi-sdk
 
 jobs:
   build:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v3
-      - uses: useblacksmith/rust-cache@v3
+      - uses: actions/checkout@v4
         with:
-          prefix-key: v1-rust
-          shared-key: debug
-          cache-all-crates: true
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - uses: cargo-bins/cargo-binstall@main
-      - name: Install cargo-component
-        run: cargo binstall --force --locked cargo-component@0.21.1
+          submodules: true
+      - uses: ./.github/actions/setup
       - name: Check formatting
         run: cargo fmt -- --check
       - name: Clippy
         run: cargo clippy -- -Dwarnings
       - name: Build
         run: cargo build --all-features --all-targets
-  test:
-    needs: [ build ]
+
+  test-other:
+    needs: [build]
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v3
-      - uses: useblacksmith/rust-cache@v3
+      - uses: actions/checkout@v4
         with:
-          prefix-key: v1-rust
-          shared-key: debug
-          cache-all-crates: true
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - uses: cargo-bins/cargo-binstall@main
-      - name: Install cargo-component
-        run: cargo binstall --force --locked cargo-component@0.21.1
-      - name: Tests
-        run: cargo test -- --nocapture --test-threads=1 --report-time
+          submodules: true
+      - uses: ./.github/actions/setup
+      - name: Compilation, DTS and error tests
+        run: cargo test --test compilation --test dts --test errors -- --nocapture --report-time --format ctrf --logfile target/ctrf.json
       - name: Publish Test Report
-        uses: mikepenz/action-junit-report@v5
-        if: success() || failure() # always run even if the previous step fails
+        uses: ctrf-io/github-test-reporter@v1
+        if: always()
         with:
-          report_paths: '**/target/report-*.xml'
-          detailed_summary: true
-          include_passed: true
+          report-path: "**/target/ctrf-*.json"
+          upload-artifact: "true"
+          artifact-name: test-other-report
+          summary: true
+          summary-report: true
+          failed-report: true
+          slowest-report: true
+          github-report: true
+          flaky-report: true
+          collapse-large-reports: true
+          exit-on-no-files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-runtime:
+    needs: [build]
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup
+      - name: Runtime tests (group ${{ matrix.group }}/8)
+        run: cargo test --test runtime -- --nocapture --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+      - name: Publish Test Report
+        uses: ctrf-io/github-test-reporter@v1
+        if: always()
+        with:
+          report-path: "**/target/ctrf-*.json"
+          upload-artifact: "true"
+          artifact-name: test-runtime-group-${{ matrix.group }}-report
+          summary: true
+          summary-report: true
+          failed-report: true
+          slowest-report: true
+          github-report: true
+          flaky-report: true
+          collapse-large-reports: true
+          exit-on-no-files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-node-compat:
+    needs: [build]
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup
+      - name: Vendor Node.js test suite
+        run: bash tests/node_compat/vendor.sh
+      - name: Node compat tests (shard ${{ matrix.shard }}/8)
+        run: cargo test --test node_compat -- --nocapture --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
+      - name: Publish Test Report
+        uses: ctrf-io/github-test-reporter@v1
+        if: always()
+        with:
+          report-path: "**/target/ctrf-*.json"
+          upload-artifact: "true"
+          artifact-name: test-node-compat-shard-${{ matrix.shard }}-report
+          summary: true
+          summary-report: true
+          failed-report: true
+          slowest-report: true
+          github-report: true
+          flaky-report: true
+          collapse-large-reports: true
+          exit-on-no-files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   publish:
-    needs: [ test ]
+    needs: [test-other, test-runtime, test-node-compat]
     if: "startsWith(github.ref, 'refs/tags/v')"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - uses: ./.github/actions/setup
         with:
-          toolchain: stable
-          override: true
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          cache-key: release
       - id: get_version
         uses: battila7/get-version-action@v2
       - name: Publish crates

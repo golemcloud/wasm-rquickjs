@@ -5,6 +5,7 @@ use url::Url;
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     use rquickjs::class::Trace;
+    use rquickjs::convert::Coerced;
     use rquickjs::prelude::*;
     use rquickjs::{Ctx, Exception, JsLifetime, Value};
     use url::Url;
@@ -18,19 +19,24 @@ pub mod native_module {
 
     #[rquickjs::methods(rename_all = "camelCase")]
     impl JsUrl {
-         #[qjs(constructor)]
-         pub fn new(url: String, base_url: Opt<Option<String>>, ctx: Ctx<'_>) -> rquickjs::Result<Self> {
-             let base = Opt(base_url.0.flatten());
-             
-             match super::parse_url(url, base) {
-                 Ok(url) => Ok(Self { url }),
-                 Err(err) => Err(ctx.throw(
-                     Exception::from_message(ctx.clone(), &format!("Invalid URL: {err}"))
-                         .unwrap()
-                         .into(),
-                 )),
-             }
-         }
+        #[qjs(constructor)]
+        pub fn new(
+            url: Coerced<String>,
+            base_url: Opt<Option<Coerced<String>>>,
+            ctx: Ctx<'_>,
+        ) -> rquickjs::Result<Self> {
+            let url = url.0;
+            let base = Opt(base_url.0.flatten().map(|c| c.0));
+
+            match super::parse_url(url, base) {
+                Ok(url) => Ok(Self { url }),
+                Err(err) => Err(ctx.throw(
+                    Exception::from_message(ctx.clone(), &format!("Invalid URL: {err}"))
+                        .unwrap()
+                        .into(),
+                )),
+            }
+        }
 
         /// The hash property of the URL interface is a string containing a "#" followed by the fragment identifier of the URL.
         /// If the URL does not have a fragment identifier, this property contains an empty string, "".
@@ -43,7 +49,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "hash")]
-        pub fn set_hash(&mut self, value: String) {
+        pub fn set_hash(&mut self, value: Coerced<String>) {
+            let value = value.0;
             if value.is_empty() {
                 self.url.set_fragment(None);
             } else if let Some(s) = value.strip_prefix('#') {
@@ -65,12 +72,13 @@ pub mod native_module {
                     host.to_string()
                 }
             } else {
-                "".to_string()
+                String::new()
             }
         }
 
         #[qjs(set, enumerable, rename = "host")]
-        pub fn set_host(&mut self, value: String, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+        pub fn set_host(&mut self, value: Coerced<String>, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+            let value = value.0;
             if value.is_empty() {
                 let _ = self.url.set_host(None);
                 Ok(())
@@ -120,7 +128,12 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "hostname")]
-        pub fn set_hostname(&mut self, value: String, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+        pub fn set_hostname(
+            &mut self,
+            value: Coerced<String>,
+            ctx: Ctx<'_>,
+        ) -> rquickjs::Result<()> {
+            let value = value.0;
             if let Err(err) = self.url.set_host(Some(&value)) {
                 Err(ctx.throw(
                     Exception::from_message(
@@ -142,7 +155,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "href")]
-        pub fn set_href(&mut self, value: String, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+        pub fn set_href(&mut self, value: Coerced<String>, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+            let value = value.0;
             match Url::parse(&value) {
                 Ok(url) => {
                     self.url = url;
@@ -172,7 +186,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "password")]
-        pub fn set_password(&mut self, value: String) {
+        pub fn set_password(&mut self, value: Coerced<String>) {
+            let value = value.0;
             if value.is_empty() {
                 let _ = self.url.set_password(None);
             } else {
@@ -188,7 +203,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "pathname")]
-        pub fn set_pathname(&mut self, value: String) {
+        pub fn set_pathname(&mut self, value: Coerced<String>) {
+            let value = value.0;
             self.url.set_path(&value);
         }
 
@@ -201,7 +217,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "port")]
-        pub fn set_port(&mut self, value: String, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+        pub fn set_port(&mut self, value: Coerced<String>, ctx: Ctx<'_>) -> rquickjs::Result<()> {
+            let value = value.0;
             if value.is_empty() {
                 let _ = self.url.set_port(None);
                 Ok(())
@@ -230,7 +247,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "protocol")]
-        pub fn set_protocol(&mut self, value: String) {
+        pub fn set_protocol(&mut self, value: Coerced<String>) {
+            let value = value.0;
             let _ = self.url.set_scheme(value.trim_end_matches(':'));
         }
 
@@ -246,7 +264,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "search")]
-        pub fn set_search(&mut self, value: String) {
+        pub fn set_search(&mut self, value: Coerced<String>) {
+            let value = value.0;
             if value.is_empty() {
                 self.url.set_query(None);
             } else if let Some(s) = value.strip_prefix('?') {
@@ -264,7 +283,8 @@ pub mod native_module {
         }
 
         #[qjs(set, enumerable, rename = "username")]
-        pub fn set_username(&mut self, value: String) {
+        pub fn set_username(&mut self, value: Coerced<String>) {
+            let value = value.0;
             let _ = self.url.set_username(&value);
         }
 
@@ -280,23 +300,59 @@ pub mod native_module {
         }
 
         #[qjs(static, rename = "canParse")]
-        pub fn can_parse(url: String, base: Opt<String>) -> bool {
+        pub fn can_parse(url: Coerced<String>, base: Opt<Coerced<String>>) -> bool {
+            let url = url.0;
+            let base = Opt(base.0.map(|c| c.0));
             super::parse_url(url, base).is_ok()
         }
 
         #[qjs(static, rename = "createObjectURL")]
-        pub fn create_object_url(_object: Value<'_>) -> String {
-            todo!()
+        pub fn create_object_url<'js>(
+            object: Value<'js>,
+            ctx: Ctx<'js>,
+        ) -> rquickjs::Result<String> {
+            if !object.is_object() {
+                return Err(Exception::throw_type(
+                    &ctx,
+                    "The argument must be an instance of Blob",
+                ));
+            }
+            let id = uuid::Uuid::new_v4().to_string();
+            let url = format!("blob:nodedata:{id}");
+            // Store the blob in a global registry
+            let global = ctx.globals();
+            let registry: rquickjs::Object<'js> = global
+                .get::<_, rquickjs::Object>("__blobURLRegistry")
+                .unwrap_or_else(|_| {
+                    let obj = rquickjs::Object::new(ctx.clone()).unwrap();
+                    global.set("__blobURLRegistry", obj.clone()).unwrap();
+                    obj
+                });
+            registry.set(&url as &str, object)?;
+            Ok(url)
         }
 
         #[qjs(static, rename = "parse")]
-        pub fn parse(url: String, base: Opt<String>) -> Option<JsUrl> {
+        pub fn parse(url: Coerced<String>, base: Opt<Coerced<String>>) -> Option<JsUrl> {
+            let url = url.0;
+            let base = Opt(base.0.map(|c| c.0));
             super::parse_url(url, base).map(|url| Self { url }).ok()
         }
 
         #[qjs(static, rename = "revokeObjectURL")]
-        pub fn revoke_object_url(_object_url: String) {
-            todo!()
+        pub fn revoke_object_url(
+            object_url: Coerced<String>,
+            ctx: Ctx<'_>,
+        ) -> rquickjs::Result<()> {
+            let object_url = object_url.0;
+            let global = ctx.globals();
+            if let Ok(registry) = global.get::<_, rquickjs::Object>("__blobURLRegistry") {
+                registry.set(
+                    &object_url as &str,
+                    rquickjs::Value::new_undefined(ctx.clone()),
+                )?;
+            }
+            Ok(())
         }
     }
 }
@@ -334,18 +390,16 @@ fn parse_url_with_base(
     }
 }
 
-// JS functions for the URL API implementation
+// JS implementation: URLSearchParams polyfill + node:url APIs
 pub const URL_JS: &str = include_str!("url.js");
+
+// Re-export for aliases
+pub const REEXPORT_JS: &str = r#"export * from 'node:url'; export { default } from 'node:url';"#;
 
 // JS code wiring the URL module into the global context
 pub const WIRE_JS: &str = r#"
-        import * as __wasm_rquickjs_url_native from '__wasm_rquickjs_builtin/url_native';
-        import * as __wasm_rquickjs_url from '__wasm_rquickjs_builtin/url';
-        globalThis.URL = __wasm_rquickjs_url_native.URL;
-        globalThis.URLSearchParams = __wasm_rquickjs_url.URLSearchParams;
-        Object.defineProperty(globalThis.URL.prototype, "searchParams", {
-            get() { return new globalThis.URLSearchParams(this.search); },
-            enumerable: true,
-            configurable: true
-        });
+        import { URL as __wasm_rquickjs_URL } from '__wasm_rquickjs_builtin/url_native';
+        import { URLSearchParams as __wasm_rquickjs_USP } from '__wasm_rquickjs_builtin/url';
+        globalThis.URL = __wasm_rquickjs_URL;
+        globalThis.URLSearchParams = __wasm_rquickjs_USP;
     "#;

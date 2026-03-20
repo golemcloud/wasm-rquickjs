@@ -1,0 +1,5 @@
+package test:lib-qdrant-js-client-rest;
+
+world lib-qdrant-js-client-rest {
+  export run: func() -> string;
+}

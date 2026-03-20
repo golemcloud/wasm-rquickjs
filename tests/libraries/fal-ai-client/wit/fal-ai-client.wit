@@ -1,0 +1,5 @@
+package test:lib-fal-ai-client;
+
+world lib-fal-ai-client {
+  export run: func() -> string;
+}

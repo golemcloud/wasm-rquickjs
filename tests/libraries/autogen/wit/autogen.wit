@@ -1,0 +1,5 @@
+package test:lib-autogen;
+
+world lib-autogen {
+  export run: func() -> string;
+}

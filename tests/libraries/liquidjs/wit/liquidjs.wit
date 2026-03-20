@@ -1,0 +1,5 @@
+package test:lib-liquidjs;
+
+world lib-liquidjs {
+  export run: func() -> string;
+}

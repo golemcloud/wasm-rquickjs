@@ -1,0 +1,5 @@
+package test:lib-huggingface-hub;
+
+world lib-huggingface-hub {
+  export run: func() -> string;
+}

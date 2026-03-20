@@ -1,0 +1,5 @@
+package test:lib-express-rate-limit;
+
+world lib-express-rate-limit {
+  export run: func() -> string;
+}

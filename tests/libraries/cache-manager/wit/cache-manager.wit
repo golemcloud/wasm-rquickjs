@@ -1,0 +1,5 @@
+package test:lib-cache-manager;
+
+world lib-cache-manager {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-effect-sql;
+
+world lib-effect-sql {
+  export run: func() -> string;
+}

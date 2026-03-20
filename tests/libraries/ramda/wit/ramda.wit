@@ -1,0 +1,5 @@
+package test:lib-ramda;
+
+world lib-ramda {
+  export run: func() -> string;
+}

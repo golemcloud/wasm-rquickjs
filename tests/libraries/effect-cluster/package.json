@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "dependencies": {
+    "@effect/cluster": "^0.57.0",
+    "@effect/platform": "^0.95.0",
+    "@effect/rpc": "^0.74.0",
+    "@effect/sql": "^0.50.0",
+    "@effect/workflow": "^0.17.0",
+    "effect": "^3.20.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.0.0"
+  }
+}

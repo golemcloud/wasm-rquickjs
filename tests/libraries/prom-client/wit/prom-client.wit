@@ -1,0 +1,5 @@
+package test:lib-prom-client;
+
+world lib-prom-client {
+  export run: func() -> string;
+}

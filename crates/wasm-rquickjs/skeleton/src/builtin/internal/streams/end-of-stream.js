@@ -2,7 +2,21 @@
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 // deno-lint-ignore-file
 
-import { AbortError, ERR_STREAM_PREMATURE_CLOSE } from "__wasm_rquickjs_builtin/internal/errors";
+import {
+    AbortError,
+    ERR_INVALID_ARG_TYPE,
+    ERR_STREAM_PREMATURE_CLOSE,
+} from "__wasm_rquickjs_builtin/internal/errors";
+import {
+    isNodeStream,
+    isReadableNodeStream,
+    isReadableStream,
+    isWritableNodeStream,
+    isWritableStream,
+    isClosed,
+    isWritableFinished,
+    isReadableFinished,
+} from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { once } from "__wasm_rquickjs_builtin/internal/util";
 import {
     validateAbortSignal,
@@ -26,33 +40,7 @@ function isServerResponse(stream) {
 }
 
 
-function isReadable(stream) {
-    return typeof stream.readable === "boolean" ||
-        typeof stream.readableEnded === "boolean" ||
-        !!stream._readableState;
-}
-
-function isWritable(stream) {
-    return typeof stream.writable === "boolean" ||
-        typeof stream.writableEnded === "boolean" ||
-        !!stream._writableState;
-}
-
-function isWritableFinished(stream) {
-    if (stream.writableFinished) return true;
-    const wState = stream._writableState;
-    if (!wState || wState.errored) return false;
-    return wState.finished || (wState.ended && wState.length === 0);
-}
-
 const nop = () => { };
-
-function isReadableEnded(stream) {
-    if (stream.readableEnded) return true;
-    const rState = stream._readableState;
-    if (!rState || rState.errored) return false;
-    return rState.endEmitted || (rState.ended && rState.length === 0);
-}
 
 
 export function eos(stream, options, callback) {
@@ -69,10 +57,20 @@ export function eos(stream, options, callback) {
 
     callback = once(callback);
 
-    const readable = options.readable ||
-        (options.readable !== false && isReadable(stream));
-    const writable = options.writable ||
-        (options.writable !== false && isWritable(stream));
+    if (isReadableStream(stream) || isWritableStream(stream)) {
+        return eosWeb(stream, options, callback);
+    }
+
+    if (!isNodeStream(stream)) {
+        throw new ERR_INVALID_ARG_TYPE(
+            "stream",
+            ["ReadableStream", "WritableStream", "Stream"],
+            stream,
+        );
+    }
+
+    const readable = options.readable ?? isReadableNodeStream(stream);
+    const writable = options.writable ?? isWritableNodeStream(stream);
 
     const wState = stream._writableState;
     const rState = stream._readableState;
@@ -90,12 +88,11 @@ export function eos(stream, options, callback) {
         state.autoDestroy &&
         state.emitClose &&
         state.closed === false &&
-        isReadable(stream) === readable &&
-        isWritable(stream) === writable
+        isReadableNodeStream(stream) === readable &&
+        isWritableNodeStream(stream) === writable
     );
 
-    let writableFinished = stream.writableFinished ||
-        (wState && wState.finished);
+    let writableFinished = isWritableFinished(stream, false);
     const onfinish = () => {
         writableFinished = true;
         // Stream should not be destroyed here. If it is that
@@ -104,13 +101,12 @@ export function eos(stream, options, callback) {
         if (stream.destroyed) willEmitClose = false;
 
         if (willEmitClose && (!stream.readable || readable)) return;
-        if (!readable || readableEnded) callback.call(stream);
+        if (!readable || readableFinished) callback.call(stream);
     };
 
-    let readableEnded = stream.readableEnded ||
-        (rState && rState.endEmitted);
+    let readableFinished = isReadableFinished(stream, false);
     const onend = () => {
-        readableEnded = true;
+        readableFinished = true;
         // Stream should not be destroyed here. If it is that
         // means that user space is doing something differently and
         // we cannot trust willEmitClose.
@@ -125,13 +121,17 @@ export function eos(stream, options, callback) {
     };
 
     const onclose = () => {
-        if (readable && !readableEnded) {
-            if (!isReadableEnded(stream)) {
+        const errored = (wState && wState.errored) || (rState && rState.errored);
+        if (errored && typeof errored !== 'boolean') {
+            return callback.call(stream, errored);
+        }
+        if (readable && !readableFinished && isReadableNodeStream(stream, true)) {
+            if (!isReadableFinished(stream, false)) {
                 return callback.call(stream, new ERR_STREAM_PREMATURE_CLOSE());
             }
         }
         if (writable && !writableFinished) {
-            if (!isWritableFinished(stream)) {
+            if (!isWritableFinished(stream, false)) {
                 return callback.call(stream, new ERR_STREAM_PREMATURE_CLOSE());
             }
         }
@@ -164,31 +164,12 @@ export function eos(stream, options, callback) {
     if (options.error !== false) stream.on("error", onerror);
     stream.on("close", onclose);
 
-    // _closed is for OutgoingMessage which is not a proper Writable.
-    const closed = (!wState && !rState && stream._closed === true) || (
-        (wState && wState.closed) ||
-        (rState && rState.closed) ||
-        (wState && wState.errorEmitted) ||
-        (rState && rState.errorEmitted) ||
-        (rState && stream.req && stream.aborted) ||
-        (
-            (!wState || !willEmitClose || typeof wState.closed !== "boolean") &&
-            (!rState || !willEmitClose || typeof rState.closed !== "boolean") &&
-            (!writable || (wState && wState.finished)) &&
-            (!readable || (rState && rState.endEmitted))
-        )
-    );
+    let closed = isClosed(stream);
 
     if (closed) {
-        // TODO(ronag): Re-throw error if errorEmitted?
-        // TODO(ronag): Throw premature close as if finished was called?
-        // before being closed? i.e. if closed but not errored, ended or finished.
-        // TODO(ronag): Throw some kind of error? Does it make sense
-        // to call finished() on a "finished" stream?
-        // TODO(ronag): willEmitClose?
-        nextTick(() => {
-            callback();
-        });
+        // Route through onclose to detect premature close
+        // (e.g., destroyed without emitting 'end').
+        nextTick(onclose);
     }
 
     const cleanup = () => {
@@ -226,6 +207,58 @@ export function eos(stream, options, callback) {
     }
 
     return cleanup;
+}
+
+function eosWeb(stream, options, callback) {
+    let isAborted = false;
+    let abort = nop;
+
+    if (options.signal) {
+        abort = () => {
+            isAborted = true;
+            callback.call(stream, new AbortError());
+        };
+        if (options.signal.aborted) {
+            nextTick(abort);
+        } else {
+            const originalCallback = callback;
+            options.signal.addEventListener('abort', abort);
+            callback = once((...args) => {
+                options.signal.removeEventListener('abort', abort);
+                originalCallback.apply(stream, args);
+            });
+        }
+    }
+
+    const resolverFn = (...args) => {
+        if (!isAborted) {
+            nextTick(() => callback.apply(stream, args));
+        }
+    };
+
+    const currentState = stream._state;
+    if (currentState === 'closed') {
+        nextTick(resolverFn);
+    } else if (currentState === 'errored') {
+        nextTick(() => resolverFn(stream._storedError));
+    } else {
+        let internalState = currentState;
+        Object.defineProperty(stream, '_state', {
+            get() { return internalState; },
+            set(val) {
+                internalState = val;
+                if (val === 'closed') {
+                    resolverFn();
+                } else if (val === 'errored') {
+                    nextTick(() => resolverFn(stream._storedError));
+                }
+            },
+            configurable: true,
+            enumerable: true,
+        });
+    }
+
+    return nop;
 }
 
 export default eos;

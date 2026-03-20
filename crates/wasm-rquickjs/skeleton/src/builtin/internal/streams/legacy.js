@@ -11,6 +11,33 @@ function Stream(opts) {
 Object.setPrototypeOf(Stream.prototype, EventEmitter.prototype);
 Object.setPrototypeOf(Stream, EventEmitter);
 
+// Override eventNames to filter out pre-initialized undefined slots.
+// Stream constructors pre-create well-known event properties on _events
+// to establish a stable property insertion order. This override ensures
+// only events with actual listeners are returned.
+Stream.prototype.eventNames = function eventNames() {
+    var names = [];
+    if (this._eventsCount > 0) {
+        var keys = Object.keys(this._events);
+        for (var i = 0; i < keys.length; i++) {
+            var val = this._events[keys[i]];
+            if (typeof val === 'function' || (Array.isArray(val) && val.length > 0)) {
+                names.push(keys[i]);
+            }
+        }
+        if (Object.getOwnPropertySymbols) {
+            var symbols = Object.getOwnPropertySymbols(this._events);
+            for (var j = 0; j < symbols.length; j++) {
+                var sval = this._events[symbols[j]];
+                if (typeof sval === 'function' || (Array.isArray(sval) && sval.length > 0)) {
+                    names.push(symbols[j]);
+                }
+            }
+        }
+    }
+    return names;
+};
+
 Stream.prototype.pipe = function (dest, options) {
     // deno-lint-ignore no-this-alias
     const source = this;

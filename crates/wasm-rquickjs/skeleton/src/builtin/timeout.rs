@@ -1,4 +1,4 @@
-use crate::internal::format_caught_error;
+use crate::internal::{format_caught_error, get_js_state};
 use rquickjs::function::Args;
 use rquickjs::{CatchResultExt, Ctx, Persistent, Value};
 
@@ -14,12 +14,13 @@ pub mod native_module {
     pub fn schedule(
         ctx: Ctx<'_>,
         code_or_fn: Persistent<Value<'static>>,
-        delay: Option<u32>,
+        delay: u32,
         periodic: bool,
         args: Persistent<Vec<Value<'static>>>,
     ) -> usize {
         let state = get_js_state();
-        let delay = delay.unwrap_or(0);
+
+        let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
 
         let (task, abort_handle) = abortable(super::scheduled_task(
             ctx.clone(),
@@ -27,39 +28,63 @@ pub mod native_module {
             delay,
             periodic,
             args,
+            key,
         ));
-
-        let key = state.last_abort_id.fetch_add(1, Ordering::Relaxed);
+        state.abort_handles.borrow_mut().insert(key, abort_handle);
         ctx.spawn(async move {
             let _ = task.await;
+            // Clean up after the task completes naturally
+            let state = get_js_state();
+            state.abort_handles.borrow_mut().remove(&key);
+            state.unrefed_timers.borrow_mut().remove(&key);
         });
-        state.abort_handles.borrow_mut().insert(key, abort_handle);
         key
     }
 
     #[rquickjs::function]
     pub fn clear_schedule(timeout_id: usize) {
         let state = get_js_state();
+        state.unrefed_timers.borrow_mut().remove(&timeout_id);
         let mut abort_handles = state.abort_handles.borrow_mut();
-        let handle = abort_handles
-            .remove(&timeout_id)
-            .expect("No such timeout ID");
-        handle.abort();
+        if let Some(handle) = abort_handles.remove(&timeout_id) {
+            handle.abort();
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn unref_schedule(timeout_id: usize) {
+        let state = get_js_state();
+        state.unrefed_timers.borrow_mut().insert(timeout_id);
+    }
+
+    #[rquickjs::function]
+    pub fn ref_schedule(timeout_id: usize) {
+        let state = get_js_state();
+        state.unrefed_timers.borrow_mut().remove(&timeout_id);
+    }
+
+    #[rquickjs::function]
+    pub fn ref_timer_count() -> usize {
+        let state = get_js_state();
+        let total = state.abort_handles.borrow().len();
+        let unrefed = state.unrefed_timers.borrow().len();
+        total.saturating_sub(unrefed)
     }
 }
 
-// JS functions for the console implementation
+// JS functions for the timeout implementation
 pub const TIMEOUT_JS: &str = include_str!("timeout.js");
 
-// JS code wiring the console module into the global context
+// JS code wiring the timeout module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_timeout from '__wasm_rquickjs_builtin/timeout';
         globalThis.setTimeout = __wasm_rquickjs_timeout.setTimeout;
         globalThis.setImmediate = __wasm_rquickjs_timeout.setImmediate;
         globalThis.setInterval = __wasm_rquickjs_timeout.setInterval;
         globalThis.clearTimeout = __wasm_rquickjs_timeout.clearTimeout;
-        globalThis.clearInterval = __wasm_rquickjs_timeout.clearTimeout;
-        globalThis.clearImmediate = __wasm_rquickjs_timeout.clearTimeout;
+        globalThis.clearInterval = __wasm_rquickjs_timeout.clearInterval;
+        globalThis.clearImmediate = __wasm_rquickjs_timeout.clearImmediate;
+        globalThis.__wasm_rquickjs_ref_timer_count = __wasm_rquickjs_timeout.getRefTimerCount;
     "#;
 
 async fn scheduled_task(
@@ -68,28 +93,30 @@ async fn scheduled_task(
     delay: u32,
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
+    timer_key: usize,
 ) {
-    if delay == 0 {
+    let duration = wstd::time::Duration::from_millis(delay as u64);
+
+    loop {
+        wstd::task::sleep(duration).await;
+
         run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
             .catch(&ctx)
             .unwrap_or_else(|e| {
-                panic!("Failed to run scheduled task:\n{}", format_caught_error(e))
+                eprintln!(
+                    "Timer callback error escaped JS uncaught handler: {}",
+                    format_caught_error(e)
+                )
             });
-    } else {
-        let duration = wstd::time::Duration::from_millis(delay as u64);
 
-        loop {
-            wstd::task::sleep(duration).await;
+        if !periodic {
+            break;
+        }
 
-            run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone())
-                .catch(&ctx)
-                .unwrap_or_else(|e| {
-                    panic!("Failed to run scheduled task:\n{}", format_caught_error(e))
-                });
-
-            if !periodic {
-                break;
-            }
+        // Check if the timer was cancelled during the callback
+        let state = get_js_state();
+        if !state.abort_handles.borrow().contains_key(&timer_key) {
+            break;
         }
     }
 }
@@ -107,11 +134,9 @@ fn run_scheduled_task(
         args.push_args(&restored_args)?;
         func.call_arg(args)
     } else if let Some(code) = restored_code_or_fn.as_string() {
-        if !restored_args.is_empty() {
-            panic!("Passing arguments to scheduled code snippets is not supported");
-        }
         ctx.eval(code.to_string()?)
     } else {
-        panic!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
+        eprintln!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
+        Ok(())
     }
 }

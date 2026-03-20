@@ -1,0 +1,5 @@
+package test:lib-playht;
+
+world lib-playht {
+  export run: func() -> string;
+}

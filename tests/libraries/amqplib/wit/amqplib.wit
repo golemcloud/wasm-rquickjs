@@ -1,0 +1,5 @@
+package test:lib-amqplib;
+
+world lib-amqplib {
+  export run: func() -> string;
+}

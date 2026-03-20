@@ -1,0 +1,5 @@
+package test:lib-temporalio-client;
+
+world lib-temporalio-client {
+  export run: func() -> string;
+}

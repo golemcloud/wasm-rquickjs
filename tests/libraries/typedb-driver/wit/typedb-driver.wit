@@ -1,0 +1,5 @@
+package test:lib-typedb-driver;
+
+world lib-typedb-driver {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-langchain-google-genai;
+
+world lib-langchain-google-genai {
+  export run: func() -> string;
+}

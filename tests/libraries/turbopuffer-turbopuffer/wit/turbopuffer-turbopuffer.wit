@@ -1,0 +1,5 @@
+package test:lib-turbopuffer-turbopuffer;
+
+world lib-turbopuffer-turbopuffer {
+  export run: func() -> string;
+}

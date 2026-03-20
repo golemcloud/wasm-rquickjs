@@ -1,0 +1,47 @@
+
+thread '<unnamed>' (1) panicked at src/internal.rs:1738:41:
+Exception during awaiting call result for run:
+JavaScript error: [NDR7] Driver Error: Unable to connect to TypeDB server.
+Stack:
+    at TypeDBDriverError (bundle/script_module:30282:42)
+    at <anonymous> (bundle/script_module:64540:33)
+    at onReceiveStatus (bundle/script_module:39914:78)
+    at call (native)
+    at onReceiveStatus (bundle/script_module:39647:147)
+    at call (native)
+    at onReceiveStatus (bundle/script_module:39610:187)
+    at <anonymous> (bundle/script_module:59399:95)
+    at apply (native)
+    at __drainNextTickQueue (node:process:332:34)
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: failed to run main module `/Users/vigoo/projects/golem/wasm-rquickjs/tmp/lib-test-typedb-driver-int-01/target/wasm32-wasip1/debug/lib_typedb_driver.wasm`
+
+Caused by:
+    0: error while executing at wasm backtrace:
+           0: 0xf2d6f8 - lib_typedb_driver.wasm!abort
+           1: 0xf24397 - lib_typedb_driver.wasm!std::sys::pal::wasi::helpers::abort_internal::h55c751025c93bbd8
+           2: 0xf1c6d5 - lib_typedb_driver.wasm!std::process::abort::h52a756c95aa1ed34
+           3: 0xf1c751 - lib_typedb_driver.wasm!__rustc[4425a7e20b4c8619]::__rust_abort
+           4: 0xf1c505 - lib_typedb_driver.wasm!__rustc[4425a7e20b4c8619]::__rust_start_panic
+           5: 0xf1c528 - lib_typedb_driver.wasm!__rustc[4425a7e20b4c8619]::rust_panic
+           6: 0xf2664a - lib_typedb_driver.wasm!std::panicking::panic_with_hook::h046cb6b5bb1ae87d
+           7: 0xf24866 - lib_typedb_driver.wasm!std::panicking::panic_handler::{{closure}}::h8c2da803f45c255c
+           8: 0xf1c840 - lib_typedb_driver.wasm!std::sys::backtrace::__rust_end_short_backtrace::h4575429eed93cb20
+           9: 0xf1c834 - lib_typedb_driver.wasm!__rustc[4425a7e20b4c8619]::rust_begin_unwind
+          10: 0xf3e8bb - lib_typedb_driver.wasm!core::panicking::panic_fmt::h45db92ad3ae804a3
+          11: 0x2ae405 - lib_typedb_driver.wasm!lib_typedb_driver::internal::call_js_export_internal::{{closure}}::{{closure}}::{{closure}}::h386599396f2ac518
+          12:  0x3c507 - lib_typedb_driver.wasm!<core::pin::Pin<P> as core::future::future::Future>::poll::h3115f132da309039
+          13: 0x46a80d - lib_typedb_driver.wasm!<rquickjs_core::context::async::future::WithFuture<F,R> as core::future::future::Future>::poll::h5da969d84b9a5834
+          14: 0x2aacde - lib_typedb_driver.wasm!lib_typedb_driver::internal::call_js_export_internal::{{closure}}::h16c41a8b0df6bebc
+          15: 0x2aaa44 - lib_typedb_driver.wasm!lib_typedb_driver::internal::call_js_export::{{closure}}::h811f2bb291a7bd7e
+          16:  0x3acea - lib_typedb_driver.wasm!<lib_typedb_driver::Component as lib_typedb_driver::bindings::Guest>::run::{{closure}}::hffddf4c42612560f
+          17: 0x31a16a - lib_typedb_driver.wasm!<futures_concurrency::future::join::tuple::Join2<A,B> as core::future::future::Future>::poll::ha59d997d0d99e365
+          18: 0x2acdae - lib_typedb_driver.wasm!lib_typedb_driver::internal::async_exported_function::{{closure}}::h8b497942de1613d2
+          19: 0x53a093 - lib_typedb_driver.wasm!wstd::runtime::block_on::block_on::hd7636e66586cbbfe
+          20: 0x2acb30 - lib_typedb_driver.wasm!lib_typedb_driver::internal::async_exported_function::h0edbee08609482fc
+          21:  0xda76e - lib_typedb_driver.wasm!<lib_typedb_driver::Component as lib_typedb_driver::bindings::Guest>::run::hf21192b71ed37c43
+          22: 0x539c2e - lib_typedb_driver.wasm!lib_typedb_driver::bindings::_export_run_cabi::h5c7ce1e5e96e7219
+          23:  0xda7b7 - lib_typedb_driver.wasm!run
+       note: using the `WASMTIME_BACKTRACE_DETAILS=1` environment variable may show more debugging information
+    1: wasm trap: wasm `unreachable` instruction executed

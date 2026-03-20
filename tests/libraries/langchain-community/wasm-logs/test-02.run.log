@@ -1,0 +1,1 @@
+"PASS: BM25Retriever returns scored in-memory document matches"

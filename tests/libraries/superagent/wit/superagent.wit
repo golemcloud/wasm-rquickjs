@@ -1,0 +1,5 @@
+package test:lib-superagent;
+
+world lib-superagent {
+  export run: func() -> string;
+}

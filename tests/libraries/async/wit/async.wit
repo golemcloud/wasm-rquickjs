@@ -1,0 +1,5 @@
+package test:lib-async;
+
+world lib-async {
+  export run: func() -> string;
+}

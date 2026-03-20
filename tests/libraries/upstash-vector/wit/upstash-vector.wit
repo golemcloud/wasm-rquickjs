@@ -1,0 +1,5 @@
+package test:lib-upstash-vector;
+
+world lib-upstash-vector {
+  export run: func() -> string;
+}

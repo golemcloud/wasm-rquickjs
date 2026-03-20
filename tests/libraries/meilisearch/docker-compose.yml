@@ -1,0 +1,15 @@
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.15
+    ports:
+      - "17700:7700"
+    environment:
+      MEILI_MASTER_KEY: test-master-key
+      MEILI_NO_ANALYTICS: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "meilisearch --help >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    tmpfs:
+      - /meili_data

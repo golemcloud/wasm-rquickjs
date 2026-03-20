@@ -1,0 +1,13 @@
+services:
+  typesense:
+    image: typesense/typesense:29.0
+    command: --data-dir /data --api-key=xyz --enable-cors
+    ports:
+      - "18108:8108"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8108'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    tmpfs:
+      - /data

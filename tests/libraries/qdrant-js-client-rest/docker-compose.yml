@@ -1,0 +1,12 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    ports:
+      - "16333:6333"
+    healthcheck:
+      test: ["CMD", "/qdrant/qdrant", "--version"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    tmpfs:
+      - /qdrant/storage

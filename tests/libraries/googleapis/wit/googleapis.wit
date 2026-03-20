@@ -1,0 +1,5 @@
+package test:lib-googleapis;
+
+world lib-googleapis {
+  export run: func() -> string;
+}

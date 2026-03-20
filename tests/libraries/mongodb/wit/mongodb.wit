@@ -1,0 +1,5 @@
+package test:lib-mongodb;
+
+world lib-mongodb {
+  export run: func() -> string;
+}

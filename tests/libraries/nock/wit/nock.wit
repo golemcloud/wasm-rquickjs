@@ -1,0 +1,5 @@
+package test:lib-nock;
+
+world lib-nock {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-mysql2;
+
+world lib-mysql2 {
+  export run: func() -> string;
+}

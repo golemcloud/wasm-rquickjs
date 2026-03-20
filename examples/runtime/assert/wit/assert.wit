@@ -1,0 +1,17 @@
+package quickjs:assert;
+
+world assert {
+  export test-ok: func() -> bool;
+  export test-equal: func() -> bool;
+  export test-strict-equal: func() -> bool;
+  export test-deep-equal: func() -> bool;
+  export test-deep-strict-equal: func() -> bool;
+  export test-throws: func() -> bool;
+  export test-does-not-throw: func() -> bool;
+  export test-if-error: func() -> bool;
+  export test-match: func() -> bool;
+  export test-fail: func() -> bool;
+  export test-rejects: func() -> bool;
+  export test-strict-mode: func() -> bool;
+  export test-assertion-error: func() -> bool;
+}

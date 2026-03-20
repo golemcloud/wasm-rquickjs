@@ -1,0 +1,5 @@
+package test:lib-anthropic-ai-sdk;
+
+world lib-anthropic-ai-sdk {
+  export run: func() -> string;
+}

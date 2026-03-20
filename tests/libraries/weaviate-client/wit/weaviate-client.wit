@@ -1,0 +1,5 @@
+package test:lib-weaviate-client;
+
+world lib-weaviate-client {
+  export run: func() -> string;
+}

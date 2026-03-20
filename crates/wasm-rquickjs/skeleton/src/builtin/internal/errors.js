@@ -1,4 +1,320 @@
-import { inspect } from "__wasm_rquickjs_builtin/internal/util/inspect";
+import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
+
+// ---------------------------------------------------------------------------
+// V8-compatible CallSite objects
+// ---------------------------------------------------------------------------
+// Many npm packages (depd, source-map-support, etc.) rely on V8's structured
+// stack trace API: Error.captureStackTrace, Error.prepareStackTrace, and
+// CallSite objects with methods like getFileName(), getLineNumber(), etc.
+//
+// QuickJS produces plain string stack traces. We parse them into CallSite
+// objects so that libraries consuming the V8 API work correctly.
+// ---------------------------------------------------------------------------
+
+const _callSiteWithFnPattern = /^\s*at\s+(.+?)\s+\((.+):(\d+):(\d+)\)\s*$/;
+const _callSiteNoFnPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
+
+function _makeCallSite(functionName, fileName, lineNumber, columnNumber) {
+    return {
+        getThis() { return undefined; },
+        getTypeName() { return null; },
+        getFunction() { return undefined; },
+        getFunctionName() { return functionName || null; },
+        getMethodName() { return null; },
+        getFileName() { return fileName || null; },
+        getLineNumber() { return lineNumber | 0; },
+        getColumnNumber() { return columnNumber | 0; },
+        getEvalOrigin() { return undefined; },
+        isToplevel() { return true; },
+        isEval() { return false; },
+        isNative() { return false; },
+        isConstructor() { return false; },
+        isAsync() { return false; },
+        isPromiseAll() { return false; },
+        getPromiseIndex() { return null; },
+        getScriptNameOrSourceURL() { return fileName || null; },
+        toString() {
+            const name = functionName || '<anonymous>';
+            if (fileName) {
+                return `${name} (${fileName}:${lineNumber}:${columnNumber})`;
+            }
+            return name;
+        },
+    };
+}
+
+function _parseStackStringToCallSites(stackString) {
+    if (typeof stackString !== 'string') return [];
+    const lines = stackString.split('\n');
+    const sites = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        let m = line.match(_callSiteWithFnPattern);
+        if (m) {
+            sites.push(_makeCallSite(m[1], m[2], parseInt(m[3], 10), parseInt(m[4], 10)));
+            continue;
+        }
+        m = line.match(_callSiteNoFnPattern);
+        if (m) {
+            sites.push(_makeCallSite(null, m[1], parseInt(m[2], 10), parseInt(m[3], 10)));
+        }
+    }
+    return sites;
+}
+
+// Helper to create property descriptors immune to Object.prototype pollution.
+// Some libraries (e.g., test-assert-fail.js) set Object.prototype.get which
+// would leak into plain object descriptors and cause "Cannot both specify
+// accessors and a value or writable attribute" errors.
+function _dataDesc(value) {
+    const d = Object.create(null);
+    d.value = value;
+    d.writable = true;
+    d.configurable = true;
+    d.enumerable = false;
+    return d;
+}
+
+// Normalize `Error.prototype.stack` so deleting an instance stack works like
+// Node (i.e. `delete err.stack` makes subsequent `err.stack` reads undefined).
+const nativeErrorStackDescriptor = Object.getOwnPropertyDescriptor(Error.prototype, "stack");
+const NativeError = Error;
+const nativeErrorToString = Error.prototype.toString;
+const materializedErrorStacks = new WeakSet();
+
+function materializeOwnStack(errorInstance) {
+    if (!errorInstance || (typeof errorInstance !== "object" && typeof errorInstance !== "function")) {
+        return;
+    }
+
+    const own = Object.getOwnPropertyDescriptor(errorInstance, "stack");
+    if (own && Object.prototype.hasOwnProperty.call(own, "value") && own.configurable === true) {
+        materializedErrorStacks.add(errorInstance);
+        return;
+    }
+
+    let stackValue;
+    try {
+        if (own && typeof own.get === "function") {
+            stackValue = own.get.call(errorInstance);
+        } else if (nativeErrorStackDescriptor && typeof nativeErrorStackDescriptor.get === "function") {
+            stackValue = nativeErrorStackDescriptor.get.call(errorInstance);
+        } else if (nativeErrorStackDescriptor && Object.prototype.hasOwnProperty.call(nativeErrorStackDescriptor, "value")) {
+            stackValue = nativeErrorStackDescriptor.value;
+        }
+    } catch {
+        stackValue = undefined;
+    }
+
+    if (stackValue === undefined || stackValue === "") {
+        try {
+            stackValue = nativeErrorToString.call(errorInstance);
+        } catch {
+            stackValue = undefined;
+        }
+    }
+
+    try {
+        Object.defineProperty(errorInstance, "stack", _dataDesc(stackValue));
+        materializedErrorStacks.add(errorInstance);
+    } catch {
+        // Best effort only.
+    }
+}
+
+function installErrorStackShimForNonConfigurablePrototype() {
+    const ErrorShimPrototype = Object.create(NativeError.prototype);
+
+    Object.defineProperty(ErrorShimPrototype, "stack", {
+        configurable: true,
+        enumerable: false,
+        get() {
+            const own = Object.getOwnPropertyDescriptor(this, "stack");
+            if (!own) {
+                return undefined;
+            }
+            if (Object.prototype.hasOwnProperty.call(own, "value")) {
+                return own.value;
+            }
+            if (typeof own.get === "function") {
+                return own.get.call(this);
+            }
+            return undefined;
+        },
+        set(value) {
+            Object.defineProperty(this, "stack", _dataDesc(value));
+        },
+    });
+
+    const ErrorShim = function Error() {
+        const ctorTarget = new.target || ErrorShim;
+        const errorInstance = Reflect.construct(NativeError, arguments, NativeError);
+        materializeOwnStack(errorInstance);
+
+        // Error.prepareStackTrace support (V8 compat).
+        // Replace the materialized .stack data property with a lazy getter that
+        // checks Error.prepareStackTrace on first access, then materializes the
+        // result as a plain data property so subsequent reads have no overhead.
+        const rawStack = errorInstance.stack;
+        Object.defineProperty(errorInstance, "stack", {
+            get() {
+                const prepareStackTrace = globalThis.Error && globalThis.Error.prepareStackTrace;
+                const result = typeof prepareStackTrace === "function"
+                    ? prepareStackTrace(errorInstance, _parseStackStringToCallSites(rawStack))
+                    : rawStack;
+                Object.defineProperty(errorInstance, "stack", _dataDesc(result));
+                return result;
+            },
+            set(value) {
+                Object.defineProperty(errorInstance, "stack", _dataDesc(value));
+            },
+            configurable: true,
+            enumerable: false,
+        });
+
+        const targetPrototype = (ctorTarget && ctorTarget.prototype) || ErrorShimPrototype;
+        if (Object.getPrototypeOf(errorInstance) !== targetPrototype) {
+            Object.setPrototypeOf(errorInstance, targetPrototype);
+        }
+
+        return errorInstance;
+    };
+
+    Object.setPrototypeOf(ErrorShim, NativeError);
+    ErrorShim.prototype = ErrorShimPrototype;
+    Object.defineProperty(ErrorShimPrototype, "constructor", {
+        value: NativeError,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+    });
+
+    Object.defineProperty(ErrorShim, Symbol.hasInstance, {
+        value(value) {
+            return value instanceof NativeError;
+        },
+        configurable: true,
+    });
+
+    globalThis.Error = ErrorShim;
+}
+
+if (nativeErrorStackDescriptor && nativeErrorStackDescriptor.configurable === false) {
+    try {
+        installErrorStackShimForNonConfigurablePrototype();
+    } catch {
+        // Keep the runtime default behavior if shimming fails.
+    }
+} else {
+    try {
+        Object.defineProperty(Error.prototype, "stack", {
+            configurable: true,
+            enumerable: false,
+            get: function getErrorStack() {
+                if (this === Error.prototype) {
+                    return undefined;
+                }
+
+                const own = Object.getOwnPropertyDescriptor(this, "stack");
+                if (own) {
+                    if (Object.prototype.hasOwnProperty.call(own, "value")) {
+                        return own.value;
+                    }
+                    if (typeof own.get === "function" && own.get !== getErrorStack) {
+                        return own.get.call(this);
+                    }
+                    return undefined;
+                }
+                return undefined;
+            },
+            set(value) {
+                Object.defineProperty(this, "stack", _dataDesc(value));
+                materializedErrorStacks.add(this);
+            },
+        });
+    } catch {
+        // Keep best-effort compatibility if the runtime forbids reconfiguration.
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Global Error.captureStackTrace & Error.stackTraceLimit (V8 compat)
+// ---------------------------------------------------------------------------
+// QuickJS natively provides Error.captureStackTrace, Error.prepareStackTrace,
+// Error.stackTraceLimit, and native CallSite objects. However, the ErrorShim
+// above replaces globalThis.Error, which can interfere with the native
+// prepareStackTrace getter/setter chain when Error.captureStackTrace is called.
+//
+// We wrap the native captureStackTrace so that it checks the JS-level
+// Error.prepareStackTrace (which may be set on the ErrorShim) and, if set,
+// parses the raw stack string into our JS CallSite objects. This ensures
+// libraries like depd that set Error.prepareStackTrace and then call
+// Error.captureStackTrace get proper CallSite objects.
+{
+    const nativeCaptureStackTrace = globalThis.Error.captureStackTrace;
+    if (typeof nativeCaptureStackTrace === 'function') {
+        globalThis.Error.captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
+            // If prepareStackTrace is set at the JS level (e.g., on the ErrorShim),
+            // we need to handle it ourselves since the native captureStackTrace
+            // may not see it through the ErrorShim prototype chain.
+            const currentPrepare = globalThis.Error && globalThis.Error.prepareStackTrace;
+            if (typeof currentPrepare === 'function') {
+                // Temporarily clear prepareStackTrace so the native implementation
+                // produces a raw string stack (not CallSite objects).
+                globalThis.Error.prepareStackTrace = undefined;
+                try {
+                    nativeCaptureStackTrace(targetObject, constructorOpt);
+                } finally {
+                    globalThis.Error.prepareStackTrace = currentPrepare;
+                }
+
+                // Read the raw stack string, parse into CallSites, and install
+                // a lazy getter that calls prepareStackTrace on first access.
+                const rawStack = targetObject.stack;
+                if (typeof rawStack === 'string') {
+                    const callSites = _parseStackStringToCallSites(rawStack);
+                    Object.defineProperty(targetObject, "stack", {
+                        get() {
+                            const prepare = globalThis.Error && globalThis.Error.prepareStackTrace;
+                            const result = typeof prepare === "function"
+                                ? prepare(targetObject, callSites)
+                                : rawStack;
+                            Object.defineProperty(targetObject, "stack", _dataDesc(result));
+                            return result;
+                        },
+                        set(value) {
+                            Object.defineProperty(targetObject, "stack", _dataDesc(value));
+                        },
+                        configurable: true,
+                        enumerable: false,
+                    });
+                }
+            } else {
+                // No prepareStackTrace set — just use the native implementation as-is.
+                nativeCaptureStackTrace(targetObject, constructorOpt);
+            }
+        };
+    }
+}
+
+// Node.js includes the error code in toString() so that regex tests like
+// /ERR_INVALID_ARG_TYPE/ can match against String(error).
+// We keep message and name clean (for exact-match tests) but add toString().
+function addCodeToMessage(err, code) {
+    err.code = code;
+    const origToString = Error.prototype.toString;
+    Object.defineProperty(err, 'toString', {
+        value: function() {
+            const name = this.name || 'Error';
+            const msg = this.message || '';
+            if (!msg) return `${name} [${code}]`;
+            return `${name} [${code}]: ${msg}`;
+        },
+        writable: true,
+        configurable: true,
+        enumerable: false,
+    });
+}
 
 /**
  * 
@@ -18,7 +334,34 @@ export class ERR_HTTP_HEADERS_SENT extends Error {
         super(
             `Cannot ${x} headers after they are sent to the client`,
         );
-        this.code = "ERR_HTTP_HEADERS_SENT";
+        addCodeToMessage(this, "ERR_HTTP_HEADERS_SENT");
+    }
+}
+
+export class ERR_HTTP_SOCKET_ASSIGNED extends Error {
+    constructor() {
+        super(
+            "ServerResponse has an already assigned socket",
+        );
+        addCodeToMessage(this, "ERR_HTTP_SOCKET_ASSIGNED");
+    }
+}
+
+export class ERR_HTTP_BODY_NOT_ALLOWED extends Error {
+    constructor() {
+        super(
+            "Adding content for this request method or response status is not allowed.",
+        );
+        addCodeToMessage(this, "ERR_HTTP_BODY_NOT_ALLOWED");
+    }
+}
+
+export class ERR_HTTP_CONTENT_LENGTH_MISMATCH extends Error {
+    constructor(bodyLength, contentLength) {
+        super(
+            `Response body's content-length of ${bodyLength} byte(s) does not match the content-length of ${contentLength} byte(s) set in header`,
+        );
+        addCodeToMessage(this, "ERR_HTTP_CONTENT_LENGTH_MISMATCH");
     }
 }
 
@@ -27,7 +370,7 @@ export class ERR_HTTP_INVALID_HEADER_VALUE extends TypeError {
         super(
             `Invalid value "${x}" for header "${y}"`,
         );
-        this.code = "ERR_HTTP_INVALID_HEADER_VALUE";
+        addCodeToMessage(this, "ERR_HTTP_INVALID_HEADER_VALUE");
     }
 }
 
@@ -36,14 +379,21 @@ export class ERR_HTTP_TRAILER_INVALID extends Error {
         super(
             `Trailers are invalid with this transfer encoding`,
         );
-        this.code = "ERR_HTTP_TRAILER_INVALID";
+        addCodeToMessage(this, "ERR_HTTP_TRAILER_INVALID");
     }
 }
 
 export class ERR_INVALID_HTTP_TOKEN extends TypeError {
     constructor(x, y) {
         super(`${x} must be a valid HTTP token ["${y}"]`);
-        this.code = "ERR_INVALID_HTTP_TOKEN";
+        addCodeToMessage(this, "ERR_INVALID_HTTP_TOKEN");
+    }
+}
+
+export class ERR_UNESCAPED_CHARACTERS extends TypeError {
+    constructor(x) {
+        super(`${x} contains unescaped characters`);
+        addCodeToMessage(this, "ERR_UNESCAPED_CHARACTERS");
     }
 }
 
@@ -143,8 +493,8 @@ function invalidArgTypeHelper(input) {
     if (input == null) {
         return ` Received ${input}`;
     }
-    if (typeof input === "function" && input.name) {
-        return ` Received function ${input.name}`;
+    if (typeof input === "function") {
+        return ` Received function ${input.name || ""}`;
     }
     if (typeof input === "object") {
         if (input.constructor && input.constructor.name) {
@@ -153,7 +503,7 @@ function invalidArgTypeHelper(input) {
         return ` Received ${inspect(input, { depth: -1 })}`;
     }
     let inspected = inspect(input, { colors: false });
-    if (inspected.length > 25) {
+    if (inspected.length > 28) {
         inspected = `${inspected.slice(0, 25)}...`;
     }
     return ` Received type ${typeof input} (${inspected})`;
@@ -175,8 +525,6 @@ function addNumericalSeparator(val) {
 }
 
 export class ERR_OUT_OF_RANGE extends RangeError {
-    code = "ERR_OUT_OF_RANGE";
-
     /**
      * 
      * @param {string} str 
@@ -209,14 +557,7 @@ export class ERR_OUT_OF_RANGE extends RangeError {
         msg += ` It must be ${range}. Received ${received}`;
 
         super(msg);
-
-        const { name } = this;
-        // Add the error code to the name to include it in the stack trace.
-        this.name = `${name} [${this.code}]`;
-        // Access the stack to generate the error message including the error code from the name.
-        this.stack;
-        // Reset the name to the actual name.
-        this.name = name;
+        addCodeToMessage(this, "ERR_OUT_OF_RANGE");
     }
 }
 
@@ -225,7 +566,7 @@ export class ERR_INVALID_ARG_TYPE_RANGE extends RangeError {
         const msg = createInvalidArgType(name, expected);
 
         super(`${msg}.${invalidArgTypeHelper(actual)}`);
-        this.code = "ERR_INVALID_ARG_TYPE";
+        addCodeToMessage(this, "ERR_INVALID_ARG_TYPE");
     }
 }
 
@@ -240,31 +581,44 @@ export class ERR_INVALID_ARG_TYPE extends TypeError {
         const msg = createInvalidArgType(name, expected);
 
         super(`${msg}.${invalidArgTypeHelper(actual)}`);
-        this.code = "ERR_INVALID_ARG_TYPE";
+        addCodeToMessage(this, "ERR_INVALID_ARG_TYPE");
     }
 
     static RangeError = ERR_INVALID_ARG_TYPE_RANGE;
 }
 
+function inspectValue(value) {
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'number' && !Number.isFinite(value)) return String(value);
+    return JSON.stringify(value);
+}
+
 export class ERR_INVALID_ARG_VALUE_RANGE extends RangeError {
     constructor(name, value, reason = "is invalid") {
         const type = name.includes(".") ? "property" : "argument";
-        const inspected = JSON.stringify(value);
+        const inspected = inspectValue(value);
 
         super(`The ${type} '${name}' ${reason}. Received ${inspected}`,);
 
-        this.code = "ERR_INVALID_ARG_VALUE"
+        addCodeToMessage(this, "ERR_INVALID_ARG_VALUE")
     }
 }
 
 export class ERR_INVALID_ARG_VALUE extends TypeError {
     constructor(name, value, reason = "is invalid") {
         const type = name.includes(".") ? "property" : "argument";
-        const inspected = JSON.stringify(value);
+        const inspected = inspectValue(value);
 
         super(`The ${type} '${name}' ${reason}. Received ${inspected}`,);
 
-        this.code = "ERR_INVALID_ARG_VALUE"
+        addCodeToMessage(this, "ERR_INVALID_ARG_VALUE")
+    }
+}
+
+export class ERR_INVALID_THIS extends TypeError {
+    constructor(type) {
+        super(`Value of "this" must be of type ${type}`);
+        addCodeToMessage(this, "ERR_INVALID_THIS");
     }
 }
 
@@ -274,21 +628,21 @@ export class ERR_INVALID_CHAR extends TypeError {
             ? `Invalid character in ${name}`
             : `Invalid character in ${name} ["${field}"]`,
         );
-        this.code = "ERR_INVALID_CHAR";
+        addCodeToMessage(this, "ERR_INVALID_CHAR");
     }
 }
 
 export class ERR_METHOD_NOT_IMPLEMENTED extends Error {
     constructor(x) {
         super(`The ${x} method is not implemented`);
-        this.code = "ERR_METHOD_NOT_IMPLEMENTED";
+        addCodeToMessage(this, "ERR_METHOD_NOT_IMPLEMENTED");
     }
 }
 
 export class ERR_STREAM_CANNOT_PIPE extends Error {
     constructor() {
         super(`Cannot pipe, not readable`);
-        this.code = "ERR_STREAM_CANNOT_PIPE";
+        addCodeToMessage(this, "ERR_STREAM_CANNOT_PIPE");
     }
 }
 
@@ -297,21 +651,21 @@ export class ERR_STREAM_ALREADY_FINISHED extends Error {
         super(
             `Cannot call ${x} after a stream was finished`,
         );
-        this.code = "ERR_STREAM_ALREADY_FINISHED";
+        addCodeToMessage(this, "ERR_STREAM_ALREADY_FINISHED");
     }
 }
 
 export class ERR_STREAM_WRITE_AFTER_END extends Error {
     constructor() {
         super(`write after end`);
-        this.code = "ERR_STREAM_WRITE_AFTER_END";
+        addCodeToMessage(this, "ERR_STREAM_WRITE_AFTER_END");
     }
 }
 
 export class ERR_STREAM_NULL_VALUES extends TypeError {
     constructor() {
         super(`May not write null values to stream`);
-        this.code = "ERR_STREAM_NULL_VALUES";
+        addCodeToMessage(this, "ERR_STREAM_NULL_VALUES");
     }
 }
 
@@ -320,7 +674,7 @@ export class ERR_STREAM_DESTROYED extends Error {
         super(
             `Cannot call ${x} after a stream was destroyed`,
         );
-        this.code = "ERR_STREAM_DESTROYED";
+        addCodeToMessage(this, "ERR_STREAM_DESTROYED");
     }
 }
 
@@ -348,31 +702,26 @@ export function aggregateTwoErrors(innerError, outerError) {
 
 export class ERR_SOCKET_BAD_PORT extends RangeError {
     constructor(name, port, allowZero = true) {
-        assert(
-            typeof allowZero === "boolean",
-            "The 'allowZero' argument must be of type boolean.",
-        );
-
         const operator = allowZero ? ">=" : ">";
 
         super(
             `${name} should be ${operator} 0 and < 65536. Received ${port}.`,
         );
-        this.code = "ERR_SOCKET_BAD_PORT";
+        addCodeToMessage(this, "ERR_SOCKET_BAD_PORT");
     }
 }
 
 export class ERR_STREAM_PREMATURE_CLOSE extends Error {
     constructor() {
         super(`Premature close`);
-        this.code = "ERR_STREAM_PREMATURE_CLOSE";
+        addCodeToMessage(this, "ERR_STREAM_PREMATURE_CLOSE");
     }
 }
 
 export class AbortError extends Error {
-    constructor() {
-        super("The operation was aborted");
-        this.code = "ABORT_ERR";
+    constructor(reason) {
+        super("The operation was aborted", reason !== undefined ? { cause: reason } : undefined);
+        addCodeToMessage(this, "ABORT_ERR");
         this.name = "AbortError";
     }
 }
@@ -382,7 +731,7 @@ export class ERR_INVALID_CALLBACK extends TypeError {
         super(
             `Callback must be a function. Received ${JSON.stringify(object)}`,
         );
-        this.code = "ERR_INVALID_CALLBACK";
+        addCodeToMessage(this, "ERR_INVALID_CALLBACK");
     }
 }
 
@@ -412,26 +761,26 @@ export class ERR_MISSING_ARGS extends TypeError {
         }
 
         super(`${msg} must be specified`);
-        this.code = "ERR_MISSING_ARGS";
+        addCodeToMessage(this, "ERR_MISSING_ARGS");
     }
 }
 export class ERR_MISSING_OPTION extends TypeError {
     constructor(x) {
         super(`${x} is required`);
-        this.code = "ERR_MISSING_OPTION";
+        addCodeToMessage(this, "ERR_MISSING_OPTION");
     }
 }
 export class ERR_MULTIPLE_CALLBACK extends Error {
     constructor() {
         super(`Callback called multiple times`);
-        this.code = "ERR_MULTIPLE_CALLBACK";
+        addCodeToMessage(this, "ERR_MULTIPLE_CALLBACK");
     }
 }
 
 export class ERR_STREAM_PUSH_AFTER_EOF extends Error {
     constructor() {
         super(`stream.push() after EOF`);
-        this.code = "ERR_STREAM_PUSH_AFTER_EOF";
+        addCodeToMessage(this, "ERR_STREAM_PUSH_AFTER_EOF");
     }
 }
 
@@ -440,23 +789,49 @@ export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends Error {
         super(
             `stream.unshift() after end event`,
         );
-        this.code = "ERR_STREAM_UNSHIFT_AFTER_END_EVENT";
+        addCodeToMessage(this, "ERR_STREAM_UNSHIFT_AFTER_END_EVENT");
     }
 }
 
 export class ERR_UNKNOWN_ENCODING extends TypeError {
     constructor(x) {
-        super(`Unknown encoding: ${x}`);
-        this.code = "ERR_UNKNOWN_ENCODING";
+        super(format("Unknown encoding: %s", x));
+        addCodeToMessage(this, "ERR_UNKNOWN_ENCODING");
+    }
+}
+
+export class ERR_STRING_TOO_LONG extends Error {
+    constructor(maxLength) {
+        const maxLengthHex = Number.isFinite(maxLength)
+            ? `0x${Math.floor(maxLength).toString(16)}`
+            : String(maxLength);
+        super(`Cannot create a string longer than ${maxLengthHex} characters`);
+        addCodeToMessage(this, "ERR_STRING_TOO_LONG");
+    }
+}
+
+export class ERR_BUFFER_OUT_OF_BOUNDS extends RangeError {
+    constructor(name) {
+        if (name) {
+            super(`"${name}" is outside of buffer bounds`);
+        } else {
+            super('Attempt to access memory outside buffer bounds');
+        }
+        addCodeToMessage(this, "ERR_BUFFER_OUT_OF_BOUNDS");
     }
 }
 
 function buildReturnPropertyType(value) {
-    if (value && value.constructor && value.constructor.name) {
-        return `instance of ${value.constructor.name}`;
-    } else {
-        return `type ${typeof value}`;
+    if (value === undefined) {
+        return 'undefined';
     }
+    if (value === null) {
+        return 'null';
+    }
+    if (value && value.constructor && value.constructor.name) {
+        return `an instance of ${value.constructor.name}`;
+    }
+    return `type ${typeof value}`;
 }
 
 export class ERR_INVALID_RETURN_VALUE extends TypeError {
@@ -464,7 +839,7 @@ export class ERR_INVALID_RETURN_VALUE extends TypeError {
         super(
             `Expected ${input} to be returned from the "${name}" function but got ${buildReturnPropertyType(value)}.`,
         );
-        this.code = "ERR_INVALID_RETURN_VALUE";
+        addCodeToMessage(this, "ERR_INVALID_RETURN_VALUE");
     }
 }
 
@@ -473,7 +848,7 @@ export class ERR_INCOMPATIBLE_OPTION_PAIR extends TypeError {
         super(
             `Option "${input}" cannot be used in combination with option "${name}"`,
         );
-        this.code = "ERR_INCOMPATIBLE_OPTION_PAIR";
+        addCodeToMessage(this, "ERR_INCOMPATIBLE_OPTION_PAIR");
     }
 }
 
@@ -521,9 +896,6 @@ export class NodeErrorAbstraction extends Error {
         super(message);
         this.code = code;
         this.name = name;
-        //This number changes depending on the name of this class
-        //20 characters as of now
-        this.stack = this.stack && `${name} [${this.code}]${this.stack.slice(20)}`;
     }
 
     toString() {
@@ -653,6 +1025,11 @@ export const ERR_FS_EISDIR = makeSystemErrorWithCode(
     "Path is a directory",
 );
 
+export const ERR_SYSTEM_ERROR = makeSystemErrorWithCode(
+    "ERR_SYSTEM_ERROR",
+    "A system error occurred",
+);
+
 export const ERR_FS_CP_DIR_TO_NON_DIR = makeSystemErrorWithCode('ERR_FS_CP_DIR_TO_NON_DIR',
     'Cannot overwrite directory with non-directory');
 export const ERR_FS_CP_EEXIST = makeSystemErrorWithCode('ERR_FS_CP_EEXIST', 'Target already exists');
@@ -777,7 +1154,7 @@ export class ERR_AMBIGUOUS_ARGUMENT extends TypeError {
 export class ERR_DIR_CLOSED extends Error {
     constructor() {
         super("Directory handle was closed");
-        this.code = "ERR_DIR_CLOSED";
+        addCodeToMessage(this, "ERR_DIR_CLOSED");
     }
 }
 
@@ -786,7 +1163,7 @@ export class ERR_DIR_CONCURRENT_OPERATION extends Error {
         super(
             "Cannot do synchronous work on directory handle with concurrent asynchronous operations",
         );
-        this.code = "ERR_DIR_CONCURRENT_OPERATION";
+        addCodeToMessage(this, "ERR_DIR_CONCURRENT_OPERATION");
     }
 }
 
@@ -795,7 +1172,7 @@ export class ERR_FS_FILE_TOO_LARGE extends RangeError {
         super(
             `File size (${x}) is greater than 2 GB`,
         );
-        this.code = "ERR_FS_FILE_TOO_LARGE";
+        addCodeToMessage(this, "ERR_FS_FILE_TOO_LARGE");
     }
 }
 
@@ -813,7 +1190,7 @@ export class ERR_FS_INVALID_SYMLINK_TYPE extends Error {
         super(
             `Symlink type must be one of "dir", "file", or "junction". Received "${x}"`,
         );
-        this.code = "ERR_FS_INVALID_SYMLINK_TYPE";
+        addCodeToMessage(this, "ERR_FS_INVALID_SYMLINK_TYPE");
     }
 }
 
@@ -822,7 +1199,7 @@ export class ERR_CRYPTO_FIPS_FORCED extends Error {
         super(
             'Cannot set FIPS mode, it was forced with --force-fips at startup.',
         );
-        this.code = "ERR_CRYPTO_FIPS_FORCED";
+        addCodeToMessage(this, "ERR_CRYPTO_FIPS_FORCED");
     }
 }
 
@@ -831,7 +1208,7 @@ export class ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH extends RangeError {
         super(
             'Input buffers must have the same byte length',
         );
-        this.code = "ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH";
+        addCodeToMessage(this, "ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH");
     }
 }
 
@@ -840,7 +1217,7 @@ export class ERR_OPERATION_FAILED extends Error {
         super(
             `Operation failed: ${x}`,
         );
-        this.code = "ERR_OPERATION_FAILED";
+        addCodeToMessage(this, "ERR_OPERATION_FAILED");
     }
 }
 
@@ -849,90 +1226,168 @@ export class ERR_CRYPTO_ENGINE_UNKNOWN extends Error {
         super(
             `Engine "${x}" was not found`,
         );
-        this.code = "ERR_CRYPTO_ENGINE_UNKNOWN";
+        addCodeToMessage(this, "ERR_CRYPTO_ENGINE_UNKNOWN");
     }
 }
 
 export class ERR_CRYPTO_INVALID_DIGEST extends TypeError {
     constructor(x) {
         super(`Invalid digest: ${x}`);
-        this.code = "ERR_CRYPTO_INVALID_DIGEST";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_DIGEST");
     }
 }
 
 export class ERR_CRYPTO_SCRYPT_INVALID_PARAMETER extends Error {
     constructor() {
         super(`Invalid scrypt parameter`);
-        this.code = "ERR_CRYPTO_SCRYPT_INVALID_PARAMETER";
+        addCodeToMessage(this, "ERR_CRYPTO_SCRYPT_INVALID_PARAMETER");
     }
 }
 
 export class ERR_CRYPTO_SCRYPT_NOT_SUPPORTED extends Error {
     constructor() {
         super(`Scrypt algorithm not supported`);
-        this.code = "ERR_CRYPTO_SCRYPT_NOT_SUPPORTED";
+        addCodeToMessage(this, "ERR_CRYPTO_SCRYPT_NOT_SUPPORTED");
     }
 }
 
 export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS extends Error {
     constructor(a, b) {
         super(`The selected key encoding ${a} ${b}.`);
-        this.code = "ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS";
+        addCodeToMessage(this, "ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS");
     }
 }
 
 export class ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE extends TypeError {
     constructor(t, e) {
         super(`Invalid key object type ${t}, expected ${e}.`);
-        this.code = "ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE");
     }
 }
 
 export class ERR_CRYPTO_INVALID_JWK extends TypeError {
     constructor() {
         super(`Invalid JWK data`);
-        this.code = "ERR_CRYPTO_INVALID_JWK";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_JWK");
     }
 }
 
 export class ERR_ILLEGAL_CONSTRUCTOR extends TypeError {
     constructor() {
         super(`Illegal constructor`);
-        this.code = "ERR_ILLEGAL_CONSTRUCTOR";
+        addCodeToMessage(this, "ERR_ILLEGAL_CONSTRUCTOR");
     }
 }
 
 export class ERR_CRYPTO_INVALID_KEYLEN extends RangeError {
     constructor() {
         super(`Invalid key length`);
-        this.code = "ERR_CRYPTO_INVALID_KEYLEN";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_KEYLEN");
     }
 }
 
 export class ERR_CRYPTO_HASH_FINALIZED extends Error {
     constructor() {
         super(`Digest already called`);
-        this.code = "ERR_CRYPTO_HASH_FINALIZED";
+        addCodeToMessage(this, "ERR_CRYPTO_HASH_FINALIZED");
     }
 }
 
 export class ERR_CRYPTO_HASH_UPDATE_FAILED extends Error {
     constructor() {
         super(`Hash update failed`);
-        this.code = "ERR_CRYPTO_HASH_UPDATE_FAILED";
+        addCodeToMessage(this, "ERR_CRYPTO_HASH_UPDATE_FAILED");
     }
 }
 
 export class ERR_CRYPTO_INVALID_STATE extends Error {
     constructor() {
         super(`Invalid state`);
-        this.code = "ERR_CRYPTO_INVALID_STATE";
+        addCodeToMessage(this, "ERR_CRYPTO_INVALID_STATE");
     }
 }
 
 export class ERR_CRYPTO_UNKNOWN_CIPHER extends Error {
     constructor() {
         super(`Unknown cipher`);
-        this.code = "ERR_CRYPTO_UNKNOWN_CIPHER";
+        addCodeToMessage(this, "ERR_CRYPTO_UNKNOWN_CIPHER");
     }
 }
+
+export class ERR_IPC_CHANNEL_CLOSED extends Error {
+    constructor() {
+        super("Channel closed");
+        addCodeToMessage(this, "ERR_IPC_CHANNEL_CLOSED");
+    }
+}
+
+export const codes = Object.freeze({
+    ERR_AMBIGUOUS_ARGUMENT,
+    ERR_ASSERT_SNAPSHOT_NOT_SUPPORTED,
+    ERR_BUFFER_OUT_OF_BOUNDS,
+    ERR_CRYPTO_ENGINE_UNKNOWN,
+    ERR_CRYPTO_FIPS_FORCED,
+    ERR_CRYPTO_HASH_FINALIZED,
+    ERR_CRYPTO_HASH_UPDATE_FAILED,
+    ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS,
+    ERR_CRYPTO_INVALID_DIGEST,
+    ERR_CRYPTO_INVALID_JWK,
+    ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE,
+    ERR_CRYPTO_INVALID_KEYLEN,
+    ERR_CRYPTO_INVALID_STATE,
+    ERR_CRYPTO_SCRYPT_INVALID_PARAMETER,
+    ERR_CRYPTO_SCRYPT_NOT_SUPPORTED,
+    ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH,
+    ERR_CRYPTO_UNKNOWN_CIPHER,
+    ERR_DIR_CLOSED,
+    ERR_DIR_CONCURRENT_OPERATION,
+    ERR_FS_CP_DIR_TO_NON_DIR,
+    ERR_FS_CP_EEXIST,
+    ERR_FS_CP_EINVAL,
+    ERR_FS_CP_FIFO_PIPE,
+    ERR_FS_CP_NON_DIR_TO_DIR,
+    ERR_FS_CP_SOCKET,
+    ERR_FS_CP_SYMLINK_TO_SUBDIRECTORY,
+    ERR_FS_CP_UNKNOWN,
+    ERR_FS_EISDIR,
+    ERR_FS_FILE_TOO_LARGE,
+    ERR_FS_INVALID_SYMLINK_TYPE,
+    ERR_HTTP_BODY_NOT_ALLOWED,
+    ERR_HTTP_CONTENT_LENGTH_MISMATCH,
+    ERR_HTTP_HEADERS_SENT,
+    ERR_HTTP_SOCKET_ASSIGNED,
+    ERR_HTTP_INVALID_HEADER_VALUE,
+    ERR_HTTP_TRAILER_INVALID,
+    ERR_IPC_CHANNEL_CLOSED,
+    ERR_ILLEGAL_CONSTRUCTOR,
+    ERR_INCOMPATIBLE_OPTION_PAIR,
+    ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_TYPE_RANGE,
+    ERR_INVALID_ARG_VALUE,
+    ERR_INVALID_ARG_VALUE_RANGE,
+    ERR_INVALID_CALLBACK,
+    ERR_INVALID_CHAR,
+    ERR_INVALID_HTTP_TOKEN,
+    ERR_UNESCAPED_CHARACTERS,
+    ERR_INVALID_RETURN_VALUE,
+    ERR_INVALID_THIS,
+    ERR_METHOD_NOT_IMPLEMENTED,
+    ERR_MISSING_ARGS,
+    ERR_MISSING_OPTION,
+    ERR_MULTIPLE_CALLBACK,
+    ERR_OPERATION_FAILED,
+    ERR_OUT_OF_RANGE,
+    ERR_SOCKET_BAD_PORT,
+    ERR_STRING_TOO_LONG,
+    ERR_STREAM_ALREADY_FINISHED,
+    ERR_STREAM_CANNOT_PIPE,
+    ERR_STREAM_DESTROYED,
+    ERR_STREAM_NULL_VALUES,
+    ERR_STREAM_PREMATURE_CLOSE,
+    ERR_STREAM_PUSH_AFTER_EOF,
+    ERR_STREAM_UNSHIFT_AFTER_END_EVENT,
+    ERR_STREAM_WRITE_AFTER_END,
+    ERR_SYSTEM_ERROR,
+    ERR_UNAVAILABLE_DURING_EXIT,
+    ERR_UNKNOWN_ENCODING,
+});

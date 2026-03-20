@@ -1,0 +1,5 @@
+package quickjs:node-compat-runner;
+
+world node-compat-runner {
+  export run-test: func(test-path: string) -> string;
+}

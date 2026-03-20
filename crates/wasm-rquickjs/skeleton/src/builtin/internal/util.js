@@ -1,5 +1,5 @@
 // Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
-import { validateFunction, validateString } from "__wasm_rquickjs_builtin/internal/validators";
+import { validateFunction, validateString, validateUint32 } from "__wasm_rquickjs_builtin/internal/validators";
 import { normalizeEncoding, slowCases } from "__wasm_rquickjs_builtin/internal/normalize_encoding";
 export { normalizeEncoding, slowCases };
 
@@ -27,9 +27,61 @@ export function createDeferredPromise() {
     return { promise, resolve, reject };
 }
 
+let sleepState = null;
+
+function getSleepState() {
+    if (sleepState !== null) {
+        return sleepState;
+    }
+
+    if (typeof SharedArrayBuffer === "function" &&
+        typeof Atomics === "object" &&
+        Atomics !== null &&
+        typeof Atomics.wait === "function") {
+        sleepState = new Int32Array(new SharedArrayBuffer(4));
+    }
+
+    return sleepState;
+}
+
+export function sleep(msec) {
+    validateUint32(msec, "msec");
+
+    if (msec === 0) {
+        return;
+    }
+
+    const state = getSleepState();
+    if (state !== null) {
+        Atomics.wait(state, 0, 0, msec);
+        return;
+    }
+
+    // Fallback for runtimes without SharedArrayBuffer/Atomics.wait support.
+    const start = Date.now();
+    while (Date.now() - start < msec) {
+        // Intentional busy wait.
+    }
+}
+
 // Keep a list of deprecation codes that have been warned on so we only warn on
 // each one once.
 const codesWarned = new Set();
+const experimentalWarnings = new Set();
+
+export function emitExperimentalWarning(feature) {
+    validateString(feature, "feature");
+
+    if (experimentalWarnings.has(feature)) {
+        return;
+    }
+    experimentalWarnings.add(feature);
+
+    process.emitWarning(
+        `${feature} is an experimental feature and might change at any time`,
+        "ExperimentalWarning",
+    );
+}
 
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
@@ -157,7 +209,8 @@ export function isError(e) {
     // An error could be an instance of Error while not being a native error
     // or could be from a different realm and not be instance of Error but still
     // be a native error.
-    return e instanceof Error;
+    return e instanceof Error ||
+        (e !== null && typeof e === 'object' && Object.prototype.toString.call(e) === '[object Error]');
 }
 
 export const kEmptyObject = Object.freeze(Object.create(null));
@@ -196,8 +249,10 @@ export default {
     customInspectSymbol,
     kEnumerableProperty,
     normalizeEncoding,
+    sleep,
     once,
     deprecate,
+    emitExperimentalWarning,
     promisify,
     removeColors,
     isError,

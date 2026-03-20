@@ -1,0 +1,5 @@
+package test:lib-groq-sdk;
+
+world lib-groq-sdk {
+  export run: func() -> string;
+}

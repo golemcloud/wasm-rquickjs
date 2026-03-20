@@ -1,0 +1,5 @@
+package test:lib-xenova-transformers;
+
+world lib-xenova-transformers {
+  export run: func() -> string;
+}

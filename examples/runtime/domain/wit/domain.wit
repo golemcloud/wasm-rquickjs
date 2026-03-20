@@ -1,0 +1,14 @@
+package quickjs:domain;
+
+world domain {
+  export test-create: func() -> bool;
+  export test-run: func() -> bool;
+  export test-bind: func() -> bool;
+  export test-intercept: func() -> bool;
+  export test-add-remove: func() -> bool;
+  export test-enter-exit: func() -> bool;
+  export test-emitter-error-routing: func() -> bool;
+  export test-error-decoration: func() -> bool;
+  export test-dispose: func() -> bool;
+  export test-nested: func() -> bool;
+}

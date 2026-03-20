@@ -1,0 +1,5 @@
+package test:lib-dgraph-js-http;
+
+world lib-dgraph-js-http {
+  export run: func() -> string;
+}

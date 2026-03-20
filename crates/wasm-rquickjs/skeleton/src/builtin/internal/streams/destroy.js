@@ -2,7 +2,8 @@
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 // deno-lint-ignore-file
 
-import { aggregateTwoErrors, ERR_MULTIPLE_CALLBACK } from "__wasm_rquickjs_builtin/internal/errors";
+import { aggregateTwoErrors, AbortError, ERR_MULTIPLE_CALLBACK } from "__wasm_rquickjs_builtin/internal/errors";
+import { isDestroyed, isFinished, isServerRequest } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { nextTick } from "node:process";
 
 const kDestroy = Symbol("kDestroy");
@@ -93,21 +94,7 @@ function _destroy(self, err, cb) {
         }
     }
     try {
-        const result = self._destroy(err || null, onDestroy);
-        if (result != null) {
-            const then = result.then;
-            if (typeof then === "function") {
-                then.call(
-                    result,
-                    function () {
-                        nextTick(onDestroy, null);
-                    },
-                    function (err) {
-                        nextTick(onDestroy, err);
-                    },
-                );
-            }
-        }
+        self._destroy(err || null, onDestroy);
     } catch (err) {
         onDestroy(err);
     }
@@ -164,8 +151,8 @@ function undestroy() {
         r.errored = null;
         r.errorEmitted = false;
         r.reading = false;
-        r.ended = false;
-        r.endEmitted = false;
+        r.ended = r.readable === false;
+        r.endEmitted = r.readable === false;
     }
 
     if (w) {
@@ -175,11 +162,11 @@ function undestroy() {
         w.closeEmitted = false;
         w.errored = null;
         w.errorEmitted = false;
-        w.ended = false;
-        w.ending = false;
         w.finalCalled = false;
         w.prefinished = false;
-        w.finished = false;
+        w.ended = w.writable === false;
+        w.ending = w.writable === false;
+        w.finished = w.writable === false;
     }
 }
 
@@ -268,46 +255,62 @@ function constructNT(stream) {
         } else if (err) {
             errorOrDestroy(stream, err, true);
         } else {
-            nextTick(emitConstructNT, stream);
+            stream.emit(kConstruct);
         }
     }
 
     try {
-        const result = stream._construct(onConstruct);
-        if (result != null) {
-            const then = result.then;
-            if (typeof then === "function") {
-                then.call(
-                    result,
-                    function () {
-                        nextTick(onConstruct, null);
-                    },
-                    function (err) {
-                        nextTick(onConstruct, err);
-                    },
-                );
-            }
-        }
+        stream._construct((err) => {
+            nextTick(onConstruct, err);
+        });
     } catch (err) {
-        onConstruct(err);
+        nextTick(onConstruct, err);
     }
-}
-
-function emitConstructNT(stream) {
-    stream.emit(kConstruct);
 }
 
 function isRequest(stream) {
     return stream && stream.setHeader && typeof stream.abort === "function";
 }
 
+function emitCloseLegacy(stream) {
+    stream.emit("close");
+}
+
+function emitErrorCloseLegacy(stream, err) {
+    stream.emit("error", err);
+    nextTick(emitCloseLegacy, stream);
+}
+
 // Normalize destroy for legacy.
 function destroyer(stream, err) {
-    if (!stream) return;
-    if (isRequest(stream)) return stream.abort();
-    if (isRequest(stream.req)) return stream.req.abort();
-    if (typeof stream.destroy === "function") return stream.destroy(err);
-    if (typeof stream.close === "function") return stream.close();
+    if (!stream || isDestroyed(stream)) {
+        return;
+    }
+
+    if (!err && !isFinished(stream)) {
+        err = new AbortError();
+    }
+
+    if (isServerRequest(stream)) {
+        stream.socket = null;
+        stream.destroy(err);
+    } else if (isRequest(stream)) {
+        stream.abort();
+    } else if (isRequest(stream.req)) {
+        stream.req.abort();
+    } else if (typeof stream.destroy === "function") {
+        stream.destroy(err);
+    } else if (typeof stream.close === "function") {
+        stream.close();
+    } else if (err) {
+        nextTick(emitErrorCloseLegacy, stream, err);
+    } else {
+        nextTick(emitCloseLegacy, stream);
+    }
+
+    if (!stream.destroyed) {
+        try { stream.destroyed = true; } catch (_e) { /* ignore */ }
+    }
 }
 
 export default {

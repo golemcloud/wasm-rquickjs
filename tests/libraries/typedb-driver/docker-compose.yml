@@ -1,0 +1,16 @@
+services:
+  typedb:
+    image: vaticle/typedb:2.29.1
+    ports:
+      - "17290:1729"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/typedb-all-linux-arm64/typedb console --core=127.0.0.1:1729 --command='database list' > /dev/null 2>&1",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    tmpfs:
+      - /opt/typedb-all-linux-arm64/server/data

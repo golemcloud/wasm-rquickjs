@@ -3,14 +3,14 @@ import * as streams from '__wasm_rquickjs_builtin/streams';
 
 export class TextDecoder {
     constructor(label, options) {
-        const safeLabel = label || 'utf-8';
+        const safeLabel = label === undefined ? 'utf-8' : `${label}`;
         if (!encodingNative.supports_encoding(safeLabel)) {
             throw new RangeError(safeLabel + ' is not supported');
         }
 
         this._label = safeLabel;
-        this._fatal = !!(options && options.fatal);
-        this._ignoreBOM = !!(options && options.ignoreBOM);
+        this._fatal = !!options?.fatal;
+        this._ignoreBOM = !!options?.ignoreBOM;
     }
 
     get encoding() {
@@ -38,14 +38,13 @@ export class TextDecoder {
         } else {
             bytes = new Uint8Array(0);
         }
-        const stream = !!(options && options.stream);
+        const stream = !!options?.stream;
 
-        let [result, error] = encodingNative.decode(bytes, this._label, stream, this._fatal, this._ignoreBOM);
+        const [result, error] = encodingNative.decode(bytes, this._label, stream, this._fatal, this._ignoreBOM);
         if (error !== undefined) {
             throw new TypeError(error);
-        } else {
-            return result;
         }
+        return result;
     }
 }
 
@@ -57,26 +56,29 @@ export class TextEncoder {
         return 'utf-8';
     }
 
-    encode(string) {
-        return encodingNative.encode(string);
+    encode(input = '') {
+        return encodingNative.encode(`${input}`);
     }
 
     encodeInto(string, uint8Array) {
-        return encodingNative.encode_into(string);
+        if (typeof string !== 'string') {
+            throw new TypeError('The "src" argument must be of type string. Received type ' + typeof string);
+        }
+        return encodingNative.encode_into(string, uint8Array);
     }
 }
 
 export class TextDecoderStream extends streams.TransformStream {
     constructor(label, options) {
-        const safeLabel = label || 'utf-8';
-        const fatal = !!(options && options.fatal);
+        const safeLabel = label === undefined ? 'utf-8' : `${label}`;
+        const fatal = !!options?.fatal;
         if (!encodingNative.supports_encoding(safeLabel)) {
             throw new RangeError(safeLabel + ' is not supported');
         }
 
         let decoder;
         super({
-            start(ctl) {
+            start() {
                 decoder = new TextDecoder(safeLabel, options);
             },
             transform(chunk, ctl) {
@@ -97,8 +99,7 @@ export class TextDecoderStream extends streams.TransformStream {
 
         this._label = safeLabel;
         this._fatal = fatal;
-        this._ignoreBOM = !!(options && options.ignoreBOM);
-
+        this._ignoreBOM = !!options?.ignoreBOM;
     }
 
     get encoding() {
@@ -115,10 +116,10 @@ export class TextDecoderStream extends streams.TransformStream {
 }
 
 export class TextEncoderStream extends streams.TransformStream {
-    constructor(label, options) {
+    constructor() {
         let encoder;
         super({
-            start(ctl) {
+            start() {
                 encoder = new TextEncoder();
             },
             transform(chunk, ctl) {

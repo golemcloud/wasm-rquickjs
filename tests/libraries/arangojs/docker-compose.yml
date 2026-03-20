@@ -1,0 +1,19 @@
+services:
+  arangodb:
+    image: arangodb:3.12
+    ports:
+      - "18529:8529"
+    environment:
+      ARANGO_ROOT_PASSWORD: testpass
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "arangosh --server.endpoint tcp://127.0.0.1:8529 --server.username root --server.password testpass --javascript.execute-string 'db._version();' >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    tmpfs:
+      - /var/lib/arangodb3
+      - /var/lib/arangodb3-apps

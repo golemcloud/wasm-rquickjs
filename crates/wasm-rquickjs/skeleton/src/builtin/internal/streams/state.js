@@ -4,6 +4,9 @@
 
 import { ERR_INVALID_ARG_VALUE } from "__wasm_rquickjs_builtin/internal/errors";
 
+let defaultHwmBytes = 64 * 1024;
+let defaultHwmObjects = 16;
+
 function highWaterMarkFrom(options, isDuplex, duplexKey) {
     return options.highWaterMark != null
         ? options.highWaterMark
@@ -13,7 +16,18 @@ function highWaterMarkFrom(options, isDuplex, duplexKey) {
 }
 
 function getDefaultHighWaterMark(objectMode) {
-    return objectMode ? 16 : 16 * 1024;
+    return objectMode ? defaultHwmObjects : defaultHwmBytes;
+}
+
+function setDefaultHighWaterMark(objectMode, value) {
+    if (typeof objectMode !== "boolean") {
+        throw new ERR_INVALID_ARG_VALUE("objectMode", objectMode);
+    }
+    if (!Number.isInteger(value) || value < 0) {
+        throw new ERR_INVALID_ARG_VALUE("value", value);
+    }
+    if (objectMode) defaultHwmObjects = value;
+    else defaultHwmBytes = value;
 }
 
 function getHighWaterMark(state, options, duplexKey, isDuplex) {
@@ -33,5 +47,6 @@ function getHighWaterMark(state, options, duplexKey, isDuplex) {
 export default {
     getHighWaterMark,
     getDefaultHighWaterMark,
+    setDefaultHighWaterMark,
 };
-export { getDefaultHighWaterMark, getHighWaterMark };
+export { getDefaultHighWaterMark, setDefaultHighWaterMark, getHighWaterMark };

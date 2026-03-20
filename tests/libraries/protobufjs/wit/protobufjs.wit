@@ -1,0 +1,5 @@
+package test:lib-protobufjs;
+
+world lib-protobufjs {
+  export run: func() -> string;
+}

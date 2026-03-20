@@ -1,0 +1,5 @@
+package test:lib-effect-schema;
+
+world lib-effect-schema {
+  export run: func() -> string;
+}

@@ -1,0 +1,5 @@
+package test:lib-effect-sql-sqlite-node;
+
+world lib-effect-sql-sqlite-node {
+  export run: func() -> string;
+}

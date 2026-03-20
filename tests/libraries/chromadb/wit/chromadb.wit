@@ -1,0 +1,5 @@
+package test:lib-chromadb;
+
+world lib-chromadb {
+  export run: func() -> string;
+}

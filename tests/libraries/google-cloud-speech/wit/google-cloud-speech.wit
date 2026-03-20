@@ -1,0 +1,5 @@
+package test:lib-google-cloud-speech;
+
+world lib-google-cloud-speech {
+  export run: func() -> string;
+}

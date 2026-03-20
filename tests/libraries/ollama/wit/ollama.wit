@@ -1,0 +1,5 @@
+package test:lib-ollama;
+
+world lib-ollama {
+  export run: func() -> string;
+}

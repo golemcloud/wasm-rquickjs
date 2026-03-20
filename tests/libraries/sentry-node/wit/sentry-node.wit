@@ -1,0 +1,5 @@
+package test:lib-sentry-node;
+
+world lib-sentry-node {
+  export run: func() -> string;
+}

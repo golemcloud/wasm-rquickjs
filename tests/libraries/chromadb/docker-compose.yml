@@ -1,0 +1,12 @@
+services:
+  chromadb:
+    image: chromadb/chroma:1.0.20
+    ports:
+      - "18081:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8000'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    tmpfs:
+      - /chroma/chroma

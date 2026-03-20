@@ -1,0 +1,15 @@
+package quickjs:streams;
+
+world streams {
+  export test1: func();
+  export test-node-stream1: func() -> string;
+  export test-consumers-text: func() -> string;
+  export test-consumers-json: func() -> string;
+  export test-consumers-buffer: func() -> u32;
+  export test-consumers-arraybuffer: func() -> u32;
+  export test-readable-from-web: func() -> string;
+  export test-readable-to-web: func() -> string;
+  export test-writable-from-web: func() -> string;
+  export test-writable-to-web: func() -> string;
+  export test-duplex-from-web: func() -> string;
+}

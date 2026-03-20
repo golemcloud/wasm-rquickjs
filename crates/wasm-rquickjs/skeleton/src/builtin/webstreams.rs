@@ -1,24 +1,42 @@
 // JS functions for the web streams implementation
 pub const WEBSTREAMS_JS: &str = include_str!("web-streams-polyfill-4.1.0.js");
 
+// JS wrapper that patches ReadableStream for Node.js compatibility
+pub const WEBSTREAMS_WRAPPER_JS: &str = include_str!("webstreams.js");
+
 // Re-export for aliases
-pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/streams';"#;
+pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/webstreams_wrapper';
+import * as _all from '__wasm_rquickjs_builtin/webstreams_wrapper';
+export default _all;"#;
 
 // JS code wiring the web streams module into the global context
 pub const WIRE_JS: &str = r#"
-        import * as __wasm_rquickjs_streams from '__wasm_rquickjs_builtin/streams';
-        globalThis.streams = __wasm_rquickjs_streams;
-        globalThis.ByteLengthQueuingStrategy = __wasm_rquickjs_streams.ByteLengthQueuingStrategy;
-        globalThis.CountQueuingStrategy = __wasm_rquickjs_streams.CountQueuingStrategy;
-        globalThis.ReadableByteStreamController = __wasm_rquickjs_streams.ReadableByteStreamController;
-        globalThis.ReadableStream = __wasm_rquickjs_streams.ReadableStream;
-        globalThis.ReadableStreamBYOBReader = __wasm_rquickjs_streams.ReadableStreamBYOBReader;
-        globalThis.ReadableStreamBYOBRequest = __wasm_rquickjs_streams.ReadableStreamBYOBRequest;
-        globalThis.ReadableStreamDefaultController = __wasm_rquickjs_streams.ReadableStreamDefaultController;
-        globalThis.ReadableStreamDefaultReader = __wasm_rquickjs_streams.ReadableStreamDefaultReader;
-        globalThis.TransformStream = __wasm_rquickjs_streams.TransformStream;
-        globalThis.TransformStreamDefaultController = __wasm_rquickjs_streams.TransformStreamDefaultController;
-        globalThis.WritableStream = __wasm_rquickjs_streams.WritableStream;
-        globalThis.WritableStreamDefaultController = __wasm_rquickjs_streams.WritableStreamDefaultController;
-        globalThis.WritableStreamDefaultWriter = __wasm_rquickjs_streams.WritableStreamDefaultWriter;
+        import {
+            ByteLengthQueuingStrategy as __ByteLengthQueuingStrategy,
+            CountQueuingStrategy as __CountQueuingStrategy,
+            ReadableByteStreamController as __ReadableByteStreamController,
+            ReadableStream as __ReadableStream,
+            ReadableStreamBYOBReader as __ReadableStreamBYOBReader,
+            ReadableStreamBYOBRequest as __ReadableStreamBYOBRequest,
+            ReadableStreamDefaultController as __ReadableStreamDefaultController,
+            ReadableStreamDefaultReader as __ReadableStreamDefaultReader,
+            TransformStream as __TransformStream,
+            TransformStreamDefaultController as __TransformStreamDefaultController,
+            WritableStream as __WritableStream,
+            WritableStreamDefaultController as __WritableStreamDefaultController,
+            WritableStreamDefaultWriter as __WritableStreamDefaultWriter,
+        } from '__wasm_rquickjs_builtin/webstreams_wrapper';
+        globalThis.ByteLengthQueuingStrategy = __ByteLengthQueuingStrategy;
+        globalThis.CountQueuingStrategy = __CountQueuingStrategy;
+        globalThis.ReadableByteStreamController = __ReadableByteStreamController;
+        globalThis.ReadableStream = __ReadableStream;
+        globalThis.ReadableStreamBYOBReader = __ReadableStreamBYOBReader;
+        globalThis.ReadableStreamBYOBRequest = __ReadableStreamBYOBRequest;
+        globalThis.ReadableStreamDefaultController = __ReadableStreamDefaultController;
+        globalThis.ReadableStreamDefaultReader = __ReadableStreamDefaultReader;
+        globalThis.TransformStream = __TransformStream;
+        globalThis.TransformStreamDefaultController = __TransformStreamDefaultController;
+        globalThis.WritableStream = __WritableStream;
+        globalThis.WritableStreamDefaultController = __WritableStreamDefaultController;
+        globalThis.WritableStreamDefaultWriter = __WritableStreamDefaultWriter;
     "#;

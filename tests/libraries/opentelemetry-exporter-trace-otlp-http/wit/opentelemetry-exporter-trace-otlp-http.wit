@@ -1,0 +1,5 @@
+package test:lib-opentelemetry-exporter-trace-otlp-http;
+
+world lib-opentelemetry-exporter-trace-otlp-http {
+  export run: func() -> string;
+}

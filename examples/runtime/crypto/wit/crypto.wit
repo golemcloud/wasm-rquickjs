@@ -1,0 +1,37 @@
+package quickjs:crypto;
+
+world crypto {
+  export new-uuids: func() -> tuple<string, string>;
+  export random-s8: func(count: u32) -> list<s8>;
+  export random-u32: func(count: u32) -> list<u32>;
+  export sha256-hex: func(input: string) -> string;
+  export sha256-multi-update: func(parts: list<string>) -> string;
+  export hash-with-algorithm: func(algorithm: string, input: string) -> string;
+  export hash-one-shot: func(algorithm: string, input: string) -> string;
+  export list-hashes: func() -> list<string>;
+  export generate-random-bytes: func(size: u32) -> list<u8>;
+  export generate-random-int: func(min: s64, max: s64) -> s64;
+  export check-timing-safe-equal: func(a: string, b: string) -> bool;
+  export hmac-hex: func(algorithm: string, key: string, data: string) -> string;
+  export hmac-multi-update: func(algorithm: string, key: string, parts: list<string>) -> string;
+  export pbkdf2-sha256-hex: func(password: string, salt: string, iterations: u32, keylen: u32) -> string;
+  export scrypt-hex: func(password: string, salt: string, keylen: u32) -> string;
+  export hkdf-sha256-hex: func(ikm: string, salt: string, info: string, keylen: u32) -> string;
+  export list-ciphers: func() -> list<string>;
+  export aes-cbc-roundtrip: func(plaintext: string, key-hex: string, iv-hex: string) -> string;
+  export aes-ctr-roundtrip: func(plaintext: string, key-hex: string, iv-hex: string) -> string;
+  export aes-gcm-roundtrip: func(plaintext: string, key-hex: string, iv-hex: string, aad-text: string) -> string;
+  export chacha20-poly1305-roundtrip: func(plaintext: string, key-hex: string, iv-hex: string, aad-text: string) -> string;
+  export aes-gcm-encrypt-hex: func(plaintext: string, key-hex: string, iv-hex: string) -> string;
+  export ed25519-sign-verify: func(message: string) -> bool;
+  export ecdsa-p256-sign-verify: func(message: string) -> bool;
+  export ecdsa-secp256k1-sign-verify: func(message: string) -> bool;
+  export ed25519-key-type: func() -> string;
+  export ecdsa-p256-export-import-verify: func(message: string) -> bool;
+  export ed25519-wrong-key-verify: func(message: string) -> bool;
+  export list-curves: func() -> list<string>;
+  export get-constants: func() -> string;
+  export subtle-digest-sha256: func(input: string) -> string;
+  export subtle-sign-verify-hmac: func(message: string) -> bool;
+  export subtle-sign-verify-ed25519: func(message: string) -> bool;
+}

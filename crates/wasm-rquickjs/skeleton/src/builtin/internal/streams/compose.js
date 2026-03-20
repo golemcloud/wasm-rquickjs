@@ -3,7 +3,16 @@
 // deno-lint-ignore-file
 
 import { destroyer } from "__wasm_rquickjs_builtin/internal/streams/destroy";
-import { isNodeStream, isReadable, isWritable } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
+import {
+    isNodeStream,
+    isReadable,
+    isReadableStream,
+    isTransformStream,
+    isWebStream,
+    isWritable,
+    isWritableStream,
+} from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { pipeline } from "__wasm_rquickjs_builtin/internal/streams/pipeline";
 import {
     AbortError,
@@ -55,18 +64,32 @@ function compose(...streams) {
     }
 
     for (let n = 0; n < streams.length; ++n) {
-        if (!isNodeStream(streams[n])) {
+        if (!isNodeStream(streams[n]) && !isWebStream(streams[n])) {
             // TODO(ronag): Add checks for non streams.
             continue;
         }
-        if (n < streams.length - 1 && !isReadable(streams[n])) {
+        if (
+            n < streams.length - 1 &&
+            !(
+                isReadable(streams[n]) ||
+                isReadableStream(streams[n]) ||
+                isTransformStream(streams[n])
+            )
+        ) {
             throw new ERR_INVALID_ARG_VALUE(
                 `streams[${n}]`,
                 orgStreams[n],
                 "must be readable",
             );
         }
-        if (n > 0 && !isWritable(streams[n])) {
+        if (
+            n > 0 &&
+            !(
+                isWritable(streams[n]) ||
+                isWritableStream(streams[n]) ||
+                isTransformStream(streams[n])
+            )
+        ) {
             throw new ERR_INVALID_ARG_VALUE(
                 `streams[${n}]`,
                 orgStreams[n],
@@ -97,8 +120,16 @@ function compose(...streams) {
     const head = streams[0];
     const tail = pipeline(streams, onfinished);
 
-    const writable = !!isWritable(head);
-    const readable = !!isReadable(tail);
+    const writable = !!(
+        isWritable(head) ||
+        isWritableStream(head) ||
+        isTransformStream(head)
+    );
+    const readable = !!(
+        isReadable(tail) ||
+        isReadableStream(tail) ||
+        isTransformStream(tail)
+    );
 
     // TODO(ronag): Avoid double buffering.
     // Implement Writable/Readable/Duplex traits.
@@ -106,34 +137,61 @@ function compose(...streams) {
     d = new ComposeDuplex({
         // TODO (ronag): highWaterMark?
         writableObjectMode: !!head?.writableObjectMode,
-        readableObjectMode: !!tail?.writableObjectMode,
+        readableObjectMode: !!tail?.readableObjectMode,
         writable,
         readable,
     });
 
     if (writable) {
-        d._write = function (chunk, encoding, callback) {
-            if (head.write(chunk, encoding)) {
-                callback();
-            } else {
-                ondrain = callback;
-            }
-        };
+        if (isNodeStream(head)) {
+            d._write = function (chunk, encoding, callback) {
+                if (head.write(chunk, encoding)) {
+                    callback();
+                } else {
+                    ondrain = callback;
+                }
+            };
 
-        d._final = function (callback) {
-            head.end();
-            onfinish = callback;
-        };
+            d._final = function (callback) {
+                head.end();
+                onfinish = callback;
+            };
 
-        head.on("drain", function () {
-            if (ondrain) {
-                const cb = ondrain;
-                ondrain = null;
-                cb();
-            }
-        });
+            head.on("drain", function () {
+                if (ondrain) {
+                    const cb = ondrain;
+                    ondrain = null;
+                    cb();
+                }
+            });
+        } else if (isWebStream(head)) {
+            const wsWritable = isTransformStream(head) ? head.writable : head;
+            const writer = wsWritable.getWriter();
 
-        tail.on("finish", function () {
+            d._write = async function (chunk, encoding, callback) {
+                try {
+                    await writer.ready;
+                    writer.write(chunk).catch(() => {});
+                    callback();
+                } catch (err) {
+                    callback(err);
+                }
+            };
+
+            d._final = async function (callback) {
+                try {
+                    await writer.ready;
+                    writer.close().catch(() => {});
+                    onfinish = callback;
+                } catch (err) {
+                    callback(err);
+                }
+            };
+        }
+
+        const toRead = isTransformStream(tail) ? tail.readable : tail;
+
+        eos(toRead, function () {
             if (onfinish) {
                 const cb = onfinish;
                 onfinish = null;
@@ -143,32 +201,56 @@ function compose(...streams) {
     }
 
     if (readable) {
-        tail.on("readable", function () {
-            if (onreadable) {
-                const cb = onreadable;
-                onreadable = null;
-                cb();
-            }
-        });
-
-        tail.on("end", function () {
-            d.push(null);
-        });
-
-        d._read = function () {
-            while (true) {
-                const buf = tail.read();
-
-                if (buf === null) {
-                    onreadable = d._read;
-                    return;
+        if (isNodeStream(tail)) {
+            tail.on("readable", function () {
+                if (onreadable) {
+                    const cb = onreadable;
+                    onreadable = null;
+                    cb();
                 }
+            });
 
-                if (!d.push(buf)) {
-                    return;
+            tail.on("end", function () {
+                d.push(null);
+            });
+
+            d._read = function () {
+                while (true) {
+                    const buf = tail.read();
+
+                    if (buf === null) {
+                        onreadable = d._read;
+                        return;
+                    }
+
+                    if (!d.push(buf)) {
+                        return;
+                    }
                 }
-            }
-        };
+            };
+        } else if (isWebStream(tail)) {
+            const wsReadable = isTransformStream(tail) ? tail.readable : tail;
+            const reader = wsReadable.getReader();
+
+            d._read = async function () {
+                while (true) {
+                    try {
+                        const { value, done } = await reader.read();
+
+                        if (!d.push(value)) {
+                            return;
+                        }
+
+                        if (done) {
+                            d.push(null);
+                            return;
+                        }
+                    } catch {
+                        return;
+                    }
+                }
+            };
+        }
     }
 
     d._destroy = function (err, callback) {
@@ -180,11 +262,14 @@ function compose(...streams) {
         ondrain = null;
         onfinish = null;
 
+        if (isNodeStream(tail)) {
+            destroyer(tail, err);
+        }
+
         if (onclose === null) {
             callback(err);
         } else {
             onclose = callback;
-            destroyer(tail, err);
         }
     };
 

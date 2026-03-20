@@ -1,0 +1,5 @@
+package test:lib-passport-jwt;
+
+world lib-passport-jwt {
+  export run: func() -> string;
+}

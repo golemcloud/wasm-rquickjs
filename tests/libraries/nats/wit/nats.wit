@@ -1,0 +1,5 @@
+package test:lib-nats;
+
+world lib-nats {
+  export run: func() -> string;
+}

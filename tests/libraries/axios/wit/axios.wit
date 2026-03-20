@@ -1,0 +1,5 @@
+package test:lib-axios;
+
+world lib-axios {
+  export run: func() -> string;
+}

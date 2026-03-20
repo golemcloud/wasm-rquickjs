@@ -1,0 +1,5 @@
+package test:lib-mastra;
+
+world lib-mastra {
+  export run: func() -> string;
+}

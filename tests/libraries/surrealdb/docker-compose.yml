@@ -1,0 +1,21 @@
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:v2.2.0
+    command:
+      ["start", "--user", "root", "--pass", "root", "memory"]
+    ports:
+      - "18082:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/surreal",
+          "is-ready",
+          "--endpoint",
+          "http://127.0.0.1:8000",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    tmpfs:
+      - /tmp

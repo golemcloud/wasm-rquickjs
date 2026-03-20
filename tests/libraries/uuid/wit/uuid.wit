@@ -1,0 +1,5 @@
+package test:lib-uuid;
+
+world lib-uuid {
+  export run: func() -> string;
+}
