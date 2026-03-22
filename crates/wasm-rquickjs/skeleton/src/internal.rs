@@ -2278,6 +2278,11 @@ pub fn wizer_initialize() {
         // Phase 1: Create runtime
         STATE = Some(block_on(JsState::new_base()));
 
+        // Mark as Initializing so re-entrant get_js_state() calls (e.g.
+        // from setTimeout callbacks during module init) return the existing
+        // state instead of re-running initialization.
+        INIT_PHASE = InitPhase::Initializing;
+
         // Phase 2: Full initialization
         block_on(STATE.as_ref().unwrap().finish_init());
 
