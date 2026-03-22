@@ -3498,7 +3498,12 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+ "tokio",
  "toml_edit",
+ "wasmtime",
+ "wasmtime-wasi",
+ "wasmtime-wasi-http",
+ "wasmtime-wizer",
  "wit-bindgen-core 0.43.0",
  "wit-encoder",
  "wit-parser 0.235.0",
@@ -3916,6 +3921,19 @@ dependencies = [
  "bytes",
  "futures",
  "tracing",
+ "wasmtime",
+]
+
+[[package]]
+name = "wasmtime-wizer"
+version = "42.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cb0722df2d5a01e7074593437d7ec503105e9b783a680c19d109372e3f23ac2"
+dependencies = [
+ "log",
+ "rayon",
+ "wasm-encoder 0.244.0",
+ "wasmparser 0.244.0",
  "wasmtime",
 ]
 

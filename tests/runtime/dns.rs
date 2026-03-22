@@ -4,9 +4,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "dns")]
-fn compiled_dns() -> CompiledTest {
+async fn compiled_dns() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/dns");
-    CompiledTest::new(path, true).expect("Failed to compile dns")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile dns")
 }
 
 #[test]

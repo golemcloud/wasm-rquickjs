@@ -34,5 +34,21 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Command::Optimize {
+            input,
+            output,
+            init_func,
+        } => {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create tokio runtime");
+            if let Err(err) =
+                rt.block_on(wasm_rquickjs::optimize_component(input, output, init_func))
+            {
+                eprintln!("Error optimizing component: {err:#}");
+                std::process::exit(1);
+            }
+        }
     };
 }

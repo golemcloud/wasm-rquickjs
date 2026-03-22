@@ -4,9 +4,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "cjs_require")]
-fn compiled_cjs_require() -> CompiledTest {
+async fn compiled_cjs_require() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/cjs-require");
-    CompiledTest::new(path, true).expect("Failed to compile cjs_require")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile cjs_require")
 }
 
 #[test]

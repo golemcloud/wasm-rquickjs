@@ -4,9 +4,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "export_from_inner_package")]
-fn compiled_export_from_inner_package() -> CompiledTest {
+async fn compiled_export_from_inner_package() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/export-from-inner-package");
-    CompiledTest::new(path, true).expect("Failed to compile export_from_inner_package")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile export_from_inner_package")
 }
 
 #[test]

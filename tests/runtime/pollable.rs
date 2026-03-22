@@ -5,9 +5,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "pollable")]
-fn compiled_pollable() -> CompiledTest {
+async fn compiled_pollable() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/pollable");
-    CompiledTest::new(path, true).expect("Failed to compile pollable")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile pollable")
 }
 
 #[test]

@@ -9,4 +9,3 @@ const constants = {};
 export { DatabaseSync, StatementSync, constants };
 export default { DatabaseSync, StatementSync, constants };
 "#;
-

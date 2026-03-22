@@ -13,10 +13,12 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
-"wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0" }
+"wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize"] }
 
+anyhow = { workspace = true }
 camino = { workspace = true }
 clap = { version = "4.5.39", features = ["default", "derive"] }
+tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -70,6 +72,10 @@ harness = false
 
 [[test]]
 name = "node_compat_report"
+harness = false
+
+[[test]]
+name = "wizer_benchmark"
 harness = false
 
 [[test]]
@@ -127,6 +133,7 @@ wac-graph = "0.7.0"
 wasmtime = "42.0.1"
 wasmtime-wasi = "42.0.1"
 wasmtime-wasi-http = "42.0.1"
+wasmtime-wizer = "42.0.1"
 wit-bindgen-core = "0.43.0"
 wit-encoder = "0.235.0"
 wit-parser = "0.235.0"

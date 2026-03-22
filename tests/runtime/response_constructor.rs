@@ -5,9 +5,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "response_constructor")]
-fn compiled_response_constructor() -> CompiledTest {
+async fn compiled_response_constructor() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/response-constructor");
-    CompiledTest::new(path, true).expect("Failed to compile response_constructor")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile response_constructor")
 }
 
 async fn run_test(compiled: &CompiledTest, func_name: &str) -> anyhow::Result<()> {

@@ -164,7 +164,7 @@ Object.defineProperty(process, 'title', {
 process.release = { name: 'node' };
 process.allowedNodeEnvironmentFlags = new Set();
 
-const _startTime = Date.now();
+let _startTime = null;
 
 process.cpuUsage = function cpuUsage(previousValue) {
     if (previousValue !== undefined) {
@@ -217,6 +217,9 @@ process.availableMemory = function availableMemory() {
 };
 
 process.uptime = function uptime() {
+    if (_startTime === null) {
+        _startTime = Date.now();
+    }
     return (Date.now() - _startTime) / 1000;
 };
 
