@@ -400,7 +400,7 @@ fn update_config_jsonc(should_not_be_skipped: &[String], missing_from_config: &[
     }
 }
 
-fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
+async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     let path = Utf8Path::new("examples/runtime/node-compat-runner");
     let name = "node-compat-runner";
     let feature_combination_label = "full-no-logging";
@@ -415,10 +415,11 @@ fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         .join("debug")
         .join(format!("{}.wasm", name.to_snake_case()));
 
-    // If already compiled, skip
-    if wasm_path.exists() {
-        println!("Runner WASM already exists at {wasm_path}");
-        return Ok(wasm_path);
+    // If already compiled and optimized, skip
+    let optimized_path = wasm_path.with_extension("optimized.wasm");
+    if optimized_path.exists() {
+        println!("Optimized runner WASM already exists at {optimized_path}");
+        return Ok(optimized_path);
     }
 
     println!("Generating wrapper crate for '{name}' to {wrapper_crate_root}");
@@ -445,7 +446,12 @@ fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         anyhow::bail!("Failed to compile runner");
     }
 
-    Ok(wasm_path)
+    // Optimize with Wizer pre-initialization
+    let optimized_path = wasm_path.with_extension("optimized.wasm");
+    println!("Optimizing component {wasm_path} -> {optimized_path}");
+    wasm_rquickjs::optimize_component(&wasm_path, &optimized_path, "wizer-initialize").await?;
+
+    Ok(optimized_path)
 }
 
 #[test]
@@ -454,7 +460,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     // Step 1: Compile/locate the runner
     println!("=== Compiling node-compat-runner ===");
-    let wasm_path = compile_runner()?;
+    let wasm_path = compile_runner().await?;
     println!("Runner WASM: {wasm_path}");
 
     // Step 2: Create shared prepared component

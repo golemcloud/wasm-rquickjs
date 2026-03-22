@@ -6,9 +6,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "bigint_roundtrip")]
-fn compiled_bigint_roundtrip() -> CompiledTest {
+async fn compiled_bigint_roundtrip() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/bigint-roundtrip");
-    CompiledTest::new(path, true).expect("Failed to compile bigint_roundtrip")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile bigint_roundtrip")
 }
 
 #[test]

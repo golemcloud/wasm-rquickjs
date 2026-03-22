@@ -4,9 +4,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "v8_stack_trace")]
-fn compiled_v8_stack_trace() -> CompiledTest {
+async fn compiled_v8_stack_trace() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/v8_stack_trace");
-    CompiledTest::new(path, true).expect("Failed to compile v8_stack_trace")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile v8_stack_trace")
 }
 
 #[test]

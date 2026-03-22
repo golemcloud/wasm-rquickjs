@@ -1373,6 +1373,22 @@ pub struct JsState {
     pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
+/// Tracks which initialization phase the runtime is in.
+/// Used to support Wizer pre-initialization and guard against re-entrant
+/// `get_js_state()` calls during module evaluation (e.g. from `setTimeout`
+/// callbacks that fire during init).
+#[repr(u8)]
+enum InitPhase {
+    /// No initialization has been performed yet.
+    Uninitialized = 0,
+    /// `STATE` is published but JS evaluation is still in progress.
+    /// Re-entrant `get_js_state()` calls return the existing state without
+    /// re-running initialization.
+    Initializing = 1,
+    /// Fully initialized including user module evaluation.
+    FullyInitialized = 2,
+}
+
 impl JsState {
     /// Phase 1: Create the runtime, context, resolvers, loaders, and all Rust-side
     /// state. Does NOT evaluate any JavaScript — safe to publish to `STATE` before
@@ -1495,11 +1511,9 @@ impl JsState {
         }
     }
 
-    /// Phase 2: Evaluate all JavaScript — dispose symbols, builtin wiring, user
-    /// module import. Must be called after `STATE` is published so that any
-    /// re-entrant `get_js_state()` calls (e.g. from `setTimeout` during module
-    /// init) find the already-published state instead of recursing.
-    async fn finish_init(&self) {
+    /// Phase 2a: Initialize engine builtins — dispose symbols and builtin wiring.
+    /// This can be pre-initialized by Wizer without user module code.
+    async fn init_engine(&self) {
         // Dispose symbols must be initialized before builtins, since builtin
         // modules use [Symbol.dispose] in their class definitions.
         async_with!(self.ctx => |ctx| {
@@ -1540,7 +1554,15 @@ impl JsState {
             .finish::<()>()
             .catch(&ctx)
             .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
+        })
+            .await;
+        drain_and_idle(self).await;
+    }
 
+    /// Phase 2b: Import and evaluate the user module.
+    /// Must be called after init_engine().
+    async fn init_user_module(&self) {
+        async_with!(self.ctx => |ctx| {
             // Import the user module (now globalThis.require is available)
             Module::evaluate(
                 ctx.clone(),
@@ -1567,6 +1589,15 @@ impl JsState {
         })
             .await;
         drain_and_idle(self).await;
+    }
+
+    /// Phase 2: Evaluate all JavaScript — dispose symbols, builtin wiring, user
+    /// module import. Must be called after `STATE` is published so that any
+    /// re-entrant `get_js_state()` calls (e.g. from `setTimeout` during module
+    /// init) find the already-published state instead of recursing.
+    async fn finish_init(&self) {
+        self.init_engine().await;
+        self.init_user_module().await;
     }
 }
 
@@ -1628,18 +1659,26 @@ async fn drain_and_idle(js_state: &JsState) {
 }
 
 static mut STATE: Option<JsState> = None;
+static mut INIT_PHASE: InitPhase = InitPhase::Uninitialized;
 
 #[allow(static_mut_refs)]
 pub fn get_js_state() -> &'static JsState {
     unsafe {
-        if STATE.is_none() {
-            // Phase 1: Create the runtime and all Rust-side state (no JS evaluation).
-            STATE = Some(block_on(JsState::new_base()));
-
-            // Phase 2: Evaluate JS modules. STATE is already published, so any
-            // re-entrant get_js_state() calls (e.g. setTimeout during module init)
-            // will find the existing state instead of recursing into new_base().
-            block_on(STATE.as_ref().unwrap().finish_init());
+        match INIT_PHASE {
+            InitPhase::Uninitialized => {
+                // Phase 1: Create the runtime and all Rust-side state (no JS evaluation).
+                STATE = Some(block_on(JsState::new_base()));
+                // Mark as Initializing so re-entrant get_js_state() calls (e.g.
+                // from setTimeout callbacks during module init) return the existing
+                // state instead of re-running initialization.
+                INIT_PHASE = InitPhase::Initializing;
+                // Phase 2: Evaluate JS modules.
+                block_on(STATE.as_ref().unwrap().finish_init());
+                INIT_PHASE = InitPhase::FullyInitialized;
+            }
+            InitPhase::Initializing | InitPhase::FullyInitialized => {
+                // Already initialized or in progress — return existing state.
+            }
         }
         STATE.as_ref().unwrap()
     }
@@ -2228,5 +2267,42 @@ pub fn format_caught_error(caught: CaughtError) -> String {
         }
         CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
         CaughtError::Value(val) => format_js_exception(&val),
+    }
+}
+
+/// Wizer pre-initialization entry point: full initialization including user module.
+/// After Wizer snapshots this state, the runtime is ready to handle exports immediately.
+#[allow(static_mut_refs)]
+pub fn wizer_initialize() {
+    unsafe {
+        // Phase 1: Create runtime
+        STATE = Some(block_on(JsState::new_base()));
+
+        // Phase 2: Full initialization
+        block_on(STATE.as_ref().unwrap().finish_init());
+
+        // Run GC to compact the heap before snapshot
+        block_on(async {
+            let state = STATE.as_ref().unwrap();
+            drain_and_idle(state).await;
+            async_with!(state.ctx => |ctx| {
+                ctx.run_gc();
+                ctx.run_gc();
+            })
+            .await;
+            drain_and_idle(state).await;
+
+            // Verify clean state
+            assert!(
+                state.abort_handles.borrow().is_empty(),
+                "pending timers/tasks at snapshot time"
+            );
+            assert!(
+                state.unrefed_timers.borrow().is_empty(),
+                "unrefed timers still tracked at snapshot time"
+            );
+        });
+
+        INIT_PHASE = InitPhase::FullyInitialized;
     }
 }

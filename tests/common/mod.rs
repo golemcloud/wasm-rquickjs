@@ -687,11 +687,11 @@ pub struct CompiledTest {
 }
 
 impl CompiledTest {
-    pub fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
-        Self::new_with_features(path, use_shared_target, FeatureCombination::Normal)
+    pub async fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
+        Self::new_with_features(path, use_shared_target, FeatureCombination::Normal).await
     }
 
-    pub fn new_with_features(
+    pub async fn new_with_features(
         path: &Utf8Path,
         use_shared_target: bool,
         feature_combination: FeatureCombination,
@@ -729,8 +729,8 @@ impl CompiledTest {
             .current_dir(&wrapper_crate_root)
             .status()?;
 
-        if use_shared_target {
-            Ok(CompiledTest {
+        let compiled = if use_shared_target {
+            CompiledTest {
                 wasm: Precompiled(
                     Utf8Path::new("tmp")
                         .join("rt-target")
@@ -738,9 +738,9 @@ impl CompiledTest {
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
                 ),
-            })
+            }
         } else {
-            Ok(CompiledTest {
+            CompiledTest {
                 wasm: Precompiled(
                     wrapper_crate_root
                         .join("target")
@@ -748,8 +748,22 @@ impl CompiledTest {
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
                 ),
-            })
-        }
+            }
+        };
+
+        compiled.optimize().await
+    }
+
+    /// Run Wizer pre-initialization on the compiled component.
+    /// Returns a new `CompiledTest` pointing to the optimized wasm file.
+    pub async fn optimize(&self) -> anyhow::Result<CompiledTest> {
+        let input = self.wasm_path();
+        let optimized = input.with_extension("optimized.wasm");
+        println!("Optimizing component {input} -> {optimized}");
+        wasm_rquickjs::optimize_component(input, &optimized, "wizer-initialize").await?;
+        Ok(CompiledTest {
+            wasm: Precompiled(optimized),
+        })
     }
 
     pub fn wasm_path(&self) -> &Utf8Path {

@@ -5,9 +5,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "xhr")]
-fn compiled_xhr() -> CompiledTest {
+async fn compiled_xhr() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/xhr");
-    CompiledTest::new(path, true).expect("Failed to compile xhr")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile xhr")
 }
 
 #[test]

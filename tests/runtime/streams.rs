@@ -5,9 +5,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "streams")]
-fn compiled_streams() -> CompiledTest {
+async fn compiled_streams() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/streams");
-    CompiledTest::new(path, true).expect("Failed to compile streams")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile streams")
 }
 
 #[test]

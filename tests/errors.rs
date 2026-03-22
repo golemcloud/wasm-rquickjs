@@ -11,9 +11,11 @@ use wasmtime::component::Val;
 mod common;
 
 #[test_dep(tagged_as = "errors")]
-fn compiled_errors() -> CompiledTest {
+async fn compiled_errors() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/errors");
-    CompiledTest::new(path, true).expect("Failed to compile errors")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile errors")
 }
 
 #[test]

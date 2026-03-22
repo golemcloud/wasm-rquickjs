@@ -7,6 +7,10 @@ homepage.workspace = true
 repository.workspace = true
 description.workspace = true
 
+[features]
+default = []
+optimize = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:wasmtime-wizer", "dep:tokio"]
+
 [dependencies]
 anyhow = { workspace = true }
 camino = { workspace = true }
@@ -18,6 +22,11 @@ proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }
 toml_edit = { workspace = true }
+tokio = { workspace = true, features = ["rt"], optional = true }
+wasmtime = { workspace = true, features = ["async", "component-model"], optional = true }
+wasmtime-wasi = { workspace = true, optional = true }
+wasmtime-wasi-http = { workspace = true, optional = true }
+wasmtime-wizer = { workspace = true, features = ["component-model", "wasmtime"], optional = true }
 wit-bindgen-core = { workspace = true }
 wit-encoder = { workspace = true }
 wit-parser = { workspace = true }

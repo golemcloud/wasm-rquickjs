@@ -87,7 +87,9 @@ tag_suite!(example1, group8);
 tag_suite!(example2, group8);
 
 #[test_dep(tagged_as = "example3")]
-fn compiled_example3() -> CompiledTest {
+async fn compiled_example3() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/example3");
-    CompiledTest::new(path, true).expect("Failed to compile example3")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile example3")
 }

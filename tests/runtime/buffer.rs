@@ -4,9 +4,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "buffer_utils")]
-fn compiled_buffer_utils() -> CompiledTest {
+async fn compiled_buffer_utils() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/buffer-utils");
-    CompiledTest::new(path, true).expect("Failed to compile buffer_utils")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile buffer_utils")
 }
 
 #[test]
