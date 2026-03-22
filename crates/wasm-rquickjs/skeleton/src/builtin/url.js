@@ -18,47 +18,41 @@ function URLSearchParamsPolyfill(search) {
     if (search instanceof URLSearchParams || search instanceof URLSearchParamsPolyfill) {
         search = search.toString();
     }
-    this [__URLSearchParams__] = parseToDict(search);
+    this[__URLSearchParams__] = parseToDict(search);
 }
 
 const prototype = URLSearchParamsPolyfill.prototype;
 
 prototype.append = function (name, value) {
-    appendTo(this [__URLSearchParams__], name, value);
+    appendTo(this[__URLSearchParams__], name, value);
 };
 
 prototype['delete'] = function (name) {
-    delete this [__URLSearchParams__] [name];
+    delete this[__URLSearchParams__][name];
 };
 
 prototype.get = function (name) {
-    const dict = this [__URLSearchParams__];
+    const dict = this[__URLSearchParams__];
     return this.has(name) ? dict[name][0] : null;
 };
 
 prototype.getAll = function (name) {
-    const dict = this [__URLSearchParams__];
-    return this.has(name) ? dict [name].slice(0) : [];
+    const dict = this[__URLSearchParams__];
+    return this.has(name) ? dict[name].slice(0) : [];
 };
 
 prototype.has = function (name, value) {
-    if (hasOwnProperty(this [__URLSearchParams__], name)) {
-        if (value === undefined) {
-            return true;
-        }
-        const dict = this [__URLSearchParams__];
-        for (let i = 0; i < dict[name].length; i++) {
-            if (dict[name][i] === value) {
-                return true;
-            }
-        }
+    if (!hasOwnProperty(this[__URLSearchParams__], name)) {
         return false;
     }
-    return false;
+    if (value === undefined) {
+        return true;
+    }
+    return this[__URLSearchParams__][name].includes(value);
 };
 
 prototype.set = function set(name, value) {
-    this [__URLSearchParams__][name] = ['' + value];
+    this[__URLSearchParams__][name] = ['' + value];
 };
 
 prototype.toString = function () {
@@ -108,54 +102,42 @@ USPProto[Symbol.toStringTag] = 'URLSearchParams';
 
 USPProto.forEach = function (callback, thisArg) {
     const dict = parseToDict(this.toString());
-    Object.getOwnPropertyNames(dict).forEach(function (name) {
-        dict[name].forEach(function (value) {
+    for (const name of Object.getOwnPropertyNames(dict)) {
+        for (const value of dict[name]) {
             callback.call(thisArg, value, name, this);
-        }, this);
-    }, this);
+        }
+    }
 };
 
 USPProto.sort = function () {
     const dict = parseToDict(this.toString());
-    const keys = [];
-    for (const k in dict) {
-        keys.push(k);
-    }
-    keys.sort();
+    const keys = Object.keys(dict).sort();
 
-    for (let i = 0; i < keys.length; i++) {
-        this['delete'](keys[i]);
+    for (const key of keys) {
+        this['delete'](key);
     }
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        const values = dict[key];
-        for (let j = 0; j < values.length; j++) {
-            this.append(key, values[j]);
+    for (const key of keys) {
+        for (const val of dict[key]) {
+            this.append(key, val);
         }
     }
 };
 
 USPProto.keys = function () {
     const items = [];
-    this.forEach(function (item, name) {
-        items.push(name);
-    });
+    this.forEach((item, name) => items.push(name));
     return makeIterator(items);
 };
 
 USPProto.values = function () {
     const items = [];
-    this.forEach(function (item) {
-        items.push(item);
-    });
+    this.forEach((item) => items.push(item));
     return makeIterator(items);
 };
 
 USPProto.entries = function () {
     const items = [];
-    this.forEach(function (item, name) {
-        items.push([name, item]);
-    });
+    this.forEach((item, name) => items.push([name, item]));
     return makeIterator(items);
 };
 
@@ -163,13 +145,11 @@ USPProto[Symbol.iterator] = USPProto.entries;
 
 Object.defineProperty(USPProto, 'size', {
     get: function () {
-        const dict = parseToDict(this.toString());
         if (USPProto === this) {
             throw new TypeError('Illegal invocation at URLSearchParams.invokeGetter');
         }
-        return Object.keys(dict).reduce(function (prev, cur) {
-            return prev + dict[cur].length;
-        }, 0);
+        const dict = parseToDict(this.toString());
+        return Object.keys(dict).reduce((prev, cur) => prev + dict[cur].length, 0);
     }
 });
 
@@ -217,8 +197,7 @@ function parseToDict(search) {
 
     if (typeof search === "object") {
         if (Array.isArray(search)) {
-            for (let i = 0; i < search.length; i++) {
-                const item = search[i];
+            for (const item of search) {
                 if (Array.isArray(item) && item.length === 2) {
                     appendTo(dict, item[0], item[1]);
                 } else {
@@ -233,21 +212,16 @@ function parseToDict(search) {
             }
         }
     } else {
-        if (search.indexOf("?") === 0) {
+        if (search.startsWith("?")) {
             search = search.slice(1);
         }
 
-        const pairs = search.split("&");
-        for (let j = 0; j < pairs.length; j++) {
-            const value = pairs[j];
+        for (const value of search.split("&")) {
             const index = value.indexOf('=');
-
-            if (-1 < index) {
+            if (index !== -1) {
                 appendTo(dict, decode(value.slice(0, index)), decode(value.slice(index + 1)));
-            } else {
-                if (value) {
-                    appendTo(dict, decode(value), '');
-                }
+            } else if (value) {
+                appendTo(dict, decode(value), '');
             }
         }
     }
@@ -259,7 +233,6 @@ function appendTo(dict, name, value) {
     const val = typeof value === 'string' ? value : (
         value !== null && value !== undefined && typeof value.toString === 'function' ? value.toString() : JSON.stringify(value)
     );
-
     if (hasOwnProperty(dict, name)) {
         dict[name].push(val);
     } else {

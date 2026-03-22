@@ -90,11 +90,10 @@ function nextTick(fn, ...args) {
 
 function createHandleWrap() {
     return {
-        setKeepAlive: function() {},
-        setNoDelay: function() {},
-        set_keep_alive: function() {},
-        set_no_delay: function() {},
-        close: function() {},
+        setKeepAlive() {},
+        set_keep_alive() {},
+        set_no_delay() {},
+        close() {},
     };
 }
 
@@ -158,7 +157,6 @@ function Socket(options) {
     this.localPort = undefined;
     this.localFamily = undefined;
     this._family = options.family ?? 4;
-    this._httpStatusProbeBuffer = '';
     this._hadError = false;
 
     // Shut down the socket when we're finished with it.
@@ -329,7 +327,6 @@ Socket.prototype.connect = function connect(...args) {
         this._readToken++;
         this.destroyed = false;
         this.readable = true;
-        this._httpStatusProbeBuffer = '';
         this._hadError = false;
 
         const rState = this._readableState;

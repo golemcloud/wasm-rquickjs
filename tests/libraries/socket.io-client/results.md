@@ -2,7 +2,7 @@
 
 **Package:** `socket.io-client`
 **Version:** `4.8.3`
-**Tested on:** 2026-03-10
+**Tested on:** 2026-03-20
 
 ## Test Results
 

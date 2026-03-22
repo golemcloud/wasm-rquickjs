@@ -36,10 +36,9 @@ class Channel {
     }
 
     publish(message) {
-        const subs = this._subscribers.slice();
-        for (let i = 0; i < subs.length; i++) {
+        for (const onMessage of this._subscribers.slice()) {
             try {
-                subs[i](message, this._name);
+                onMessage(message, this._name);
             } catch (e) {
                 queueMicrotask(() => { throw e; });
             }
@@ -153,86 +152,72 @@ class TracingChannel {
         return allRemoved;
     }
 
-    traceSync(fn, context, thisArg, ...args) {
+    traceSync(fn, context = {}, thisArg, ...args) {
         if (!this.hasSubscribers) {
             return fn.apply(thisArg, args);
         }
-        if (context === undefined || context === null) {
-            context = {};
-        }
-        // runStores publishes start, then calls doTrace inside store contexts
-        const doTrace = () => {
+
+        const { start, end, error } = this;
+
+        return start.runStores(context, () => {
             try {
                 const result = fn.apply(thisArg, args);
                 context.result = result;
                 return result;
             } catch (err) {
                 context.error = err;
-                this.error.publish(context);
+                error.publish(context);
                 throw err;
             } finally {
-                this.end.publish(context);
+                end.publish(context);
             }
-        };
-        return this.start.runStores(context, doTrace);
+        });
     }
 
-    tracePromise(fn, context, thisArg, ...args) {
+    tracePromise(fn, context = {}, thisArg, ...args) {
         if (!this.hasSubscribers) {
             return fn.apply(thisArg, args);
         }
-        if (context === undefined || context === null) {
-            context = {};
-        }
-        // runStores publishes start, then calls doTrace inside store contexts
-        // end fires after the synchronous portion (when fn returns a promise),
-        // asyncStart/asyncEnd fire when the promise settles
-        const doTrace = () => {
+
+        const { start, end, asyncStart, asyncEnd, error } = this;
+
+        return start.runStores(context, () => {
             try {
                 const promise = fn.apply(thisArg, args);
-                // end fires here — after sync portion, before promise settles
-                this.end.publish(context);
+                end.publish(context);
                 return Promise.resolve(promise).then(
                     (result) => {
                         context.result = result;
-                        // asyncStart.runStores publishes asyncStart, restores store contexts
-                        return this.asyncStart.runStores(context, () => {
+                        return asyncStart.runStores(context, () => {
                             try { return result; }
-                            finally { this.asyncEnd.publish(context); }
+                            finally { asyncEnd.publish(context); }
                         });
                     },
                     (err) => {
                         context.error = err;
-                        this.error.publish(context);
-                        return this.asyncStart.runStores(context, () => {
+                        error.publish(context);
+                        return asyncStart.runStores(context, () => {
                             try { throw err; }
-                            finally { this.asyncEnd.publish(context); }
+                            finally { asyncEnd.publish(context); }
                         });
                     }
                 );
             } catch (err) {
                 context.error = err;
-                this.error.publish(context);
-                this.end.publish(context);
+                error.publish(context);
+                end.publish(context);
                 throw err;
             }
-        };
-        return this.start.runStores(context, doTrace);
+        });
     }
 
-    traceCallback(fn, position, context, thisArg, ...args) {
+    traceCallback(fn, position = -1, context = {}, thisArg, ...args) {
         if (!this.hasSubscribers) {
             return fn.apply(thisArg, args);
         }
-        if (typeof position !== 'number') {
-            position = -1;
-        }
-        const idx = position < 0 ? args.length + position : position;
-        if (context === undefined || context === null) {
-            context = {};
-        }
 
-        const self = this;
+        const { start, end, asyncStart, asyncEnd, error } = this;
+        const idx = position < 0 ? args.length + position : position;
         const originalCb = args[idx];
 
         if (idx >= 0 && idx < args.length && typeof originalCb !== 'function') {
@@ -242,56 +227,48 @@ class TracingChannel {
         }
 
         if (typeof originalCb !== 'function') {
-            // No callback at position; just trace the sync call
-            const doTrace = () => {
+            return start.runStores(context, () => {
                 try {
                     return fn.apply(thisArg, args);
                 } catch (err) {
                     context.error = err;
-                    this.error.publish(context);
+                    error.publish(context);
                     throw err;
                 } finally {
-                    this.end.publish(context);
+                    end.publish(context);
                 }
-            };
-            return this.start.runStores(context, doTrace);
+            });
         }
 
         function wrappedCallback(err, ...cbArgs) {
             if (err) {
                 context.error = err;
-                self.error.publish(context);
+                error.publish(context);
             } else {
                 context.result = cbArgs[0];
             }
-            // Restore store contexts for async continuation
-            // asyncStart.runStores publishes asyncStart, then runs callback inside stores
-            const doAsync = () => {
+            return asyncStart.runStores(context, () => {
                 try {
                     return originalCb.call(this, err, ...cbArgs);
                 } finally {
-                    self.asyncEnd.publish(context);
+                    asyncEnd.publish(context);
                 }
-            };
-            return self.asyncStart.runStores(context, doAsync);
+            });
         }
 
         args[idx] = wrappedCallback;
 
-        // runStores publishes start, then calls doTrace inside store contexts
-        const doTrace = () => {
+        return start.runStores(context, () => {
             try {
-                const result = fn.apply(thisArg, args);
-                return result;
+                return fn.apply(thisArg, args);
             } catch (err) {
                 context.error = err;
-                this.error.publish(context);
+                error.publish(context);
                 throw err;
             } finally {
-                this.end.publish(context);
+                end.publish(context);
             }
-        };
-        return this.start.runStores(context, doTrace);
+        });
     }
 }
 

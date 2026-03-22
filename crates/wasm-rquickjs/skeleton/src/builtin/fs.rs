@@ -338,9 +338,7 @@ fn resolve_emulated_symlinks_checked(path: &str) -> std::io::Result<String> {
         if let Some(target) = get_emulated_symlink_target(&current) {
             symlink_count += 1;
             if symlink_count > MAX_SYMLINK_FOLLOWS {
-                return Err(std::io::Error::other(
-                    "too many levels of symbolic links",
-                ));
+                return Err(std::io::Error::other("too many levels of symbolic links"));
             }
 
             // Remove the symlink component
@@ -531,8 +529,7 @@ fn metadata_to_obj<'js>(
     obj.set("gid", 0_f64).unwrap();
     obj.set("rdev", 0_f64).unwrap();
     obj.set("blksize", 4096_f64).unwrap();
-    obj.set("blocks", meta.len().div_ceil(512) as f64)
-        .unwrap();
+    obj.set("blocks", meta.len().div_ceil(512) as f64).unwrap();
 
     obj.set("size", meta.len() as f64).unwrap();
 

@@ -2,7 +2,7 @@
 
 **Package:** `mocha`
 **Version:** `11.7.5`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-20
 
 ## Bundling
 
@@ -14,42 +14,35 @@ Rollup bundling succeeded for all 5 test files.
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: navigator is not defined`
-- **Run error:** `Error: failed to run main module 'tmp/lib-test-mocha-01/target/wasm32-wasip1/debug/lib_mocha.wasm'`
-- **Root cause:** Mocha initialization executes browser-detection logic that reads `navigator`, which is not available in this runtime.
+- **Root cause:** Mocha's browser-detection code (`getChromeVersion`) reads `navigator.userAgent` during module initialization, which is not available in the wasm-rquickjs runtime. This aborts before any test logic executes.
 
 ### test-02-suite-model.js — Suite/Test tree construction
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: navigator is not defined`
-- **Run error:** `Error: failed to run main module 'tmp/lib-test-mocha-02/target/wasm32-wasip1/debug/lib_mocha.wasm'`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
 ### test-03-bdd-interface.js — BDD interface programmatic suite definition
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: navigator is not defined`
-- **Run error:** `Error: failed to run main module 'tmp/lib-test-mocha-03/target/wasm32-wasip1/debug/lib_mocha.wasm'`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
 ### test-04-reporters.js — built-in reporter registry and selection
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: navigator is not defined`
-- **Run error:** `Error: failed to run main module 'tmp/lib-test-mocha-04/target/wasm32-wasip1/debug/lib_mocha.wasm'`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
-### test-05-grep-hooks.js — grep/fgrep/invert/rootHooks configuration
+### test-05-grep-hooks.js — grep/fgrep/invert and rootHooks configuration
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: navigator is not defined`
-- **Run error:** `Error: failed to run main module 'tmp/lib-test-mocha-05/target/wasm32-wasip1/debug/lib_mocha.wasm'`
 - **Root cause:** Same module-initialization failure before test logic executes.
 
 ## Summary
 
 - Tests passed in Node.js: 5/5
 - Tests passed in wasm-rquickjs: 0/5
-- Missing APIs / unsupported environment:
-  - Global `navigator` expected during Mocha module initialization
-- Blockers:
-  - Mocha aborts at startup in wasm-rquickjs, preventing all API usage in this workflow
+- Missing APIs: Global `navigator` object (specifically `navigator.userAgent` used by Mocha's `getChromeVersion()` browser-detection in its reporter system)
+- Blockers: Mocha aborts at module initialization in wasm-rquickjs due to missing `navigator` global, preventing all API usage

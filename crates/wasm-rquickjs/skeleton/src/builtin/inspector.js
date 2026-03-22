@@ -4,8 +4,6 @@
 
 import EventEmitter from 'node:events';
 
-const NOT_SUPPORTED_ERROR = new Error('inspector is not supported in WebAssembly environment');
-
 export class Session extends EventEmitter {
     constructor() {
         super();

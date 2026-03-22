@@ -4,6 +4,14 @@ const _timeOrigin = Date.now();
 const _marks = [];
 const _measures = [];
 
+function findMark(name) {
+    const entry = _marks.find(e => e.name === name);
+    if (!entry) {
+        throw new Error(`The "${name}" performance mark has not been set`);
+    }
+    return entry;
+}
+
 class PerformanceEntry {
     constructor(name, entryType, startTime, duration) {
         this.name = name;
@@ -36,6 +44,16 @@ const nodeTiming = Object.freeze({
     idleTime: 0,
 });
 
+function removeByName(arr, name) {
+    if (name === undefined) {
+        arr.length = 0;
+    } else {
+        for (let i = arr.length - 1; i >= 0; i--) {
+            if (arr[i].name === name) arr.splice(i, 1);
+        }
+    }
+}
+
 const performance = {
     timeOrigin: _timeOrigin,
 
@@ -44,7 +62,7 @@ const performance = {
     },
 
     mark(name, options) {
-        const startTime = (options && options.startTime !== undefined) ? options.startTime : performance.now();
+        const startTime = options?.startTime ?? this.now();
         const entry = new PerformanceEntry(name, 'mark', startTime, 0);
         _marks.push(entry);
         return entry;
@@ -52,43 +70,23 @@ const performance = {
 
     measure(name, startMarkOrOptions, endMark) {
         let startTime = 0;
-        let endTime = performance.now();
+        let endTime = this.now();
 
         if (typeof startMarkOrOptions === 'string') {
-            const startEntry = _marks.find(e => e.name === startMarkOrOptions);
-            if (!startEntry) {
-                throw new Error(`The "${startMarkOrOptions}" performance mark has not been set`);
-            }
-            startTime = startEntry.startTime;
+            startTime = findMark(startMarkOrOptions).startTime;
             if (typeof endMark === 'string') {
-                const endEntry = _marks.find(e => e.name === endMark);
-                if (!endEntry) {
-                    throw new Error(`The "${endMark}" performance mark has not been set`);
-                }
-                endTime = endEntry.startTime;
+                endTime = findMark(endMark).startTime;
             }
         } else if (startMarkOrOptions && typeof startMarkOrOptions === 'object') {
             if (startMarkOrOptions.start !== undefined) {
-                if (typeof startMarkOrOptions.start === 'string') {
-                    const se = _marks.find(e => e.name === startMarkOrOptions.start);
-                    if (!se) {
-                        throw new Error(`The "${startMarkOrOptions.start}" performance mark has not been set`);
-                    }
-                    startTime = se.startTime;
-                } else {
-                    startTime = startMarkOrOptions.start;
-                }
+                startTime = typeof startMarkOrOptions.start === 'string'
+                    ? findMark(startMarkOrOptions.start).startTime
+                    : startMarkOrOptions.start;
             }
             if (startMarkOrOptions.end !== undefined) {
-                if (typeof startMarkOrOptions.end === 'string') {
-                    const ee = _marks.find(e => e.name === startMarkOrOptions.end);
-                    if (!ee) {
-                        throw new Error(`The "${startMarkOrOptions.end}" performance mark has not been set`);
-                    }
-                    endTime = ee.startTime;
-                } else {
-                    endTime = startMarkOrOptions.end;
-                }
+                endTime = typeof startMarkOrOptions.end === 'string'
+                    ? findMark(startMarkOrOptions.end).startTime
+                    : startMarkOrOptions.end;
             }
             if (startMarkOrOptions.duration !== undefined) {
                 endTime = startTime + startMarkOrOptions.duration;
@@ -102,23 +100,11 @@ const performance = {
     },
 
     clearMarks(name) {
-        if (name === undefined) {
-            _marks.length = 0;
-        } else {
-            for (let i = _marks.length - 1; i >= 0; i--) {
-                if (_marks[i].name === name) _marks.splice(i, 1);
-            }
-        }
+        removeByName(_marks, name);
     },
 
     clearMeasures(name) {
-        if (name === undefined) {
-            _measures.length = 0;
-        } else {
-            for (let i = _measures.length - 1; i >= 0; i--) {
-                if (_measures[i].name === name) _measures.splice(i, 1);
-            }
-        }
+        removeByName(_measures, name);
     },
 
     getEntries() {
@@ -126,15 +112,13 @@ const performance = {
     },
 
     getEntriesByName(name, type) {
-        return performance.getEntries().filter(e => {
-            if (e.name !== name) return false;
-            if (type !== undefined && e.entryType !== type) return false;
-            return true;
-        });
+        return this.getEntries().filter(e =>
+            e.name === name && (type === undefined || e.entryType === type)
+        );
     },
 
     getEntriesByType(type) {
-        return performance.getEntries().filter(e => e.entryType === type);
+        return this.getEntries().filter(e => e.entryType === type);
     },
 
     nodeTiming,
@@ -149,13 +133,9 @@ class PerformanceObserver {
         this._callback = callback;
     }
 
-    observe(options) {
-        // no-op
-    }
+    observe() {}
 
-    disconnect() {
-        // no-op
-    }
+    disconnect() {}
 
     takeRecords() {
         return [];
@@ -166,11 +146,11 @@ class PerformanceObserver {
     }
 }
 
-function monitorEventLoopDelay(options) {
+function monitorEventLoopDelay() {
     throw new Error('monitorEventLoopDelay is not supported in WebAssembly environment');
 }
 
-function createHistogram(options) {
+function createHistogram() {
     throw new Error('createHistogram is not supported in WebAssembly environment');
 }
 

@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::panic::{RefUnwindSafe, UnwindSafe};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use rquickjs::qjs;
@@ -407,10 +407,6 @@ fn sqlite_owned_value_to_js<'js>(
     }
 }
 
-fn value_ref_to_owned(val: &rusqlite::types::ValueRef) -> rusqlite::types::Value {
-    rusqlite::types::Value::from(val.clone())
-}
-
 fn create_null_proto_object<'js>(
     ctx: &rquickjs::Ctx<'js>,
 ) -> rquickjs::Result<rquickjs::Object<'js>> {
@@ -751,7 +747,6 @@ fn stmt_run_impl<'js>(
 
     let result = rquickjs::Object::new(ctx.clone())?;
     if read_big_ints {
-        use rquickjs::IntoJs;
         let changes_bi = rquickjs::BigInt::from_i64(ctx.clone(), changes as i64)?;
         result.set("changes", rquickjs::Value::from_big_int(changes_bi))?;
         let rowid_bi = rquickjs::BigInt::from_i64(ctx.clone(), last_rowid)?;
@@ -905,7 +900,7 @@ fn stmt_iterate_init_impl<'js>(
             let mut row_vals = Vec::with_capacity(col_names.len());
             for i in 0..col_names.len() {
                 let val = row.get_ref(i).map_err(|e| sqlite_error(&ctx, &e))?;
-                row_vals.push(value_ref_to_owned(&val));
+                row_vals.push(rusqlite::types::Value::from(val.clone()));
             }
             all_values.push(row_vals);
         }
@@ -1485,8 +1480,6 @@ fn apply_changeset_impl<'js>(
         None
     };
 
-    use std::sync::Arc;
-
     let aborted = Arc::new(Mutex::new(false));
     let callback_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
@@ -1670,7 +1663,7 @@ fn set_authorizer_impl<'js>(
         .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
 
     if callback.is_null() || callback.is_undefined() {
-        conn.authorizer(
+        let _ = conn.authorizer(
             None::<fn(rusqlite::hooks::AuthContext<'_>) -> rusqlite::hooks::Authorization>,
         );
         return Ok(());
@@ -1681,7 +1674,7 @@ fn set_authorizer_impl<'js>(
     })?;
     let persistent_fn = SendPersistent(rquickjs::Persistent::save(&ctx, func.clone()));
 
-    conn.authorizer(Some(
+    let _ = conn.authorizer(Some(
         move |auth_ctx: rusqlite::hooks::AuthContext<'_>| -> rusqlite::hooks::Authorization {
             let js_ctx = match unsafe { get_udf_js_ctx() } {
                 Ok(ctx) => ctx,
@@ -2168,4 +2161,5 @@ pub mod native_module {
 
 pub const SQLITE_JS: &str = include_str!("sqlite.js");
 
+#[allow(dead_code)]
 pub const WIRE_JS: &str = "";

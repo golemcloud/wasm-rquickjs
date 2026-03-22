@@ -2,7 +2,7 @@
 
 **Package:** `dotenv`
 **Version:** `17.3.1`
-**Tested on:** 2026-03-10
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -24,13 +24,11 @@
 
 ### test-05-config-processenv.js — config file loading + processEnv override
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: ENOENT: no such file or directory, open 'fixtures/config.env'`
-- **Root cause:** Filesystem paths used by `dotenv.config()` are not accessible in this WASI execution context, so `.env` files cannot be read via `node:fs`.
+- **wasm-rquickjs:** ✅ PASS
 
 ## Summary
 
-- Tests passed: 4/5
-- Missing APIs: none identified for `dotenv.parse` / `dotenv.populate`
-- Behavioral differences: `dotenv.config()` cannot read `.env` files from filesystem paths in wasm-rquickjs (`ENOENT` on `node:fs` open)
-- Blockers: file-based env loading is not available for this runtime invocation model
+- Tests passed: 5/5
+- Missing APIs: none
+- Behavioral differences: none
+- Blockers: none — all dotenv functionality works correctly when fixture files are available on the WASI filesystem

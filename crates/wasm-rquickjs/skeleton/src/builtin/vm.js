@@ -1,62 +1,20 @@
 import { eval_in_new_context as evalInNewContext } from '__wasm_rquickjs_builtin/vm_native';
 
-var contextIdCounter = 1;
-var contextSymbol = Symbol('vm.context');
-var identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
-var moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
-var moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
-
-function isAllowNativesSyntaxEnabled() {
-    var runtimeFlags = globalThis.__wasm_rquickjs_v8_runtime_flags;
-    if (runtimeFlags && runtimeFlags.allowNativesSyntax === true) {
-        return true;
-    }
-
-    var processObject = globalThis.process;
-    if (!processObject || !Array.isArray(processObject.execArgv)) {
-        return false;
-    }
-
-    var enabled = false;
-    for (var i = 0; i < processObject.execArgv.length; i++) {
-        var arg = String(processObject.execArgv[i]).replace(/_/g, '-');
-        if (arg === '--allow-natives-syntax') {
-            enabled = true;
-            continue;
-        }
-
-        if (arg === '--noallow-natives-syntax' || arg === '--no-allow-natives-syntax') {
-            enabled = false;
-        }
-    }
-
-    return enabled;
-}
-
-function emulateV8NativeIntrinsicIfSupported(code) {
-    if (!isAllowNativesSyntaxEnabled()) {
-        return undefined;
-    }
-
-    var trimmed = code.trim();
-    if (trimmed === '%GetUndetectable()' || trimmed === '%GetUndetectable();') {
-        // Node uses this intrinsic only for V8 internals tests. Returning a
-        // plain empty object preserves util.inspect observable behavior.
-        return {};
-    }
-
-    return undefined;
-}
+let contextIdCounter = 1;
+const contextSymbol = Symbol('vm.context');
+const identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
+const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
+const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
 
 function splitDeclarators(declarationList) {
-    var result = [];
-    var current = '';
-    var depth = 0;
-    var quote = '';
+    const result = [];
+    let current = '';
+    let depth = 0;
+    let quote = '';
 
-    for (var i = 0; i < declarationList.length; i++) {
-        var ch = declarationList[i];
-        var prev = i > 0 ? declarationList[i - 1] : '';
+    for (let i = 0; i < declarationList.length; i++) {
+        const ch = declarationList[i];
+        const prev = i > 0 ? declarationList[i - 1] : '';
 
         if (quote) {
             current += ch;
@@ -103,18 +61,18 @@ function splitDeclarators(declarationList) {
 }
 
 function parseSourceTextModuleBindings(source) {
-    var bindings = [];
-    var exportDeclarationPattern = /export\s+(const|let|var)\s+([^;]+)/g;
-    var match;
+    const bindings = [];
+    const exportDeclarationPattern = /export\s+(const|let|var)\s+([^;]+)/g;
+    let match;
 
     while ((match = exportDeclarationPattern.exec(source)) !== null) {
-        var kind = match[1];
-        var declarators = splitDeclarators(match[2]);
+        const kind = match[1];
+        const declarators = splitDeclarators(match[2]);
 
-        for (var i = 0; i < declarators.length; i++) {
-            var declarator = declarators[i];
-            var eq = declarator.indexOf('=');
-            var bindingName = (eq === -1 ? declarator : declarator.slice(0, eq)).trim();
+        for (let i = 0; i < declarators.length; i++) {
+            const declarator = declarators[i];
+            const eq = declarator.indexOf('=');
+            const bindingName = (eq === -1 ? declarator : declarator.slice(0, eq)).trim();
 
             if (!identifierPattern.test(bindingName)) {
                 throw new SyntaxError('Unsupported export declaration in vm.SourceTextModule');
@@ -135,8 +93,8 @@ function parseSourceTextModuleBindings(source) {
 }
 
 function compileSourceTextModuleEvaluator(source, names) {
-    var executableSource = source.replace(/\bexport\s+(?=(?:const|let|var)\b)/g, '');
-    var exportObjectEntries = names.map(function(name) {
+    const executableSource = source.replace(/\bexport\s+(?=(?:const|let|var)\b)/g, '');
+    const exportObjectEntries = names.map(function(name) {
         return JSON.stringify(name) + ': ' + name;
     }).join(', ');
 
@@ -144,8 +102,8 @@ function compileSourceTextModuleEvaluator(source, names) {
 }
 
 function createModuleNamespace(module) {
-    var namespaceTarget = Object.create(null);
-    var names = module._names.slice().sort();
+    const namespaceTarget = Object.create(null);
+    const names = module._names.slice().sort();
 
     // QuickJS does not expose virtual export keys from this proxy via
     // Object.getOwnPropertyNames() while bindings are uninitialized.
@@ -182,7 +140,7 @@ function createModuleNamespace(module) {
         },
         get: function(_target, prop, receiver) {
             if (typeof prop === 'string' && module._bindings[prop] !== undefined) {
-                var binding = module._bindings[prop];
+                const binding = module._bindings[prop];
                 if (!binding.initialized) {
                     throw new ReferenceError(prop + ' is not initialized');
                 }
@@ -192,7 +150,7 @@ function createModuleNamespace(module) {
         },
         getOwnPropertyDescriptor: function(_target, prop) {
             if (typeof prop === 'string' && module._bindings[prop] !== undefined) {
-                var binding = module._bindings[prop];
+                const binding = module._bindings[prop];
                 if (!binding.initialized) {
                     throw new ReferenceError(prop + ' is not initialized');
                 }
@@ -218,12 +176,12 @@ export function runInNewContext(code, sandbox, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
 
-    var keys = [];
-    var values = [];
+    const keys = [];
+    const values = [];
 
     if (sandbox && typeof sandbox === 'object') {
-        var sandboxKeys = Object.keys(sandbox);
-        for (var i = 0; i < sandboxKeys.length; i++) {
+        const sandboxKeys = Object.keys(sandbox);
+        for (let i = 0; i < sandboxKeys.length; i++) {
             keys.push(sandboxKeys[i]);
             values.push(sandbox[sandboxKeys[i]]);
         }
@@ -254,21 +212,22 @@ export function runInContext(code, context, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
 
-    var keys = Object.keys(context).filter(function(k) { return k !== contextSymbol.toString(); });
-    var values = keys.map(function(k) { return context[k]; });
+    const keys = [];
+    const values = [];
+    for (const k of Object.keys(context)) {
+        if (typeof context[contextSymbol] !== 'undefined' && k === String(contextSymbol)) {
+            continue;
+        }
+        keys.push(k);
+        values.push(context[k]);
+    }
 
     return evalInNewContext(createIndirectEvalSource(code), keys, values);
 }
 
 export function runInThisContext(code, options) {
     if (code === undefined || code === null) return undefined;
-
     code = String(code);
-    var emulated = emulateV8NativeIntrinsicIfSupported(code);
-    if (emulated !== undefined) {
-        return emulated;
-    }
-
     return (0, eval)(code);
 }
 
@@ -304,12 +263,12 @@ export class SourceTextModule {
         this._source = String(code);
         this._status = 'unlinked';
 
-        var declaredBindings = parseSourceTextModuleBindings(this._source);
+        const declaredBindings = parseSourceTextModuleBindings(this._source);
         this._bindings = Object.create(null);
         this._names = [];
 
-        for (var i = 0; i < declaredBindings.length; i++) {
-            var binding = declaredBindings[i];
+        for (let i = 0; i < declaredBindings.length; i++) {
+            const binding = declaredBindings[i];
             this._names.push(binding.name);
             this._bindings[binding.name] = {
                 kind: binding.kind,
@@ -348,10 +307,10 @@ export class SourceTextModule {
         this._status = 'evaluating';
 
         try {
-            var evaluatedExports = this._evaluateSource();
-            for (var i = 0; i < this._names.length; i++) {
-                var name = this._names[i];
-                var binding = this._bindings[name];
+            const evaluatedExports = this._evaluateSource();
+            for (let i = 0; i < this._names.length; i++) {
+                const name = this._names[i];
+                const binding = this._bindings[name];
                 binding.initialized = true;
                 binding.value = evaluatedExports[name];
             }
@@ -368,7 +327,7 @@ export function createScript(code, options) {
     return new Script(code, options);
 }
 
-var vmExports = {
+const vmExports = {
     runInNewContext,
     runInContext,
     runInThisContext,

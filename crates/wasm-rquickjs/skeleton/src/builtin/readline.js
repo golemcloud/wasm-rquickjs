@@ -1,15 +1,14 @@
 // node:readline stub implementation
-// Readline is implementable but stubbed for now
 
-const NOT_SUPPORTED_ERROR = new Error('readline is not yet supported in WebAssembly environment');
+const NOT_SUPPORTED = new Error('node:readline is not yet supported in WebAssembly environment');
 
-export function createInterface(options) {
-    throw NOT_SUPPORTED_ERROR;
+export function createInterface() {
+    throw NOT_SUPPORTED;
 }
 
 export class Interface {
     constructor() {
-        throw NOT_SUPPORTED_ERROR;
+        throw NOT_SUPPORTED;
     }
 }
 
@@ -29,7 +28,7 @@ export function moveCursor(stream, dx, dy, callback) {
     if (typeof callback === 'function') callback();
 }
 
-export function emitKeypressEvents(stream, interface_) {
+export function emitKeypressEvents() {
     // no-op
 }
 

@@ -2,7 +2,7 @@
 
 **Package:** `@grpc/proto-loader`
 **Version:** `0.8.0`
-**Tested on:** 2026-03-10
+**Tested on:** 2026-03-20
 
 ## Test Results
 

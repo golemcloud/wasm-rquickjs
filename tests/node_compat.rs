@@ -24,20 +24,21 @@ mod common;
 
 struct FullPreparedComponent(Arc<PreparedComponent>);
 
-fn compile_node_compat_with_features(
+async fn compile_node_compat_with_features(
     feature_combination: common::FeatureCombination,
 ) -> Arc<PreparedComponent> {
     let path = Utf8Path::new("examples/runtime/node-compat-runner");
     let compiled = CompiledTest::new_with_features(path, true, feature_combination)
+        .await
         .expect("Failed to compile node-compat-runner");
     Arc::new(PreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"))
 }
 
 #[test_dep]
-fn prepare_node_compat_full() -> Arc<FullPreparedComponent> {
-    Arc::new(FullPreparedComponent(compile_node_compat_with_features(
-        common::FeatureCombination::Full,
-    )))
+async fn prepare_node_compat_full() -> Arc<FullPreparedComponent> {
+    Arc::new(FullPreparedComponent(
+        compile_node_compat_with_features(common::FeatureCombination::Full).await,
+    ))
 }
 
 // --- Config loading ---

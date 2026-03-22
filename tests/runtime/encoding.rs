@@ -4,9 +4,11 @@ use indoc::indoc;
 use test_r::{test, test_dep};
 
 #[test_dep(tagged_as = "encoding")]
-fn compiled_encoding() -> CompiledTest {
+async fn compiled_encoding() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/encoding");
-    CompiledTest::new(path, true).expect("Failed to compile encoding")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile encoding")
 }
 
 #[test]

@@ -4,9 +4,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "toplevel_timer")]
-fn compiled_toplevel_timer() -> CompiledTest {
+async fn compiled_toplevel_timer() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/toplevel-timer");
-    CompiledTest::new(path, true).expect("Failed to compile toplevel-timer")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile toplevel-timer")
 }
 
 #[test]

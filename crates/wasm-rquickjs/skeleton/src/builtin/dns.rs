@@ -34,8 +34,8 @@ impl DnsResult {
     }
 
     #[qjs(get)]
-    pub fn address(&self) -> String {
-        self.address.clone()
+    pub fn address(&self) -> &str {
+        &self.address
     }
 
     #[qjs(get)]

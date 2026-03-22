@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use chrono::{DateTime, Datelike, Timelike, Utc};
 
 #[rquickjs::module]
@@ -69,15 +71,14 @@ fn dtf_resolve_impl(timestamp_ms: f64, timezone: &str) -> Result<DtfResolved, St
         .ok_or_else(|| format!("Invalid timestamp: {timestamp_ms}"))?;
 
     if timezone.eq_ignore_ascii_case("UTC") {
-        let civil = dt.with_timezone(&Utc);
         Ok(DtfResolved {
-            year: civil.year(),
-            month: civil.month(),
-            day: civil.day(),
-            hour: civil.hour(),
-            minute: civil.minute(),
-            second: civil.second(),
-            weekday: civil.weekday().num_days_from_monday() + 1,
+            year: dt.year(),
+            month: dt.month(),
+            day: dt.day(),
+            hour: dt.hour(),
+            minute: dt.minute(),
+            second: dt.second(),
+            weekday: dt.weekday().num_days_from_monday() + 1,
             utc_offset_minutes: 0,
         })
     } else {
@@ -138,31 +139,31 @@ fn collator_compare_impl(
     numeric: bool,
     ignore_punctuation: bool,
 ) -> i32 {
-    let a_str: String = if ignore_punctuation {
-        a.chars()
+    let filter_punct = |s: &str| -> String {
+        s.chars()
             .filter(|c| c.is_alphanumeric() || c.is_whitespace())
             .collect()
-    } else {
-        a.to_string()
     };
-    let b_str: String = if ignore_punctuation {
-        b.chars()
-            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-            .collect()
+    let a_filtered;
+    let b_filtered;
+    let (a_str, b_str) = if ignore_punctuation {
+        a_filtered = filter_punct(a);
+        b_filtered = filter_punct(b);
+        (a_filtered.as_str(), b_filtered.as_str())
     } else {
-        b.to_string()
+        (a, b)
     };
 
     let result = if numeric {
-        natural_compare(&a_str, &b_str, sensitivity)
+        natural_compare(a_str, b_str, sensitivity)
     } else {
-        compare_text(&a_str, &b_str, sensitivity)
+        compare_text(a_str, b_str, sensitivity)
     };
 
     match result {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1,
     }
 }
 
@@ -199,7 +200,7 @@ fn split_segments(s: &str) -> Vec<Segment<'_>> {
 
 /// Compare two digit strings by numeric magnitude without parsing to integer.
 /// Strips leading zeros, then compares by length (longer = larger), then lexicographically.
-fn compare_numeric_strings(a: &str, b: &str) -> std::cmp::Ordering {
+fn compare_numeric_strings(a: &str, b: &str) -> Ordering {
     let a_trimmed = a.trim_start_matches('0');
     let b_trimmed = b.trim_start_matches('0');
     a_trimmed
@@ -208,14 +209,14 @@ fn compare_numeric_strings(a: &str, b: &str) -> std::cmp::Ordering {
         .then_with(|| a_trimmed.cmp(b_trimmed))
 }
 
-fn compare_text(a: &str, b: &str, sensitivity: &str) -> std::cmp::Ordering {
+fn compare_text(a: &str, b: &str, sensitivity: &str) -> Ordering {
     match sensitivity {
         "base" | "accent" => a.to_lowercase().cmp(&b.to_lowercase()),
         _ => a.cmp(b),
     }
 }
 
-fn natural_compare(a: &str, b: &str, sensitivity: &str) -> std::cmp::Ordering {
+fn natural_compare(a: &str, b: &str, sensitivity: &str) -> Ordering {
     let segs_a = split_segments(a);
     let segs_b = split_segments(b);
 
@@ -224,10 +225,10 @@ fn natural_compare(a: &str, b: &str, sensitivity: &str) -> std::cmp::Ordering {
             (Segment::Number(da), Segment::Number(db)) => compare_numeric_strings(da, db),
             (Segment::Text(ta), Segment::Text(tb)) => compare_text(ta, tb, sensitivity),
             // Number segments sort before text segments
-            (Segment::Number(..), Segment::Text(_)) => std::cmp::Ordering::Less,
-            (Segment::Text(_), Segment::Number(..)) => std::cmp::Ordering::Greater,
+            (Segment::Number(..), Segment::Text(_)) => Ordering::Less,
+            (Segment::Text(_), Segment::Number(..)) => Ordering::Greater,
         };
-        if ord != std::cmp::Ordering::Equal {
+        if ord != Ordering::Equal {
             return ord;
         }
     }
@@ -236,9 +237,9 @@ fn natural_compare(a: &str, b: &str, sensitivity: &str) -> std::cmp::Ordering {
 }
 
 fn segment_impl(text: &str, granularity: &str) -> String {
+    use std::fmt::Write;
     use unicode_segmentation::UnicodeSegmentation;
 
-    // Build segments with byte offsets, then convert to UTF-16 offsets for JS
     let mut result = String::from("[");
     let mut first = true;
 
@@ -251,7 +252,7 @@ fn segment_impl(text: &str, granularity: &str) -> String {
                 }
                 first = false;
                 let escaped = json_escape(grapheme);
-                result.push_str(&format!("[{},\"{}\",false]", utf16_offset, escaped));
+                let _ = write!(result, "[{utf16_offset},\"{escaped}\",false]");
                 utf16_offset += grapheme.encode_utf16().count();
             }
         }
@@ -262,13 +263,9 @@ fn segment_impl(text: &str, granularity: &str) -> String {
                     result.push(',');
                 }
                 first = false;
-                // A segment is "word-like" if it contains at least one alphanumeric character
                 let is_word_like = segment.chars().any(|c| c.is_alphanumeric());
                 let escaped = json_escape(segment);
-                result.push_str(&format!(
-                    "[{},\"{}\",{}]",
-                    utf16_offset, escaped, is_word_like
-                ));
+                let _ = write!(result, "[{utf16_offset},\"{escaped}\",{is_word_like}]");
                 utf16_offset += segment.encode_utf16().count();
             }
         }
@@ -280,13 +277,11 @@ fn segment_impl(text: &str, granularity: &str) -> String {
                 }
                 first = false;
                 let escaped = json_escape(sentence);
-                result.push_str(&format!("[{},\"{}\",false]", utf16_offset, escaped));
+                let _ = write!(result, "[{utf16_offset},\"{escaped}\",false]");
                 utf16_offset += sentence.encode_utf16().count();
             }
         }
-        _ => {
-            // Unknown granularity, return empty
-        }
+        _ => {}
     }
 
     result.push(']');

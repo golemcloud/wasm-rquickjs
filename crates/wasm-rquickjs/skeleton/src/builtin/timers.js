@@ -6,15 +6,21 @@ export const promises = { setTimeout: pSetTimeout, setImmediate: pSetImmediate, 
 
 const TIMEOUT_MAX = 2 ** 31 - 1;
 
-export function enroll(item, msecs) {
+function emitWarning(msg, type, code) {
     if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
-        process.emitWarning('timers.enroll() is deprecated. Please use setTimeout instead.', 'DeprecationWarning', 'DEP0095');
+        if (code) {
+            process.emitWarning(msg, type, code);
+        } else {
+            process.emitWarning(msg, type);
+        }
     }
+}
+
+export function enroll(item, msecs) {
+    emitWarning('timers.enroll() is deprecated. Please use setTimeout instead.', 'DeprecationWarning', 'DEP0095');
     const delay = +msecs;
     if (delay > TIMEOUT_MAX) {
-        if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
-            process.emitWarning(`${msecs} does not fit into a 32-bit signed integer.\nTimer duration was truncated to ${TIMEOUT_MAX}.`, 'TimeoutOverflowWarning');
-        }
+        emitWarning(`${msecs} does not fit into a 32-bit signed integer.\nTimer duration was truncated to ${TIMEOUT_MAX}.`, 'TimeoutOverflowWarning');
         item._idleTimeout = TIMEOUT_MAX;
     } else if (!(delay >= 1)) {
         item._idleTimeout = 1;
@@ -25,9 +31,7 @@ export function enroll(item, msecs) {
 }
 
 export function active(item) {
-    if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
-        process.emitWarning('timers.active() is deprecated. Please use setTimeout instead.', 'DeprecationWarning', 'DEP0096');
-    }
+    emitWarning('timers.active() is deprecated. Please use setTimeout instead.', 'DeprecationWarning', 'DEP0096');
     if (item._onTimeout && item._idleTimeout >= 0) {
         if (item.__timerHandle) {
             clearTimeout(item.__timerHandle);
@@ -37,9 +41,7 @@ export function active(item) {
 }
 
 export function unenroll(item) {
-    if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
-        process.emitWarning('timers.unenroll() is deprecated. Please use clearTimeout instead.', 'DeprecationWarning', 'DEP0096');
-    }
+    emitWarning('timers.unenroll() is deprecated. Please use clearTimeout instead.', 'DeprecationWarning', 'DEP0096');
     if (item.__timerHandle) {
         clearTimeout(item.__timerHandle);
         item.__timerHandle = null;

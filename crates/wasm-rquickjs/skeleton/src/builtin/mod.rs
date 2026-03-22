@@ -121,6 +121,7 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/http_blob")
         .with_module("__wasm_rquickjs_builtin/http_form_data")
         .with_module("__wasm_rquickjs_builtin/streams")
+        .with_module("__wasm_rquickjs_builtin/webstreams_wrapper")
         .with_module("__wasm_rquickjs_builtin/encoding_native")
         .with_module("__wasm_rquickjs_builtin/encoding")
         .with_module("__wasm_rquickjs_builtin/intl_native")
@@ -361,6 +362,10 @@ pub fn module_loader() -> (
         .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
         .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
         .with_module("__wasm_rquickjs_builtin/streams", webstreams::WEBSTREAMS_JS)
+        .with_module(
+            "__wasm_rquickjs_builtin/webstreams_wrapper",
+            webstreams::WEBSTREAMS_WRAPPER_JS,
+        )
         .with_module("node:stream/web", webstreams::REEXPORT_JS)
         .with_module("stream/web", webstreams::REEXPORT_JS)
         .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)

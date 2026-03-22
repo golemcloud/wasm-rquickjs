@@ -66,7 +66,7 @@ function isIdentifierPartCharacter(char) {
         return false;
     }
 
-    var code = char.charCodeAt(0);
+    const code = char.charCodeAt(0);
     return (code >= 48 && code <= 57) ||
         (code >= 65 && code <= 90) ||
         (code >= 97 && code <= 122) ||
@@ -80,15 +80,15 @@ function normalizeExpressionIndentation(expression) {
         return expression;
     }
 
-    var lines = expression.split('\n');
-    var minContinuationIndent = Infinity;
-    for (var i = 1; i < lines.length; i++) {
-        var line = lines[i];
+    const lines = expression.split('\n');
+    let minContinuationIndent = Infinity;
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
         if (!line) {
             continue;
         }
 
-        var indent = 0;
+        let indent = 0;
         while (indent < line.length && line.charAt(indent) === ' ') {
             indent++;
         }
@@ -102,10 +102,10 @@ function normalizeExpressionIndentation(expression) {
         return expression;
     }
 
-    var removeIndent = minContinuationIndent - 2;
-    for (var j = 1; j < lines.length; j++) {
-        var currentLine = lines[j];
-        var removed = 0;
+    const removeIndent = minContinuationIndent - 2;
+    for (let j = 1; j < lines.length; j++) {
+        const currentLine = lines[j];
+        let removed = 0;
         while (removed < removeIndent && removed < currentLine.length && currentLine.charAt(removed) === ' ') {
             removed++;
         }
@@ -116,21 +116,21 @@ function normalizeExpressionIndentation(expression) {
 }
 
 function normalizeExtractedExpression(expression) {
-    var normalizedExpression = normalizeExpressionIndentation(expression);
+    let normalizedExpression = normalizeExpressionIndentation(expression);
     return normalizedExpression.replace(/^(?:assert|strict)\s*\n\s*\.\s*/, '');
 }
 
 function isInsideQuotedSection(source, index) {
-    var inSingleQuote = false;
-    var inDoubleQuote = false;
-    var inTemplateLiteral = false;
-    var inLineComment = false;
-    var inBlockComment = false;
-    var escaped = false;
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let inTemplateLiteral = false;
+    let inLineComment = false;
+    let inBlockComment = false;
+    let escaped = false;
 
-    for (var i = 0; i < index; i++) {
-        var char = source.charAt(i);
-        var nextChar = i + 1 < source.length ? source.charAt(i + 1) : '';
+    for (let i = 0; i < index; i++) {
+        const char = source.charAt(i);
+        const nextChar = i + 1 < source.length ? source.charAt(i + 1) : '';
 
         if (inLineComment) {
             if (char === '\n') {
@@ -205,14 +205,14 @@ function isInsideQuotedSection(source, index) {
 }
 
 function extractNamedCallExpression(sourceSnippet, names, preferLast) {
-    var lastExpression = '';
+    let lastExpression = '';
 
-    for (var nameIdx = 0; nameIdx < names.length; nameIdx++) {
-        var name = names[nameIdx];
-        var searchOffset = 0;
+    for (let nameIdx = 0; nameIdx < names.length; nameIdx++) {
+        const name = names[nameIdx];
+        let searchOffset = 0;
 
         while (searchOffset < sourceSnippet.length) {
-            var start = sourceSnippet.indexOf(name, searchOffset);
+            const start = sourceSnippet.indexOf(name, searchOffset);
             if (start < 0) {
                 break;
             }
@@ -222,13 +222,13 @@ function extractNamedCallExpression(sourceSnippet, names, preferLast) {
                 continue;
             }
 
-            var previous = start > 0 ? sourceSnippet.charAt(start - 1) : '';
+            const previous = start > 0 ? sourceSnippet.charAt(start - 1) : '';
             if (isIdentifierPartCharacter(previous) || previous === '.') {
                 searchOffset = start + name.length;
                 continue;
             }
 
-            var openParenIndex = sourceSnippet.indexOf('(', start + name.length);
+            const openParenIndex = sourceSnippet.indexOf('(', start + name.length);
             if (openParenIndex < 0) {
                 break;
             }
@@ -238,15 +238,15 @@ function extractNamedCallExpression(sourceSnippet, names, preferLast) {
                 continue;
             }
 
-            var closeParenIndex = findMatchingParenEnd(sourceSnippet, openParenIndex);
+            const closeParenIndex = findMatchingParenEnd(sourceSnippet, openParenIndex);
             if (closeParenIndex < 0) {
                 searchOffset = start + name.length;
                 continue;
             }
 
-            var expression = sourceSnippet.slice(start, closeParenIndex + 1).trim();
+            const expression = sourceSnippet.slice(start, closeParenIndex + 1).trim();
             if (expression && expression.charAt(0) !== '(') {
-                var normalizedExpression = normalizeExtractedExpression(expression);
+                const normalizedExpression = normalizeExtractedExpression(expression);
                 if (!preferLast) {
                     return normalizedExpression;
                 }
@@ -274,31 +274,31 @@ function areDiffLinesEqual(actualLine, expectedLine, checkCommaDisparity) {
 }
 
 function myersBacktrack(trace, actual, expected, checkCommaDisparity) {
-    var actualLength = actual.length;
-    var expectedLength = expected.length;
-    var max = actualLength + expectedLength;
-    var x = actualLength;
-    var y = expectedLength;
-    var result = [];
+    let actualLength = actual.length;
+    let expectedLength = expected.length;
+    let max = actualLength + expectedLength;
+    let x = actualLength;
+    let y = expectedLength;
+    const result = [];
 
-    for (var diffLevel = trace.length - 1; diffLevel >= 0; diffLevel--) {
-        var v = trace[diffLevel];
-        var diagonalIndex = x - y;
-        var offset = diagonalIndex + max;
+    for (let diffLevel = trace.length - 1; diffLevel >= 0; diffLevel--) {
+        let v = trace[diffLevel];
+        let diagonalIndex = x - y;
+        let offset = diagonalIndex + max;
 
-        var prevDiagonalIndex;
+        let prevDiagonalIndex;
         if (diagonalIndex === -diffLevel || (diagonalIndex !== diffLevel && v[offset - 1] < v[offset + 1])) {
             prevDiagonalIndex = diagonalIndex + 1;
         } else {
             prevDiagonalIndex = diagonalIndex - 1;
         }
 
-        var prevX = v[prevDiagonalIndex + max];
-        var prevY = prevX - prevDiagonalIndex;
+        const prevX = v[prevDiagonalIndex + max];
+        const prevY = prevX - prevDiagonalIndex;
 
         while (x > prevX && y > prevY) {
-            var actualItem = actual[x - 1];
-            var value = (!checkCommaDisparity || actualItem.endsWith(',')) ? actualItem : expected[y - 1];
+            const actualItem = actual[x - 1];
+            const value = (!checkCommaDisparity || actualItem.endsWith(',')) ? actualItem : expected[y - 1];
             result.push({ type: 'nop', value: value });
             x--;
             y--;
@@ -319,28 +319,28 @@ function myersBacktrack(trace, actual, expected, checkCommaDisparity) {
 }
 
 function myersDiff(actual, expected, checkCommaDisparity) {
-    var actualLength = actual.length;
-    var expectedLength = expected.length;
-    var max = actualLength + expectedLength;
-    var v = new Int32Array(2 * max + 1);
-    var trace = [];
+    const actualLength = actual.length;
+    const expectedLength = expected.length;
+    const max = actualLength + expectedLength;
+    const v = new Int32Array(2 * max + 1);
+    const trace = [];
 
-    for (var diffLevel = 0; diffLevel <= max; diffLevel++) {
+    for (let diffLevel = 0; diffLevel <= max; diffLevel++) {
         trace.push(v.slice());
 
-        for (var diagonalIndex = -diffLevel; diagonalIndex <= diffLevel; diagonalIndex += 2) {
-            var offset = diagonalIndex + max;
-            var previousOffset = v[offset - 1];
-            var nextOffset = v[offset + 1];
+        for (let diagonalIndex = -diffLevel; diagonalIndex <= diffLevel; diagonalIndex += 2) {
+            const offset = diagonalIndex + max;
+            const previousOffset = v[offset - 1];
+            const nextOffset = v[offset + 1];
 
-            var x;
+            let x;
             if (diagonalIndex === -diffLevel || (diagonalIndex !== diffLevel && previousOffset < nextOffset)) {
                 x = nextOffset;
             } else {
                 x = previousOffset + 1;
             }
 
-            var y = x - diagonalIndex;
+            let y = x - diagonalIndex;
             while (x < actualLength && y < expectedLength && areDiffLinesEqual(actual[x], expected[y], checkCommaDisparity)) {
                 x++;
                 y++;
@@ -357,14 +357,14 @@ function myersDiff(actual, expected, checkCommaDisparity) {
 }
 
 function printMyersDiff(diffEntries) {
-    var rendered = [];
-    var skipped = false;
-    var nopCount = 0;
-    var kNopLinesToCollapse = 5;
+    const rendered = [];
+    let skipped = false;
+    let nopCount = 0;
+    const kNopLinesToCollapse = 5;
 
-    for (var diffIdx = diffEntries.length - 1; diffIdx >= 0; diffIdx--) {
-        var diffEntry = diffEntries[diffIdx];
-        var previousType = diffIdx < diffEntries.length - 1 ? diffEntries[diffIdx + 1].type : null;
+    for (let diffIdx = diffEntries.length - 1; diffIdx >= 0; diffIdx--) {
+        const diffEntry = diffEntries[diffIdx];
+        const previousType = diffIdx < diffEntries.length - 1 ? diffEntries[diffIdx + 1].type : null;
 
         if (previousType === 'nop' && diffEntry.type !== previousType) {
             if (nopCount === kNopLinesToCollapse + 1) {
@@ -415,21 +415,21 @@ function normalizeStackFrameFormatting(stack) {
         return stack;
     }
 
-    var lines = stack.split('\n');
-    var normalizedLines = [];
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
+    let lines = stack.split('\n');
+    const normalizedLines = [];
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
         if (/^\s*at\s+apply\s+\(native\)\s*$/.test(line)) {
             continue;
         }
 
-        var bareFrameMatch = line.match(/^(\s*at)\s+(.+):(\d+):(\d+)\s*$/);
+        const bareFrameMatch = line.match(/^(\s*at)\s+(.+):(\d+):(\d+)\s*$/);
         if (!bareFrameMatch) {
             normalizedLines.push(line);
             continue;
         }
 
-        var location = bareFrameMatch[2];
+        const location = bareFrameMatch[2];
         normalizedLines.push(
             bareFrameMatch[1] + ' anonymous (' + location + ':' + bareFrameMatch[3] + ':' + bareFrameMatch[4] + ')'
         );
@@ -443,11 +443,11 @@ function parseStackFrames(stack) {
         return [];
     }
 
-    var frames = [];
-    var lines = stack.split('\n');
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim();
-        var match = line.match(/^at\s+(.+?)\s+\((.+):(\d+):(\d+)\)$/);
+    let frames = [];
+    const lines = stack.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        let match = line.match(/^at\s+(.+?)\s+\((.+):(\d+):(\d+)\)$/);
         if (!match) {
             match = line.match(/^at\s+(.+):(\d+):(\d+)$/);
             if (match) {
@@ -489,7 +489,7 @@ function resolveSourceForFrame(frame, currentModuleSource) {
 
     if (!frame.fileName.startsWith('<')) {
         try {
-            var fileSource = fs.readFileSync(frame.fileName, 'utf8');
+            const fileSource = fs.readFileSync(frame.fileName, 'utf8');
             if (typeof fileSource === 'string') {
                 return fileSource;
             }
@@ -513,7 +513,7 @@ function shouldSkipStackFrame(frame, stackStartFnName) {
         return true;
     }
 
-    var functionName = frame.functionName;
+    const functionName = frame.functionName;
     if (functionName === 'getErrMessage' || functionName === 'innerOk' || functionName === 'ok') {
         return true;
     }
@@ -533,8 +533,8 @@ function expressionRelevanceScore(expression, stackStartFnName) {
         return 0;
     }
 
-    var score = 0;
-    var hasNameReference = expression.indexOf(stackStartFnName) !== -1;
+    let score = 0;
+    const hasNameReference = expression.indexOf(stackStartFnName) !== -1;
     if (hasNameReference) {
         if (expression.startsWith(stackStartFnName + '(')) {
             score += 5;
@@ -574,11 +574,11 @@ function expressionRelevanceScore(expression, stackStartFnName) {
 }
 
 function findExpressionFromStack(stack, stackStartFnName, currentModuleSource) {
-    var frames = parseStackFrames(stack);
-    var checkedFrames = 0;
+    const frames = parseStackFrames(stack);
+    let checkedFrames = 0;
 
-    for (var i = 0; i < frames.length; i++) {
-        var frame = frames[i];
+    for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i];
         if (shouldSkipStackFrame(frame, stackStartFnName)) {
             continue;
         }
@@ -588,40 +588,40 @@ function findExpressionFromStack(stack, stackStartFnName, currentModuleSource) {
             break;
         }
 
-        var source = resolveSourceForFrame(frame, currentModuleSource);
+        const source = resolveSourceForFrame(frame, currentModuleSource);
         if (typeof source !== 'string') {
             continue;
         }
 
-        var sourceLines = source.split(/\r?\n/);
-        var frameBestExpression = '';
-        var frameBestRank = -Infinity;
-        var candidateLineNumbers = [];
-        for (var lineOffset = 0; lineOffset <= 10; lineOffset++) {
+        const sourceLines = source.split(/\r?\n/);
+        let frameBestExpression = '';
+        let frameBestRank = -Infinity;
+        const candidateLineNumbers = [];
+        for (let lineOffset = 0; lineOffset <= 10; lineOffset++) {
             candidateLineNumbers.push(frame.lineNumber - lineOffset);
         }
-        for (var j = 0; j < candidateLineNumbers.length; j++) {
-            var lineNumber = candidateLineNumbers[j];
+        for (let j = 0; j < candidateLineNumbers.length; j++) {
+            const lineNumber = candidateLineNumbers[j];
             if (lineNumber <= 0 || lineNumber > sourceLines.length) {
                 continue;
             }
 
-            var sourceExpression = extractCallExpression(sourceLines, lineNumber, frame.columnNumber);
-            var lineExpression = extractNamedCallExpression(sourceLines[lineNumber - 1], ['assert', 'strict'], true);
-            var arrowExpression = '';
-            var arrowMatch = sourceLines[lineNumber - 1].match(/=>\s*([A-Za-z_$][\w$]*\([^)]*\))/);
+            const sourceExpression = extractCallExpression(sourceLines, lineNumber, frame.columnNumber);
+            const lineExpression = extractNamedCallExpression(sourceLines[lineNumber - 1], ['assert', 'strict'], true);
+            let arrowExpression = '';
+            const arrowMatch = sourceLines[lineNumber - 1].match(/=>\s*([A-Za-z_$][\w$]*\([^)]*\))/);
             if (arrowMatch) {
                 arrowExpression = normalizeExtractedExpression(arrowMatch[1]);
             }
-            var wrapperExpression = '';
+            let wrapperExpression = '';
             if (sourceExpression) {
-                var wrapperInvocationMatch = sourceExpression.match(/^([A-Za-z_$][\w$]*)\([^)]*\)$/);
+                const wrapperInvocationMatch = sourceExpression.match(/^([A-Za-z_$][\w$]*)\([^)]*\)$/);
                 if (wrapperInvocationMatch) {
-                    var wrapperName = wrapperInvocationMatch[1];
-                    var wrapperDefinitionRegExp = new RegExp('\\b' + wrapperName + '\\s*=\\s*\\([^)]*\\)\\s*=>\\s*([A-Za-z_$][\\w$]*\\([^)]*\\))');
-                    var startSearchLine = Math.max(0, lineNumber - 4);
-                    for (var searchLine = startSearchLine; searchLine < lineNumber; searchLine++) {
-                        var wrapperDefinitionMatch = sourceLines[searchLine].match(wrapperDefinitionRegExp);
+                    const wrapperName = wrapperInvocationMatch[1];
+                    const wrapperDefinitionRegExp = new RegExp('\\b' + wrapperName + '\\s*=\\s*\\([^)]*\\)\\s*=>\\s*([A-Za-z_$][\\w$]*\\([^)]*\\))');
+                    const startSearchLine = Math.max(0, lineNumber - 4);
+                    for (let searchLine = startSearchLine; searchLine < lineNumber; searchLine++) {
+                        const wrapperDefinitionMatch = sourceLines[searchLine].match(wrapperDefinitionRegExp);
                         if (wrapperDefinitionMatch) {
                             wrapperExpression = normalizeExtractedExpression(wrapperDefinitionMatch[1]);
                         }
@@ -629,21 +629,21 @@ function findExpressionFromStack(stack, stackStartFnName, currentModuleSource) {
                 }
             }
 
-            var candidates = [sourceExpression, lineExpression, arrowExpression, wrapperExpression];
+            const candidates = [sourceExpression, lineExpression, arrowExpression, wrapperExpression];
 
-            for (var candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
-                var candidateExpression = candidates[candidateIdx];
+            for (let candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
+                const candidateExpression = candidates[candidateIdx];
                 if (!candidateExpression) {
                     continue;
                 }
 
-                var relevanceScore = expressionRelevanceScore(candidateExpression, stackStartFnName);
+                const relevanceScore = expressionRelevanceScore(candidateExpression, stackStartFnName);
                 if (relevanceScore < 0) {
                     continue;
                 }
 
-                var lineDistance = frame.lineNumber - lineNumber;
-                var candidateRank = relevanceScore * 100 - lineDistance * 5 - i;
+                const lineDistance = frame.lineNumber - lineNumber;
+                const candidateRank = relevanceScore * 100 - lineDistance * 5 - i;
                 if (candidateRank > frameBestRank || (candidateRank === frameBestRank && (frameBestExpression === '' || candidateExpression.length < frameBestExpression.length))) {
                     frameBestRank = candidateRank;
                     frameBestExpression = candidateExpression;
@@ -660,14 +660,14 @@ function findExpressionFromStack(stack, stackStartFnName, currentModuleSource) {
 }
 
 function findMatchingParenEnd(source, openParenIndex) {
-    var depth = 0;
-    var inSingleQuote = false;
-    var inDoubleQuote = false;
-    var inTemplateLiteral = false;
-    var escaped = false;
+    let depth = 0;
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let inTemplateLiteral = false;
+    let escaped = false;
 
-    for (var i = openParenIndex; i < source.length; i++) {
-        var char = source.charAt(i);
+    for (let i = openParenIndex; i < source.length; i++) {
+        const char = source.charAt(i);
 
         if (escaped) {
             escaped = false;
@@ -738,10 +738,10 @@ function utf8CharByteSize(code) {
 }
 
 function utf8ByteLength(str) {
-    var bytes = 0;
-    for (var i = 0; i < str.length; i++) {
-        var code = str.charCodeAt(i);
-        var size = utf8CharByteSize(code);
+    let bytes = 0;
+    for (let i = 0; i < str.length; i++) {
+        let code = str.charCodeAt(i);
+        let size = utf8CharByteSize(code);
         bytes += size;
         if (size === 4) i++;
     }
@@ -749,13 +749,13 @@ function utf8ByteLength(str) {
 }
 
 function byteOffsetToCharOffset(str, byteOffset) {
-    var bytes = 0;
-    for (var i = 0; i < str.length; i++) {
+    let bytes = 0;
+    for (let i = 0; i < str.length; i++) {
         if (bytes >= byteOffset) {
             return i;
         }
-        var code = str.charCodeAt(i);
-        var size = utf8CharByteSize(code);
+        let code = str.charCodeAt(i);
+        const size = utf8CharByteSize(code);
         bytes += size;
         if (size === 4) i++;
     }
@@ -771,8 +771,8 @@ function extractCallExpression(sourceLines, lineNumber, columnNumber) {
         return '';
     }
 
-    var startLineIndex = lineNumber - 1;
-    var sourceLine = sourceLines[startLineIndex];
+    const startLineIndex = lineNumber - 1;
+    const sourceLine = sourceLines[startLineIndex];
     if (typeof sourceLine !== 'string') {
         return '';
     }
@@ -782,23 +782,23 @@ function extractCallExpression(sourceLines, lineNumber, columnNumber) {
     }
 
     // Keep the scan local to avoid accidentally consuming surrounding unrelated code.
-    var maxSnippetLines = Math.min(sourceLines.length, startLineIndex + 20);
-    var sourceSnippet = sourceLines.slice(startLineIndex, maxSnippetLines).join('\n');
+    const maxSnippetLines = Math.min(sourceLines.length, startLineIndex + 20);
+    const sourceSnippet = sourceLines.slice(startLineIndex, maxSnippetLines).join('\n');
 
-    var index = 0;
+    let index = 0;
     if (sourceLine.length > 0) {
-        var byteCol = Math.max(0, columnNumber - 1);
-        var lineByteLen = utf8ByteLength(sourceLine);
+        let byteCol = Math.max(0, columnNumber - 1);
+        const lineByteLen = utf8ByteLength(sourceLine);
         if (byteCol >= lineByteLen) {
             byteCol = Math.max(0, byteCol - 62);
         }
-        var charColumn = byteOffsetToCharOffset(sourceLine, byteCol);
+        const charColumn = byteOffsetToCharOffset(sourceLine, byteCol);
         index = Math.max(0, Math.min(sourceLine.length - 1, charColumn));
     }
 
-    var beforeIndex = sourceSnippet.lastIndexOf('(', index);
-    var afterIndex = sourceSnippet.indexOf('(', index);
-    var openParenIndex = -1;
+    const beforeIndex = sourceSnippet.lastIndexOf('(', index);
+    const afterIndex = sourceSnippet.indexOf('(', index);
+    let openParenIndex = -1;
 
     if (beforeIndex >= 0 && afterIndex >= 0) {
         openParenIndex = (index - beforeIndex <= afterIndex - index) ? beforeIndex : afterIndex;
@@ -812,14 +812,14 @@ function extractCallExpression(sourceLines, lineNumber, columnNumber) {
         return '';
     }
 
-    var closeParenIndex = findMatchingParenEnd(sourceSnippet, openParenIndex);
+    const closeParenIndex = findMatchingParenEnd(sourceSnippet, openParenIndex);
     if (closeParenIndex < 0) {
         return '';
     }
 
-    var startIndex = openParenIndex;
+    let startIndex = openParenIndex;
     while (startIndex > 0) {
-        var previous = sourceSnippet.charAt(startIndex - 1);
+        const previous = sourceSnippet.charAt(startIndex - 1);
         if (isIdentifierPartCharacter(previous) || previous === '.' || previous === '?' || previous === '[' || previous === ']') {
             startIndex--;
             continue;
@@ -827,12 +827,12 @@ function extractCallExpression(sourceLines, lineNumber, columnNumber) {
         break;
     }
 
-    var charBeforeStart = startIndex > 0 ? sourceSnippet.charAt(startIndex - 1) : '';
+    const charBeforeStart = startIndex > 0 ? sourceSnippet.charAt(startIndex - 1) : '';
     if (charBeforeStart === '"' || charBeforeStart === '\'' || charBeforeStart === '`') {
         return '';
     }
 
-    var expression = sourceSnippet.slice(startIndex, closeParenIndex + 1).trim();
+    let expression = sourceSnippet.slice(startIndex, closeParenIndex + 1).trim();
     if (!expression) {
         return '';
     }
@@ -849,17 +849,17 @@ function extractCallExpression(sourceLines, lineNumber, columnNumber) {
         expression = expression.slice(1).trimStart();
     }
 
-    var isLikelyAssertInvocation = expression.indexOf('assert') !== -1 ||
+    const isLikelyAssertInvocation = expression.indexOf('assert') !== -1 ||
         expression.indexOf('strict') !== -1 ||
         expression.startsWith('ok(');
 
     if (!isLikelyAssertInvocation) {
-        var assertionExpression = extractNamedCallExpression(sourceSnippet, ['assert', 'strict']);
+        const assertionExpression = extractNamedCallExpression(sourceSnippet, ['assert', 'strict']);
         if (assertionExpression) {
             return assertionExpression;
         }
     } else if (expression.startsWith('assert(') && sourceLine.indexOf('assert(') !== sourceLine.lastIndexOf('assert(')) {
-        var sameLineAssertionExpression = extractNamedCallExpression(sourceLine, ['assert'], true);
+        const sameLineAssertionExpression = extractNamedCallExpression(sourceLine, ['assert'], true);
         if (sameLineAssertionExpression) {
             return sameLineAssertionExpression;
         }
@@ -869,9 +869,9 @@ function extractCallExpression(sourceLines, lineNumber, columnNumber) {
 }
 
 function getErrMessage(stackStartFn) {
-    var stack;
-    var originalStackTraceLimit = Error.stackTraceLimit;
-    var restoreStackTraceLimit = false;
+    let stack;
+    const originalStackTraceLimit = Error.stackTraceLimit;
+    let restoreStackTraceLimit = false;
 
     if (typeof originalStackTraceLimit === 'number' && originalStackTraceLimit < 4) {
         Error.stackTraceLimit = 4;
@@ -880,7 +880,7 @@ function getErrMessage(stackStartFn) {
 
     try {
         if (typeof Error.captureStackTrace === 'function') {
-            var stackHolder = {};
+            const stackHolder = {};
             Error.captureStackTrace(stackHolder, stackStartFn);
             stack = stackHolder.stack;
         }
@@ -894,9 +894,9 @@ function getErrMessage(stackStartFn) {
         }
     }
 
-    var stackFrames = parseStackFrames(stack);
-    for (var i = 0; i < stackFrames.length; i++) {
-        var frame = stackFrames[i];
+    const stackFrames = parseStackFrames(stack);
+    for (let i = 0; i < stackFrames.length; i++) {
+        const frame = stackFrames[i];
         if (frame.fileName === 'native') {
             continue;
         }
@@ -906,14 +906,14 @@ function getErrMessage(stackStartFn) {
         break;
     }
 
-    var currentModule = globalThis.__wasm_rquickjs_current_module;
+    const currentModule = globalThis.__wasm_rquickjs_current_module;
     if (!currentModule) {
         return undefined;
     }
 
-    var currentModuleSource = typeof currentModule.source === 'string' ? currentModule.source : undefined;
-    var stackStartFnName = stackStartFn && stackStartFn.name ? stackStartFn.name : '';
-    var sourceExpression = findExpressionFromStack(stack, stackStartFnName, currentModuleSource);
+    const currentModuleSource = typeof currentModule.source === 'string' ? currentModule.source : undefined;
+    const stackStartFnName = stackStartFn && stackStartFn.name ? stackStartFn.name : '';
+    let sourceExpression = findExpressionFromStack(stack, stackStartFnName, currentModuleSource);
     if (!sourceExpression) {
         return undefined;
     }
@@ -940,14 +940,14 @@ class Comparison {
 class AssertionError extends Error {
     constructor(options) {
         if (typeof options !== 'object' || options === null) {
-            var err = new TypeError('The "options" argument must be of type object.' + invalidArgTypeHelper(options));
+            const err = new TypeError('The "options" argument must be of type object.' + invalidArgTypeHelper(options));
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
-        var message;
-        var actual = options.actual;
-        var expected = options.expected;
-        var operator = options.operator || 'fail';
+        let message;
+        let actual = options.actual;
+        let expected = options.expected;
+        const operator = options.operator || 'fail';
 
         // Prevent the error stack from being visible by duplicating the error
         // in a very close way to the original in case both sides are actually
@@ -962,16 +962,16 @@ class AssertionError extends Error {
 
         try {
         if (operator === 'deepEqual') {
-                var actualInsp = inspectForDiff(actual);
-                var expectedInsp = inspectForDiff(expected);
+                let actualInsp = inspectForDiff(actual);
+                let expectedInsp = inspectForDiff(expected);
                 message = 'Expected values to be loosely deep-equal:\n\n' +
                     actualInsp + '\n\nshould loosely deep-equal\n\n' + expectedInsp;
         } else if (operator === 'notDeepEqual') {
-                var actualInsp = inspectForDiff(actual);
-                var expectedInsp = inspectForDiff(expected);
+                let actualInsp = inspectForDiff(actual);
+                let expectedInsp = inspectForDiff(expected);
                 if (actualInsp === expectedInsp) {
-                    var base2 = 'Expected "actual" not to be loosely deep-equal to:';
-                    var lines2 = actualInsp.split('\n');
+                    let base2 = 'Expected "actual" not to be loosely deep-equal to:';
+                    let lines2 = actualInsp.split('\n');
                     if (lines2.length > 50) {
                         lines2 = lines2.slice(0, 46);
                         lines2.push('...');
@@ -983,28 +983,28 @@ class AssertionError extends Error {
                     message = actualInsp + '\n\nshould not loosely deep-equal\n\n' + expectedInsp;
                 }
         } else if (operator === 'deepStrictEqual' || operator === 'partialDeepStrictEqual') {
-                var actualInsp = inspectForDiff(actual);
-                var expectedInsp = inspectForDiff(expected);
-                var actualIsPrimitive = actual === null || (typeof actual !== 'object' && typeof actual !== 'function');
-                var expectedIsPrimitive = expected === null || (typeof expected !== 'object' && typeof expected !== 'function');
+                const actualInsp = inspectForDiff(actual);
+                const expectedInsp = inspectForDiff(expected);
+                const actualIsPrimitive = actual === null || (typeof actual !== 'object' && typeof actual !== 'function');
+                const expectedIsPrimitive = expected === null || (typeof expected !== 'object' && typeof expected !== 'function');
                 if (actualIsPrimitive && expectedIsPrimitive) {
                     message = 'Expected values to be strictly deep-equal:\n\n' + actualInsp + ' !== ' + expectedInsp + '\n';
                 } else {
-                var actualLines = actualInsp.split('\n');
-                var expectedLines = expectedInsp.split('\n');
-                var header = 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n';
-                var checkCommaDisparity = actual != null && typeof actual === 'object';
-                var m = actualLines.length;
-                var n = expectedLines.length;
+                const actualLines = actualInsp.split('\n');
+                const expectedLines = expectedInsp.split('\n');
+                let header = 'Expected values to be strictly deep-equal:\n+ actual - expected\n\n';
+                const checkCommaDisparity = actual != null && typeof actual === 'object';
+                const m = actualLines.length;
+                let n = expectedLines.length;
 
                 if (m > 500 || n > 500 || m * n > 100000) {
-                    var diffLines = [];
-                    var maxLen = Math.max(m, n);
-                    for (var di = 0; di < maxLen; di++) {
-                        var aLine = di < m ? actualLines[di] : undefined;
-                        var eLine = di < n ? expectedLines[di] : undefined;
+                    const diffLines = [];
+                    const maxLen = Math.max(m, n);
+                    for (let di = 0; di < maxLen; di++) {
+                        const aLine = di < m ? actualLines[di] : undefined;
+                        let eLine = di < n ? expectedLines[di] : undefined;
                         if (aLine !== undefined && eLine !== undefined && areDiffLinesEqual(aLine, eLine, checkCommaDisparity)) {
-                            var commonLine = checkCommaDisparity && !aLine.endsWith(',') ? eLine : aLine;
+                            const commonLine = checkCommaDisparity && !aLine.endsWith(',') ? eLine : aLine;
                             diffLines.push('  ' + commonLine);
                         } else {
                             if (aLine !== undefined) diffLines.push('+ ' + aLine);
@@ -1013,7 +1013,7 @@ class AssertionError extends Error {
                     }
                     message = header + diffLines.join('\n') + '\n';
                 } else {
-                    var diffResult = printMyersDiff(myersDiff(actualLines, expectedLines, checkCommaDisparity));
+                    const diffResult = printMyersDiff(myersDiff(actualLines, expectedLines, checkCommaDisparity));
                     if (diffResult.skipped) {
                         header = header.replace('\n\n', '\n... Skipped lines\n\n');
                     }
@@ -1021,9 +1021,9 @@ class AssertionError extends Error {
                 }
                 }
         } else if (operator === 'notDeepStrictEqual') {
-                    var actualInsp2 = inspectForDiff(actual);
-                    var base2 = 'Expected "actual" not to be strictly deep-equal to:';
-                    var lines2 = actualInsp2.split('\n');
+                    let actualInsp2 = inspectForDiff(actual);
+                    let base2 = 'Expected "actual" not to be strictly deep-equal to:';
+                    let lines2 = actualInsp2.split('\n');
                     // Truncate at ~50 lines
                     if (lines2.length > 50) {
                         lines2 = lines2.slice(0, 46);
@@ -1035,36 +1035,36 @@ class AssertionError extends Error {
                         message = base2 + '\n\n' + lines2.join('\n') + '\n';
                     }
         } else if (operator === 'notStrictEqual') {
-                    var actualInsp2 = inspectForDiff(actual);
-                    var base2 = 'Expected "actual" to be strictly unequal to:';
+                    const actualInsp2 = inspectForDiff(actual);
+                    let base2 = 'Expected "actual" to be strictly unequal to:';
                     if ((typeof actual === 'object' && actual !== null) || typeof actual === 'function') {
                         base2 = 'Expected "actual" not to be reference-equal to "expected":';
                     }
-                    var lines2 = actualInsp2.split('\n');
+                    const lines2 = actualInsp2.split('\n');
                     if (lines2.length === 1) {
                         message = base2 + (lines2[0].length > 5 ? '\n\n' : ' ') + lines2[0];
                     } else {
                         message = base2 + '\n\n' + lines2.join('\n') + '\n';
                     }
         } else if (operator === 'strictEqual') {
-                    var isObjCompare = (typeof actual === 'object' && actual !== null &&
+                    const isObjCompare = (typeof actual === 'object' && actual !== null &&
                         typeof expected === 'object' && expected !== null) ||
                         (typeof actual === 'function' && typeof expected === 'function');
                     if (isObjCompare) {
-                        var actualInsp3 = inspectForDiff(actual);
-                        var expectedInsp3 = inspectForDiff(expected);
+                        const actualInsp3 = inspectForDiff(actual);
+                        const expectedInsp3 = inspectForDiff(expected);
                         if (actualInsp3 === expectedInsp3) {
                             message = 'Values have same structure but are not reference-equal:\n\n' + actualInsp3 + '\n';
                         } else {
                             message = 'Expected "actual" to be reference-equal to "expected":\n' +
                                 '+ actual - expected\n\n';
-                            var aLines3 = actualInsp3.split('\n');
-                            var eLines3 = expectedInsp3.split('\n');
-                            var maxLen3 = Math.max(aLines3.length, eLines3.length);
-                            var diffParts3 = [];
-                            for (var si = 0; si < maxLen3; si++) {
-                                var aL3 = si < aLines3.length ? aLines3[si] : undefined;
-                                var eL3 = si < eLines3.length ? eLines3[si] : undefined;
+                            const aLines3 = actualInsp3.split('\n');
+                            const eLines3 = expectedInsp3.split('\n');
+                            const maxLen3 = Math.max(aLines3.length, eLines3.length);
+                            const diffParts3 = [];
+                            for (let si = 0; si < maxLen3; si++) {
+                                const aL3 = si < aLines3.length ? aLines3[si] : undefined;
+                                const eL3 = si < eLines3.length ? eLines3[si] : undefined;
                                 if (aL3 !== undefined && eL3 !== undefined && aL3 === eL3) {
                                     diffParts3.push('  ' + aL3);
                                 } else {
@@ -1075,26 +1075,26 @@ class AssertionError extends Error {
                             message += diffParts3.join('\n') + '\n';
                         }
                     } else {
-                        var actualStr = inspectForDiff(actual);
-                        var expectedStr = inspectForDiff(expected);
-                        var aLines4 = actualStr.split('\n');
-                        var eLines4 = expectedStr.split('\n');
-                        var stringsLen = actualStr.length + expectedStr.length;
+                        let actualStr = inspectForDiff(actual);
+                        let expectedStr = inspectForDiff(expected);
+                        const aLines4 = actualStr.split('\n');
+                        const eLines4 = expectedStr.split('\n');
+                        let stringsLen = actualStr.length + expectedStr.length;
                         if (typeof actual === 'string') stringsLen -= 2;
                         if (typeof expected === 'string') stringsLen -= 2;
-                        var isSingleLine = aLines4.length === 1 && eLines4.length === 1;
+                        const isSingleLine = aLines4.length === 1 && eLines4.length === 1;
                         if (isSingleLine && stringsLen <= 12 && (actual !== 0 || expected !== 0)) {
                             message = 'Expected values to be strictly equal:\n\n' + actualStr + ' !== ' + expectedStr + '\n';
                         } else {
-                            var aPrefixed = aLines4.map(function(l) { return '+ ' + l; }).join('\n');
-                            var ePrefixed = eLines4.map(function(l) { return '- ' + l; }).join('\n');
+                            const aPrefixed = aLines4.map(function(l) { return '+ ' + l; }).join('\n');
+                            const ePrefixed = eLines4.map(function(l) { return '- ' + l; }).join('\n');
                             message = 'Expected values to be strictly equal:\n+ actual - expected\n\n' +
                                 aPrefixed + '\n' + ePrefixed + '\n';
 
                             if (typeof actual === 'string' && typeof expected === 'string' && isSingleLine) {
-                                var indicatorIdx = -1;
-                                var maxIdx = Math.min(actualStr.length, expectedStr.length);
-                                for (var idx = 0; idx < maxIdx; idx++) {
+                                let indicatorIdx = -1;
+                                const maxIdx = Math.min(actualStr.length, expectedStr.length);
+                                for (let idx = 0; idx < maxIdx; idx++) {
                                     if (actualStr.charAt(idx) !== expectedStr.charAt(idx)) {
                                         if (idx >= 3) {
                                             indicatorIdx = idx;
@@ -1110,8 +1110,8 @@ class AssertionError extends Error {
                         }
                     }
         } else {
-                    var actualStr = inspect(actual, { depth: 2 });
-                    var expectedStr = inspect(expected, { depth: 2 });
+                    let actualStr = inspect(actual, { depth: 2 });
+                    let expectedStr = inspect(expected, { depth: 2 });
                     if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
                     if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
                     message = actualStr + ' ' + operator + ' ' + expectedStr;
@@ -1121,8 +1121,8 @@ class AssertionError extends Error {
             // If diff generation fails (e.g., stack overflow on large/circular objects),
             // fall back to a simple message
             if (message == null) {
-                var actualStr = typeof actual === 'object' ? '[object]' : String(actual);
-                var expectedStr = typeof expected === 'object' ? '[object]' : String(expected);
+                let actualStr = typeof actual === 'object' ? '[object]' : String(actual);
+                let expectedStr = typeof expected === 'object' ? '[object]' : String(expected);
                 if (actualStr.length > 128) actualStr = actualStr.slice(0, 125) + '...';
                 if (expectedStr.length > 128) expectedStr = expectedStr.slice(0, 125) + '...';
                 message = actualStr + ' ' + operator + ' ' + expectedStr;
@@ -1130,13 +1130,13 @@ class AssertionError extends Error {
         }
 
         if (options.message != null) {
-            var userMsg = String(options.message);
+            const userMsg = String(options.message);
             if (message != null) {
-                var diffStartIdx = message.indexOf('\n+ actual - expected\n\n');
+                const diffStartIdx = message.indexOf('\n+ actual - expected\n\n');
                 if (diffStartIdx >= 0) {
                     message = userMsg + message.slice(diffStartIdx);
                 } else {
-                    var nnIdx = message.indexOf('\n\n');
+                    const nnIdx = message.indexOf('\n\n');
                     if (nnIdx >= 0) {
                         message = userMsg + '\n\n' + message.slice(nnIdx + 2);
                     } else {
@@ -1158,7 +1158,7 @@ class AssertionError extends Error {
         this.name = 'AssertionError';
 
         if (typeof Error.captureStackTrace === 'function') {
-            var stackStartFunction = options.stackStartFn || options.stackStartFunction || this.constructor;
+            const stackStartFunction = options.stackStartFn || options.stackStartFunction || this.constructor;
             Error.captureStackTrace(this, stackStartFunction);
         }
         // QuickJS stacks don't include the error message; prepend it to match Node.js format
@@ -1168,7 +1168,7 @@ class AssertionError extends Error {
         this.stack = normalizeStackFrameFormatting(this.stack);
         // In QuickJS stack traces may omit frames. For async assertion helpers,
         // keep the entry point name visible so /rejects/ checks keep working.
-        var keepAsyncEntryPoint = options.stackStartFn === rejects || options.stackStartFn === doesNotReject;
+        const keepAsyncEntryPoint = options.stackStartFn === rejects || options.stackStartFn === doesNotReject;
         if (keepAsyncEntryPoint && typeof this.stack === 'string' && options.stackStartFn && options.stackStartFn.name && !this.stack.includes(options.stackStartFn.name)) {
             this.stack += '\n    at ' + options.stackStartFn.name + ' (native)';
         }
@@ -1179,10 +1179,10 @@ class AssertionError extends Error {
     }
 
     inspect(depth, ctx) {
-        var kMaxLongStringLength = 512;
+        const kMaxLongStringLength = 512;
         // addEllipsis helper
         function addEllipsis(string) {
-            var lines = string.split('\n', 11);
+            const lines = string.split('\n', 11);
             if (lines.length > 10) {
                 lines.length = 10;
                 return lines.join('\n') + '\n...';
@@ -1192,16 +1192,16 @@ class AssertionError extends Error {
             return string;
         }
         // Temporarily truncate long string actual/expected
-        var tmpActual = this.actual;
-        var tmpExpected = this.expected;
+        const tmpActual = this.actual;
+        const tmpExpected = this.expected;
         if (typeof this.actual === 'string') {
             this.actual = addEllipsis(this.actual);
         }
         if (typeof this.expected === 'string') {
             this.expected = addEllipsis(this.expected);
         }
-        var inspectOpts = Object.assign({}, ctx || {}, { customInspect: false, depth: 0 });
-        var result = inspect(this, inspectOpts);
+        const inspectOpts = Object.assign({}, ctx || {}, { customInspect: false, depth: 0 });
+        let result = inspect(this, inspectOpts);
         // Restore original values
         this.actual = tmpActual;
         this.expected = tmpExpected;
@@ -1225,7 +1225,7 @@ function isErrorLike(obj) {
 function processMessage(message, actual, expected) {
     if (isErrorLike(message)) return message;
     if (typeof message === 'function') {
-        var result = message(actual, expected);
+        const result = message(actual, expected);
         if (typeof result === 'string') return result;
         return undefined;
     }
@@ -1233,13 +1233,13 @@ function processMessage(message, actual, expected) {
 }
 
 function innerFail(obj) {
-    var msg = processMessage(obj.message, obj.actual, obj.expected);
+    let msg = processMessage(obj.message, obj.actual, obj.expected);
     if (isErrorLike(msg)) throw msg;
     obj.message = msg;
     throw new AssertionError(obj);
 }
 
-var NO_EXCEPTION_SENTINEL = {};
+const NO_EXCEPTION_SENTINEL = {};
 
 function fail(actual, expected, message, operator, stackStartFn) {
     if (arguments.length === 0) {
@@ -1254,7 +1254,7 @@ function fail(actual, expected, message, operator, stackStartFn) {
         return;
     }
     if (arguments.length === 1) {
-        var msg1 = processMessage(actual, undefined, undefined);
+        const msg1 = processMessage(actual, undefined, undefined);
         if (isErrorLike(msg1)) throw msg1;
         innerFail({
             actual: undefined,
@@ -1269,7 +1269,7 @@ function fail(actual, expected, message, operator, stackStartFn) {
     if (arguments.length === 2) {
         operator = '!=';
     }
-    var msg = processMessage(message, actual, expected);
+    const msg = processMessage(message, actual, expected);
     if (isErrorLike(msg)) throw msg;
     innerFail({
         actual: actual,
@@ -1283,8 +1283,8 @@ function fail(actual, expected, message, operator, stackStartFn) {
 
 function innerOk(stackStartFn, argLength, value, message) {
     if (!value) {
-        var generatedMessage = false;
-        var assertionMessage = message;
+        let generatedMessage = false;
+        let assertionMessage = message;
 
         if (argLength === 0) {
             generatedMessage = true;
@@ -1466,41 +1466,21 @@ function partialDeepStrictEqual(actual, expected, message) {
 }
 
 function createPartialDeepMemo() {
-    if (typeof WeakMap === 'function' && typeof WeakSet === 'function') {
-        return { weakMemo: new WeakMap(), pairsA: null, pairsB: null };
-    }
-
-    return { weakMemo: null, pairsA: [], pairsB: [] };
+    return { weakMemo: new WeakMap(), pairsA: null, pairsB: null };
 }
 
 function partialMemoHas(memo, actual, expected) {
-    if (memo.weakMemo) {
-        var expectedSet = memo.weakMemo.get(actual);
-        return expectedSet !== undefined && expectedSet.has(expected);
-    }
-
-    for (var i = 0; i < memo.pairsA.length; i++) {
-        if (memo.pairsA[i] === actual && memo.pairsB[i] === expected) {
-            return true;
-        }
-    }
-
-    return false;
+    const expectedSet = memo.weakMemo.get(actual);
+    return expectedSet !== undefined && expectedSet.has(expected);
 }
 
 function partialMemoAdd(memo, actual, expected) {
-    if (memo.weakMemo) {
-        var expectedSet = memo.weakMemo.get(actual);
-        if (expectedSet === undefined) {
-            expectedSet = new WeakSet();
-            memo.weakMemo.set(actual, expectedSet);
-        }
-        expectedSet.add(expected);
-        return;
+    let expectedSet = memo.weakMemo.get(actual);
+    if (expectedSet === undefined) {
+        expectedSet = new WeakSet();
+        memo.weakMemo.set(actual, expectedSet);
     }
-
-    memo.pairsA.push(actual);
-    memo.pairsB.push(expected);
+    expectedSet.add(expected);
 }
 
 function getTag(value) {
@@ -1508,13 +1488,9 @@ function getTag(value) {
 }
 
 function getEnumerableSymbols(value) {
-    if (typeof Object.getOwnPropertySymbols !== 'function') {
-        return [];
-    }
-
-    var symbols = Object.getOwnPropertySymbols(value);
-    var enumerableSymbols = [];
-    for (var i = 0; i < symbols.length; i++) {
+    const symbols = Object.getOwnPropertySymbols(value);
+    const enumerableSymbols = [];
+    for (let i = 0; i < symbols.length; i++) {
         if (Object.prototype.propertyIsEnumerable.call(value, symbols[i])) {
             enumerableSymbols.push(symbols[i]);
         }
@@ -1528,7 +1504,7 @@ function isArrayIndexKey(key, length) {
         return false;
     }
 
-    var index = Number(key);
+    const index = Number(key);
     if (!Number.isInteger(index) || index < 0 || index >= length) {
         return false;
     }
@@ -1537,9 +1513,9 @@ function isArrayIndexKey(key, length) {
 }
 
 function compareExpectedProperties(actual, expected, memo, skipArrayIndices) {
-    var expectedKeys = Object.keys(expected);
-    for (var i = 0; i < expectedKeys.length; i++) {
-        var key = expectedKeys[i];
+    const expectedKeys = Object.keys(expected);
+    for (let i = 0; i < expectedKeys.length; i++) {
+        const key = expectedKeys[i];
         if (skipArrayIndices && isArrayIndexKey(key, expected.length)) {
             continue;
         }
@@ -1553,9 +1529,9 @@ function compareExpectedProperties(actual, expected, memo, skipArrayIndices) {
         }
     }
 
-    var expectedSymbols = getEnumerableSymbols(expected);
-    for (var i = 0; i < expectedSymbols.length; i++) {
-        var symbolKey = expectedSymbols[i];
+    const expectedSymbols = getEnumerableSymbols(expected);
+    for (let i = 0; i < expectedSymbols.length; i++) {
+        const symbolKey = expectedSymbols[i];
         if (!hasOwn(actual, symbolKey)) {
             return false;
         }
@@ -1573,7 +1549,7 @@ function arraysEqual(actualBytes, expectedBytes) {
         return false;
     }
 
-    for (var i = 0; i < expectedBytes.length; i++) {
+    for (let i = 0; i < expectedBytes.length; i++) {
         if (actualBytes[i] !== expectedBytes[i]) {
             return false;
         }
@@ -1587,10 +1563,10 @@ function isSubsequence(actualValues, expectedValues, compare) {
         return false;
     }
 
-    var searchStart = 0;
-    for (var i = 0; i < expectedValues.length; i++) {
-        var found = false;
-        for (var j = searchStart; j < actualValues.length; j++) {
+    let searchStart = 0;
+    for (let i = 0; i < expectedValues.length; i++) {
+        let found = false;
+        for (let j = searchStart; j < actualValues.length; j++) {
             if (compare(actualValues[j], expectedValues[i])) {
                 searchStart = j + 1;
                 found = true;
@@ -1611,11 +1587,7 @@ function isTypedArrayView(value, tag) {
         return false;
     }
 
-    if (typeof ArrayBuffer.isView === 'function') {
-        return ArrayBuffer.isView(value);
-    }
-
-    return value && typeof value === 'object' && value.buffer instanceof ArrayBuffer;
+    return ArrayBuffer.isView(value);
 }
 
 function strictMapKeyEqual(actualKey, expectedKey) {
@@ -1652,8 +1624,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
     }
     partialMemoAdd(memo, actual, expected);
 
-    var expectedTag = getTag(expected);
-    var actualTag = getTag(actual);
+    const expectedTag = getTag(expected);
+    const actualTag = getTag(actual);
 
     if (expectedTag === '[object Array]') {
         if (actualTag !== '[object Array]') {
@@ -1674,12 +1646,12 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        var actualEntries = Array.from(actual.entries());
+        const actualEntries = Array.from(actual.entries());
 
-        var expectedEntries = Array.from(expected.entries());
-        for (var i = 0; i < expectedEntries.length; i++) {
-            var expectedEntry = expectedEntries[i];
-            var foundMapEntry = false;
+        const expectedEntries = Array.from(expected.entries());
+        for (let i = 0; i < expectedEntries.length; i++) {
+            const expectedEntry = expectedEntries[i];
+            let foundMapEntry = false;
 
             if (actual.has(expectedEntry[0])) {
                 if (!innerPartialDeepEqual(actual.get(expectedEntry[0]), expectedEntry[1], memo)) {
@@ -1687,8 +1659,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
                 }
                 foundMapEntry = true;
             } else {
-                for (var j = 0; j < actualEntries.length; j++) {
-                    var actualEntry = actualEntries[j];
+                for (let j = 0; j < actualEntries.length; j++) {
+                    const actualEntry = actualEntries[j];
                     if (strictMapKeyEqual(actualEntry[0], expectedEntry[0]) &&
                         innerPartialDeepEqual(actualEntry[1], expectedEntry[1], memo)) {
                         foundMapEntry = true;
@@ -1710,18 +1682,18 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        var actualValues = Array.from(actual.values());
-        var usedActualValues = new Array(actualValues.length);
-        for (var i = 0; i < usedActualValues.length; i++) {
+        const actualValues = Array.from(actual.values());
+        const usedActualValues = new Array(actualValues.length);
+        for (let i = 0; i < usedActualValues.length; i++) {
             usedActualValues[i] = false;
         }
 
-        var expectedValues = Array.from(expected.values());
-        for (var i = 0; i < expectedValues.length; i++) {
-            var expectedValue = expectedValues[i];
-            var foundSetValue = false;
+        const expectedValues = Array.from(expected.values());
+        for (let i = 0; i < expectedValues.length; i++) {
+            const expectedValue = expectedValues[i];
+            let foundSetValue = false;
 
-            for (var j = 0; j < actualValues.length; j++) {
+            for (let j = 0; j < actualValues.length; j++) {
                 if (usedActualValues[j]) {
                     continue;
                 }
@@ -1764,8 +1736,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        var actualBuffer = new Uint8Array(actual);
-        var expectedBuffer = new Uint8Array(expected);
+        const actualBuffer = new Uint8Array(actual);
+        const expectedBuffer = new Uint8Array(expected);
         if (actualBuffer.length < expectedBuffer.length) {
             return false;
         }
@@ -1784,8 +1756,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        var actualDataView = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
-        var expectedDataView = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
+        const actualDataView = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
+        const expectedDataView = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
         if (actualDataView.length === expectedDataView.length) {
             return arraysEqual(actualDataView, expectedDataView);
         }
@@ -1800,8 +1772,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        var actualTypedArray = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
-        var expectedTypedArray = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
+        const actualTypedArray = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
+        const expectedTypedArray = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
         if (actualTypedArray.length === expectedTypedArray.length) {
             if (!arraysEqual(actualTypedArray, expectedTypedArray)) {
                 return false;
@@ -1815,8 +1787,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
         return compareExpectedProperties(actual, expected, memo, false);
     }
 
-    var expectedIsURL = isURLValue(expected, expectedTag);
-    var actualIsURL = isURLValue(actual, actualTag);
+    const expectedIsURL = isURLValue(expected, expectedTag);
+    const actualIsURL = isURLValue(actual, actualTag);
     if (expectedIsURL || actualIsURL) {
         if (!expectedIsURL || !actualIsURL) {
             return false;
@@ -1867,7 +1839,7 @@ function innerPartialDeepEqual(actual, expected, memo) {
 // --- throws / doesNotThrow / rejects / doesNotReject ---
 
 function makeAmbiguousArgumentError(arg, details) {
-    var err = new TypeError('The "' + arg + '" argument is ambiguous. ' + details);
+    let err = new TypeError('The "' + arg + '" argument is ambiguous. ' + details);
     err.code = 'ERR_AMBIGUOUS_ARGUMENT';
     return err;
 }
@@ -1901,10 +1873,10 @@ function compareExceptionKey(actual, expected, key, message, keys, fn) {
 
     if (!message) {
         // Build small placeholder objects to keep the generated diff readable.
-        var actualSubset = {};
-        var expectedSubset = {};
-        for (var i = 0; i < keys.length; i++) {
-            var currentKey = keys[i];
+        const actualSubset = {};
+        const expectedSubset = {};
+        for (let i = 0; i < keys.length; i++) {
+            const currentKey = keys[i];
             if (currentKey in actual) {
                 actualSubset[currentKey] = actual[currentKey];
             }
@@ -1917,7 +1889,7 @@ function compareExceptionKey(actual, expected, key, message, keys, fn) {
             }
         }
 
-        var err = new AssertionError({
+        let err = new AssertionError({
             actual: new Comparison(actualSubset),
             expected: new Comparison(expectedSubset),
             operator: 'deepStrictEqual',
@@ -1939,12 +1911,12 @@ function compareExceptionKey(actual, expected, key, message, keys, fn) {
 }
 
 function expectedException(actual, expected, message, fn) {
-    var generatedMessage = false;
-    var throwError = false;
+    let generatedMessage = false;
+    let throwError = false;
 
     if (typeof expected !== 'function') {
         if (expected instanceof RegExp) {
-            var str = String(actual);
+            const str = String(actual);
             if (expected.test(str)) {
                 return;
             }
@@ -1955,7 +1927,7 @@ function expectedException(actual, expected, message, fn) {
             }
             throwError = true;
         } else if (typeof actual !== 'object' || actual === null) {
-            var primitiveErr = new AssertionError({
+            const primitiveErr = new AssertionError({
                 actual: actual,
                 expected: expected,
                 message: message,
@@ -1965,7 +1937,7 @@ function expectedException(actual, expected, message, fn) {
             primitiveErr.operator = fn.name;
             throw primitiveErr;
         } else {
-            var keys = Object.keys(expected);
+            const keys = Object.keys(expected);
             if (expected instanceof Error) {
                 if (keys.indexOf('name') === -1) {
                     keys.push('name');
@@ -1977,8 +1949,8 @@ function expectedException(actual, expected, message, fn) {
                 throw new ERR_INVALID_ARG_VALUE('error', expected, 'may not be an empty object');
             }
 
-            for (var keyIdx = 0; keyIdx < keys.length; keyIdx++) {
-                var key = keys[keyIdx];
+            for (let keyIdx = 0; keyIdx < keys.length; keyIdx++) {
+                const key = keys[keyIdx];
                 if (typeof actual[key] === 'string' && expected[key] instanceof RegExp && expected[key].test(actual[key])) {
                     continue;
                 }
@@ -1994,7 +1966,7 @@ function expectedException(actual, expected, message, fn) {
             message = 'The error is expected to be an instance of "' + expected.name + '". Received ';
 
             if (isError(actual)) {
-                var name = (actual && actual.constructor && actual.constructor.name) || actual.name;
+                let name = (actual && actual.constructor && actual.constructor.name) || actual.name;
                 if (expected.name === name) {
                     message += 'an error with identical name but a different prototype.';
                 } else {
@@ -2010,11 +1982,11 @@ function expectedException(actual, expected, message, fn) {
         }
         throwError = true;
     } else {
-        var result = expected.call({}, actual);
+        const result = expected.call({}, actual);
         if (result !== true) {
             if (!message) {
                 generatedMessage = true;
-                var name = expected.name ? '"' + expected.name + '" ' : '';
+                const name = expected.name ? '"' + expected.name + '" ' : '';
                 message = 'The ' + name + 'validation function is expected to return "true". Received ' + inspect(result);
                 if (actual instanceof Error) {
                     message += '\n\nCaught error:\n\n' + actual;
@@ -2025,7 +1997,7 @@ function expectedException(actual, expected, message, fn) {
     }
 
     if (throwError) {
-        var err = new AssertionError({
+        const err = new AssertionError({
             actual: actual,
             expected: expected,
             message: message,
@@ -2041,7 +2013,7 @@ function invalidArgTypeHelper(input) {
     if (input == null) return ' Received ' + input;
     if (typeof input === 'function') return ' Received function ' + input.name;
     if (typeof input === 'object') {
-        var ctorName = input.constructor && input.constructor.name;
+        const ctorName = input.constructor && input.constructor.name;
         if (ctorName) return ' Received an instance of ' + ctorName;
         return ' Received [object]';
     }
@@ -2078,7 +2050,7 @@ function ensureAsyncAssertionFrame(error, assertionFn) {
         return;
     }
 
-    var asyncFrame = 'at async Function.' + assertionFn.name;
+    const asyncFrame = 'at async Function.' + assertionFn.name;
     if (error.stack.indexOf(asyncFrame) !== -1) {
         return;
     }
@@ -2087,7 +2059,7 @@ function ensureAsyncAssertionFrame(error, assertionFn) {
 }
 
 async function waitForActual(promiseFn, assertionFn) {
-    var resultPromise;
+    let resultPromise;
     if (typeof promiseFn === 'function') {
         // If this throws synchronously, async function semantics make the returned
         // promise reject with the thrown error, matching Node.js behavior.
@@ -2140,12 +2112,12 @@ function expectsError(stackStartFn, actual, error, message) {
     }
 
     if (actual === NO_EXCEPTION_SENTINEL) {
-        var details = '';
+        let details = '';
         if (error && error.name) {
             details += ' (' + error.name + ')';
         }
         details += message ? ': ' + message : '.';
-        var fnType = stackStartFn === rejects ? 'rejection' : 'exception';
+        let fnType = stackStartFn === rejects ? 'rejection' : 'exception';
 
         innerFail({
             actual: undefined,
@@ -2191,9 +2163,9 @@ function expectsNoError(stackStartFn, actual, error, message) {
     }
 
     if (!error || hasMatchingError(actual, error)) {
-        var details = message ? ': ' + message : '.';
-        var fnType = stackStartFn === doesNotReject ? 'rejection' : 'exception';
-        var actualMessage = actual != null && typeof actual === 'object' && 'message' in actual
+        const details = message ? ': ' + message : '.';
+        const fnType = stackStartFn === doesNotReject ? 'rejection' : 'exception';
+        const actualMessage = actual != null && typeof actual === 'object' && 'message' in actual
             ? String(actual.message)
             : String(actual);
 
@@ -2210,28 +2182,28 @@ function expectsNoError(stackStartFn, actual, error, message) {
 }
 
 function throws(fn) {
-    var args = Array.prototype.slice.call(arguments, 1);
+    let args = Array.prototype.slice.call(arguments, 1);
     expectsError.apply(null, [throws, getActual(fn)].concat(args));
 }
 
 function doesNotThrow(fn) {
-    var args = Array.prototype.slice.call(arguments, 1);
+    let args = Array.prototype.slice.call(arguments, 1);
     expectsNoError.apply(null, [doesNotThrow, getActual(fn)].concat(args));
 }
 
 async function rejects(promiseFn) {
-    var args = Array.prototype.slice.call(arguments, 1);
+    let args = Array.prototype.slice.call(arguments, 1);
     expectsError.apply(null, [rejects, await waitForActual(promiseFn, rejects)].concat(args));
 }
 
 async function doesNotReject(promiseFn) {
-    var args = Array.prototype.slice.call(arguments, 1);
+    const args = Array.prototype.slice.call(arguments, 1);
     expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn, doesNotReject)].concat(args));
 }
 
 function ifError(value) {
     if (value !== null && value !== undefined) {
-        var newErr = new AssertionError({
+        const newErr = new AssertionError({
             actual: value,
             expected: null,
             message: 'ifError got unwanted exception: ' + (
@@ -2250,7 +2222,7 @@ function ifError(value) {
 
 function match(string, regexp, message) {
     if (!(regexp instanceof RegExp)) {
-        var err = new ERR_INVALID_ARG_TYPE('regexp', 'RegExp', regexp);
+        let err = new ERR_INVALID_ARG_TYPE('regexp', 'RegExp', regexp);
         throw err;
     }
     if (typeof string !== 'string') {
@@ -2286,7 +2258,7 @@ function match(string, regexp, message) {
 
 function doesNotMatch(string, regexp, message) {
     if (!(regexp instanceof RegExp)) {
-        var err = new ERR_INVALID_ARG_TYPE('regexp', 'RegExp', regexp);
+        let err = new ERR_INVALID_ARG_TYPE('regexp', 'RegExp', regexp);
         throw err;
     }
     if (typeof string !== 'string') {
@@ -2328,7 +2300,7 @@ class CallTracker {
 
     calls(fn, exact) {
         if (typeof globalThis.process !== 'undefined' && globalThis.process._exiting) {
-            var exitErr = new Error('Cannot call CallTracker methods during process exit handler');
+            const exitErr = new Error('Cannot call CallTracker methods during process exit handler');
             exitErr.code = 'ERR_UNAVAILABLE_DURING_EXIT';
             throw exitErr;
         }
@@ -2340,7 +2312,7 @@ class CallTracker {
             fn = function() {};
         }
         if (typeof fn !== 'function') {
-            var err = new TypeError('The "fn" argument must be of type function. Received type ' + typeof fn);
+            let err = new TypeError('The "fn" argument must be of type function. Received type ' + typeof fn);
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
@@ -2348,25 +2320,25 @@ class CallTracker {
             exact = 1;
         }
         if (typeof exact !== 'number') {
-            var err = new TypeError('The "exact" argument must be of type number. Received type ' + typeof exact);
+            let err = new TypeError('The "exact" argument must be of type number. Received type ' + typeof exact);
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
         if (!Number.isInteger(exact) || exact < 0) {
-            var err = new RangeError('The value of "exact" is out of range. It must be a non-negative integer. Received ' + exact);
+            let err = new RangeError('The value of "exact" is out of range. It must be a non-negative integer. Received ' + exact);
             err.code = 'ERR_OUT_OF_RANGE';
             throw err;
         }
 
-        var callRecords = [];
-        var tracking = {
+        const callRecords = [];
+        let tracking = {
             fn: fn,
             expected: exact,
             callRecords: callRecords,
             name: fn.name || 'anonymous'
         };
 
-        var wrapper = function() {
+        let wrapper = function() {
             callRecords.push({
                 arguments: Array.prototype.slice.call(arguments),
                 thisArg: this === globalThis ? undefined : this
@@ -2377,13 +2349,13 @@ class CallTracker {
         // Copy own properties from the original function.
         // Use Object.create(null) for descriptors to avoid prototype pollution
         // (e.g. Object.prototype.get being set can confuse Object.defineProperty).
-        var ownKeys = Object.getOwnPropertyNames(fn);
-        for (var i = 0; i < ownKeys.length; i++) {
-            var key = ownKeys[i];
+        const ownKeys = Object.getOwnPropertyNames(fn);
+        for (let i = 0; i < ownKeys.length; i++) {
+            const key = ownKeys[i];
             if (key === 'length' || key === 'name' || key === 'prototype') continue;
-            var desc = Object.getOwnPropertyDescriptor(fn, key);
+            const desc = Object.getOwnPropertyDescriptor(fn, key);
             if (desc) {
-                var cleanDesc = Object.create(null);
+                const cleanDesc = Object.create(null);
                 if (Object.prototype.hasOwnProperty.call(desc, 'value')) {
                     cleanDesc.value = desc.value;
                     cleanDesc.writable = desc.writable;
@@ -2399,16 +2371,16 @@ class CallTracker {
 
         // Handle the length property specially
         if (Object.prototype.hasOwnProperty.call(fn, 'length')) {
-            var lengthDesc = Object.getOwnPropertyDescriptor(fn, 'length');
+            const lengthDesc = Object.getOwnPropertyDescriptor(fn, 'length');
             if (lengthDesc && Object.prototype.hasOwnProperty.call(lengthDesc, 'value')) {
-                var cleanLenDesc = Object.create(null);
+                const cleanLenDesc = Object.create(null);
                 cleanLenDesc.value = lengthDesc.value;
                 cleanLenDesc.writable = false;
                 cleanLenDesc.enumerable = false;
                 cleanLenDesc.configurable = true;
                 Object.defineProperty(wrapper, 'length', cleanLenDesc);
             } else if (lengthDesc && Object.prototype.hasOwnProperty.call(lengthDesc, 'get')) {
-                var cleanLenDesc2 = Object.create(null);
+                const cleanLenDesc2 = Object.create(null);
                 cleanLenDesc2.get = lengthDesc.get;
                 if (Object.prototype.hasOwnProperty.call(lengthDesc, 'set')) cleanLenDesc2.set = lengthDesc.set;
                 cleanLenDesc2.enumerable = lengthDesc.enumerable;
@@ -2427,13 +2399,13 @@ class CallTracker {
     }
 
     getCalls(fn) {
-        var tracking = this._findTracking(fn);
+        let tracking = this._findTracking(fn);
         if (!tracking) {
-            var err = new TypeError('The "fn" argument is not a tracked function');
+            let err = new TypeError('The "fn" argument is not a tracked function');
             err.code = 'ERR_INVALID_ARG_VALUE';
             throw err;
         }
-        var result = tracking.callRecords.map(function(record) {
+        let result = tracking.callRecords.map(function(record) {
             return Object.freeze({
                 arguments: Object.freeze(Array.prototype.slice.call(record.arguments)),
                 thisArg: record.thisArg
@@ -2443,10 +2415,10 @@ class CallTracker {
     }
 
     report() {
-        var result = [];
-        for (var i = 0; i < this._trackedFunctions.length; i++) {
-            var t = this._trackedFunctions[i];
-            var actual = t.callRecords.length;
+        const result = [];
+        for (let i = 0; i < this._trackedFunctions.length; i++) {
+            let t = this._trackedFunctions[i];
+            const actual = t.callRecords.length;
             if (actual !== t.expected) {
                 result.push({
                     message: 'Expected the ' + t.name + ' function to be executed ' +
@@ -2463,22 +2435,22 @@ class CallTracker {
 
     reset(fn) {
         if (fn !== undefined) {
-            var tracking = this._findTracking(fn);
+            const tracking = this._findTracking(fn);
             if (!tracking) {
-                var err = new TypeError('The "fn" argument is not a tracked function');
+                const err = new TypeError('The "fn" argument is not a tracked function');
                 err.code = 'ERR_INVALID_ARG_VALUE';
                 throw err;
             }
             tracking.callRecords.length = 0;
         } else {
-            for (var i = 0; i < this._trackedFunctions.length; i++) {
+            for (let i = 0; i < this._trackedFunctions.length; i++) {
                 this._trackedFunctions[i].callRecords.length = 0;
             }
         }
     }
 
     verify() {
-        var errors = this.report();
+        const errors = this.report();
         if (errors.length === 0) return;
         if (errors.length === 1) {
             throw new AssertionError({
@@ -2497,7 +2469,7 @@ class CallTracker {
     }
 
     _findTracking(fn) {
-        for (var i = 0; i < this._trackedFunctions.length; i++) {
+        for (let i = 0; i < this._trackedFunctions.length; i++) {
             if (this._trackedFunctions[i].wrapper === fn) {
                 return this._trackedFunctions[i];
             }
@@ -2508,7 +2480,7 @@ class CallTracker {
 
 // --- Wire up the main assert function ---
 
-var assert = function assert(value, message) {
+const assert = function assert(value, message) {
     innerOk(assert, arguments.length, value, message);
 };
 
@@ -2533,7 +2505,7 @@ assert.fail = fail;
 assert.AssertionError = AssertionError;
 assert.CallTracker = CallTracker;
 
-var strict = function strict(value, message) {
+const strict = function strict(value, message) {
     innerOk(strict, arguments.length, value, message);
 };
 

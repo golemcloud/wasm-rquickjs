@@ -53,10 +53,6 @@ function getSignalState(signal) {
     return state;
 }
 
-function createAbortSignal() {
-    return new AbortSignal(INTERNAL_TOKEN);
-}
-
 function setupTimeoutTimer(weakSignal, milliseconds) {
     const timeoutId = setTimeout(() => {
         const s = weakSignal.deref();
@@ -65,9 +61,7 @@ function setupTimeoutTimer(weakSignal, milliseconds) {
             abortSignal(s, new DOMException('The operation timed out.', 'TimeoutError'));
         }
     }, milliseconds);
-    if (timeoutId && typeof timeoutId.unref === 'function') {
-        timeoutId.unref();
-    }
+    timeoutId.unref();
 }
 
 // Called before native GC runs. Releases timeout signals that have no active
@@ -133,7 +127,7 @@ class AbortSignal {
     }
 
     static abort(reason) {
-        const signal = createAbortSignal();
+        const signal = new AbortSignal(INTERNAL_TOKEN);
         const state = signal[_signalState];
         state.aborted = true;
         state.reason = reason !== undefined
@@ -143,7 +137,7 @@ class AbortSignal {
     }
 
     static timeout(milliseconds) {
-        const signal = createAbortSignal();
+        const signal = new AbortSignal(INTERNAL_TOKEN);
         signal[_signalState].isTimeout = true;
         // Add to strong refs set so the signal survives QuickJS's ref-counting.
         // The pre-GC hook will release it if it has no active listeners.
@@ -156,7 +150,7 @@ class AbortSignal {
         if (!Array.isArray(signals)) {
             throw new TypeError('signals must be an iterable');
         }
-        const signal = createAbortSignal();
+        const signal = new AbortSignal(INTERNAL_TOKEN);
         const state = signal[_signalState];
         for (const s of signals) {
             if (s.aborted) {
@@ -250,38 +244,29 @@ class AbortSignal {
     }
 }
 
-const _controllerState = Symbol('AbortController.state');
+const _controllerSignal = Symbol('AbortController.signal');
 
-function getControllerState(controller) {
-    const state = controller[_controllerState];
-    if (!state) {
+function validateController(controller) {
+    if (!(controller instanceof AbortController) || !(controller[_controllerSignal])) {
         throw new TypeError('Illegal invocation');
     }
-    return state;
 }
 
 // AbortController implementation
 class AbortController {
     constructor() {
-        Object.defineProperty(this, _controllerState, {
-            value: {
-                signal: createAbortSignal(),
-            },
-            writable: false,
-            enumerable: false,
-            configurable: false,
-        });
+        this[_controllerSignal] = new AbortSignal(INTERNAL_TOKEN);
     }
 
     get signal() {
-        return getControllerState(this).signal;
+        validateController(this);
+        return this[_controllerSignal];
     }
 
     abort(reason) {
-        const state = getControllerState(this);
-        const signal = state.signal;
+        validateController(this);
         abortSignal(
-            signal,
+            this[_controllerSignal],
             reason !== undefined
                 ? reason
                 : new DOMException('The operation was aborted.', 'AbortError'),
@@ -303,7 +288,7 @@ AbortSignal.prototype[customInspect] = function(depth, opts) {
 
 AbortController.prototype[customInspect] = function(depth, opts) {
     if (depth !== null && depth < 0) return 'AbortController';
-    const signal = this[_controllerState]?.signal;
+    const signal = this.signal;
     if (!signal) return 'AbortController';
     const nextDepth = depth === null ? null : depth - 1;
     const signalStr = (nextDepth !== null && nextDepth < 0) ? '[AbortSignal]' : signal[customInspect](nextDepth, opts);

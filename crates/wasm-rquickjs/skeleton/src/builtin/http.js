@@ -63,12 +63,7 @@ export async function fetch(resource, options = {}) {
         signal = options.signal;
 
         body = options.body;
-        // Convert URL objects to strings
-        if (typeof resource === 'string') {
-            url = resource;
-        } else {
-            url = String(resource);
-        }
+        url = String(resource);
     }
 
     // Check if signal is already aborted
@@ -171,14 +166,10 @@ function abortableFetch(fetchPromise, signal) {
 
 async function sendBody(bodyWriter, body) {
     const reader = body.getReader();
-    try {
-        while (true) {
-            const {done, value} = await reader.read();
-            if (done) break;
-            await bodyWriter.writeRequestBodyChunk(value);
-        }
-    } finally {
-        // reader.releaseLock(); // Stream is consumed, no need to release lock usually
+    while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        await bodyWriter.writeRequestBodyChunk(value);
     }
     bodyWriter.finishBody();
 }
@@ -568,36 +559,28 @@ export class Response {
 }
 
 function normalizeName(name) {
-    if (typeof name !== 'string') {
-        name = String(name)
+    const str = typeof name !== 'string' ? String(name) : name;
+    if (/[^a-z0-9\-#$%&'*+.^_`|~!]/i.test(str) || str === '') {
+        throw new TypeError('Invalid character in header field name: "' + str + '"')
     }
-    if (/[^a-z0-9\-#$%&'*+.^_`|~!]/i.test(name) || name === '') {
-        throw new TypeError('Invalid character in header field name: "' + name + '"')
-    }
-    return name.toLowerCase()
+    return str.toLowerCase()
 }
 
 function normalizeValue(value) {
-    if (typeof value !== 'string') {
-        value = String(value)
-    }
-    return value
+    return typeof value !== 'string' ? String(value) : value;
 }
 
-// Build a destructive iterator for the value list
 function iteratorFor(items) {
-    let iterator = {
-        next: function () {
-            const value = items.shift()
-            return {done: value === undefined, value: value}
+    const iterator = {
+        next() {
+            const value = items.shift();
+            return {done: value === undefined, value};
+        },
+        [Symbol.iterator]() {
+            return iterator;
         }
     };
-
-    iterator[Symbol.iterator] = function () {
-        return iterator
-    }
-
-    return iterator
+    return iterator;
 }
 
 export class Headers {
@@ -666,10 +649,8 @@ export class Headers {
     }
 
     forEach(callback, thisArg) {
-        for (const name in this.map) {
-            if (this.map.hasOwnProperty(name)) {
-                callback.call(thisArg, this.map[name], name, this)
-            }
+        for (const [name, value] of Object.entries(this.map)) {
+            callback.call(thisArg, value, name, this)
         }
     }
 

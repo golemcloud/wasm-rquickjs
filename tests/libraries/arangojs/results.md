@@ -2,7 +2,7 @@
 
 **Package:** `arangojs`
 **Version:** `10.2.2`
-**Tested on:** 2026-03-17
+**Tested on:** 2026-03-20
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results

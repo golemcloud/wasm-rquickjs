@@ -274,6 +274,7 @@ fn eval_with_filename_impl<'js>(
 
 /// Minimal JSON string quoting for error messages.
 fn serde_json_mini_quote(s: &str) -> String {
+    use std::fmt::Write;
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for c in s.chars() {
@@ -284,7 +285,7 @@ fn serde_json_mini_quote(s: &str) -> String {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             c if c < '\x20' => {
-                out.push_str(&format!("\\u{:04x}", c as u32));
+                let _ = write!(out, "\\u{:04x}", c as u32);
             }
             c => out.push(c),
         }

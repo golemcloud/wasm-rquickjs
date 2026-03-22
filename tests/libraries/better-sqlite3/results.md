@@ -2,7 +2,7 @@
 
 **Package:** `better-sqlite3`
 **Version:** `12.6.2`
-**Tested on:** 2026-03-08
+**Tested on:** 2026-03-20 (re-tested; same results as 2026-03-08)
 **Bundler:** Rollup (with `@rollup/plugin-commonjs` + `@rollup/plugin-node-resolve`)
 
 ## Test Results

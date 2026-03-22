@@ -1,12 +1,12 @@
 import assert from 'assert';
-import { Surreal } from 'surrealdb';
+import { HttpEngine, Surreal } from 'surrealdb';
 
 const BASE = 'http://localhost:18080';
 
 export const run = async () => {
   const db = new Surreal();
 
-  await db.connect(BASE);
+  await db.connect(BASE, { engine: HttpEngine });
   await db.signin({ username: 'root', password: 'root' });
   await db.use({ namespace: 'test', database: 'test' });
 

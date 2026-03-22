@@ -277,8 +277,6 @@ Buffer.from = function (value, encodingOrOffset, length) {
     return from(value, encodingOrOffset, length)
 }
 
-// Note: Change prototype *after* Buffer.from is defined to workaround Chrome bug:
-// https://github.com/feross/buffer/pull/148
 Object.setPrototypeOf(Buffer.prototype, Uint8Array.prototype)
 Object.setPrototypeOf(Buffer, Uint8Array)
 
@@ -507,7 +505,7 @@ function fromObject (obj) {
     }
 
     if (obj.length !== undefined) {
-        if (typeof obj.length !== 'number' || numberIsNaN(obj.length)) {
+        if (typeof obj.length !== 'number' || Number.isNaN(obj.length)) {
             return createBuffer(0)
         }
         return fromArrayLike(obj)
@@ -959,7 +957,7 @@ function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
         byteOffset = -0x80000000
     }
     byteOffset = +byteOffset // Coerce to Number.
-    if (numberIsNaN(byteOffset)) {
+    if (Number.isNaN(byteOffset)) {
         // byteOffset: it it's undefined, null, NaN, "foo", etc, search whole buffer
         byteOffset = dir ? 0 : buffer.length
     }
@@ -1298,13 +1296,10 @@ function utf8Slice (buf, start, end) {
     if (end - start > K_STRING_MAX_LENGTH) {
         throw new ERR_STRING_TOO_LONG(K_STRING_MAX_LENGTH)
     }
-    var u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+    const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
     return nativeUtf8Decode(u8, start, end)
 }
 
-// Based on http://stackoverflow.com/a/22747272/680742, the browser with
-// the lowest limit is Chrome, with 0x10000 args.
-// We go 1 magnitude less, for safety
 const MAX_ARGUMENTS_LENGTH = 0x1000
 
 function decodeCodePointsArray (codePoints) {
@@ -1505,7 +1500,7 @@ Buffer.prototype.readUint32BE =
                 this[offset + 3])
     }
 
-Buffer.prototype.readBigUInt64LE = defineBigIntMethod(function readBigUInt64LE (offset) {
+Buffer.prototype.readBigUInt64LE = function readBigUInt64LE (offset) {
     offset = offset >>> 0
     validateNumber(offset, 'offset')
     const first = this[offset]
@@ -1525,9 +1520,9 @@ Buffer.prototype.readBigUInt64LE = defineBigIntMethod(function readBigUInt64LE (
         last * 2 ** 24
 
     return BigInt(lo) + (BigInt(hi) << BigInt(32))
-})
+}
 
-Buffer.prototype.readBigUInt64BE = defineBigIntMethod(function readBigUInt64BE (offset) {
+Buffer.prototype.readBigUInt64BE = function readBigUInt64BE (offset) {
     offset = offset >>> 0
     validateNumber(offset, 'offset')
     const first = this[offset]
@@ -1547,7 +1542,7 @@ Buffer.prototype.readBigUInt64BE = defineBigIntMethod(function readBigUInt64BE (
         last
 
     return (BigInt(hi) << BigInt(32)) + BigInt(lo)
-})
+}
 
 Buffer.prototype.readIntLE = function readIntLE (offset, byteLength) {
     byteLength = _validateOffset(byteLength, 'byteLength', 1, 6)
@@ -1624,7 +1619,7 @@ Buffer.prototype.readInt32BE = function readInt32BE (offset) {
         (this[offset + 3])
 }
 
-Buffer.prototype.readBigInt64LE = defineBigIntMethod(function readBigInt64LE (offset) {
+Buffer.prototype.readBigInt64LE = function readBigInt64LE (offset) {
     offset = offset >>> 0
     validateNumber(offset, 'offset')
     const first = this[offset]
@@ -1643,9 +1638,9 @@ Buffer.prototype.readBigInt64LE = defineBigIntMethod(function readBigInt64LE (of
             this[++offset] * 2 ** 8 +
             this[++offset] * 2 ** 16 +
             this[++offset] * 2 ** 24)
-})
+}
 
-Buffer.prototype.readBigInt64BE = defineBigIntMethod(function readBigInt64BE (offset) {
+Buffer.prototype.readBigInt64BE = function readBigInt64BE (offset) {
     offset = offset >>> 0
     validateNumber(offset, 'offset')
     const first = this[offset]
@@ -1664,7 +1659,7 @@ Buffer.prototype.readBigInt64BE = defineBigIntMethod(function readBigInt64BE (of
             this[++offset] * 2 ** 16 +
             this[++offset] * 2 ** 8 +
             last)
-})
+}
 
 Buffer.prototype.readFloatLE = function readFloatLE (offset) {
     if (offset === undefined) offset = 0
@@ -1853,13 +1848,13 @@ function wrtBigUInt64BE (buf, value, offset, min, max) {
     return offset + 8
 }
 
-Buffer.prototype.writeBigUInt64LE = defineBigIntMethod(function writeBigUInt64LE (value, offset = 0) {
+Buffer.prototype.writeBigUInt64LE = function writeBigUInt64LE (value, offset = 0) {
     return wrtBigUInt64LE(this, value, offset, BigInt(0), BigInt('0xffffffffffffffff'))
-})
+}
 
-Buffer.prototype.writeBigUInt64BE = defineBigIntMethod(function writeBigUInt64BE (value, offset = 0) {
+Buffer.prototype.writeBigUInt64BE = function writeBigUInt64BE (value, offset = 0) {
     return wrtBigUInt64BE(this, value, offset, BigInt(0), BigInt('0xffffffffffffffff'))
-})
+}
 
 Buffer.prototype.writeIntLE = function writeIntLE (value, offset, byteLength) {
     value = +value
@@ -1958,13 +1953,13 @@ Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset) {
     return offset + 4
 }
 
-Buffer.prototype.writeBigInt64LE = defineBigIntMethod(function writeBigInt64LE (value, offset = 0) {
+Buffer.prototype.writeBigInt64LE = function writeBigInt64LE (value, offset = 0) {
     return wrtBigUInt64LE(this, value, offset, -BigInt('0x8000000000000000'), BigInt('0x7fffffffffffffff'))
-})
+}
 
-Buffer.prototype.writeBigInt64BE = defineBigIntMethod(function writeBigInt64BE (value, offset = 0) {
+Buffer.prototype.writeBigInt64BE = function writeBigInt64BE (value, offset = 0) {
     return wrtBigUInt64BE(this, value, offset, -BigInt('0x8000000000000000'), BigInt('0x7fffffffffffffff'))
-})
+}
 
 // Lowercase Uint aliases for BigUInt64 methods (Node.js compat)
 Buffer.prototype.readBigUint64LE = Buffer.prototype.readBigUInt64LE
@@ -2374,7 +2369,6 @@ function isInstance (obj, type) {
             obj.constructor.name === type.name) ||
         (type === Uint8Array && Buffer.isBuffer(obj))
 }
-const numberIsNaN = Number.isNaN
 
 // Create lookup table for `toString('hex')`
 // See: https://github.com/feross/buffer/issues/219
@@ -2665,10 +2659,6 @@ export function isUtf8 (source) {
         }
     }
     return true
-}
-
-function defineBigIntMethod (fn) {
-    return fn
 }
 
 const _defaultExport = {

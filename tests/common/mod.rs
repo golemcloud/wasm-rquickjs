@@ -5,13 +5,14 @@ use crate::common::WasmSource::Precompiled;
 use anyhow::anyhow;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
+use futures::FutureExt;
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
@@ -19,7 +20,7 @@ use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{
     Component, Func, Instance, Linker, ResourceAny, ResourceTable, ResourceType, Val,
 };
-use wasmtime::{Engine, Store, StoreContextMut};
+use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
@@ -235,12 +236,12 @@ impl PreparedComponent {
         config.cache(Some(wasmtime::Cache::from_file(None)?));
         let engine = Engine::new(&config)?;
 
-        // Start a background thread that increments the epoch every second,
+        // Start a background thread that increments the epoch every 10ms,
         // enabling epoch-based interruption to enforce timeouts on spinning WASM.
         let epoch_engine = engine.clone();
         std::thread::spawn(move || {
             loop {
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                std::thread::sleep(std::time::Duration::from_millis(10));
                 epoch_engine.increment_epoch();
             }
         });
@@ -505,10 +506,23 @@ impl TestInstance {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(http_ctx),
+            started_at: Instant::now(),
+            timeout: Duration::from_secs(120),
         };
 
         let mut store = Store::new(engine, host);
-        store.set_epoch_deadline(120); // default: 120 ticks (~120 seconds with 1s epoch thread)
+        store.set_epoch_deadline(0);
+        store.epoch_deadline_callback(|cx| {
+            let data = cx.data();
+            if data.started_at.elapsed() >= data.timeout {
+                Ok(UpdateDeadline::Interrupt)
+            } else {
+                Ok(UpdateDeadline::YieldCustom(
+                    1,
+                    tokio::task::yield_now().boxed(),
+                ))
+            }
+        });
 
         let instance = linker.instantiate_async(&mut store, component).await?;
 
@@ -566,8 +580,9 @@ impl TestInstance {
         )
     }
 
-    pub fn set_epoch_deadline(&mut self, ticks: u64) {
-        self.store.set_epoch_deadline(ticks);
+    pub fn set_epoch_deadline(&mut self, timeout_secs: u64) {
+        self.store.data_mut().timeout = Duration::from_secs(timeout_secs);
+        self.store.data_mut().started_at = Instant::now();
     }
 
     pub fn temp_dir_path(&self) -> &Utf8Path {
@@ -672,11 +687,11 @@ pub struct CompiledTest {
 }
 
 impl CompiledTest {
-    pub fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
-        Self::new_with_features(path, use_shared_target, FeatureCombination::Normal)
+    pub async fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
+        Self::new_with_features(path, use_shared_target, FeatureCombination::Normal).await
     }
 
-    pub fn new_with_features(
+    pub async fn new_with_features(
         path: &Utf8Path,
         use_shared_target: bool,
         feature_combination: FeatureCombination,
@@ -714,8 +729,8 @@ impl CompiledTest {
             .current_dir(&wrapper_crate_root)
             .status()?;
 
-        if use_shared_target {
-            Ok(CompiledTest {
+        let compiled = if use_shared_target {
+            CompiledTest {
                 wasm: Precompiled(
                     Utf8Path::new("tmp")
                         .join("rt-target")
@@ -723,9 +738,9 @@ impl CompiledTest {
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
                 ),
-            })
+            }
         } else {
-            Ok(CompiledTest {
+            CompiledTest {
                 wasm: Precompiled(
                     wrapper_crate_root
                         .join("target")
@@ -733,8 +748,22 @@ impl CompiledTest {
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
                 ),
-            })
-        }
+            }
+        };
+
+        compiled.optimize().await
+    }
+
+    /// Run Wizer pre-initialization on the compiled component.
+    /// Returns a new `CompiledTest` pointing to the optimized wasm file.
+    pub async fn optimize(&self) -> anyhow::Result<CompiledTest> {
+        let input = self.wasm_path();
+        let optimized = input.with_extension("optimized.wasm");
+        println!("Optimizing component {input} -> {optimized}");
+        wasm_rquickjs::optimize_component(input, &optimized, "wizer-initialize").await?;
+        Ok(CompiledTest {
+            wasm: Precompiled(optimized),
+        })
     }
 
     pub fn wasm_path(&self) -> &Utf8Path {
@@ -770,10 +799,12 @@ impl CompiledTest {
 }
 
 #[derive(Clone)]
-struct Host {
+pub struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<WasiHttpCtx>,
+    pub started_at: Instant,
+    pub timeout: Duration,
 }
 
 impl WasiView for Host {
@@ -866,4 +897,197 @@ fn plug(
     }
 
     Ok(())
+}
+
+/// Classify a test filename into a module category based on its name prefix.
+pub fn classify_test(filename: &str) -> &str {
+    // Strip "test-" prefix
+    let name = filename
+        .strip_prefix("test-")
+        .unwrap_or(filename)
+        .strip_suffix(".js")
+        .unwrap_or(filename);
+
+    if name.starts_with("path") {
+        "path"
+    } else if name.starts_with("assert") {
+        "assert"
+    } else if name.starts_with("buffer") {
+        "buffer"
+    } else if name.starts_with("stream") {
+        "stream"
+    } else if name.starts_with("string-decoder") || name.starts_with("stringdecoder") {
+        "string_decoder"
+    } else if name.starts_with("url") {
+        "url"
+    } else if name.starts_with("util") {
+        "util"
+    } else if name.starts_with("querystring") {
+        "querystring"
+    } else if name.starts_with("events") || name.starts_with("event-emitter") {
+        "events"
+    } else if name.starts_with("fs") || name.starts_with("file") {
+        "fs"
+    } else if name.starts_with("crypto") {
+        "crypto"
+    } else if name.starts_with("http") || name.starts_with("http2") || name.starts_with("https") {
+        "http"
+    } else if name.starts_with("net") {
+        "net"
+    } else if name.starts_with("dns") {
+        "dns"
+    } else if name.starts_with("os") {
+        "os"
+    } else if name.starts_with("process") {
+        "process"
+    } else if name.starts_with("child-process") || name.starts_with("child_process") {
+        "child_process"
+    } else if name.starts_with("tls") || name.starts_with("ssl") {
+        "tls"
+    } else if name.starts_with("zlib") {
+        "zlib"
+    } else if name.starts_with("console") {
+        "console"
+    } else if name.starts_with("timers")
+        || name.starts_with("settimeout")
+        || name.starts_with("setinterval")
+        || name.starts_with("setimmediate")
+    {
+        "timers"
+    } else if name.starts_with("worker") || name.starts_with("worker-threads") {
+        "worker_threads"
+    } else if name.starts_with("cluster") {
+        "cluster"
+    } else if name.starts_with("readline") {
+        "readline"
+    } else if name.starts_with("repl") {
+        "repl"
+    } else if name.starts_with("vm") {
+        "vm"
+    } else if name.starts_with("dgram") {
+        "dgram"
+    } else if name.starts_with("tty") {
+        "tty"
+    } else if name.starts_with("async-hooks")
+        || name.starts_with("async-context")
+        || name.starts_with("async-local-storage")
+    {
+        "async_hooks"
+    } else if name.starts_with("inspector") || name.starts_with("debugger") {
+        "inspector"
+    } else if name.starts_with("module")
+        || name.starts_with("require")
+        || name.starts_with("esm")
+        || name.starts_with("cjs")
+        || name.starts_with("loaders")
+    {
+        "module"
+    } else if name.starts_with("perf") || name.starts_with("performance") {
+        "perf_hooks"
+    } else if name.starts_with("diagnostics") {
+        "diagnostics_channel"
+    } else if name.starts_with("domain") {
+        "domain"
+    } else if name.starts_with("v8") {
+        "v8"
+    } else if name.starts_with("trace") {
+        "trace_events"
+    } else if name.starts_with("runner") || name.starts_with("test-runner") {
+        "test_runner"
+    } else if name.starts_with("abortcontroller")
+        || name.starts_with("abortsignal")
+        || name.starts_with("aborted")
+    {
+        "abort"
+    } else if name.starts_with("encoding")
+        || name.starts_with("textdecoder")
+        || name.starts_with("textencoder")
+    {
+        "encoding"
+    } else if name.starts_with("blob") {
+        "blob"
+    } else if name.starts_with("fetch")
+        || name.starts_with("response")
+        || name.starts_with("request")
+        || name.starts_with("headers")
+    {
+        "fetch"
+    } else if name.starts_with("readable")
+        || name.starts_with("writable")
+        || name.starts_with("transform")
+        || name.starts_with("duplex")
+    {
+        "stream"
+    } else if name.starts_with("sqlite") {
+        "sqlite"
+    } else if name.starts_with("whatwg") {
+        "whatwg"
+    } else if name.starts_with("webcrypto") {
+        "webcrypto"
+    } else if name.starts_with("permission") {
+        "permission"
+    } else if name.starts_with("promise") || name.starts_with("promises") {
+        "promises"
+    } else if name.starts_with("global") {
+        "global"
+    } else if name.starts_with("compile") {
+        "compile"
+    } else if name.starts_with("cli") {
+        "cli"
+    } else if name.starts_with("stdin") || name.starts_with("stdout") || name.starts_with("stdio") {
+        "stdio"
+    } else if name.starts_with("signal") {
+        "signal"
+    } else if name.starts_with("errors") || name.starts_with("error") {
+        "errors"
+    } else if name.starts_with("pipe")
+        || name.starts_with("socket")
+        || name.starts_with("listen")
+        || name.starts_with("tcp")
+    {
+        "net"
+    } else if name.starts_with("webstream") || name.starts_with("webstreams") {
+        "webstreams"
+    } else if name.starts_with("snapshot") {
+        "snapshot"
+    } else if name.starts_with("eslint") {
+        "eslint"
+    } else if name.starts_with("internal") {
+        "internal"
+    } else if name.starts_with("heap") {
+        "heap"
+    } else if name.starts_with("node") {
+        "node"
+    } else if name.starts_with("inspect") {
+        "inspector"
+    } else if name.starts_with("shadow-realm") {
+        "shadow_realm"
+    } else if name.starts_with("btoa") || name.starts_with("atob") {
+        "encoding"
+    } else if name.starts_with("common") {
+        "common"
+    } else {
+        "other"
+    }
+}
+
+/// Check if a test file relies on Node.js internals (not public API).
+///
+/// Detects patterns like `// Flags: --expose-internals`, `require('internal/...')`,
+/// and `internalBinding(...)` in the test source code.
+pub fn uses_node_internals(test_path: &str) -> bool {
+    let file_path = format!("tests/node_compat/suite/{test_path}");
+    let content = match fs::read_to_string(&file_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    // Only check the first 50 lines for the Flags comment (it's always near the top)
+    let header: String = content.lines().take(50).collect::<Vec<_>>().join("\n");
+    if header.contains("--expose-internals") {
+        return true;
+    }
+    // Check the full file for internal requires/bindings
+    content.contains("require('internal/")
+        || content.contains("require(\"internal/")
+        || content.contains("internalBinding(")
 }

@@ -2,7 +2,7 @@
 
 **Package:** `cheerio`
 **Version:** `1.2.0`
-**Tested on:** 2026-03-18
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -26,13 +26,13 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: getaddrinfo ESERVFAIL localhost`
-- **Root cause:** `fromURL` (via bundled `undici`) performs DNS lookup and fails to resolve `localhost` in this runtime setup.
+- **Root cause:** `fromURL` (via bundled `undici`) performs DNS lookup and fails to resolve `localhost` in the wasmtime CLI runtime setup. In a Golem deployment with proper networking, this would likely work.
 
 ### test-integration-02-from-url-xml-and-errors.js — `fromURL` XML load and content-type rejection
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: getaddrinfo ESERVFAIL localhost`
-- **Root cause:** Same DNS resolution failure happens before request/response handling; the test cannot reach the mock server.
+- **Root cause:** Same DNS resolution failure; the request cannot reach the mock server.
 
 ## Summary
 
@@ -40,5 +40,5 @@
 - Integration tests passed: 0/2 HTTP mock in wasm-rquickjs (2/2 in Node.js)
 - Live service tests passed: N/A — not a service client library
 - Missing APIs: none identified
-- Behavioral differences: `fromURL` networking path fails in wasm-rquickjs due to DNS resolution (`getaddrinfo ESERVFAIL localhost`), while offline parsing/manipulation APIs work.
-- Blockers: HTTP fetching via `fromURL` is not currently usable in this runtime environment.
+- Behavioral differences: `fromURL` networking path fails in wasmtime CLI due to DNS resolution (`getaddrinfo ESERVFAIL localhost`), while all offline parsing/manipulation APIs work perfectly.
+- Blockers: HTTP fetching via `fromURL` is not usable in this runtime environment; core HTML parsing and manipulation work fully.

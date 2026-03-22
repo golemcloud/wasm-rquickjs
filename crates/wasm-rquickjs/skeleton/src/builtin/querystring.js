@@ -5,23 +5,16 @@ for (let i = 0; i < 256; ++i) {
     hexTable[i] = '%' + ((i < 16 ? '0' : '') + i.toString(16)).toUpperCase();
 }
 
-const isHexTable = new Int8Array([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
-    0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+const unhexTable = new Int8Array([
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+     0,  1,  2,  3,  4,  5,  6,  7,  8,  9, -1, -1, -1, -1, -1, -1,
+    -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 ]);
-
-function unhexChar(c) {
-    if (c >= 48 && c <= 57) return c - 48;       // 0-9
-    if (c >= 65 && c <= 70) return c - 55;       // A-F
-    if (c >= 97 && c <= 102) return c - 87;      // a-f
-    return -1;
-}
 
 function makeUriError() {
     const err = new URIError('URI malformed');
@@ -46,9 +39,11 @@ export function unescapeBuffer(s, decodeSpaces) {
         if (c === 0x25 /* % */ && i + 2 < s.length) {
             const hi = s.charCodeAt(i + 1);
             const lo = s.charCodeAt(i + 2);
-            if (hi < 128 && lo < 128 && isHexTable[hi] === 1 && isHexTable[lo] === 1) {
+            const hexHigh = unhexTable[hi];
+            const hexLow = unhexTable[lo];
+            if (hexHigh >= 0 && hexLow >= 0) {
                 if (i > lastPos) chunks.push(Buffer.from(s.slice(lastPos, i), 'utf8'));
-                chunks.push(Buffer.from([(unhexChar(hi) << 4) | unhexChar(lo)]));
+                chunks.push(Buffer.from([(hexHigh << 4) | hexLow]));
                 i += 2;
                 lastPos = i + 1;
             }
@@ -61,34 +56,26 @@ export function unescapeBuffer(s, decodeSpaces) {
 }
 
 export function unescape(s, decodeSpaces) {
-    s = typeof s === 'string' ? s : '' + s;
-    if (decodeSpaces && s.indexOf('+') !== -1) {
-        s = s.replace(/\+/g, ' ');
-    }
     try {
         return decodeURIComponent(s);
     } catch {
-        return unescapeBuffer(s, false).toString();
+        return QueryString.unescapeBuffer(s, decodeSpaces).toString();
     }
 }
 
 export function escape(str) {
-    if (typeof str === 'symbol') {
-        throw new TypeError('Cannot convert a Symbol value to a string');
-    }
     if (typeof str !== 'string') {
-        if (typeof str === 'object' && str !== null) {
+        if (typeof str === 'object')
             str = String(str);
-        } else {
-            str = str + '';
-        }
+        else
+            str += '';
     }
 
     let out = '';
     let lastPos = 0;
 
     for (let i = 0; i < str.length; ++i) {
-        let c = str.charCodeAt(i);
+        const c = str.charCodeAt(i);
 
         if (
             (c >= 0x41 && c <= 0x5A) || // A-Z
@@ -194,24 +181,14 @@ export function stringify(obj, sep, eq, options) {
 }
 
 function encodeStringifiedPrimitive(v, encode) {
-    if (typeof v === 'string') {
-        if (v.length > 0) return encode(v);
-        return '';
-    }
-    if (typeof v === 'number') {
-        if (isFinite(v)) {
-            const str = '' + v;
-            if (str.length > 0) return encode(str);
-            return '';
-        }
-        return '';
-    }
-    if (typeof v === 'bigint') {
+    if (typeof v === 'string')
+        return v.length ? encode(v) : '';
+    if (typeof v === 'number' && isFinite(v))
         return encode('' + v);
-    }
-    if (typeof v === 'boolean') {
-        return encode(v ? 'true' : 'false');
-    }
+    if (typeof v === 'bigint')
+        return '' + v;
+    if (typeof v === 'boolean')
+        return v ? 'true' : 'false';
     return '';
 }
 

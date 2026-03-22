@@ -3,9 +3,11 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 
 #[test_dep(tagged_as = "abort_controller")]
-fn compiled_abort_controller() -> CompiledTest {
+async fn compiled_abort_controller() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/abort-controller");
-    CompiledTest::new(path, true).expect("Failed to compile abort_controller")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile abort_controller")
 }
 
 #[test]

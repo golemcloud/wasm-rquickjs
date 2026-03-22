@@ -2,15 +2,13 @@
 
 **Package:** `@effect/platform`
 **Version:** `0.95.0`
-**Tested on:** 2026-03-18
+**Tested on:** 2026-03-20
 
 ## Test Results
 
 ### test-01-url-headers.js — URL mutation, query params, and headers
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Error converting from js 'object' into type 'string'`
-- **Root cause:** `Url.mutate` path fails in wasm-rquickjs when cloning/mutating URL instances (`new URL(self)` path inside `@effect/platform`), causing the component to trap.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-02-cookies.js — cookie creation, lookup, serialization, and removal
 - **Node.js:** ✅ PASS
@@ -48,11 +46,10 @@
 
 ## Summary
 
-- Offline tests passed: 3/5
+- Offline tests passed: 4/5
 - Integration tests passed: 3/3 (HTTP mock server)
 - Live service tests passed: N/A — not a service client library
 - Missing APIs: None observed in this test set
 - Behavioral differences:
-  - `Url.mutate` fails during URL cloning/mutation in wasm-rquickjs
   - `HttpClientRequest.toUrl` query-string behavior differs from Node.js for appended URL params
-- Blockers: URL utility behavior mismatches prevent full compatibility for `@effect/platform` request/URL helper usage
+- Blockers: URL query-parameter handling mismatch prevents full compatibility for `@effect/platform` request builder usage

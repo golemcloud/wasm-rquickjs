@@ -43,13 +43,8 @@ if (typeof _fsBinding.fstat !== 'function') {
 let _Buffer = null;
 function getBuffer() {
     if (!_Buffer) {
-        try {
-            const bufModule = globalThis.require ? globalThis.require('node:buffer') : null;
-            _Buffer = bufModule ? (bufModule.Buffer || bufModule.default?.Buffer) : null;
-        } catch {}
-        if (!_Buffer) {
-            _Buffer = { from: (x) => x, alloc: (n) => new Uint8Array(n) };
-        }
+        const bufModule = require('node:buffer');
+        _Buffer = bufModule.Buffer || bufModule.default?.Buffer;
     }
     return _Buffer;
 }
@@ -57,8 +52,7 @@ function getBuffer() {
 let _Stats = null;
 function getStats() {
     if (!_Stats) {
-        const fs = globalThis.require ? globalThis.require('node:fs') : null;
-        _Stats = fs ? fs.Stats : null;
+        _Stats = require('node:fs').Stats;
     }
     return _Stats;
 }
@@ -67,15 +61,15 @@ let _EventEmitter = null;
 let _PathModule = null;
 function getEventEmitter() {
     if (!_EventEmitter) {
-        const events = globalThis.require ? globalThis.require('node:events') : null;
-        _EventEmitter = events ? (events.EventEmitter || events.default) : null;
+        const events = require('node:events');
+        _EventEmitter = events.EventEmitter || events.default;
     }
     return _EventEmitter;
 }
 
 function getPathModule() {
     if (!_PathModule) {
-        _PathModule = globalThis.require ? globalThis.require('node:path') : null;
+        _PathModule = require('node:path');
     }
     return _PathModule;
 }
@@ -98,26 +92,35 @@ export let constants = { F_OK, R_OK, W_OK, X_OK };
 
 // --- Helpers ---
 
+const O_RDONLY = 0;
+const O_WRONLY = 1;
+const O_RDWR = 2;
+const O_CREAT = 64;
+const O_EXCL = 128;
+const O_TRUNC = 512;
+const O_APPEND = 1024;
+const O_SYNC = 1052672;
+
 function flagsToNumber(flags) {
     if (typeof flags === 'number') {
         validateInteger(flags, 'flags', -2147483648, 2147483647);
         return flags;
     }
-    if (typeof flags !== 'string') return 0;
+    if (typeof flags !== 'string') return O_RDONLY;
     switch (flags) {
-        case 'r': return 0;
-        case 'r+': return 2;
-        case 'rs+': case 'sr+': return 2 | 1052672;
-        case 'w': return 1 | 64 | 512;
-        case 'wx': case 'xw': return 1 | 64 | 512 | 128;
-        case 'w+': return 2 | 64 | 512;
-        case 'wx+': case 'xw+': return 2 | 64 | 512 | 128;
-        case 'a': return 1 | 1024 | 64;
-        case 'ax': case 'xa': return 1 | 1024 | 64 | 128;
-        case 'a+': return 2 | 1024 | 64;
-        case 'ax+': case 'xa+': return 2 | 1024 | 64 | 128;
-        case 'as': case 'sa': return 1 | 1024 | 64 | 1052672;
-        case 'as+': case 'sa+': return 2 | 1024 | 64 | 1052672;
+        case 'r': return O_RDONLY;
+        case 'r+': return O_RDWR;
+        case 'rs+': case 'sr+': return O_RDWR | O_SYNC;
+        case 'w': return O_WRONLY | O_CREAT | O_TRUNC;
+        case 'wx': case 'xw': return O_WRONLY | O_CREAT | O_TRUNC | O_EXCL;
+        case 'w+': return O_RDWR | O_CREAT | O_TRUNC;
+        case 'wx+': case 'xw+': return O_RDWR | O_CREAT | O_TRUNC | O_EXCL;
+        case 'a': return O_WRONLY | O_APPEND | O_CREAT;
+        case 'ax': case 'xa': return O_WRONLY | O_APPEND | O_CREAT | O_EXCL;
+        case 'a+': return O_RDWR | O_APPEND | O_CREAT;
+        case 'ax+': case 'xa+': return O_RDWR | O_APPEND | O_CREAT | O_EXCL;
+        case 'as': case 'sa': return O_WRONLY | O_APPEND | O_CREAT | O_SYNC;
+        case 'as+': case 'sa+': return O_RDWR | O_APPEND | O_CREAT | O_SYNC;
         default: throw new Error(`Unknown file open flag: ${flags}`);
     }
 }
@@ -736,14 +739,12 @@ export async function appendFile(path, data, options) {
     if (error) throw createSystemError(error);
 
     if (flush === true) {
-        const fs = globalThis.require ? globalThis.require('node:fs') : null;
-        if (fs) {
-            const fd = fs.openSync(path, 'r');
-            try {
-                fs.fsyncSync(fd);
-            } finally {
-                fs.closeSync(fd);
-            }
+        const fs = require('node:fs');
+        const fd = fs.openSync(path, 'r');
+        try {
+            fs.fsyncSync(fd);
+        } finally {
+            fs.closeSync(fd);
         }
     }
 }
@@ -817,8 +818,7 @@ export async function readdir(path, options) {
             if (left.name > right.name) return 1;
             return 0;
         });
-        const fs = globalThis.require ? globalThis.require('node:fs') : null;
-        const DirentClass = fs ? fs.Dirent : null;
+        const DirentClass = require('node:fs').Dirent;
         const makeDirent = DirentClass
             ? (e, p) => new DirentClass(e.name, e.fileType, p)
             : (e, p) => {
@@ -878,11 +878,7 @@ export async function readdir(path, options) {
 }
 
 export async function opendir(path, options) {
-    const fs = globalThis.require ? globalThis.require('node:fs') : null;
-    if (!fs || typeof fs.opendirSync !== 'function') {
-        throw new Error('fs.opendirSync is not available');
-    }
-    return fs.opendirSync(path, options);
+    return require('node:fs').opendirSync(path, options);
 }
 
 export async function access(path, mode) {
@@ -1170,8 +1166,7 @@ const _defaultExport = {
 Object.defineProperty(_defaultExport, 'constants', {
     get() {
         try {
-            const fs = globalThis.require ? globalThis.require('node:fs') : null;
-            if (fs && fs.constants) return fs.constants;
+            return require('node:fs').constants;
         } catch {}
         return constants;
     },

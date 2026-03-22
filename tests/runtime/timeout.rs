@@ -4,9 +4,11 @@ use indoc::indoc;
 use test_r::{test, test_dep};
 
 #[test_dep(tagged_as = "timeout")]
-fn compiled_timeout() -> CompiledTest {
+async fn compiled_timeout() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/timeout");
-    CompiledTest::new(path, true).expect("Failed to compile timeout")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile timeout")
 }
 
 #[test]

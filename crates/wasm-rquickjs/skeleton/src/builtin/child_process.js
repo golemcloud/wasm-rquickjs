@@ -11,21 +11,20 @@ import { EventEmitter } from 'node:events';
 import process from 'node:process';
 import moduleExports from 'node:module';
 
-var BUFFER_CONSTRUCTOR_DEPRECATION = 'Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.';
-var FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode not supported';
+const FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode not supported';
 
 function createNotSupportedError(method) {
-    var err = new Error(method + ' is not supported in WebAssembly environment');
+    const err = new Error(method + ' is not supported in WebAssembly environment');
     err.code = 'ENOSYS';
     return err;
 }
 
 function formatErrorForStderr(err) {
-    var text;
+    let text;
     if (err && err.stack) {
         text = String(err.stack);
         if (err && err.message) {
-            var message = String(err.message);
+            const message = String(err.message);
             if (text.indexOf(message) === -1) {
                 text = 'Error: ' + message + '\n' + text;
             }
@@ -45,34 +44,25 @@ function formatErrorForStderr(err) {
 }
 
 function snapshotEnv(env) {
-    var copy = {};
-    var keys = Object.keys(env || {});
-    for (var i = 0; i < keys.length; i++) {
-        var key = keys[i];
-        copy[key] = env[key];
-    }
-    return copy;
+    return Object.assign({}, env);
 }
 
 function replaceEnv(targetEnv, sourceEnv) {
-    var existingKeys = Object.keys(targetEnv || {});
-    for (var i = 0; i < existingKeys.length; i++) {
-        delete targetEnv[existingKeys[i]];
+    for (const key of Object.keys(targetEnv || {})) {
+        delete targetEnv[key];
     }
 
     if (!sourceEnv || typeof sourceEnv !== 'object') {
         return;
     }
 
-    var keys = Object.keys(sourceEnv);
-    for (var j = 0; j < keys.length; j++) {
-        var key = keys[j];
+    for (const key of Object.keys(sourceEnv)) {
         targetEnv[key] = String(sourceEnv[key]);
     }
 }
 
 function unsupportedSpawnSyncResult(command) {
-    var error = createNotSupportedError('spawnSync(' + String(command) + ')');
+    const error = createNotSupportedError('spawnSync(' + String(command) + ')');
     return {
         pid: 0,
         output: null,
@@ -101,10 +91,10 @@ function convertOutputValue(output, encoding) {
 }
 
 function buildOutputResult(capturedStdout, capturedStderr, status, encoding) {
-    var rawStdout = Buffer.from(capturedStdout);
-    var rawStderr = Buffer.from(capturedStderr);
-    var stdout = convertOutputValue(rawStdout, encoding);
-    var stderr = convertOutputValue(rawStderr, encoding);
+    const rawStdout = Buffer.from(capturedStdout);
+    const rawStderr = Buffer.from(capturedStderr);
+    const stdout = convertOutputValue(rawStdout, encoding);
+    const stderr = convertOutputValue(rawStderr, encoding);
 
     return {
         pid: 1,
@@ -125,23 +115,19 @@ function execArgTakesValue(arg) {
 }
 
 function splitExecArgvAndInvocationArgs(args) {
-    var execArgv = [];
-    var invocationArgs = [];
+    const execArgv = [];
+    let invocationArgs = [];
 
-    for (var i = 0; i < args.length; i++) {
-        var arg = String(args[i]);
+    for (let i = 0; i < args.length; i++) {
+        const arg = String(args[i]);
 
         if (isInlineEvalOption(arg)) {
-            invocationArgs = args.slice(i).map(function(value) {
-                return String(value);
-            });
+            invocationArgs = args.slice(i).map((value) => String(value));
             break;
         }
 
         if (arg === '--') {
-            invocationArgs = args.slice(i + 1).map(function(value) {
-                return String(value);
-            });
+            invocationArgs = args.slice(i + 1).map((value) => String(value));
             break;
         }
 
@@ -156,9 +142,7 @@ function splitExecArgvAndInvocationArgs(args) {
             continue;
         }
 
-        invocationArgs = args.slice(i).map(function(value) {
-            return String(value);
-        });
+        invocationArgs = args.slice(i).map((value) => String(value));
         break;
     }
 
@@ -169,8 +153,8 @@ function splitExecArgvAndInvocationArgs(args) {
 }
 
 function hasFipsStartupFlag(execArgv) {
-    for (var i = 0; i < execArgv.length; i++) {
-        var arg = String(execArgv[i]);
+    for (let i = 0; i < execArgv.length; i++) {
+        const arg = String(execArgv[i]);
         if (arg === '--enable-fips' || arg === '--force-fips') {
             return true;
         }
@@ -180,9 +164,9 @@ function hasFipsStartupFlag(execArgv) {
 }
 
 function readExecArgValue(execArgv, flag) {
-    var prefixed = flag + '=';
-    for (var i = 0; i < execArgv.length; i++) {
-        var arg = String(execArgv[i]);
+    const prefixed = flag + '=';
+    for (let i = 0; i < execArgv.length; i++) {
+        const arg = String(execArgv[i]);
         if (arg === flag) {
             if (i + 1 >= execArgv.length) {
                 return '';
@@ -202,7 +186,7 @@ function parsePositiveIntegerFlagValue(value) {
         return null;
     }
 
-    var parsed = Number(value);
+    const parsed = Number(value);
     if (!Number.isSafeInteger(parsed) || parsed < 0) {
         return null;
     }
@@ -223,19 +207,19 @@ function isPowerOfTwo(value) {
 }
 
 function validateSecureHeapFlags(execArgv) {
-    var errors = [];
+    const errors = [];
 
-    var secureHeapValue = readExecArgValue(execArgv, '--secure-heap');
+    const secureHeapValue = readExecArgValue(execArgv, '--secure-heap');
     if (secureHeapValue !== null) {
-        var parsedHeapValue = parsePositiveIntegerFlagValue(secureHeapValue);
+        const parsedHeapValue = parsePositiveIntegerFlagValue(secureHeapValue);
         if (parsedHeapValue === null || (parsedHeapValue >= 2 && !isPowerOfTwo(parsedHeapValue))) {
             errors.push('--secure-heap must be a power of 2');
         }
     }
 
-    var secureHeapMinValue = readExecArgValue(execArgv, '--secure-heap-min');
+    const secureHeapMinValue = readExecArgValue(execArgv, '--secure-heap-min');
     if (secureHeapMinValue !== null) {
-        var parsedHeapMinValue = parsePositiveIntegerFlagValue(secureHeapMinValue);
+        const parsedHeapMinValue = parsePositiveIntegerFlagValue(secureHeapMinValue);
         if (parsedHeapMinValue === null || parsedHeapMinValue < 2 || !isPowerOfTwo(parsedHeapMinValue)) {
             errors.push('--secure-heap-min must be a power of 2');
         }
@@ -258,7 +242,7 @@ function parseJsStringLiteral(literal) {
     }
 
     if (literal[0] === "'") {
-        var inner = literal.slice(1, -1);
+        let inner = literal.slice(1, -1);
         inner = inner.replace(/\\'/g, "'");
         inner = inner.replace(/\\\\/g, '\\');
         return inner;
@@ -272,11 +256,11 @@ function parseBufferConstructorProbe(source) {
         return null;
     }
 
-    var filenames = [];
-    var filenameRe = /filename\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g;
-    var match;
+    const filenames = [];
+    const filenameRe = /filename\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g;
+    let match;
     while ((match = filenameRe.exec(source)) !== null) {
-        var parsed = parseJsStringLiteral(match[1]);
+        const parsed = parseJsStringLiteral(match[1]);
         if (parsed === null) {
             return null;
         }
@@ -315,13 +299,13 @@ function isWarningSuppressed() {
         return true;
     }
 
-    var execArgv = process.execArgv;
+    const execArgv = process.execArgv;
     if (!Array.isArray(execArgv)) {
         return false;
     }
 
-    for (var i = 0; i < execArgv.length; i++) {
-        var arg = String(execArgv[i]);
+    for (let i = 0; i < execArgv.length; i++) {
+        const arg = String(execArgv[i]);
         if (arg === '--no-warnings' || arg === '--no-deprecation') {
             return true;
         }
@@ -339,8 +323,8 @@ function getWarningInfo(warning, typeOrOptions, code) {
         };
     }
 
-    var name = 'Warning';
-    var warningCode = undefined;
+    let name = 'Warning';
+    let warningCode = undefined;
 
     if (typeof typeOrOptions === 'string') {
         name = typeOrOptions;
@@ -365,13 +349,13 @@ function getWarningInfo(warning, typeOrOptions, code) {
 }
 
 function formatWarningForStderr(warning, typeOrOptions, code) {
-    var info = getWarningInfo(warning, typeOrOptions, code);
-    var pid = process.pid;
+    const info = getWarningInfo(warning, typeOrOptions, code);
+    let pid = process.pid;
     if (typeof pid !== 'number' || Number.isNaN(pid)) {
         pid = 1;
     }
 
-    var prefix = '(node:' + String(pid) + ') ';
+    let prefix = '(node:' + String(pid) + ') ';
     if (info.code) {
         prefix += '[' + info.code + '] ';
     }
@@ -380,17 +364,17 @@ function formatWarningForStderr(warning, typeOrOptions, code) {
 }
 
 function executeInlineSource(runtimeRequire, inlineArgs) {
-    var mode = String(inlineArgs[0]);
-    var source = String(inlineArgs[1]);
-    var shouldPrint = mode === '-p' || mode === '--print';
-    var evalArgv = [];
-    for (var i = 2; i < inlineArgs.length; i++) {
+    const mode = String(inlineArgs[0]);
+    const source = String(inlineArgs[1]);
+    const shouldPrint = mode === '-p' || mode === '--print';
+    const evalArgv = [];
+    for (let i = 2; i < inlineArgs.length; i++) {
         evalArgv.push(String(inlineArgs[i]));
     }
 
-    var vmModule = runtimeRequire('node:vm');
-    var bufferProbe = parseBufferConstructorProbe(source);
-    var result;
+    const vmModule = runtimeRequire('node:vm');
+    const bufferProbe = parseBufferConstructorProbe(source);
+    let result;
 
     if (bufferProbe) {
         process.mainModule = { filename: bufferProbe.mainFilename };
@@ -398,7 +382,7 @@ function executeInlineSource(runtimeRequire, inlineArgs) {
             filename: bufferProbe.callSiteFilename,
         });
     } else {
-        var evaluator = new Function('Buffer', 'process', 'vm', source + '\n//# sourceURL=[eval]\n');
+        const evaluator = new Function('Buffer', 'process', 'vm', source + '\n//# sourceURL=[eval]\n');
         result = evaluator(Buffer, process, vmModule);
     }
 
@@ -417,18 +401,18 @@ function runInline(command, args, options) {
         return unsupportedSpawnSyncResult(command);
     }
 
-    var childArgs = [];
-    for (var i = 0; i < args.length; i++) {
+    const childArgs = [];
+    for (let i = 0; i < args.length; i++) {
         childArgs.push(String(args[i]));
     }
 
-    var parsedChildArgs = splitExecArgvAndInvocationArgs(childArgs);
-    var execArgv = parsedChildArgs.execArgv;
-    var invocationArgs = parsedChildArgs.invocationArgs;
+    const parsedChildArgs = splitExecArgvAndInvocationArgs(childArgs);
+    const execArgv = parsedChildArgs.execArgv;
+    const invocationArgs = parsedChildArgs.invocationArgs;
 
-    var hasTestFlag = execArgv.indexOf('--test') !== -1;
+    let hasTestFlag = execArgv.indexOf('--test') !== -1;
     if (!hasTestFlag) {
-        for (var j = 0; j < invocationArgs.length; j++) {
+        for (let j = 0; j < invocationArgs.length; j++) {
             if (invocationArgs[j] === '--test') {
                 hasTestFlag = true;
                 break;
@@ -436,10 +420,10 @@ function runInline(command, args, options) {
         }
     }
     if (hasTestFlag) {
-        var conflictingFlags = ['--check', '--interactive', '--eval', '-e', '--print', '-p'];
-        var conflictFlag = null;
-        for (var k = 0; k < conflictingFlags.length; k++) {
-            var flag = conflictingFlags[k];
+        const conflictingFlags = ['--check', '--interactive', '--eval', '-e', '--print', '-p'];
+        let conflictFlag = null;
+        for (let k = 0; k < conflictingFlags.length; k++) {
+            const flag = conflictingFlags[k];
             if (execArgv.indexOf(flag) !== -1) {
                 conflictFlag = flag;
                 break;
@@ -450,7 +434,7 @@ function runInline(command, args, options) {
             }
         }
         if (conflictFlag !== null) {
-            var encoding = getOutputEncoding(options);
+            const encoding = getOutputEncoding(options);
             return buildOutputResult('', conflictFlag + ' cannot be used with --test\n', 1, encoding);
         }
     }
@@ -459,37 +443,37 @@ function runInline(command, args, options) {
         return unsupportedSpawnSyncResult(command);
     }
 
-    var childCwd = process.cwd();
+    let childCwd = process.cwd();
     if (options && typeof options.cwd === 'string') {
         childCwd = options.cwd;
     }
-    var encoding = getOutputEncoding(options);
+    const encoding = getOutputEncoding(options);
 
-    var oldArgv = process.argv.slice();
-    var oldExecArgv = Array.isArray(process.execArgv) ? process.execArgv.slice() : [];
-    var oldArgv0 = process.argv0;
-    var oldCwd = process.cwd;
-    var hadMainModule = Object.prototype.hasOwnProperty.call(process, 'mainModule');
-    var oldMainModule = process.mainModule;
-    var oldEnv = snapshotEnv(process.env);
-    var oldStdoutWrite = process.stdout && process.stdout.write;
-    var oldStderrWrite = process.stderr && process.stderr.write;
-    var oldEmitWarning = process.emitWarning;
-    var oldExit = process.exit;
-    var firstExitCode = null;
-    var hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
-    var oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
-    var hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
-    var oldCjsLineOffsets = globalThis.__wasm_rquickjs_cjs_line_offsets;
-    var stdinData = options && typeof options.__wasmStdinData === 'string' ? options.__wasmStdinData : null;
-    var oldFsPromisesReadFile = null;
-    var oldFsReadFile = null;
-    var oldFsReadFileSync = null;
+    const oldArgv = process.argv.slice();
+    const oldExecArgv = Array.isArray(process.execArgv) ? process.execArgv.slice() : [];
+    const oldArgv0 = process.argv0;
+    const oldCwd = process.cwd;
+    const hadMainModule = Object.prototype.hasOwnProperty.call(process, 'mainModule');
+    const oldMainModule = process.mainModule;
+    const oldEnv = snapshotEnv(process.env);
+    const oldStdoutWrite = process.stdout && process.stdout.write;
+    const oldStderrWrite = process.stderr && process.stderr.write;
+    const oldEmitWarning = process.emitWarning;
+    const oldExit = process.exit;
+    let firstExitCode = null;
+    const hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
+    const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
+    const hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
+    const oldCjsLineOffsets = globalThis.__wasm_rquickjs_cjs_line_offsets;
+    const stdinData = options && typeof options.__wasmStdinData === 'string' ? options.__wasmStdinData : null;
+    let oldFsPromisesReadFile = null;
+    let oldFsReadFile = null;
+    let oldFsReadFileSync = null;
 
-    var capturedStdout = '';
-    var capturedStderr = '';
-    var status = 0;
-    var inlineBufferProbe = null;
+    let capturedStdout = '';
+    let capturedStderr = '';
+    let status = 0;
+    let inlineBufferProbe = null;
 
     try {
         process.argv = [String(command)].concat(invocationArgs);
@@ -518,7 +502,7 @@ function runInline(command, args, options) {
             capturedStderr += 'Warning: coverage could not be collected\n';
         }
 
-        var secureHeapErrors = validateSecureHeapFlags(execArgv);
+        const secureHeapErrors = validateSecureHeapFlags(execArgv);
         if (secureHeapErrors.length > 0) {
             status = 9;
             capturedStderr += secureHeapErrors.join('\n') + '\n';
@@ -544,7 +528,7 @@ function runInline(command, args, options) {
 
         if (typeof oldEmitWarning === 'function') {
             process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
-                var shouldCapture = !isWarningSuppressed();
+                let shouldCapture = !isWarningSuppressed();
 
                 if (shouldCapture && inlineBufferProbe && getWarningCode(warning, typeOrOptions, code) === 'DEP0005') {
                     shouldCapture = !isNodeModulesPath(inlineBufferProbe.callSiteFilename);
@@ -558,17 +542,17 @@ function runInline(command, args, options) {
             };
         }
 
-        var runtimeRequire = moduleExports.require;
+        const runtimeRequire = moduleExports.require;
 
         if (stdinData !== null) {
             try {
-                var fsPromises = runtimeRequire('node:fs/promises');
+                const fsPromises = runtimeRequire('node:fs/promises');
                 if (fsPromises && typeof fsPromises.readFile === 'function') {
                     oldFsPromisesReadFile = fsPromises.readFile;
                     fsPromises.readFile = function readFileWithMockedStdin(targetPath, readOptions) {
                         if (targetPath === '/dev/stdin') {
-                            var mockStdinBuffer = Buffer.from(stdinData);
-                            var readEncoding = null;
+                            const mockStdinBuffer = Buffer.from(stdinData);
+                            let readEncoding = null;
 
                             if (typeof readOptions === 'string') {
                                 readEncoding = String(readOptions);
@@ -591,13 +575,13 @@ function runInline(command, args, options) {
             }
 
             try {
-                var fsSync = runtimeRequire('node:fs');
+                const fsSync = runtimeRequire('node:fs');
                 if (fsSync && typeof fsSync.readFileSync === 'function') {
                     oldFsReadFileSync = fsSync.readFileSync;
                     fsSync.readFileSync = function readFileSyncWithMockedStdin(targetPath, readOptions) {
                         if (targetPath === '/dev/stdin') {
-                            var mockStdinBuffer = Buffer.from(stdinData);
-                            var readEncoding = null;
+                            const mockStdinBuffer = Buffer.from(stdinData);
+                            let readEncoding = null;
 
                             if (typeof readOptions === 'string') {
                                 readEncoding = String(readOptions);
@@ -620,10 +604,10 @@ function runInline(command, args, options) {
                     oldFsReadFile = fsSync.readFile;
                     fsSync.readFile = function readFileWithMockedStdin(targetPath, optionsOrCallback, callback) {
                         if (targetPath === '/dev/stdin') {
-                            var cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
-                            var readOptions = typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
-                            var mockStdinBuffer = Buffer.from(stdinData);
-                            var readEncoding = null;
+                            const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+                            const readOptions = typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
+                            const mockStdinBuffer = Buffer.from(stdinData);
+                            let readEncoding = null;
 
                             if (typeof readOptions === 'string') {
                                 readEncoding = String(readOptions);
@@ -631,7 +615,7 @@ function runInline(command, args, options) {
                                 readEncoding = String(readOptions.encoding);
                             }
 
-                            var result = mockStdinBuffer;
+                            let result = mockStdinBuffer;
                             if (readEncoding && readEncoding !== 'buffer') {
                                 result = mockStdinBuffer.toString(readEncoding);
                             }
@@ -652,12 +636,12 @@ function runInline(command, args, options) {
         }
 
         // Handle --require / -r preloading
-        for (var ri = 0; ri < execArgv.length; ri++) {
-            var ea = execArgv[ri];
+        for (let ri = 0; ri < execArgv.length; ri++) {
+            const ea = execArgv[ri];
             if (ea === '--require' || ea === '-r') {
                 if (ri + 1 < execArgv.length) {
                     ri++;
-                    var requirePath = execArgv[ri];
+                    const requirePath = execArgv[ri];
                     if (!path.isAbsolute(requirePath)) {
                         requirePath = path.resolve(childCwd, requirePath);
                     }
@@ -667,22 +651,22 @@ function runInline(command, args, options) {
         }
 
         if (invocationArgs.length >= 2 && isInlineEvalOption(invocationArgs[0])) {
-            var savedModuleContext = globalThis.__wasm_rquickjs_current_module;
-            var hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
-            var oldEvalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
+            const savedModuleContext = globalThis.__wasm_rquickjs_current_module;
+            const hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
+            const oldEvalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
             globalThis.__wasm_rquickjs_current_module = undefined;
             globalThis.__wasm_rquickjs_current_eval_script_name = '[eval]';
 
             // Pre-parse buffer probe so the emitWarning interceptor can
             // suppress DEP0005 for node_modules call sites during execution.
-            var inlineSource = invocationArgs.length >= 2 ? String(invocationArgs[1]) : '';
+            const inlineSource = invocationArgs.length >= 2 ? String(invocationArgs[1]) : '';
             inlineBufferProbe = parseBufferConstructorProbe(inlineSource);
 
             // Each emulated child process gets its own Buffer deprecation state.
-            var oldBufferDepWarned = globalThis.__wasm_rquickjs_buffer_dep0005_warned;
+            const oldBufferDepWarned = globalThis.__wasm_rquickjs_buffer_dep0005_warned;
             globalThis.__wasm_rquickjs_buffer_dep0005_warned = false;
 
-            var inlineResult;
+            let inlineResult;
             try {
                 inlineResult = executeInlineSource(runtimeRequire, invocationArgs);
             } finally {
@@ -697,14 +681,14 @@ function runInline(command, args, options) {
 
             process.argv = [String(command)].concat(inlineResult.evalArgv);
         } else {
-            var scriptPath = invocationArgs[0];
+            let scriptPath = invocationArgs[0];
             if (!path.isAbsolute(scriptPath)) {
                 scriptPath = path.resolve(childCwd, scriptPath);
             }
-            var scriptArgs = invocationArgs.slice(1);
+            const scriptArgs = invocationArgs.slice(1);
 
             if (execArgv.indexOf('--test') !== -1) {
-                var fsForTest = runtimeRequire('node:fs');
+                const fsForTest = runtimeRequire('node:fs');
                 if (!fsForTest.existsSync(scriptPath)) {
                     capturedStderr += "Could not find '" + invocationArgs[0] + "'\n";
                     status = 1;
@@ -718,7 +702,7 @@ function runInline(command, args, options) {
                 delete runtimeRequire.cache[scriptPath];
             }
 
-            var moduleModule = runtimeRequire('module');
+            const moduleModule = runtimeRequire('module');
             if (moduleModule && typeof moduleModule.runMain === 'function') {
                 moduleModule.runMain();
             } else {
@@ -755,7 +739,7 @@ function runInline(command, args, options) {
 
         if (oldFsPromisesReadFile !== null) {
             try {
-                var fsPromisesToRestore = moduleExports.require('node:fs/promises');
+                const fsPromisesToRestore = moduleExports.require('node:fs/promises');
                 if (fsPromisesToRestore) {
                     fsPromisesToRestore.readFile = oldFsPromisesReadFile;
                 }
@@ -766,7 +750,7 @@ function runInline(command, args, options) {
 
         if (oldFsReadFile !== null || oldFsReadFileSync !== null) {
             try {
-                var fsSyncToRestore = moduleExports.require('node:fs');
+                const fsSyncToRestore = moduleExports.require('node:fs');
                 if (fsSyncToRestore) {
                     if (oldFsReadFile !== null) {
                         fsSyncToRestore.readFile = oldFsReadFile;
@@ -799,17 +783,10 @@ function runInline(command, args, options) {
 }
 
 function cloneObject(value) {
-    var copy = {};
     if (!value || typeof value !== 'object') {
-        return copy;
+        return {};
     }
-
-    var keys = Object.keys(value);
-    for (var i = 0; i < keys.length; i++) {
-        copy[keys[i]] = value[keys[i]];
-    }
-
-    return copy;
+    return Object.assign({}, value);
 }
 
 function normalizeExecParams(options, callback) {
@@ -827,14 +804,12 @@ function normalizeExecParams(options, callback) {
 }
 
 function normalizeExecFileParams(args, options, callback) {
-    var normalizedArgs = [];
-    var normalizedOptions = {};
-    var normalizedCallback = null;
+    let normalizedArgs = [];
+    let normalizedOptions = {};
+    let normalizedCallback = null;
 
     if (Array.isArray(args)) {
-        normalizedArgs = args.map(function(value) {
-            return String(value);
-        });
+        normalizedArgs = args.map((value) => String(value));
 
         if (typeof options === 'function') {
             normalizedCallback = options;
@@ -877,8 +852,8 @@ function normalizeExecFileParams(args, options, callback) {
 }
 
 function expandTemplateEnvRefs(command, env) {
-    var source = String(command);
-    return source.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, function(_, name) {
+    const source = String(command);
+    return source.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => {
         if (!env || env[name] === undefined || env[name] === null) {
             return '';
         }
@@ -887,14 +862,14 @@ function expandTemplateEnvRefs(command, env) {
 }
 
 function splitCommandTokens(command) {
-    var text = String(command);
-    var tokens = [];
-    var current = '';
-    var quote = null;
-    var escaping = false;
+    const text = String(command);
+    const tokens = [];
+    let current = '';
+    let quote = null;
+    let escaping = false;
 
-    for (var i = 0; i < text.length; i++) {
-        var ch = text[i];
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
 
         if (escaping) {
             current += ch;
@@ -940,7 +915,7 @@ function splitCommandTokens(command) {
         }
 
         if (ch === '\\' && i + 1 < text.length) {
-            var next = text[i + 1];
+            const next = text[i + 1];
             if (next === '"' || next === '\\' || next === '$' || next === '`') {
                 current += next;
                 i += 1;
@@ -963,33 +938,33 @@ function splitCommandTokens(command) {
 }
 
 function parseEchoPipeline(command) {
-    var expandedCommand = String(command);
-    var pipeIndex = expandedCommand.indexOf('|');
+    const expandedCommand = String(command);
+    const pipeIndex = expandedCommand.indexOf('|');
     if (pipeIndex === -1) {
         return null;
     }
 
-    var lhs = expandedCommand.slice(0, pipeIndex).trim();
-    var rhs = expandedCommand.slice(pipeIndex + 1).trim();
+    let lhs = expandedCommand.slice(0, pipeIndex).trim();
+    const rhs = expandedCommand.slice(pipeIndex + 1).trim();
 
     if (lhs[0] === '(' && lhs[lhs.length - 1] === ')') {
         lhs = lhs.slice(1, -1);
     }
 
-    var rhsTokens = splitCommandTokens(rhs);
+    const rhsTokens = splitCommandTokens(rhs);
     if (!rhsTokens || rhsTokens.length < 2 || String(rhsTokens[0]) !== String(process.execPath)) {
         return null;
     }
 
-    var parts = lhs.split(';');
-    var stdinLines = [];
-    for (var i = 0; i < parts.length; i++) {
-        var part = parts[i].trim();
+    const parts = lhs.split(';');
+    const stdinLines = [];
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i].trim();
         if (part.length === 0) {
             continue;
         }
 
-        var partTokens = splitCommandTokens(part);
+        const partTokens = splitCommandTokens(part);
         if (!partTokens || partTokens.length === 0) {
             return null;
         }
@@ -1014,31 +989,31 @@ function parseEchoPipeline(command) {
 }
 
 function runExecCommand(command, options) {
-    var env = options && typeof options.env === 'object' ? options.env : process.env;
-    var expanded = expandTemplateEnvRefs(command, env);
-    var resolvedOptions = cloneObject(options);
+    const env = options && typeof options.env === 'object' ? options.env : process.env;
+    const expanded = expandTemplateEnvRefs(command, env);
+    const resolvedOptions = cloneObject(options);
 
     if (resolvedOptions.encoding === undefined) {
         resolvedOptions.encoding = 'utf8';
     }
 
-    var pipeline = parseEchoPipeline(expanded);
+    const pipeline = parseEchoPipeline(expanded);
     if (pipeline) {
         resolvedOptions.__wasmStdinData = pipeline.stdinData;
         return spawnSync(pipeline.command, pipeline.args, resolvedOptions);
     }
 
-    var tokens = splitCommandTokens(expanded);
+    const tokens = splitCommandTokens(expanded);
     if (!tokens || tokens.length === 0) {
         return unsupportedSpawnSyncResult('exec(empty command)');
     }
 
     // Handle stdin redirection: command ... < filename
-    for (var ri = 1; ri < tokens.length; ri++) {
+    for (let ri = 1; ri < tokens.length; ri++) {
         if (tokens[ri] === '<' && ri + 1 < tokens.length) {
-            var stdinFile = tokens[ri + 1];
+            const stdinFile = tokens[ri + 1];
             try {
-                var fsForRedirect = moduleExports.require('node:fs');
+                const fsForRedirect = moduleExports.require('node:fs');
                 resolvedOptions.__wasmStdinData = fsForRedirect.readFileSync(stdinFile, 'utf8');
             } catch (_) {
                 // ignore if file cannot be read
@@ -1065,16 +1040,16 @@ function createExecError(command, result) {
         return null;
     }
 
-    var stderrText = '';
+    let stderrText = '';
     if (result.stderr !== undefined && result.stderr !== null) {
         stderrText = String(result.stderr);
     }
-    var message = 'Command failed: ' + String(command);
+    let message = 'Command failed: ' + String(command);
     if (stderrText.length > 0) {
         message += '\n' + stderrText;
     }
 
-    var err = new Error(message);
+    const err = new Error(message);
     err.code = result.status;
     err.killed = false;
     err.signal = result.signal;
@@ -1083,8 +1058,8 @@ function createExecError(command, result) {
 }
 
 function buildExecFileCommand(file, args) {
-    var cmd = String(file);
-    for (var i = 0; i < args.length; i++) {
+    let cmd = String(file);
+    for (let i = 0; i < args.length; i++) {
         cmd += ' ' + String(args[i]);
     }
     return cmd;
@@ -1095,7 +1070,7 @@ function createExecFileError(file, args, result) {
         return createNotSupportedError('execFile');
     }
 
-    var command = buildExecFileCommand(file, args);
+    const command = buildExecFileCommand(file, args);
     if (result.error) {
         result.error.cmd = command;
         return result.error;
@@ -1105,17 +1080,17 @@ function createExecFileError(file, args, result) {
         return null;
     }
 
-    var stderrText = '';
+    let stderrText = '';
     if (result.stderr !== undefined && result.stderr !== null) {
         stderrText = String(result.stderr);
     }
 
-    var message = 'Command failed: ' + command;
+    let message = 'Command failed: ' + command;
     if (stderrText.length > 0) {
         message += '\n' + stderrText;
     }
 
-    var err = new Error(message);
+    const err = new Error(message);
     err.code = result.status;
     err.killed = false;
     err.signal = result.signal;
@@ -1124,7 +1099,7 @@ function createExecFileError(file, args, result) {
 }
 
 function createExecChildProcess() {
-    var child = new EventEmitter();
+    const child = new EventEmitter();
     child.pid = 1;
     child.stdin = null;
     child.stdout = null;
@@ -1165,7 +1140,7 @@ export class ChildProcess {
 }
 
 function createForkReadable() {
-    var readable = new EventEmitter();
+    const readable = new EventEmitter();
     readable._encoding = null;
     readable.setEncoding = function setEncoding(encoding) {
         readable._encoding = String(encoding);
@@ -1175,7 +1150,7 @@ function createForkReadable() {
             return;
         }
 
-        var data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         if (data.length === 0) {
             return;
         }
@@ -1192,13 +1167,11 @@ function createForkReadable() {
 }
 
 function normalizeForkArgs(args, options) {
-    var normalizedArgs = [];
-    var normalizedOptions = {};
+    let normalizedArgs = [];
+    let normalizedOptions = {};
 
     if (Array.isArray(args)) {
-        normalizedArgs = args.map(function(value) {
-            return String(value);
-        });
+        normalizedArgs = args.map((value) => String(value));
         if (options && typeof options === 'object') {
             normalizedOptions = options;
         }
@@ -1216,9 +1189,7 @@ function normalizeForkArgs(args, options) {
 
 function getForkExecArgv(options) {
     if (options && Array.isArray(options.execArgv)) {
-        return options.execArgv.map(function(value) {
-            return String(value);
-        });
+        return options.execArgv.map((value) => String(value));
     }
 
     if (Array.isArray(process.execArgv)) {
@@ -1230,10 +1201,10 @@ function getForkExecArgv(options) {
 
 // Asynchronous process creation functions
 export function exec(command, options, callback) {
-    var normalized = normalizeExecParams(options, callback);
-    var child = createExecChildProcess();
-    var result = runExecCommand(command, normalized.options);
-    var error = createExecError(command, result);
+    const normalized = normalizeExecParams(options, callback);
+    const child = createExecChildProcess();
+    const result = runExecCommand(command, normalized.options);
+    const error = createExecError(command, result);
 
     child.exitCode = typeof result.status === 'number' ? result.status : null;
     child.signalCode = result.signal;
@@ -1254,16 +1225,16 @@ export function exec(command, options, callback) {
 }
 
 export function execFile(file, args, options, callback) {
-    var normalized = normalizeExecFileParams(args, options, callback);
-    var child = createExecChildProcess();
-    var resolvedOptions = cloneObject(normalized.options);
+    const normalized = normalizeExecFileParams(args, options, callback);
+    const child = createExecChildProcess();
+    const resolvedOptions = cloneObject(normalized.options);
 
     if (resolvedOptions.encoding === undefined) {
         resolvedOptions.encoding = 'utf8';
     }
 
-    var result = spawnSync(String(file), normalized.args, resolvedOptions);
-    var error = createExecFileError(file, normalized.args, result);
+    const result = spawnSync(String(file), normalized.args, resolvedOptions);
+    const error = createExecFileError(file, normalized.args, result);
 
     child.spawnfile = String(file);
     child.spawnargs = [String(file)].concat(normalized.args);
@@ -1286,8 +1257,8 @@ export function execFile(file, args, options, callback) {
 }
 
 export function fork(modulePath, args, options) {
-    var normalized = normalizeForkArgs(args, options);
-    var child = new EventEmitter();
+    const normalized = normalizeForkArgs(args, options);
+    const child = new EventEmitter();
     child.pid = 1;
     child.connected = false;
     child.killed = false;
@@ -1307,19 +1278,19 @@ export function fork(modulePath, args, options) {
     };
 
     setTimeout(function runForkInWasm() {
-        var modulePathStr = String(modulePath);
-        var childCommand = process.execPath;
+        const modulePathStr = String(modulePath);
+        let childCommand = process.execPath;
         if (normalized.options && typeof normalized.options.execPath === 'string') {
             childCommand = normalized.options.execPath;
         }
 
-        var spawnArgs = getForkExecArgv(normalized.options);
+        const spawnArgs = getForkExecArgv(normalized.options);
         spawnArgs.push(modulePathStr);
-        for (var i = 0; i < normalized.args.length; i++) {
+        for (let i = 0; i < normalized.args.length; i++) {
             spawnArgs.push(normalized.args[i]);
         }
 
-        var spawnOptions = {
+        const spawnOptions = {
             encoding: 'buffer',
         };
         if (normalized.options && typeof normalized.options.cwd === 'string') {
@@ -1329,8 +1300,8 @@ export function fork(modulePath, args, options) {
             spawnOptions.env = normalized.options.env;
         }
 
-        var result = spawnSync(childCommand, spawnArgs, spawnOptions);
-        var exitCode = typeof result.status === 'number' ? result.status : 1;
+        const result = spawnSync(childCommand, spawnArgs, spawnOptions);
+        const exitCode = typeof result.status === 'number' ? result.status : 1;
         child.exitCode = exitCode;
         child.signalCode = result.signal || null;
 
@@ -1348,7 +1319,7 @@ export function fork(modulePath, args, options) {
 // spawn emulation — runs the target script inline (like fork/spawnSync) but
 // delivers results asynchronously through EventEmitter streams.
 export function spawn(command, args, options) {
-    var child = new EventEmitter();
+    const child = new EventEmitter();
     child.pid = 1;
     child.connected = false;
     child.killed = false;
@@ -1358,14 +1329,14 @@ export function spawn(command, args, options) {
     child.stderr = createForkReadable();
     child.stdin = null;
     child.spawnfile = String(command);
-    child.spawnargs = [String(command)].concat((args || []).map(function(a) { return String(a); }));
+    child.spawnargs = [String(command)].concat((args || []).map((a) => String(a)));
     child.kill = function kill() {
         child.killed = true;
         return false;
     };
 
     setTimeout(function runSpawnInWasm() {
-        var spawnOpts = {};
+        const spawnOpts = {};
         if (options && typeof options === 'object') {
             if (typeof options.cwd === 'string') {
                 spawnOpts.cwd = options.cwd;
@@ -1376,8 +1347,8 @@ export function spawn(command, args, options) {
         }
         spawnOpts.encoding = 'buffer';
 
-        var result = spawnSync(String(command), args || [], spawnOpts);
-        var exitCode = typeof result.status === 'number' ? result.status : 1;
+        const result = spawnSync(String(command), args || [], spawnOpts);
+        const exitCode = typeof result.status === 'number' ? result.status : 1;
         child.exitCode = exitCode;
         child.signalCode = result.signal || null;
 
@@ -1394,8 +1365,8 @@ export function spawn(command, args, options) {
 
 // Synchronous process creation functions
 export function execFileSync(file, args, options) {
-    var normalizedArgs = [];
-    var normalizedOptions = {};
+    let normalizedArgs = [];
+    let normalizedOptions = {};
 
     if (Array.isArray(args)) {
         normalizedArgs = args;
@@ -1406,10 +1377,10 @@ export function execFileSync(file, args, options) {
         normalizedOptions = args;
     }
 
-    var result = spawnSync(file, normalizedArgs, normalizedOptions);
+    const result = spawnSync(file, normalizedArgs, normalizedOptions);
 
     if (result.status !== 0) {
-        var err = new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
+        const err = new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
         err.status = result.status;
         err.signal = result.signal;
         err.stdout = result.stdout;
@@ -1419,7 +1390,7 @@ export function execFileSync(file, args, options) {
         throw err;
     }
 
-    var encoding = getOutputEncoding(normalizedOptions);
+    const encoding = getOutputEncoding(normalizedOptions);
     if (encoding && encoding !== 'buffer') {
         return result.stdout ? result.stdout.toString(encoding) : '';
     }
@@ -1432,7 +1403,7 @@ export function execSync(command, options) {
 }
 
 export function spawnSync(command, args, options) {
-    var cmd = String(command);
+    const cmd = String(command);
     if (cmd !== process.execPath) {
         return unsupportedSpawnSyncResult(cmd);
     }

@@ -2,7 +2,7 @@
 
 **Package:** `@mistralai/mistralai`
 **Version:** `1.15.1`
-**Tested on:** 2026-03-17
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -12,24 +12,21 @@
 
 ### test-02-http-hooks.js — `HTTPClient` hook ordering and header mutation
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: cannot read property 'Symbol.iterator' of undefined`
-  - Stack excerpt: `at get headers (__wasm_rquickjs_builtin/http:337:26)`
-- **Root cause:** Runtime incompatibility in the `node:http` request header handling path when SDK `HTTPClient` issues a request.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-03-chat-complete.js — mocked `chat.complete()` request serialization + response parsing
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Error converting from js 'object' into type 'string'`
-  - Stack excerpt: `at _createRequest (bundle/script_module:6104:29)`
-- **Root cause:** Runtime type-conversion mismatch in request construction for SDK chat calls.
+- **Error:** `JavaScript error: Unexpected HTTP client error: TypeError: not a function`
+  - Stack excerpt: `at UnexpectedClientError (bundle/script_module:624:10)` → `at _restoreContext (node:async_hooks:148:12)`
+- **Root cause:** SDK request path invokes something that is not a function in the WASM runtime's async_hooks or HTTP client layer. The custom HTTPClient fetcher does not get called; the error occurs internally during request dispatch.
 
 ### test-04-embeddings-env.js — env API key fallback and `serverURL` override in `embeddings.create()`
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: Error converting from js 'object' into type 'string'`
-  - Stack excerpt: `at _createRequest (bundle/script_module:6104:29)`
-- **Root cause:** Same request-construction conversion issue as chat calls, triggered in embeddings endpoint path.
+- **Error:** `JavaScript error: Unexpected HTTP client error: TypeError: not a function`
+  - Stack excerpt: same as test-03
+- **Root cause:** Same SDK request dispatch issue as test-03, triggered through the embeddings endpoint path.
 
 ### test-05-components-errors.js — component JSON helpers and SDK error classes
 - **Node.js:** ✅ PASS
@@ -37,7 +34,7 @@
 
 ## Integration Tests (Docker)
 
-N/A — this SDK targets Mistral’s hosted API and is not tied to a Docker-hostable local service.
+N/A — this SDK targets Mistral's hosted API and is not tied to a Docker-hostable local service.
 
 ## Untestable Features
 
@@ -54,8 +51,8 @@ To fully test these features, a user would need to:
 
 ## Summary
 
-- Offline tests passed: 2/5 in wasm-rquickjs (5/5 in Node.js)
+- Offline tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
 - Integration tests passed: N/A — no Docker service applicable
 - Missing APIs: none directly identified in tested offline utility paths
-- Behavioral differences: SDK request/HTTP paths fail in wasm-rquickjs (`headers` iterator error and JS object→string conversion error)
-- Blockers: Runtime incompatibilities in request/header handling prevent most SDK operation methods from executing
+- Behavioral differences: SDK request dispatch fails with `TypeError: not a function` in the async_hooks/HTTP client layer when the SDK's internal `_createRequest` path is exercised
+- Blockers: Runtime incompatibility in request dispatch prevents SDK operation methods (chat.complete, embeddings.create) from executing

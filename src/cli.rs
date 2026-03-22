@@ -51,6 +51,20 @@ pub enum Command {
         #[arg(long)]
         world: Option<String>,
     },
+    /// Pre-initialize a WebAssembly component using Wizer to speed up startup
+    Optimize {
+        /// Path to the input WebAssembly component
+        #[arg(long)]
+        input: Utf8PathBuf,
+
+        /// Path for the pre-initialized output WebAssembly component
+        #[arg(long)]
+        output: Utf8PathBuf,
+
+        /// Initialization function name
+        #[arg(long, default_value = "wizer-initialize")]
+        init_func: String,
+    },
 }
 
 #[derive(Debug, Clone)]

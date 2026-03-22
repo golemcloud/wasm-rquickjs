@@ -2,7 +2,7 @@
 
 **Package:** `@effect/sql-sqlite-node`
 **Version:** `0.51.0`
-**Tested on:** 2026-03-18
+**Tested on:** 2026-03-20
 
 ## Test Results
 

@@ -2,7 +2,7 @@
 
 **Package:** `replicate`
 **Version:** `1.4.0`
-**Tested on:** 2026-03-17
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -20,19 +20,11 @@
 
 ### test-04-mock-request.js — `predictions.create` request path with mocked fetch
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: not a function`
-  - Stack excerpt: `at text (__wasm_rquickjs_builtin/http:443:48)`
-  - Stack excerpt: `at request (bundle/script_module:2224:44)`
-- **Root cause:** Runtime HTTP response handling fails when the SDK request path awaits `response.text()`/response-body parsing.
+- **wasm-rquickjs:** ✅ PASS
 
 ### test-05-pagination.js — `paginate` over multi-page model listings
 - **Node.js:** ✅ PASS
-- **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: not a function`
-  - Stack excerpt: `at text (__wasm_rquickjs_builtin/http:443:48)`
-  - Stack excerpt: `at request (bundle/script_module:2224:44)`
-- **Root cause:** Same runtime HTTP response parsing issue blocks paginated request processing.
+- **wasm-rquickjs:** ✅ PASS
 
 ## Integration Tests (Docker)
 
@@ -61,9 +53,9 @@ To fully test these features, a user would need to:
 
 ## Summary
 
-- Offline tests passed: 3/5 in wasm-rquickjs (5/5 in Node.js)
+- Offline tests passed: 5/5 in wasm-rquickjs (5/5 in Node.js)
 - Integration tests passed: N/A — no Docker service applicable
 - Live service tests passed: N/A — no tokens available
-- Missing APIs: none identified in constructor/validation/webhook utility paths
-- Behavioral differences: request/pagination paths fail in wasm-rquickjs with `JavaScript error: not a function` in `__wasm_rquickjs_builtin/http` response text handling
-- Blockers: runtime HTTP response body API incompatibility prevents Replicate SDK request-based methods from completing
+- Missing APIs: none
+- Behavioral differences: none
+- Blockers: none — all offline tests pass

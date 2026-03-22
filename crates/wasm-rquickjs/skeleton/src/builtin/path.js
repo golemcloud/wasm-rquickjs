@@ -898,6 +898,14 @@ const win32 = {
 
 const posix = {
   resolve(...args) {
+    // Fast path for common cases: no args or single empty/dot arg
+    if (args.length === 0 || (args.length === 1 && (args[0] === '' || args[0] === '.'))) {
+      const cwd = process.cwd();
+      if (cwd.charCodeAt(0) === CHAR_FORWARD_SLASH) {
+        return cwd;
+      }
+    }
+
     let resolvedPath = '';
     let resolvedAbsolute = false;
 
@@ -920,7 +928,7 @@ const posix = {
     }
 
     resolvedPath = normalizeString(resolvedPath, !resolvedAbsolute, '/',
-                                   isPosixPathSeparator);
+                                    isPosixPathSeparator);
 
     if (resolvedAbsolute) {
       return `/${resolvedPath}`;

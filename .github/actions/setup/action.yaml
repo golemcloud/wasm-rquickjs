@@ -17,6 +17,8 @@ runs:
         cache-all-crates: true
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-wasip1, wasm32-wasip2
     - uses: cargo-bins/cargo-binstall@main
     - name: Install cargo-component
       shell: bash

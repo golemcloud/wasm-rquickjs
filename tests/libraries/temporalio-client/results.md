@@ -2,7 +2,7 @@
 
 **Package:** `@temporalio/client`
 **Version:** `1.15.0`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-20
 
 ## Test Results
 

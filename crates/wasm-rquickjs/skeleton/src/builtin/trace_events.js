@@ -1,11 +1,9 @@
 import { inspect } from 'node:util';
 import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
 
-const kEnabled = Symbol('enabled');
-const kCategories = Symbol('categories');
 const enabledTraces = new Set();
 
-function normalizeCategories(categories) {
+function validateCategories(categories) {
     if (!Array.isArray(categories)) {
         throw new ERR_INVALID_ARG_TYPE('options.categories', 'Array', categories);
     }
@@ -16,36 +14,38 @@ function normalizeCategories(categories) {
         throw err;
     }
 
-    return categories.map((category, index) => {
-        if (typeof category !== 'string') {
-            throw new ERR_INVALID_ARG_TYPE(`options.categories[${index}]`, 'string', category);
+    for (let i = 0; i < categories.length; i++) {
+        if (typeof categories[i] !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE(`options.categories[${i}]`, 'string', categories[i]);
         }
+    }
 
-        return category;
-    }).join(',');
+    return categories;
 }
 
 class Tracing {
+    #enabled = false;
+    #categories;
+
     constructor(categories) {
-        this[kEnabled] = false;
-        this[kCategories] = categories;
+        this.#categories = categories;
     }
 
     get enabled() {
-        return this[kEnabled];
+        return this.#enabled;
     }
 
     get categories() {
-        return this[kCategories];
+        return this.#categories.join(',');
     }
 
     enable() {
-        this[kEnabled] = true;
+        this.#enabled = true;
         enabledTraces.add(this);
     }
 
     disable() {
-        this[kEnabled] = false;
+        this.#enabled = false;
         enabledTraces.delete(this);
     }
 
@@ -63,22 +63,15 @@ export function createTracing(options) {
         throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
     }
 
-    return new Tracing(normalizeCategories(options.categories));
+    return new Tracing(validateCategories(options.categories));
 }
 
 export function getEnabledCategories() {
     const categories = new Set();
 
     for (const trace of enabledTraces) {
-        if (!trace.enabled || trace.categories === '') {
-            continue;
-        }
-
         for (const category of trace.categories.split(',')) {
-            const trimmed = category.trim();
-            if (trimmed !== '') {
-                categories.add(trimmed);
-            }
+            categories.add(category);
         }
     }
 

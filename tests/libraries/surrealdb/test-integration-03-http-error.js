@@ -1,12 +1,12 @@
 import assert from 'assert';
-import { Surreal, ValidationError } from 'surrealdb';
+import { HttpEngine, Surreal, ValidationError } from 'surrealdb';
 
 const BASE = 'http://localhost:18080';
 
 export const run = async () => {
   const db = new Surreal();
 
-  await db.connect(BASE);
+  await db.connect(BASE, { engine: HttpEngine });
   await db.use({ namespace: 'test', database: 'test' });
 
   await assert.rejects(async () => {

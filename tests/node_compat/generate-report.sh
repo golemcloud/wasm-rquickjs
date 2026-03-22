@@ -27,7 +27,7 @@ cd "${REPO_ROOT}"
 # Clean the cached runner WASM so it gets rebuilt with latest changes
 rm -rf tmp/node-compat-runner tmp/rt-target
 
-echo "==> Running node_compat_report test (this takes ~10 minutes)..."
+echo "==> Running node_compat_report test (this takes ~80 minutes)..."
 cargo test --release --test node_compat_report -- --nocapture
 
 echo "==> Report written to tests/node_compat/report.md"

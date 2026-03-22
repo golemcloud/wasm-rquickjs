@@ -16,7 +16,7 @@ function _invalidArgTypeHelper(value) {
         if (value.constructor && value.constructor.name) return ' Received an instance of ' + value.constructor.name;
         return ' Received an instance of Object';
     }
-    var inspected = String(value);
+    let inspected = String(value);
     if (typeof value === 'string') inspected = "'" + value + "'";
     if (typeof value === 'bigint') inspected = String(value) + 'n';
     if (inspected.length > 28) inspected = inspected.slice(0, 25) + '...';
@@ -24,7 +24,7 @@ function _invalidArgTypeHelper(value) {
 }
 
 function _makeTypeError(code, message) {
-    var err = new TypeError(message);
+    const err = new TypeError(message);
     err.code = code;
     Object.defineProperty(err, 'toString', {
         value: function() { return 'TypeError [' + code + ']: ' + message; },
@@ -34,7 +34,7 @@ function _makeTypeError(code, message) {
 }
 
 function _makeRangeError(code, message) {
-    var err = new RangeError(message);
+    const err = new RangeError(message);
     err.code = code;
     Object.defineProperty(err, 'toString', {
         value: function() { return 'RangeError [' + code + ']: ' + message; },
@@ -44,7 +44,7 @@ function _makeRangeError(code, message) {
 }
 
 function _makeError(code, message) {
-    var err = new Error(message);
+    const err = new Error(message);
     err.code = code;
     Object.defineProperty(err, 'toString', {
         value: function() { return 'Error [' + code + ']: ' + message; },
@@ -55,9 +55,9 @@ function _makeError(code, message) {
 
 var process = new EventEmitter();
 
-var _argv = get_args();
-var _env = get_env();
-var _exitCode = 0;
+const _argv = get_args();
+const _env = get_env();
+let _exitCode = 0;
 var _exiting = false;
 
 process.argv = _argv;
@@ -100,22 +100,19 @@ process.env = new Proxy(_env, {
     },
     defineProperty: function(target, key, descriptor) {
         if ('get' in descriptor || 'set' in descriptor) {
-            var err = new TypeError("'process.env' does not accept an accessor(getter/setter) descriptor");
+            const err = new TypeError("'process.env' does not accept an accessor(getter/setter) descriptor");
             err.code = 'ERR_INVALID_OBJECT_DEFINE_PROPERTY';
             throw err;
         }
         if (descriptor.configurable !== true || descriptor.writable !== true || descriptor.enumerable !== true) {
-            var err2 = new TypeError("'process.env' only accepts a configurable, writable, and enumerable data descriptor");
-            err2.code = 'ERR_INVALID_OBJECT_DEFINE_PROPERTY';
-            throw err2;
+            const err = new TypeError("'process.env' only accepts a configurable, writable, and enumerable data descriptor");
+            err.code = 'ERR_INVALID_OBJECT_DEFINE_PROPERTY';
+            throw err;
         }
         if (descriptor.value !== undefined) {
             target[key] = String(descriptor.value);
         }
         return true;
-    },
-    enumerate: function(target) {
-        return Object.keys(target);
     }
 });
 process.exitCode = _exitCode;
@@ -157,7 +154,7 @@ process.features = {
 };
 process.execArgv = [];
 process.execPath = '/usr/local/bin/node';
-var _title = 'wasm-rquickjs';
+let _title = 'wasm-rquickjs';
 Object.defineProperty(process, 'title', {
     get: function() { return _title; },
     set: function(v) { _title = String(v); },
@@ -167,7 +164,7 @@ Object.defineProperty(process, 'title', {
 process.release = { name: 'node' };
 process.allowedNodeEnvironmentFlags = new Set();
 
-var _startTime = Date.now();
+let _startTime = null;
 
 process.cpuUsage = function cpuUsage(previousValue) {
     if (previousValue !== undefined) {
@@ -197,7 +194,7 @@ process.cpuUsage = function cpuUsage(previousValue) {
 };
 
 process.memoryUsage = function memoryUsage() {
-    var stats = _native_memory_usage();
+    const stats = _native_memory_usage();
     return {
         rss: stats[0],
         heapTotal: stats[1],
@@ -220,6 +217,9 @@ process.availableMemory = function availableMemory() {
 };
 
 process.uptime = function uptime() {
+    if (_startTime === null) {
+        _startTime = Date.now();
+    }
     return (Date.now() - _startTime) / 1000;
 };
 
@@ -231,7 +231,7 @@ process._linkedBinding = function _linkedBinding() {
     throw new Error('process._linkedBinding is not supported in WASM environment');
 };
 
-var _uncaughtExceptionCallback = null;
+let _uncaughtExceptionCallback = null;
 
 process.setUncaughtExceptionCaptureCallback = function setUncaughtExceptionCaptureCallback(fn) {
     if (fn !== null && typeof fn !== 'function') {
@@ -239,7 +239,7 @@ process.setUncaughtExceptionCaptureCallback = function setUncaughtExceptionCaptu
             'The "fn" argument must be of type function or null.' + _invalidArgTypeHelper(fn));
     }
     if (fn !== null && _uncaughtExceptionCallback !== null) {
-        var err = new Error('`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active');
+        const err = new Error('`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active');
         err.code = 'ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET';
         throw err;
     }
@@ -251,7 +251,7 @@ process.hasUncaughtExceptionCaptureCallback = function hasUncaughtExceptionCaptu
 };
 
 process.dlopen = function dlopen(module, filename) {
-    var err = new Error('Cannot load native addon in WASM environment: ' + (filename || ''));
+    const err = new Error('Cannot load native addon in WASM environment: ' + (filename || ''));
     err.code = 'ERR_DLOPEN_FAILED';
     throw err;
 };
@@ -264,7 +264,7 @@ function createWritableStdio(fd, writer) {
         fd,
         writable: true,
         write(chunk, encoding, callback) {
-            var cb = callback;
+            let cb = callback;
             if (typeof encoding === 'function') {
                 cb = encoding;
             }
@@ -291,8 +291,8 @@ process.cwd = function cwd() {
 // Triple-deferring ensures the drain runs after import() resolution
 // (DynamicImportJob + 1 PromiseReaction = 2 jobs) but before spawned
 // tasks like setTimeout(fn, 0).
-var __nextTickQueue = [];
-var __nextTickDrainScheduled = false;
+const __nextTickQueue = [];
+let __nextTickDrainScheduled = false;
 
 function __wasm_rquickjs_handleUncaughtError(err, domain) {
     if (domain && typeof domain.emit === 'function') {
@@ -324,7 +324,7 @@ globalThis.__wasm_rquickjs_handleUncaughtError = __wasm_rquickjs_handleUncaughtE
 function __drainNextTickQueue() {
     __nextTickDrainScheduled = false;
     while (__nextTickQueue.length > 0) {
-        var entry = __nextTickQueue.shift();
+        const entry = __nextTickQueue.shift();
         try {
             if (entry.domain) {
                 entry.domain.enter();
@@ -352,7 +352,7 @@ process.nextTick = function processNextTick(callback, ...args) {
         throw _makeTypeError('ERR_INVALID_ARG_TYPE',
             'The "callback" argument must be of type function.' + _invalidArgTypeHelper(callback));
     }
-    var domain = process.domain || null;
+    const domain = process.domain || null;
     __nextTickQueue.push({ callback, args, domain });
     if (!__nextTickDrainScheduled) {
         __nextTickDrainScheduled = true;
@@ -371,13 +371,13 @@ process.nextTick = function processNextTick(callback, ...args) {
     }
 };
 
-var _umask = 0o022;
+let _umask = 0o022;
 process.umask = function umask(mask) {
     if (mask === undefined) return _umask;
-    var old = _umask;
+    const old = _umask;
     if (typeof mask === 'string') {
         if (!/^[0-7]+$/.test(mask)) {
-            var err = new TypeError('The "mask" argument must be a valid octal string. Received \'' + mask + '\'');
+            const err = new TypeError('The "mask" argument must be a valid octal string. Received \'' + mask + '\'');
             err.code = 'ERR_INVALID_ARG_VALUE';
             throw err;
         }
@@ -385,9 +385,9 @@ process.umask = function umask(mask) {
     } else if (typeof mask === 'number') {
         _umask = mask & 0o777;
     } else {
-        var err2 = new TypeError('The "mask" argument must be one of type number or string. Received an instance of ' + (typeof mask === 'object' ? mask.constructor.name : typeof mask));
-        err2.code = 'ERR_INVALID_ARG_TYPE';
-        throw err2;
+        const err = new TypeError('The "mask" argument must be one of type number or string. Received an instance of ' + (typeof mask === 'object' ? mask.constructor.name : typeof mask));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
     }
     return old;
 };
@@ -404,15 +404,15 @@ process.chdir = function chdir(directory) {
             'The "directory" argument must be of type string.' + _invalidArgTypeHelper(directory));
     }
     // Resolve relative paths against current cwd
-    var resolved = directory;
+    let resolved = directory;
     if (resolved.charAt(0) !== '/') {
-        var cwd = process.cwd();
-        resolved = cwd + (cwd === '/' ? '' : '/') + resolved;
+        const currentCwd = process.cwd();
+        resolved = currentCwd + (currentCwd === '/' ? '' : '/') + resolved;
     }
     // Normalize . and ..
-    var parts = resolved.split('/');
-    var normalized = [];
-    for (var i = 0; i < parts.length; i++) {
+    const parts = resolved.split('/');
+    const normalized = [];
+    for (let i = 0; i < parts.length; i++) {
         if (parts[i] === '' || parts[i] === '.') continue;
         if (parts[i] === '..') { normalized.pop(); continue; }
         normalized.push(parts[i]);
@@ -422,50 +422,34 @@ process.chdir = function chdir(directory) {
     process.cwd = function cwd() { return resolved; };
 };
 
-process.setuid = function setuid(id) {
-    if (typeof id !== 'number' && typeof id !== 'string') {
-        throw _makeTypeError('ERR_INVALID_ARG_TYPE',
-            'The "id" argument must be one of type number or string.' + _invalidArgTypeHelper(id));
-    }
-    if (typeof id === 'string') {
-        throw _makeError('ERR_UNKNOWN_CREDENTIAL', 'User identifier does not exist: ' + id);
-    }
-};
-process.setgid = function setgid(id) {
-    if (typeof id !== 'number' && typeof id !== 'string') {
-        throw _makeTypeError('ERR_INVALID_ARG_TYPE',
-            'The "id" argument must be one of type number or string.' + _invalidArgTypeHelper(id));
-    }
-    if (typeof id === 'string') {
-        throw _makeError('ERR_UNKNOWN_CREDENTIAL', 'Group identifier does not exist: ' + id);
-    }
-};
-process.seteuid = function seteuid(id) {
-    if (typeof id !== 'number' && typeof id !== 'string') {
-        throw _makeTypeError('ERR_INVALID_ARG_TYPE',
-            'The "id" argument must be one of type number or string.' + _invalidArgTypeHelper(id));
-    }
-    if (typeof id === 'string') {
-        throw _makeError('ERR_UNKNOWN_CREDENTIAL', 'User identifier does not exist: ' + id);
-    }
-};
-process.setegid = function setegid(id) {
-    if (typeof id !== 'number' && typeof id !== 'string') {
-        throw _makeTypeError('ERR_INVALID_ARG_TYPE',
-            'The "id" argument must be one of type number or string.' + _invalidArgTypeHelper(id));
-    }
-    if (typeof id === 'string') {
-        throw _makeError('ERR_UNKNOWN_CREDENTIAL', 'Group identifier does not exist: ' + id);
-    }
-};
+function _makeCredentialSetter(name, argName, credentialType) {
+    return function(id) {
+        if (typeof id !== 'number' && typeof id !== 'string') {
+            throw _makeTypeError('ERR_INVALID_ARG_TYPE',
+                'The "' + argName + '" argument must be one of type number or string.' + _invalidArgTypeHelper(id));
+        }
+        if (typeof id === 'string') {
+            throw _makeError('ERR_UNKNOWN_CREDENTIAL', credentialType + ' identifier does not exist: ' + id);
+        }
+    };
+}
+// Named functions preserve .name for compatibility
+process.setuid = _makeCredentialSetter('setuid', 'id', 'User');
+Object.defineProperty(process.setuid, 'name', { value: 'setuid' });
+process.setgid = _makeCredentialSetter('setgid', 'id', 'Group');
+Object.defineProperty(process.setgid, 'name', { value: 'setgid' });
+process.seteuid = _makeCredentialSetter('seteuid', 'id', 'User');
+Object.defineProperty(process.seteuid, 'name', { value: 'seteuid' });
+process.setegid = _makeCredentialSetter('setegid', 'id', 'Group');
+Object.defineProperty(process.setegid, 'name', { value: 'setegid' });
 
 process.setgroups = function setgroups(groups) {
     if (!Array.isArray(groups)) {
         throw _makeTypeError('ERR_INVALID_ARG_TYPE',
             'The "groups" argument must be an instance of Array.' + _invalidArgTypeHelper(groups));
     }
-    for (var i = 0; i < groups.length; i++) {
-        var g = groups[i];
+    for (let i = 0; i < groups.length; i++) {
+        const g = groups[i];
         if (typeof g !== 'number' && typeof g !== 'string') {
             throw _makeTypeError('ERR_INVALID_ARG_TYPE',
                 'The "groups[' + i + ']" argument must be one of type number or string.' + _invalidArgTypeHelper(g));
@@ -498,20 +482,20 @@ process.initgroups = function initgroups(user, extraGroup) {
 };
 
 process.hrtime = function hrtime(time) {
-    var ns = hrtime_ns();
+    const ns = hrtime_ns();
     if (time !== undefined) {
         if (!Array.isArray(time)) {
-            var err = new TypeError('The "time" argument must be an instance of Array. Received type ' + typeof time + ' (' + String(time) + ')');
+            const err = new TypeError('The "time" argument must be an instance of Array. Received type ' + typeof time + ' (' + String(time) + ')');
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
         if (time.length !== 2) {
-            var err2 = new RangeError('The value of "time" is out of range. It must be 2. Received ' + time.length);
-            err2.code = 'ERR_OUT_OF_RANGE';
-            throw err2;
+            const err = new RangeError('The value of "time" is out of range. It must be 2. Received ' + time.length);
+            err.code = 'ERR_OUT_OF_RANGE';
+            throw err;
         }
-        var sec = Math.floor(ns / 1e9) - time[0];
-        var nsec = (ns % 1e9) - time[1];
+        let sec = Math.floor(ns / 1e9) - time[0];
+        let nsec = (ns % 1e9) - time[1];
         if (nsec < 0) {
             sec -= 1;
             nsec += 1e9;
@@ -529,8 +513,17 @@ process.abort = () => {
     throw new Error('process.abort is not supported in WASM environment');
 };
 
+const _signals = {
+    SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGILL: 4, SIGTRAP: 5, SIGABRT: 6,
+    SIGBUS: 7, SIGFPE: 8, SIGKILL: 9, SIGUSR1: 10, SIGSEGV: 11, SIGUSR2: 12,
+    SIGPIPE: 13, SIGALRM: 14, SIGTERM: 15, SIGCHLD: 17, SIGCONT: 18,
+    SIGSTOP: 19, SIGTSTP: 20, SIGTTIN: 21, SIGTTOU: 22, SIGURG: 23,
+    SIGXCPU: 24, SIGXFSZ: 25, SIGVTALRM: 26, SIGPROF: 27, SIGWINCH: 28,
+    SIGIO: 29, SIGPWR: 30, SIGSYS: 31, 0: 0
+};
+
 process.kill = function kill(pid, signal) {
-    var origPid = pid;
+    const origPid = pid;
     if (typeof pid === 'string') pid = Number(pid);
     if (typeof pid !== 'number' || Number.isNaN(pid) || !Number.isFinite(pid)) {
         throw _makeTypeError('ERR_INVALID_ARG_TYPE',
@@ -538,22 +531,14 @@ process.kill = function kill(pid, signal) {
     }
     pid = Math.trunc(pid);
     if (signal === undefined) signal = 'SIGTERM';
-    var sigNum;
+    let sigNum;
     if (typeof signal === 'number') {
         if (signal < 0 || signal > 31) {
             throw _makeError('EINVAL', 'kill EINVAL');
         }
         sigNum = signal;
     } else if (typeof signal === 'string') {
-        var signals = {
-            SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGILL: 4, SIGTRAP: 5, SIGABRT: 6,
-            SIGBUS: 7, SIGFPE: 8, SIGKILL: 9, SIGUSR1: 10, SIGSEGV: 11, SIGUSR2: 12,
-            SIGPIPE: 13, SIGALRM: 14, SIGTERM: 15, SIGCHLD: 17, SIGCONT: 18,
-            SIGSTOP: 19, SIGTSTP: 20, SIGTTIN: 21, SIGTTOU: 22, SIGURG: 23,
-            SIGXCPU: 24, SIGXFSZ: 25, SIGVTALRM: 26, SIGPROF: 27, SIGWINCH: 28,
-            SIGIO: 29, SIGPWR: 30, SIGSYS: 31, 0: 0
-        };
-        sigNum = signals[signal];
+        sigNum = _signals[signal];
         if (sigNum === undefined) {
             throw _makeTypeError('ERR_UNKNOWN_SIGNAL', 'Unknown signal: ' + signal);
         }
@@ -592,7 +577,7 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
                 'The "code" argument must be of type string.' + _invalidArgTypeHelper(code));
         }
     }
-    var obj;
+    let obj;
     if (typeof warning === 'string') {
         obj = new Error(warning);
         obj.name = (typeof typeOrOptions === 'string') ? typeOrOptions : 'Warning';
@@ -654,14 +639,14 @@ Object.defineProperty(process, '_exiting', {
 });
 
 // Sentinel error for process.exit()
-function ProcessExitError(code) {
-    this.code = code;
-    this.message = 'process.exit(' + code + ')';
-    this.name = 'ProcessExitError';
-    this.__isProcessExit = true;
+class ProcessExitError extends Error {
+    constructor(code) {
+        super('process.exit(' + code + ')');
+        this.code = code;
+        this.name = 'ProcessExitError';
+        this.__isProcessExit = true;
+    }
 }
-ProcessExitError.prototype = Object.create(Error.prototype);
-ProcessExitError.prototype.constructor = ProcessExitError;
 
 // Internal: run exit handlers without throwing the sentinel
 process._runExitHandlers = function _runExitHandlers(code) {
@@ -681,7 +666,7 @@ process._runExitHandlers = function _runExitHandlers(code) {
 // rejection event. We track unhandled rejections and only emit the event
 // after a microtask turn, so that assert.rejects() and similar patterns
 // that handle the rejection synchronously don't cause false positives.
-var _pendingRejections = new Map();
+const _pendingRejections = new Map();
 
 globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandled) {
     if (!isHandled) {

@@ -4,7 +4,7 @@ use crate::imports::generate_import_modules;
 use crate::skeleton::{
     copy_skeleton_lock, copy_skeleton_sources, generate_app_manifest, generate_cargo_toml,
 };
-use crate::wit::add_get_script_import;
+use crate::wit::{add_get_script_import, add_wizer_init_export};
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use heck::{ToSnakeCase, ToUpperCamelCase};
@@ -20,11 +20,16 @@ mod conversions;
 mod exports;
 mod imports;
 mod javascript;
+#[cfg(feature = "optimize")]
+mod optimize;
 mod rust_bindgen;
 mod skeleton;
 mod types;
 mod typescript;
 mod wit;
+
+#[cfg(feature = "optimize")]
+pub use optimize::optimize_component;
 
 /// Write `contents` to `path` only if the file doesn't exist or its current content differs.
 /// This preserves file timestamps when content hasn't changed, avoiding unnecessary recompilation.
@@ -105,7 +110,7 @@ pub fn generate_wrapper_crate(
     std::fs::create_dir_all(output.join("src").join("modules"))
         .context("Failed to create output/src/modules directory")?;
 
-    // Resolving the WIT package
+    // Resolving the WIT package (initial parse for Cargo.toml generation)
     let context = GeneratorContext::new(output, wit, world)?;
 
     // Generating the Cargo.toml file
@@ -128,6 +133,14 @@ pub fn generate_wrapper_crate(
         add_get_script_import(&context.output.join("wit"), world)
             .context("Failed to add get-script import to the WIT world")?;
     }
+
+    // Add wizer-initialize export for pre-initialization support
+    add_wizer_init_export(&context.output.join("wit"), world)
+        .context("Failed to add wizer-initialize export to the WIT world")?;
+
+    // Re-resolve the WIT package after modifications (wizer-initialize export was added)
+    let modified_wit = output.join("wit");
+    let context = GeneratorContext::new(output, &modified_wit, world)?;
 
     // Copying the JavaScript module to the output directory
     copy_js_modules(js_modules, context.output)

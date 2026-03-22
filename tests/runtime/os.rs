@@ -4,9 +4,11 @@ use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "os")]
-fn compiled_os() -> CompiledTest {
+async fn compiled_os() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/os");
-    CompiledTest::new(path, true).expect("Failed to compile os")
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile os")
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 **Package:** `kafkajs`
 **Version:** `2.2.4`
-**Tested on:** 2026-03-09
+**Tested on:** 2026-03-20
 
 ## Test Results
 

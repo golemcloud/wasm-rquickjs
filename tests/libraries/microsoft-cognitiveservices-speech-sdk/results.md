@@ -2,7 +2,7 @@
 
 **Package:** `microsoft-cognitiveservices-speech-sdk`
 **Version:** `1.48.0`
-**Tested on:** 2026-03-18
+**Tested on:** 2026-03-20
 
 ## Test Results
 
@@ -38,13 +38,13 @@
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
 - **Error:** `JavaScript error: expected recognizeOnceAsync() to attempt a websocket upgrade`
-- **Root cause:** Behavioral difference in websocket transport path under wasm-rquickjs: the SDK does not trigger the expected websocket upgrade request to the mock endpoint.
+- **Root cause:** The SDK's websocket transport path does not trigger the expected HTTP upgrade request to the mock endpoint under wasm-rquickjs. The SDK internally uses `node:http` for websocket upgrade, but the wasm-rquickjs runtime's HTTP implementation does not support websocket upgrade handshakes.
 
 ### test-integration-03-speak-cancel.js — websocket synthesis path against mock rejection
 - **Node.js:** ✅ PASS
 - **wasm-rquickjs:** ❌ FAIL
-- **Error:** `JavaScript error: expected speakTextAsync() to attempt a websocket upgrade`
-- **Root cause:** Behavioral difference in websocket transport path under wasm-rquickjs: the SDK does not trigger the expected websocket upgrade request to the mock endpoint.
+- **Error:** `JavaScript error: ErrorCode::ConnectionRefused` at `_parseNativeHttpError` / `_emitRequestError` / `_doSend` in `node:http`
+- **Root cause:** The SDK's speech synthesis websocket transport fails with a connection refused error when attempting to reach the mock server via wasm-rquickjs's HTTP stack. The underlying issue is the same as integration-02: websocket upgrade is not supported.
 
 ## Live Service Tests
 
@@ -63,5 +63,5 @@ The following features could not be fully tested without external dependencies:
 - Integration tests passed: 1/3 (HTTP mock)
 - Live service tests passed: N/A — no Azure Speech credentials available
 - Missing APIs: none identified in tested offline APIs
-- Behavioral differences: websocket recognition/synthesis transport behavior differs from Node.js in mock integration tests
-- Blockers: websocket-based Speech SDK runtime paths are only partially working in wasm-rquickjs
+- Behavioral differences: websocket upgrade handshakes not supported in wasm-rquickjs HTTP stack, causing SDK websocket transport (recognition/synthesis) to fail
+- Blockers: websocket-based Speech SDK runtime paths do not work in wasm-rquickjs; HTTP-based endpoints (e.g., getVoicesAsync) work correctly

@@ -29,12 +29,8 @@ const kIoMaxLength = 2 ** 31 - 1;
 let _Buffer = null;
 function getBuffer() {
     if (!_Buffer) {
-        const bufModule = globalThis.require ? globalThis.require('node:buffer') : null;
-        _Buffer = bufModule ? (bufModule.Buffer || bufModule.default?.Buffer) : null;
-        if (!_Buffer) {
-            // Fallback: try dynamic import is not available, use basic approach
-            _Buffer = { from: (x) => x, alloc: (n) => new Uint8Array(n) };
-        }
+        const bufModule = require('node:buffer');
+        _Buffer = bufModule.Buffer || bufModule.default?.Buffer;
     }
     return _Buffer;
 }
@@ -433,14 +429,12 @@ function validatePath(path, propName) {
         // Delegate to fileURLToPath for proper validation - it throws
         // ERR_INVALID_URL_SCHEME, ERR_INVALID_FILE_URL_HOST, ERR_INVALID_FILE_URL_PATH
         // matching Node.js behavior.
-        const urlModule = globalThis.require ? globalThis.require('node:url') : null;
-        if (urlModule && typeof urlModule.fileURLToPath === 'function') {
-            const converted = urlModule.fileURLToPath(path);
-            if (converted.indexOf('\u0000') !== -1) {
-                const err = new TypeError(`The argument '${propName || 'path'}' must be a string, Uint8Array, or URL without null bytes. Received ${JSON.stringify(converted)}`);
-                err.code = 'ERR_INVALID_ARG_VALUE';
-                throw err;
-            }
+        const urlModule = require('node:url');
+        const converted = urlModule.fileURLToPath(path);
+        if (converted.indexOf('\u0000') !== -1) {
+            const err = new TypeError(`The argument '${propName || 'path'}' must be a string, Uint8Array, or URL without null bytes. Received ${JSON.stringify(converted)}`);
+            err.code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
         }
         return;
     }
@@ -456,31 +450,17 @@ function validateMkdtempPrefix(prefix) {
 function pathToString(path) {
     if (typeof path === 'string') {
         if (path.length > 0 && path.charAt(0) !== '/') {
-            const pathMod = globalThis.require ? globalThis.require('path') : null;
-            if (pathMod) return pathMod.resolve(path);
+            return require('path').resolve(path);
         }
         return path;
     }
     if (getBuffer() && path instanceof getBuffer()) return path.toString();
     if (path instanceof Uint8Array) {
-        const BufferCtor = getBuffer();
-        if (BufferCtor && typeof BufferCtor.from === 'function') {
-            const asBuffer = BufferCtor.from(path);
-            if (asBuffer && typeof asBuffer.toString === 'function') {
-                return asBuffer.toString();
-            }
-        }
-        if (typeof TextDecoder === 'function') {
-            return new TextDecoder().decode(path);
-        }
+        return getBuffer().from(path).toString();
     }
     if (path instanceof URL) {
         if (path.protocol !== 'file:') return path.toString();
-        const urlModule = globalThis.require ? globalThis.require('node:url') : null;
-        if (urlModule && typeof urlModule.fileURLToPath === 'function') {
-            return urlModule.fileURLToPath(path);
-        }
-        return decodeURIComponent(path.pathname);
+        return require('node:url').fileURLToPath(path);
     }
     return String(path);
 }

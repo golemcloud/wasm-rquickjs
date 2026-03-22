@@ -3,7 +3,7 @@
 // We override the default protocol to 'https:' so URLs are constructed correctly
 import * as http from 'node:http';
 
-const NOT_SUPPORTED_ERROR = new Error('https.createServer is not supported in WebAssembly environment');
+const NOT_SUPPORTED_MSG = 'https.createServer is not supported in WebAssembly environment';
 
 export const METHODS = http.METHODS;
 export const STATUS_CODES = http.STATUS_CODES;
@@ -14,8 +14,7 @@ export const ClientRequest = http.ClientRequest;
 
 export function request(url, options, callback) {
     if (typeof url === 'object' && url !== null && !(url instanceof URL)) {
-        url = { protocol: 'https:', ...url };
-        return http.request(url, options, callback);
+        return http.request({ protocol: 'https:', ...url }, options, callback);
     }
     if (typeof options === 'object' && options !== null) {
         options = { protocol: 'https:', ...options };
@@ -30,12 +29,12 @@ export function get(url, options, callback) {
 }
 
 export function createServer() {
-    throw NOT_SUPPORTED_ERROR;
+    throw new Error(NOT_SUPPORTED_MSG);
 }
 
 export class Server {
     constructor() {
-        throw NOT_SUPPORTED_ERROR;
+        throw new Error(NOT_SUPPORTED_MSG);
     }
 }
 

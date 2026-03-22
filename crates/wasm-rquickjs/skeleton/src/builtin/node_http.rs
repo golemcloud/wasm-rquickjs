@@ -713,6 +713,9 @@ async fn write_all_to_stream<'js>(
     stream: &OutputStream,
     data: &[u8],
 ) -> rquickjs::Result<()> {
+    if data.is_empty() {
+        return Ok(());
+    }
     let mut offset = 0;
     while offset < data.len() {
         let remaining = &data[offset..];

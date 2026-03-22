@@ -998,7 +998,7 @@ impl HttpResponse {
                 (ResponseBodySource::Consumed, ResponseBodySource::Consumed)
             }
         };
-        let _ = std::mem::replace(&mut self.body_source, updated_body_source);
+        self.body_source = updated_body_source;
         Self {
             body_source: cloned_body_source,
             headers: self.headers.clone(),
@@ -1459,12 +1459,9 @@ fn apply_credentials_filtering(
     }
 }
 
-// JS functions for the console implementation
 pub const HTTP_JS: &str = include_str!("http.js");
 pub const FETCH_BLOB_JS: &str = include_str!("fetch-blob-4.0.0.js");
 pub const FORMDATA_JS: &str = include_str!("formdata-polyfill-4.0.10.js");
-
-// JS code wiring the console module into the global context
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_http from '__wasm_rquickjs_builtin/http';
         import * as __wasm_rquickjs_http_blob from '__wasm_rquickjs_builtin/http_blob';

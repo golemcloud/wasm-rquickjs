@@ -109,11 +109,7 @@ const HKDF_OUTPUT_LENGTHS = {
 };
 
 function isAnyArrayBuffer(data) {
-    if (data instanceof ArrayBuffer) {
-        return true;
-    }
-
-    return typeof SharedArrayBuffer === 'function' && data instanceof SharedArrayBuffer;
+    return data instanceof ArrayBuffer || data instanceof SharedArrayBuffer;
 }
 
 function toHkdfByteSource(data, name) {
@@ -336,7 +332,7 @@ function toSecretKeyBytes(key, argumentName = 'key') {
         return toBytes(key.export());
     }
 
-    if (typeof CryptoKey === 'function' && key instanceof CryptoKey) {
+    if (key instanceof CryptoKey) {
         if (key.type !== 'secret') {
             throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.type, 'secret');
         }

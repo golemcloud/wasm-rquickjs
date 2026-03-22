@@ -15,10 +15,8 @@ import {
 import { ERR_SYSTEM_ERROR } from '__wasm_rquickjs_builtin/internal/errors';
 import { validateInt32 } from '__wasm_rquickjs_builtin/internal/validators';
 
-// End-of-line marker constant
 export const EOL = '\n';
 
-// Wrap native functions to allow adding Symbol.toPrimitive
 export function arch() { return arch_native(); }
 
 const _endianness = endianness_native();
@@ -30,23 +28,20 @@ export function release() { return release_native(); }
 export function uptime() { return uptime_native(); }
 export function version() { return version_native(); }
 
+const _availableParallelism = available_parallelism_native();
 export function availableParallelism() {
-    return available_parallelism_native();
+    return _availableParallelism;
 }
 
-// tmpdir reads from environment variables like Node.js
 export function tmpdir() {
     const env = globalThis.process ? globalThis.process.env : {};
     let dir = env.TMPDIR || env.TMP || env.TEMP || '/tmp';
-    // Strip trailing slash unless it's the root '/'
     if (dir.length > 1 && dir.endsWith('/')) {
         dir = dir.slice(0, -1);
     }
     return dir;
 }
 
-// Must consult internalBinding('os').getHomeDirectory first so Node's
-// test-os-checked-function monkey-patch is observed even if HOME is set.
 export function homedir() {
     const binding = globalThis.__wasm_rquickjs_internal_os_binding;
     if (binding && typeof binding.getHomeDirectory === 'function') {
@@ -62,9 +57,8 @@ export function homedir() {
     return homedir_native();
 }
 
-// WASI does not expose system memory info; return reasonable stub values
-export function freemem() { return 268435456; } // 256MB
-export function totalmem() { return 536870912; } // 512MB
+export function freemem() { return 268435456; }
+export function totalmem() { return 536870912; }
 
 export { type_ as type };
 function type_() { return type_native(); }
@@ -203,7 +197,7 @@ export function cpus() {
 
 export const devNull = "/dev/null";
 
-const _priorities = new Map();
+let _currentPriority = 0;
 
 export function getPriority(pid) {
     if (pid !== undefined) {
@@ -212,7 +206,6 @@ export function getPriority(pid) {
 
     const id = (pid === undefined || pid === 0) ? 0 : pid;
 
-    // Simulate ESRCH for non-existent processes (pid 0 = current process is always valid)
     if (id !== 0 && id !== (globalThis.process ? globalThis.process.pid : 0)) {
         throw new ERR_SYSTEM_ERROR({
             code: 'ESRCH',
@@ -222,7 +215,7 @@ export function getPriority(pid) {
         });
     }
 
-    return _priorities.get(0) || 0;
+    return _currentPriority;
 }
 
 export function loadavg() {
@@ -235,13 +228,12 @@ export function networkInterfaces() {
 
 export function setPriority(pid, priority) {
     if (priority === undefined) {
-        // setPriority(priority) form - one argument means priority only
         priority = pid;
         pid = 0;
     }
     validateInt32(pid, 'pid');
     validateInt32(priority, 'priority', constants.priority.PRIORITY_HIGHEST, constants.priority.PRIORITY_LOW);
-    _priorities.set(0, priority);
+    _currentPriority = priority;
 }
 
 export { userinfo as userInfo };
@@ -267,13 +259,11 @@ export function userinfo(options) {
     }
 }
 
-// Add Symbol.toPrimitive to string-returning functions
 const stringFns = [arch, endianness, hostname, homedir, machine, platform, release, tmpdir, type_, version];
 for (const fn of stringFns) {
     fn[Symbol.toPrimitive] = () => fn();
 }
 
-// Add Symbol.toPrimitive to number-returning functions
 const numberFns = [freemem, totalmem, uptime, availableParallelism];
 for (const fn of numberFns) {
     fn[Symbol.toPrimitive] = () => fn();

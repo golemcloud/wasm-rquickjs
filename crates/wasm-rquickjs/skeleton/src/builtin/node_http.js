@@ -766,32 +766,32 @@ function _readHttpResponseFromSocket(socket) {
 }
 
 function _readConnectResponseHeaders(socket) {
-    return new Promise(function(resolve, reject) {
-        var buffer = '';
+    return new Promise((resolve, reject) => {
+        let buffer = '';
 
-        var cleanup = function() {
+        const cleanup = () => {
             socket.removeListener('data', onData);
             socket.removeListener('end', onEnd);
             socket.removeListener('error', onError);
         };
 
-        var onData = function(chunk) {
+        const onData = (chunk) => {
             buffer += typeof chunk === 'string' ? chunk : chunk.toString();
-            var headerEnd = buffer.indexOf('\r\n\r\n');
+            const headerEnd = buffer.indexOf('\r\n\r\n');
             if (headerEnd === -1) return;
 
             cleanup();
-            var headerSection = buffer.substring(0, headerEnd);
-            var lines = headerSection.split('\r\n');
-            var match = lines[0].match(/^HTTP\/(\d+\.\d+)\s+(\d+)\s*(.*)/);
+            const headerSection = buffer.substring(0, headerEnd);
+            const lines = headerSection.split('\r\n');
+            const match = lines[0].match(/^HTTP\/(\d+\.\d+)\s+(\d+)\s*(.*)/);
             if (!match) {
                 reject(new Error('Invalid HTTP status line'));
                 return;
             }
 
-            var headers = [];
-            for (var i = 1; i < lines.length; i++) {
-                var colonIdx = lines[i].indexOf(':');
+            const headers = [];
+            for (let i = 1; i < lines.length; i++) {
+                const colonIdx = lines[i].indexOf(':');
                 if (colonIdx > 0) {
                     headers.push([
                         lines[i].substring(0, colonIdx).trim(),
@@ -804,16 +804,16 @@ function _readConnectResponseHeaders(socket) {
                 httpVersion: match[1],
                 statusCode: parseInt(match[2], 10),
                 statusMessage: match[3] || '',
-                headers: headers,
+                headers,
             });
         };
 
-        var onEnd = function() {
+        const onEnd = () => {
             cleanup();
             reject(new Error('Connection closed before headers received'));
         };
 
-        var onError = function(err) {
+        const onError = (err) => {
             cleanup();
             reject(err);
         };
@@ -827,16 +827,12 @@ function _readConnectResponseHeaders(socket) {
     });
 }
 
-function stringifyHeaderValue(value) {
-    return String(value);
-}
-
 function expandHeaderValuesForWire(name, value) {
     if (!Array.isArray(value)) {
-        return [stringifyHeaderValue(value)];
+        return [String(value)];
     }
 
-    const values = value.map(stringifyHeaderValue);
+    const values = value.map(String);
     if (values.length < 2 || !isCookieHeader(name)) {
         return values;
     }
@@ -906,12 +902,12 @@ function mergeCookieHeaderValues(existingValue, nextValue) {
     const merged = [];
     const existingValues = Array.isArray(existingValue) ? existingValue : [existingValue];
     for (const value of existingValues) {
-        merged.push(stringifyHeaderValue(value));
+        merged.push(String(value));
     }
 
     const nextValues = Array.isArray(nextValue) ? nextValue : [nextValue];
     for (const value of nextValues) {
-        merged.push(stringifyHeaderValue(value));
+        merged.push(String(value));
     }
 
     return merged;
@@ -1949,10 +1945,7 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     _computeShouldKeepAliveFromAgent() {
-        if (this.agent === false) {
-            return false;
-        }
-        return true;
+        return this.agent !== false;
     }
 
     _refreshShouldKeepAlive() {
@@ -2061,17 +2054,17 @@ export class ClientRequest extends OutgoingMessage {
             bodyChunk = Buffer.from(String(chunk), 'utf8');
         }
 
-        if (bodyChunk) {
+        if (bodyChunk && bodyChunk.length > 0) {
             this._bodyLength += bodyChunk.length;
             this._bodyChunks.push(bodyChunk);
 
-            if (this._useSocketTransport) {
-                // Socket transport path unchanged
-            } else {
+            if (!this._useSocketTransport) {
                 this._pendingWrites.push({ chunk: bodyChunk, cb: typeof callback === 'function' ? callback : null });
                 this._bufferedBytes += bodyChunk.length;
                 this._scheduleFlush();
             }
+        } else if (typeof callback === 'function') {
+            callback();
         }
 
         if (this._useSocketTransport) {

@@ -143,9 +143,19 @@ fn generate_guest_impl(
     for (name, function) in exports {
         match &function.kind {
             FunctionKind::Freestanding => {
-                let func_impl =
-                    generate_exported_function_impl(context, interface, name, function)?;
-                func_impls.push(func_impl);
+                if name == "wizer-initialize" {
+                    // wizer-initialize calls directly into the skeleton's
+                    // pre-init function instead of dispatching to JS
+                    func_impls.push(quote! {
+                        fn wizer_initialize() {
+                            crate::internal::wizer_initialize();
+                        }
+                    });
+                } else {
+                    let func_impl =
+                        generate_exported_function_impl(context, interface, name, function)?;
+                    func_impls.push(func_impl);
+                }
             }
             FunctionKind::AsyncFreestanding
             | FunctionKind::AsyncMethod(_)
