@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use camino::Utf8Path;
-use wasmtime::component::{Component, Linker};
+use wasmtime::component::types::ComponentItem;
+use wasmtime::component::{Component, Linker, LinkerInstance};
 use wasmtime::{Config, Engine, Store, StoreContextMut};
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wizer::Wizer;
@@ -23,6 +24,19 @@ enum LogLevel {
     Error,
     #[component(name = "critical")]
     Critical,
+}
+
+impl std::fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogLevel::Trace => write!(f, "TRACE"),
+            LogLevel::Debug => write!(f, "DEBUG"),
+            LogLevel::Info => write!(f, "INFO"),
+            LogLevel::Warn => write!(f, "WARN"),
+            LogLevel::Error => write!(f, "ERROR"),
+            LogLevel::Critical => write!(f, "CRITICAL"),
+        }
+    }
 }
 
 struct WizerHost {
@@ -54,6 +68,11 @@ impl wasmtime_wasi_http::WasiHttpView for WizerHost {
 ///
 /// Reads the component from `input`, runs the specified `init_func` to capture
 /// the initialized state, and writes the pre-initialized component to `output`.
+///
+/// Known imports (WASI, HTTP, logging) are provided with real or logging
+/// implementations. Any remaining unknown imports are automatically stubbed
+/// with trapping functions — if the init code calls them, pre-initialization
+/// will fail with an error identifying the unexpected import call.
 pub async fn optimize_component(
     input: &Utf8Path,
     output: &Utf8Path,
@@ -94,22 +113,37 @@ pub async fn optimize_component(
             &wasm_bytes,
             async |store: &mut Store<WizerHost>, component: &Component| {
                 let mut linker: Linker<WizerHost> = Linker::new(store.engine());
+
+                // Add real WASI and HTTP implementations
                 wasmtime_wasi::p2::add_to_linker_with_options_async(
                     &mut linker,
                     &bindings::LinkOptions::default(),
                 )?;
                 wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
 
-                // Stub wasi:logging/logging (required by the logging feature)
+                // Implement wasi:logging/logging with actual log output
                 {
                     let mut logging = linker.instance("wasi:logging/logging")?;
                     logging.func_wrap(
                         "log",
                         |_ctx: StoreContextMut<'_, WizerHost>,
-                         (_level, _context, _message): (LogLevel, String, String)|
-                         -> Result<(), wasmtime::Error> { Ok(()) },
+                         (level, context, message): (LogLevel, String, String)|
+                         -> Result<(), wasmtime::Error> {
+                            if context.is_empty() {
+                                eprintln!("[wizer] [{level}] {message}");
+                            } else {
+                                eprintln!("[wizer] [{level}] [{context}] {message}");
+                            }
+                            Ok(())
+                        },
                     )?;
                 }
+
+                // Stub any remaining unknown imports (e.g. golem:api/host,
+                // user-defined WIT interfaces) with trapping functions.
+                // We skip wasi: prefixed imports to preserve wasmtime's
+                // semver version aliasing for WASI interfaces.
+                stub_unknown_imports(&mut linker, component)?;
 
                 linker.instantiate_async(store, component).await
             },
@@ -128,5 +162,68 @@ pub async fn optimize_component(
         output_size as f64 / 1024.0,
     );
 
+    Ok(())
+}
+
+/// Prefixes for imports that are handled by real implementations
+/// (WASI, HTTP, logging) and should not be stubbed with traps.
+const KNOWN_IMPORT_PREFIXES: &[&str] = &["wasi:"];
+
+/// Stub unknown component imports with trapping functions.
+///
+/// Iterates over the component's imports using the public `component_type()` API
+/// and registers trap stubs for any imports not matching known prefixes.
+/// This preserves wasmtime's semver version aliasing for WASI interfaces
+/// while ensuring unknown imports (e.g. `golem:api/host`) don't cause
+/// instantiation failures.
+fn stub_unknown_imports(
+    linker: &mut Linker<WizerHost>,
+    component: &Component,
+) -> wasmtime::Result<()> {
+    let engine = linker.engine().clone();
+    let component_type = component.component_type();
+
+    for (import_name, item) in component_type.imports(&engine) {
+        if KNOWN_IMPORT_PREFIXES
+            .iter()
+            .any(|prefix| import_name.starts_with(prefix))
+        {
+            continue;
+        }
+
+        stub_component_item(&mut linker.root(), &import_name, &item, &engine)?;
+    }
+
+    Ok(())
+}
+
+fn stub_component_item(
+    linker_instance: &mut LinkerInstance<'_, WizerHost>,
+    name: &str,
+    item: &ComponentItem,
+    engine: &Engine,
+) -> wasmtime::Result<()> {
+    match item {
+        ComponentItem::ComponentInstance(inst) => {
+            let mut nested = linker_instance.instance(name)?;
+            for (export_name, export_item) in inst.exports(engine) {
+                stub_component_item(&mut nested, &export_name, &export_item, engine)?;
+            }
+        }
+        ComponentItem::ComponentFunc(_) => {
+            let fqn = name.to_string();
+            linker_instance.func_new(name, move |_ctx, _ty, _args, _results| {
+                Err(wasmtime::Error::msg(format!(
+                    "wizer pre-initialization called unknown import `{fqn}` — \
+                     this import is not available during pre-initialization"
+                )))
+            })?;
+        }
+        ComponentItem::Resource(_) => {
+            let ty = wasmtime::component::ResourceType::host::<()>();
+            linker_instance.resource(name, ty, |_, _| Ok(()))?;
+        }
+        _ => {}
+    }
     Ok(())
 }
