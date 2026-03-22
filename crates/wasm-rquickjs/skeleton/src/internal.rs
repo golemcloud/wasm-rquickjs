@@ -1378,6 +1378,7 @@ pub struct JsState {
 /// `get_js_state()` calls during module evaluation (e.g. from `setTimeout`
 /// callbacks that fire during init).
 #[repr(u8)]
+#[derive(Clone, Copy)]
 enum InitPhase {
     /// No initialization has been performed yet.
     Uninitialized = 0,
@@ -1387,6 +1388,9 @@ enum InitPhase {
     Initializing = 1,
     /// Fully initialized including user module evaluation.
     FullyInitialized = 2,
+    /// Wizer pre-initialized: JS state is snapshotted but runtime env (argv, env vars)
+    /// needs to be refreshed from the actual host environment on first access.
+    WizerPreInitialized = 3,
 }
 
 impl JsState {
@@ -1599,6 +1603,52 @@ impl JsState {
         self.init_engine().await;
         self.init_user_module().await;
     }
+
+    /// Refresh `process.argv` and `process.env` from the actual WASI host
+    /// environment. Called after a Wizer snapshot is restored so that
+    /// snapshotted (empty) values are replaced with the real runtime values.
+    /// Mutates objects in-place so ESM bindings remain valid.
+    async fn refresh_process_env(state: &JsState) {
+        let argv = wasip2::cli::environment::get_arguments();
+        let env_vars: std::collections::HashMap<String, String> =
+            wasip2::cli::environment::get_environment()
+                .into_iter()
+                .collect();
+
+        async_with!(state.ctx => |ctx| {
+            let globals = ctx.globals();
+            if let Ok(process) = globals.get::<_, rquickjs::Object>("process") {
+                // Refresh argv in-place so existing references stay valid
+                if let Ok(existing_argv) = process.get::<_, rquickjs::Array>("argv") {
+                    let _ = existing_argv.as_object().set("length", 0u32);
+                    for (i, arg) in argv.iter().enumerate() {
+                        let _ = existing_argv.set(i, arg.as_str());
+                    }
+                }
+                let _ = process.set(
+                    "argv0",
+                    argv.first().map(|s| s.as_str()).unwrap_or(""),
+                );
+
+                // Refresh env via JS eval to trigger Proxy traps
+                if let Ok(new_env) = rquickjs::Object::new(ctx.clone()) {
+                    for (key, value) in &env_vars {
+                        let _ = new_env.set(key.as_str(), value.as_str());
+                    }
+                    let _ = globals.set("__wasm_rquickjs_new_env", new_env);
+                    let _ = ctx.eval::<(), &str>(
+                        "(() => { \
+                            const e = globalThis.__wasm_rquickjs_new_env; \
+                            for (const k of Object.keys(process.env)) delete process.env[k]; \
+                            for (const [k,v] of Object.entries(e)) process.env[k] = v; \
+                            delete globalThis.__wasm_rquickjs_new_env; \
+                        })()",
+                    );
+                }
+            }
+        })
+        .await;
+    }
 }
 
 fn abort_unrefed_timers(js_state: &JsState) {
@@ -1674,6 +1724,12 @@ pub fn get_js_state() -> &'static JsState {
                 INIT_PHASE = InitPhase::Initializing;
                 // Phase 2: Evaluate JS modules.
                 block_on(STATE.as_ref().unwrap().finish_init());
+                INIT_PHASE = InitPhase::FullyInitialized;
+            }
+            InitPhase::WizerPreInitialized => {
+                // Wizer snapshot restored — refresh argv/env from the real host.
+                let state = STATE.as_ref().unwrap();
+                block_on(JsState::refresh_process_env(state));
                 INIT_PHASE = InitPhase::FullyInitialized;
             }
             InitPhase::Initializing | InitPhase::FullyInitialized => {
@@ -2308,6 +2364,6 @@ pub fn wizer_initialize() {
             );
         });
 
-        INIT_PHASE = InitPhase::FullyInitialized;
+        INIT_PHASE = InitPhase::WizerPreInitialized;
     }
 }
