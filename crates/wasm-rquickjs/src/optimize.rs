@@ -191,7 +191,7 @@ fn stub_unknown_imports(
             continue;
         }
 
-        stub_component_item(&mut linker.root(), &import_name, &item, &engine)?;
+        stub_component_item(&mut linker.root(), import_name, &item, &engine)?;
     }
 
     Ok(())
@@ -207,7 +207,7 @@ fn stub_component_item(
         ComponentItem::ComponentInstance(inst) => {
             let mut nested = linker_instance.instance(name)?;
             for (export_name, export_item) in inst.exports(engine) {
-                stub_component_item(&mut nested, &export_name, &export_item, engine)?;
+                stub_component_item(&mut nested, export_name, &export_item, engine)?;
             }
         }
         ComponentItem::ComponentFunc(_) => {
