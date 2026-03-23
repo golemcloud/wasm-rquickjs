@@ -581,11 +581,99 @@ fn generate_exported_resource_function_impl(
 fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStream> {
     if let Some((export_module, additional_modules)) = js_modules.split_first() {
         let export_module_name = LitStr::new(&export_module.name, Span::call_site());
-        let export_module_file_name = LitStr::new(&export_module.file_name(), Span::call_site());
+
+        let export_module_def = match &export_module.mode {
+            EmbeddingMode::BinarySlot => {
+                let slot_file_name = LitStr::new(
+                    &(export_module.name.replace('/', "_") + ".slot"),
+                    Span::call_site(),
+                );
+                quote! {
+                    static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
+                    static JS_EXPORT_MODULE_SLOT: &[u8] = include_bytes!(#slot_file_name);
+
+                    /// Reads JS source from the binary slot using volatile reads to prevent
+                    /// the optimizer from constant-folding the slot contents at compile time.
+                    /// This is essential because the slot is patched post-compilation.
+                    ///
+                    /// The marker layout is: MAGIC(16) + JS_OFFSET(4) + END_MAGIC(16) = 36 bytes.
+                    /// JS_OFFSET is a pointer into linear memory where LEN(4) + JS(LEN) is stored.
+                    /// A JS_OFFSET of 0 means no JS has been injected.
+                    fn read_js_from_slot() -> String {
+                        const MAGIC: &[u8; 16] = b"WASM_RQJS_SLOT\x01\x00";
+                        const END_MAGIC: &[u8; 16] = b"WASM_RQJS_SLTND\x00";
+                        let slot = JS_EXPORT_MODULE_SLOT;
+                        assert!(slot.len() >= 36, "JS injection marker is too small");
+
+                        let slot_ptr = slot.as_ptr();
+                        unsafe {
+                            // Validate magic
+                            let mut magic_buf = [0u8; 16];
+                            for i in 0..16 {
+                                magic_buf[i] = core::ptr::read_volatile(slot_ptr.add(i));
+                            }
+                            assert_eq!(&magic_buf, MAGIC, "invalid JS injection marker header");
+
+                            // Read JS_OFFSET (pointer into linear memory)
+                            let mut offset_bytes = [0u8; 4];
+                            for i in 0..4 {
+                                offset_bytes[i] = core::ptr::read_volatile(slot_ptr.add(16 + i));
+                            }
+                            let js_offset = u32::from_le_bytes(offset_bytes) as usize;
+
+                            assert!(js_offset > 0, "JS injection slot is empty — no JS has been injected. \
+                                Use wasm-rquickjs inject-js to inject JavaScript source into the template.");
+
+                            // Validate end magic
+                            let mut end_magic_buf = [0u8; 16];
+                            for i in 0..16 {
+                                end_magic_buf[i] = core::ptr::read_volatile(slot_ptr.add(20 + i));
+                            }
+                            assert_eq!(&end_magic_buf, END_MAGIC, "JS injection marker footer is corrupted");
+
+                            // Read JS length from linear memory at js_offset
+                            let mem_ptr = js_offset as *const u8;
+                            let mut len_bytes = [0u8; 4];
+                            for i in 0..4 {
+                                len_bytes[i] = core::ptr::read_volatile(mem_ptr.add(i));
+                            }
+                            let len = u32::from_le_bytes(len_bytes) as usize;
+
+                            // Read JS bytes from linear memory at js_offset + 4
+                            let js_ptr = mem_ptr.add(4);
+                            let mut payload = Vec::with_capacity(len);
+                            for i in 0..len {
+                                payload.push(core::ptr::read_volatile(js_ptr.add(i)));
+                            }
+                            String::from_utf8(payload)
+                                .expect("injected JS source is not valid UTF-8")
+                        }
+                    }
+
+                    fn js_export_module() -> &'static str {
+                        static SOURCE: std::sync::LazyLock<String> =
+                            std::sync::LazyLock::new(read_js_from_slot);
+                        SOURCE.as_str()
+                    }
+                }
+            }
+            _ => {
+                let export_module_file_name =
+                    LitStr::new(&export_module.file_name(), Span::call_site());
+                quote! {
+                    static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
+                    static JS_EXPORT_MODULE_SOURCE: &str = include_str!(#export_module_file_name);
+
+                    fn js_export_module() -> &'static str {
+                        JS_EXPORT_MODULE_SOURCE
+                    }
+                }
+            }
+        };
 
         let mut additional_module_pairs = Vec::new();
         for module in additional_modules {
-            match module.mode {
+            match &module.mode {
                 EmbeddingMode::EmbedFile(_) => {
                     let name = LitStr::new(&module.name, Span::call_site());
                     let file_name = LitStr::new(&module.file_name(), Span::call_site());
@@ -597,12 +685,17 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
                     additional_module_pairs
                         .push(quote! { (#name, Box::new(|| { crate::bindings::get_script() })) });
                 }
+                EmbeddingMode::BinarySlot => {
+                    return Err(anyhow!(
+                        "BinarySlot mode is only supported for the primary export module, \
+                         not for additional modules"
+                    ));
+                }
             }
         }
 
         Ok(quote! {
-            static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
-            static JS_EXPORT_MODULE: &str = include_str!(#export_module_file_name);
+            #export_module_def
 
             static JS_ADDITIONAL_MODULES: std::sync::LazyLock<Vec<(&str, Box<dyn (Fn() -> String) + Send + Sync>)>> =
               std::sync::LazyLock::new(|| { vec![

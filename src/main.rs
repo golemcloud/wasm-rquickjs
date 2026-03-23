@@ -50,5 +50,15 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Command::InjectJs { input, output, js } => {
+            let js_source = std::fs::read_to_string(js.as_std_path()).unwrap_or_else(|err| {
+                eprintln!("Error reading JS file: {err:#}");
+                std::process::exit(1);
+            });
+            if let Err(err) = wasm_rquickjs::inject_js_into_component(input, output, &js_source) {
+                eprintln!("Error injecting JS: {err:#}");
+                std::process::exit(1);
+            }
+        }
     };
 }
