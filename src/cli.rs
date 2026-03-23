@@ -65,6 +65,22 @@ pub enum Command {
         #[arg(long, default_value = "wizer-initialize")]
         init_func: String,
     },
+    /// Inject JavaScript source into a compiled WASM component template
+    InjectJs {
+        /// Path to the template WASM component (compiled with --js-modules name=@slot)
+        #[arg(long)]
+        input: Utf8PathBuf,
+
+        /// Path for the output WASM component with injected JS
+        #[arg(long)]
+        output: Utf8PathBuf,
+
+        /// Path(s) to JavaScript source file(s) to inject. Order must match the
+        /// BinarySlot module order used during crate generation (primary module first,
+        /// then additional modules in order).
+        #[arg(long, required = true)]
+        js: Vec<Utf8PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +109,7 @@ impl FromStr for JsModuleSpecArg {
         let name = parts[0].to_string();
         let mode = match parts[1] {
             "@composition" => EmbeddingMode::Composition,
+            "@slot" => EmbeddingMode::BinarySlot,
             path => EmbeddingMode::EmbedFile(Utf8Path::new(path).to_path_buf()),
         };
         Ok(JsModuleSpecArg { name, mode })

@@ -19,6 +19,7 @@ use wit_parser::{
 mod conversions;
 mod exports;
 mod imports;
+mod inject;
 mod javascript;
 #[cfg(feature = "optimize")]
 mod optimize;
@@ -28,6 +29,7 @@ mod types;
 mod typescript;
 mod wit;
 
+pub use inject::{SLOT_END_MAGIC, SLOT_MAGIC, create_marker_file, inject_js_into_component};
 #[cfg(feature = "optimize")]
 pub use optimize::optimize_component;
 
@@ -70,6 +72,17 @@ pub enum EmbeddingMode {
     EmbedFile(Utf8PathBuf),
     /// The JS module is going to be fetched run-time through an imported WIT interface
     Composition,
+    /// Embeds a small marker in the compiled WASM component.
+    /// After compilation, JS source can be injected into the marker via `inject_js_into_component`
+    /// without recompiling the Rust crate. The injected JS can be any size — the WASM component
+    /// is structurally rewritten to accommodate the new data.
+    BinarySlot,
+}
+
+impl EmbeddingMode {
+    pub fn is_binary_slot(&self) -> bool {
+        matches!(self, EmbeddingMode::BinarySlot)
+    }
 }
 
 /// Specifies a JS module to be evaluated in the generated component.
@@ -383,14 +396,28 @@ fn copy_dir_if_changed(src: &std::path::Path, dst: &std::path::Path) -> std::io:
     Ok(())
 }
 
-/// Copies the JS module files to `<output>/src/<name>.js`.
+/// Copies the JS module files to `<output>/src/<name>.js` or generates slot files.
 fn copy_js_modules(js_modules: &[JsModuleSpec], output: &Utf8Path) -> anyhow::Result<()> {
+    let mut slot_index: u32 = 0;
     for module in js_modules {
-        if let EmbeddingMode::EmbedFile(source) = &module.mode {
-            let filename = module.file_name();
-            let js_dest = output.join("src").join(filename);
-            copy_if_changed(source, js_dest)
-                .context(format!("Failed to copy JavaScript module {}", module.name))?;
+        match &module.mode {
+            EmbeddingMode::EmbedFile(source) => {
+                let filename = module.file_name();
+                let js_dest = output.join("src").join(filename);
+                copy_if_changed(source, js_dest)
+                    .context(format!("Failed to copy JavaScript module {}", module.name))?;
+            }
+            EmbeddingMode::BinarySlot => {
+                let slot_filename = module.name.replace('/', "_") + ".slot";
+                let slot_dest = output.join("src").join(slot_filename);
+                let slot_data = inject::create_marker_file(slot_index);
+                write_if_changed(slot_dest, slot_data).context(format!(
+                    "Failed to create marker file for module {}",
+                    module.name
+                ))?;
+                slot_index += 1;
+            }
+            EmbeddingMode::Composition => {}
         }
     }
     Ok(())

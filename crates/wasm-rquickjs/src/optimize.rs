@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use camino::Utf8Path;
 use wasmtime::component::types::ComponentItem;
-use wasmtime::component::{Component, Linker, LinkerInstance};
+use wasmtime::component::{Component, Linker, LinkerInstance, ResourceType};
 use wasmtime::{Config, Engine, Store, StoreContextMut};
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wizer::Wizer;
@@ -175,8 +175,66 @@ pub async fn optimize_component(
 }
 
 /// Prefixes for imports that are handled by real implementations
-/// (WASI, HTTP, logging) and should not be stubbed with traps.
-const KNOWN_IMPORT_PREFIXES: &[&str] = &["wasi:"];
+/// and should not be stubbed with traps. Only list the specific WASI
+/// namespaces that wasmtime-wasi, wasmtime-wasi-http, and the logging
+/// stub actually register — not all `wasi:*` (e.g. `wasi:blobstore`
+/// and `wasi:keyvalue` are NOT provided and must be stubbed).
+const KNOWN_IMPORT_PREFIXES: &[&str] = &[
+    "wasi:io/",
+    "wasi:clocks/",
+    "wasi:filesystem/",
+    "wasi:random/",
+    "wasi:cli/",
+    "wasi:sockets/",
+    "wasi:http/",
+    "wasi:logging/",
+];
+
+/// Collect resource types that appear in WASI imports.
+///
+/// Non-WASI interfaces (like `golem:agent/host`) can re-export WASI resource
+/// types (e.g. `pollable`). When stubbing those interfaces we must skip
+/// resources already registered by wasmtime-wasi, otherwise the linker will
+/// reject the type identity mismatch.
+///
+/// The component type system uses the same `ResourceType` value for the same
+/// underlying WIT resource definition regardless of which interface references
+/// it, so we can compare them with `==`.
+fn collect_wasi_resource_types(component: &Component, engine: &Engine) -> Vec<ResourceType> {
+    let mut known = Vec::new();
+    let component_type = component.component_type();
+
+    for (import_name, item) in component_type.imports(engine) {
+        if KNOWN_IMPORT_PREFIXES
+            .iter()
+            .any(|prefix| import_name.starts_with(prefix))
+        {
+            collect_resource_types_from_item(&item, engine, &mut known);
+        }
+    }
+
+    known
+}
+
+fn collect_resource_types_from_item(
+    item: &ComponentItem,
+    engine: &Engine,
+    known: &mut Vec<ResourceType>,
+) {
+    match item {
+        ComponentItem::ComponentInstance(inst) => {
+            for (_name, export_item) in inst.exports(engine) {
+                collect_resource_types_from_item(&export_item, engine, known);
+            }
+        }
+        ComponentItem::Resource(res_ty) => {
+            if !known.contains(res_ty) {
+                known.push(*res_ty);
+            }
+        }
+        _ => {}
+    }
+}
 
 /// Stub unknown component imports with trapping functions.
 ///
@@ -185,12 +243,18 @@ const KNOWN_IMPORT_PREFIXES: &[&str] = &["wasi:"];
 /// This preserves wasmtime's semver version aliasing for WASI interfaces
 /// while ensuring unknown imports (e.g. `golem:api/host`) don't cause
 /// instantiation failures.
+///
+/// Resource types that were already registered by wasmtime-wasi are skipped
+/// to avoid "mismatched resource types" errors when non-WASI interfaces
+/// re-export WASI resources (e.g. `pollable`).
 fn stub_unknown_imports(
     linker: &mut Linker<WizerHost>,
     component: &Component,
 ) -> wasmtime::Result<()> {
     let engine = linker.engine().clone();
     let component_type = component.component_type();
+
+    let wasi_resources = collect_wasi_resource_types(component, &engine);
 
     for (import_name, item) in component_type.imports(&engine) {
         if KNOWN_IMPORT_PREFIXES
@@ -200,7 +264,13 @@ fn stub_unknown_imports(
             continue;
         }
 
-        stub_component_item(&mut linker.root(), import_name, &item, &engine)?;
+        stub_component_item(
+            &mut linker.root(),
+            import_name,
+            &item,
+            &engine,
+            &wasi_resources,
+        )?;
     }
 
     Ok(())
@@ -211,12 +281,19 @@ fn stub_component_item(
     name: &str,
     item: &ComponentItem,
     engine: &Engine,
+    wasi_resources: &[ResourceType],
 ) -> wasmtime::Result<()> {
     match item {
         ComponentItem::ComponentInstance(inst) => {
             let mut nested = linker_instance.instance(name)?;
             for (export_name, export_item) in inst.exports(engine) {
-                stub_component_item(&mut nested, export_name, &export_item, engine)?;
+                stub_component_item(
+                    &mut nested,
+                    export_name,
+                    &export_item,
+                    engine,
+                    wasi_resources,
+                )?;
             }
         }
         ComponentItem::ComponentFunc(_) => {
@@ -228,9 +305,14 @@ fn stub_component_item(
                 )))
             })?;
         }
-        ComponentItem::Resource(_) => {
-            let ty = wasmtime::component::ResourceType::host::<()>();
-            linker_instance.resource(name, ty, |_, _| Ok(()))?;
+        ComponentItem::Resource(res_ty) => {
+            if wasi_resources.contains(res_ty) {
+                // This resource type is already registered by wasmtime-wasi
+                // (e.g. pollable). Skip it to avoid type identity mismatches.
+            } else {
+                let ty = ResourceType::host::<()>();
+                linker_instance.resource(name, ty, |_, _| Ok(()))?;
+            }
         }
         _ => {}
     }

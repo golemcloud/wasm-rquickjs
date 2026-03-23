@@ -83,6 +83,10 @@ name = "migrate_config_split"
 harness = false
 
 [[test]]
+name = "binary_inject"
+harness = false
+
+[[test]]
 name = "js_subtest_parser"
 harness = false
 
@@ -140,6 +144,8 @@ wasmtime-wasi = "42.0.1"
 wasmtime-wasi-http = "42.0.1"
 wasmtime-wizer = "42.0.1"
 wit-bindgen-core = "0.43.0"
+wasm-encoder = "0.235.0"
+wasmparser_encoder = { package = "wasmparser", version = "0.235.0" }
 wit-encoder = "0.235.0"
 wit-parser = "0.235.0"
 oxc_parser = "0.115"
