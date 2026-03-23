@@ -10,6 +10,7 @@ description.workspace = true
 [features]
 default = []
 optimize = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:wasmtime-wizer", "dep:tokio"]
+use-golem-wasmtime = []
 
 [dependencies]
 anyhow = { workspace = true }

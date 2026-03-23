@@ -86,6 +86,11 @@ harness = false
 name = "js_subtest_parser"
 harness = false
 
+[features]
+default = []
+# Use Golem's forked wasmtime (see [patch.crates-io] at bottom of file)
+use-golem-wasmtime = ["wasm-rquickjs/use-golem-wasmtime"]
+
 [workspace]
 exclude = [
     "crates/wasm-rquickjs/skeleton",
@@ -141,3 +146,10 @@ oxc_parser = "0.115"
 oxc_allocator = "0.115"
 oxc_ast = "0.115"
 oxc_span = "0.115"
+
+# Golem's forked wasmtime — uncomment these patches together with enabling the
+# `use-golem-wasmtime` feature.
+#[patch.crates-io]
+#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v42.0.1" }
+#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v42.0.1" }
+#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v42.0.1" }
