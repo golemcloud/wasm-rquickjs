@@ -490,7 +490,8 @@ impl TestInstance {
         fs::write(temp_dir.path().join("input.txt"), "test file contents")?;
         fs::create_dir(temp_dir.path().join("test"))?;
 
-        let ctx = WasiCtx::builder()
+        let mut ctx_builder = WasiCtx::builder();
+        ctx_builder
             .stdout(OutputFile::new(stdout_file.reopen()?))
             .stderr(OutputFile::new(stderr_file.reopen()?))
             .arg("first-arg")
@@ -499,8 +500,11 @@ impl TestInstance {
             .env("TEST_KEY_2", "TEST_VALUE_2")
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
             .inherit_network()
-            .allow_ip_name_lookup(true)
-            .build();
+            .allow_ip_name_lookup(true);
+        #[cfg(feature = "use-golem-wasmtime")]
+        let (ctx, io_ctx) = ctx_builder.build();
+        #[cfg(not(feature = "use-golem-wasmtime"))]
+        let ctx = ctx_builder.build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
             table: Arc::new(Mutex::new(ResourceTable::new())),
@@ -508,6 +512,8 @@ impl TestInstance {
             wasi_http: Arc::new(http_ctx),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx: Arc::new(Mutex::new(io_ctx)),
         };
 
         let mut store = Store::new(engine, host);
@@ -805,6 +811,8 @@ pub struct Host {
     pub wasi_http: Arc<WasiHttpCtx>,
     pub started_at: Instant,
     pub timeout: Duration,
+    #[cfg(feature = "use-golem-wasmtime")]
+    pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
 }
 
 impl WasiView for Host {
@@ -818,6 +826,11 @@ impl WasiView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx: Arc::get_mut(&mut self.io_ctx)
+                .expect("IoCtx is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("IoCtx mutex must never fail"),
         }
     }
 }
