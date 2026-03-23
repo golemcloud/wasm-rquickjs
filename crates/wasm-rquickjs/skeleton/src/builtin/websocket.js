@@ -392,5 +392,172 @@ WebSocket.prototype.OPEN = OPEN;
 WebSocket.prototype.CLOSING = CLOSING;
 WebSocket.prototype.CLOSED = CLOSED;
 
-export { WebSocket, MessageEvent, CloseEvent, ErrorEvent };
+// ===== WebSocketStream (promise/streams-based API) =====
+// See https://developer.mozilla.org/en-US/docs/Web/API/WebSocketStream
+
+class WebSocketStream {
+    constructor(url, options) {
+        if (arguments.length === 0) {
+            throw new TypeError("Failed to construct 'WebSocketStream': 1 argument required, but only 0 present.");
+        }
+
+        if (typeof url !== 'string') {
+            url = String(url);
+        }
+
+        if (url.indexOf('#') !== -1) {
+            throw new DOMException(
+                "Failed to construct 'WebSocketStream': The URL '" + url + "' contains a fragment identifier.",
+                'SyntaxError'
+            );
+        }
+
+        url = normalizeWebSocketUrl(url);
+
+        if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+            throw new DOMException(
+                "Failed to construct 'WebSocketStream': The URL's scheme must be either 'ws', 'wss', 'http', or 'https'. '" + url + "' is not allowed.",
+                'SyntaxError'
+            );
+        }
+
+        this._url = url;
+
+        const protocols = (options && options.protocols) || [];
+        this._protocols = Array.isArray(protocols) ? protocols.slice() : [String(protocols)];
+
+        // Build the opened and closed promises
+        let resolveOpened, rejectOpened;
+        this._opened = new Promise((res, rej) => { resolveOpened = res; rejectOpened = rej; });
+
+        let resolveClosed, rejectClosed;
+        this._closed = new Promise((res, rej) => { resolveClosed = res; rejectClosed = rej; });
+
+        this._connection = null;
+        this._readableController = null;
+        this._writableStarted = false;
+
+        // Connect asynchronously
+        Promise.resolve().then(() => {
+            try {
+                this._connection = ws_connect(this._url, this._protocols);
+            } catch (e) {
+                const err = new Error(e.message || String(e));
+                rejectOpened(err);
+                rejectClosed(err);
+                return;
+            }
+
+            const conn = this._connection;
+            const self = this;
+
+            const readable = new ReadableStream({
+                start(controller) {
+                    self._readableController = controller;
+                    self._pumpReadable(controller, resolveClosed, rejectClosed);
+                },
+                cancel() {
+                    self._closeConnection(1000, '');
+                }
+            });
+
+            const writable = new WritableStream({
+                write(chunk) {
+                    if (!conn) {
+                        throw new Error('WebSocketStream is closed');
+                    }
+                    if (typeof chunk === 'string') {
+                        conn.send_text(chunk);
+                    } else if (chunk instanceof ArrayBuffer) {
+                        conn.send_binary(new Uint8Array(chunk));
+                    } else if (ArrayBuffer.isView(chunk)) {
+                        conn.send_binary(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+                    } else {
+                        conn.send_text(String(chunk));
+                    }
+                },
+                close() {
+                    self._closeConnection(1000, '');
+                },
+                abort(reason) {
+                    self._closeConnection(1000, reason ? String(reason) : '');
+                }
+            });
+
+            const negotiatedProtocol = this._protocols.length > 0 ? this._protocols[0] : '';
+
+            resolveOpened({
+                readable,
+                writable,
+                protocol: negotiatedProtocol,
+                extensions: '',
+            });
+        });
+    }
+
+    _pumpReadable(controller, resolveClosed, rejectClosed) {
+        if (!this._connection) {
+            return;
+        }
+
+        const self = this;
+
+        const poll = () => {
+            if (!self._connection) {
+                return;
+            }
+
+            try {
+                const result = self._connection.receive_with_timeout(POLL_INTERVAL_MS);
+                const [type, data] = result;
+
+                if (type === 'text') {
+                    controller.enqueue(data);
+                    Promise.resolve().then(poll);
+                } else if (type === 'binary') {
+                    controller.enqueue(data);
+                    Promise.resolve().then(poll);
+                } else if (type === 'timeout') {
+                    Promise.resolve().then(poll);
+                } else if (type === 'closed') {
+                    const code = (data && data.code) || 1000;
+                    const reason = (data && data.reason) || '';
+                    controller.close();
+                    resolveClosed({ closeCode: code, reason: reason });
+                } else if (type === 'error') {
+                    const err = new Error(data || 'Unknown error');
+                    controller.error(err);
+                    rejectClosed(err);
+                }
+            } catch (e) {
+                const err = new Error(e.message || String(e));
+                controller.error(err);
+                rejectClosed(err);
+            }
+        };
+
+        Promise.resolve().then(poll);
+    }
+
+    _closeConnection(code, reason) {
+        if (this._connection) {
+            try {
+                this._connection.close(code, reason);
+            } catch (_) {}
+            this._connection = null;
+        }
+    }
+
+    get url() { return this._url; }
+    get opened() { return this._opened; }
+    get closed() { return this._closed; }
+
+    close(options) {
+        const code = (options && options.closeCode) || 1000;
+        const reason = (options && options.reason) || '';
+        this._closeConnection(code, reason);
+    }
+}
+
+export { WebSocket, WebSocketStream, MessageEvent, CloseEvent, ErrorEvent };
 export default WebSocket;

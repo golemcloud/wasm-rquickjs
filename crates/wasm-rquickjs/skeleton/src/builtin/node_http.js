@@ -2635,6 +2635,11 @@ export function get(url, options, callback) {
     return req;
 }
 
+// ===== WebSocket re-exports (per Node.js convention) =====
+
+import { WebSocket, WebSocketStream, MessageEvent, CloseEvent } from '__wasm_rquickjs_builtin/websocket';
+export { WebSocket, WebSocketStream, MessageEvent, CloseEvent };
+
 // ===== Default export =====
 
 export default {
@@ -2653,4 +2658,8 @@ export default {
     createServer,
     request,
     get,
+    WebSocket,
+    WebSocketStream,
+    MessageEvent,
+    CloseEvent,
 };
