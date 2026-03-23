@@ -30,7 +30,7 @@ jobs:
       - name: Clippy
         run: cargo clippy -- -Dwarnings
       - name: Build
-        run: cargo build --all-features --all-targets
+        run: cargo build --all-targets
 
   test-other:
     needs: [build]
@@ -145,5 +145,5 @@ jobs:
         run: |
           export VERSION="${{ steps.get_version.outputs.version-without-v }}"
           sed -i "s/0.0.0/$VERSION/g" Cargo.toml        
-          cargo publish -p wasm-rquickjs --all-features --allow-dirty
-          cargo publish -p wasm-rquickjs-cli --all-features --allow-dirty
+          cargo publish -p wasm-rquickjs --features optimize --allow-dirty
+          cargo publish -p wasm-rquickjs-cli --allow-dirty
