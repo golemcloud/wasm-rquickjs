@@ -7,7 +7,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use common::TestInstance;
 use heck::ToSnakeCase;
 use std::process::Command;
-use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate, inject_js_into_component};
+use wasm_rquickjs::{
+    EmbeddingMode, JsModuleSpec, generate_wrapper_crate, inject_js_into_component,
+};
 use wasmtime::component::Val;
 
 /// Generates a wrapper crate using BinarySlot mode, compiles it, injects JS,
@@ -65,7 +67,7 @@ impl BinarySlotTestBuilder {
             "tmp/{}-binary-inject/{}-injected.wasm",
             self.example_name, self.example_name
         ));
-        inject_js_into_component(&self.wasm_path, &injected_path, js_source)?;
+        inject_js_into_component(&self.wasm_path, &injected_path, &[js_source])?;
         Ok(injected_path)
     }
 
@@ -98,8 +100,7 @@ async fn main() {
 async fn test_inject_and_run() {
     eprintln!("\n--- test_inject_and_run ---");
 
-    let builder = BinarySlotTestBuilder::new("example1")
-        .expect("Failed to build template");
+    let builder = BinarySlotTestBuilder::new("example1").expect("Failed to build template");
 
     let js_source = r#"
 function helloImpl(name) {
@@ -141,8 +142,7 @@ export const asyncHello = asyncHelloImpl;
 async fn test_inject_optimize_and_run() {
     eprintln!("\n--- test_inject_optimize_and_run ---");
 
-    let builder = BinarySlotTestBuilder::new("example1")
-        .expect("Failed to build template");
+    let builder = BinarySlotTestBuilder::new("example1").expect("Failed to build template");
 
     let js_source = r#"
 function helloImpl(name) {
@@ -187,8 +187,7 @@ export const asyncHello = asyncHelloImpl;
 async fn test_reinject_different_js() {
     eprintln!("\n--- test_reinject_different_js ---");
 
-    let builder = BinarySlotTestBuilder::new("example1")
-        .expect("Failed to build template");
+    let builder = BinarySlotTestBuilder::new("example1").expect("Failed to build template");
 
     // First injection
     let js1 = r#"
@@ -209,7 +208,7 @@ export const something = 2;
 export function hello(name) { return `Second: ${name}`; }
 export async function asyncHello(name) { return `Second async: ${name}`; }
 "#;
-    inject_js_into_component(&builder.wasm_path, &injected_path2, js2)
+    inject_js_into_component(&builder.wasm_path, &injected_path2, &[js2])
         .expect("Second injection failed");
 
     // Run first

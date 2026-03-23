@@ -50,12 +50,22 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Command::InjectJs { input, output, js } => {
-            let js_source = std::fs::read_to_string(js.as_std_path()).unwrap_or_else(|err| {
-                eprintln!("Error reading JS file: {err:#}");
-                std::process::exit(1);
-            });
-            if let Err(err) = wasm_rquickjs::inject_js_into_component(input, output, &js_source) {
+        Command::InjectJs {
+            input,
+            output,
+            js: js_paths,
+        } => {
+            let js_sources: Vec<String> = js_paths
+                .iter()
+                .map(|path| {
+                    std::fs::read_to_string(path.as_std_path()).unwrap_or_else(|err| {
+                        eprintln!("Error reading JS file {path}: {err:#}");
+                        std::process::exit(1);
+                    })
+                })
+                .collect();
+            let js_refs: Vec<&str> = js_sources.iter().map(|s| s.as_str()).collect();
+            if let Err(err) = wasm_rquickjs::inject_js_into_component(input, output, &js_refs) {
                 eprintln!("Error injecting JS: {err:#}");
                 std::process::exit(1);
             }

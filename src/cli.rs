@@ -75,9 +75,11 @@ pub enum Command {
         #[arg(long)]
         output: Utf8PathBuf,
 
-        /// Path to the JavaScript source file to inject
-        #[arg(long)]
-        js: Utf8PathBuf,
+        /// Path(s) to JavaScript source file(s) to inject. Order must match the
+        /// BinarySlot module order used during crate generation (primary module first,
+        /// then additional modules in order).
+        #[arg(long, required = true)]
+        js: Vec<Utf8PathBuf>,
     },
 }
 

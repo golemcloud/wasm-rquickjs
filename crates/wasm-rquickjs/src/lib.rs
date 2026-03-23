@@ -29,9 +29,9 @@ mod types;
 mod typescript;
 mod wit;
 
+pub use inject::{SLOT_END_MAGIC, SLOT_MAGIC, create_marker_file, inject_js_into_component};
 #[cfg(feature = "optimize")]
 pub use optimize::optimize_component;
-pub use inject::{inject_js_into_component, SLOT_END_MAGIC, SLOT_MAGIC};
 
 /// Write `contents` to `path` only if the file doesn't exist or its current content differs.
 /// This preserves file timestamps when content hasn't changed, avoiding unnecessary recompilation.
@@ -77,6 +77,12 @@ pub enum EmbeddingMode {
     /// without recompiling the Rust crate. The injected JS can be any size — the WASM component
     /// is structurally rewritten to accommodate the new data.
     BinarySlot,
+}
+
+impl EmbeddingMode {
+    pub fn is_binary_slot(&self) -> bool {
+        matches!(self, EmbeddingMode::BinarySlot)
+    }
 }
 
 /// Specifies a JS module to be evaluated in the generated component.
@@ -392,6 +398,7 @@ fn copy_dir_if_changed(src: &std::path::Path, dst: &std::path::Path) -> std::io:
 
 /// Copies the JS module files to `<output>/src/<name>.js` or generates slot files.
 fn copy_js_modules(js_modules: &[JsModuleSpec], output: &Utf8Path) -> anyhow::Result<()> {
+    let mut slot_index: u32 = 0;
     for module in js_modules {
         match &module.mode {
             EmbeddingMode::EmbedFile(source) => {
@@ -403,9 +410,12 @@ fn copy_js_modules(js_modules: &[JsModuleSpec], output: &Utf8Path) -> anyhow::Re
             EmbeddingMode::BinarySlot => {
                 let slot_filename = module.name.replace('/', "_") + ".slot";
                 let slot_dest = output.join("src").join(slot_filename);
-                let slot_data = inject::create_marker_file();
-                write_if_changed(slot_dest, slot_data)
-                    .context(format!("Failed to create marker file for module {}", module.name))?;
+                let slot_data = inject::create_marker_file(slot_index);
+                write_if_changed(slot_dest, slot_data).context(format!(
+                    "Failed to create marker file for module {}",
+                    module.name
+                ))?;
+                slot_index += 1;
             }
             EmbeddingMode::Composition => {}
         }
