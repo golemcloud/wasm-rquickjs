@@ -581,11 +581,108 @@ fn generate_exported_resource_function_impl(
 fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStream> {
     if let Some((export_module, additional_modules)) = js_modules.split_first() {
         let export_module_name = LitStr::new(&export_module.name, Span::call_site());
-        let export_module_file_name = LitStr::new(&export_module.file_name(), Span::call_site());
+
+        let any_binary_slot = export_module.mode.is_binary_slot()
+            || additional_modules.iter().any(|m| m.mode.is_binary_slot());
+
+        let slot_helper = if any_binary_slot {
+            quote! {
+                /// Reads JS source from a binary slot marker using volatile reads to prevent
+                /// the optimizer from constant-folding the slot contents at compile time.
+                /// This is essential because the slot is patched post-compilation.
+                ///
+                /// The marker layout is: MAGIC(16) + MODULE_INDEX(4) + JS_OFFSET(4) + END_MAGIC(16) = 40 bytes.
+                /// JS_OFFSET is a pointer into linear memory where LEN(4) + JS(LEN) is stored.
+                /// A JS_OFFSET of 0 means no JS has been injected.
+                fn read_js_from_slot_bytes(slot: &[u8]) -> String {
+                    const MAGIC: &[u8; 16] = b"WASM_RQJS_SLOT\x01\x00";
+                    const END_MAGIC: &[u8; 16] = b"WASM_RQJS_SLTND\x00";
+                    assert!(slot.len() >= 40, "JS injection marker is too small");
+
+                    let slot_ptr = slot.as_ptr();
+                    unsafe {
+                        // Validate magic
+                        let mut magic_buf = [0u8; 16];
+                        for i in 0..16 {
+                            magic_buf[i] = core::ptr::read_volatile(slot_ptr.add(i));
+                        }
+                        assert_eq!(&magic_buf, MAGIC, "invalid JS injection marker header");
+
+                        // Skip MODULE_INDEX (4 bytes at offset 16), read JS_OFFSET (4 bytes at offset 20)
+                        let mut offset_bytes = [0u8; 4];
+                        for i in 0..4 {
+                            offset_bytes[i] = core::ptr::read_volatile(slot_ptr.add(20 + i));
+                        }
+                        let js_offset = u32::from_le_bytes(offset_bytes) as usize;
+
+                        assert!(js_offset > 0, "JS injection slot is empty — no JS has been injected. \
+                            Use wasm-rquickjs inject-js to inject JavaScript source into the template.");
+
+                        // Validate end magic
+                        let mut end_magic_buf = [0u8; 16];
+                        for i in 0..16 {
+                            end_magic_buf[i] = core::ptr::read_volatile(slot_ptr.add(24 + i));
+                        }
+                        assert_eq!(&end_magic_buf, END_MAGIC, "JS injection marker footer is corrupted");
+
+                        // Read JS length from linear memory at js_offset
+                        let mem_ptr = js_offset as *const u8;
+                        let mut len_bytes = [0u8; 4];
+                        for i in 0..4 {
+                            len_bytes[i] = core::ptr::read_volatile(mem_ptr.add(i));
+                        }
+                        let len = u32::from_le_bytes(len_bytes) as usize;
+
+                        // Read JS bytes from linear memory at js_offset + 4
+                        let js_ptr = mem_ptr.add(4);
+                        let mut payload = Vec::with_capacity(len);
+                        for i in 0..len {
+                            payload.push(core::ptr::read_volatile(js_ptr.add(i)));
+                        }
+                        String::from_utf8(payload)
+                            .expect("injected JS source is not valid UTF-8")
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        let export_module_def = match &export_module.mode {
+            EmbeddingMode::BinarySlot => {
+                let slot_file_name = LitStr::new(
+                    &(export_module.name.replace('/', "_") + ".slot"),
+                    Span::call_site(),
+                );
+                quote! {
+                    static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
+                    static JS_EXPORT_MODULE_SLOT: &[u8] = include_bytes!(#slot_file_name);
+
+                    fn js_export_module() -> &'static str {
+                        static SOURCE: std::sync::LazyLock<String> =
+                            std::sync::LazyLock::new(|| read_js_from_slot_bytes(JS_EXPORT_MODULE_SLOT));
+                        SOURCE.as_str()
+                    }
+                }
+            }
+            _ => {
+                let export_module_file_name =
+                    LitStr::new(&export_module.file_name(), Span::call_site());
+                quote! {
+                    static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
+                    static JS_EXPORT_MODULE_SOURCE: &str = include_str!(#export_module_file_name);
+
+                    fn js_export_module() -> &'static str {
+                        JS_EXPORT_MODULE_SOURCE
+                    }
+                }
+            }
+        };
 
         let mut additional_module_pairs = Vec::new();
+        let mut additional_slot_defs = Vec::new();
         for module in additional_modules {
-            match module.mode {
+            match &module.mode {
                 EmbeddingMode::EmbedFile(_) => {
                     let name = LitStr::new(&module.name, Span::call_site());
                     let file_name = LitStr::new(&module.file_name(), Span::call_site());
@@ -597,12 +694,49 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
                     additional_module_pairs
                         .push(quote! { (#name, Box::new(|| { crate::bindings::get_script() })) });
                 }
+                EmbeddingMode::BinarySlot => {
+                    let name = LitStr::new(&module.name, Span::call_site());
+                    let slot_file_name = LitStr::new(
+                        &(module.name.replace('/', "_") + ".slot"),
+                        Span::call_site(),
+                    );
+                    let sanitized = module.name.replace(['/', '-'], "_");
+                    let static_name = Ident::new(
+                        &format!("JS_SLOT_{}", sanitized.to_uppercase()),
+                        Span::call_site(),
+                    );
+                    let fn_name =
+                        Ident::new(&format!("read_js_from_slot_{sanitized}"), Span::call_site());
+                    let source_name = Ident::new(
+                        &format!("JS_SLOT_SOURCE_{}", sanitized.to_uppercase()),
+                        Span::call_site(),
+                    );
+
+                    additional_slot_defs.push(quote! {
+                        static #static_name: &[u8] = include_bytes!(#slot_file_name);
+
+                        fn #fn_name() -> String {
+                            read_js_from_slot_bytes(#static_name)
+                        }
+                    });
+
+                    additional_module_pairs.push(quote! {
+                        (#name, Box::new(|| {
+                            static #source_name: std::sync::LazyLock<String> =
+                                std::sync::LazyLock::new(#fn_name);
+                            #source_name.clone()
+                        }))
+                    });
+                }
             }
         }
 
         Ok(quote! {
-            static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
-            static JS_EXPORT_MODULE: &str = include_str!(#export_module_file_name);
+            #slot_helper
+
+            #export_module_def
+
+            #(#additional_slot_defs)*
 
             static JS_ADDITIONAL_MODULES: std::sync::LazyLock<Vec<(&str, Box<dyn (Fn() -> String) + Send + Sync>)>> =
               std::sync::LazyLock::new(|| { vec![

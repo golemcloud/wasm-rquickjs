@@ -6,7 +6,11 @@ mod modules;
 pub mod wrappers;
 
 static JS_EXPORT_MODULE_NAME: &str = "bundle/script_module";
-static JS_EXPORT_MODULE: &str = include_str!("bundle_script_module.js");
+static JS_EXPORT_MODULE_SOURCE: &str = include_str!("bundle_script_module.js");
+
+fn js_export_module() -> &'static str {
+    JS_EXPORT_MODULE_SOURCE
+}
 
 type GetModuleFn = Box<dyn (Fn() -> String) + Send + Sync>;
 

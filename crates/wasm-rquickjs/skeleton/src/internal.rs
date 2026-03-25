@@ -1446,7 +1446,7 @@ impl JsState {
                     dirname: None,
                     include_resolve: true,
                 },
-                crate::JS_EXPORT_MODULE,
+                crate::js_export_module(),
             ),
         );
         for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
