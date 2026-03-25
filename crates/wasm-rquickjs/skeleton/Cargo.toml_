@@ -121,7 +121,7 @@ wasi-logging = { version = "0.0.1", optional = true }
 rusqlite = { version = "0.38", default-features = false, features = ["bundled", "wasm32-wasi-vfs", "functions", "session", "backup"], optional = true }
 
 # Golem
-golem-rust = { version = "1.7", default-features = false, optional = true }
+golem-rust = { git = "https://github.com/golemcloud/golem", branch = "web_socket", default-features = false, optional = true }
 
 # Patch libsqlite3-sys to fix wasm32-wasi cross-compilation with session/preupdate_hook features.
 # Upstream buildtime_bindgen produces incomplete bindings when cross-compiling to wasm32-wasip1.
