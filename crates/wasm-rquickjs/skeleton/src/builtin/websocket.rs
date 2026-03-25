@@ -1,5 +1,5 @@
-use crate::bindings::golem::websocket::client::{
-    Error as WsError, Message, WebsocketConnection,
+use golem_rust::{
+    WebSocketError as WsError, WebSocketMessage as Message, WebsocketConnection,
 };
 use rquickjs::class::Trace;
 use rquickjs::{Ctx, Exception, JsLifetime};

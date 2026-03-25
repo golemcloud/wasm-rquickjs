@@ -5283,7 +5283,7 @@
     "parallel/test-http-extra-response.js": {},
     "parallel/test-http-header-validators.js": {},
     "parallel/test-http-hostname-typechecking.js": {},
-    "parallel/test-http-import-websocket.js": {},
+    "parallel/test-http-import-websocket.js": { "skip": true, "reason": "requires golem:websocket WIT import (golem-websocket feature)" },
     "parallel/test-http-incoming-matchKnownFields.js": {},
     "parallel/test-http-incoming-message-connection-setter.js": {},
     "parallel/test-http-incoming-message-destroy.js": {},
@@ -9909,7 +9909,7 @@
       }
     },
     "parallel/test-webcrypto-wrap-unwrap.js": { "skip": true, "reason": "requires CFRG key (Ed448/X25519/X448) DER export support" },
-    "parallel/test-websocket.js": {},
+    "parallel/test-websocket.js": { "skip": true, "reason": "requires golem:websocket WIT import (golem-websocket feature)" },
     "parallel/test-webstorage.js": {
       "skip": true,
       "reason": "newly discovered, not yet evaluated",
