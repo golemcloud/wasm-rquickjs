@@ -2636,9 +2636,11 @@ export function get(url, options, callback) {
 }
 
 // ===== WebSocket re-exports (per Node.js convention) =====
+// WebSocket/WebSocketStream are set on globalThis by the websocket builtin (golem feature only).
+// Re-export from globalThis so this module works regardless of feature flags.
 
-import { WebSocket, WebSocketStream, MessageEvent, CloseEvent } from '__wasm_rquickjs_builtin/websocket';
-export { WebSocket, WebSocketStream, MessageEvent, CloseEvent };
+export const WebSocket = globalThis.WebSocket;
+export const WebSocketStream = globalThis.WebSocketStream;
 
 // ===== Default export =====
 
@@ -2660,6 +2662,4 @@ export default {
     get,
     WebSocket,
     WebSocketStream,
-    MessageEvent,
-    CloseEvent,
 };

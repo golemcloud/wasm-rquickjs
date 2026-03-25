@@ -35,8 +35,8 @@ export function createServer() { throw NOT_SUPPORTED_ERROR; }
 export function request() { throw NOT_SUPPORTED_ERROR; }
 export function get() { throw NOT_SUPPORTED_ERROR; }
 
-import { WebSocket, WebSocketStream, MessageEvent, CloseEvent } from '__wasm_rquickjs_builtin/websocket';
-export { WebSocket, WebSocketStream, MessageEvent, CloseEvent };
+export const WebSocket = globalThis.WebSocket;
+export const WebSocketStream = globalThis.WebSocketStream;
 
 export default {
     METHODS, STATUS_CODES, maxHeaderSize,
@@ -46,6 +46,4 @@ export default {
     Server, ServerResponse,
     createServer, request, get,
     WebSocket, WebSocketStream,
-    MessageEvent,
-    CloseEvent,
 };
