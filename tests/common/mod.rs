@@ -441,6 +441,8 @@ impl GolemPreparedComponent {
             }
         })?;
 
+        let component = Component::from_file(&engine, wasm_path)?;
+
         Ok(Self {
             engine,
             linker,
