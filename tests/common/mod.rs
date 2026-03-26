@@ -266,6 +266,13 @@ impl PreparedComponent {
 
         let component = Component::from_file(&engine, wasm_path)?;
 
+        // Define traps for any remaining unstubbed imports (including golem:websocket)
+        // allow_shadowing is needed because define_unknown_imports_as_traps may
+        // re-define imports already provided above (e.g. wasi:logging).
+        linker.allow_shadowing(true);
+        linker.define_unknown_imports_as_traps(&component)?;
+        linker.allow_shadowing(false);
+
         Ok(Self {
             engine,
             linker,
@@ -442,6 +449,13 @@ impl GolemPreparedComponent {
         })?;
 
         let component = Component::from_file(&engine, wasm_path)?;
+
+        // Define traps for any remaining unstubbed imports (including golem:websocket and other golem imports)
+        // allow_shadowing is needed because define_unknown_imports_as_traps may
+        // re-define imports already provided above (e.g. wasi:logging).
+        linker.allow_shadowing(true);
+        linker.define_unknown_imports_as_traps(&component)?;
+        linker.allow_shadowing(false);
 
         Ok(Self {
             engine,
