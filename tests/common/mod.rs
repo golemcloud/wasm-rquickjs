@@ -264,20 +264,7 @@ impl PreparedComponent {
             )?;
         }
 
-        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-        }
-
         let component = Component::from_file(&engine, wasm_path)?;
-
-        // Define traps for any remaining unstubbed imports
-        // This handles any golem:websocket methods we didn't explicitly mock
-        linker.define_unknown_imports_as_traps(&component)?;
 
         Ok(Self {
             engine,
@@ -453,23 +440,6 @@ impl GolemPreparedComponent {
                 Ok(())
             }
         })?;
-
-        // Mock golem:websocket/client@1.5.0 (imported via golem-rust, not used in this test)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-        }
-
-        let component = Component::from_file(&engine, wasm_path)?;
-        // Define traps for any remaining unstubbed imports (websocket methods etc.)
-        // allow_shadowing is needed because define_unknown_imports_as_traps may
-        // re-define imports already provided above (e.g. wasi:logging).
-        linker.allow_shadowing(true);
-        linker.define_unknown_imports_as_traps(&component)?;
-        linker.allow_shadowing(false);
 
         Ok(Self {
             engine,
