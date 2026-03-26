@@ -264,6 +264,60 @@ impl PreparedComponent {
             )?;
         }
 
+        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
+        {
+            struct WsConn;
+            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+            })?;
+            
+            // Add all the WebSocket methods as stubs
+            // Since we don't know the exact variant representation, let's use func_new
+            // to define functions dynamically
+            ws.func_new(
+                "[static]websocket-connection.connect", 
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket connect not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.send",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket send not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.receive",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket receive not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.receive-with-timeout",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket receive-with-timeout not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.close",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket close not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.subscribe",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket subscribe not available in tests"))
+                },
+            )?;
+        }
+
         let component = Component::from_file(&engine, wasm_path)?;
 
         Ok(Self {
@@ -341,6 +395,60 @@ impl GolemPreparedComponent {
                 |_ctx: StoreContextMut<'_, Host>,
                  (_level, _context, _message): (LogLevel, String, String)|
                  -> Result<(), wasmtime::Error> { Ok(()) },
+            )?;
+        }
+
+        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
+        {
+            struct WsConn;
+            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+            })?;
+            
+            // Add all the WebSocket methods as stubs
+            // Since we don't know the exact variant representation, let's use func_new
+            // to define functions dynamically
+            ws.func_new(
+                "[static]websocket-connection.connect", 
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket connect not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.send",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket send not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.receive",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket receive not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.receive-with-timeout",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket receive-with-timeout not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.close",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket close not available in tests"))
+                },
+            )?;
+            
+            ws.func_new(
+                "[method]websocket-connection.subscribe",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg("WebSocket subscribe not available in tests"))
+                },
             )?;
         }
 
