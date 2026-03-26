@@ -209,7 +209,7 @@ fn add_local_dependency_paths(doc: &mut DocumentMut) -> anyhow::Result<()> {
     // Process regular dependencies
     if let Some(deps) = doc.get_mut("dependencies").and_then(|d| d.as_table_mut()) {
         for (crate_name, relative_path) in &local_crates {
-            if let Some(dep) = deps.get_mut(*crate_name) {
+            if let Some(dep) = deps.get_mut(crate_name) {
                 match dep {
                     Item::Value(Value::InlineTable(table)) => {
                         table.insert("path", (*relative_path).into());
