@@ -1,0 +1,14 @@
+[package]
+name = "golem-websocket"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Packages golem:websocket as a simple Rust crate"
+
+[dependencies]
+wit-bindgen-rt = { version = "0.42.1" }
+
+[package.metadata.component.target.dependencies]
+"golem:websocket" = { path = "wit/deps/golem-websocket" }

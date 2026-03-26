@@ -1,6 +1,4 @@
-use crate::bindings::golem::websocket::client::{
-    Error as WsError, Message, WebsocketConnection,
-};
+use golem_websocket::{Error as WsError, Message, WebsocketConnection};
 use rquickjs::class::Trace;
 use rquickjs::{Ctx, Exception, JsLifetime};
 use std::cell::RefCell;
@@ -163,9 +161,8 @@ impl WsConnection {
                 .map(|s| s.to_string().unwrap_or_default())
         };
 
-        conn.close(code_opt, reason_opt.as_deref()).map_err(|e| {
-            Exception::throw_message(&ctx, &format!("WebSocket close failed: {e:?}"))
-        })
+        conn.close(code_opt, reason_opt.as_deref())
+            .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket close failed: {e:?}")))
     }
 }
 

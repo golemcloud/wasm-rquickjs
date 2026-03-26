@@ -100,7 +100,7 @@ exclude = [
     "crates/wasm-rquickjs/skeleton",
     "tmp"
 ]
-members = ["crates/wasi-logging", "crates/wasm-rquickjs"]
+members = ["crates/wasi-logging", "crates/wasm-rquickjs", "crates/golem-websocket"]
 
 [workspace.package]
 version = "0.0.0"
