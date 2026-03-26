@@ -2,10 +2,10 @@ use crate::GeneratorContext;
 use anyhow::anyhow;
 use camino::Utf8Path;
 use heck::ToSnakeCase;
-use include_dir::{Dir, include_dir};
+use include_dir::{include_dir, Dir};
 use std::collections::BTreeSet;
 use std::path::Path;
-use toml_edit::{DocumentMut, Item, Table, Value, value};
+use toml_edit::{value, DocumentMut, Item, Table, Value};
 
 static SKELETON: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/skeleton");
 
@@ -31,7 +31,6 @@ pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()>
 
     change_package_name(context, &mut doc);
     add_wit_dependencies(&context, &mut doc)?;
-    add_local_dependency_paths(&mut doc)?;
 
     // Writing the result
     let output_path = context.output.join("Cargo.toml");
@@ -192,44 +191,6 @@ fn recursive_copy_sources(dir: &Dir, output: &Utf8Path) -> anyhow::Result<()> {
 
     for dir in dir.dirs() {
         recursive_copy_sources(dir, output)?;
-    }
-
-    Ok(())
-}
-
-/// Add local path dependencies for workspace crates
-fn add_local_dependency_paths(doc: &mut DocumentMut) -> anyhow::Result<()> {
-    // Map of local crate names to their paths relative to the workspace root
-    // The generated crate will be in a subdirectory, so we need to go up to the workspace root
-    let local_crates = [
-        ("wasi-logging", "../../../crates/wasi-logging"),
-        ("golem-websocket", "../../../crates/golem-websocket"),
-    ];
-
-    // Process regular dependencies
-    if let Some(deps) = doc.get_mut("dependencies").and_then(|d| d.as_table_mut()) {
-        for (crate_name, relative_path) in &local_crates {
-            if let Some(dep) = deps.get_mut(crate_name) {
-                match dep {
-                    Item::Value(Value::InlineTable(table)) => {
-                        table.insert("path", (*relative_path).into());
-                    }
-                    Item::Table(table) => {
-                        table.insert("path", Item::Value(Value::from(*relative_path)));
-                    }
-                    _ => {
-                        // Convert simple version string to table with path
-                        let mut table = Table::new();
-                        table.insert("version", Item::Value(Value::from("0.0.1")));
-                        table.insert("path", Item::Value(Value::from(*relative_path)));
-                        if crate_name.contains("golem") {
-                            table.insert("optional", Item::Value(Value::from(true)));
-                        }
-                        *dep = Item::Table(table);
-                    }
-                }
-            }
-        }
     }
 
     Ok(())
