@@ -2,10 +2,10 @@ use crate::GeneratorContext;
 use anyhow::anyhow;
 use camino::Utf8Path;
 use heck::ToSnakeCase;
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use std::collections::BTreeSet;
 use std::path::Path;
-use toml_edit::{value, DocumentMut, Item, Table, Value};
+use toml_edit::{DocumentMut, Item, Table, Value, value};
 
 static SKELETON: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/skeleton");
 
