@@ -14,17 +14,18 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [features]
-default = ["normal"]
+default = ["normal", "golem"]
 
 # Tier meta-features (cumulative)
 lite = ["fetch"]
-normal = ["lite", "node-http", "crypto", "zlib", "logging", "encoding"]
+normal = ["lite", "node-http", "websocket", "crypto", "zlib", "logging", "encoding"]
 full = ["normal", "crypto-full", "brotli", "sqlite", "timezone"]
 full-no-logging = ["lite", "node-http", "crypto", "zlib", "encoding", "crypto-full", "brotli", "sqlite", "timezone"]
 
 # Individual capabilities
 fetch = ["dep:golem-wasi-http"]
 node-http = []
+websocket = ["dep:golem-websocket"]
 logging = ["dep:wasi-logging"]
 encoding = ["dep:encoding_rs"]
 zlib = ["dep:flate2", "dep:crc32fast"]
@@ -52,7 +53,7 @@ crypto-full = [
 
 sqlite = ["dep:rusqlite"]
 timezone = ["dep:chrono-tz"]
-golem = ["normal", "dep:golem-rust", "dep:golem-websocket"]
+golem = ["normal", "dep:golem-rust"]
 
 [dependencies]
 # Core dependencies
