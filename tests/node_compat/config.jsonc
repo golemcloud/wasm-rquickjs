@@ -3137,7 +3137,7 @@
     "parallel/test-weakref.js": {},
     "parallel/test-websocket-disabled.js": {
       "skip": true,
-      "reason": "WebSocket is now always available in wasm-rquickjs (not feature-gated)"
+      "reason": "WebSocket is now always available in wasm-rquickjs"
     },
     "parallel/test-webstream-string-tag.js": {},
     "parallel/test-whatwg-encoding-custom-api-basics.js": {},
