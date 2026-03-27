@@ -169,12 +169,16 @@ impl WsConnection {
 pub const WEBSOCKET_JS: &str = include_str!("websocket.js");
 
 pub const WIRE_JS: &str = r#"
-    {
-        const { WebSocket, WebSocketStream, MessageEvent, CloseEvent, ErrorEvent } = await import('__wasm_rquickjs_builtin/websocket');
-        globalThis.WebSocket = WebSocket;
-        globalThis.WebSocketStream = WebSocketStream;
-        globalThis.MessageEvent = MessageEvent;
-        globalThis.CloseEvent = CloseEvent;
-        globalThis.ErrorEvent = ErrorEvent;
-    }
+    import {
+        WebSocket as __WebSocket,
+        WebSocketStream as __WebSocketStream,
+        MessageEvent as __WsMessageEvent,
+        CloseEvent as __WsCloseEvent,
+        ErrorEvent as __WsErrorEvent,
+    } from '__wasm_rquickjs_builtin/websocket';
+    globalThis.WebSocket = __WebSocket;
+    globalThis.WebSocketStream = __WebSocketStream;
+    globalThis.MessageEvent = __WsMessageEvent;
+    globalThis.CloseEvent = __WsCloseEvent;
+    globalThis.ErrorEvent = __WsErrorEvent;
 "#;
