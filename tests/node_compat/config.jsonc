@@ -3135,7 +3135,10 @@
     "parallel/test-vm-context-async-script.js": {},
     "parallel/test-vm-static-this.js": {},
     "parallel/test-weakref.js": {},
-    "parallel/test-websocket-disabled.js": {},
+    "parallel/test-websocket-disabled.js": {
+      "skip": true,
+      "reason": "WebSocket is now always available in wasm-rquickjs (not feature-gated)"
+    },
     "parallel/test-webstream-string-tag.js": {},
     "parallel/test-whatwg-encoding-custom-api-basics.js": {},
     "parallel/test-whatwg-encoding-custom-textdecoder-ignorebom.js": {},
