@@ -2641,6 +2641,9 @@ export function get(url, options, callback) {
 
 export const WebSocket = globalThis.WebSocket;
 export const WebSocketStream = globalThis.WebSocketStream;
+export const MessageEvent = globalThis.MessageEvent;
+export const CloseEvent = globalThis.CloseEvent;
+export const ErrorEvent = globalThis.ErrorEvent;
 
 // ===== Default export =====
 
@@ -2662,4 +2665,7 @@ export default {
     get,
     WebSocket,
     WebSocketStream,
+    MessageEvent,
+    CloseEvent,
+    ErrorEvent,
 };
