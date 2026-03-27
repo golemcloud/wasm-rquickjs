@@ -2636,8 +2636,12 @@ export function get(url, options, callback) {
 }
 
 // ===== WebSocket re-exports (per Node.js convention) =====
-// Import directly from the websocket builtin module
-export { WebSocket, WebSocketStream, MessageEvent, CloseEvent, ErrorEvent } from '__wasm_rquickjs_builtin/websocket';
+// Get from globalThis where the websocket module sets them
+export const WebSocket = globalThis.WebSocket;
+export const WebSocketStream = globalThis.WebSocketStream;
+export const MessageEvent = globalThis.MessageEvent;
+export const CloseEvent = globalThis.CloseEvent;
+export const ErrorEvent = globalThis.ErrorEvent;
 
 // ===== Default export =====
 
