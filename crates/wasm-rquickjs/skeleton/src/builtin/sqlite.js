@@ -6,10 +6,11 @@ import {
     create_session, session_changeset, session_patchset, session_close,
     apply_changeset,
     get_constants,
-    enable_defensive, location, set_authorizer, native_backup
+    enable_defensive, location, set_authorizer, native_backup,
+    serialize_database, restore_database
 } from '__wasm_rquickjs_builtin/sqlite_native';
 
-const constants = get_constants();
+export const constants = get_constants();
 const _connIdSymbol = Symbol('connId');
 
 function assertBoolean(value, name) {
@@ -326,7 +327,7 @@ class _DatabaseSyncImpl {
     }
 }
 
-function DatabaseSync(path, options) {
+export function DatabaseSync(path, options) {
     if (!new.target) {
         const err = new TypeError('Cannot call constructor without `new`');
         err.code = 'ERR_CONSTRUCT_CALL_REQUIRED';
@@ -336,7 +337,7 @@ function DatabaseSync(path, options) {
 }
 DatabaseSync.prototype = _DatabaseSyncImpl.prototype;
 
-class Session {
+export class Session {
     #sessionId;
     #connId;
     #closed = false;
@@ -379,7 +380,7 @@ class Session {
 
 const _stmtSecret = Symbol('stmtSecret');
 
-class StatementSync {
+export class StatementSync {
     #connId;
     #sql;
     #options;
@@ -506,7 +507,7 @@ class StatementSync {
     }
 }
 
-class SQLTagStore {
+export class SQLTagStore {
     #db;
     #maxSize;
     #cache;
@@ -585,7 +586,7 @@ class SQLTagStore {
     }
 }
 
-async function backup(sourceDb, path, options = {}) {
+export async function backup(sourceDb, path, options = {}) {
     if (!(sourceDb instanceof DatabaseSync)) {
         throw new TypeError('sourceDb must be a DatabaseSync instance');
     }
@@ -603,5 +604,28 @@ async function backup(sourceDb, path, options = {}) {
     return native_backup(connId, path, source, target, rate);
 }
 
-export { DatabaseSync, StatementSync, Session, SQLTagStore, constants, backup };
-export default { DatabaseSync, StatementSync, Session, SQLTagStore, constants, backup };
+export const serializeDatabase = serialize_database;
+export const restoreDatabase = restore_database;
+
+function _getConnId(db) {
+    if (!(db instanceof DatabaseSync)) {
+        throw new TypeError('db must be a DatabaseSync instance');
+    }
+    const connId = db[_connIdSymbol];
+    if (connId === null || connId === undefined) throwDbNotOpen('ERR_SQLITE_ERROR');
+    return connId;
+}
+
+export function serializeDatabaseSync(db) {
+    return serialize_database(_getConnId(db));
+}
+
+export function restoreDatabaseSync(db, bytes) {
+    return restore_database(_getConnId(db), bytes);
+}
+
+export function isAutocommitDatabaseSync(db) {
+    return is_autocommit(_getConnId(db));
+}
+
+export default { DatabaseSync, StatementSync, Session, SQLTagStore, constants, backup, serializeDatabase, restoreDatabase, serializeDatabaseSync, restoreDatabaseSync, isAutocommitDatabaseSync };

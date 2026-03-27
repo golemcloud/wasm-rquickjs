@@ -1830,6 +1830,78 @@ fn auth_action_args<'a>(action: &'a rusqlite::hooks::AuthAction<'a>) -> (&'a str
     }
 }
 
+fn serialize_database_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    conn_id: u32,
+) -> rquickjs::Result<rquickjs::Value<'js>> {
+    let table = lock_conn_table(&ctx)?;
+    let conn = table
+        .connections
+        .get(&conn_id)
+        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+
+    let data = conn
+        .serialize(rusqlite::MAIN_DB)
+        .map_err(|e| sqlite_error(&ctx, &e))?;
+
+    let bytes: &[u8] = &data;
+    let typed_array = rquickjs::TypedArray::<u8>::new(ctx.clone(), bytes)
+        .map_err(|_| rquickjs::Exception::throw_message(&ctx, "failed to create Uint8Array"))?;
+    Ok(typed_array.into_value())
+}
+
+fn restore_database_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    conn_id: u32,
+    bytes: rquickjs::TypedArray<'js, u8>,
+) -> rquickjs::Result<()> {
+    let mut table = lock_conn_table(&ctx)?;
+    let conn = table
+        .connections
+        .get_mut(&conn_id)
+        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+
+    if conn
+        .is_readonly(rusqlite::MAIN_DB)
+        .map_err(|e| sqlite_error(&ctx, &e))?
+    {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "cannot restore a read-only database",
+            "ERR_SQLITE_ERROR",
+        ));
+    }
+
+    if !conn.is_autocommit() {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "cannot restore database with an open transaction",
+            "ERR_SQLITE_ERROR",
+        ));
+    }
+
+    let data = bytes.as_bytes().ok_or_else(|| {
+        rquickjs::Exception::throw_message(&ctx, "failed to read Uint8Array bytes")
+    })?;
+
+    // Use deserialize_read_exact into a temp in-memory connection, then backup into dest
+    let mut temp_conn =
+        rusqlite::Connection::open_in_memory().map_err(|e| sqlite_error(&ctx, &e))?;
+    temp_conn
+        .deserialize_read_exact(rusqlite::MAIN_DB, data, data.len(), false)
+        .map_err(|e| sqlite_error(&ctx, &e))?;
+
+    let backup = rusqlite::backup::Backup::new(&temp_conn, conn)
+        .map_err(|e| sqlite_error(&ctx, &e))?;
+    backup
+        .run_to_completion(100, Duration::ZERO, None)
+        .map_err(|e| sqlite_error(&ctx, &e))?;
+
+    Ok(())
+}
+
 fn native_backup_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
     conn_id: u32,
@@ -2156,6 +2228,20 @@ pub mod native_module {
         rate: i32,
     ) -> rquickjs::Result<i32> {
         super::native_backup_impl(ctx, conn_id, path, source_db, target_db, rate)
+    }
+
+    #[rquickjs::function]
+    pub fn serialize_database<'js>(ctx: Ctx<'js>, conn_id: u32) -> rquickjs::Result<Value<'js>> {
+        super::serialize_database_impl(ctx, conn_id)
+    }
+
+    #[rquickjs::function]
+    pub fn restore_database<'js>(
+        ctx: Ctx<'js>,
+        conn_id: u32,
+        bytes: rquickjs::TypedArray<'js, u8>,
+    ) -> rquickjs::Result<()> {
+        super::restore_database_impl(ctx, conn_id, bytes)
     }
 }
 

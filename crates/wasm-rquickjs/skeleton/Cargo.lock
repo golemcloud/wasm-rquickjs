@@ -1328,7 +1328,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libsqlite3-sys"
 version = "0.36.0"
-source = "git+https://github.com/golemcloud/rusqlite?branch=v0.38.0-patched#353b267ef32d80b8cbcf0bf24b12b90fffcf4640"
+source = "git+https://github.com/golemcloud/rusqlite?branch=v0.38.0-patched#40024c3f7a2e1dfc2b36aac33e3d84ee04bfb700"
 dependencies = [
  "bindgen",
  "cc",
@@ -1958,8 +1958,7 @@ dependencies = [
 [[package]]
 name = "rusqlite"
 version = "0.38.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1c93dd1c9683b438c392c492109cb702b8090b2bfc8fed6f6e4eb4523f17af3"
+source = "git+https://github.com/golemcloud/rusqlite?branch=v0.38.0-patched#40024c3f7a2e1dfc2b36aac33e3d84ee04bfb700"
 dependencies = [
  "bitflags",
  "fallible-iterator",

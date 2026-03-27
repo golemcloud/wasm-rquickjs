@@ -119,16 +119,17 @@ golem-wasi-http = { version = "0.2.0", features = ["async"], optional = true }
 wasi-logging = { version = "0.0.1", optional = true }
 
 # SQLite
-rusqlite = { version = "0.38", default-features = false, features = ["bundled", "wasm32-wasi-vfs", "functions", "session", "backup"], optional = true }
+rusqlite = { version = "0.38", default-features = false, features = ["bundled", "wasm32-wasi-vfs", "functions", "session", "backup", "serialize"], optional = true }
 
 # Golem
 golem-rust = { version = "1.7", default-features = false, optional = true }
 golem-websocket = { version = "0.0.1" }
 
-# Patch libsqlite3-sys to fix wasm32-wasi cross-compilation with session/preupdate_hook features.
-# Upstream buildtime_bindgen produces incomplete bindings when cross-compiling to wasm32-wasip1.
-# This fork uses pre-built session-enabled bindings instead.
+# Patch rusqlite and libsqlite3-sys together for wasm32-wasi: the fork carries
+# both the serialize/deserialize flag typing fix and the session-enabled WASI
+# bindings.
 [patch.crates-io]
+rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 
 [package.metadata.component.bindings]

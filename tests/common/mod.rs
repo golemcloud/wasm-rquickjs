@@ -233,7 +233,6 @@ impl PreparedComponent {
         config.epoch_interruption(true);
         config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
         config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
-        config.cache(Some(wasmtime::Cache::from_file(None)?));
         let engine = Engine::new(&config)?;
 
         // Start a background thread that increments the epoch every 10ms,
@@ -386,7 +385,6 @@ impl GolemPreparedComponent {
         config.wasm_component_model(true);
         config.async_stack_size(32 * 1024 * 1024);
         config.max_wasm_stack(16 * 1024 * 1024);
-        config.cache(Some(wasmtime::Cache::from_file(None)?));
         let engine = Engine::new(&config)?;
         let mut linker: Linker<Host> = Linker::new(&engine);
 
@@ -823,7 +821,25 @@ impl CompiledTest {
         Self::new_with_features(path, use_shared_target, FeatureCombination::Normal).await
     }
 
+    pub async fn new_unoptimized_with_features(
+        path: &Utf8Path,
+        use_shared_target: bool,
+        feature_combination: FeatureCombination,
+    ) -> anyhow::Result<CompiledTest> {
+        Self::compile_with_features(path, use_shared_target, feature_combination).await
+    }
+
     pub async fn new_with_features(
+        path: &Utf8Path,
+        use_shared_target: bool,
+        feature_combination: FeatureCombination,
+    ) -> anyhow::Result<CompiledTest> {
+        let compiled =
+            Self::compile_with_features(path, use_shared_target, feature_combination).await?;
+        compiled.optimize().await
+    }
+
+    async fn compile_with_features(
         path: &Utf8Path,
         use_shared_target: bool,
         feature_combination: FeatureCombination,
@@ -859,7 +875,16 @@ impl CompiledTest {
         command
             .args(feature_combination.cargo_args())
             .current_dir(&wrapper_crate_root)
-            .status()?;
+            .status()
+            .and_then(|status| {
+                if status.success() {
+                    Ok(status)
+                } else {
+                    Err(std::io::Error::other(format!(
+                        "cargo-component build failed for {wrapper_crate_root}"
+                    )))
+                }
+            })?;
 
         let compiled = if use_shared_target {
             CompiledTest {
@@ -883,7 +908,7 @@ impl CompiledTest {
             }
         };
 
-        compiled.optimize().await
+        Ok(compiled)
     }
 
     /// Run Wizer pre-initialization on the compiled component.

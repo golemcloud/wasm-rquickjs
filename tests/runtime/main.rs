@@ -34,6 +34,7 @@ mod path;
 mod pollable;
 mod response_constructor;
 mod response_static;
+mod sqlite;
 mod stateful1;
 mod streams;
 mod structured_clone;
@@ -70,6 +71,7 @@ tag_suite!(stateful1, group6);
 tag_suite!(os, group6);
 tag_suite!(export_from_inner_package, group6);
 tag_suite!(example3, group6);
+tag_suite!(sqlite, group6);
 
 tag_suite!(url, group7);
 tag_suite!(cjs_require, group7);
