@@ -7,13 +7,6 @@ import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { channel } from 'node:diagnostics_channel';
 import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
 import {
-    WebSocket as _WebSocket,
-    WebSocketStream as _WebSocketStream,
-    MessageEvent as _MessageEvent,
-    CloseEvent as _CloseEvent,
-    ErrorEvent as _ErrorEvent,
-} from '__wasm_rquickjs_builtin/websocket';
-import {
     AbortError,
     ERR_HTTP_HEADERS_SENT,
     ERR_HTTP_INVALID_HEADER_VALUE,
@@ -2643,17 +2636,17 @@ export function get(url, options, callback) {
 }
 
 // ===== WebSocket re-exports (per Node.js convention) =====
-export {
-    _WebSocket as WebSocket,
-    _WebSocketStream as WebSocketStream,
-    _MessageEvent as MessageEvent,
-    _CloseEvent as CloseEvent,
-    _ErrorEvent as ErrorEvent,
-};
+// These are lazily read from globalThis because the websocket WIRE_JS init script
+// sets them after module evaluation but before any user code runs.
+export const WebSocket = globalThis.WebSocket;
+export const WebSocketStream = globalThis.WebSocketStream;
+export const MessageEvent = globalThis.MessageEvent;
+export const CloseEvent = globalThis.CloseEvent;
+export const ErrorEvent = globalThis.ErrorEvent;
 
 // ===== Default export =====
 
-export default {
+const _default = {
     METHODS,
     STATUS_CODES,
     maxHeaderSize,
@@ -2669,9 +2662,13 @@ export default {
     createServer,
     request,
     get,
-    WebSocket: _WebSocket,
-    WebSocketStream: _WebSocketStream,
-    MessageEvent: _MessageEvent,
-    CloseEvent: _CloseEvent,
-    ErrorEvent: _ErrorEvent,
 };
+// Add WebSocket properties as lazy getters so they resolve after WIRE_JS runs
+Object.defineProperties(_default, {
+    WebSocket: { get() { return globalThis.WebSocket; }, enumerable: true },
+    WebSocketStream: { get() { return globalThis.WebSocketStream; }, enumerable: true },
+    MessageEvent: { get() { return globalThis.MessageEvent; }, enumerable: true },
+    CloseEvent: { get() { return globalThis.CloseEvent; }, enumerable: true },
+    ErrorEvent: { get() { return globalThis.ErrorEvent; }, enumerable: true },
+});
+export default _default;
