@@ -272,9 +272,6 @@ impl PreparedComponent {
                 move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
             })?;
 
-            // Add all the WebSocket methods as stubs
-            // Since we don't know the exact variant representation, let's use func_new
-            // to define functions dynamically
             ws.func_new(
                 "[static]websocket-connection.connect",
                 |_store, _ty, _params, _results| {
@@ -418,9 +415,6 @@ impl GolemPreparedComponent {
                 move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
             })?;
 
-            // Add all the WebSocket methods as stubs
-            // Since we don't know the exact variant representation, let's use func_new
-            // to define functions dynamically
             ws.func_new(
                 "[static]websocket-connection.connect",
                 |_store, _ty, _params, _results| {
