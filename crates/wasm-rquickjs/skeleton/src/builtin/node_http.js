@@ -2636,7 +2636,9 @@ export function get(url, options, callback) {
 }
 
 // ===== WebSocket re-exports (per Node.js convention) =====
-// Get from globalThis where the websocket module sets them
+// Import the websocket module to ensure it runs and sets globalThis
+await import('__wasm_rquickjs_builtin/websocket');
+// Now export from globalThis
 export const WebSocket = globalThis.WebSocket;
 export const WebSocketStream = globalThis.WebSocketStream;
 export const MessageEvent = globalThis.MessageEvent;
