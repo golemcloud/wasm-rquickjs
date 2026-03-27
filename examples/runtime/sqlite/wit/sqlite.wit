@@ -1,0 +1,13 @@
+package quickjs:sqlite;
+
+world sqlite {
+  export test-memory-roundtrip: func() -> bool;
+  export test-file-roundtrip: func() -> bool;
+  export test-udf-survives-restore: func() -> bool;
+  export test-constructor-overwritten: func() -> bool;
+  export test-open-transaction-detected: func() -> bool;
+  export test-read-only-rejected: func() -> bool;
+  export test-wal-mode-snapshot: func() -> bool;
+  export test-autocommit-tracking: func() -> bool;
+  export test-type-validation: func() -> bool;
+}

@@ -90,10 +90,15 @@ pub async fn optimize_component(
     config.wasm_component_model(true);
     let engine = Engine::new(&config)?;
 
+    let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
+    // Forward guest stdout/stderr so Wizer failures preserve the original JS/Rust
+    // diagnostics instead of collapsing into a bare trap.
+    wasi_builder.inherit_stdout().inherit_stderr();
+
     #[cfg(feature = "use-golem-wasmtime")]
-    let (wasi, io_ctx) = wasmtime_wasi::WasiCtxBuilder::new().build();
+    let (wasi, io_ctx) = wasi_builder.build();
     #[cfg(not(feature = "use-golem-wasmtime"))]
-    let wasi = wasmtime_wasi::WasiCtxBuilder::new().build();
+    let wasi = wasi_builder.build();
 
     let mut store = Store::new(
         &engine,

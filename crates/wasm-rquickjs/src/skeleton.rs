@@ -174,6 +174,7 @@ pub fn copy_skeleton_sources(output: &Utf8Path) -> anyhow::Result<()> {
             output,
         )?;
     }
+
     Ok(())
 }
 

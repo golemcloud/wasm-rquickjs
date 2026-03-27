@@ -697,7 +697,25 @@ impl CompiledTest {
         Self::new_with_features(path, use_shared_target, FeatureCombination::Normal).await
     }
 
+    pub async fn new_unoptimized_with_features(
+        path: &Utf8Path,
+        use_shared_target: bool,
+        feature_combination: FeatureCombination,
+    ) -> anyhow::Result<CompiledTest> {
+        Self::compile_with_features(path, use_shared_target, feature_combination).await
+    }
+
     pub async fn new_with_features(
+        path: &Utf8Path,
+        use_shared_target: bool,
+        feature_combination: FeatureCombination,
+    ) -> anyhow::Result<CompiledTest> {
+        let compiled =
+            Self::compile_with_features(path, use_shared_target, feature_combination).await?;
+        compiled.optimize().await
+    }
+
+    async fn compile_with_features(
         path: &Utf8Path,
         use_shared_target: bool,
         feature_combination: FeatureCombination,
@@ -733,7 +751,16 @@ impl CompiledTest {
         command
             .args(feature_combination.cargo_args())
             .current_dir(&wrapper_crate_root)
-            .status()?;
+            .status()
+            .and_then(|status| {
+                if status.success() {
+                    Ok(status)
+                } else {
+                    Err(std::io::Error::other(format!(
+                        "cargo-component build failed for {wrapper_crate_root}"
+                    )))
+                }
+            })?;
 
         let compiled = if use_shared_target {
             CompiledTest {
@@ -757,7 +784,7 @@ impl CompiledTest {
             }
         };
 
-        compiled.optimize().await
+        Ok(compiled)
     }
 
     /// Run Wizer pre-initialization on the compiled component.
