@@ -72,11 +72,24 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - name: Runtime tests under gdb (groups 1-2)
+        if: matrix.group == 1 || matrix.group == 2
+        run: bash .github/scripts/run-runtime-group-under-gdb.sh ${{ matrix.group }}
       - name: Runtime tests (group ${{ matrix.group }}/8)
+        if: matrix.group != 1 && matrix.group != 2
         run: cargo test --test runtime -- --nocapture --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+      - name: Upload gdb log
+        uses: actions/upload-artifact@v4
+        if: always() && (matrix.group == 1 || matrix.group == 2)
+        with:
+          name: test-runtime-group-${{ matrix.group }}-gdb-log
+          path: |
+            target/gdb-runtime-group${{ matrix.group }}.log
+            target/gdb-runtime-group${{ matrix.group }}.cmds
+          if-no-files-found: warn
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
-        if: always()
+        if: always() && matrix.group != 1 && matrix.group != 2
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
