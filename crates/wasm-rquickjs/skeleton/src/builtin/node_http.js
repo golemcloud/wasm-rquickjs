@@ -7,6 +7,13 @@ import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { channel } from 'node:diagnostics_channel';
 import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
 import {
+    WebSocket as _WebSocket,
+    WebSocketStream as _WebSocketStream,
+    MessageEvent as _MessageEvent,
+    CloseEvent as _CloseEvent,
+    ErrorEvent as _ErrorEvent,
+} from '__wasm_rquickjs_builtin/websocket';
+import {
     AbortError,
     ERR_HTTP_HEADERS_SENT,
     ERR_HTTP_INVALID_HEADER_VALUE,
@@ -2636,12 +2643,13 @@ export function get(url, options, callback) {
 }
 
 // ===== WebSocket re-exports (per Node.js convention) =====
-const __ws = await import('__wasm_rquickjs_builtin/websocket');
-export const WebSocket = __ws.WebSocket;
-export const WebSocketStream = __ws.WebSocketStream;
-export const MessageEvent = __ws.MessageEvent;
-export const CloseEvent = __ws.CloseEvent;
-export const ErrorEvent = __ws.ErrorEvent;
+export {
+    _WebSocket as WebSocket,
+    _WebSocketStream as WebSocketStream,
+    _MessageEvent as MessageEvent,
+    _CloseEvent as CloseEvent,
+    _ErrorEvent as ErrorEvent,
+};
 
 // ===== Default export =====
 
@@ -2661,9 +2669,9 @@ export default {
     createServer,
     request,
     get,
-    WebSocket,
-    WebSocketStream,
-    MessageEvent,
-    CloseEvent,
-    ErrorEvent,
+    WebSocket: _WebSocket,
+    WebSocketStream: _WebSocketStream,
+    MessageEvent: _MessageEvent,
+    CloseEvent: _CloseEvent,
+    ErrorEvent: _ErrorEvent,
 };
