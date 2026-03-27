@@ -1216,6 +1216,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "golem-websocket"
+version = "0.0.1"
+dependencies = [
+ "wit-bindgen-rt 0.42.1",
+]
+
+[[package]]
 name = "h2"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"

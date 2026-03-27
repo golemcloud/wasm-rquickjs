@@ -529,7 +529,7 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `node:_http_common` — `_checkIsHttpToken`, `_checkInvalidHeaderChar`
 - Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, sequential request pipelining, idle connection cleanup
 
-**Not yet supported:** HTTP Upgrade/WebSocket, 1xx informational events, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
+**Not yet supported:** HTTP Upgrade, 1xx informational events, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
 
 </details>
 

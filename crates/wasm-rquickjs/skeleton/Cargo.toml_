@@ -25,6 +25,7 @@ full-no-logging = ["lite", "node-http", "crypto", "zlib", "encoding", "crypto-fu
 # Individual capabilities
 fetch = ["dep:golem-wasi-http"]
 node-http = []
+
 logging = ["dep:wasi-logging"]
 encoding = ["dep:encoding_rs"]
 zlib = ["dep:flate2", "dep:crc32fast"]
@@ -122,6 +123,7 @@ rusqlite = { version = "0.38", default-features = false, features = ["bundled", 
 
 # Golem
 golem-rust = { version = "1.7", default-features = false, optional = true }
+golem-websocket = { version = "0.0.1" }
 
 # Patch rusqlite and libsqlite3-sys together for wasm32-wasi: the fork carries
 # both the serialize/deserialize flag typing fix and the session-enabled WASI
