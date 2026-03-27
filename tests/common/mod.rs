@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
@@ -25,6 +25,20 @@ use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
+
+#[cfg(unix)]
+fn enable_stack_overflow_backtrace() {
+    static ENABLED: Once = Once::new();
+
+    ENABLED.call_once(|| unsafe {
+        // Best-effort diagnostic for CI-only stack overflows in the Rust test
+        // process. Keep this in test code only.
+        backtrace_on_stack_overflow::enable();
+    });
+}
+
+#[cfg(not(unix))]
+fn enable_stack_overflow_backtrace() {}
 
 /// Strip JSONC comments (// and /* */) while respecting string literals.
 pub fn strip_jsonc_comments(input: &str) -> String {
@@ -228,6 +242,8 @@ pub struct PreparedComponent {
 
 impl PreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        enable_stack_overflow_backtrace();
+
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
@@ -319,6 +335,8 @@ pub struct GolemPreparedComponent {
 
 impl GolemPreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        enable_stack_overflow_backtrace();
+
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
         config.async_stack_size(32 * 1024 * 1024);

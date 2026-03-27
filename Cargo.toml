@@ -23,6 +23,7 @@ tokio = { workspace = true, features = ["rt"] }
 [dev-dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }
+backtrace-on-stack-overflow = "0.3.0"
 bytes = { workspace = true }
 camino-tempfile = { workspace = true }
 chrono = { workspace = true }
