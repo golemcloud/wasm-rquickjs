@@ -170,8 +170,11 @@ pub const WEBSOCKET_JS: &str = include_str!("websocket.js");
 
 pub const WIRE_JS: &str = r#"
     {
-        const { WebSocket: _WS, WebSocketStream: _WSS } = await import('__wasm_rquickjs_builtin/websocket');
-        globalThis.WebSocket = _WS;
-        globalThis.WebSocketStream = _WSS;
+        const { WebSocket, WebSocketStream, MessageEvent, CloseEvent, ErrorEvent } = await import('__wasm_rquickjs_builtin/websocket');
+        globalThis.WebSocket = WebSocket;
+        globalThis.WebSocketStream = WebSocketStream;
+        globalThis.MessageEvent = MessageEvent;
+        globalThis.CloseEvent = CloseEvent;
+        globalThis.ErrorEvent = ErrorEvent;
     }
 "#;
