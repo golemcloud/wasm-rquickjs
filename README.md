@@ -531,8 +531,6 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 
 **Not yet supported:** HTTP Upgrade, 1xx informational events, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
 
-**WebSocket support:** Available through the `golem` feature flag using Golem's WebSocket API.
-
 </details>
 
 <details>
