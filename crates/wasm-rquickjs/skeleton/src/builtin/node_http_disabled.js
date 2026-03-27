@@ -35,9 +35,6 @@ export function createServer() { throw NOT_SUPPORTED_ERROR; }
 export function request() { throw NOT_SUPPORTED_ERROR; }
 export function get() { throw NOT_SUPPORTED_ERROR; }
 
-export const WebSocket = globalThis.WebSocket;
-export const WebSocketStream = globalThis.WebSocketStream;
-
 export default {
     METHODS, STATUS_CODES, maxHeaderSize,
     validateHeaderName, validateHeaderValue,
@@ -45,5 +42,4 @@ export default {
     ClientRequest, IncomingMessage,
     Server, ServerResponse,
     createServer, request, get,
-    WebSocket, WebSocketStream,
 };
