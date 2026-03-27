@@ -86,10 +86,11 @@ jobs:
           path: |
             target/gdb-runtime-group${{ matrix.group }}.log
             target/gdb-runtime-group${{ matrix.group }}.cmds
+            target/ctrf-*.json
           if-no-files-found: warn
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
-        if: always() && matrix.group != 1 && matrix.group != 2
+        if: always()
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
