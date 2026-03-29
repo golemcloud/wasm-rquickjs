@@ -10,6 +10,7 @@ const DEFAULT_GROUP_INDENTATION = 2;
 const MAX_GROUP_INDENTATION = 1000;
 
 let globalGroupIndentation = '';
+const _loggingEnabled = consoleNative.is_logging_enabled();
 
 function formatArgs(args) {
     if (args.length === 0) return '';
@@ -62,9 +63,11 @@ function validateGroupIndentation(groupIndentation) {
     }
 }
 
-function writeToConfiguredStream(stream, message, nativeWriter, groupIndentation) {
+function writeToConfiguredStream(stream, message, nativeWriter, groupIndentation, forceNative) {
     const output = applyGroupIndent(message, groupIndentation);
-    if (stream) {
+    if (forceNative) {
+        nativeWriter(output);
+    } else if (stream) {
         stream.write(output + '\n');
     } else {
         nativeWriter(output);
@@ -218,7 +221,7 @@ function _getStderr() {
 }
 
 export function debug(...v) {
-    writeToConfiguredStream(_getStdout(), formatArgs(v), consoleNative.debug, globalGroupIndentation);
+    writeToConfiguredStream(_getStdout(), formatArgs(v), consoleNative.debug, globalGroupIndentation, _loggingEnabled);
 }
 
 export function dir(object, options) {
@@ -241,7 +244,7 @@ export function dirxml(...v) {
 }
 
 export function error(...v) {
-    writeToConfiguredStream(_getStderr(), formatArgs(v), consoleNative.error, globalGroupIndentation);
+    writeToConfiguredStream(_getStderr(), formatArgs(v), consoleNative.error, globalGroupIndentation, _loggingEnabled);
 }
 
 export function group(label) {
@@ -261,7 +264,7 @@ export function groupEnd() {
 }
 
 export function info(...v) {
-    writeToConfiguredStream(_getStdout(), formatArgs(v), consoleNative.info, globalGroupIndentation);
+    writeToConfiguredStream(_getStdout(), formatArgs(v), consoleNative.info, globalGroupIndentation, _loggingEnabled);
 }
 
 export function log(...v) {
@@ -304,11 +307,11 @@ export function trace(...v) {
     }
 
     const stack = formatTraceStack(err);
-    writeToConfiguredStream(_getStderr(), stack, consoleNative.trace, globalGroupIndentation);
+    writeToConfiguredStream(_getStderr(), stack, consoleNative.trace, globalGroupIndentation, _loggingEnabled);
 }
 
 export function warn(...v) {
-    writeToConfiguredStream(_getStderr(), formatArgs(v), consoleNative.warn, globalGroupIndentation);
+    writeToConfiguredStream(_getStderr(), formatArgs(v), consoleNative.warn, globalGroupIndentation, _loggingEnabled);
 }
 
 const tableChars = {
@@ -658,10 +661,16 @@ export function Console(stdout, stderr, ignoreErrors) {
     }
 }
 
-Console.prototype._writeToStream = function(stream, string) {
+Console.prototype._writeToStream = function(stream, string, nativeWriter, forceNative) {
     const hasTrailingNewline = string.endsWith('\n');
     const baseString = hasTrailingNewline ? string.slice(0, -1) : string;
     const indentedString = applyGroupIndent(baseString, this._groupIndent);
+
+    if (forceNative && nativeWriter) {
+        nativeWriter(indentedString);
+        return;
+    }
+
     const output = hasTrailingNewline ? `${indentedString}\n` : indentedString;
 
     if (this._ignoreErrors) {
@@ -694,15 +703,32 @@ Console.prototype.log = function(...args) {
         args.length === 1 && typeof args[0] === 'string' ? args[0] :
         args.length === 1 ? util.inspect(args[0], opts) :
         util.format(...args);
-    this._writeToStream(this._stdout, str + '\n');
+    this._writeToStream(this._stdout, str + '\n', consoleNative.println);
 };
-Console.prototype.info = function(...args) { this.log(...args); };
-Console.prototype.debug = function(...args) { this.log(...args); };
+Console.prototype.info = function(...args) {
+    const opts = { colors: this._getColors(), ...this._inspectOptions };
+    const str = args.length === 0 ? '' :
+        args.length === 1 && typeof args[0] === 'string' ? args[0] :
+        args.length === 1 ? util.inspect(args[0], opts) :
+        util.format(...args);
+    this._writeToStream(this._stdout, str + '\n', consoleNative.info, _loggingEnabled);
+};
+Console.prototype.debug = function(...args) {
+    const opts = { colors: this._getColors(), ...this._inspectOptions };
+    const str = args.length === 0 ? '' :
+        args.length === 1 && typeof args[0] === 'string' ? args[0] :
+        args.length === 1 ? util.inspect(args[0], opts) :
+        util.format(...args);
+    this._writeToStream(this._stdout, str + '\n', consoleNative.debug, _loggingEnabled);
+};
 Console.prototype.warn = function(...args) {
     const str = util.format(...args);
-    this._writeToStream(this._stderr, str + '\n');
+    this._writeToStream(this._stderr, str + '\n', consoleNative.warn, _loggingEnabled);
 };
-Console.prototype.error = function(...args) { this.warn(...args); };
+Console.prototype.error = function(...args) {
+    const str = util.format(...args);
+    this._writeToStream(this._stderr, str + '\n', consoleNative.error, _loggingEnabled);
+};
 Console.prototype.dir = function(object, options) {
     const opts = {
         customInspect: false,
@@ -710,7 +736,7 @@ Console.prototype.dir = function(object, options) {
         ...options,
     };
     const result = util.inspect(object, opts);
-    this._writeToStream(this._stdout, (result !== undefined ? result : 'undefined') + '\n');
+    this._writeToStream(this._stdout, (result !== undefined ? result : 'undefined') + '\n', consoleNative.println);
 };
 Console.prototype.dirxml = function(...args) { this.log(...args); };
 Console.prototype.trace = function(...args) {
