@@ -64,6 +64,11 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
+    pub fn is_logging_enabled() -> bool {
+        cfg!(feature = "logging")
+    }
+
+    #[rquickjs::function]
     pub fn timestamp() -> u64 {
         use std::time::{SystemTime, UNIX_EPOCH};
         SystemTime::now()
