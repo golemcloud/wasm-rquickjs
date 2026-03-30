@@ -26,14 +26,15 @@ async fn console(#[tagged_as("console")] compiled: &CompiledTest) -> anyhow::Res
     let output_str = output.join("\n");
     let timer_output = timer_output.join("\n");
 
+    // With the logging feature enabled, console.debug/info/warn/error/trace
+    // route through wasi:logging instead of stdout/stderr, so those messages
+    // do not appear in the captured stdout output.
     assert_eq!(
         output_str,
         formatdoc!(
             r#"
     default: 1
     logged message 1 2 {{ key: 'value' }}
-    This is an debug message
-    This is an info message
     default: 2
     Group 1
       Inside Group 1
