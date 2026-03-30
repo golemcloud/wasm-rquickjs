@@ -44,10 +44,7 @@ async fn abortable_promise_already_aborted(
         output.contains("fast: true"),
         "Expected fast rejection: {output}"
     );
-    assert!(
-        !output.contains("ERROR"),
-        "Should have thrown: {output}"
-    );
+    assert!(!output.contains("ERROR"), "Should have thrown: {output}");
     Ok(())
 }
 
@@ -74,13 +71,8 @@ async fn abortable_promise_not_aborted(
 async fn abortable_promise_mid_wait(
     #[tagged_as("pollable")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abortable-mid-wait",
-        &[],
-    )
-    .await;
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abortable-mid-wait", &[]).await;
 
     assert!(
         output.contains("caught: timeout abort"),
@@ -90,10 +82,7 @@ async fn abortable_promise_mid_wait(
         output.contains("fast: true"),
         "Expected fast abort: {output}"
     );
-    assert!(
-        !output.contains("ERROR"),
-        "Should have thrown: {output}"
-    );
+    assert!(!output.contains("ERROR"), "Should have thrown: {output}");
     Ok(())
 }
 
@@ -101,13 +90,8 @@ async fn abortable_promise_mid_wait(
 async fn abortable_promise_race(
     #[tagged_as("pollable")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (_, output) = invoke_and_capture_output(
-        compiled.wasm_path(),
-        None,
-        "test-abortable-race",
-        &[],
-    )
-    .await;
+    let (_, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-abortable-race", &[]).await;
 
     assert!(
         output.contains("winner: fast"),
