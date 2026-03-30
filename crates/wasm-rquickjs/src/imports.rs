@@ -451,6 +451,78 @@ fn generate_import_module(
                     wstd::runtime::AsyncPollable::new(pollable).wait_for().await;
                 }
             });
+            special_methods.push(quote! {
+                pub async fn abortable_promise<'js>(&mut self, ctx: rquickjs::Ctx<'js>, signal: rquickjs::Value<'js>) -> rquickjs::Result<()> {
+                    use rquickjs::function::This;
+                    use futures::future::{AbortHandle, Abortable};
+
+                    let signal_obj = rquickjs::Object::from_value(signal.clone())?;
+
+                    // Fast path: already aborted
+                    if signal_obj.get::<_, bool>("aborted")? {
+                        let reason: rquickjs::Value<'js> = signal_obj.get("reason")?;
+                        return Err(ctx.throw(reason));
+                    }
+
+                    // Validate signal interface and set up abort machinery before consuming the pollable
+                    let add_event_listener: rquickjs::Function<'js> = signal_obj.get("addEventListener")?;
+                    let remove_event_listener: rquickjs::Function<'js> = signal_obj.get("removeEventListener")?;
+
+                    let (abort_handle, abort_reg) = AbortHandle::new_pair();
+                    let abort_fn = rquickjs::Function::new(ctx.clone(), move || {
+                        abort_handle.abort();
+                    })?;
+
+                    let signal_persistent = rquickjs::Persistent::save(&ctx, signal);
+                    let abort_fn_persistent = rquickjs::Persistent::save(&ctx, abort_fn.clone());
+
+                    let opts = rquickjs::Object::new(ctx.clone())?;
+                    opts.set("once", true)?;
+
+                    add_event_listener.call::<_, ()>((
+                        This(signal_obj.clone()),
+                        "abort",
+                        abort_fn.clone(),
+                        opts,
+                    ))?;
+
+                    // Close race: signal may have been aborted between the first check and listener registration
+                    if signal_obj.get::<_, bool>("aborted")? {
+                        let _ = remove_event_listener.call::<_, ()>((
+                            This(signal_obj.clone()),
+                            "abort",
+                            abort_fn,
+                        ));
+                        let reason: rquickjs::Value<'js> = signal_obj.get("reason")?;
+                        return Err(ctx.throw(reason));
+                    }
+
+                    // Only consume the pollable after signal setup succeeds
+                    let pollable = self.inner.take().expect("Resource has already been disposed");
+                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
+                    let wait_for = wstd::runtime::AsyncPollable::new(pollable).wait_for();
+
+                    let result = Abortable::new(wait_for, abort_reg).await;
+
+                    // Cleanup: remove the abort listener
+                    let signal_obj = rquickjs::Object::from_value(signal_persistent.restore(&ctx)?)?;
+                    let abort_fn = abort_fn_persistent.restore(&ctx)?;
+
+                    let _ = remove_event_listener.call::<_, ()>((
+                        This(signal_obj.clone()),
+                        "abort",
+                        abort_fn,
+                    ));
+
+                    match result {
+                        Ok(()) => Ok(()),
+                        Err(_aborted) => {
+                            let reason: rquickjs::Value<'js> = signal_obj.get("reason")?;
+                            Err(ctx.throw(reason))
+                        }
+                    }
+                }
+            });
         }
 
         let rquickjs_class =

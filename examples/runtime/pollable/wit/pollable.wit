@@ -5,4 +5,8 @@ world pollable {
   import wasi:io/poll@0.2.3;
 
   export test: func() -> u64;
+  export test-abortable-already-aborted: func();
+  export test-abortable-not-aborted: func();
+  export test-abortable-mid-wait: func();
+  export test-abortable-race: func();
 }

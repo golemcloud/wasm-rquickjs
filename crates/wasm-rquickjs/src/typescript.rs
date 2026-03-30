@@ -300,6 +300,9 @@ fn declare_functions_and_resources(
                     && &package.name.name == "io"
                 {
                     let _fun = result.begin_async_method("promise");
+                    drop(_fun);
+                    let mut fun = result.begin_async_method("abortablePromise");
+                    fun.param("signal", "AbortSignal");
                 }
             }
         }
