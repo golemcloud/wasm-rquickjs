@@ -187,6 +187,7 @@ pub enum FeatureCombination {
     Lite,
     Normal,
     Full,
+    FullNoLogging,
     Golem,
 }
 
@@ -201,6 +202,7 @@ impl FeatureCombination {
             Self::Lite => "lite",
             Self::Normal => "normal",
             Self::Full => "full",
+            Self::FullNoLogging => "full-no-logging",
             Self::Golem => "golem",
         }
     }
@@ -214,6 +216,9 @@ impl FeatureCombination {
             FeatureCombination::Normal => vec![],
             FeatureCombination::Full => {
                 vec!["--no-default-features", "--features", "full"]
+            }
+            FeatureCombination::FullNoLogging => {
+                vec!["--no-default-features", "--features", "full-no-logging"]
             }
             FeatureCombination::Golem => vec!["--features", "golem"],
         }
@@ -257,9 +262,16 @@ impl PreparedComponent {
             let mut logging = linker.instance("wasi:logging/logging")?;
             logging.func_wrap(
                 "log",
-                |_ctx: StoreContextMut<'_, Host>,
-                 (_level, _context, _message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> { Ok(()) },
+                |mut ctx: StoreContextMut<'_, Host>,
+                 (level, context, message): (LogLevel, String, String)|
+                 -> Result<(), wasmtime::Error> {
+                    ctx.data_mut()
+                        .log_messages
+                        .lock()
+                        .unwrap()
+                        .push((level, context, message));
+                    Ok(())
+                },
             )?;
         }
 
@@ -337,7 +349,7 @@ impl PreparedComponent {
 }
 
 /// Mock logging level for wasi:logging/logging
-#[derive(wasmtime::component::ComponentType, wasmtime::component::Lift)]
+#[derive(Debug, Clone, wasmtime::component::ComponentType, wasmtime::component::Lift)]
 #[component(enum)]
 #[repr(u8)]
 #[allow(dead_code)]
@@ -399,9 +411,16 @@ impl GolemPreparedComponent {
             let mut logging = linker.instance("wasi:logging/logging")?;
             logging.func_wrap(
                 "log",
-                |_ctx: StoreContextMut<'_, Host>,
-                 (_level, _context, _message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> { Ok(()) },
+                |mut ctx: StoreContextMut<'_, Host>,
+                 (level, context, message): (LogLevel, String, String)|
+                 -> Result<(), wasmtime::Error> {
+                    ctx.data_mut()
+                        .log_messages
+                        .lock()
+                        .unwrap()
+                        .push((level, context, message));
+                    Ok(())
+                },
             )?;
         }
 
@@ -636,6 +655,7 @@ impl TestInstance {
             wasi_http: Arc::new(http_ctx),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
+            log_messages: Arc::new(Mutex::new(Vec::new())),
             #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::new(Mutex::new(io_ctx)),
         };
@@ -725,6 +745,10 @@ impl TestInstance {
 
     pub fn read_stderr(&self) -> anyhow::Result<String> {
         Ok(fs::read_to_string(&self.stderr_file)?)
+    }
+
+    pub fn read_log_messages(&self) -> Vec<(LogLevel, String, String)> {
+        self.store.data().log_messages.lock().unwrap().clone()
     }
 
     async fn invoke_and_capture_output_inner(
@@ -962,6 +986,7 @@ pub struct Host {
     pub wasi_http: Arc<WasiHttpCtx>,
     pub started_at: Instant,
     pub timeout: Duration,
+    pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
     #[cfg(feature = "use-golem-wasmtime")]
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
 }

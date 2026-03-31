@@ -1893,8 +1893,8 @@ fn restore_database_impl<'js>(
         .deserialize_read_exact(rusqlite::MAIN_DB, data, data.len(), false)
         .map_err(|e| sqlite_error(&ctx, &e))?;
 
-    let backup = rusqlite::backup::Backup::new(&temp_conn, conn)
-        .map_err(|e| sqlite_error(&ctx, &e))?;
+    let backup =
+        rusqlite::backup::Backup::new(&temp_conn, conn).map_err(|e| sqlite_error(&ctx, &e))?;
     backup
         .run_to_completion(100, Duration::ZERO, None)
         .map_err(|e| sqlite_error(&ctx, &e))?;
