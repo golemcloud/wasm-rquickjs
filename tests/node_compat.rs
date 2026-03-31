@@ -37,7 +37,7 @@ async fn compile_node_compat_with_features(
 #[test_dep]
 async fn prepare_node_compat_full() -> Arc<FullPreparedComponent> {
     Arc::new(FullPreparedComponent(
-        compile_node_compat_with_features(common::FeatureCombination::FullNoLogging).await,
+        compile_node_compat_with_features(common::FeatureCombination::FullNoLoggingWithGolem).await,
     ))
 }
 

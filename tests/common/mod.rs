@@ -190,6 +190,7 @@ pub enum FeatureCombination {
     FullNoLogging,
     Golem,
     FullWithGolem,
+    FullNoLoggingWithGolem,
 }
 
 impl FeatureCombination {
@@ -206,6 +207,7 @@ impl FeatureCombination {
             Self::FullNoLogging => "full-no-logging",
             Self::Golem => "golem",
             Self::FullWithGolem => "full-golem",
+            Self::FullNoLoggingWithGolem => "full-no-logging-golem",
         }
     }
 
@@ -225,6 +227,9 @@ impl FeatureCombination {
             FeatureCombination::Golem => vec!["--features", "golem"],
             FeatureCombination::FullWithGolem => {
                 vec!["--no-default-features", "--features", "full,golem"]
+            }
+            FeatureCombination::FullNoLoggingWithGolem => {
+                vec!["--no-default-features", "--features", "full-no-logging,golem"]
             }
         }
     }

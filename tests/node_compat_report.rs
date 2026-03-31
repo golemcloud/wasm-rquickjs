@@ -403,7 +403,7 @@ fn update_config_jsonc(should_not_be_skipped: &[String], missing_from_config: &[
 async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     let path = Utf8Path::new("examples/runtime/node-compat-runner");
     let name = "node-compat-runner";
-    let feature_combination_label = "full-no-logging";
+    let feature_combination_label = "full-no-logging-golem";
     let wrapper_crate_root = Utf8Path::new("tmp")
         .join(name)
         .join(feature_combination_label);
@@ -438,7 +438,7 @@ async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         .arg("build")
         .arg("--target-dir")
         .arg(&shared_target)
-        .args(["--no-default-features", "--features", "full-no-logging"])
+        .args(["--no-default-features", "--features", "full-no-logging,golem"])
         .current_dir(&wrapper_crate_root)
         .status()?;
 
