@@ -6,9 +6,6 @@ const OPEN = 1;
 const CLOSING = 2;
 const CLOSED = 3;
 
-// Default poll interval for the receive loop (ms)
-const POLL_INTERVAL_MS = 50;
-
 // Compute the byte length of a UTF-8 encoded string
 function utf8ByteLength(str) {
     let len = 0;
@@ -164,36 +161,25 @@ class WebSocket {
         });
     }
 
-    _startReceiveLoop() {
+    async _startReceiveLoop() {
         if (this._receiveLoopRunning) return;
         this._receiveLoopRunning = true;
 
-        const poll = () => {
-            if (this._readyState !== OPEN || !this._connection) {
-                this._receiveLoopRunning = false;
-                return;
-            }
-
+        while (this._readyState === OPEN && this._connection) {
             try {
-                // Native module returns [type, data] arrays:
+                // Native module returns [type, data] arrays (async, uses WASI pollables):
                 //   ["text", string]
                 //   ["binary", ArrayBuffer]
-                //   ["timeout", null]
                 //   ["closed", { code, reason }]
                 //   ["error", string]
-                const result = this._connection.receive_with_timeout(POLL_INTERVAL_MS);
+                const result = await this._connection.receive();
                 const [type, data] = result;
 
                 if (type === 'text') {
                     this._dispatch('message', new MessageEvent('message', data, this._url));
-                    Promise.resolve().then(poll);
                 } else if (type === 'binary') {
                     // Always deliver as ArrayBuffer; Blob is not available in QuickJS.
                     this._dispatch('message', new MessageEvent('message', data, this._url));
-                    Promise.resolve().then(poll);
-                } else if (type === 'timeout') {
-                    // No message yet, continue polling
-                    Promise.resolve().then(poll);
                 } else if (type === 'closed') {
                     this._receiveLoopRunning = false;
                     if (this._readyState !== CLOSED) {
@@ -202,6 +188,7 @@ class WebSocket {
                         const reason = (data && data.reason) || '';
                         this._dispatch('close', new CloseEvent(code, reason, true));
                     }
+                    return;
                 } else if (type === 'error') {
                     this._receiveLoopRunning = false;
                     if (this._readyState !== CLOSED) {
@@ -209,6 +196,7 @@ class WebSocket {
                         this._dispatch('error', new ErrorEvent(data || 'Unknown error'));
                         this._dispatch('close', new CloseEvent(1006, '', false));
                     }
+                    return;
                 }
             } catch (e) {
                 this._receiveLoopRunning = false;
@@ -217,10 +205,11 @@ class WebSocket {
                     this._dispatch('error', new ErrorEvent(e.message || String(e)));
                     this._dispatch('close', new CloseEvent(1006, '', false));
                 }
+                return;
             }
-        };
+        }
 
-        Promise.resolve().then(poll);
+        this._receiveLoopRunning = false;
     }
 
     get url() { return this._url; }
@@ -495,48 +484,35 @@ class WebSocketStream {
         });
     }
 
-    _pumpReadable(controller, resolveClosed, rejectClosed) {
-        if (!this._connection) {
-            return;
-        }
-
-        const self = this;
-
-        const poll = () => {
-            if (!self._connection) {
-                return;
-            }
-
+    async _pumpReadable(controller, resolveClosed, rejectClosed) {
+        while (this._connection) {
             try {
-                const result = self._connection.receive_with_timeout(POLL_INTERVAL_MS);
+                const result = await this._connection.receive();
                 const [type, data] = result;
 
                 if (type === 'text') {
                     controller.enqueue(data);
-                    Promise.resolve().then(poll);
                 } else if (type === 'binary') {
                     controller.enqueue(data);
-                    Promise.resolve().then(poll);
-                } else if (type === 'timeout') {
-                    Promise.resolve().then(poll);
                 } else if (type === 'closed') {
                     const code = (data && data.code) || 1000;
                     const reason = (data && data.reason) || '';
                     controller.close();
                     resolveClosed({ closeCode: code, reason: reason });
+                    return;
                 } else if (type === 'error') {
                     const err = new Error(data || 'Unknown error');
                     controller.error(err);
                     rejectClosed(err);
+                    return;
                 }
             } catch (e) {
                 const err = new Error(e.message || String(e));
                 controller.error(err);
                 rejectClosed(err);
+                return;
             }
-        };
-
-        Promise.resolve().then(poll);
+        }
     }
 
     _closeConnection(code, reason) {

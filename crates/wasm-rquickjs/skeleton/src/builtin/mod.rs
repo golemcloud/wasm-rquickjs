@@ -81,9 +81,9 @@ mod web_crypto {
     pub use super::web_crypto_lite::*;
 }
 
-mod webstreams;
 #[cfg(feature = "golem")]
 mod websocket;
+mod webstreams;
 mod worker_threads;
 
 #[cfg(feature = "zlib")]
@@ -503,10 +503,7 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/diagnostics_channel_golem",
             diagnostics_channel::DIAGNOSTICS_CHANNEL_GOLEM_JS,
         )
-        .with_module(
-            "__wasm_rquickjs_builtin/websocket",
-            websocket::WEBSOCKET_JS,
-        );
+        .with_module("__wasm_rquickjs_builtin/websocket", websocket::WEBSOCKET_JS);
 
     (native_loader, builtin_loader, internal::module_loader())
 }

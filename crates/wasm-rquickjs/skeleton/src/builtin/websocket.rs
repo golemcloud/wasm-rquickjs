@@ -2,6 +2,7 @@ use golem_websocket::{Error as WsError, Message, WebsocketConnection};
 use rquickjs::class::Trace;
 use rquickjs::{Ctx, Exception, JsLifetime};
 use std::cell::RefCell;
+use wstd::runtime::AsyncPollable;
 
 #[rquickjs::module]
 pub mod native_module {
@@ -77,60 +78,66 @@ impl WsConnection {
             .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket send failed: {e:?}")))
     }
 
+    /// Async receive: waits for the next message using WASI pollables
+    /// instead of busy-polling with timeouts.
+    ///
     /// Returns: [type, data]
     ///   "text"    → data is the string
     ///   "binary"  → data is an ArrayBuffer
-    ///   "timeout" → data is null
     ///   "closed"  → data is { code, reason }
     ///   "error"   → data is an error description string
-    pub fn receive_with_timeout<'js>(
-        &self,
-        ctx: Ctx<'js>,
-        timeout_ms: u64,
-    ) -> rquickjs::Result<rquickjs::Value<'js>> {
-        let inner = self.inner.borrow();
-        let conn = inner
-            .as_ref()
-            .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
+    pub async fn receive<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+        loop {
+            let pollable = {
+                let inner = self.inner.borrow();
+                let conn = inner
+                    .as_ref()
+                    .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
+                conn.subscribe()
+            };
+            AsyncPollable::new(pollable).wait_for().await;
 
-        match conn.receive_with_timeout(timeout_ms) {
-            Ok(Some(Message::Text(text))) => {
-                let arr = rquickjs::Array::new(ctx.clone())?;
-                arr.set(0, "text")?;
-                arr.set(1, text)?;
-                Ok(arr.into_value())
-            }
-            Ok(Some(Message::Binary(data))) => {
-                let arr = rquickjs::Array::new(ctx.clone())?;
-                arr.set(0, "binary")?;
-                let ab = rquickjs::ArrayBuffer::new(ctx.clone(), data)?;
-                arr.set(1, ab)?;
-                Ok(arr.into_value())
-            }
-            Ok(None) => {
-                let arr = rquickjs::Array::new(ctx.clone())?;
-                arr.set(0, "timeout")?;
-                arr.set(1, rquickjs::Value::new_null(ctx.clone()))?;
-                Ok(arr.into_value())
-            }
-            Err(WsError::Closed(info)) => {
-                let arr = rquickjs::Array::new(ctx.clone())?;
-                arr.set(0, "closed")?;
-                let (code, reason) = match info {
-                    Some(ci) => (ci.code as i32, ci.reason),
-                    None => (1000, String::new()),
-                };
-                let close_obj = rquickjs::Object::new(ctx.clone())?;
-                close_obj.set("code", code)?;
-                close_obj.set("reason", reason)?;
-                arr.set(1, close_obj)?;
-                Ok(arr.into_value())
-            }
-            Err(e) => {
-                let arr = rquickjs::Array::new(ctx.clone())?;
-                arr.set(0, "error")?;
-                arr.set(1, format!("{e:?}"))?;
-                Ok(arr.into_value())
+            let result = {
+                let inner = self.inner.borrow();
+                let conn = inner
+                    .as_ref()
+                    .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
+                conn.receive()
+            };
+
+            match result {
+                Ok(Message::Text(text)) => {
+                    let arr = rquickjs::Array::new(ctx.clone())?;
+                    arr.set(0, "text")?;
+                    arr.set(1, text)?;
+                    return Ok(arr.into_value());
+                }
+                Ok(Message::Binary(data)) => {
+                    let arr = rquickjs::Array::new(ctx.clone())?;
+                    arr.set(0, "binary")?;
+                    let ab = rquickjs::ArrayBuffer::new(ctx.clone(), data)?;
+                    arr.set(1, ab)?;
+                    return Ok(arr.into_value());
+                }
+                Err(WsError::Closed(info)) => {
+                    let arr = rquickjs::Array::new(ctx.clone())?;
+                    arr.set(0, "closed")?;
+                    let (code, reason) = match info {
+                        Some(ci) => (ci.code as i32, ci.reason),
+                        None => (1000, String::new()),
+                    };
+                    let close_obj = rquickjs::Object::new(ctx.clone())?;
+                    close_obj.set("code", code)?;
+                    close_obj.set("reason", reason)?;
+                    arr.set(1, close_obj)?;
+                    return Ok(arr.into_value());
+                }
+                Err(e) => {
+                    let arr = rquickjs::Array::new(ctx.clone())?;
+                    arr.set(0, "error")?;
+                    arr.set(1, format!("{e:?}"))?;
+                    return Ok(arr.into_value());
+                }
             }
         }
     }
