@@ -53,7 +53,7 @@ crypto-full = [
 
 sqlite = ["dep:rusqlite"]
 timezone = ["dep:chrono-tz"]
-golem = ["normal", "dep:golem-rust"]
+golem = ["normal", "dep:golem-rust", "dep:golem-websocket"]
 
 [dependencies]
 # Core dependencies
@@ -122,8 +122,8 @@ wasi-logging = { version = "0.0.1", optional = true }
 rusqlite = { version = "0.38", default-features = false, features = ["bundled", "wasm32-wasi-vfs", "functions", "session", "backup", "serialize"], optional = true }
 
 # Golem
-golem-rust = { version = "1.7", default-features = false, optional = true }
-golem-websocket = { version = "0.0.1" }
+golem-rust = { git = "https://github.com/golemcloud/golem.git", branch = "main", default-features = false, optional = true }
+golem-websocket = { version = "0.0.1", optional = true }
 
 # Patch rusqlite and libsqlite3-sys together for wasm32-wasi: the fork carries
 # both the serialize/deserialize flag typing fix and the session-enabled WASI

@@ -189,11 +189,12 @@ pub enum FeatureCombination {
     Full,
     FullNoLogging,
     Golem,
+    FullWithGolem,
 }
 
 impl FeatureCombination {
     pub fn all() -> Vec<FeatureCombination> {
-        vec![Self::None, Self::Lite, Self::Normal, Self::Full]
+        vec![Self::Lite, Self::Normal, Self::Full, Self::FullWithGolem]
     }
 
     pub fn label(&self) -> &str {
@@ -204,6 +205,7 @@ impl FeatureCombination {
             Self::Full => "full",
             Self::FullNoLogging => "full-no-logging",
             Self::Golem => "golem",
+            Self::FullWithGolem => "full-golem",
         }
     }
 
@@ -221,6 +223,9 @@ impl FeatureCombination {
                 vec!["--no-default-features", "--features", "full-no-logging"]
             }
             FeatureCombination::Golem => vec!["--features", "golem"],
+            FeatureCombination::FullWithGolem => {
+                vec!["--no-default-features", "--features", "full,golem"]
+            }
         }
     }
 }
