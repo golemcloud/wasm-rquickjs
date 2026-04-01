@@ -409,9 +409,20 @@ impl GolemPreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
+        config.epoch_interruption(true);
         config.async_stack_size(32 * 1024 * 1024);
         config.max_wasm_stack(16 * 1024 * 1024);
         let engine = Engine::new(&config)?;
+
+        // Start a background thread that increments the epoch every 10ms,
+        // enabling epoch-based interruption to enforce timeouts on spinning WASM.
+        let epoch_engine = engine.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                epoch_engine.increment_epoch();
+            }
+        });
         let mut linker: Linker<Host> = Linker::new(&engine);
 
         wasmtime_wasi::p2::add_to_linker_with_options_async(
