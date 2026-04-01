@@ -438,7 +438,11 @@ async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         .arg("build")
         .arg("--target-dir")
         .arg(&shared_target)
-        .args(["--no-default-features", "--features", "full-no-logging,golem"])
+        .args([
+            "--no-default-features",
+            "--features",
+            "full-no-logging,golem",
+        ])
         .current_dir(&wrapper_crate_root)
         .status()?;
 

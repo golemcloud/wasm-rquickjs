@@ -229,7 +229,11 @@ impl FeatureCombination {
                 vec!["--no-default-features", "--features", "full,golem"]
             }
             FeatureCombination::FullNoLoggingWithGolem => {
-                vec!["--no-default-features", "--features", "full-no-logging,golem"]
+                vec![
+                    "--no-default-features",
+                    "--features",
+                    "full-no-logging,golem",
+                ]
             }
         }
     }

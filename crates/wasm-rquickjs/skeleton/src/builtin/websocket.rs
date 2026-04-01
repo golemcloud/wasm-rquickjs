@@ -87,15 +87,15 @@ impl WsConnection {
     ///   "closed"  → data is { code, reason }
     ///   "error"   → data is an error description string
     pub async fn receive<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+        let async_pollable = {
+            let inner = self.inner.borrow();
+            let conn = inner
+                .as_ref()
+                .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
+            AsyncPollable::new(conn.subscribe())
+        };
         loop {
-            let pollable = {
-                let inner = self.inner.borrow();
-                let conn = inner
-                    .as_ref()
-                    .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
-                conn.subscribe()
-            };
-            AsyncPollable::new(pollable).wait_for().await;
+            async_pollable.wait_for().await;
 
             let result = {
                 let inner = self.inner.borrow();
