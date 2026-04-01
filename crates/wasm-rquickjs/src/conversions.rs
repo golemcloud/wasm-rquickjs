@@ -15,10 +15,7 @@ use wit_parser::{Type, TypeDefKind, TypeId, TypeOwner};
 /// For WASI types (from wasip2::), we cannot implement IntoJs/FromJs directly
 /// due to the orphan rule, so we generate newtype wrappers in conversions.rs.
 /// This function generates the fully qualified path to the wrapper type.
-pub fn wasi_wrapper_name(
-    context: &GeneratorContext<'_>,
-    type_id: TypeId,
-) -> anyhow::Result<Ident> {
+pub fn wasi_wrapper_name(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow::Result<Ident> {
     let typ = context.typ(type_id)?;
     let name = typ
         .name
@@ -103,7 +100,7 @@ fn generate_conversion_instances_for_type(
     if is_wasi_remapped && matches!(typ.kind, TypeDefKind::Resource) {
         let type_path = type_id_to_type_ref(context, type_id)?;
         let wrapper_name = wasi_wrapper_name(context, type_id)?;
-        let name = typ.name.as_ref().map(|n| n.as_str()).unwrap_or("Resource");
+        let name = typ.name.as_deref().unwrap_or("Resource");
         let name_lit = LitStr::new(name, Span::call_site());
         return Ok(Some(quote! {
             pub struct #wrapper_name(pub #type_path);
@@ -177,7 +174,9 @@ fn generate_conversion_instances_for_type(
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
 
-                let wrapped_field = field_type.wrap.run(quote! { #field_accessor.#rust_field_ident });
+                let wrapped_field = field_type
+                    .wrap
+                    .run(quote! { #field_accessor.#rust_field_ident });
                 let unwrapped_field = field_type.unwrap.run(quote! { #rust_field_ident });
 
                 set_fields.push(quote! {
@@ -245,7 +244,11 @@ fn generate_conversion_instances_for_type(
             let mut get_fields = Vec::new();
 
             // For WASI-remapped types, access through `.0` (newtype wrapper)
-            let self_ref = if is_wasi_remapped { quote! { self.0 } } else { quote! { self } };
+            let self_ref = if is_wasi_remapped {
+                quote! { self.0 }
+            } else {
+                quote! { self }
+            };
 
             for flag in &flags.flags {
                 let js_field_name = escape_js_ident(flag.name.to_lower_camel_case());

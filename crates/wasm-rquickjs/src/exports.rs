@@ -777,11 +777,17 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
         ("wasi:cli/terminal-stderr", "wasip2::cli::terminal_stderr"),
         ("wasi:cli/terminal-stdin", "wasip2::cli::terminal_stdin"),
         ("wasi:cli/terminal-stdout", "wasip2::cli::terminal_stdout"),
-        ("wasi:clocks/monotonic-clock", "wasip2::clocks::monotonic_clock"),
+        (
+            "wasi:clocks/monotonic-clock",
+            "wasip2::clocks::monotonic_clock",
+        ),
         ("wasi:clocks/wall-clock", "wasip2::clocks::wall_clock"),
         ("wasi:filesystem/preopens", "wasip2::filesystem::preopens"),
         ("wasi:filesystem/types", "wasip2::filesystem::types"),
-        ("wasi:http/outgoing-handler", "wasip2::http::outgoing_handler"),
+        (
+            "wasi:http/outgoing-handler",
+            "wasip2::http::outgoing_handler",
+        ),
         ("wasi:http/types", "wasip2::http::types"),
         ("wasi:io/error", "wasip2::io::error"),
         ("wasi:io/poll", "wasip2::io::poll"),
@@ -789,13 +795,25 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
         ("wasi:random/insecure", "wasip2::random::insecure"),
         ("wasi:random/insecure-seed", "wasip2::random::insecure_seed"),
         ("wasi:random/random", "wasip2::random::random"),
-        ("wasi:sockets/instance-network", "wasip2::sockets::instance_network"),
-        ("wasi:sockets/ip-name-lookup", "wasip2::sockets::ip_name_lookup"),
+        (
+            "wasi:sockets/instance-network",
+            "wasip2::sockets::instance_network",
+        ),
+        (
+            "wasi:sockets/ip-name-lookup",
+            "wasip2::sockets::ip_name_lookup",
+        ),
         ("wasi:sockets/network", "wasip2::sockets::network"),
         ("wasi:sockets/tcp", "wasip2::sockets::tcp"),
-        ("wasi:sockets/tcp-create-socket", "wasip2::sockets::tcp_create_socket"),
+        (
+            "wasi:sockets/tcp-create-socket",
+            "wasip2::sockets::tcp_create_socket",
+        ),
         ("wasi:sockets/udp", "wasip2::sockets::udp"),
-        ("wasi:sockets/udp-create-socket", "wasip2::sockets::udp_create_socket"),
+        (
+            "wasi:sockets/udp-create-socket",
+            "wasip2::sockets::udp_create_socket",
+        ),
     ];
 
     // Collect all interfaces used in the world, with their fully-qualified versioned names
@@ -805,16 +823,14 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
     for (key, _) in world.imports.iter().chain(world.exports.iter()) {
         if let WorldKey::Interface(id) = key {
             let interface = &context.resolve.interfaces[*id];
-            if let Some(ref name) = interface.name {
-                if let Some(package_id) = interface.package {
-                    let package = &context.resolve.packages[package_id];
-                    let unversioned = format!(
-                        "{}:{}/{}",
-                        package.name.namespace, package.name.name, name
-                    );
-                    let versioned = package.name.interface_id(name);
-                    used_interfaces.insert(unversioned, versioned);
-                }
+            if let Some(ref name) = interface.name
+                && let Some(package_id) = interface.package
+            {
+                let package = &context.resolve.packages[package_id];
+                let unversioned =
+                    format!("{}:{}/{}", package.name.namespace, package.name.name, name);
+                let versioned = package.name.interface_id(name);
+                used_interfaces.insert(unversioned, versioned);
             }
         }
     }

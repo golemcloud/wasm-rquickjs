@@ -212,10 +212,12 @@ pub fn generate_dts(
 
 struct GeneratorContext<'a> {
     output: &'a Utf8Path,
+    #[allow(dead_code)]
     wit_source_path: &'a Utf8Path,
     resolve: Resolve,
     root_package: PackageId,
     world: WorldId,
+    #[allow(dead_code)]
     source_map: PackageSourceMap,
     visited_types: RefCell<BTreeSet<TypeId>>,
     world_name: String,
@@ -352,10 +354,10 @@ impl<'a> GeneratorContext<'a> {
         if let Some(typ) = self.resolve.types.get(type_id) {
             match &typ.owner {
                 TypeOwner::Interface(interface_id) => {
-                    if let Some(interface) = self.resolve.interfaces.get(*interface_id) {
-                        if let Some(package_id) = interface.package {
-                            return self.is_wasi_remapped_package(package_id);
-                        }
+                    if let Some(interface) = self.resolve.interfaces.get(*interface_id)
+                        && let Some(package_id) = interface.package
+                    {
+                        return self.is_wasi_remapped_package(package_id);
                     }
                     false
                 }

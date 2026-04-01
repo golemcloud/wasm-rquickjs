@@ -228,15 +228,15 @@ pub fn ident_in_imported_interface(
     );
 
     // Check if this interface belongs to a WASI package remapped to wasip2::
-    if let Some(package_id) = interface.package {
-        if context.is_wasi_remapped_package(package_id) {
-            let package = &context.resolve.packages[package_id];
-            let pkg_name_ident = Ident::new(
-                &escape_rust_ident(&package.name.name.to_snake_case()),
-                Span::call_site(),
-            );
-            return quote! { wasip2::#pkg_name_ident::#name_ident::#ident };
-        }
+    if let Some(package_id) = interface.package
+        && context.is_wasi_remapped_package(package_id)
+    {
+        let package = &context.resolve.packages[package_id];
+        let pkg_name_ident = Ident::new(
+            &escape_rust_ident(&package.name.name.to_snake_case()),
+            Span::call_site(),
+        );
+        return quote! { wasip2::#pkg_name_ident::#name_ident::#ident };
     }
 
     let mut path = Vec::new();
@@ -837,7 +837,8 @@ fn get_wrapped_type_own_handle(
         // Find the actual resource type id by following aliases
         let actual_resource_type_id = find_resource_type_id(ctx.context, *resource_type_id)?;
         ctx.context.record_visited_type(actual_resource_type_id);
-        let wrapper_name = crate::conversions::wasi_wrapper_name(ctx.context, actual_resource_type_id)?;
+        let wrapper_name =
+            crate::conversions::wasi_wrapper_name(ctx.context, actual_resource_type_id)?;
         let wrapper_name_for_ref = wrapper_name.clone();
         let original = ctx.original_type_ref;
         Ok(WrappedType {
@@ -856,7 +857,10 @@ fn get_wrapped_type_own_handle(
 }
 
 /// Follows type aliases to find the final resource TypeId
-fn find_resource_type_id(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow::Result<TypeId> {
+fn find_resource_type_id(
+    context: &GeneratorContext<'_>,
+    type_id: TypeId,
+) -> anyhow::Result<TypeId> {
     let mut current = type_id;
     loop {
         let typ = context.typ(current)?;
@@ -870,7 +874,10 @@ fn find_resource_type_id(context: &GeneratorContext<'_>, type_id: TypeId) -> any
     }
 }
 
-fn get_wrapped_type_adt(ctx: GetWrappedTypeContext<'_>, type_id: TypeId) -> anyhow::Result<WrappedType> {
+fn get_wrapped_type_adt(
+    ctx: GetWrappedTypeContext<'_>,
+    type_id: TypeId,
+) -> anyhow::Result<WrappedType> {
     if ctx.context.is_wasi_remapped_type(type_id) {
         let wrapper_name = crate::conversions::wasi_wrapper_name(ctx.context, type_id)?;
         let wrapper_name_for_ref = wrapper_name.clone();
