@@ -501,11 +501,11 @@ impl GolemPreparedComponent {
             )?;
         }
 
-        // Mock golem:api/context@1.3.0
+        // Mock golem:api/context@1.5.0
         let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
         let spans_clone = spans.clone();
 
-        let mut golem_ctx = linker.instance("golem:api/context@1.3.0")?;
+        let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
 
         // Register the span resource type
         let span_resource_type = ResourceType::host::<GolemSpan>();
