@@ -18,7 +18,7 @@ use common::js_subtest_parser::{
     SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
 };
 use common::{
-    PreparedComponent, TestInstance, classify_test, setup_node_compat_test_files,
+    GolemPreparedComponent, TestInstance, classify_test, setup_node_compat_test_files,
     strip_jsonc_comments, uses_node_internals,
 };
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -403,7 +403,7 @@ fn update_config_jsonc(should_not_be_skipped: &[String], missing_from_config: &[
 async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     let path = Utf8Path::new("examples/runtime/node-compat-runner");
     let name = "node-compat-runner";
-    let feature_combination_label = "full-no-logging";
+    let feature_combination_label = "full-no-logging-golem";
     let wrapper_crate_root = Utf8Path::new("tmp")
         .join(name)
         .join(feature_combination_label);
@@ -438,7 +438,11 @@ async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
         .arg("build")
         .arg("--target-dir")
         .arg(&shared_target)
-        .args(["--no-default-features", "--features", "full-no-logging"])
+        .args([
+            "--no-default-features",
+            "--features",
+            "full-no-logging,golem",
+        ])
         .current_dir(&wrapper_crate_root)
         .status()?;
 
@@ -465,7 +469,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     // Step 2: Create shared prepared component
     println!("=== Loading shared runner ===");
-    let prepared = Arc::new(PreparedComponent::new(&wasm_path)?);
+    let prepared = Arc::new(GolemPreparedComponent::new(&wasm_path)?);
     println!("Engine and component loaded.");
 
     // Step 3: Collect all .js test files from all suites
@@ -711,7 +715,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             let test_start = Instant::now();
 
             let r = match tokio::time::timeout(Duration::from_secs(60), async {
-                let mut instance = TestInstance::from_prepared(&prepared).await?;
+                let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
                 instance.set_epoch_deadline(30);
                 setup_node_compat_test_files(instance.temp_dir_path(), &task.test_path)?;
 

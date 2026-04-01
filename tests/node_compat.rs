@@ -4,7 +4,7 @@ use crate::common::js_subtest_parser::{
     BlockInfo, SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
 };
 use crate::common::{
-    CompiledTest, PreparedComponent, TestInstance, setup_node_compat_test_files,
+    CompiledTest, GolemPreparedComponent, TestInstance, setup_node_compat_test_files,
     strip_jsonc_comments,
 };
 use camino::Utf8Path;
@@ -22,22 +22,24 @@ use wasmtime::component::Val;
 #[path = "common/mod.rs"]
 mod common;
 
-struct FullPreparedComponent(Arc<PreparedComponent>);
+struct FullPreparedComponent(Arc<GolemPreparedComponent>);
 
 async fn compile_node_compat_with_features(
     feature_combination: common::FeatureCombination,
-) -> Arc<PreparedComponent> {
+) -> Arc<GolemPreparedComponent> {
     let path = Utf8Path::new("examples/runtime/node-compat-runner");
     let compiled = CompiledTest::new_with_features(path, true, feature_combination)
         .await
         .expect("Failed to compile node-compat-runner");
-    Arc::new(PreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"))
+    Arc::new(
+        GolemPreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"),
+    )
 }
 
 #[test_dep]
 async fn prepare_node_compat_full() -> Arc<FullPreparedComponent> {
     Arc::new(FullPreparedComponent(
-        compile_node_compat_with_features(common::FeatureCombination::FullNoLogging).await,
+        compile_node_compat_with_features(common::FeatureCombination::FullNoLoggingWithGolem).await,
     ))
 }
 
@@ -242,7 +244,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     let path = path.clone();
                     Box::pin(async move {
                         let test_future = async {
-                            let mut instance = TestInstance::from_prepared(&prepared).await?;
+                            let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
                             instance.set_epoch_deadline(test_timeout_secs);
                             setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
@@ -326,7 +328,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         let source = source.clone();
                         let discovery_clone = discovery_clone.clone();
                         Box::pin(async move {
-                            let mut instance = TestInstance::from_prepared(&prepared).await?;
+                            let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
                             instance.set_epoch_deadline(test_timeout_secs);
                             setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 

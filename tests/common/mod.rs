@@ -189,11 +189,13 @@ pub enum FeatureCombination {
     Full,
     FullNoLogging,
     Golem,
+    FullWithGolem,
+    FullNoLoggingWithGolem,
 }
 
 impl FeatureCombination {
     pub fn all() -> Vec<FeatureCombination> {
-        vec![Self::None, Self::Lite, Self::Normal, Self::Full]
+        vec![Self::Lite, Self::Normal, Self::Full, Self::FullWithGolem]
     }
 
     pub fn label(&self) -> &str {
@@ -204,6 +206,8 @@ impl FeatureCombination {
             Self::Full => "full",
             Self::FullNoLogging => "full-no-logging",
             Self::Golem => "golem",
+            Self::FullWithGolem => "full-golem",
+            Self::FullNoLoggingWithGolem => "full-no-logging-golem",
         }
     }
 
@@ -221,6 +225,16 @@ impl FeatureCombination {
                 vec!["--no-default-features", "--features", "full-no-logging"]
             }
             FeatureCombination::Golem => vec!["--features", "golem"],
+            FeatureCombination::FullWithGolem => {
+                vec!["--no-default-features", "--features", "full,golem"]
+            }
+            FeatureCombination::FullNoLoggingWithGolem => {
+                vec![
+                    "--no-default-features",
+                    "--features",
+                    "full-no-logging,golem",
+                ]
+            }
         }
     }
 }
@@ -271,6 +285,69 @@ impl PreparedComponent {
                         .unwrap()
                         .push((level, context, message));
                     Ok(())
+                },
+            )?;
+        }
+
+        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
+        {
+            struct WsConn;
+            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+            })?;
+
+            ws.func_new(
+                "[static]websocket-connection.connect",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket connect not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.send",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket send not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.receive",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.receive-with-timeout",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive-with-timeout not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.close",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket close not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.subscribe",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket subscribe not available in tests",
+                    ))
                 },
             )?;
         }
@@ -332,9 +409,20 @@ impl GolemPreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
+        config.epoch_interruption(true);
         config.async_stack_size(32 * 1024 * 1024);
         config.max_wasm_stack(16 * 1024 * 1024);
         let engine = Engine::new(&config)?;
+
+        // Start a background thread that increments the epoch every 10ms,
+        // enabling epoch-based interruption to enforce timeouts on spinning WASM.
+        let epoch_engine = engine.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                epoch_engine.increment_epoch();
+            }
+        });
         let mut linker: Linker<Host> = Linker::new(&engine);
 
         wasmtime_wasi::p2::add_to_linker_with_options_async(
@@ -361,11 +449,74 @@ impl GolemPreparedComponent {
             )?;
         }
 
-        // Mock golem:api/context@1.3.0
+        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
+        {
+            struct WsConn;
+            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+            })?;
+
+            ws.func_new(
+                "[static]websocket-connection.connect",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket connect not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.send",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket send not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.receive",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.receive-with-timeout",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive-with-timeout not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.close",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket close not available in tests",
+                    ))
+                },
+            )?;
+
+            ws.func_new(
+                "[method]websocket-connection.subscribe",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket subscribe not available in tests",
+                    ))
+                },
+            )?;
+        }
+
+        // Mock golem:api/context@1.5.0
         let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
         let spans_clone = spans.clone();
 
-        let mut golem_ctx = linker.instance("golem:api/context@1.3.0")?;
+        let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
 
         // Register the span resource type
         let span_resource_type = ResourceType::host::<GolemSpan>();
