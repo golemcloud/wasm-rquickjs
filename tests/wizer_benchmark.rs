@@ -89,18 +89,20 @@ fn build_example(name: &str) -> Utf8PathBuf {
     .expect("Failed to generate wrapper crate");
 
     eprintln!("Compiling wrapper crate...");
-    let status = Command::new("cargo-component")
+    let status = Command::new("cargo")
         .arg("build")
+        .arg("--target")
+        .arg("wasm32-wasip2")
         .arg("--target-dir")
         .arg(&shared_target)
         .current_dir(&wrapper_crate_root)
         .status()
-        .expect("Failed to run cargo-component");
-    assert!(status.success(), "cargo-component build failed");
+        .expect("Failed to run cargo build");
+    assert!(status.success(), "cargo build failed");
 
     Utf8Path::new("tmp")
         .join("rt-target")
-        .join("wasm32-wasip1")
+        .join("wasm32-wasip2")
         .join("debug")
         .join(format!("{}.wasm", name.to_snake_case()))
 }

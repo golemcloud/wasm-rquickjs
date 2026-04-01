@@ -68,7 +68,15 @@ pub fn collect_imported_interfaces<'a>(
         };
         match import {
             WorldItem::Interface { id, .. } => {
-                interfaces.push(context.get_imported_interface(id)?);
+                // Skip WASI-remapped interfaces — their types come from wasip2::
+                // and we cannot implement IntoJs/FromJs for foreign types.
+                let interface = &context.resolve.interfaces[*id];
+                let is_wasi_remapped = interface
+                    .package
+                    .is_some_and(|pkg_id| context.is_wasi_remapped_package(pkg_id));
+                if !is_wasi_remapped {
+                    interfaces.push(context.get_imported_interface(id)?);
+                }
             }
             WorldItem::Function(function) => {
                 global_imports.push((name, function));
@@ -528,6 +536,65 @@ fn generate_import_module(
         let rquickjs_class =
             generate_rquickjs_class_module(resource_name, &resource_name_ident, &resource_name_lit);
 
+        // For WASI-remapped resources, skip the IntoJs/FromJs impls on the bindgen type
+        // (they're foreign types from wasip2::) and the BorrowWrapper, since those would
+        // violate the orphan rule.
+        let foreign_type_impls = if context.is_wasi_remapped_type(resource_type_id) {
+            quote! {}
+        } else {
+            quote! {
+                impl<'js> rquickjs::IntoJs<'js> for #bindgen_path {
+                    fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                        #resource_name_ident {
+                            inner: Some(std::rc::Rc::new(self)),
+                        }
+                        .into_js(ctx)
+                    }
+                }
+
+                impl<'js> rquickjs::FromJs<'js> for #bindgen_path {
+                    fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                        let wrapper = #resource_name_ident::from_js(ctx, value)?;
+                        unsafe {
+                            Ok(
+                                #bindgen_path::from_handle(
+                                    wrapper
+                                      .inner
+                                      .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
+                                      .take_handle(),
+                                ),
+                            )
+                        }
+                    }
+                }
+
+                pub struct #borrow_wrapper_ident(pub #bindgen_path);
+
+                impl<'js> rquickjs::FromJs<'js> for #borrow_wrapper_ident {
+                    fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                        let wrapper = #resource_name_ident::from_js(ctx, value)?;
+                        unsafe {
+                            Ok(#borrow_wrapper_ident(
+                                #bindgen_path::from_handle(
+                                    wrapper
+                                      .inner
+                                      .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
+                                      .handle(),
+                                ),
+                            ))
+                        }
+                    }
+                }
+
+                impl Drop for #borrow_wrapper_ident {
+                    fn drop(&mut self) {
+                        // By taking out the handle from the resource it is not going to be dropped
+                        let _ = self.0.take_handle();
+                    }
+                }
+            }
+        };
+
         bridge_classes.push(quote! {
             #[derive(Clone, JsLifetime, Trace)]
             pub struct #resource_name_ident {
@@ -551,55 +618,7 @@ fn generate_import_module(
                 #(#special_methods)*
             }
 
-            impl<'js> rquickjs::IntoJs<'js> for #bindgen_path {
-                fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
-                    #resource_name_ident {
-                        inner: Some(std::rc::Rc::new(self)),
-                    }
-                    .into_js(ctx)
-                }
-            }
-
-            impl<'js> rquickjs::FromJs<'js> for #bindgen_path {
-                fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
-                    let wrapper = #resource_name_ident::from_js(ctx, value)?;
-                    unsafe {
-                        Ok(
-                            #bindgen_path::from_handle(
-                                wrapper
-                                  .inner
-                                  .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
-                                  .take_handle(),
-                            ),
-                        )
-                    }
-                }
-            }
-
-            pub struct #borrow_wrapper_ident(pub #bindgen_path);
-
-            impl<'js> rquickjs::FromJs<'js> for #borrow_wrapper_ident {
-                fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
-                    let wrapper = #resource_name_ident::from_js(ctx, value)?;
-                    unsafe {
-                        Ok(#borrow_wrapper_ident(
-                            #bindgen_path::from_handle(
-                                wrapper
-                                  .inner
-                                  .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
-                                  .handle(),
-                            ),
-                        ))
-                    }
-                }
-            }
-
-            impl Drop for #borrow_wrapper_ident {
-                fn drop(&mut self) {
-                    // By taking out the handle from the resource it is not going to be dropped
-                    let _ = self.0.take_handle();
-                }
-            }
+            #foreign_type_impls
         });
 
         let js_class_lit = LitStr::new(

@@ -227,6 +227,18 @@ pub fn ident_in_imported_interface(
         Span::call_site(),
     );
 
+    // Check if this interface belongs to a WASI package remapped to wasip2::
+    if let Some(package_id) = interface.package {
+        if context.is_wasi_remapped_package(package_id) {
+            let package = &context.resolve.packages[package_id];
+            let pkg_name_ident = Ident::new(
+                &escape_rust_ident(&package.name.name.to_snake_case()),
+                Span::call_site(),
+            );
+            return quote! { wasip2::#pkg_name_ident::#name_ident::#ident };
+        }
+    }
+
     let mut path = Vec::new();
     path.push(quote! { crate });
     path.push(quote! { bindings });
@@ -401,7 +413,13 @@ pub fn get_wrapped_type_internal(
                 TypeDefKind::Result(result) => {
                     get_wrapped_type_result(ctx, import_rust_type, export_rust_type, result)
                 }
-                TypeDefKind::Record(_) | TypeDefKind::Variant(_) => get_wrapped_type_adt(ctx),
+                TypeDefKind::Record(_)
+                | TypeDefKind::Variant(_)
+                | TypeDefKind::Flags(_)
+                | TypeDefKind::Enum(_) => get_wrapped_type_adt(ctx, *type_id),
+                TypeDefKind::Handle(Handle::Own(resource_type_id)) => {
+                    get_wrapped_type_own_handle(ctx, resource_type_id)
+                }
                 TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
                     get_wrapped_type_borrow_handle(ctx, resource_type_id)
                 }
@@ -799,8 +817,77 @@ fn get_wrapped_type_borrow_handle(
     }
 }
 
-fn get_wrapped_type_adt(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {
-    Ok(WrappedType::no_wrapping(ctx.original_type_ref))
+fn get_wrapped_type_own_handle(
+    ctx: GetWrappedTypeContext<'_>,
+    resource_type_id: &TypeId,
+) -> anyhow::Result<WrappedType> {
+    // Follow type aliases to find the actual resource definition, since
+    // `use wasi:io/streams.{output-stream}` creates a type alias in the
+    // importing interface that points to the actual WASI resource.
+    let resolved = follow_type_paths(ctx.context, *resource_type_id)?;
+    let resolved_is_wasi = resolved.owner != ctx.context.resolve.types[*resource_type_id].owner
+        && matches!(resolved.owner, TypeOwner::Interface(iface_id) if {
+            ctx.context.resolve.interfaces.get(iface_id)
+                .and_then(|iface| iface.package)
+                .is_some_and(|pkg_id| ctx.context.is_wasi_remapped_package(pkg_id))
+        });
+    let is_wasi = ctx.context.is_wasi_remapped_type(*resource_type_id) || resolved_is_wasi;
+
+    if is_wasi {
+        // Find the actual resource type id by following aliases
+        let actual_resource_type_id = find_resource_type_id(ctx.context, *resource_type_id)?;
+        ctx.context.record_visited_type(actual_resource_type_id);
+        let wrapper_name = crate::conversions::wasi_wrapper_name(ctx.context, actual_resource_type_id)?;
+        let wrapper_name_for_ref = wrapper_name.clone();
+        let original = ctx.original_type_ref;
+        Ok(WrappedType {
+            wrap: TokenStreamWrapper::new(move |ts| {
+                quote! { crate::conversions::#wrapper_name(#ts) }
+            }),
+            unwrap: TokenStreamWrapper::new(move |ts| {
+                quote! { #ts.0 }
+            }),
+            wrapped_type_ref: quote! { crate::conversions::#wrapper_name_for_ref },
+            original_type_ref: original,
+        })
+    } else {
+        Ok(WrappedType::no_wrapping(ctx.original_type_ref))
+    }
+}
+
+/// Follows type aliases to find the final resource TypeId
+fn find_resource_type_id(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow::Result<TypeId> {
+    let mut current = type_id;
+    loop {
+        let typ = context.typ(current)?;
+        match &typ.kind {
+            TypeDefKind::Type(Type::Id(inner)) => {
+                current = *inner;
+            }
+            TypeDefKind::Resource => return Ok(current),
+            _ => return Ok(current),
+        }
+    }
+}
+
+fn get_wrapped_type_adt(ctx: GetWrappedTypeContext<'_>, type_id: TypeId) -> anyhow::Result<WrappedType> {
+    if ctx.context.is_wasi_remapped_type(type_id) {
+        let wrapper_name = crate::conversions::wasi_wrapper_name(ctx.context, type_id)?;
+        let wrapper_name_for_ref = wrapper_name.clone();
+        let original = ctx.original_type_ref;
+        Ok(WrappedType {
+            wrap: TokenStreamWrapper::new(move |ts| {
+                quote! { crate::conversions::#wrapper_name(#ts) }
+            }),
+            unwrap: TokenStreamWrapper::new(move |ts| {
+                quote! { #ts.0 }
+            }),
+            wrapped_type_ref: quote! { crate::conversions::#wrapper_name_for_ref },
+            original_type_ref: original,
+        })
+    } else {
+        Ok(WrappedType::no_wrapping(ctx.original_type_ref))
+    }
 }
 
 fn get_wrapped_type_string(ctx: GetWrappedTypeContext<'_>) -> anyhow::Result<WrappedType> {

@@ -915,8 +915,8 @@ impl CompiledTest {
         )?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
-        let mut command = Command::new("cargo-component");
-        command.arg("build");
+        let mut command = Command::new("cargo");
+        command.arg("build").arg("--target").arg("wasm32-wasip2");
         if use_shared_target {
             command.arg("--target-dir");
             command.arg(shared_target);
@@ -930,7 +930,7 @@ impl CompiledTest {
                     Ok(status)
                 } else {
                     Err(std::io::Error::other(format!(
-                        "cargo-component build failed for {wrapper_crate_root}"
+                        "cargo build failed for {wrapper_crate_root}"
                     )))
                 }
             })?;
@@ -940,7 +940,7 @@ impl CompiledTest {
                 wasm: Precompiled(
                     Utf8Path::new("tmp")
                         .join("rt-target")
-                        .join("wasm32-wasip1")
+                        .join("wasm32-wasip2")
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
                 ),
@@ -950,7 +950,7 @@ impl CompiledTest {
                 wasm: Precompiled(
                     wrapper_crate_root
                         .join("target")
-                        .join("wasm32-wasip1")
+                        .join("wasm32-wasip2")
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
                 ),

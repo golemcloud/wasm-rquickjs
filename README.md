@@ -59,7 +59,7 @@ Usage: wasm-rquickjs generate-wrapper-crate --js <JS> --wit <WIT> --output <OUTP
 - The `--output` argument is the path to the output directory where the generated Rust crate will be created.
 
 The output directory is going to contain a self-contained Rust crate that can be compiled into a WASM component using
-the [cargo-component](https://github.com/bytecodealliance/cargo-component) tool.
+`cargo build --target wasm32-wasip2`.
 
 The generated crate has some **features** that control what imports the component will have beside the ones defined in
 the user's WIT world:

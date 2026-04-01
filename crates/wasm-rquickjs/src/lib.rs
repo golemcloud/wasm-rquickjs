@@ -1,9 +1,7 @@
 use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
 use crate::imports::generate_import_modules;
-use crate::skeleton::{
-    copy_skeleton_lock, copy_skeleton_sources, generate_app_manifest, generate_cargo_toml,
-};
+use crate::skeleton::{copy_skeleton_lock, copy_skeleton_sources, generate_cargo_toml};
 use crate::wit::{add_get_script_import, add_wizer_init_export};
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -15,6 +13,19 @@ use wit_parser::{
     Function, Interface, InterfaceId, PackageId, PackageName, PackageSourceMap, Resolve, TypeDef,
     TypeId, TypeOwner, WorldId, WorldItem,
 };
+
+/// WASI package namespaces whose interfaces are remapped to `wasip2::` in the generated code.
+/// These correspond to interfaces provided by the `wasip2` crate and are mapped via the
+/// `with:` block in `wit_bindgen::generate!`.
+const WASI_REMAP_NAMESPACES: &[(&str, &str)] = &[
+    ("cli", "cli"),
+    ("clocks", "clocks"),
+    ("filesystem", "filesystem"),
+    ("http", "http"),
+    ("io", "io"),
+    ("random", "random"),
+    ("sockets", "sockets"),
+];
 
 mod conversions;
 mod exports;
@@ -131,9 +142,6 @@ pub fn generate_wrapper_crate(
 
     // Copying the skeleton's Cargo.lock for faster dependency resolution
     copy_skeleton_lock(context.output).context("Failed to copy skeleton Cargo.lock")?;
-
-    // Generating a Golem App Manifest file (for debugging)
-    generate_app_manifest(&context)?;
 
     // Copying the skeleton files
     copy_skeleton_sources(context.output).context("Failed to copy skeleton sources")?;
@@ -325,6 +333,37 @@ impl<'a> GeneratorContext<'a> {
             .types
             .get(type_id)
             .ok_or_else(|| anyhow!("Unknown type id: {type_id:?}"))
+    }
+
+    /// Returns `true` if the given package is a WASI package whose interfaces are remapped
+    /// to `wasip2::` via the `with:` block in `wit_bindgen::generate!`.
+    fn is_wasi_remapped_package(&self, package_id: PackageId) -> bool {
+        let package = &self.resolve.packages[package_id];
+        if package.name.namespace != "wasi" {
+            return false;
+        }
+        WASI_REMAP_NAMESPACES
+            .iter()
+            .any(|(pkg_name, _)| *pkg_name == package.name.name.as_str())
+    }
+
+    /// Returns `true` if the given type belongs to a WASI-remapped interface.
+    fn is_wasi_remapped_type(&self, type_id: TypeId) -> bool {
+        if let Some(typ) = self.resolve.types.get(type_id) {
+            match &typ.owner {
+                TypeOwner::Interface(interface_id) => {
+                    if let Some(interface) = self.resolve.interfaces.get(*interface_id) {
+                        if let Some(package_id) = interface.package {
+                            return self.is_wasi_remapped_package(package_id);
+                        }
+                    }
+                    false
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
     }
 }
 

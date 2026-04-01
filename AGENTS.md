@@ -200,4 +200,3 @@ Key external dependencies:
 - `rquickjs` - QuickJS Rust bindings
 - `wit-parser` / `wit-encoder` - WebAssembly Interface Type support
 - `wasmtime` - WASM runtime for testing
-- `cargo-component` - WASM component compilation (for end users)

@@ -411,7 +411,7 @@ async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
 
     let wasm_path = Utf8Path::new("tmp")
         .join("rt-target")
-        .join("wasm32-wasip1")
+        .join("wasm32-wasip2")
         .join("debug")
         .join(format!("{}.wasm", name.to_snake_case()));
 
@@ -434,8 +434,10 @@ async fn compile_runner() -> anyhow::Result<Utf8PathBuf> {
     )?;
 
     println!("Compiling wrapper crate in {wrapper_crate_root}");
-    let status = Command::new("cargo-component")
+    let status = Command::new("cargo")
         .arg("build")
+        .arg("--target")
+        .arg("wasm32-wasip2")
         .arg("--target-dir")
         .arg(&shared_target)
         .args([
