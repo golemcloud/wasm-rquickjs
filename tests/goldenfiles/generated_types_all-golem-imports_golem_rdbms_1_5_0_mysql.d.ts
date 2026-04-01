@@ -1,5 +1,5 @@
-declare module 'golem:rdbms/mysql@0.0.1' {
-  import * as golemRdbms001Types from 'golem:rdbms/types@0.0.1';
+declare module 'golem:rdbms/mysql@1.5.0' {
+  import * as golemRdbms150Types from 'golem:rdbms/types@1.5.0';
   export class DbResultStream {
     getColumns(): DbColumn[];
     getNext(): DbRow[] | undefined;
@@ -48,9 +48,9 @@ declare module 'golem:rdbms/mysql@0.0.1' {
      */
     rollback(): void;
   }
-  export type Date = golemRdbms001Types.Date;
-  export type Time = golemRdbms001Types.Time;
-  export type Timestamp = golemRdbms001Types.Timestamp;
+  export type Date = golemRdbms150Types.Date;
+  export type Time = golemRdbms150Types.Time;
+  export type Timestamp = golemRdbms150Types.Timestamp;
   export type Error = 
   {
     tag: 'connection-failure'
@@ -200,7 +200,6 @@ declare module 'golem:rdbms/mysql@0.0.1' {
     tag: 'smallint'
     val: number
   } |
-  /** s24 */
   {
     tag: 'mediumint'
     val: number
@@ -221,7 +220,6 @@ declare module 'golem:rdbms/mysql@0.0.1' {
     tag: 'smallint-unsigned'
     val: number
   } |
-  /** u24 */
   {
     tag: 'mediumint-unsigned'
     val: number

@@ -1,5 +1,5 @@
-declare module 'golem:rdbms/postgres@0.0.1' {
-  import * as golemRdbms001Types from 'golem:rdbms/types@0.0.1';
+declare module 'golem:rdbms/postgres@1.5.0' {
+  import * as golemRdbms150Types from 'golem:rdbms/types@1.5.0';
   export class LazyDbValue {
     constructor(value: DbValue);
     get(): DbValue;
@@ -56,14 +56,14 @@ declare module 'golem:rdbms/postgres@0.0.1' {
      */
     rollback(): void;
   }
-  export type Date = golemRdbms001Types.Date;
-  export type Time = golemRdbms001Types.Time;
-  export type Timetz = golemRdbms001Types.Timetz;
-  export type Timestamp = golemRdbms001Types.Timestamp;
-  export type Timestamptz = golemRdbms001Types.Timestamptz;
-  export type Uuid = golemRdbms001Types.Uuid;
-  export type IpAddress = golemRdbms001Types.IpAddress;
-  export type MacAddress = golemRdbms001Types.MacAddress;
+  export type Date = golemRdbms150Types.Date;
+  export type Time = golemRdbms150Types.Time;
+  export type Timetz = golemRdbms150Types.Timetz;
+  export type Timestamp = golemRdbms150Types.Timestamp;
+  export type Timestamptz = golemRdbms150Types.Timestamptz;
+  export type Uuid = golemRdbms150Types.Uuid;
+  export type IpAddress = golemRdbms150Types.IpAddress;
+  export type MacAddress = golemRdbms150Types.MacAddress;
   export type Error = 
   {
     tag: 'connection-failure'
@@ -192,6 +192,11 @@ declare module 'golem:rdbms/postgres@0.0.1' {
   export type Enumeration = {
     name: string;
     value: string;
+  };
+  export type SparseVec = {
+    dim: number;
+    indices: number[];
+    values: number[];
   };
   export type Composite = {
     name: string;
@@ -388,6 +393,18 @@ declare module 'golem:rdbms/postgres@0.0.1' {
   } |
   {
     tag: 'null'
+  } |
+  {
+    tag: 'vector'
+    val: number[]
+  } |
+  {
+    tag: 'halfvec'
+    val: number[]
+  } |
+  {
+    tag: 'sparsevec'
+    val: SparseVec
   };
   export type CompositeType = {
     name: string;
@@ -529,6 +546,15 @@ declare module 'golem:rdbms/postgres@0.0.1' {
   {
     tag: 'range'
     val: RangeType
+  } |
+  {
+    tag: 'vector'
+  } |
+  {
+    tag: 'halfvec'
+  } |
+  {
+    tag: 'sparsevec'
   };
   export type DbColumn = {
     ordinal: bigint;
