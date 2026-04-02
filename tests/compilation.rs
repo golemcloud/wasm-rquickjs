@@ -60,8 +60,8 @@ fn compilation_test(
     )?;
 
     println!("Compiling wrapper crate in {wrapper_crate_root}");
-    let mut cmd = Command::new("cargo-component");
-    cmd.arg("build");
+    let mut cmd = Command::new("cargo");
+    cmd.arg("build").arg("--target").arg("wasm32-wasip2");
     if share_target_dir {
         cmd.arg("--target-dir").arg(shared_target);
     }

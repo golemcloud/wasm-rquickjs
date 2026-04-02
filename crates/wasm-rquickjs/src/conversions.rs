@@ -2,13 +2,55 @@ use crate::GeneratorContext;
 use crate::javascript::escape_js_ident;
 use crate::rust_bindgen::{RustType, TypeOwnershipStyle, escape_rust_ident, type_mode_for};
 use crate::types::{get_wrapped_type, type_id_to_type_ref};
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeSet;
 use syn::{Lit, LitStr};
-use wit_parser::{Type, TypeDefKind, TypeId};
+use wit_parser::{Type, TypeDefKind, TypeId, TypeOwner};
+
+/// Returns the wrapper type name for a WASI-remapped type.
+///
+/// For WASI types (from wasip2::), we cannot implement IntoJs/FromJs directly
+/// due to the orphan rule, so we generate newtype wrappers in conversions.rs.
+/// This function generates the fully qualified path to the wrapper type.
+pub fn wasi_wrapper_name(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow::Result<Ident> {
+    let typ = context.typ(type_id)?;
+    let name = typ
+        .name
+        .as_ref()
+        .ok_or_else(|| anyhow!("WASI type has no name"))?;
+
+    // Build a unique wrapper name including the package and interface name to avoid conflicts
+    // between types with the same name in different WASI packages (e.g., wasi:filesystem/types
+    // and wasi:http/types both have error-code).
+    let interface_prefix = match &typ.owner {
+        TypeOwner::Interface(iface_id) => {
+            let iface = context
+                .resolve
+                .interfaces
+                .get(*iface_id)
+                .ok_or_else(|| anyhow!("Unknown interface id"))?;
+            let pkg_prefix = if let Some(pkg_id) = iface.package {
+                let pkg = &context.resolve.packages[pkg_id];
+                pkg.name.name.to_upper_camel_case()
+            } else {
+                String::new()
+            };
+            let iface_prefix = if let Some(iface_name) = &iface.name {
+                iface_name.to_upper_camel_case()
+            } else {
+                String::new()
+            };
+            format!("{}{}", pkg_prefix, iface_prefix)
+        }
+        _ => String::new(),
+    };
+
+    let wrapper_name = format!("Js{}{}", interface_prefix, name.to_upper_camel_case());
+    Ok(Ident::new(&wrapper_name, Span::call_site()))
+}
 
 /// Generates the `<output>/src/conversions.rs` file for the wrapper crate, implementing the IntoJs
 /// and FromJs typeclass instances for the types generated in the Rust bindings..
@@ -58,7 +100,55 @@ fn generate_conversion_instances_for_type(
         return Ok(None);
     }
 
+    let is_wasi_remapped = context.is_wasi_remapped_type(type_id);
+
     let typ = context.typ(type_id)?;
+
+    // For WASI-remapped resource types, generate a newtype wrapper with IntoJs/FromJs
+    // since we can't implement those traits directly on the foreign wasip2 type.
+    if is_wasi_remapped && matches!(typ.kind, TypeDefKind::Resource) {
+        let type_path = type_id_to_type_ref(context, type_id)?;
+        let wrapper_name = wasi_wrapper_name(context, type_id)?;
+        let name = typ.name.as_deref().unwrap_or("Resource");
+        let name_lit = LitStr::new(name, Span::call_site());
+        return Ok(Some(quote! {
+            pub struct #wrapper_name(pub #type_path);
+
+            impl<'js> rquickjs::IntoJs<'js> for #wrapper_name {
+                fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                    rquickjs::class::Class::instance(ctx.clone(), self)
+                        .and_then(|cls| rquickjs::IntoJs::into_js(cls, ctx))
+                }
+            }
+
+            impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
+                fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                    let cls = rquickjs::class::Class::<Self>::from_js(ctx, value)?;
+                    let borrow = cls.try_borrow()?;
+                    Ok(Self(unsafe { #type_path::from_handle(borrow.0.handle()) }))
+                }
+            }
+
+            impl<'js> rquickjs::class::JsClass<'js> for #wrapper_name {
+                const NAME: &'static str = #name_lit;
+                type Mutable = rquickjs::class::Writable;
+                fn prototype(_ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<Option<rquickjs::Object<'js>>> {
+                    Ok(None)
+                }
+                fn constructor(_ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<Option<rquickjs::function::Constructor<'js>>> {
+                    Ok(None)
+                }
+            }
+
+            impl<'js> rquickjs::class::Trace<'js> for #wrapper_name {
+                fn trace<'a>(&self, _tracer: rquickjs::class::Tracer<'a, 'js>) {}
+            }
+
+            unsafe impl<'js> rquickjs::JsLifetime<'js> for #wrapper_name {
+                type Changed<'to> = #wrapper_name;
+            }
+        }));
+    }
 
     match &typ.kind {
         TypeDefKind::Record(record) => {
@@ -67,6 +157,13 @@ fn generate_conversion_instances_for_type(
             let mut set_fields = Vec::new();
             let mut get_fields = Vec::new();
             let mut rust_field_list = Vec::new();
+
+            // For WASI-remapped types, access fields through `.0.field` (newtype wrapper)
+            let field_accessor = if is_wasi_remapped {
+                quote! { self.0 }
+            } else {
+                quote! { self }
+            };
 
             for field in &record.fields {
                 let js_field_name = escape_js_ident(field.name.to_lower_camel_case());
@@ -86,7 +183,9 @@ fn generate_conversion_instances_for_type(
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
 
-                let wrapped_field = field_type.wrap.run(quote! { self.#rust_field_ident });
+                let wrapped_field = field_type
+                    .wrap
+                    .run(quote! { #field_accessor.#rust_field_ident });
                 let unwrapped_field = field_type.unwrap.run(quote! { #rust_field_ident });
 
                 set_fields.push(quote! {
@@ -102,32 +201,63 @@ fn generate_conversion_instances_for_type(
                 rust_field_list.push(rust_field_ident);
             }
 
-            Ok(Some(quote! {
-                impl<'js> rquickjs::IntoJs<'js> for #type_path {
-                    fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
-                        // record
-                        let obj = rquickjs::Object::new(ctx.clone())?;
-                        #(#set_fields);*
-                        Ok(obj.into_value())
-                    }
-                }
+            if is_wasi_remapped {
+                let wrapper_name = wasi_wrapper_name(context, type_id)?;
+                Ok(Some(quote! {
+                    pub struct #wrapper_name(pub #type_path);
 
-                impl<'js> rquickjs::FromJs<'js> for #type_path {
-                    fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
-                        let obj = rquickjs::Object::from_value(value)?;
-                        #(#get_fields);*
-                        Ok(Self {
-                            #(#rust_field_list),*
-                        })
+                    impl<'js> rquickjs::IntoJs<'js> for #wrapper_name {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            let obj = rquickjs::Object::new(ctx.clone())?;
+                            #(#set_fields);*
+                            Ok(obj.into_value())
+                        }
                     }
-                }
-            }))
+
+                    impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let obj = rquickjs::Object::from_value(value)?;
+                            #(#get_fields);*
+                            Ok(Self(#type_path {
+                                #(#rust_field_list),*
+                            }))
+                        }
+                    }
+                }))
+            } else {
+                Ok(Some(quote! {
+                    impl<'js> rquickjs::IntoJs<'js> for #type_path {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            let obj = rquickjs::Object::new(ctx.clone())?;
+                            #(#set_fields);*
+                            Ok(obj.into_value())
+                        }
+                    }
+
+                    impl<'js> rquickjs::FromJs<'js> for #type_path {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let obj = rquickjs::Object::from_value(value)?;
+                            #(#get_fields);*
+                            Ok(Self {
+                                #(#rust_field_list),*
+                            })
+                        }
+                    }
+                }))
+            }
         }
         TypeDefKind::Flags(flags) => {
             let type_path = type_id_to_type_ref(context, type_id)?;
 
             let mut set_fields = Vec::new();
             let mut get_fields = Vec::new();
+
+            // For WASI-remapped types, access through `.0` (newtype wrapper)
+            let self_ref = if is_wasi_remapped {
+                quote! { self.0 }
+            } else {
+                quote! { self }
+            };
 
             for flag in &flags.flags {
                 let js_field_name = escape_js_ident(flag.name.to_lower_camel_case());
@@ -136,7 +266,7 @@ fn generate_conversion_instances_for_type(
                 let field_name_lit = Lit::Str(LitStr::new(&js_field_name, Span::call_site()));
 
                 set_fields.push(quote! {
-                   obj.set(#field_name_lit, self & #type_path::#rust_field_ident == #type_path::#rust_field_ident)?;
+                   obj.set(#field_name_lit, #self_ref & #type_path::#rust_field_ident == #type_path::#rust_field_ident)?;
                 });
 
                 get_fields.push(quote! {
@@ -146,24 +276,48 @@ fn generate_conversion_instances_for_type(
                 });
             }
 
-            Ok(Some(quote! {
-                impl<'js> rquickjs::IntoJs<'js> for #type_path {
-                    fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
-                        let obj = rquickjs::Object::new(ctx.clone())?;
-                        #(#set_fields);*
-                        Ok(obj.into_value())
-                    }
-                }
+            if is_wasi_remapped {
+                let wrapper_name = wasi_wrapper_name(context, type_id)?;
+                Ok(Some(quote! {
+                    pub struct #wrapper_name(pub #type_path);
 
-                impl<'js> rquickjs::FromJs<'js> for #type_path {
-                    fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
-                        let obj = rquickjs::Object::from_value(value)?;
-                        let mut result = #type_path::empty();
-                        #(#get_fields);*
-                        Ok(result)
+                    impl<'js> rquickjs::IntoJs<'js> for #wrapper_name {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            let obj = rquickjs::Object::new(ctx.clone())?;
+                            #(#set_fields);*
+                            Ok(obj.into_value())
+                        }
                     }
-                }
-            }))
+
+                    impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let obj = rquickjs::Object::from_value(value)?;
+                            let mut result = #type_path::empty();
+                            #(#get_fields);*
+                            Ok(Self(result))
+                        }
+                    }
+                }))
+            } else {
+                Ok(Some(quote! {
+                    impl<'js> rquickjs::IntoJs<'js> for #type_path {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            let obj = rquickjs::Object::new(ctx.clone())?;
+                            #(#set_fields);*
+                            Ok(obj.into_value())
+                        }
+                    }
+
+                    impl<'js> rquickjs::FromJs<'js> for #type_path {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let obj = rquickjs::Object::from_value(value)?;
+                            let mut result = #type_path::empty();
+                            #(#get_fields);*
+                            Ok(result)
+                        }
+                    }
+                }))
+            }
         }
         TypeDefKind::Variant(variant) => {
             let type_path = type_id_to_type_ref(context, type_id)?;
@@ -222,32 +376,64 @@ fn generate_conversion_instances_for_type(
                 Span::call_site(),
             ));
 
-            Ok(Some(quote! {
-                impl<'js> rquickjs::IntoJs<'js> for #type_path {
-                    fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
-                        let obj = rquickjs::Object::new(ctx.clone())?;
-                        match self {
-                            #(#into_cases)*
-                        }
-                        Ok(obj.into_value())
-                    }
-                }
+            if is_wasi_remapped {
+                let wrapper_name = wasi_wrapper_name(context, type_id)?;
+                Ok(Some(quote! {
+                    pub struct #wrapper_name(pub #type_path);
 
-                impl<'js> rquickjs::FromJs<'js> for #type_path {
-                    fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
-                        let obj = rquickjs::Object::from_value(value)?;
-                        let tag: String = obj.get(crate::wrappers::TAG)?;
-                        match tag.as_str() {
-                            #(#from_cases)*
-                            _ => Err(rquickjs::Error::new_from_js_message(
-                                #lit_js_type,
-                                #lit_wit_type,
-                                format!("Unknown variant case: {tag}"),
-                            )),
+                    impl<'js> rquickjs::IntoJs<'js> for #wrapper_name {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            let obj = rquickjs::Object::new(ctx.clone())?;
+                            match self.0 {
+                                #(#into_cases)*
+                            }
+                            Ok(obj.into_value())
                         }
                     }
-                }
-            }))
+
+                    impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let obj = rquickjs::Object::from_value(value)?;
+                            let tag: String = obj.get(crate::wrappers::TAG)?;
+                            match tag.as_str() {
+                                #(#from_cases)*
+                                _ => Err(rquickjs::Error::new_from_js_message(
+                                    #lit_js_type,
+                                    #lit_wit_type,
+                                    format!("Unknown variant case: {tag}"),
+                                )),
+                            }.map(Self)
+                        }
+                    }
+                }))
+            } else {
+                Ok(Some(quote! {
+                    impl<'js> rquickjs::IntoJs<'js> for #type_path {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            let obj = rquickjs::Object::new(ctx.clone())?;
+                            match self {
+                                #(#into_cases)*
+                            }
+                            Ok(obj.into_value())
+                        }
+                    }
+
+                    impl<'js> rquickjs::FromJs<'js> for #type_path {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let obj = rquickjs::Object::from_value(value)?;
+                            let tag: String = obj.get(crate::wrappers::TAG)?;
+                            match tag.as_str() {
+                                #(#from_cases)*
+                                _ => Err(rquickjs::Error::new_from_js_message(
+                                    #lit_js_type,
+                                    #lit_wit_type,
+                                    format!("Unknown variant case: {tag}"),
+                                )),
+                            }
+                        }
+                    }
+                }))
+            }
         }
         TypeDefKind::Enum(enm) => {
             let type_path = type_id_to_type_ref(context, type_id)?;
@@ -271,34 +457,68 @@ fn generate_conversion_instances_for_type(
             let lit_js_type = Lit::Str(LitStr::new(&format!("JS {name}"), Span::call_site()));
             let lit_wit_type = Lit::Str(LitStr::new(&format!("WIT {name}"), Span::call_site()));
 
-            Ok(Some(quote! {
-                impl<'js> rquickjs::IntoJs<'js> for #type_path {
-                    fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
-                        match self {
-                            #(#into_cases)*
-                        }
-                    }
-                }
+            if is_wasi_remapped {
+                let wrapper_name = wasi_wrapper_name(context, type_id)?;
+                Ok(Some(quote! {
+                    pub struct #wrapper_name(pub #type_path);
 
-                impl<'js> rquickjs::FromJs<'js> for #type_path {
-                    fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
-                        let value = value
-                            .as_string()
-                            .ok_or_else(|| {
-                                rquickjs::Error::new_from_js_message(#lit_js_type, #lit_wit_type, "Expected a string")
-                            })?
-                            .to_string()?;
-                        match value.as_str() {
-                            #(#from_cases)*
-                            _ => Err(rquickjs::Error::new_from_js_message(
-                                #lit_js_type,
-                                #lit_wit_type,
-                                format!("Unknown case value: {value}"),
-                            )),
+                    impl<'js> rquickjs::IntoJs<'js> for #wrapper_name {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            match self.0 {
+                                #(#into_cases)*
+                            }
                         }
                     }
-                }
-            }))
+
+                    impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let value = value
+                                .as_string()
+                                .ok_or_else(|| {
+                                    rquickjs::Error::new_from_js_message(#lit_js_type, #lit_wit_type, "Expected a string")
+                                })?
+                                .to_string()?;
+                            match value.as_str() {
+                                #(#from_cases)*
+                                _ => Err(rquickjs::Error::new_from_js_message(
+                                    #lit_js_type,
+                                    #lit_wit_type,
+                                    format!("Unknown case value: {value}"),
+                                )),
+                            }.map(Self)
+                        }
+                    }
+                }))
+            } else {
+                Ok(Some(quote! {
+                    impl<'js> rquickjs::IntoJs<'js> for #type_path {
+                        fn into_js(self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+                            match self {
+                                #(#into_cases)*
+                            }
+                        }
+                    }
+
+                    impl<'js> rquickjs::FromJs<'js> for #type_path {
+                        fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
+                            let value = value
+                                .as_string()
+                                .ok_or_else(|| {
+                                    rquickjs::Error::new_from_js_message(#lit_js_type, #lit_wit_type, "Expected a string")
+                                })?
+                                .to_string()?;
+                            match value.as_str() {
+                                #(#from_cases)*
+                                _ => Err(rquickjs::Error::new_from_js_message(
+                                    #lit_js_type,
+                                    #lit_wit_type,
+                                    format!("Unknown case value: {value}"),
+                                )),
+                            }
+                        }
+                    }
+                }))
+            }
         }
         TypeDefKind::Type(Type::Id(type_id)) => {
             generate_conversion_instances_for_type(context, *type_id, visited_types)

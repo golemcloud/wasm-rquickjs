@@ -6,7 +6,7 @@
 #
 # Prerequisites:
 #   - The vendored test suite must be present (run vendor.sh first)
-#   - cargo-component must be installed
+#   - wasm32-wasip2 target must be installed (rustup target add wasm32-wasip2)
 #
 # The report is written to tests/node_compat/report.md
 

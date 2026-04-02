@@ -23,10 +23,20 @@ pub fn generate_export_impls(
     let guest_impls = generate_guest_impls(context)?;
     let module_defs = generate_module_defs(js_modules)?;
 
+    let world_name_lit = LitStr::new(&context.world_name, Span::call_site());
+    let with_block = generate_wasi_remaps(context);
+
     let lib_tokens = quote! {
-        #[allow(static_mut_refs)]
         #[allow(unsafe_op_in_unsafe_fn)]
-        mod bindings;
+        pub(crate) mod bindings {
+            wit_bindgen::generate!({
+                path: "wit",
+                world: #world_name_lit,
+                ownership: Owning,
+                generate_all,
+                #with_block
+            });
+        }
         mod builtin;
         mod conversions;
         #[allow(unused)]
@@ -745,5 +755,105 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
         })
     } else {
         Err(anyhow!("No JS modules provided."))?
+    }
+}
+
+/// Generates the `with: { ... }` entries for `wit_bindgen::generate!` to remap
+/// standard WASI interfaces to the `wasip2` crate, avoiding duplicate bindings.
+///
+/// Only interfaces that are actually used by the resolved world are included,
+/// because unused `with:` entries cause compilation errors.
+fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
+    // Static mapping from unversioned WIT interface names to wasip2 Rust module paths.
+    // The actual `with:` entries use the fully-versioned names from the resolved world.
+    static WASI_REMAPS: &[(&str, &str)] = &[
+        ("wasi:cli/environment", "wasip2::cli::environment"),
+        ("wasi:cli/exit", "wasip2::cli::exit"),
+        ("wasi:cli/stderr", "wasip2::cli::stderr"),
+        ("wasi:cli/stdin", "wasip2::cli::stdin"),
+        ("wasi:cli/stdout", "wasip2::cli::stdout"),
+        ("wasi:cli/terminal-input", "wasip2::cli::terminal_input"),
+        ("wasi:cli/terminal-output", "wasip2::cli::terminal_output"),
+        ("wasi:cli/terminal-stderr", "wasip2::cli::terminal_stderr"),
+        ("wasi:cli/terminal-stdin", "wasip2::cli::terminal_stdin"),
+        ("wasi:cli/terminal-stdout", "wasip2::cli::terminal_stdout"),
+        (
+            "wasi:clocks/monotonic-clock",
+            "wasip2::clocks::monotonic_clock",
+        ),
+        ("wasi:clocks/wall-clock", "wasip2::clocks::wall_clock"),
+        ("wasi:filesystem/preopens", "wasip2::filesystem::preopens"),
+        ("wasi:filesystem/types", "wasip2::filesystem::types"),
+        (
+            "wasi:http/outgoing-handler",
+            "wasip2::http::outgoing_handler",
+        ),
+        ("wasi:http/types", "wasip2::http::types"),
+        ("wasi:io/error", "wasip2::io::error"),
+        ("wasi:io/poll", "wasip2::io::poll"),
+        ("wasi:io/streams", "wasip2::io::streams"),
+        ("wasi:random/insecure", "wasip2::random::insecure"),
+        ("wasi:random/insecure-seed", "wasip2::random::insecure_seed"),
+        ("wasi:random/random", "wasip2::random::random"),
+        (
+            "wasi:sockets/instance-network",
+            "wasip2::sockets::instance_network",
+        ),
+        (
+            "wasi:sockets/ip-name-lookup",
+            "wasip2::sockets::ip_name_lookup",
+        ),
+        ("wasi:sockets/network", "wasip2::sockets::network"),
+        ("wasi:sockets/tcp", "wasip2::sockets::tcp"),
+        (
+            "wasi:sockets/tcp-create-socket",
+            "wasip2::sockets::tcp_create_socket",
+        ),
+        ("wasi:sockets/udp", "wasip2::sockets::udp"),
+        (
+            "wasi:sockets/udp-create-socket",
+            "wasip2::sockets::udp_create_socket",
+        ),
+    ];
+
+    // Collect all interfaces used in the world, with their fully-qualified versioned names
+    let world = &context.resolve.worlds[context.world];
+    let mut used_interfaces = std::collections::BTreeMap::<String, String>::new();
+
+    for (key, _) in world.imports.iter().chain(world.exports.iter()) {
+        if let WorldKey::Interface(id) = key {
+            let interface = &context.resolve.interfaces[*id];
+            if let Some(ref name) = interface.name
+                && let Some(package_id) = interface.package
+            {
+                let package = &context.resolve.packages[package_id];
+                let unversioned =
+                    format!("{}:{}/{}", package.name.namespace, package.name.name, name);
+                let versioned = package.name.interface_id(name);
+                used_interfaces.insert(unversioned, versioned);
+            }
+        }
+    }
+
+    // Build with: entries only for WASI interfaces that are actually used,
+    // using the fully-versioned WIT name as the key
+    let mut entries = Vec::new();
+    for (wit_name, rust_path) in WASI_REMAPS {
+        if let Some(versioned_name) = used_interfaces.get(*wit_name) {
+            let wit_lit = LitStr::new(versioned_name, Span::call_site());
+            let rust_path: syn::Path = syn::parse_str(rust_path)
+                .unwrap_or_else(|_| panic!("Invalid Rust path: {rust_path}"));
+            entries.push(quote! { #wit_lit: #rust_path });
+        }
+    }
+
+    if entries.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            with: {
+                #(#entries),*
+            },
+        }
     }
 }

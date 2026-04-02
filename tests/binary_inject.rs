@@ -41,17 +41,19 @@ impl BinarySlotTestBuilder {
         )?;
 
         eprintln!("Compiling wrapper crate...");
-        let status = Command::new("cargo-component")
+        let status = Command::new("cargo")
             .arg("build")
+            .arg("--target")
+            .arg("wasm32-wasip2")
             .arg("--target-dir")
             .arg(&shared_target)
             .current_dir(&wrapper_crate_root)
             .status()?;
-        assert!(status.success(), "cargo-component build failed");
+        assert!(status.success(), "cargo build failed");
 
         let wasm_path = Utf8Path::new("tmp")
             .join("inject-target")
-            .join("wasm32-wasip1")
+            .join("wasm32-wasip2")
             .join("debug")
             .join(format!("{}.wasm", example_name.to_snake_case()));
 

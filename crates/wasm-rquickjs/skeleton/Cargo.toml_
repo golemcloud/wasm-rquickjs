@@ -107,6 +107,7 @@ brotli = { version = "7", default-features = false, features = ["std"], optional
 crc32fast = { version = "1", optional = true }
 wasip2 = "1.0"
 wit-bindgen-rt = { version = "0.42.1", features = ["bitflags"] }
+wit-bindgen = { version = "0.42.1", default-features = false, features = ["macros"] }
 wstd = "=0.6.5"
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 chrono-tz = { version = "0.10", default-features = false, optional = true }
@@ -132,5 +133,3 @@ golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs.git", rev
 rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 
-[package.metadata.component.bindings]
-ownership = "owning"
