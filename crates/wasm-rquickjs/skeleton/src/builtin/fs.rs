@@ -929,9 +929,9 @@ pub mod native_module {
                         return result;
                     }
                 }
-                match file.write(data) {
-                    Ok(written) => {
-                        result.set("bytesWritten", written as f64).unwrap();
+                match file.write_all(data) {
+                    Ok(()) => {
+                        result.set("bytesWritten", data.len() as f64).unwrap();
                     }
                     Err(err) => {
                         result
@@ -976,9 +976,9 @@ pub mod native_module {
                     }
                 }
                 let bytes = data.as_bytes();
-                match file.write(bytes) {
-                    Ok(written) => {
-                        result.set("bytesWritten", written as f64).unwrap();
+                match file.write_all(bytes) {
+                    Ok(()) => {
+                        result.set("bytesWritten", bytes.len() as f64).unwrap();
                     }
                     Err(err) => {
                         result
