@@ -22,7 +22,9 @@ pub fn wasi_wrapper_name(context: &GeneratorContext<'_>, type_id: TypeId) -> any
         .as_ref()
         .ok_or_else(|| anyhow!("WASI type has no name"))?;
 
-    // Build a unique wrapper name including the interface name to avoid conflicts
+    // Build a unique wrapper name including the package and interface name to avoid conflicts
+    // between types with the same name in different WASI packages (e.g., wasi:filesystem/types
+    // and wasi:http/types both have error-code).
     let interface_prefix = match &typ.owner {
         TypeOwner::Interface(iface_id) => {
             let iface = context
@@ -30,11 +32,18 @@ pub fn wasi_wrapper_name(context: &GeneratorContext<'_>, type_id: TypeId) -> any
                 .interfaces
                 .get(*iface_id)
                 .ok_or_else(|| anyhow!("Unknown interface id"))?;
-            if let Some(iface_name) = &iface.name {
+            let pkg_prefix = if let Some(pkg_id) = iface.package {
+                let pkg = &context.resolve.packages[pkg_id];
+                pkg.name.name.to_upper_camel_case()
+            } else {
+                String::new()
+            };
+            let iface_prefix = if let Some(iface_name) = &iface.name {
                 iface_name.to_upper_camel_case()
             } else {
                 String::new()
-            }
+            };
+            format!("{}{}", pkg_prefix, iface_prefix)
         }
         _ => String::new(),
     };

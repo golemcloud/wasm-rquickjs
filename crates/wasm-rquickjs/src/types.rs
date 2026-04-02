@@ -772,6 +772,8 @@ fn get_wrapped_type_result(
 
     let wrap_ok = ok.wrap.run(quote! { v });
     let wrap_err = err.wrap.run(quote! { v });
+    let unwrap_ok = ok.unwrap.run(quote! { v });
+    let unwrap_err = err.unwrap.run(quote! { v });
 
     Ok(WrappedType {
         wrap: TokenStreamWrapper::new(move |ts| {
@@ -784,7 +786,14 @@ fn get_wrapped_type_result(
                 )
             }
         }),
-        unwrap: TokenStreamWrapper::new(|ts| quote! { #ts.0 }),
+        unwrap: TokenStreamWrapper::new(move |ts| {
+            quote! {
+                match #ts.0 {
+                    Ok(v) => Ok(#unwrap_ok),
+                    Err(v) => Err(#unwrap_err),
+                }
+            }
+        }),
         original_type_ref: ctx.original_type_ref,
         wrapped_type_ref: quote! { crate::wrappers::JsResult<#wrapped_ok, #wrapped_err> },
     })
@@ -837,20 +846,56 @@ fn get_wrapped_type_own_handle(
         // Find the actual resource type id by following aliases
         let actual_resource_type_id = find_resource_type_id(ctx.context, *resource_type_id)?;
         ctx.context.record_visited_type(actual_resource_type_id);
-        let wrapper_name =
-            crate::conversions::wasi_wrapper_name(ctx.context, actual_resource_type_id)?;
-        let wrapper_name_for_ref = wrapper_name.clone();
-        let original = ctx.original_type_ref;
-        Ok(WrappedType {
-            wrap: TokenStreamWrapper::new(move |ts| {
-                quote! { crate::conversions::#wrapper_name(#ts) }
-            }),
-            unwrap: TokenStreamWrapper::new(move |ts| {
-                quote! { #ts.0 }
-            }),
-            wrapped_type_ref: quote! { crate::conversions::#wrapper_name_for_ref },
-            original_type_ref: original,
-        })
+
+        // Use the import module's resource class (which has all methods like promise/ready)
+        // instead of the bare conversions wrapper.
+        if let Some((module_path, resource_ident)) = ctx
+            .context
+            .wasi_resource_module_path(actual_resource_type_id)
+        {
+            let module_path_wrap = module_path.clone();
+            let resource_ident_wrap = resource_ident.clone();
+            let original = ctx.original_type_ref.clone();
+            let original_for_unwrap = ctx.original_type_ref;
+            Ok(WrappedType {
+                wrap: TokenStreamWrapper::new(move |ts| {
+                    quote! {
+                        #module_path_wrap::#resource_ident_wrap {
+                            inner: Some(std::rc::Rc::new(#ts)),
+                        }
+                    }
+                }),
+                unwrap: TokenStreamWrapper::new(move |ts| {
+                    quote! {
+                        unsafe {
+                            #original_for_unwrap::from_handle(
+                                #ts.inner
+                                    .expect("Resource has already been disposed")
+                                    .take_handle()
+                            )
+                        }
+                    }
+                }),
+                wrapped_type_ref: quote! { #module_path::#resource_ident },
+                original_type_ref: original,
+            })
+        } else {
+            // Fallback to conversions wrapper if we can't determine the module path
+            let wrapper_name =
+                crate::conversions::wasi_wrapper_name(ctx.context, actual_resource_type_id)?;
+            let wrapper_name_for_ref = wrapper_name.clone();
+            let original = ctx.original_type_ref;
+            Ok(WrappedType {
+                wrap: TokenStreamWrapper::new(move |ts| {
+                    quote! { crate::conversions::#wrapper_name(#ts) }
+                }),
+                unwrap: TokenStreamWrapper::new(move |ts| {
+                    quote! { #ts.0 }
+                }),
+                wrapped_type_ref: quote! { crate::conversions::#wrapper_name_for_ref },
+                original_type_ref: original,
+            })
+        }
     } else {
         Ok(WrappedType::no_wrapping(ctx.original_type_ref))
     }

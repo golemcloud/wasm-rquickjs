@@ -349,6 +349,39 @@ impl<'a> GeneratorContext<'a> {
             .any(|(pkg_name, _)| *pkg_name == package.name.name.as_str())
     }
 
+    /// For a WASI-remapped resource type, returns the import module path and resource class
+    /// name (e.g., `crate::modules::wasi_io_0_2_3_poll::Pollable`).
+    fn wasi_resource_module_path(
+        &self,
+        type_id: TypeId,
+    ) -> Option<(proc_macro2::TokenStream, Ident)> {
+        let typ = self.resolve.types.get(type_id)?;
+        let resource_name = typ.name.as_ref()?;
+        let resource_ident = Ident::new(&resource_name.to_upper_camel_case(), Span::call_site());
+
+        let interface_id = match &typ.owner {
+            TypeOwner::Interface(id) => *id,
+            _ => return None,
+        };
+        let interface = self.resolve.interfaces.get(interface_id)?;
+        let interface_name = interface.name.as_ref()?;
+        let package_id = interface.package?;
+        let package = self.resolve.packages.get(package_id)?;
+        let package_name = &package.name;
+
+        let module_name = format!(
+            "{}_{}",
+            package_name.to_string().to_snake_case(),
+            interface_name.to_snake_case()
+        );
+        let module_ident = Ident::new(&module_name, Span::call_site());
+
+        Some((
+            quote::quote! { crate::modules::#module_ident },
+            resource_ident,
+        ))
+    }
+
     /// Returns `true` if the given type belongs to a WASI-remapped interface.
     fn is_wasi_remapped_type(&self, type_id: TypeId) -> bool {
         if let Some(typ) = self.resolve.types.get(type_id) {
