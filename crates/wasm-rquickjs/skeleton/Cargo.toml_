@@ -123,7 +123,7 @@ wasi-logging = { version = "0.0.1", optional = true }
 rusqlite = { version = "0.38", default-features = false, features = ["bundled", "wasm32-wasi-vfs", "functions", "session", "backup", "serialize"], optional = true }
 
 # Golem
-golem-rust = { git = "https://github.com/golemcloud/golem.git", branch = "main", default-features = false, optional = true }
+golem-rust = { git = "https://github.com/golemcloud/golem.git", branch = "semantic-retries", default-features = false, optional = true }
 golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs.git", rev = "2f8a2e468985dd13516c3c13603dbb8ea5ce9534", optional = true }
 
 # Patch rusqlite and libsqlite3-sys together for wasm32-wasi: the fork carries
