@@ -1,0 +1,16 @@
+[package]
+name = "golem-context"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Packages golem:api/context as a simple Rust crate"
+
+[dependencies]
+wit-bindgen-rt = { version = "0.42.1" }
+wit-bindgen = { version = "0.51.0", default-features = false, features = ["macros"] }
+wasip2 = "1.0"
+
+[package.metadata.component.target.dependencies]
+"golem:api" = { path = "wit/deps/golem-context" }

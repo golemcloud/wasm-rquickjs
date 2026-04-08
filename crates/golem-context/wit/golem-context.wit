@@ -1,0 +1,5 @@
+package golem-context-rust:golem-context;
+
+world golem-context {
+    import golem:api/context@1.5.0;
+}
