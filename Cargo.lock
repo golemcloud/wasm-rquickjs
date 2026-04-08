@@ -1216,6 +1216,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "golem-context"
+version = "0.0.1"
+dependencies = [
+ "wasip2",
+ "wit-bindgen",
+ "wit-bindgen-rt 0.42.1",
+]
+
+[[package]]
 name = "golem-websocket"
 version = "0.0.2"
 dependencies = [
