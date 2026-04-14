@@ -88,6 +88,22 @@ pub fn collect_imported_interfaces<'a>(
     Ok((global, interfaces))
 }
 
+fn warn_log_tokens(message: TokenStream) -> TokenStream {
+    quote! {
+        {
+            let message = #message;
+            #[cfg(feature = "logging")]
+            {
+                wasi_logging::log(wasi_logging::Level::Warn, "wasm-rquickjs", &message);
+            }
+            #[cfg(not(feature = "logging"))]
+            {
+                eprintln!("{message}");
+            }
+        }
+    }
+}
+
 fn generate_import_module(
     context: &GeneratorContext<'_>,
     import: &ImportedInterface<'_>,
@@ -444,11 +460,64 @@ fn generate_import_module(
                 .map(|p| format!("{}:{}", p.namespace, p.name))
                 == Some("wasi:io".to_string())
         {
+            let pollable_promise_start_log = warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.promise] start wrapper_handle={:?} strong_count={:?}",
+                    self.inner.as_ref().map(|pollable| pollable.handle()),
+                    self.inner
+                        .as_ref()
+                        .map(|pollable| std::rc::Rc::strong_count(pollable)),
+                )
+            });
+            let pollable_promise_transfer_log = warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.promise] transfer wrapper_handle={} strong_count={} taken_handle={}",
+                    wrapper_handle,
+                    strong_count,
+                    taken_handle,
+                )
+            });
+            let pollable_promise_complete_log = warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.promise] complete taken_handle={}",
+                    taken_handle,
+                )
+            });
+            let pollable_abortable_start_log = warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.abortable_promise] start wrapper_handle={:?} strong_count={:?}",
+                    self.inner.as_ref().map(|pollable| pollable.handle()),
+                    self.inner
+                        .as_ref()
+                        .map(|pollable| std::rc::Rc::strong_count(pollable)),
+                )
+            });
+            let pollable_abortable_transfer_log = warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.abortable_promise] transfer wrapper_handle={} strong_count={} taken_handle={}",
+                    wrapper_handle,
+                    strong_count,
+                    taken_handle,
+                )
+            });
+            let pollable_abortable_complete_log = warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.abortable_promise] finish taken_handle={} aborted={}",
+                    taken_handle,
+                    aborted,
+                )
+            });
             special_methods.push(quote! {
                 pub async fn promise(&mut self) -> () {
+                    #pollable_promise_start_log
                     let pollable = self.inner.take().expect("Resource has already been disposed");
-                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
+                    let wrapper_handle = pollable.handle();
+                    let strong_count = std::rc::Rc::strong_count(&pollable);
+                    let taken_handle = pollable.take_handle();
+                    #pollable_promise_transfer_log
+                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(taken_handle) };
                     wstd::runtime::AsyncPollable::new(pollable).wait_for().await;
+                    #pollable_promise_complete_log
                 }
             });
             special_methods.push(quote! {
@@ -498,8 +567,13 @@ fn generate_import_module(
                     }
 
                     // Only consume the pollable after signal setup succeeds
+                    #pollable_abortable_start_log
                     let pollable = self.inner.take().expect("Resource has already been disposed");
-                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
+                    let wrapper_handle = pollable.handle();
+                    let strong_count = std::rc::Rc::strong_count(&pollable);
+                    let taken_handle = pollable.take_handle();
+                    #pollable_abortable_transfer_log
+                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(taken_handle) };
                     let wait_for = wstd::runtime::AsyncPollable::new(pollable).wait_for();
 
                     let result = Abortable::new(wait_for, abort_reg).await;
@@ -514,6 +588,9 @@ fn generate_import_module(
                         abort_fn,
                     ));
 
+                    let aborted = result.is_err();
+                    #pollable_abortable_complete_log
+
                     match result {
                         Ok(()) => Ok(()),
                         Err(_aborted) => {
@@ -524,6 +601,41 @@ fn generate_import_module(
                 }
             });
         }
+
+        let pollable_dispose_log = if resource_name == "pollable" {
+            warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.__dispose] wrapper_handle={:?} strong_count={:?}",
+                    self.inner.as_ref().map(|pollable| pollable.handle()),
+                    self.inner
+                        .as_ref()
+                        .map(|pollable| std::rc::Rc::strong_count(pollable)),
+                )
+            })
+        } else {
+            quote! {}
+        };
+        let pollable_borrow_from_js_log = if resource_name == "pollable" {
+            warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.borrow_from_js] alias_handle={} strong_count={}",
+                    handle,
+                    strong_count,
+                )
+            })
+        } else {
+            quote! {}
+        };
+        let pollable_borrow_drop_log = if resource_name == "pollable" {
+            warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.borrow_drop] detached_handle={}",
+                    detached_handle,
+                )
+            })
+        } else {
+            quote! {}
+        };
 
         let rquickjs_class =
             generate_rquickjs_class_module(resource_name, &resource_name_ident, &resource_name_lit);
@@ -538,14 +650,20 @@ fn generate_import_module(
                 impl<'js> rquickjs::FromJs<'js> for #borrow_wrapper_ident {
                     fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                         let wrapper = #resource_name_ident::from_js(ctx, value)?;
+                        let inner = wrapper
+                            .inner
+                            .as_ref()
+                            .ok_or_else(|| rquickjs::Error::FromJs {
+                                from: "JavaScript object",
+                                to: #resource_name_lit,
+                                message: Some("Resource has already been disposed".to_string()),
+                            })?;
+                        let handle = inner.handle();
+                        let strong_count = std::rc::Rc::strong_count(inner);
+                        #pollable_borrow_from_js_log
                         unsafe {
                             Ok(#borrow_wrapper_ident(
-                                #bindgen_path::from_handle(
-                                    wrapper
-                                      .inner
-                                      .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
-                                      .handle(),
-                                ),
+                                #bindgen_path::from_handle(handle),
                             ))
                         }
                     }
@@ -554,6 +672,8 @@ fn generate_import_module(
                 impl Drop for #borrow_wrapper_ident {
                     fn drop(&mut self) {
                         // By taking out the handle from the resource it is not going to be dropped
+                        let detached_handle = self.0.handle();
+                        #pollable_borrow_drop_log
                         let _ = self.0.take_handle();
                     }
                 }
@@ -590,14 +710,20 @@ fn generate_import_module(
                 impl<'js> rquickjs::FromJs<'js> for #borrow_wrapper_ident {
                     fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                         let wrapper = #resource_name_ident::from_js(ctx, value)?;
+                        let inner = wrapper
+                            .inner
+                            .as_ref()
+                            .ok_or_else(|| rquickjs::Error::FromJs {
+                                from: "JavaScript object",
+                                to: #resource_name_lit,
+                                message: Some("Resource has already been disposed".to_string()),
+                            })?;
+                        let handle = inner.handle();
+                        let strong_count = std::rc::Rc::strong_count(inner);
+                        #pollable_borrow_from_js_log
                         unsafe {
                             Ok(#borrow_wrapper_ident(
-                                #bindgen_path::from_handle(
-                                    wrapper
-                                      .inner
-                                      .ok_or_else(|| rquickjs::Error::FromJs { from: "JavaScript object", to: #resource_name_lit, message: Some("Resource has already been disposed".to_string()) })?
-                                      .handle(),
-                                ),
+                                #bindgen_path::from_handle(handle),
                             ))
                         }
                     }
@@ -606,6 +732,8 @@ fn generate_import_module(
                 impl Drop for #borrow_wrapper_ident {
                     fn drop(&mut self) {
                         // By taking out the handle from the resource it is not going to be dropped
+                        let detached_handle = self.0.handle();
+                        #pollable_borrow_drop_log
                         let _ = self.0.take_handle();
                     }
                 }
@@ -629,6 +757,7 @@ fn generate_import_module(
 
                 #[qjs(rename="__dispose")]
                 pub fn __dispose(&mut self) {
+                    #pollable_dispose_log
                     let _ = self.inner.take();
                 }
 
@@ -696,6 +825,20 @@ fn generate_rquickjs_class_module(
         &format!("__impl_class_{}_", resource_name.to_snake_case()),
         Span::call_site(),
     );
+    let pollable_class_from_js_log = if resource_name == "pollable" {
+        warn_log_tokens(quote! {
+            format!(
+                "[wasm-rquickjs.pollable.class_from_js] wrapper_handle={:?} strong_count={:?}",
+                cloned.inner.as_ref().map(|pollable| pollable.handle()),
+                cloned
+                    .inner
+                    .as_ref()
+                    .map(|pollable| std::rc::Rc::strong_count(pollable)),
+            )
+        })
+    } else {
+        quote! {}
+    };
 
     quote! {
         mod #mod_name {
@@ -742,7 +885,9 @@ fn generate_rquickjs_class_module(
                     use rquickjs::class::impl_::CloneTrait;
                     let value = rquickjs::class::Class::<Self>::from_js(ctx, value)?;
                     let borrow = value.try_borrow()?;
-                    Ok(rquickjs::class::impl_::CloneWrapper(&*borrow).wrap_clone())
+                    let cloned = rquickjs::class::impl_::CloneWrapper(&*borrow).wrap_clone();
+                    #pollable_class_from_js_log
+                    Ok(cloned)
                 }
             }
         }

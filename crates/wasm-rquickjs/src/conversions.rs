@@ -72,6 +72,22 @@ pub fn generate_conversions(context: &GeneratorContext<'_>) -> anyhow::Result<()
     Ok(())
 }
 
+fn warn_log_tokens(message: TokenStream) -> TokenStream {
+    quote! {
+        {
+            let message = #message;
+            #[cfg(feature = "logging")]
+            {
+                wasi_logging::log(wasi_logging::Level::Warn, "wasm-rquickjs", &message);
+            }
+            #[cfg(not(feature = "logging"))]
+            {
+                eprintln!("{message}");
+            }
+        }
+    }
+}
+
 fn generate_conversion_instances(
     context: &GeneratorContext<'_>,
 ) -> anyhow::Result<Vec<TokenStream>> {
@@ -111,6 +127,16 @@ fn generate_conversion_instances_for_type(
         let wrapper_name = wasi_wrapper_name(context, type_id)?;
         let name = typ.name.as_deref().unwrap_or("Resource");
         let name_lit = LitStr::new(name, Span::call_site());
+        let pollable_from_js_log = if name == "pollable" {
+            warn_log_tokens(quote! {
+                format!(
+                    "[wasm-rquickjs.pollable.conversions_from_js] alias_handle={}",
+                    handle,
+                )
+            })
+        } else {
+            quote! {}
+        };
         return Ok(Some(quote! {
             pub struct #wrapper_name(pub #type_path);
 
@@ -125,7 +151,9 @@ fn generate_conversion_instances_for_type(
                 fn from_js(ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                     let cls = rquickjs::class::Class::<Self>::from_js(ctx, value)?;
                     let borrow = cls.try_borrow()?;
-                    Ok(Self(unsafe { #type_path::from_handle(borrow.0.handle()) }))
+                    let handle = borrow.0.handle();
+                    #pollable_from_js_log
+                    Ok(Self(unsafe { #type_path::from_handle(handle) }))
                 }
             }
 
