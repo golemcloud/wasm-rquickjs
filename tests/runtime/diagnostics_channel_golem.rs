@@ -50,21 +50,21 @@ async fn golem_context_tracing(
             "traceSyncError should be true"
         );
 
-        // Custom tracing channel works
+        // Custom tracing channel auto-wires Golem tracing
+        assert!(
+            r["customGolemSubs"].as_bool().unwrap(),
+            "customGolemSubs should be true - custom channels should auto-wire Golem tracing"
+        );
         assert!(
             r["customTraceSync"].as_bool().unwrap(),
             "customTraceSync should be true"
         );
-        assert!(
-            r["customNoGolemSubs"].as_bool().unwrap(),
-            "customNoGolemSubs should be true"
-        );
 
-        // Verify spans were recorded by the mock host
+        // Verify spans were recorded by the mock host (2 http.client + 1 custom)
         let spans = prepared.spans.lock().unwrap();
         assert!(
-            spans.len() >= 2,
-            "Expected at least 2 spans from traceSync calls, got {}. Output: {}",
+            spans.len() >= 3,
+            "Expected at least 3 spans (2 http.client + 1 custom), got {}. Output: {}",
             spans.len(),
             output
         );

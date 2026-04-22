@@ -6,28 +6,37 @@ import { channel } from 'node:diagnostics_channel';
 // Internal registry to correlate context objects with span handles
 const _contextSpans = new WeakMap();
 
+// Deduplication set to prevent multiple subscriber installs for the same channel
+const _wired = new Set();
+
 // Helper to create a Golem-integrated subscriber set for any TracingChannel
 export function _installGolemTracing(channelName) {
-    const startCh = channel(`tracing:${channelName}:start`);
-    const endCh = channel(`tracing:${channelName}:end`);
-    const errorCh = channel(`tracing:${channelName}:error`);
-    const asyncEndCh = channel(`tracing:${channelName}:asyncEnd`);
+    const key = String(channelName);
+    if (_wired.has(key)) return;
+    _wired.add(key);
 
-    startCh.subscribe((context) => {
+    const startCh = channel(`tracing:${key}:start`);
+    const endCh = channel(`tracing:${key}:end`);
+    const errorCh = channel(`tracing:${key}:error`);
+    const asyncEndCh = channel(`tracing:${key}:asyncEnd`);
+
+    function onStart(context) {
         try {
-            const handle = start_span(channelName);
-            _contextSpans.set(context, { handle, hasAsync: false });
-            for (const [key, value] of Object.entries(context)) {
-                if (key !== 'result' && key !== 'error' && value !== undefined && value !== null) {
+            const handle = start_span(key);
+            _contextSpans.set(context, { handle });
+            for (const [k, value] of Object.entries(context)) {
+                if (k !== 'result' && k !== 'error' && value !== undefined && value !== null) {
                     try {
-                        set_span_attribute(handle, key, String(value));
+                        set_span_attribute(handle, k, String(value));
                     } catch (_) {}
                 }
             }
         } catch (_) {}
-    });
+    }
+    onStart._internal = true;
+    startCh.subscribe(onStart);
 
-    errorCh.subscribe((context) => {
+    function onError(context) {
         try {
             const entry = _contextSpans.get(context);
             if (entry) {
@@ -37,14 +46,14 @@ export function _installGolemTracing(channelName) {
                 }
             }
         } catch (_) {}
-    });
+    }
+    onError._internal = true;
+    errorCh.subscribe(onError);
 
-    endCh.subscribe((context) => {
+    function onEnd(context) {
         try {
             const entry = _contextSpans.get(context);
-            if (entry && !entry.hasAsync) {
-                // For sync-only traces, finish span on end
-                // For async traces, asyncEnd will finish it
+            if (entry && !context.__dc_async) {
                 if (context.result !== undefined) {
                     set_span_attribute(entry.handle, 'result', String(context.result));
                 }
@@ -52,9 +61,11 @@ export function _installGolemTracing(channelName) {
                 _contextSpans.delete(context);
             }
         } catch (_) {}
-    });
+    }
+    onEnd._internal = true;
+    endCh.subscribe(onEnd);
 
-    asyncEndCh.subscribe((context) => {
+    function onAsyncEnd(context) {
         try {
             const entry = _contextSpans.get(context);
             if (entry) {
@@ -65,16 +76,8 @@ export function _installGolemTracing(channelName) {
                 _contextSpans.delete(context);
             }
         } catch (_) {}
-    });
+    }
+    onAsyncEnd._internal = true;
+    asyncEndCh.subscribe(onAsyncEnd);
 
-    // Mark contexts as async when asyncStart fires
-    const asyncStartCh = channel(`tracing:${channelName}:asyncStart`);
-    asyncStartCh.subscribe((context) => {
-        try {
-            const entry = _contextSpans.get(context);
-            if (entry) {
-                entry.hasAsync = true;
-            }
-        } catch (_) {}
-    });
 }

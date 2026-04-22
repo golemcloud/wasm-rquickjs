@@ -9,10 +9,11 @@ export function test() {
     // tracing:http.client:start/end/error/asyncStart/asyncEnd channels.
     //
     // Test 1: Verify the Golem tracing subscribers are installed on the http.client channels
+    // Internal subscribers are hidden from hasSubscribers, so check _subscribers directly
     try {
         const startCh = dc.channel('tracing:http.client:start');
         const endCh = dc.channel('tracing:http.client:end');
-        results.golemTracingInstalled = startCh.hasSubscribers && endCh.hasSubscribers;
+        results.golemTracingInstalled = startCh._subscribers.length > 0 && endCh._subscribers.length > 0;
     } catch (e) {
         errors.push('golemTracingInstalled: ' + e.message);
     }
@@ -44,18 +45,16 @@ export function test() {
         errors.push('traceSyncError: ' + e.message);
     }
 
-    // Test 4: Verify custom tracing channels also work with _installGolemTracing pattern
-    // We manually install golem tracing for a custom channel
+    // Test 4: Verify custom tracing channels auto-wire Golem tracing
     try {
         const customCh = dc.tracingChannel('test.custom');
-        // Before installing, no extra subscribers beyond what we add
+        // After creation, Golem tracing should be auto-installed (internal subscribers)
         const startCh = dc.channel('tracing:test.custom:start');
-        const initialSubs = startCh.hasSubscribers;
+        results.customGolemSubs = startCh._subscribers.length > 0;
 
-        // The traceSync should work even without Golem tracing
-        const val = customCh.traceSync(() => 42, {});
+        // traceSync on custom channel should create a Golem span
+        const val = customCh.traceSync(() => 42, { operation: 'custom-op' });
         results.customTraceSync = val === 42;
-        results.customNoGolemSubs = !initialSubs;
     } catch (e) {
         errors.push('customTrace: ' + e.message);
     }

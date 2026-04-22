@@ -105,10 +105,8 @@ fn extract_preceding_comment(source: &str, span_start: u32) -> Option<String> {
 fn uses_node_test(program: &Program) -> bool {
     for stmt in &program.body {
         match stmt {
-            Statement::ImportDeclaration(import) => {
-                if import.source.value == "node:test" {
-                    return true;
-                }
+            Statement::ImportDeclaration(import) if import.source.value == "node:test" => {
+                return true;
             }
             Statement::VariableDeclaration(var_decl) => {
                 for decl in &var_decl.declarations {
@@ -163,16 +161,14 @@ fn extract_test_name(call: &CallExpression) -> Option<String> {
     if let Some(arg) = call.arguments.first() {
         match arg {
             Argument::StringLiteral(s) => return Some(s.value.to_string()),
-            Argument::TemplateLiteral(t) => {
-                if t.expressions.is_empty() && !t.quasis.is_empty() {
-                    let value = t
-                        .quasis
-                        .iter()
-                        .map(|q| q.value.raw.as_str())
-                        .collect::<String>();
-                    if !value.is_empty() {
-                        return Some(value);
-                    }
+            Argument::TemplateLiteral(t) if t.expressions.is_empty() && !t.quasis.is_empty() => {
+                let value = t
+                    .quasis
+                    .iter()
+                    .map(|q| q.value.raw.as_str())
+                    .collect::<String>();
+                if !value.is_empty() {
+                    return Some(value);
                 }
             }
             _ => {}
