@@ -11,6 +11,7 @@ on:
 permissions:
   checks: write
   pull-requests: write
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -125,6 +126,81 @@ jobs:
           exit-on-no-files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-binaries:
+    needs: [test-other, test-runtime, test-node-compat]
+    if: "startsWith(github.ref, 'refs/tags/v')"
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: blacksmith-16vcpu-ubuntu-2404
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: blacksmith-16vcpu-ubuntu-2404
+            archive: tar.gz
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: useblacksmith/rust-cache@v3
+        with:
+          prefix-key: v1-rust
+          shared-key: release-${{ matrix.target }}
+          cache-all-crates: true
+      - id: get_version
+        uses: battila7/get-version-action@v2
+      - name: Set version
+        shell: bash
+        run: |
+          VERSION="${{ steps.get_version.outputs.version-without-v }}"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            sed -i '' "s/0.0.0/$VERSION/g" Cargo.toml
+          else
+            sed -i "s/0.0.0/$VERSION/g" Cargo.toml
+          fi
+      - name: Install cross-compilation tools
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Package (unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          ARCHIVE="wasm-rquickjs-cli-v${{ steps.get_version.outputs.version-without-v }}-${{ matrix.target }}.tar.gz"
+          tar -czf "$ARCHIVE" -C target/${{ matrix.target }}/release wasm-rquickjs
+          echo "ARCHIVE=$ARCHIVE" >> $GITHUB_ENV
+      - name: Package (windows)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          ARCHIVE="wasm-rquickjs-cli-v${{ steps.get_version.outputs.version-without-v }}-${{ matrix.target }}.zip"
+          cd target/${{ matrix.target }}/release
+          7z a "../../../$ARCHIVE" wasm-rquickjs.exe
+          cd ../../..
+          echo "ARCHIVE=$ARCHIVE" >> $GITHUB_ENV
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE }}
 
   publish:
     needs: [test-other, test-runtime, test-node-compat]

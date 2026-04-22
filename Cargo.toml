@@ -12,6 +12,14 @@ name = "wasm-rquickjs"
 path = "src/main.rs"
 test = false
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.'cfg(target_os = "windows")']
+pkg-fmt = "zip"
+
 [dependencies]
 "wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize"] }
 
