@@ -20,7 +20,7 @@ export function _installGolemTracing(channelName) {
     const errorCh = channel(`tracing:${key}:error`);
     const asyncEndCh = channel(`tracing:${key}:asyncEnd`);
 
-    startCh.subscribe((context) => {
+    function onStart(context) {
         try {
             const handle = start_span(key);
             _contextSpans.set(context, { handle });
@@ -32,9 +32,11 @@ export function _installGolemTracing(channelName) {
                 }
             }
         } catch (_) {}
-    });
+    }
+    onStart._internal = true;
+    startCh.subscribe(onStart);
 
-    errorCh.subscribe((context) => {
+    function onError(context) {
         try {
             const entry = _contextSpans.get(context);
             if (entry) {
@@ -44,9 +46,11 @@ export function _installGolemTracing(channelName) {
                 }
             }
         } catch (_) {}
-    });
+    }
+    onError._internal = true;
+    errorCh.subscribe(onError);
 
-    endCh.subscribe((context) => {
+    function onEnd(context) {
         try {
             const entry = _contextSpans.get(context);
             if (entry && !context.__dc_async) {
@@ -57,9 +61,11 @@ export function _installGolemTracing(channelName) {
                 _contextSpans.delete(context);
             }
         } catch (_) {}
-    });
+    }
+    onEnd._internal = true;
+    endCh.subscribe(onEnd);
 
-    asyncEndCh.subscribe((context) => {
+    function onAsyncEnd(context) {
         try {
             const entry = _contextSpans.get(context);
             if (entry) {
@@ -70,6 +76,8 @@ export function _installGolemTracing(channelName) {
                 _contextSpans.delete(context);
             }
         } catch (_) {}
-    });
+    }
+    onAsyncEnd._internal = true;
+    asyncEndCh.subscribe(onAsyncEnd);
 
 }

@@ -14,6 +14,10 @@ class Channel {
     }
 
     get hasSubscribers() {
+        return this._subscribers.some(fn => !fn._internal) || this._stores.size > 0;
+    }
+
+    get _hasAnySubscribers() {
         return this._subscribers.length > 0 || this._stores.size > 0;
     }
 
@@ -145,6 +149,10 @@ class TracingChannel {
         return TRACE_EVENTS.some(e => this[e].hasSubscribers);
     }
 
+    get _hasAnySubscribers() {
+        return TRACE_EVENTS.some(e => this[e]._hasAnySubscribers);
+    }
+
     unsubscribe(subscribers) {
         let allRemoved = true;
         for (const event of TRACE_EVENTS) {
@@ -158,7 +166,7 @@ class TracingChannel {
     }
 
     traceSync(fn, context = {}, thisArg, ...args) {
-        if (!this.hasSubscribers) {
+        if (!this._hasAnySubscribers) {
             return fn.apply(thisArg, args);
         }
 
@@ -180,7 +188,7 @@ class TracingChannel {
     }
 
     tracePromise(fn, context = {}, thisArg, ...args) {
-        if (!this.hasSubscribers) {
+        if (!this._hasAnySubscribers) {
             return fn.apply(thisArg, args);
         }
 
@@ -218,7 +226,7 @@ class TracingChannel {
     }
 
     traceCallback(fn, position = -1, context = {}, thisArg, ...args) {
-        if (!this.hasSubscribers) {
+        if (!this._hasAnySubscribers) {
             return fn.apply(thisArg, args);
         }
 
