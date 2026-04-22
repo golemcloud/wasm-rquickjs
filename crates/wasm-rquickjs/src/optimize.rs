@@ -232,10 +232,8 @@ fn collect_resource_types_from_item(
                 collect_resource_types_from_item(&export_item, engine, known);
             }
         }
-        ComponentItem::Resource(res_ty) => {
-            if !known.contains(res_ty) {
-                known.push(*res_ty);
-            }
+        ComponentItem::Resource(res_ty) if !known.contains(res_ty) => {
+            known.push(*res_ty);
         }
         _ => {}
     }
