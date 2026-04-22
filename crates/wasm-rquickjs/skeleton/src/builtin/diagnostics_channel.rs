@@ -10,7 +10,14 @@ pub const DIAGNOSTICS_CHANNEL_GOLEM_JS: &str = include_str!("diagnostics_channel
 #[cfg(feature = "golem")]
 pub const GOLEM_WIRE_JS: &str = r#"
     {
+        const { subscribe } = await import('node:diagnostics_channel');
         const { _installGolemTracing } = await import('__wasm_rquickjs_builtin/diagnostics_channel_golem');
+
+        const TRACING_CHANNEL_CREATED = Symbol.for('wasm-rquickjs.internal.tracing_channel.created');
+        subscribe(TRACING_CHANNEL_CREATED, ({ key }) => {
+            _installGolemTracing(key);
+        });
+
         _installGolemTracing('http.client');
     }
 "#;
