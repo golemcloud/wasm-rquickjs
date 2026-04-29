@@ -918,3 +918,130 @@ function assert_eq(a, b) {
         throw new Error(`Assertion failed: ${a} !== ${b}`);
     }
 }
+
+export async function redirectWithFailingStreamBody(port) {
+    console.log("fetch test 33 (redirect with failing stream body)");
+
+    // The body source intentionally throws on its first pull.
+    // Even though the target server (/redirect-to) responds with a redirect,
+    // the genuine stream-source error must be propagated (not swallowed).
+    const stream = new ReadableStream({
+        pull(controller) {
+            throw new Error("source body failure");
+        }
+    });
+
+    let caught = null;
+    try {
+        await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
+            method: 'POST',
+            body: stream,
+            redirect: 'follow'
+        });
+    } catch (e) {
+        caught = e;
+    }
+
+    if (caught === null) {
+        console.log("Expected stream body source error to propagate, but fetch resolved");
+        return;
+    }
+    console.log(`Caught body source error: ${caught.message}`);
+    if (String(caught.message).includes("source body failure")) {
+        console.log("Stream body source error surfaced through redirect: PASSED");
+    } else {
+        console.log("Stream body source error NOT surfaced as expected: FAILED");
+    }
+}
+
+export async function redirectWithInfiniteStreamBody(port) {
+    console.log("fetch test 34 (redirect with infinite stream body)");
+
+    // An infinite body that keeps producing chunks. Without prompt redirect
+    // handling this fetch would never resolve.
+    let interval = null;
+    const stream = new ReadableStream({
+        start(controller) {
+            interval = setInterval(() => {
+                try {
+                    controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+                } catch (_) { /* ignore */ }
+            }, 50);
+        },
+        cancel() {
+            if (interval !== null) {
+                clearInterval(interval);
+                interval = null;
+            }
+            console.log("Infinite stream cancel() invoked");
+        }
+    });
+
+    const start = Date.now();
+    const response = await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
+        method: 'POST',
+        body: stream,
+        redirect: 'follow'
+    });
+    const duration = Date.now() - start;
+
+    console.log(`Status: ${response.status}`);
+    console.log(`Redirected: ${response.redirected}`);
+    console.log(`Resolved in approximately ${duration}ms`);
+
+    // Stop the timer if cancel didn't get called
+    if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+    }
+
+    // The exact threshold doesn't matter - we just want to be sure we did
+    // NOT block waiting for the infinite upload to complete.
+    if (duration < 5000) {
+        console.log("Redirect handled promptly with infinite upload: PASSED");
+    } else {
+        console.log(`Redirect with infinite body was too slow: FAILED (${duration}ms)`);
+    }
+}
+
+export async function fetchFunctionShape() {
+    console.log("fetch test 35 (fetch function shape - Node compat)");
+
+    // Mirrors Node's vendored test-fetch.mjs invariants: fetch must be a
+    // plain (non-async) function whose prototype is Function.prototype.
+    // Node deliberately exposes `fetch` as a plain function (not a method
+    // shorthand) so `new fetch(url)` does NOT throw — it simply returns
+    // the Promise produced by fetch(url). We match that behavior.
+    const asyncFunction = (async function () {}).constructor;
+    const isAsync = fetch instanceof asyncFunction;
+    const hasFunctionProto = Reflect.getPrototypeOf(fetch) === Reflect.getPrototypeOf(function () {});
+    const notAsyncProto = Reflect.getPrototypeOf(fetch) !== Reflect.getPrototypeOf(async function () {});
+
+    console.log(`fetch instanceof AsyncFunction: ${isAsync}`);
+    console.log(`fetch has Function.prototype: ${hasFunctionProto}`);
+    console.log(`fetch prototype !== AsyncFunction prototype: ${notAsyncProto}`);
+
+    // Verify `new fetch(...)` matches Node behavior: returns a Promise without throwing.
+    let newResult = null;
+    let newThrew = false;
+    try {
+        newResult = new fetch("data:text/plain,hello");
+    } catch (e) {
+        newThrew = true;
+        console.log(`Unexpected throw from new fetch: ${e.constructor.name}: ${e.message}`);
+    }
+    const newReturnedPromise = newResult instanceof Promise;
+    console.log(`new fetch threw: ${newThrew}`);
+    console.log(`new fetch returned Promise: ${newReturnedPromise}`);
+
+    // Catch the rejection so it doesn't surface as unhandled.
+    if (newResult && typeof newResult.catch === 'function') {
+        newResult.catch(() => {});
+    }
+
+    if (!isAsync && hasFunctionProto && notAsyncProto && !newThrew && newReturnedPromise) {
+        console.log("fetch function shape matches Node: PASSED");
+    } else {
+        console.log("fetch function shape: FAILED");
+    }
+}

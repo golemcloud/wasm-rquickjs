@@ -7,143 +7,153 @@ import * as base64 from 'base64-js';
 // Partially based on https://github.com/JakeChampion/fetch/blob/main/fetch.js
 // Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
 
-export async function fetch(resource, options = {}) {
-    let method;
-    let rawHeaders = {};
-    let version = options.version || 'HTTP/1.1';
-    let mode;
-    let referer;
-    let referrerPolicy;
-    let credentials;
-    let redirect;
-    let body;
-    let url;
-    let signal;
+// Defined as a plain (non-async) function so its prototype is
+// `Function.prototype` (not `AsyncFunction.prototype`) — which Node's vendored
+// `parallel/test-fetch.mjs` asserts. We deliberately do NOT use a
+// method-shorthand here even though that would make `new fetch(...)` throw,
+// because Node's own `globalThis.fetch` is also a plain function and
+// `new fetch(url)` in Node simply returns the Promise produced by `fetch(url)`.
+// Matching Node's behavior is more important than enforcing the web spec's
+// "fetch is not a constructor" rule for our compatibility goals.
+export function fetch(resource, options = {}) {
+    return (async () => {
+        let method;
+        let rawHeaders = {};
+        let version = options.version || 'HTTP/1.1';
+        let mode;
+        let referer;
+        let referrerPolicy;
+        let credentials;
+        let redirect;
+        let body;
+        let url;
+        let signal;
 
-    if (typeof resource === 'object' && resource instanceof Request) {
-        method = resource.method.toUpperCase();
-        const headers = resource.headers;
-        if (!headers.has('Accept')) {
-            headers.set('Accept', '*/*');
-        }
-        for (const [name, value] of headers.entries()) {
-            rawHeaders[name] = value;
-        }
-
-        mode = options.mode || resource.mode;
-        referer = options.referrer || resource.referrer;
-        referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
-        // let cache = options.cache || resource.cache; // cache not used in native yet
-        credentials = options.credentials || resource.credentials;
-        redirect = options.redirect || resource.redirect || 'follow';
-        signal = options.signal || resource.signal;
-
-        if (resource._bodyUsed) {
-            throw new TypeError("Request body is already used");
-        }
-        resource._bodyUsed = true;
-        body = resource._body;
-        url = resource.url;
-    } else {
-        method = (options.method || 'GET').toUpperCase();
-        const headers = new Headers(options.headers || {});
-        if (!headers.has('Accept')) {
-            headers.set('Accept', '*/*');
-        }
-        for (const [name, value] of headers.entries()) {
-            rawHeaders[name] = value;
-        }
-
-        mode = options.mode || 'cors';
-        referer = options.referrer || 'about:client';
-        referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
-        // let cache = options.cache || 'default';
-        credentials = options.credentials || 'same-origin';
-        redirect = options.redirect || 'follow';
-        signal = options.signal;
-
-        body = options.body;
-        url = String(resource);
-    }
-
-    // Check if signal is already aborted
-    if (signal && signal.aborted) {
-        throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
-    }
-
-    // Create the fetch promise
-    let fetchPromise;
-    if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
-        let bodyCreator;
-        if (body instanceof ReadableStream) {
-            if (body.locked) throw new TypeError("ReadableStream is locked");
-            let used = false;
-            bodyCreator = () => {
-                if (used) throw new TypeError("Disturbed stream");
-                used = true;
-                return body;
-            };
-        } else if (body instanceof FormData) {
-            const blob = formDataToBlob(body);
-            // We update rawHeaders here to include Content-Type
-            if (blob.type && blob.type !== '') {
-                rawHeaders['content-type'] = blob.type;
+        if (typeof resource === 'object' && resource instanceof Request) {
+            method = resource.method.toUpperCase();
+            const headers = resource.headers;
+            if (!headers.has('Accept')) {
+                headers.set('Accept', '*/*');
             }
-            bodyCreator = () => blob.stream();
-        } else if (body instanceof Blob) {
-            if (body.type && body.type !== '') {
-                rawHeaders['content-type'] = body.type;
+            for (const [name, value] of headers.entries()) {
+                rawHeaders[name] = value;
             }
-            bodyCreator = () => body.stream();
-        }
 
-        fetchPromise = streamingRequest(
-            url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
-            bodyCreator
-        );
-    } else {
-        // Simple request
-        const request = new httpNative.HttpRequest(
-            url,
-            method,
-            rawHeaders,
-            version,
-            mode,
-            referer,
-            referrerPolicy,
-            credentials,
-            redirect
-        );
+            mode = options.mode || resource.mode;
+            referer = options.referrer || resource.referrer;
+            referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
+            // let cache = options.cache || resource.cache; // cache not used in native yet
+            credentials = options.credentials || resource.credentials;
+            redirect = options.redirect || resource.redirect || 'follow';
+            signal = options.signal || resource.signal;
 
-        if (!body) {
-            // no body
-        } else if (body instanceof ArrayBuffer) {
-            request.arrayBufferBody(body);
-        } else if (body instanceof DataView) {
-            request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
-        } else if (body instanceof Uint8Array) {
-            request.uint8ArrayBody(body);
-        } else if (body instanceof URLSearchParams) {
-            request.addHeader('Content-Type', 'application/x-www-form-urlencoded');
-            request.stringBody(body.toString());
-        } else if (typeof body === 'string' || body instanceof String) {
-            request.stringBody(body);
+            if (resource._bodyUsed) {
+                throw new TypeError("Request body is already used");
+            }
+            resource._bodyUsed = true;
+            body = resource._body;
+            url = resource.url;
         } else {
-            console.warn('Unsupported body type');
+            method = (options.method || 'GET').toUpperCase();
+            const headers = new Headers(options.headers || {});
+            if (!headers.has('Accept')) {
+                headers.set('Accept', '*/*');
+            }
+            for (const [name, value] of headers.entries()) {
+                rawHeaders[name] = value;
+            }
+
+            mode = options.mode || 'cors';
+            referer = options.referrer || 'about:client';
+            referrerPolicy = options.referrerPolicy || 'strict-origin-when-cross-origin';
+            // let cache = options.cache || 'default';
+            credentials = options.credentials || 'same-origin';
+            redirect = options.redirect || 'follow';
+            signal = options.signal;
+
+            body = options.body;
+            url = String(resource);
         }
 
-        fetchPromise = (async () => {
-            const nativeResponse = await request.simpleSend();
-            return new Response(nativeResponse, request.url, credentials);
-        })();
-    }
+        // Check if signal is already aborted
+        if (signal && signal.aborted) {
+            throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+        }
 
-    // If signal is provided, wrap the promise to support abort
-    if (signal) {
-        fetchPromise = abortableFetch(fetchPromise, signal);
-    }
+        // Create the fetch promise
+        let fetchPromise;
+        if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
+            let bodyCreator;
+            if (body instanceof ReadableStream) {
+                if (body.locked) throw new TypeError("ReadableStream is locked");
+                let used = false;
+                bodyCreator = () => {
+                    if (used) throw new TypeError("Disturbed stream");
+                    used = true;
+                    return body;
+                };
+            } else if (body instanceof FormData) {
+                const blob = formDataToBlob(body);
+                // We update rawHeaders here to include Content-Type
+                if (blob.type && blob.type !== '') {
+                    rawHeaders['content-type'] = blob.type;
+                }
+                bodyCreator = () => blob.stream();
+            } else if (body instanceof Blob) {
+                if (body.type && body.type !== '') {
+                    rawHeaders['content-type'] = body.type;
+                }
+                bodyCreator = () => body.stream();
+            }
 
-    return await fetchPromise;
+            fetchPromise = streamingRequest(
+                url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
+                bodyCreator
+            );
+        } else {
+            // Simple request
+            const request = new httpNative.HttpRequest(
+                url,
+                method,
+                rawHeaders,
+                version,
+                mode,
+                referer,
+                referrerPolicy,
+                credentials,
+                redirect
+            );
+
+            if (!body) {
+                // no body
+            } else if (body instanceof ArrayBuffer) {
+                request.arrayBufferBody(body);
+            } else if (body instanceof DataView) {
+                request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
+            } else if (body instanceof Uint8Array) {
+                request.uint8ArrayBody(body);
+            } else if (body instanceof URLSearchParams) {
+                request.addHeader('Content-Type', 'application/x-www-form-urlencoded');
+                request.stringBody(body.toString());
+            } else if (typeof body === 'string' || body instanceof String) {
+                request.stringBody(body);
+            } else {
+                console.warn('Unsupported body type');
+            }
+
+            fetchPromise = (async () => {
+                const nativeResponse = await request.simpleSend();
+                return new Response(nativeResponse, request.url, credentials);
+            })();
+        }
+
+        // If signal is provided, wrap the promise to support abort
+        if (signal) {
+            fetchPromise = abortableFetch(fetchPromise, signal);
+        }
+
+        return fetchPromise;
+    })();
 }
 
 function abortableFetch(fetchPromise, signal) {
@@ -164,14 +174,55 @@ function abortableFetch(fetchPromise, signal) {
     ]);
 }
 
-async function sendBody(bodyWriter, body) {
+// Marker tag for body source (ReadableStream/Blob/FormData) errors so the
+// streaming request loop can distinguish them from transport errors that may
+// arise when the server closes the upload (e.g. on an early redirect).
+const BODY_SOURCE_ERROR = Symbol('bodySourceError');
+
+async function sendBody(bodyWriter, body, abortRef) {
     const reader = body.getReader();
-    while (true) {
-        const {done, value} = await reader.read();
-        if (done) break;
-        await bodyWriter.writeRequestBodyChunk(value);
+    try {
+        while (true) {
+            if (abortRef.aborted) {
+                try { await reader.cancel(); } catch (_) { /* ignore */ }
+                return;
+            }
+            let item;
+            try {
+                item = await reader.read();
+            } catch (err) {
+                if (abortRef.aborted) return;
+                // Error originating from the body source itself.
+                const wrapped = err instanceof Error ? err : new Error(String(err));
+                wrapped[BODY_SOURCE_ERROR] = true;
+                throw wrapped;
+            }
+            const {done, value} = item;
+            if (done) break;
+            if (abortRef.aborted) {
+                try { await reader.cancel(); } catch (_) { /* ignore */ }
+                return;
+            }
+            try {
+                await bodyWriter.writeRequestBodyChunk(value);
+            } catch (err) {
+                // Transport/write error. If we've been aborted (e.g. because
+                // a redirect arrived), swallow it — the redirect path handles
+                // resource cleanup. Otherwise propagate as a regular error.
+                if (abortRef.aborted) return;
+                throw err;
+            }
+        }
+    } finally {
+        try { reader.releaseLock(); } catch (_) { /* ignore */ }
     }
-    bodyWriter.finishBody();
+    if (abortRef.aborted) return;
+    try {
+        bodyWriter.finishBody();
+    } catch (err) {
+        if (abortRef.aborted) return;
+        throw err;
+    }
 }
 
 async function streamingRequest(
@@ -203,24 +254,65 @@ async function streamingRequest(
         const bodyWriter = request.initRequestBody();
         request.sendRequest();
 
-        let bodyStream;
+        // Track body upload state synchronously so we can inspect it from the
+        // redirect path without having to await the upload promise (which may
+        // never finish for slow/infinite streaming bodies).
+        const abortRef = {aborted: false};
+        const bodyState = {settled: false, ok: true, error: undefined};
         let bodyPromise;
 
         if (currentBodyCreator && (currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
-            bodyStream = currentBodyCreator();
-            bodyPromise = sendBody(bodyWriter, bodyStream);
+            const bodyStream = currentBodyCreator();
+            bodyPromise = sendBody(bodyWriter, bodyStream, abortRef).then(
+                () => {
+                    bodyState.settled = true;
+                    bodyState.ok = true;
+                },
+                (error) => {
+                    bodyState.settled = true;
+                    bodyState.ok = false;
+                    bodyState.error = error;
+                },
+            );
         } else {
             bodyWriter.finishBody();
+            bodyState.settled = true;
             bodyPromise = Promise.resolve();
         }
 
-        const [nativeResponse, _] = await Promise.all([request.receiveResponse(), bodyPromise]);
+        const nativeResponse = await request.receiveResponse();
 
         const status = nativeResponse.status;
         const isRedirectStatus = status >= 300 && status < 400 && // is redirect
             status !== 304 && // NOT MODIFIED
             status !== 305 && // USE PROXY
             status !== 306; // SWITCH PROXY
+
+        if (isRedirectStatus) {
+            // Always surface a body source error that has already manifested
+            // before we observed the redirect — those are genuine failures of
+            // the user's stream/blob/formdata and should not be silently
+            // swallowed even when the server happened to redirect.
+            if (bodyState.settled && !bodyState.ok &&
+                bodyState.error && bodyState.error[BODY_SOURCE_ERROR]) {
+                throw bodyState.error;
+            }
+            // Otherwise, do NOT await body upload. Servers can legitimately
+            // respond with a redirect before consuming the full request body,
+            // and slow/infinite streaming bodies must not delay redirect
+            // handling. Signal the upload to abort and ignore further errors
+            // (transport errors after this point are expected).
+            abortRef.aborted = true;
+            // Suppress unhandled-rejection noise on the detached promise.
+            bodyPromise.catch(() => {});
+        } else {
+            // Non-redirect: wait for the body upload to complete and propagate
+            // any error (whether source-side or transport-side).
+            await bodyPromise;
+            if (!bodyState.ok) {
+                throw bodyState.error;
+            }
+        }
 
         // Redirect logic
         if (redirect === 'follow' && isRedirectStatus) {

@@ -2697,6 +2697,7 @@
     "parallel/test-domain-top-level-error-handler-clears-stack.js": {},
     "parallel/test-eval-strict-referenceerror.js": {},
     "parallel/test-eval.js": {},
+    "parallel/test-fetch.mjs": {},
     "parallel/test-fetch-mock.js": {},
     "parallel/test-file-read-noexist.js": {},
     "parallel/test-file-validate-mode-flag.js": {},
