@@ -696,13 +696,15 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
                 EmbeddingMode::EmbedFile(_) => {
                     let name = LitStr::new(&module.name, Span::call_site());
                     let file_name = LitStr::new(&module.file_name(), Span::call_site());
-                    additional_module_pairs
-                        .push(quote! { (#name, Box::new(|| { include_str!(#file_name) })) });
+                    additional_module_pairs.push(
+                        quote! { (#name, Box::new(|| { include_str!(#file_name).to_string() })) },
+                    );
                 }
                 EmbeddingMode::Composition => {
                     let name = LitStr::new(&module.name, Span::call_site());
-                    additional_module_pairs
-                        .push(quote! { (#name, Box::new(|| { crate::bindings::get_script() })) });
+                    additional_module_pairs.push(
+                        quote! { (#name, Box::new(|| { crate::bindings::get_script().to_string() })) },
+                    );
                 }
                 EmbeddingMode::BinarySlot => {
                     let name = LitStr::new(&module.name, Span::call_site());
