@@ -33,4 +33,7 @@ declare module 'fetch' {
   export function fetchUrlObjectWithQueryParams(port: number): Promise<void>;
   export function requestBodyGetReaderAfterAccess(port: number): Promise<void>;
   export function responseBodyGetReaderAfterAccess(port: number): Promise<void>;
+  export function redirectWithFailingStreamBody(port: number): Promise<void>;
+  export function redirectWithInfiniteStreamBody(port: number): Promise<void>;
+  export function fetchFunctionShape(): Promise<void>;
 }

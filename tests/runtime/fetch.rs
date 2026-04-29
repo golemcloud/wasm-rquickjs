@@ -822,3 +822,67 @@ async fn fetch_response_body_get_reader_after_access(
 
     Ok(())
 }
+
+#[test]
+async fn fetch_redirect_with_failing_stream_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "redirect-with-failing-stream-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 33 (redirect with failing stream body)"));
+    assert!(output.contains("Stream body source error surfaced through redirect: PASSED"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_redirect_with_infinite_stream_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "redirect-with-infinite-stream-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 34 (redirect with infinite stream body)"));
+    assert!(output.contains("Redirect handled promptly with infinite upload: PASSED"));
+
+    Ok(())
+}
+
+#[test]
+async fn fetch_function_shape(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "fetch-function-shape", &[]).await;
+    let _ = r?;
+
+    println!("{output}");
+
+    assert!(output.contains("fetch test 35 (fetch function shape - Node compat)"));
+    assert!(output.contains("fetch instanceof AsyncFunction: false"));
+    assert!(output.contains("fetch has Function.prototype: true"));
+    assert!(output.contains("new fetch threw: false"));
+    assert!(output.contains("new fetch returned Promise: true"));
+    assert!(output.contains("fetch function shape matches Node: PASSED"));
+
+    Ok(())
+}
