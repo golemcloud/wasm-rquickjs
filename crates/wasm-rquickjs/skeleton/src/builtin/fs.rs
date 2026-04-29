@@ -484,6 +484,27 @@ fn make_badf_error<'js>(ctx: &rquickjs::Ctx<'js>, syscall: &str) -> rquickjs::Ob
     obj
 }
 
+/// Synthesize an ENOENT std::io::Error without ever touching wasi-libc.
+///
+/// Used to short-circuit path-based fs operations during Wizer pre-init so
+/// that wasi-libc's lazy preopen-cache initialization never runs against the
+/// (empty) wizer environment. See `crate::internal::is_wizer_active` and
+/// issue #91.
+fn wizer_enoent_io() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "ENOENT during wizer pre-initialization",
+    )
+}
+
+fn wizer_enoent_obj<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    syscall: &str,
+    path: Option<&str>,
+) -> rquickjs::Object<'js> {
+    make_fs_error(ctx, &wizer_enoent_io(), syscall, path)
+}
+
 fn is_dev_stdio_path(path: &str) -> bool {
     matches!(path, "/dev/stdin" | "/dev/stdout" | "/dev/stderr")
 }
@@ -766,6 +787,13 @@ pub mod native_module {
         use std::io::{Seek, SeekFrom};
 
         let result = Object::new(ctx.clone()).unwrap();
+
+        if crate::internal::is_wizer_active() {
+            result
+                .set("error", super::wizer_enoent_obj(&ctx, "open", Some(&path)))
+                .unwrap();
+            return result;
+        }
 
         let fs_path = super::resolve_emulated_symlinks(&path);
 
@@ -1051,6 +1079,13 @@ pub mod native_module {
             return result;
         }
 
+        if crate::internal::is_wizer_active() {
+            result
+                .set("error", super::wizer_enoent_obj(&ctx, "stat", Some(&path)))
+                .unwrap();
+            return result;
+        }
+
         let fs_path = super::resolve_emulated_symlinks(&path);
 
         match std::fs::metadata(&fs_path) {
@@ -1080,6 +1115,13 @@ pub mod native_module {
         if super::is_dev_stdio_path(&path) {
             let stat = super::stdio_stat_obj(&ctx);
             result.set("stat", stat).unwrap();
+            return result;
+        }
+
+        if crate::internal::is_wizer_active() {
+            result
+                .set("error", super::wizer_enoent_obj(&ctx, "lstat", Some(&path)))
+                .unwrap();
             return result;
         }
 
@@ -1164,6 +1206,16 @@ pub mod native_module {
             return result;
         }
 
+        if crate::internal::is_wizer_active() {
+            result
+                .set(
+                    "error",
+                    super::wizer_enoent_obj(&ctx, "scandir", Some(&path)),
+                )
+                .unwrap();
+            return result;
+        }
+
         let fs_path = super::resolve_emulated_symlinks(&path);
 
         match std::fs::read_dir(&fs_path) {
@@ -1211,6 +1263,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_access(ctx: Ctx<'_>, path: String, _mode: i32) -> Option<Object<'_>> {
+        if crate::internal::is_wizer_active() {
+            return Some(super::wizer_enoent_obj(&ctx, "access", Some(&path)));
+        }
+
         let fs_path = super::resolve_emulated_symlinks(&path);
 
         // For WASI, just check if the path exists (and is accessible)
@@ -1226,6 +1282,16 @@ pub mod native_module {
 
         if super::is_dev_stdio_path(&path) {
             result.set("result", path).unwrap();
+            return result;
+        }
+
+        if crate::internal::is_wizer_active() {
+            result
+                .set(
+                    "error",
+                    super::wizer_enoent_obj(&ctx, "realpath", Some(&path)),
+                )
+                .unwrap();
             return result;
         }
 
@@ -1340,6 +1406,16 @@ pub mod native_module {
 
         if let Some(target) = super::get_emulated_symlink_target(&path) {
             result.set("result", target).unwrap();
+            return result;
+        }
+
+        if crate::internal::is_wizer_active() {
+            result
+                .set(
+                    "error",
+                    super::wizer_enoent_obj(&ctx, "readlink", Some(&path)),
+                )
+                .unwrap();
             return result;
         }
 

@@ -1711,6 +1711,18 @@ async fn drain_and_idle(js_state: &JsState) {
 static mut STATE: Option<JsState> = None;
 static mut INIT_PHASE: InitPhase = InitPhase::Uninitialized;
 
+/// True while `wizer_initialize` is running. Used by built-in modules to avoid
+/// std::fs / std::env operations during Wizer pre-init: those would trigger
+/// wasi-libc's lazy preopen-cache population with the empty wizer environment,
+/// and the broken cache would then be snapshotted into the pre-initialized
+/// component, breaking filesystem access at runtime. See issue #91.
+static WIZER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+pub fn is_wizer_active() -> bool {
+    WIZER_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[allow(static_mut_refs)]
 pub fn get_js_state() -> &'static JsState {
     unsafe {
@@ -2330,6 +2342,12 @@ pub fn format_caught_error(caught: CaughtError) -> String {
 /// After Wizer snapshots this state, the runtime is ready to handle exports immediately.
 #[allow(static_mut_refs)]
 pub fn wizer_initialize() {
+    // Mark Wizer pre-init as active so built-in modules avoid touching
+    // std::fs / std::env: those would trigger wasi-libc's lazy preopen-cache
+    // population with the empty wizer environment, and the broken cache would
+    // then be snapshotted into the pre-initialized component (issue #91).
+    WIZER_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+
     unsafe {
         // Phase 1: Create runtime
         STATE = Some(block_on(JsState::new_base()));
@@ -2366,4 +2384,6 @@ pub fn wizer_initialize() {
 
         INIT_PHASE = InitPhase::WizerPreInitialized;
     }
+
+    WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
 }
