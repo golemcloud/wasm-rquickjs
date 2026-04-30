@@ -215,8 +215,22 @@ impl Reencode for MarkerRewriter {
         // Process all existing segments
         wasm_encoder::reencode::utils::parse_data_section(self, data, section)?;
 
-        // For each found marker (sorted by module index), add a data segment
-        let mut current_offset = page_align(self.max_data_end);
+        // For each found marker (sorted by module index), add a data segment.
+        //
+        // Placement must be past BOTH:
+        //   - the highest existing active data segment (`max_data_end`), and
+        //   - the original linear-memory floor (`original_memory_min * PAGE`).
+        //
+        // wasm-ld typically reserves a heap region between `__heap_base`
+        // (right after `__data_end`) and `memory.initial * PAGE_SIZE` for
+        // `dlmalloc` / the Rust global allocator. `max_data_end` lives below
+        // that region, so a naive `page_align(max_data_end)` placement would
+        // drop the new JS data segment INSIDE the live heap window — and at
+        // cold-start the allocator would walk those JS source bytes as free-
+        // chunk metadata and trap OOB. Clamping to the original memory floor
+        // pushes the JS into fresh memory grown by `parse_memory_section`.
+        let mut current_offset =
+            page_align(self.max_data_end).max(self.original_memory_min * WASM_PAGE_SIZE);
         let mut sorted_indices = self.markers_found.clone();
         sorted_indices.sort();
 
