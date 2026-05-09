@@ -114,7 +114,7 @@ chrono-tz = { version = "0.10", default-features = false, optional = true }
 unicode-segmentation = "1.12"
 
 # HTTP
-golem-wasi-http = { version = "0.2.0", features = ["async"], optional = true }
+golem-wasi-http = { version = "0.2.1", features = ["async"], optional = true }
 
 # Logging
 wasi-logging = { version = "0.0.1", optional = true }
@@ -132,4 +132,3 @@ golem-websocket = { version = "0.0.2", optional = true }
 [patch.crates-io]
 rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
-
