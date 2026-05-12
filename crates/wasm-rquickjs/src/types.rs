@@ -72,7 +72,7 @@ pub fn type_id_to_type_ref(
             let inner_ref = to_type_ref(context, inner)?;
             Ok(quote! { Vec<#inner_ref> })
         }
-        TypeDefKind::FixedSizeList(inner, n) => {
+        TypeDefKind::FixedLengthList(inner, n) => {
             let inner_ref = to_type_ref(context, inner)?;
             Ok(quote! { &[#inner_ref; #n] })
         }

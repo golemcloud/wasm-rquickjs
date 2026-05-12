@@ -95,7 +95,7 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
             WorldItem::Function(function) => {
                 global_exports.push((name, function));
             }
-            WorldItem::Type(_) => {}
+            WorldItem::Type { .. } => {}
         }
     }
 
@@ -322,11 +322,11 @@ fn generate_exported_function_impl(
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
         .map(
-            |(((param_name, param_type), export_parameter), import_parameter)| {
+            |((param, export_parameter), import_parameter)| {
                 process_parameter(
                     context,
-                    param_name,
-                    param_type,
+                    &param.name,
+                    &param.ty,
                     &export_parameter,
                     &import_parameter,
                 )
@@ -414,7 +414,9 @@ fn generate_exported_resource_function_impl(
         .iter()
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
-        .map(|(((param_name, param_type), export_param), import_param)| {
+        .map(|((param, export_param), import_param)| {
+            let param_name = &param.name;
+            let param_type = &param.ty;
             if matches!(
                 function.kind,
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_)

@@ -43,7 +43,6 @@ struct WizerHost {
     table: wasmtime::component::ResourceTable,
     wasi: wasmtime_wasi::WasiCtx,
     wasi_http: wasmtime_wasi_http::WasiHttpCtx,
-    #[cfg(feature = "use-golem-wasmtime")]
     io_ctx: wasmtime_wasi::IoCtx,
 }
 
@@ -52,19 +51,18 @@ impl wasmtime_wasi::WasiView for WizerHost {
         wasmtime_wasi::WasiCtxView {
             ctx: &mut self.wasi,
             table: &mut self.table,
-            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: &mut self.io_ctx,
         }
     }
 }
 
-impl wasmtime_wasi_http::WasiHttpView for WizerHost {
-    fn ctx(&mut self) -> &mut wasmtime_wasi_http::WasiHttpCtx {
-        &mut self.wasi_http
-    }
-
-    fn table(&mut self) -> &mut wasmtime::component::ResourceTable {
-        &mut self.table
+impl wasmtime_wasi_http::p2::WasiHttpView for WizerHost {
+    fn http(&mut self) -> wasmtime_wasi_http::p2::WasiHttpCtxView<'_> {
+        wasmtime_wasi_http::p2::WasiHttpCtxView {
+            ctx: &mut self.wasi_http,
+            table: &mut self.table,
+            hooks: wasmtime_wasi_http::p2::default_hooks(),
+        }
     }
 }
 
@@ -95,10 +93,7 @@ pub async fn optimize_component(
     // diagnostics instead of collapsing into a bare trap.
     wasi_builder.inherit_stdout().inherit_stderr();
 
-    #[cfg(feature = "use-golem-wasmtime")]
     let (wasi, io_ctx) = wasi_builder.build();
-    #[cfg(not(feature = "use-golem-wasmtime"))]
-    let wasi = wasi_builder.build();
 
     let mut store = Store::new(
         &engine,
@@ -106,7 +101,6 @@ pub async fn optimize_component(
             table: wasmtime::component::ResourceTable::new(),
             wasi,
             wasi_http: wasmtime_wasi_http::WasiHttpCtx::new(),
-            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx,
         },
     );
@@ -133,7 +127,7 @@ pub async fn optimize_component(
                     &mut linker,
                     &bindings::LinkOptions::default(),
                 )?;
-                wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+                wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
                 // Implement wasi:logging/logging with actual log output
                 {

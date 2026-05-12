@@ -622,7 +622,8 @@ impl RustType {
                     }
                 }
             },
-            TypeDefKind::FixedSizeList(..) => todo!(),
+            TypeDefKind::FixedLengthList(..) => todo!(),
+            TypeDefKind::Map(..) => todo!("map types are not supported yet"),
             TypeDefKind::Unknown => unreachable!(),
         }
     }
@@ -1089,15 +1090,15 @@ impl RustWitFunction {
             import_parameters: function
                 .params
                 .iter()
-                .map(|(param_name, param_type)| {
-                    RustFunctionParameter::for_guest_import(context, param_name, param_type)
+                .map(|param| {
+                    RustFunctionParameter::for_guest_import(context, &param.name, &param.ty)
                 })
                 .collect(),
             export_parameters: function
                 .params
                 .iter()
-                .map(|(param_name, param_type)| {
-                    RustFunctionParameter::for_guest_export(context, param_name, param_type)
+                .map(|param| {
+                    RustFunctionParameter::for_guest_export(context, &param.name, &param.ty)
                 })
                 .collect(),
             return_type: if let Some(ty) = &function.result {

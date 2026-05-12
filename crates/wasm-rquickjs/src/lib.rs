@@ -231,7 +231,7 @@ impl<'a> GeneratorContext<'a> {
             .push_path(wit)
             .context("Failed to resolve WIT package")?;
         let world = resolve
-            .select_world(root_package, world)
+            .select_world(std::slice::from_ref(&root_package), world)
             .context("Failed to select WIT world")?;
 
         let world_name = resolve.worlds[world].name.clone();
@@ -277,7 +277,7 @@ impl<'a> GeneratorContext<'a> {
                         world
                             .exports
                             .iter()
-                            .any(|(_, item)| matches!(item, WorldItem::Type(id) if id == &type_id))
+                            .any(|(_, item)| matches!(item, WorldItem::Type { id, .. } if id == &type_id))
                     } else {
                         false
                     }
