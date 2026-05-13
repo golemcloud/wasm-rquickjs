@@ -425,7 +425,7 @@ fn migrate_config_split() {
             eprintln!("WARNING: Could not find value span for key: {}", key);
         }
     }
-    positioned_updates.sort_by(|a, b| b.0.cmp(&a.0)); // reverse order preserves offsets
+    positioned_updates.sort_by_key(|b| std::cmp::Reverse(b.0)); // reverse order preserves offsets
 
     for (start, end, new_value) in positioned_updates {
         modified_content.replace_range(start..end, &new_value);

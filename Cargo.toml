@@ -146,24 +146,24 @@ test-r = "3.0.3"
 tokio = "1.47.1"
 tokio-util = "0.7.16"
 toml_edit = "0.22.27"
-wac-graph = "0.7.0"
-wasmtime = "42.0.1"
-wasmtime-wasi = "42.0.1"
-wasmtime-wasi-http = "42.0.1"
-wasmtime-wizer = "42.0.1"
-wit-bindgen-core = "0.43.0"
-wasm-encoder = "0.235.0"
-wasmparser_encoder = { package = "wasmparser", version = "0.235.0" }
-wit-encoder = "0.235.0"
-wit-parser = "0.235.0"
+wac-graph = "0.10.0"
+wasmtime = "=45.0.0"
+wasmtime-wasi = "=45.0.0"
+wasmtime-wasi-http = "=45.0.0"
+wasmtime-wizer = "=45.0.0"
+wit-bindgen-core = "0.57.1"
+wasm-encoder = "0.247.0"
+wasmparser_encoder = { package = "wasmparser", version = "0.247.0" }
+wit-encoder = "0.247.0"
+wit-parser = "0.247.0"
 oxc_parser = "0.115"
 oxc_allocator = "0.115"
 oxc_ast = "0.115"
 oxc_span = "0.115"
 
-# Golem's forked wasmtime — uncomment these patches together with enabling the
-# `use-golem-wasmtime` feature.
-#[patch.crates-io]
-#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v42.0.1" }
-#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v42.0.1" }
-#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v42.0.1" }
+# Golem's forked wasmtime — pinned to a GitHub branch while v45 fork is unpublished.
+[patch.crates-io]
+wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }

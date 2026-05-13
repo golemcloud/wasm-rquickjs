@@ -41,8 +41,8 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
             WorldItem::Function(function) => {
                 global_exports.push((name, function));
             }
-            WorldItem::Type(typ) => {
-                global_types.push(*typ);
+            WorldItem::Type { id, .. } => {
+                global_types.push(*id);
             }
         }
     }
@@ -205,11 +205,11 @@ fn declare_functions_and_resources(
                 } else {
                     result.begin_export_function(&js_name)
                 };
-                for (param_name, param_type) in &function.params {
-                    let js_param_name = escape_js_ident(param_name.to_lower_camel_case());
+                for param in &function.params {
+                    let js_param_name = escape_js_ident(param.name.to_lower_camel_case());
                     exported_function.param(
                         &js_param_name,
-                        &ts_type_reference(context, param_type, false, interface_stack)?,
+                        &ts_type_reference(context, &param.ty, false, interface_stack)?,
                     );
                 }
                 define_return_type(context, interface_stack, function, &mut exported_function)?;
@@ -268,11 +268,11 @@ fn declare_functions_and_resources(
             } else {
                 &function.params
             };
-            for (param_name, param_type) in params {
-                let js_param_name = escape_js_ident(param_name.to_lower_camel_case());
+            for param in params {
+                let js_param_name = escape_js_ident(param.name.to_lower_camel_case());
                 fun.param(
                     &js_param_name,
-                    &ts_type_reference(context, param_type, false, interface_stack)?,
+                    &ts_type_reference(context, &param.ty, false, interface_stack)?,
                 );
             }
             if !matches!(&function.kind, FunctionKind::Constructor(_)) {
@@ -409,8 +409,8 @@ fn export_types(
         )?;
     }
     for function in functions {
-        for (_, param_type) in &function.params {
-            visit_subtree(context, param_type, interface_stack, &mut visit_result)?;
+        for param in &function.params {
+            visit_subtree(context, &param.ty, interface_stack, &mut visit_result)?;
         }
         if let Some(result_type) = &function.result {
             visit_subtree(context, result_type, interface_stack, &mut visit_result)?;
@@ -595,7 +595,7 @@ fn visit_subtree<'a>(
                 TypeDefKind::List(elem_type) => {
                     visit_subtree(context, elem_type, interface_stack, result)?;
                 }
-                TypeDefKind::FixedSizeList(elem_type, _) => {
+                TypeDefKind::FixedLengthList(elem_type, _) => {
                     visit_subtree(context, elem_type, interface_stack, result)?;
                 }
                 TypeDefKind::Type(Type::Id(type_id)) => {
@@ -730,7 +730,7 @@ fn ts_type_definition(
             Ok(format!("Result<{ok_type}, {err_type}>"))
         }
         TypeDefKind::List(Type::U8) => Ok("Uint8Array".to_string()),
-        TypeDefKind::List(elem_type) | TypeDefKind::FixedSizeList(elem_type, _) => Ok(format!(
+        TypeDefKind::List(elem_type) | TypeDefKind::FixedLengthList(elem_type, _) => Ok(format!(
             "{}[]",
             ts_type_reference(context, elem_type, false, interface_stack)?
         )),
@@ -738,6 +738,7 @@ fn ts_type_definition(
         TypeDefKind::Future(_) => Err(anyhow!("Future types are not supported yet")),
         TypeDefKind::Stream(_) => Err(anyhow!("Stream types are not supported yet")),
         TypeDefKind::Resource => ts_resource_reference(context, typ, interface_stack),
+        TypeDefKind::Map(..) => Err(anyhow!("Map types are not supported yet")),
         TypeDefKind::Unknown => Err(anyhow!("Unknown type definition kind")),
     }
 }

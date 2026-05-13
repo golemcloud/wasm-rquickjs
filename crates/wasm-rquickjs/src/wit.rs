@@ -9,7 +9,7 @@ pub fn add_get_script_import(wit_root: &Utf8Path, world: Option<&str>) -> anyhow
         .push_path(wit_root)
         .context("Failed to resolve WIT package")?;
     let world_id = resolve
-        .select_world(root_package_id, world)
+        .select_world(std::slice::from_ref(&root_package_id), world)
         .context("Failed to select WIT world")?;
 
     let root_package_name = resolve.packages[root_package_id].name.clone();
@@ -71,7 +71,7 @@ pub fn add_wizer_init_export(wit_root: &Utf8Path, world: Option<&str>) -> anyhow
         .push_path(wit_root)
         .context("Failed to resolve WIT package")?;
     let world_id = resolve
-        .select_world(root_package_id, world)
+        .select_world(std::slice::from_ref(&root_package_id), world)
         .context("Failed to select WIT world")?;
 
     let root_package_name = resolve.packages[root_package_id].name.clone();

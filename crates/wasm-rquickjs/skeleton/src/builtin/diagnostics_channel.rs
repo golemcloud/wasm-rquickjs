@@ -30,7 +30,7 @@ pub mod golem_context {
     use std::cell::RefCell;
     use std::collections::HashMap;
 
-    use ::golem_context::{context, AttributeValue, Span};
+    use ::golem_context::{AttributeValue, Span, context};
 
     thread_local! {
         static SPANS: RefCell<HashMap<u32, Span>> = RefCell::new(HashMap::new());
