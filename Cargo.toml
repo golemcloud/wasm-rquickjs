@@ -161,7 +161,7 @@ oxc_allocator = "0.115"
 oxc_ast = "0.115"
 oxc_span = "0.115"
 
-# Golem's forked wasmtime — local file system path while v45 fork is unpublished.
+# Golem's forked wasmtime — pinned to a GitHub branch while v45 fork is unpublished.
 [patch.crates-io]
 wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
 wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
