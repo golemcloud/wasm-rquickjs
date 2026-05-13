@@ -70,7 +70,7 @@ fn eval_in_new_context_impl<'js>(
 
     // Restore sandbox values into the new context's global object
     let new_global = new_ctx.globals();
-    for (key, pval) in sandbox_keys.iter().zip(persistent_values.into_iter()) {
+    for (key, pval) in sandbox_keys.iter().zip(persistent_values) {
         let restored: Value<'js> = pval
             .restore(&new_ctx)
             .map_err(|_| rquickjs::Error::Unknown)?;

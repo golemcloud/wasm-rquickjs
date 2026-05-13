@@ -188,17 +188,15 @@ fn generate_import_module(
                     .iter()
                     .zip(rust_fn.export_parameters.clone())
                     .zip(rust_fn.import_parameters.clone())
-                    .map(
-                        |((param, export_parameter), import_parameter)| {
-                            process_parameter(
-                                context,
-                                &param.name,
-                                &param.ty,
-                                &export_parameter,
-                                &import_parameter,
-                            )
-                        },
-                    )
+                    .map(|((param, export_parameter), import_parameter)| {
+                        process_parameter(
+                            context,
+                            &param.name,
+                            &param.ty,
+                            &export_parameter,
+                            &import_parameter,
+                        )
+                    })
                     .collect::<anyhow::Result<Vec<_>>>()?;
 
                 let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
@@ -292,17 +290,15 @@ fn generate_import_module(
                 .iter()
                 .zip(rust_fn.export_parameters)
                 .zip(rust_fn.import_parameters)
-                .map(
-                    |((param, export_parameter), import_parameter)| {
-                        process_parameter(
-                            context,
-                            &param.name,
-                            &param.ty,
-                            &export_parameter,
-                            &import_parameter,
-                        )
-                    },
-                )
+                .map(|((param, export_parameter), import_parameter)| {
+                    process_parameter(
+                        context,
+                        &param.name,
+                        &param.ty,
+                        &export_parameter,
+                        &import_parameter,
+                    )
+                })
                 .collect::<anyhow::Result<Vec<_>>>()?;
 
             let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
@@ -339,17 +335,15 @@ fn generate_import_module(
                 .iter()
                 .zip(rust_fn.export_parameters.clone())
                 .zip(rust_fn.import_parameters.clone())
-                .map(
-                    |((param, export_parameter), import_parameter)| {
-                        process_parameter(
-                            context,
-                            &param.name,
-                            &param.ty,
-                            &export_parameter,
-                            &import_parameter,
-                        )
-                    },
-                )
+                .map(|((param, export_parameter), import_parameter)| {
+                    process_parameter(
+                        context,
+                        &param.name,
+                        &param.ty,
+                        &export_parameter,
+                        &import_parameter,
+                    )
+                })
                 .collect::<anyhow::Result<Vec<_>>>()?;
 
             let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);

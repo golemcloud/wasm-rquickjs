@@ -1,6 +1,7 @@
 /// Integration tests for the BinarySlot injection mode.
 ///
 /// Usage: cargo test --test binary_inject -- --nocapture
+#[allow(dead_code)]
 mod common;
 
 use camino::{Utf8Path, Utf8PathBuf};

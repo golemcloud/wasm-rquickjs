@@ -354,7 +354,7 @@ fn update_config_jsonc(should_not_be_skipped: &[String], missing_from_config: &[
     }
 
     // Apply updates in reverse order to preserve byte offsets
-    updates.sort_by(|a, b| b.0.cmp(&a.0));
+    updates.sort_by_key(|b| std::cmp::Reverse(b.0));
     for (start, end, new_value) in updates {
         content.replace_range(start..end, &new_value);
     }
@@ -1270,7 +1270,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
             // Sort by count descending
             let mut patterns: Vec<_> = by_pattern.into_iter().collect();
-            patterns.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+            patterns.sort_by_key(|b| std::cmp::Reverse(b.1.len()));
 
             report.push_str("| Error Pattern | Count | Example tests |\n");
             report.push_str("|---------------|-------|---------------|\n");
@@ -1579,7 +1579,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         })
         .filter(|(_, pass, _)| *pass > 0)
         .collect();
-    module_stats.sort_by(|a, b| b.1.cmp(&a.1));
+    module_stats.sort_by_key(|b| std::cmp::Reverse(b.1));
     for (module, pass, total) in module_stats.iter().take(20) {
         println!(
             "  {module:<20} {pass:>4}/{total:<4} ({:.1}%)",

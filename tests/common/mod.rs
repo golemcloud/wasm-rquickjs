@@ -24,7 +24,8 @@ use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
+use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 
 /// Strip JSONC comments (// and /* */) while respecting string literals.
 pub fn strip_jsonc_comments(input: &str) -> String {
@@ -269,7 +270,7 @@ impl PreparedComponent {
             &mut linker,
             &bindings::LinkOptions::default(),
         )?;
-        wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+        wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
         // Mock wasi:logging/logging (required by the full feature)
         {
@@ -429,7 +430,7 @@ impl GolemPreparedComponent {
             &mut linker,
             &bindings::LinkOptions::default(),
         )?;
-        wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+        wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
         // Mock wasi:logging/logging (required by the golem feature)
         {
@@ -669,19 +670,15 @@ impl TestInstance {
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
             .inherit_network()
             .allow_ip_name_lookup(true);
-        #[cfg(feature = "use-golem-wasmtime")]
         let (ctx, io_ctx) = ctx_builder.build();
-        #[cfg(not(feature = "use-golem-wasmtime"))]
-        let ctx = ctx_builder.build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
-            wasi_http: Arc::new(http_ctx),
+            wasi_http: Arc::new(Mutex::new(http_ctx)),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
-            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::new(Mutex::new(io_ctx)),
         };
 
@@ -1008,11 +1005,10 @@ impl CompiledTest {
 pub struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
-    pub wasi_http: Arc<WasiHttpCtx>,
+    pub wasi_http: Arc<Mutex<WasiHttpCtx>>,
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
-    #[cfg(feature = "use-golem-wasmtime")]
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
 }
 
@@ -1027,7 +1023,6 @@ impl WasiView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
-            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::get_mut(&mut self.io_ctx)
                 .expect("IoCtx is shared and cannot be borrowed mutably")
                 .get_mut()
@@ -1037,16 +1032,18 @@ impl WasiView for Host {
 }
 
 impl WasiHttpView for Host {
-    fn ctx(&mut self) -> &mut WasiHttpCtx {
-        Arc::get_mut(&mut self.wasi_http)
-            .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
-    }
-
-    fn table(&mut self) -> &mut ResourceTable {
-        Arc::get_mut(&mut self.table)
-            .expect("ResourceTable is shared and cannot be borrowed mutably")
-            .get_mut()
-            .expect("ResourceTable mutex must never fail")
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: Arc::get_mut(&mut self.wasi_http)
+                .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("WasiHttpCtx mutex must never fail"),
+            table: Arc::get_mut(&mut self.table)
+                .expect("ResourceTable is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("ResourceTable mutex must never fail"),
+            hooks: default_hooks(),
+        }
     }
 }
 

@@ -321,17 +321,15 @@ fn generate_exported_function_impl(
         .iter()
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
-        .map(
-            |((param, export_parameter), import_parameter)| {
-                process_parameter(
-                    context,
-                    &param.name,
-                    &param.ty,
-                    &export_parameter,
-                    &import_parameter,
-                )
-            },
-        )
+        .map(|((param, export_parameter), import_parameter)| {
+            process_parameter(
+                context,
+                &param.name,
+                &param.ty,
+                &export_parameter,
+                &import_parameter,
+            )
+        })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
