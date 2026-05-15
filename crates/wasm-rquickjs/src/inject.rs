@@ -332,6 +332,123 @@ fn patch_js_offsets_in_output(output: &mut [u8], offsets: &[(u32, u32)]) -> anyh
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Capability gates patching
+// ---------------------------------------------------------------------------
+
+/// Magic prefix of the capability-gates slot embedded by the skeleton.
+pub const CAPABILITY_GATES_MAGIC: &[u8; 16] = b"WASM_RQJS_CAPS\x01\x00";
+
+/// Magic suffix of the capability-gates slot, used to validate the slot's
+/// integrity before patching.
+pub const CAPABILITY_GATES_END_MAGIC: &[u8; 16] = b"WASM_RQJS_CAPSND";
+
+/// Total size of the capability-gates slot: MAGIC(16) + GATES(8) + END_MAGIC(16).
+const CAPABILITY_GATES_SLOT_SIZE: usize = 40;
+
+/// Locate every capability-gates slot in the raw bytes of `wasm`. Returns the
+/// offsets of the magic prefixes, in the order they appear.
+///
+/// The slot is embedded by the skeleton via `#[link_section]` and ends up
+/// inside an active data segment, so its 16-byte magic is preserved verbatim
+/// in the wasm binary. Searching for the magic + end-magic pair is sufficient
+/// to locate it without parsing the module structure.
+///
+/// A wasm component embedding the skeleton may contain the slot more than once
+/// (e.g. the same module appearing in multiple core modules of a component, or
+/// post-wizer snapshot data). All copies must be patched together so they
+/// agree on the same gate values.
+fn find_capability_gates_slots(wasm: &[u8]) -> Vec<usize> {
+    let mut out = Vec::new();
+    if wasm.len() < CAPABILITY_GATES_SLOT_SIZE {
+        return out;
+    }
+    let limit = wasm.len() - CAPABILITY_GATES_SLOT_SIZE;
+    let mut i = 0;
+    while i <= limit {
+        if &wasm[i..i + 16] == CAPABILITY_GATES_MAGIC
+            && &wasm[i + 24..i + CAPABILITY_GATES_SLOT_SIZE] == CAPABILITY_GATES_END_MAGIC
+        {
+            out.push(i);
+            // Slots cannot overlap; skip past the matched region.
+            i += CAPABILITY_GATES_SLOT_SIZE;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Patch every capability-gates bitset embedded in `wasm` to the given value.
+///
+/// Bit `i` corresponds to the skeleton's `Capability` variant with discriminant
+/// `i`. Setting a bit enables that capability; clearing it disables the
+/// capability so the skeleton skips its module registration and global wiring.
+/// Combined with a downstream wasm-level dead-code elimination pass, disabled
+/// capabilities also drop their host imports (`wasi:filesystem`, `wasi:sockets`,
+/// etc.).
+///
+/// Returns an error if the capability-gates marker is not present in `wasm`,
+/// which generally means the skeleton was built without the capability-gates
+/// support or the slot has been stripped already.
+pub fn patch_capability_gates_in_bytes(
+    wasm: &[u8],
+    enabled_bits: u64,
+) -> anyhow::Result<Vec<u8>> {
+    let positions = find_capability_gates_slots(wasm);
+    if positions.is_empty() {
+        return Err(anyhow!(
+            "Capability-gates marker not found in WASM. The component does not appear \
+             to support per-capability trimming, or the marker has been stripped."
+        ));
+    }
+
+    let mut out = wasm.to_vec();
+    let bytes = enabled_bits.to_le_bytes();
+    for pos in positions {
+        out[pos + 16..pos + 24].copy_from_slice(&bytes);
+    }
+    Ok(out)
+}
+
+/// Read the current capability-gates bitset from `wasm`. Useful for round-trip
+/// testing and for letting callers see what the slot was patched with last.
+///
+/// If multiple slots are present, this returns the value from the first one
+/// and asserts that they all agree. Disagreement indicates a partial patch
+/// (likely a bug) and is reported as an error.
+pub fn read_capability_gates_from_bytes(wasm: &[u8]) -> anyhow::Result<u64> {
+    let positions = find_capability_gates_slots(wasm);
+    let first = *positions
+        .first()
+        .ok_or_else(|| anyhow!("Capability-gates marker not found in WASM"))?;
+    let value = u64::from_le_bytes(wasm[first + 16..first + 24].try_into().unwrap());
+    for &pos in &positions[1..] {
+        let v = u64::from_le_bytes(wasm[pos + 16..pos + 24].try_into().unwrap());
+        if v != value {
+            return Err(anyhow!(
+                "Capability-gates slots disagree: slot at offset {first} = {value:#x}, \
+                 slot at offset {pos} = {v:#x}. The wasm has been partially patched."
+            ));
+        }
+    }
+    Ok(value)
+}
+
+/// File-level convenience wrapper around [`patch_capability_gates_in_bytes`].
+pub fn patch_capability_gates(
+    input: &Utf8Path,
+    output: &Utf8Path,
+    enabled_bits: u64,
+) -> anyhow::Result<()> {
+    let bytes = std::fs::read(input.as_std_path())
+        .with_context(|| format!("Failed to read input component: {input}"))?;
+    let patched = patch_capability_gates_in_bytes(&bytes, enabled_bits)?;
+    std::fs::write(output.as_std_path(), &patched)
+        .with_context(|| format!("Failed to write output component: {output}"))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,5 +503,136 @@ mod tests {
         assert_eq!(page_align(1), WASM_PAGE_SIZE);
         assert_eq!(page_align(WASM_PAGE_SIZE), WASM_PAGE_SIZE);
         assert_eq!(page_align(WASM_PAGE_SIZE + 1), 2 * WASM_PAGE_SIZE);
+    }
+
+    /// Build a synthetic 40-byte capability-gates slot with the given bitset
+    /// to mirror the layout produced by the skeleton's static initializer.
+    fn build_test_gates_slot(gates: u64) -> Vec<u8> {
+        let mut v = Vec::with_capacity(CAPABILITY_GATES_SLOT_SIZE);
+        v.extend_from_slice(CAPABILITY_GATES_MAGIC);
+        v.extend_from_slice(&gates.to_le_bytes());
+        v.extend_from_slice(CAPABILITY_GATES_END_MAGIC);
+        v
+    }
+
+    #[test]
+    fn test_capability_gates_magic_lengths() {
+        assert_eq!(CAPABILITY_GATES_MAGIC.len(), 16);
+        assert_eq!(CAPABILITY_GATES_END_MAGIC.len(), 16);
+        assert_ne!(CAPABILITY_GATES_MAGIC, CAPABILITY_GATES_END_MAGIC);
+    }
+
+    #[test]
+    fn test_find_capability_gates_slot_at_zero() {
+        let slot = build_test_gates_slot(u64::MAX);
+        assert_eq!(find_capability_gates_slots(&slot), vec![0]);
+    }
+
+    #[test]
+    fn test_find_capability_gates_slot_embedded() {
+        let mut wasm = vec![0xAA; 1234];
+        let slot = build_test_gates_slot(0x1234_5678_9abc_def0);
+        wasm.extend_from_slice(&slot);
+        wasm.extend_from_slice(&[0xBB; 100]);
+        assert_eq!(find_capability_gates_slots(&wasm), vec![1234]);
+    }
+
+    #[test]
+    fn test_find_capability_gates_slot_missing() {
+        let buf = vec![0u8; 1024];
+        assert!(find_capability_gates_slots(&buf).is_empty());
+        // Too small to contain a slot at all
+        assert!(find_capability_gates_slots(&[0u8; 10]).is_empty());
+    }
+
+    #[test]
+    fn test_find_and_patch_multiple_capability_gates_slots() {
+        // Components can embed the skeleton's data more than once. Make sure we
+        // find each occurrence and that patching updates them all coherently.
+        let mut wasm = vec![0u8; 0];
+        wasm.extend_from_slice(&build_test_gates_slot(u64::MAX));
+        wasm.extend_from_slice(&[0u8; 200]);
+        wasm.extend_from_slice(&build_test_gates_slot(u64::MAX));
+        wasm.extend_from_slice(&[0u8; 50]);
+        wasm.extend_from_slice(&build_test_gates_slot(u64::MAX));
+
+        let positions = find_capability_gates_slots(&wasm);
+        assert_eq!(positions.len(), 3);
+
+        let new_bits: u64 = 0x0123_4567_89ab_cdef;
+        let patched = patch_capability_gates_in_bytes(&wasm, new_bits).unwrap();
+
+        // All slots should now hold the same patched value, so reading reports it.
+        assert_eq!(read_capability_gates_from_bytes(&patched).unwrap(), new_bits);
+
+        // Sanity: each individual slot in the patched buffer carries the new value.
+        let bytes = new_bits.to_le_bytes();
+        for pos in find_capability_gates_slots(&patched) {
+            assert_eq!(&patched[pos + 16..pos + 24], &bytes);
+        }
+    }
+
+    #[test]
+    fn test_patch_and_read_capability_gates_roundtrip() {
+        let mut wasm = vec![0xCD; 200];
+        wasm.extend_from_slice(&build_test_gates_slot(u64::MAX));
+        wasm.extend_from_slice(&[0xEF; 200]);
+
+        // Default reads as all-enabled.
+        assert_eq!(read_capability_gates_from_bytes(&wasm).unwrap(), u64::MAX);
+
+        // Patch to a specific bitset and confirm.
+        let new_bits: u64 = 0xCAFE_BABE_DEAD_BEEF;
+        let patched = patch_capability_gates_in_bytes(&wasm, new_bits).unwrap();
+        assert_eq!(read_capability_gates_from_bytes(&patched).unwrap(), new_bits);
+
+        // Surrounding bytes must be untouched.
+        assert_eq!(&patched[..200], &wasm[..200]);
+        assert_eq!(&patched[200 + CAPABILITY_GATES_SLOT_SIZE..], &wasm[200 + CAPABILITY_GATES_SLOT_SIZE..]);
+
+        // Magic markers must be preserved across the patch.
+        assert_eq!(&patched[200..200 + 16], CAPABILITY_GATES_MAGIC.as_slice());
+        assert_eq!(
+            &patched[200 + 24..200 + CAPABILITY_GATES_SLOT_SIZE],
+            CAPABILITY_GATES_END_MAGIC.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_patch_capability_gates_no_marker() {
+        let buf = vec![0u8; 100];
+        let result = patch_capability_gates_in_bytes(&buf, 0);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Capability-gates marker not found")
+        );
+    }
+
+    #[test]
+    fn test_capability_enabled_bits_helper() {
+        use crate::capability_scan::{Capability, enabled_bits};
+
+        // Empty set ⇒ all-zero bitmask
+        assert_eq!(enabled_bits(std::iter::empty::<Capability>()), 0);
+
+        // Single capability sets exactly its bit.
+        let only_console = enabled_bits([Capability::Console]);
+        assert_eq!(only_console, 1u64 << Capability::Console.bit_index());
+
+        // Two unrelated capabilities OR together.
+        let pair = enabled_bits([Capability::Fs, Capability::Sqlite]);
+        assert_eq!(
+            pair,
+            (1u64 << Capability::Fs.bit_index()) | (1u64 << Capability::Sqlite.bit_index())
+        );
+
+        // The enum is laid out so all 52 bits fit inside the lower half of u64.
+        let all_known: u64 = enabled_bits(crate::capability_scan::ALL_CAPABILITIES.iter().copied());
+        assert_eq!(all_known.count_ones(), 52);
+        // Bits 52..64 must be unused.
+        assert_eq!(all_known & !((1u64 << 52) - 1), 0);
     }
 }

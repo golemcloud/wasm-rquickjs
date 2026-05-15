@@ -183,6 +183,7 @@ wit-parser = "0.247.0"
 oxc_parser = "0.115"
 oxc_allocator = "0.115"
 oxc_ast = "0.115"
+oxc_ast_visit = "0.115"
 oxc_span = "0.115"
 
 # Golem's forked wasmtime — uncomment these patches together with enabling the

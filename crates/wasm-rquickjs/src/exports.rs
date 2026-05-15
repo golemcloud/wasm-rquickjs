@@ -79,7 +79,10 @@ pub fn generate_export_impls(
             mod builtin;
         }
     } else {
-        quote! { mod builtin; }
+        quote! {
+            mod builtin;
+            mod capabilities;
+        }
     };
 
     let lib_tokens = quote! {
