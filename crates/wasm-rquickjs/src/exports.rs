@@ -38,6 +38,7 @@ pub fn generate_export_impls(
             });
         }
         mod builtin;
+        mod capabilities;
         mod conversions;
         #[allow(unused)]
         mod internal;

@@ -65,6 +65,33 @@ pub enum Command {
         #[arg(long, default_value = "wizer-initialize")]
         init_func: String,
     },
+    /// Scan a JavaScript module and report which skeleton built-ins it appears to use.
+    /// This is a research/diagnostic tool for the per-app trimming work.
+    ScanCapabilities {
+        /// Path(s) to JavaScript entry-point files to scan. Each file is scanned
+        /// recursively (relative imports are followed transitively); the union of
+        /// all results is reported.
+        #[arg(long, required = true)]
+        js: Vec<Utf8PathBuf>,
+
+        /// Force-include a capability by its marker name (e.g. `fs`, `node_http`).
+        /// Repeatable.
+        #[arg(long = "include")]
+        include: Vec<String>,
+
+        /// Force-exclude a capability by its marker name (e.g. `vm`, `sqlite`).
+        /// Repeatable. Excludes that conflict with a transitively-required
+        /// capability are reported as ineffective and remain enabled.
+        #[arg(long = "exclude")]
+        exclude: Vec<String>,
+
+        /// When set, trim aggressively even if the JS contains dynamic patterns
+        /// (`require(varName)`, `import(expr)`, `eval`, `new Function`, `vm.run*`).
+        /// Default behavior is conservative: any dynamic pattern → enable
+        /// every known capability.
+        #[arg(long = "trim-unknown", default_value_t = false)]
+        trim_unknown: bool,
+    },
     /// Inject JavaScript source into a compiled WASM component template
     InjectJs {
         /// Path to the template WASM component (compiled with --js-modules name=@slot)
@@ -80,6 +107,34 @@ pub enum Command {
         /// then additional modules in order).
         #[arg(long, required = true)]
         js: Vec<Utf8PathBuf>,
+
+        /// Force-include a capability by its marker name when patching the
+        /// capability-gates slot (e.g. `fs`, `node_http`). Repeatable.
+        ///
+        /// Implies enabling per-capability gate patching: when neither
+        /// `--include`, `--exclude`, nor `--auto-trim` is set, the gates slot
+        /// is left untouched and every capability stays enabled.
+        #[arg(long = "include")]
+        include: Vec<String>,
+
+        /// Force-exclude a capability by its marker name. Repeatable.
+        /// Excludes that conflict with a transitively-required capability are
+        /// reported as ineffective and remain enabled.
+        #[arg(long = "exclude")]
+        exclude: Vec<String>,
+
+        /// Scan the JS sources, then patch the capability-gates slot to enable
+        /// only the capabilities the scanner reports as needed (after
+        /// dependency closure). `--include` / `--exclude` further refine the
+        /// scanner's result.
+        #[arg(long = "auto-trim", default_value_t = false)]
+        auto_trim: bool,
+
+        /// When set with `--auto-trim`, also trim aggressively even if the JS
+        /// contains dynamic patterns (`require(varName)`, `import(expr)`,
+        /// `eval`, `new Function`, `vm.run*`). Default behavior is conservative.
+        #[arg(long = "trim-unknown", default_value_t = false)]
+        trim_unknown: bool,
     },
 }
 

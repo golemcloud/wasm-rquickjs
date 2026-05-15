@@ -1,6 +1,7 @@
 // Empty file, to be generated
 
 mod builtin;
+pub mod capabilities;
 pub mod internal;
 mod modules;
 pub mod wrappers;
