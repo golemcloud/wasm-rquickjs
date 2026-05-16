@@ -83,6 +83,10 @@ name = "node_compat_report"
 harness = false
 
 [[test]]
+name = "node_compat_validate"
+harness = false
+
+[[test]]
 name = "wizer_benchmark"
 harness = false
 

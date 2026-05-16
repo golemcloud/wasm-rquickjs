@@ -6,6 +6,7 @@ import { fixBatchCommand } from "./commands/fix-batch.js";
 import { syncConfigCommand } from "./commands/sync-config.js";
 import { ensureAllVendoredCommand } from "./commands/ensure-all-vendored.js";
 import { testLibrariesCommand } from "./commands/test-libraries.js";
+import { validateClassificationsCommand } from "./commands/validate-classifications.js";
 
 const USAGE = `\
 ai-dev-tools — AI-powered development tools for wasm-rquickjs
@@ -15,6 +16,7 @@ Usage:
   ai-dev-tools fix-batch <category>       Fix skipped tests in grouped batches (for http)
   ai-dev-tools sync-config [--dry-run]    Update config.jsonc from the compat report
   ai-dev-tools ensure-all-vendored [--dry-run]  Ensure ALL vendored tests are in config.jsonc
+  ai-dev-tools validate-classifications [--dry-run]  Ask Amp to triage validator mismatches
   ai-dev-tools test-libraries             Test npm library compatibility (iterates all untested)
   ai-dev-tools --help                     Show this help message
 
@@ -26,6 +28,7 @@ Examples:
   npx ai-dev-tools sync-config --dry-run
   npx ai-dev-tools ensure-all-vendored
   npx ai-dev-tools ensure-all-vendored --dry-run
+  npx ai-dev-tools validate-classifications --limit 5
   npx ai-dev-tools test-libraries
 
   # Or during development:
@@ -33,6 +36,7 @@ Examples:
   npx tsx src/cli.ts fix-batch http
   npx tsx src/cli.ts sync-config
   npx tsx src/cli.ts ensure-all-vendored
+  npx tsx src/cli.ts validate-classifications --limit 5
   npx tsx src/cli.ts test-libraries
 `;
 
@@ -44,6 +48,9 @@ async function main(): Promise<void> {
     options: {
       help: { type: "boolean", short: "h" },
       "dry-run": { type: "boolean" },
+      results: { type: "string" },
+      "triage-log": { type: "string" },
+      limit: { type: "string" },
     },
   });
 
@@ -95,6 +102,23 @@ async function main(): Promise<void> {
     }
     case "ensure-all-vendored": {
       await ensureAllVendoredCommand({ dryRun: !!values["dry-run"] });
+      break;
+    }
+    case "validate-classifications": {
+      let limit: number | undefined;
+      if (values.limit !== undefined) {
+        limit = Number.parseInt(values.limit, 10);
+        if (!Number.isFinite(limit) || limit < 0) {
+          console.error("Error: --limit must be a non-negative integer");
+          process.exit(1);
+        }
+      }
+      await validateClassificationsCommand({
+        dryRun: !!values["dry-run"],
+        resultsPath: values.results,
+        triageLogPath: values["triage-log"],
+        limit,
+      });
       break;
     }
     case "test-libraries": {
