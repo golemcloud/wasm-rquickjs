@@ -5,8 +5,15 @@
   // Tests listed here are expected to pass.
   // Each key is a path relative to the suite/ directory.
   // Value is an object with optional configuration:
-  //   "skip": true        - skip this test (with optional "reason")
-  //   "impossible": true  - test can never pass (e.g. needs net.listen, wasi:http limitation)
+  //   "skip": true        - legacy spelling for a known public API gap or unevaluated test
+  //   "impossible": true  - legacy spelling for category "wasi-impossible"
+  //   "category": "..."   - classification used by both the runner and report generator:
+  //                         "runnable"          - public API test expected to pass
+  //                         "known-gap"         - public API is missing but in scope
+  //                         "wasi-impossible"   - cannot be provided on WASI P2
+  //                         "engine-difference" - V8 behavior QuickJS cannot reasonably mirror
+  //                         "node-internals"    - tests Node.js internals/implementation details
+  //                         "unevaluated"       - not triaged yet; excluded from percentages
   //   "flaky": true       - retry up to 3 times before failing
   //   "reason": "..."     - explanation for skip/flaky/impossible marking
   //

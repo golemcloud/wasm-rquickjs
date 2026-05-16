@@ -4,8 +4,8 @@ use crate::common::js_subtest_parser::{
     BlockInfo, SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
 };
 use crate::common::{
-    CompiledTest, GolemPreparedComponent, TestInstance, setup_node_compat_test_files,
-    strip_jsonc_comments,
+    CompiledTest, GolemPreparedComponent, TestInstance, load_node_compat_config,
+    setup_node_compat_test_files,
 };
 use camino::Utf8Path;
 use std::collections::hash_map::DefaultHasher;
@@ -41,117 +41,6 @@ async fn prepare_node_compat_full() -> Arc<FullPreparedComponent> {
     Arc::new(FullPreparedComponent(
         compile_node_compat_with_features(common::FeatureCombination::FullNoLoggingWithGolem).await,
     ))
-}
-
-// --- Config loading ---
-
-struct SubtestEntry {
-    name: String,
-    index: usize,
-    skip: bool,
-    impossible: bool,
-    #[allow(dead_code)]
-    reason: Option<String>,
-}
-
-/// Default timeout for node_compat tests (in seconds).
-const DEFAULT_TEST_TIMEOUT_SECS: u64 = 120;
-
-struct TestEntry {
-    path: String,
-    skip: bool,
-    impossible: bool,
-    #[allow(dead_code)]
-    reason: Option<String>,
-    split: bool,
-    timeout_secs: u64,
-    subtests: Vec<SubtestEntry>,
-}
-
-fn load_config(path: &str) -> anyhow::Result<Vec<TestEntry>> {
-    let content = fs::read_to_string(path)?;
-    let json_str = strip_jsonc_comments(&content);
-    let value: serde_json::Value = serde_json::from_str(&json_str)?;
-
-    let tests_obj = value
-        .get("tests")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| anyhow::anyhow!("config.jsonc missing 'tests' object"))?;
-
-    let mut tests = Vec::new();
-    for (path, opts) in tests_obj {
-        let skip = opts.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
-        let impossible = opts
-            .get("impossible")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let reason = opts
-            .get("reason")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let split = opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false);
-        let timeout_secs = opts
-            .get("timeout")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(DEFAULT_TEST_TIMEOUT_SECS);
-
-        let mut subtests = Vec::new();
-        if let Some(subtests_obj) = opts.get("subtests").and_then(|v| v.as_object()) {
-            for (subtest_name, subtest_opts) in subtests_obj {
-                let sub_skip = subtest_opts
-                    .get("skip")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let sub_impossible = subtest_opts
-                    .get("impossible")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let sub_reason = subtest_opts
-                    .get("reason")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let index = extract_subtest_index(subtest_name);
-                subtests.push(SubtestEntry {
-                    name: subtest_name.clone(),
-                    index,
-                    skip: sub_skip,
-                    impossible: sub_impossible,
-                    reason: sub_reason,
-                });
-            }
-        }
-
-        tests.push(TestEntry {
-            path: path.clone(),
-            skip,
-            impossible,
-            reason,
-            split,
-            timeout_secs,
-            subtests,
-        });
-    }
-
-    Ok(tests)
-}
-
-/// Extract the numeric index from a subtest name like "block_00_foo" or "test_03_bar".
-/// Panics if the name doesn't match the expected format (config is authoritative).
-fn extract_subtest_index(name: &str) -> usize {
-    let after_prefix = if let Some(rest) = name.strip_prefix("block_") {
-        rest
-    } else if let Some(rest) = name.strip_prefix("test_") {
-        rest
-    } else {
-        panic!("Subtest name '{name}' must start with 'block_' or 'test_'");
-    };
-    let digits: String = after_prefix
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-    digits
-        .parse()
-        .unwrap_or_else(|_| panic!("Subtest name '{name}' has no valid numeric index after prefix"))
 }
 
 // --- Helper types and functions ---
@@ -212,7 +101,8 @@ fn shard_tag(name: &str) -> String {
 
 #[test_gen]
 fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
-    let entries = load_config("tests/node_compat/config.jsonc").expect("Failed to load config");
+    let entries =
+        load_node_compat_config("tests/node_compat/config.jsonc").expect("Failed to load config");
 
     let dependency_name = "arc_fullpreparedcomponent".to_string();
 
@@ -225,7 +115,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
         if !entry.split || entry.subtests.is_empty() {
             // Non-split: one Rust test per file (unchanged behavior)
             let props = TestProperties {
-                is_ignored: entry.skip || entry.impossible,
+                is_ignored: entry.category.should_ignore_in_runner(),
                 tags: vec![shard_tag(&file_test_name)],
                 ..TestProperties::unit_test()
             };
@@ -296,8 +186,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
             for subtest in &entry.subtests {
                 let test_name = format!("{}__{}", file_test_name, subtest.name);
-                let is_ignored =
-                    entry.skip || entry.impossible || subtest.skip || subtest.impossible;
+                let is_ignored = subtest.category.should_ignore_in_runner();
                 let props = TestProperties {
                     is_ignored,
                     tags: vec![shard_tag(&test_name)],

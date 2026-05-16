@@ -18,8 +18,9 @@ use common::js_subtest_parser::{
     SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
 };
 use common::{
-    GolemPreparedComponent, TestInstance, classify_test, setup_node_compat_test_files,
-    strip_jsonc_comments, uses_node_internals,
+    GolemPreparedComponent, NodeCompatCategory, TestInstance, classify_test,
+    load_node_compat_config, setup_node_compat_test_files, strip_jsonc_comments,
+    uses_node_internals,
 };
 use futures::stream::{FuturesUnordered, StreamExt};
 use heck::ToSnakeCase;
@@ -71,8 +72,11 @@ struct SkippedObservation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportBucket {
     Pass,
+    Gap,
     Skip,
     Impossible,
+    EngineDifference,
+    Unevaluated,
     Fail,
     Error,
 }
@@ -116,10 +120,18 @@ fn report_bucket(
     path: &str,
     actual: &TestResult,
     skipped_observations: &BTreeMap<String, SkippedObservation>,
-    config_impossible: &BTreeMap<String, String>,
+    config_categories: &BTreeMap<String, NodeCompatCategory>,
 ) -> ReportBucket {
-    if config_impossible.contains_key(path) {
-        return ReportBucket::Impossible;
+    match config_categories
+        .get(path)
+        .copied()
+        .unwrap_or(NodeCompatCategory::Runnable)
+    {
+        NodeCompatCategory::Runnable | NodeCompatCategory::NodeInternals => {}
+        NodeCompatCategory::KnownGap => return ReportBucket::Gap,
+        NodeCompatCategory::WasmImpossible => return ReportBucket::Impossible,
+        NodeCompatCategory::EngineDifference => return ReportBucket::EngineDifference,
+        NodeCompatCategory::Unevaluated => return ReportBucket::Unevaluated,
     }
     if let Some(obs) = skipped_observations.get(path) {
         if obs.inferred_impossible.is_some() {
@@ -508,91 +520,43 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         "=== Running {total_tests} tests ({total_public} public API, {total_internals} internals) ===\n"
     );
 
-    // Load config.jsonc to find tests explicitly skipped or impossible
-    let config_content_for_flags =
-        fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
-    let config_json_str_for_flags = strip_jsonc_comments(&config_content_for_flags);
-    let config_tests_obj: Option<serde_json::Map<String, serde_json::Value>> =
-        serde_json::from_str::<serde_json::Value>(&config_json_str_for_flags)
-            .ok()
-            .and_then(|v| v.get("tests")?.as_object().cloned());
+    let config_entries = load_node_compat_config("tests/node_compat/config.jsonc")?;
 
-    let config_skipped: BTreeMap<String, String> = config_tests_obj
-        .as_ref()
-        .map(|obj| {
-            obj.iter()
-                .filter_map(|(key, entry)| {
-                    let skip = entry.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
-                    if skip {
-                        let reason = entry
-                            .get("reason")
-                            .and_then(|r| r.as_str())
-                            .unwrap_or("skipped in config.jsonc")
-                            .to_string();
-                        Some((key.clone(), reason))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let config_impossible: BTreeMap<String, String> = config_tests_obj
-        .as_ref()
-        .map(|obj| {
-            obj.iter()
-                .filter_map(|(key, entry)| {
-                    let impossible = entry
-                        .get("impossible")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    if impossible {
-                        let reason = entry
-                            .get("reason")
-                            .and_then(|r| r.as_str())
-                            .unwrap_or("impossible in config.jsonc")
-                            .to_string();
-                        Some((key.clone(), reason))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Load full config to detect split entries
-    let config_split_entries: BTreeMap<String, Vec<String>> = {
-        let config_content =
-            fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
-        let config_json_str = strip_jsonc_comments(&config_content);
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
-            val.get("tests")
-                .and_then(|v| v.as_object())
-                .map(|obj| {
-                    obj.iter()
-                        .filter_map(|(key, entry)| {
-                            let is_split = entry.get("split")?.as_bool()?;
-                            if is_split {
-                                let subtests = entry.get("subtests")?.as_object()?;
-                                let names: Vec<String> = subtests.keys().cloned().collect();
-                                Some((key.clone(), names))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
-        } else {
-            BTreeMap::new()
+    let mut config_categories: BTreeMap<String, NodeCompatCategory> = BTreeMap::new();
+    let mut config_reasons: BTreeMap<String, String> = BTreeMap::new();
+    let mut config_split_entries: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut config_split_subtests: BTreeMap<String, Vec<(usize, String)>> = BTreeMap::new();
+    for entry in &config_entries {
+        config_categories.insert(entry.path.clone(), entry.category);
+        if let Some(reason) = &entry.reason {
+            config_reasons.insert(entry.path.clone(), reason.clone());
         }
-    };
+        if entry.split {
+            config_split_entries.insert(
+                entry.path.clone(),
+                entry.subtests.iter().map(|s| s.name.clone()).collect(),
+            );
+            config_split_subtests.insert(
+                entry.path.clone(),
+                entry
+                    .subtests
+                    .iter()
+                    .map(|s| (s.index, s.name.clone()))
+                    .collect(),
+            );
+        }
+        for subtest in &entry.subtests {
+            let key = format!("{}#{}", entry.path, subtest.name);
+            config_categories.insert(key.clone(), subtest.category);
+            if let Some(reason) = &subtest.reason {
+                config_reasons.insert(key, reason.clone());
+            }
+        }
+    }
 
-    // Also include config-skipped/impossible tests that weren't found in the suite directory scan
-    // (e.g. .mjs files) so they still appear in the report
-    for path in config_skipped.keys().chain(config_impossible.keys()) {
+    // Also include configured tests that weren't found in the suite directory scan
+    // (e.g. .mjs files) so they still appear in the report.
+    for path in config_entries.iter().map(|entry| &entry.path) {
         if !test_files.contains(path) {
             let suite_file = format!("tests/node_compat/suite/{path}");
             if std::path::Path::new(&suite_file).exists() {
@@ -607,16 +571,33 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let mut should_not_be_skipped: Vec<String> = Vec::new();
     let mut skipped_observations: BTreeMap<String, SkippedObservation> = BTreeMap::new();
 
-    // First pass: handle impossible tests without execution
+    // First pass: handle explicitly non-runnable categories without execution. This keeps the
+    // report generator in sync with the dynamic test runner: gaps, WASI-impossible tests,
+    // engine differences, internals, and unevaluated tests are acknowledged but not tested.
     for test_path in &test_files {
-        if let Some(reason) = config_impossible.get(test_path) {
-            let is_internal = internals_tests.contains(test_path);
+        if config_split_entries.contains_key(test_path) {
+            continue;
+        }
+        let category = config_categories
+            .get(test_path)
+            .copied()
+            .unwrap_or_else(|| {
+                if internals_tests.contains(test_path) {
+                    NodeCompatCategory::NodeInternals
+                } else {
+                    NodeCompatCategory::Runnable
+                }
+            });
+        if category.should_ignore_in_runner() {
+            let reason = config_reasons
+                .get(test_path)
+                .cloned()
+                .unwrap_or_else(|| category.label().to_string());
             let filename = test_path.rsplit('/').next().unwrap_or(test_path);
-            let tag = if is_internal { " [internal]" } else { "" };
-            println!("IMPOSSIBLE {filename}{tag} ({reason})");
+            println!("{} {filename} ({reason})", category.label().to_uppercase());
             results.insert(
                 test_path.clone(),
-                TestResult::Skip(format!("impossible: {reason}")),
+                TestResult::Skip(format!("{}: {reason}", category.label())),
             );
         }
     }
@@ -633,47 +614,74 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     let mut tasks: Vec<TestTask> = Vec::new();
     for test_path in &test_files {
-        if config_impossible.contains_key(test_path) {
+        if results.contains_key(test_path) {
             continue;
         }
-        if let Some(_subtest_names) = config_split_entries.get(test_path) {
+        if let Some(configured_subtests) = config_split_subtests.get(test_path) {
             let source = fs::read_to_string(format!("tests/node_compat/suite/{}", test_path))
                 .unwrap_or_default();
             let discovery = discover_subtests(test_path, &source);
 
-            let subtest_list: Vec<(usize, String)> = match &discovery {
-                SubtestDiscovery::None => vec![],
-                SubtestDiscovery::Block(blocks) => {
-                    blocks.iter().map(|b| (b.index, b.name.clone())).collect()
-                }
-                SubtestDiscovery::NodeTest(tests) => {
-                    tests.iter().map(|t| (t.index, t.name.clone())).collect()
-                }
+            let discovered_count = match &discovery {
+                SubtestDiscovery::None => 0,
+                SubtestDiscovery::Block(blocks) => blocks.len(),
+                SubtestDiscovery::NodeTest(tests) => tests.len(),
             };
-
-            if subtest_list.is_empty() {
+            if discovered_count != configured_subtests.len() {
                 eprintln!(
-                    "WARNING: split file {} has 0 discoverable subtests, running as whole file",
+                    "WARNING: Subtest count mismatch for {}: config has {}, discovered {}. Run migration tool.",
+                    test_path,
+                    configured_subtests.len(),
+                    discovered_count
+                );
+            }
+
+            if configured_subtests.is_empty() {
+                eprintln!(
+                    "WARNING: split file {} has 0 configured subtests, running as whole file",
                     test_path
                 );
                 tasks.push(TestTask {
                     key: test_path.clone(),
                     test_path: test_path.clone(),
-                    skip_reason: config_skipped.get(test_path).cloned(),
+                    skip_reason: None,
                     rewrite_source: None,
                     rewrite_discovery: None,
                     rewrite_index: None,
                 });
             } else {
-                let file_skip_reason = config_skipped.get(test_path).cloned();
-                for (idx, subtest_name) in subtest_list {
+                for (idx, subtest_name) in configured_subtests {
+                    let key = format!("{}#{}", test_path, subtest_name);
+                    let category = config_categories
+                        .get(&key)
+                        .copied()
+                        .or_else(|| config_categories.get(test_path).copied())
+                        .unwrap_or_else(|| {
+                            if internals_tests.contains(test_path) {
+                                NodeCompatCategory::NodeInternals
+                            } else {
+                                NodeCompatCategory::Runnable
+                            }
+                        });
+                    if category.should_ignore_in_runner() {
+                        let reason = config_reasons
+                            .get(&key)
+                            .or_else(|| config_reasons.get(test_path))
+                            .cloned()
+                            .unwrap_or_else(|| category.label().to_string());
+                        results.insert(
+                            key,
+                            TestResult::Skip(format!("{}: {reason}", category.label())),
+                        );
+                        continue;
+                    }
                     tasks.push(TestTask {
-                        key: format!("{}#{}", test_path, subtest_name),
+                        key,
                         test_path: test_path.clone(),
-                        skip_reason: file_skip_reason.clone(),
+                        skip_reason: None,
                         rewrite_source: Some(source.clone()),
                         rewrite_discovery: Some(discovery.clone()),
-                        rewrite_index: Some(idx),
+                        rewrite_index: Some(*idx),
                     });
                 }
             }
@@ -681,7 +689,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             tasks.push(TestTask {
                 key: test_path.clone(),
                 test_path: test_path.clone(),
-                skip_reason: config_skipped.get(test_path).cloned(),
+                skip_reason: None,
                 rewrite_source: None,
                 rewrite_discovery: None,
                 rewrite_index: None,
@@ -694,13 +702,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         .unwrap_or(4);
     let total_to_run = tasks.len();
     println!(
-        "\n=== Running {} tasks ({} impossible, skipped), concurrency={} ===\n",
+        "\n=== Running {} tasks ({} acknowledged without execution), concurrency={} ===\n",
         total_to_run,
-        test_files.len()
-            - test_files
-                .iter()
-                .filter(|p| !config_impossible.contains_key(p.as_str()))
-                .count(),
+        results.len(),
         parallelism
     );
 
@@ -901,9 +905,12 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     // Compute counts from collected results
     let mut pass_count = 0usize;
+    let mut gap_count = 0usize;
     let mut fail_count = 0usize;
     let mut skip_count = 0usize;
     let mut impossible_count = 0usize;
+    let mut engine_difference_count = 0usize;
+    let mut unevaluated_count = 0usize;
     let mut error_count = 0usize;
     let mut internals_pass = 0usize;
     let mut internals_fail = 0usize;
@@ -913,8 +920,12 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
 
     for (path, result) in &results {
         let base_path = path.split('#').next().unwrap_or(path);
-        let is_internal = internals_tests.contains(base_path);
-        let bucket = report_bucket(path, result, &skipped_observations, &config_impossible);
+        let is_internal = internals_tests.contains(base_path)
+            || config_categories
+                .get(path)
+                .or_else(|| config_categories.get(base_path))
+                .is_some_and(|category| *category == NodeCompatCategory::NodeInternals);
+        let bucket = report_bucket(path, result, &skipped_observations, &config_categories);
         match bucket {
             ReportBucket::Pass => {
                 if is_internal {
@@ -922,6 +933,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 } else {
                     pass_count += 1;
                 }
+            }
+            ReportBucket::Gap => {
+                gap_count += 1;
             }
             ReportBucket::Skip => {
                 if is_internal {
@@ -936,6 +950,12 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 } else {
                     impossible_count += 1;
                 }
+            }
+            ReportBucket::EngineDifference => {
+                engine_difference_count += 1;
+            }
+            ReportBucket::Unevaluated => {
+                unevaluated_count += 1;
             }
             ReportBucket::Fail => {
                 if is_internal {
@@ -957,7 +977,9 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     let total_elapsed = total_start.elapsed();
 
     // Recompute totals based on the subtest-expanded counts
-    let total_public = pass_count + fail_count + skip_count + impossible_count + error_count;
+    let primary_total = pass_count + gap_count + fail_count + skip_count + error_count;
+    let total_public =
+        primary_total + impossible_count + engine_difference_count + unevaluated_count;
     let total_internals =
         internals_pass + internals_fail + internals_skip + internals_impossible + internals_error;
     let total_tests = total_public + total_internals;
@@ -976,39 +998,63 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     // Summary (public API tests only)
     report.push_str("## Summary (Public API Tests)\n\n");
     report.push_str(&format!(
-        "Tests that rely on Node.js internals (`--expose-internals`, `internalBinding`, `require('internal/...')`) \
-         are excluded from the primary counts ({total_internals} internals tests listed separately below).\n\n"
+        "Primary compatibility is measured only over public API tests that are in scope for \
+         wasm-rquickjs. WASI-impossible tests, QuickJS/V8 engine differences, unevaluated tests, \
+         and Node.js-internals tests are acknowledged separately and excluded from the primary \
+         percentage ({total_internals} internals tests listed separately below).\n\n"
+    ));
+    report.push_str(&format!(
+        "**Primary compatibility:** {pass_count}/{primary_total} ({:.1}%)\n\n",
+        pass_count as f64 / primary_total.max(1) as f64 * 100.0
     ));
     report.push_str("| Result | Count | Percentage |\n");
     report.push_str("|--------|-------|------------|\n");
     report.push_str(&format!(
         "| ✅ PASS | {pass_count} | {:.1}% |\n",
-        pass_count as f64 / total_public as f64 * 100.0
+        pass_count as f64 / primary_total.max(1) as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| 🧩 KNOWN GAP | {gap_count} | {:.1}% |\n",
+        gap_count as f64 / primary_total.max(1) as f64 * 100.0
     ));
     report.push_str(&format!(
         "| ⏭️ SKIP | {skip_count} | {:.1}% |\n",
-        skip_count as f64 / total_public as f64 * 100.0
-    ));
-    report.push_str(&format!(
-        "| 🚫 IMPOSSIBLE | {impossible_count} | {:.1}% |\n",
-        impossible_count as f64 / total_public as f64 * 100.0
+        skip_count as f64 / primary_total.max(1) as f64 * 100.0
     ));
     report.push_str(&format!(
         "| ❌ FAIL | {fail_count} | {:.1}% |\n",
-        fail_count as f64 / total_public as f64 * 100.0
+        fail_count as f64 / primary_total.max(1) as f64 * 100.0
     ));
     report.push_str(&format!(
         "| 💥 ERROR | {error_count} | {:.1}% |\n",
-        error_count as f64 / total_public as f64 * 100.0
+        error_count as f64 / primary_total.max(1) as f64 * 100.0
     ));
     report.push_str(&format!(
-        "| **Total** | **{total_public}** | **100%** |\n\n"
+        "| **Primary Total** | **{primary_total}** | **100%** |\n"
+    ));
+    report.push_str(&format!(
+        "| 🚫 WASI-IMPOSSIBLE (excluded) | {impossible_count} | {:.1}% of public tests |\n",
+        impossible_count as f64 / total_public.max(1) as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| ⚙️ ENGINE DIFFERENCE (excluded) | {engine_difference_count} | {:.1}% of public tests |\n",
+        engine_difference_count as f64 / total_public.max(1) as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| ❔ UNEVALUATED (excluded) | {unevaluated_count} | {:.1}% of public tests |\n",
+        unevaluated_count as f64 / total_public.max(1) as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| **Public Total Including Excluded** | **{total_public}** | **100% of public tests** |\n\n"
     ));
 
     // All tests summary (public + internals combined)
     let all_pass = pass_count + internals_pass;
+    let all_gap = gap_count;
     let all_skip = skip_count + internals_skip;
     let all_impossible = impossible_count + internals_impossible;
+    let all_engine_difference = engine_difference_count;
+    let all_unevaluated = unevaluated_count;
     let all_fail = fail_count + internals_fail;
     let all_error = error_count + internals_error;
 
@@ -1024,12 +1070,24 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
         all_pass as f64 / total_tests as f64 * 100.0
     ));
     report.push_str(&format!(
+        "| 🧩 KNOWN GAP | {all_gap} | {:.1}% |\n",
+        all_gap as f64 / total_tests as f64 * 100.0
+    ));
+    report.push_str(&format!(
         "| ⏭️ SKIP | {all_skip} | {:.1}% |\n",
         all_skip as f64 / total_tests as f64 * 100.0
     ));
     report.push_str(&format!(
-        "| 🚫 IMPOSSIBLE | {all_impossible} | {:.1}% |\n",
+        "| 🚫 WASI-IMPOSSIBLE | {all_impossible} | {:.1}% |\n",
         all_impossible as f64 / total_tests as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| ⚙️ ENGINE DIFFERENCE | {all_engine_difference} | {:.1}% |\n",
+        all_engine_difference as f64 / total_tests as f64 * 100.0
+    ));
+    report.push_str(&format!(
+        "| ❔ UNEVALUATED | {all_unevaluated} | {:.1}% |\n",
+        all_unevaluated as f64 / total_tests as f64 * 100.0
     ));
     report.push_str(&format!(
         "| ❌ FAIL | {all_fail} | {:.1}% |\n",
@@ -1058,23 +1116,29 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             .push((path, result));
     }
 
-    report.push_str("| Module | Total | Pass | Fail | Error | Skip | Impossible | Pass% |\n");
-    report.push_str("|--------|-------|------|------|-------|------|------------|-------|\n");
+    report.push_str("| Module | Total | Pass | Gap | Fail | Error | Skip | WASI-impossible | Engine diff | Unevaluated | Pass% |\n");
+    report.push_str("|--------|-------|------|-----|------|-------|------|-----------------|-------------|-------------|-------|\n");
 
     for (module, tests) in &by_module_public {
         let total = tests.len();
         let mut pass = 0;
+        let mut gap = 0;
         let mut fail = 0;
         let mut error = 0;
         let mut skip = 0;
         let mut impossible = 0;
+        let mut engine_difference = 0;
+        let mut unevaluated = 0;
         for (path, result) in tests {
-            match report_bucket(path, result, &skipped_observations, &config_impossible) {
+            match report_bucket(path, result, &skipped_observations, &config_categories) {
                 ReportBucket::Pass => pass += 1,
+                ReportBucket::Gap => gap += 1,
                 ReportBucket::Fail => fail += 1,
                 ReportBucket::Error => error += 1,
                 ReportBucket::Skip => skip += 1,
                 ReportBucket::Impossible => impossible += 1,
+                ReportBucket::EngineDifference => engine_difference += 1,
+                ReportBucket::Unevaluated => unevaluated += 1,
             }
         }
         let pass_pct = if total > 0 {
@@ -1083,7 +1147,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             0.0
         };
         report.push_str(&format!(
-            "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {impossible} | {pass_pct:.1}% |\n"
+            "| {module} | {total} | {pass} | {gap} | {fail} | {error} | {skip} | {impossible} | {engine_difference} | {unevaluated} | {pass_pct:.1}% |\n"
         ));
     }
 
@@ -1169,7 +1233,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             }
             let base_path = p.split('#').next().unwrap_or(p);
             !internals_tests.contains(base_path)
-                && report_bucket(p, r, &skipped_observations, &config_impossible)
+                && report_bucket(p, r, &skipped_observations, &config_categories)
                     == ReportBucket::Skip
         })
         .collect();
@@ -1439,7 +1503,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             fs::read_to_string("tests/node_compat/config.jsonc").unwrap_or_default();
         let config_json_str = strip_jsonc_comments(&config_content);
         let config_tests_for_report: BTreeSet<String> = {
-            let mut keys: BTreeSet<String> =
+            let keys: BTreeSet<String> =
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(&config_json_str) {
                     val.get("tests")
                         .and_then(|v| v.as_object())
@@ -1448,7 +1512,6 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
                 } else {
                     BTreeSet::new()
                 };
-            keys.extend(config_skipped.keys().cloned());
             keys
         };
 
@@ -1498,22 +1561,28 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             .push((path, result));
     }
 
-    report.push_str("| Module | Total | Pass | Fail | Error | Skip | Impossible | Pass% |\n");
-    report.push_str("|--------|-------|------|------|-------|------|------------|-------|\n");
+    report.push_str("| Module | Total | Pass | Gap | Fail | Error | Skip | WASI-impossible | Engine diff | Unevaluated | Pass% |\n");
+    report.push_str("|--------|-------|------|-----|------|-------|------|-----------------|-------------|-------------|-------|\n");
     for (module, tests) in &by_module_all {
         let total = tests.len();
         let mut pass = 0;
+        let mut gap = 0;
         let mut fail = 0;
         let mut error = 0;
         let mut skip = 0;
         let mut impossible = 0;
+        let mut engine_difference = 0;
+        let mut unevaluated = 0;
         for (path, result) in tests {
-            match report_bucket(path, result, &skipped_observations, &config_impossible) {
+            match report_bucket(path, result, &skipped_observations, &config_categories) {
                 ReportBucket::Pass => pass += 1,
+                ReportBucket::Gap => gap += 1,
                 ReportBucket::Fail => fail += 1,
                 ReportBucket::Error => error += 1,
                 ReportBucket::Skip => skip += 1,
                 ReportBucket::Impossible => impossible += 1,
+                ReportBucket::EngineDifference => engine_difference += 1,
+                ReportBucket::Unevaluated => unevaluated += 1,
             }
         }
         let pass_pct = if total > 0 {
@@ -1522,7 +1591,7 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
             0.0
         };
         report.push_str(&format!(
-            "| {module} | {total} | {pass} | {fail} | {error} | {skip} | {impossible} | {pass_pct:.1}% |\n"
+            "| {module} | {total} | {pass} | {gap} | {fail} | {error} | {skip} | {impossible} | {engine_difference} | {unevaluated} | {pass_pct:.1}% |\n"
         ));
     }
     report.push('\n');
@@ -1538,30 +1607,33 @@ async fn generate_node_compat_report() -> anyhow::Result<()> {
     println!("============================================");
     println!(
         "  ✅ PASS:       {pass_count:>5} ({:.1}%)",
-        pass_count as f64 / total_public as f64 * 100.0
+        pass_count as f64 / primary_total.max(1) as f64 * 100.0
+    );
+    println!(
+        "  🧩 GAP:        {gap_count:>5} ({:.1}%)",
+        gap_count as f64 / primary_total.max(1) as f64 * 100.0
     );
     println!(
         "  ⏭️  SKIP:       {skip_count:>5} ({:.1}%)",
-        skip_count as f64 / total_public as f64 * 100.0
-    );
-    println!(
-        "  🚫 IMPOSSIBLE: {impossible_count:>5} ({:.1}%)",
-        impossible_count as f64 / total_public as f64 * 100.0
+        skip_count as f64 / primary_total.max(1) as f64 * 100.0
     );
     println!(
         "  ❌ FAIL:       {fail_count:>5} ({:.1}%)",
-        fail_count as f64 / total_public as f64 * 100.0
+        fail_count as f64 / primary_total.max(1) as f64 * 100.0
     );
     println!(
         "  💥 ERROR:      {error_count:>5} ({:.1}%)",
-        error_count as f64 / total_public as f64 * 100.0
+        error_count as f64 / primary_total.max(1) as f64 * 100.0
     );
     println!("  ─────────────────────────────────");
-    println!("  Total:         {total_public:>5}");
+    println!("  Primary total:{primary_total:>5}");
+    println!(
+        "  Excluded: WASI-impossible={impossible_count}, engine-difference={engine_difference_count}, unevaluated={unevaluated_count}, internals={total_internals}"
+    );
     println!("  ─────────────────────────────────");
     println!("  All (incl. internals):");
     println!(
-        "    PASS: {all_pass}, SKIP: {all_skip}, IMPOSSIBLE: {all_impossible}, FAIL: {all_fail}, ERROR: {all_error}, Total: {total_tests}"
+        "    PASS: {all_pass}, GAP: {all_gap}, SKIP: {all_skip}, WASI-IMPOSSIBLE: {all_impossible}, ENGINE-DIFF: {all_engine_difference}, UNEVALUATED: {all_unevaluated}, FAIL: {all_fail}, ERROR: {all_error}, Total: {total_tests}"
     );
     println!("  Runtime:  {:.0}s", total_elapsed.as_secs_f64());
     println!("============================================\n");
