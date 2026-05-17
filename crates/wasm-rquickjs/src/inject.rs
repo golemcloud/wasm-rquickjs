@@ -1,6 +1,24 @@
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
+
 use anyhow::{Context, anyhow};
 use camino::Utf8Path;
 use wasm_encoder::reencode::{Error, Reencode, ReencodeComponent};
+
+use crate::capability_scan::{ALL_CAPABILITIES, Capability};
+
+const CAPABILITY_ROOTS_SECTION: &str = "wasm-rquickjs.capability-roots";
+const CAPABILITY_ROOTS_MAGIC: &[u8; 8] = b"WRQJSCAP";
+const CAPABILITY_ROOTS_VERSION: u8 = 1;
+const ROOT_KIND_INDIRECT_ANY: u8 = 0;
+const ROOT_KIND_DIRECT_SCRUB: u8 = 1;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+struct CapabilityRootEntry {
+    func: u32,
+    capability: Capability,
+    kind: u8,
+}
 
 /// Magic bytes identifying a wasm-rquickjs JS injection marker.
 pub const SLOT_MAGIC: &[u8; 16] = b"WASM_RQJS_SLOT\x01\x00";
@@ -336,6 +354,8 @@ fn patch_js_offsets_in_output(output: &mut [u8], offsets: &[(u32, u32)]) -> anyh
 // Capability gates patching
 // ---------------------------------------------------------------------------
 
+const CAPABILITY_HELPER_EXPORT_PREFIX: &str = "__wrjs_cap_";
+
 /// Magic prefix of the capability-gates slot embedded by the skeleton.
 pub const CAPABILITY_GATES_MAGIC: &[u8; 16] = b"WASM_RQJS_CAPS\x01\x00";
 
@@ -391,7 +411,21 @@ fn find_capability_gates_slots(wasm: &[u8]) -> Vec<usize> {
 /// Returns an error if the capability-gates marker is not present in `wasm`,
 /// which generally means the skeleton was built without the capability-gates
 /// support or the slot has been stripped already.
-pub fn patch_capability_gates_in_bytes(
+pub fn patch_capability_gates_in_bytes(wasm: &[u8], enabled_bits: u64) -> anyhow::Result<Vec<u8>> {
+    match lower_capability_helpers_to_globals(wasm, enabled_bits) {
+        Ok(lowered) if lowered.calls_rewritten > 0 => {
+            return match patch_capability_gates_slots_in_bytes(&lowered.bytes, enabled_bits) {
+                Ok(bytes) => Ok(bytes),
+                Err(_) => Ok(lowered.bytes),
+            };
+        }
+        Ok(_) | Err(_) => {}
+    }
+
+    patch_capability_gates_slots_in_bytes(wasm, enabled_bits)
+}
+
+fn patch_capability_gates_slots_in_bytes(
     wasm: &[u8],
     enabled_bits: u64,
 ) -> anyhow::Result<Vec<u8>> {
@@ -409,6 +443,542 @@ pub fn patch_capability_gates_in_bytes(
         out[pos + 16..pos + 24].copy_from_slice(&bytes);
     }
     Ok(out)
+}
+
+struct LoweredCapabilityGlobals {
+    bytes: Vec<u8>,
+    calls_rewritten: usize,
+}
+
+#[derive(Default)]
+struct CapabilityGlobalModuleState {
+    imported_globals: u32,
+    defined_globals: u32,
+    cap_globals_base: Option<u32>,
+    appended_cap_globals: bool,
+    exported_helpers: BTreeMap<u32, Capability>,
+}
+
+#[derive(Default)]
+struct CapabilityGlobalLowerer {
+    enabled_bits: u64,
+    module: CapabilityGlobalModuleState,
+    calls_rewritten: usize,
+}
+
+fn lower_capability_helpers_to_globals(
+    wasm: &[u8],
+    enabled_bits: u64,
+) -> anyhow::Result<LoweredCapabilityGlobals> {
+    let mut lowerer = CapabilityGlobalLowerer {
+        enabled_bits,
+        ..Default::default()
+    };
+    let parser = wasmparser_encoder::Parser::new(0);
+    let mut component = wasm_encoder::Component::new();
+    lowerer
+        .parse_component(&mut component, parser, wasm)
+        .map_err(|e| match e {
+            Error::UserError(e) => e,
+            Error::ParseError(e) => anyhow!("Failed to parse WASM component: {e}"),
+            other => anyhow!("Failed to reencode WASM component: {other}"),
+        })?;
+
+    Ok(LoweredCapabilityGlobals {
+        bytes: component.finish(),
+        calls_rewritten: lowerer.calls_rewritten,
+    })
+}
+
+fn build_capability_roots_metadata(module: &[u8]) -> Vec<u8> {
+    let names = function_names(module);
+    let helper_exports = capability_helper_exports(module);
+    let direct = direct_call_graph(module);
+    let mut memo: BTreeMap<u32, BTreeSet<Capability>> = BTreeMap::new();
+    let mut entries = BTreeSet::new();
+
+    for func in direct.keys().copied() {
+        for cap in reachable_builtin_capabilities(
+            func,
+            &names,
+            &helper_exports,
+            &direct,
+            &mut memo,
+        ) {
+            entries.insert(CapabilityRootEntry {
+                func,
+                capability: cap,
+                kind: ROOT_KIND_INDIRECT_ANY,
+            });
+        }
+        if let Some(name) = names.get(&func)
+            && is_fs_loader_function(name)
+        {
+            entries.insert(CapabilityRootEntry {
+                func,
+                capability: Capability::Fs,
+                kind: ROOT_KIND_DIRECT_SCRUB,
+            });
+        }
+    }
+
+    if entries.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out = Vec::with_capacity(CAPABILITY_ROOTS_MAGIC.len() + 1 + 4 + entries.len() * 6);
+    out.extend_from_slice(CAPABILITY_ROOTS_MAGIC);
+    out.push(CAPABILITY_ROOTS_VERSION);
+    out.extend_from_slice(&(entries.len() as u32).to_le_bytes());
+    for entry in entries {
+        out.extend_from_slice(&entry.func.to_le_bytes());
+        out.push(entry.capability.bit_index());
+        out.push(entry.kind);
+    }
+    out
+}
+
+fn capability_helper_exports(module: &[u8]) -> BTreeMap<u32, Capability> {
+    let mut out = BTreeMap::new();
+    for payload in wasmparser_encoder::Parser::new(0).parse_all(module) {
+        let Ok(wasmparser_encoder::Payload::ExportSection(section)) = payload else {
+            continue;
+        };
+        for export in section.into_iter().flatten() {
+            if export.kind == wasmparser_encoder::ExternalKind::Func
+                && let Some(cap) = capability_from_helper_export(export.name)
+            {
+                out.insert(export.index, cap);
+            }
+        }
+    }
+    out
+}
+
+fn function_names(module: &[u8]) -> BTreeMap<u32, String> {
+    let mut out = BTreeMap::new();
+    for payload in wasmparser_encoder::Parser::new(0).parse_all(module) {
+        let Ok(wasmparser_encoder::Payload::CustomSection(section)) = payload else {
+            continue;
+        };
+        if section.name() != "name" {
+            continue;
+        }
+        let names = wasmparser_encoder::NameSectionReader::new(wasmparser_encoder::BinaryReader::new(
+            section.data(),
+            0,
+        ));
+        for name in names.into_iter().flatten() {
+            if let wasmparser_encoder::Name::Function(map) = name {
+                for naming in map.into_iter().flatten() {
+                    out.insert(naming.index, naming.name.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+fn direct_call_graph(module: &[u8]) -> BTreeMap<u32, Vec<u32>> {
+    let mut function_types = Vec::new();
+    let mut imported_funcs = 0u32;
+    let mut bodies = Vec::new();
+    for payload in wasmparser_encoder::Parser::new(0).parse_all(module) {
+        match payload {
+            Ok(wasmparser_encoder::Payload::ImportSection(reader)) => {
+                for imports in reader.into_iter().flatten() {
+                    match imports {
+                        wasmparser_encoder::Imports::Single(_, import) => {
+                            imported_funcs += imported_func_count_for_type_ref(import.ty, 1);
+                        }
+                        wasmparser_encoder::Imports::Compact1 { items, .. } => {
+                            for item in items.into_iter().flatten() {
+                                imported_funcs += imported_func_count_for_type_ref(item.ty, 1);
+                            }
+                        }
+                        wasmparser_encoder::Imports::Compact2 { ty, names, .. } => {
+                            imported_funcs += imported_func_count_for_type_ref(ty, names.count());
+                        }
+                    }
+                }
+            }
+            Ok(wasmparser_encoder::Payload::FunctionSection(reader)) => {
+                function_types.extend(reader.into_iter().flatten());
+            }
+            Ok(wasmparser_encoder::Payload::CodeSectionEntry(body)) => {
+                bodies.push(body);
+            }
+            _ => {}
+        }
+    }
+
+    let mut out = BTreeMap::new();
+    for (slot, body) in bodies.into_iter().enumerate() {
+        if slot >= function_types.len() {
+            break;
+        }
+        let func = imported_funcs + slot as u32;
+        let mut calls = Vec::new();
+        let Ok(mut reader) = body.get_operators_reader() else {
+            continue;
+        };
+        while !reader.eof() {
+            let Ok(op) = reader.read() else {
+                break;
+            };
+            match op {
+                wasmparser_encoder::Operator::Call { function_index }
+                | wasmparser_encoder::Operator::ReturnCall { function_index } => {
+                    calls.push(function_index);
+                }
+                _ => {}
+            }
+        }
+        out.insert(func, calls);
+    }
+    out
+}
+
+fn imported_func_count_for_type_ref(ty: wasmparser_encoder::TypeRef, names_count: u32) -> u32 {
+    match ty {
+        wasmparser_encoder::TypeRef::Func(_) | wasmparser_encoder::TypeRef::FuncExact(_) => {
+            names_count
+        }
+        _ => 0,
+    }
+}
+
+fn reachable_builtin_capabilities(
+    func: u32,
+    names: &BTreeMap<u32, String>,
+    helper_exports: &BTreeMap<u32, Capability>,
+    direct: &BTreeMap<u32, Vec<u32>>,
+    memo: &mut BTreeMap<u32, BTreeSet<Capability>>,
+) -> BTreeSet<Capability> {
+    let mut visiting = BTreeSet::new();
+    reachable_builtin_capabilities_inner(
+        func,
+        names,
+        helper_exports,
+        direct,
+        memo,
+        &mut visiting,
+    )
+}
+
+fn reachable_builtin_capabilities_inner(
+    func: u32,
+    names: &BTreeMap<u32, String>,
+    helper_exports: &BTreeMap<u32, Capability>,
+    direct: &BTreeMap<u32, Vec<u32>>,
+    memo: &mut BTreeMap<u32, BTreeSet<Capability>>,
+    visiting: &mut BTreeSet<u32>,
+) -> BTreeSet<Capability> {
+    if let Some(cached) = memo.get(&func) {
+        return cached.clone();
+    }
+    if !visiting.insert(func) {
+        return BTreeSet::new();
+    }
+
+    let mut caps = BTreeSet::new();
+    if let Some(name) = names.get(&func)
+        && let Some(cap) = callback_capability(name)
+    {
+        caps.insert(cap);
+    }
+    if let Some(cap) = helper_exports.get(&func) {
+        caps.insert(*cap);
+    }
+    if let Some(callees) = direct.get(&func) {
+        for callee in callees {
+            caps.extend(reachable_builtin_capabilities_inner(
+                *callee,
+                names,
+                helper_exports,
+                direct,
+                memo,
+                visiting,
+            ));
+        }
+    }
+
+    visiting.remove(&func);
+    memo.insert(func, caps.clone());
+    caps
+}
+
+fn callback_capability(name: &str) -> Option<Capability> {
+    let module = builtin_module_fragment(name)?;
+    Some(match module {
+        "base64" => Capability::Base64,
+        "console" => Capability::Console,
+        "dgram" => Capability::Dgram,
+        "diagnostics_channel" => Capability::DiagnosticsChannel,
+        "dns" => Capability::Dns,
+        "encoding" => Capability::Encoding,
+        "fs" => Capability::Fs,
+        "gc" => Capability::Gc,
+        "http" => Capability::NodeFetch,
+        "intl" => Capability::Intl,
+        "internal_binding_util" => Capability::Util,
+        "net" => Capability::Net,
+        "node_http" => Capability::NodeHttp,
+        "os" => Capability::Os,
+        "process" => Capability::Process,
+        "sqlite" => Capability::Sqlite,
+        "string_decoder" => Capability::StringDecoder,
+        "timeout" => Capability::Timers,
+        "url" => Capability::Url,
+        "vm" => Capability::Vm,
+        "web_crypto" => Capability::WebCrypto,
+        "websocket" => Capability::Websocket,
+        "zlib" => Capability::Zlib,
+        _ => return None,
+    })
+}
+
+fn builtin_module_fragment(name: &str) -> Option<&str> {
+    let rest = if let Some((_, rest)) = name.split_once("::builtin::") {
+        rest
+    } else if let Some((_, rest)) = name.split_once("..builtin..") {
+        rest
+    } else {
+        return None;
+    };
+
+    rest.split("::")
+        .next()
+        .and_then(|s| s.split("..").next())
+        .filter(|s| !s.is_empty())
+}
+
+fn is_fs_loader_function(name: &str) -> bool {
+    [
+        "__wasilibc_populate_preopens",
+        "std::fs::",
+        "std..fs..",
+        "std::sys::fs::",
+        "std..sys..fs..",
+        "std::os::wasi::fs::",
+        "std..os..wasi..fs..",
+        "wasip2::imports::wasi::filesystem::",
+        "wasip2..imports..wasi..filesystem..",
+        "wasi::filesystem::",
+        "wasi..filesystem..",
+        "::internal::NodeModulesResolver::",
+        "..internal..NodeModulesResolver..",
+        "::internal::FileUrlResolver::",
+        "..internal..FileUrlResolver..",
+        "::internal::CjsEvalResolver",
+        "..internal..CjsEvalResolver",
+        "::internal::JsonFileLoader",
+        "..internal..JsonFileLoader",
+        "::internal::CjsCompatLoader",
+        "..internal..CjsCompatLoader",
+        "::internal::ImportMetaLoader",
+        "..internal..ImportMetaLoader",
+        "rquickjs_core::loader::file_resolver",
+        "rquickjs_core..loader..file_resolver",
+    ]
+    .iter()
+    .any(|fragment| name.contains(fragment))
+}
+
+fn capability_from_helper_export(name: &str) -> Option<Capability> {
+    name.strip_prefix(CAPABILITY_HELPER_EXPORT_PREFIX)
+        .and_then(Capability::from_marker_name)
+}
+
+fn imported_global_count_for_type_ref(ty: wasmparser_encoder::TypeRef, names_count: u32) -> u32 {
+    match ty {
+        wasmparser_encoder::TypeRef::Global(_) => names_count,
+        _ => 0,
+    }
+}
+
+impl CapabilityGlobalLowerer {
+    fn append_capability_globals(&mut self, globals: &mut wasm_encoder::GlobalSection) {
+        if self.module.appended_cap_globals {
+            return;
+        }
+
+        self.module.cap_globals_base =
+            Some(self.module.imported_globals + self.module.defined_globals);
+        for cap in ALL_CAPABILITIES {
+            let enabled = ((self.enabled_bits >> cap.bit_index()) & 1) as i32;
+            globals.global(
+                wasm_encoder::GlobalType {
+                    val_type: wasm_encoder::ValType::I32,
+                    mutable: false,
+                    shared: false,
+                },
+                &wasm_encoder::ConstExpr::i32_const(enabled),
+            );
+        }
+        self.module.defined_globals += ALL_CAPABILITIES.len() as u32;
+        self.module.appended_cap_globals = true;
+    }
+
+    fn capability_global_index(&self, cap: Capability) -> Option<u32> {
+        self.module
+            .cap_globals_base
+            .map(|base| base + cap.bit_index() as u32)
+    }
+}
+
+impl Reencode for CapabilityGlobalLowerer {
+    type Error = anyhow::Error;
+
+    fn parse_core_module(
+        &mut self,
+        module: &mut wasm_encoder::Module,
+        parser: wasmparser_encoder::Parser,
+        data: &[u8],
+    ) -> Result<(), Error<Self::Error>> {
+        let outer = std::mem::take(&mut self.module);
+        let capability_roots = build_capability_roots_metadata(data);
+        let result = wasm_encoder::reencode::utils::parse_core_module(self, module, parser, data);
+        if result.is_ok() && !capability_roots.is_empty() {
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed(CAPABILITY_ROOTS_SECTION),
+                data: Cow::Owned(capability_roots),
+            });
+        }
+        self.module = outer;
+        result
+    }
+
+    fn parse_custom_section(
+        &mut self,
+        module: &mut wasm_encoder::Module,
+        section: wasmparser_encoder::CustomSectionReader<'_>,
+    ) -> Result<(), Error<Self::Error>> {
+        if section.name() == CAPABILITY_ROOTS_SECTION {
+            return Ok(());
+        }
+        wasm_encoder::reencode::utils::parse_custom_section(self, module, section)
+    }
+
+    fn parse_import_section(
+        &mut self,
+        import_section: &mut wasm_encoder::ImportSection,
+        section: wasmparser_encoder::ImportSectionReader<'_>,
+    ) -> Result<(), Error<Self::Error>> {
+        for imports in section {
+            let imports = imports.map_err(Error::ParseError)?;
+            match imports.clone() {
+                wasmparser_encoder::Imports::Single(_, import) => {
+                    self.module.imported_globals +=
+                        imported_global_count_for_type_ref(import.ty, 1);
+                }
+                wasmparser_encoder::Imports::Compact1 { items, .. } => {
+                    for item in items {
+                        let item = item.map_err(Error::ParseError)?;
+                        self.module.imported_globals +=
+                            imported_global_count_for_type_ref(item.ty, 1);
+                    }
+                }
+                wasmparser_encoder::Imports::Compact2 { ty, names, .. } => {
+                    self.module.imported_globals +=
+                        imported_global_count_for_type_ref(ty, names.count());
+                }
+            }
+            self.parse_imports(import_section, imports)?;
+        }
+        Ok(())
+    }
+
+    fn parse_global_section(
+        &mut self,
+        globals: &mut wasm_encoder::GlobalSection,
+        section: wasmparser_encoder::GlobalSectionReader<'_>,
+    ) -> Result<(), Error<Self::Error>> {
+        let defined_count = section.count();
+        wasm_encoder::reencode::utils::parse_global_section(self, globals, section)?;
+        self.module.defined_globals += defined_count;
+        self.append_capability_globals(globals);
+        Ok(())
+    }
+
+    fn parse_export(
+        &mut self,
+        exports: &mut wasm_encoder::ExportSection,
+        export: wasmparser_encoder::Export<'_>,
+    ) -> Result<(), Error<Self::Error>> {
+        if export.kind == wasmparser_encoder::ExternalKind::Func
+            && let Some(cap) = capability_from_helper_export(export.name)
+        {
+            self.module.exported_helpers.insert(export.index, cap);
+            return Ok(());
+        }
+
+        wasm_encoder::reencode::utils::parse_export(self, exports, export)
+    }
+
+    fn instruction<'a>(
+        &mut self,
+        arg: wasmparser_encoder::Operator<'a>,
+    ) -> Result<wasm_encoder::Instruction<'a>, Error<Self::Error>> {
+        if let wasmparser_encoder::Operator::Call { function_index } = arg
+            && let Some(cap) = self.module.exported_helpers.get(&function_index).copied()
+            && let Some(global_index) = self.capability_global_index(cap)
+        {
+            self.calls_rewritten += 1;
+            return Ok(wasm_encoder::Instruction::GlobalGet(global_index));
+        }
+
+        wasm_encoder::reencode::utils::instruction(self, arg)
+    }
+
+    fn intersperse_section_hook(
+        &mut self,
+        module: &mut wasm_encoder::Module,
+        after: Option<wasm_encoder::SectionId>,
+        before: Option<wasm_encoder::SectionId>,
+    ) -> Result<(), Error<Self::Error>> {
+        let global_id = wasm_encoder::SectionId::Global as u8;
+        let after_id = after.map(|id| id as u8).unwrap_or(0);
+        let before_id = before.map(|id| id as u8).unwrap_or(u8::MAX);
+        if !self.module.appended_cap_globals && after_id < global_id && before_id > global_id {
+            let mut globals = wasm_encoder::GlobalSection::new();
+            self.append_capability_globals(&mut globals);
+            module.section(&globals);
+        }
+
+        wasm_encoder::reencode::utils::intersperse_section_hook(self, module, after, before)
+    }
+}
+
+impl ReencodeComponent for CapabilityGlobalLowerer {
+    fn parse_component_submodule(
+        &mut self,
+        component: &mut wasm_encoder::Component,
+        parser: wasmparser_encoder::Parser,
+        data: &[u8],
+    ) -> Result<(), Error<Self::Error>> {
+        self.push_depth();
+        let outer = std::mem::take(&mut self.module);
+        let capability_roots = build_capability_roots_metadata(data);
+        let mut module = wasm_encoder::Module::new();
+        let result = wasm_encoder::reencode::utils::parse_core_module(
+            self,
+            &mut module,
+            parser,
+            data,
+        );
+        if result.is_ok() && !capability_roots.is_empty() {
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed(CAPABILITY_ROOTS_SECTION),
+                data: Cow::Owned(capability_roots),
+            });
+        }
+        self.module = outer;
+        self.pop_depth();
+        result?;
+        component.section(&wasm_encoder::ModuleSection(&module));
+        Ok(())
+    }
 }
 
 /// Read the current capability-gates bitset from `wasm`. Useful for round-trip
@@ -563,7 +1133,10 @@ mod tests {
         let patched = patch_capability_gates_in_bytes(&wasm, new_bits).unwrap();
 
         // All slots should now hold the same patched value, so reading reports it.
-        assert_eq!(read_capability_gates_from_bytes(&patched).unwrap(), new_bits);
+        assert_eq!(
+            read_capability_gates_from_bytes(&patched).unwrap(),
+            new_bits
+        );
 
         // Sanity: each individual slot in the patched buffer carries the new value.
         let bytes = new_bits.to_le_bytes();
@@ -584,11 +1157,17 @@ mod tests {
         // Patch to a specific bitset and confirm.
         let new_bits: u64 = 0xCAFE_BABE_DEAD_BEEF;
         let patched = patch_capability_gates_in_bytes(&wasm, new_bits).unwrap();
-        assert_eq!(read_capability_gates_from_bytes(&patched).unwrap(), new_bits);
+        assert_eq!(
+            read_capability_gates_from_bytes(&patched).unwrap(),
+            new_bits
+        );
 
         // Surrounding bytes must be untouched.
         assert_eq!(&patched[..200], &wasm[..200]);
-        assert_eq!(&patched[200 + CAPABILITY_GATES_SLOT_SIZE..], &wasm[200 + CAPABILITY_GATES_SLOT_SIZE..]);
+        assert_eq!(
+            &patched[200 + CAPABILITY_GATES_SLOT_SIZE..],
+            &wasm[200 + CAPABILITY_GATES_SLOT_SIZE..]
+        );
 
         // Magic markers must be preserved across the patch.
         assert_eq!(&patched[200..200 + 16], CAPABILITY_GATES_MAGIC.as_slice());
@@ -596,6 +1175,106 @@ mod tests {
             &patched[200 + 24..200 + CAPABILITY_GATES_SLOT_SIZE],
             CAPABILITY_GATES_END_MAGIC.as_slice()
         );
+    }
+
+    fn build_test_component_with_capability_helper() -> Vec<u8> {
+        let mut module = wasm_encoder::Module::new();
+
+        let mut types = wasm_encoder::TypeSection::new();
+        types.ty().function([], [wasm_encoder::ValType::I32]);
+        module.section(&types);
+
+        let mut functions = wasm_encoder::FunctionSection::new();
+        functions.function(0);
+        functions.function(0);
+        module.section(&functions);
+
+        let mut exports = wasm_encoder::ExportSection::new();
+        exports.export("__wrjs_cap_fs", wasm_encoder::ExportKind::Func, 0);
+        exports.export("caller", wasm_encoder::ExportKind::Func, 1);
+        module.section(&exports);
+
+        let mut code = wasm_encoder::CodeSection::new();
+        let mut helper = wasm_encoder::Function::new([]);
+        helper.instruction(&wasm_encoder::Instruction::I32Const(1));
+        helper.instruction(&wasm_encoder::Instruction::End);
+        code.function(&helper);
+
+        let mut caller = wasm_encoder::Function::new([]);
+        caller.instruction(&wasm_encoder::Instruction::Call(0));
+        caller.instruction(&wasm_encoder::Instruction::End);
+        code.function(&caller);
+        module.section(&code);
+
+        let mut component = wasm_encoder::Component::new();
+        component.section(&wasm_encoder::ModuleSection(&module));
+        component.finish()
+    }
+
+    #[test]
+    fn test_lower_capability_helper_calls_to_globals() {
+        let component = build_test_component_with_capability_helper();
+        let lowered = lower_capability_helpers_to_globals(&component, 0).unwrap();
+
+        assert_eq!(lowered.calls_rewritten, 1);
+
+        let mut saw_disabled_fs_global = false;
+        let mut saw_rewritten_global_get = false;
+        let mut saw_helper_export = false;
+
+        for payload in wasmparser_encoder::Parser::new(0).parse_all(&lowered.bytes) {
+            let payload = payload.unwrap();
+            if let wasmparser_encoder::Payload::ModuleSection {
+                unchecked_range, ..
+            } = payload
+            {
+                let module_bytes = &lowered.bytes[unchecked_range];
+                for module_payload in wasmparser_encoder::Parser::new(0).parse_all(module_bytes) {
+                    match module_payload.unwrap() {
+                        wasmparser_encoder::Payload::GlobalSection(section) => {
+                            let globals: Vec<_> =
+                                section.into_iter().collect::<Result<_, _>>().unwrap();
+                            assert_eq!(globals.len(), ALL_CAPABILITIES.len());
+                            let fs_global = &globals[Capability::Fs.bit_index() as usize];
+                            assert_eq!(fs_global.ty.content_type, wasmparser_encoder::ValType::I32);
+                            assert!(!fs_global.ty.mutable);
+
+                            let mut ops = fs_global.init_expr.get_operators_reader();
+                            match ops.read().unwrap() {
+                                wasmparser_encoder::Operator::I32Const { value } => {
+                                    saw_disabled_fs_global = value == 0;
+                                }
+                                other => panic!("unexpected fs global initializer: {other:?}"),
+                            }
+                        }
+                        wasmparser_encoder::Payload::ExportSection(section) => {
+                            for export in section {
+                                let export = export.unwrap();
+                                if export.name == "__wrjs_cap_fs" {
+                                    saw_helper_export = true;
+                                }
+                            }
+                        }
+                        wasmparser_encoder::Payload::CodeSectionEntry(body) => {
+                            let mut ops = body.get_operators_reader().unwrap();
+                            while !ops.eof() {
+                                if let wasmparser_encoder::Operator::GlobalGet { global_index } =
+                                    ops.read().unwrap()
+                                {
+                                    saw_rewritten_global_get =
+                                        global_index == Capability::Fs.bit_index() as u32;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        assert!(saw_disabled_fs_global);
+        assert!(saw_rewritten_global_get);
+        assert!(!saw_helper_export);
     }
 
     #[test]

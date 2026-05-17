@@ -1,18 +1,19 @@
 //! Per-capability runtime gates.
 //!
 //! The skeleton ships with all builtins compiled in. Each builtin's registration
-//! and global wiring is gated by a single bit in [`CAPABILITY_GATES_SLOT`]. By
-//! default every bit is set, so every capability is wired up and behaves as if no
-//! trimming were taking place.
+//! and global wiring is gated by a tiny exported helper function. By default each
+//! helper reads a bit in [`CAPABILITY_GATES_SLOT`], so every capability is wired
+//! up and behaves as if no trimming were taking place.
 //!
 //! After the skeleton has been compiled to wasm, the `wasm-rquickjs` host tooling
-//! can patch the bitset inside the slot to clear bits for capabilities the user's
-//! JavaScript provably does not need (see `wasm_rquickjs::inject`). Once a bit is
+//! can lower calls to those helper functions into immutable wasm `i32` globals
+//! initialized to `0` or `1` (see `wasm_rquickjs::inject`). Once a global is
 //! cleared, the corresponding native module is not registered, the wrapper JS is
 //! not loaded, and the global wiring code is skipped. Combined with a downstream
-//! wasm-level dead-code-elimination pass that drops unreferenced WIT imports,
-//! this lets a precompiled base image shed the WASI surface (filesystem, sockets,
-//! http, ...) of any builtin that the user app does not actually use.
+//! wasm-level dead-code-elimination pass that folds immutable globals and drops
+//! unreferenced WIT imports, this lets a precompiled base image shed the WASI
+//! surface (filesystem, sockets, http, ...) of any builtin that the user app does
+//! not actually use.
 //!
 //! ## Slot layout
 //!
@@ -27,6 +28,8 @@
 //!
 //! All reads of the bitset go through `core::ptr::read_volatile` to defeat
 //! constant-folding: the value is decided post-compile, not at LLVM time.
+//! The slot remains as a fallback for tools that have not yet adopted the
+//! helper-to-global lowering pass.
 //!
 //! ## Adding capabilities
 //!
@@ -80,8 +83,7 @@ const fn build_capability_gates_slot() -> [u8; CAPABILITY_GATES_SLOT_SIZE] {
 /// guarantees the bytes end up in a data segment instead of being inlined.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".wasm_rquickjs_capability_gates")]
-pub static CAPABILITY_GATES_SLOT: [u8; CAPABILITY_GATES_SLOT_SIZE] =
-    build_capability_gates_slot();
+pub static CAPABILITY_GATES_SLOT: [u8; CAPABILITY_GATES_SLOT_SIZE] = build_capability_gates_slot();
 
 /// Read the patched gate bitset from the slot via volatile reads to prevent
 /// LLVM from constant-folding the default value into callers.
@@ -126,6 +128,73 @@ fn cached_gates() -> u64 {
 pub fn is_enabled(cap: Capability) -> bool {
     let bit = cap as u8;
     (cached_gates() >> bit) & 1 == 1
+}
+
+macro_rules! capability_gate_helpers {
+    ($($variant:ident => $fn_name:ident, $export_name:literal;)*) => {
+        $(
+            #[inline(never)]
+            #[unsafe(export_name = $export_name)]
+            pub extern "C" fn $fn_name() -> bool {
+                is_enabled(Capability::$variant)
+            }
+        )*
+    };
+}
+
+capability_gate_helpers! {
+    AbortController => cap_abort_controller, "__wrjs_cap_abort_controller";
+    Assert => cap_assert, "__wrjs_cap_assert";
+    AsyncHooks => cap_async_hooks, "__wrjs_cap_async_hooks";
+    Base64 => cap_base64, "__wrjs_cap_base64";
+    Buffer => cap_buffer, "__wrjs_cap_buffer";
+    ChildProcess => cap_child_process, "__wrjs_cap_child_process";
+    Cluster => cap_cluster, "__wrjs_cap_cluster";
+    Console => cap_console, "__wrjs_cap_console";
+    Constants => cap_constants, "__wrjs_cap_constants";
+    Dgram => cap_dgram, "__wrjs_cap_dgram";
+    DiagnosticsChannel => cap_diagnostics_channel, "__wrjs_cap_diagnostics_channel";
+    Dns => cap_dns, "__wrjs_cap_dns";
+    Domain => cap_domain, "__wrjs_cap_domain";
+    Encoding => cap_encoding, "__wrjs_cap_encoding";
+    Events => cap_events, "__wrjs_cap_events";
+    FormDataNode => cap_formdata_node, "__wrjs_cap_formdata_node";
+    Fs => cap_fs, "__wrjs_cap_fs";
+    Gc => cap_gc, "__wrjs_cap_gc";
+    Http2 => cap_http2, "__wrjs_cap_http2";
+    Https => cap_https, "__wrjs_cap_https";
+    Inspector => cap_inspector, "__wrjs_cap_inspector";
+    Intl => cap_intl, "__wrjs_cap_intl";
+    Module => cap_module, "__wrjs_cap_module";
+    Net => cap_net, "__wrjs_cap_net";
+    NodeFetch => cap_node_fetch, "__wrjs_cap_node_fetch";
+    NodeHttp => cap_node_http, "__wrjs_cap_node_http";
+    NodeTest => cap_node_test, "__wrjs_cap_node_test";
+    Os => cap_os, "__wrjs_cap_os";
+    Path => cap_path, "__wrjs_cap_path";
+    PerfHooks => cap_perf_hooks, "__wrjs_cap_perf_hooks";
+    Process => cap_process, "__wrjs_cap_process";
+    Punycode => cap_punycode, "__wrjs_cap_punycode";
+    Querystring => cap_querystring, "__wrjs_cap_querystring";
+    Readline => cap_readline, "__wrjs_cap_readline";
+    Repl => cap_repl, "__wrjs_cap_repl";
+    Sqlite => cap_sqlite, "__wrjs_cap_sqlite";
+    Stream => cap_stream, "__wrjs_cap_stream";
+    StringDecoder => cap_string_decoder, "__wrjs_cap_string_decoder";
+    StructuredClone => cap_structured_clone, "__wrjs_cap_structured_clone";
+    Timers => cap_timers, "__wrjs_cap_timers";
+    Tls => cap_tls, "__wrjs_cap_tls";
+    TraceEvents => cap_trace_events, "__wrjs_cap_trace_events";
+    Tty => cap_tty, "__wrjs_cap_tty";
+    Url => cap_url, "__wrjs_cap_url";
+    Util => cap_util, "__wrjs_cap_util";
+    V8 => cap_v8, "__wrjs_cap_v8";
+    Vm => cap_vm, "__wrjs_cap_vm";
+    WebCrypto => cap_web_crypto, "__wrjs_cap_web_crypto";
+    Websocket => cap_websocket, "__wrjs_cap_websocket";
+    Webstreams => cap_webstreams, "__wrjs_cap_webstreams";
+    WorkerThreads => cap_worker_threads, "__wrjs_cap_worker_threads";
+    Zlib => cap_zlib, "__wrjs_cap_zlib";
 }
 
 /// Identifiers for each builtin capability the skeleton can be asked to enable
