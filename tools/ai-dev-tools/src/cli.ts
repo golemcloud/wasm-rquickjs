@@ -28,7 +28,7 @@ Examples:
   npx ai-dev-tools sync-config --dry-run
   npx ai-dev-tools ensure-all-vendored
   npx ai-dev-tools ensure-all-vendored --dry-run
-  npx ai-dev-tools validate-classifications --limit 5
+  npx ai-dev-tools validate-classifications --limit 50 --batch-size 10
   npx ai-dev-tools test-libraries
 
   # Or during development:
@@ -36,7 +36,7 @@ Examples:
   npx tsx src/cli.ts fix-batch http
   npx tsx src/cli.ts sync-config
   npx tsx src/cli.ts ensure-all-vendored
-  npx tsx src/cli.ts validate-classifications --limit 5
+  npx tsx src/cli.ts validate-classifications --limit 50 --batch-size 10
   npx tsx src/cli.ts test-libraries
 `;
 
@@ -51,6 +51,7 @@ async function main(): Promise<void> {
       results: { type: "string" },
       "triage-log": { type: "string" },
       limit: { type: "string" },
+      "batch-size": { type: "string" },
     },
   });
 
@@ -113,11 +114,20 @@ async function main(): Promise<void> {
           process.exit(1);
         }
       }
+      let batchSize: number | undefined;
+      if (values["batch-size"] !== undefined) {
+        batchSize = Number.parseInt(values["batch-size"], 10);
+        if (!Number.isFinite(batchSize) || batchSize <= 0) {
+          console.error("Error: --batch-size must be a positive integer");
+          process.exit(1);
+        }
+      }
       await validateClassificationsCommand({
         dryRun: !!values["dry-run"],
         resultsPath: values.results,
         triageLogPath: values["triage-log"],
         limit,
+        batchSize,
       });
       break;
     }
