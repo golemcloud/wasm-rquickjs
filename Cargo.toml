@@ -22,11 +22,13 @@ pkg-fmt = "zip"
 
 [dependencies]
 "wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize"] }
+wasm-eliminator = { path = "../../oss/wasm-eliminator/crates/wasm-eliminator" }
 
 anyhow = { workspace = true }
 camino = { workspace = true }
 clap = { version = "4.5.39", features = ["default", "derive"] }
 tokio = { workspace = true, features = ["rt"] }
+wasmparser_encoder = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

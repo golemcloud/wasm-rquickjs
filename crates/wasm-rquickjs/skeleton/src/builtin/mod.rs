@@ -1,9 +1,163 @@
-use crate::capabilities::{self, Capability};
+use crate::capabilities;
 use std::fmt::Write;
 
-#[inline]
-fn cap(c: Capability) -> bool {
-    capabilities::is_enabled(c)
+macro_rules! capability_enabled {
+    (AbortController) => {
+        capabilities::cap_abort_controller()
+    };
+    (Assert) => {
+        capabilities::cap_assert()
+    };
+    (AsyncHooks) => {
+        capabilities::cap_async_hooks()
+    };
+    (Base64) => {
+        capabilities::cap_base64()
+    };
+    (Buffer) => {
+        capabilities::cap_buffer()
+    };
+    (ChildProcess) => {
+        capabilities::cap_child_process()
+    };
+    (Cluster) => {
+        capabilities::cap_cluster()
+    };
+    (Console) => {
+        capabilities::cap_console()
+    };
+    (Constants) => {
+        capabilities::cap_constants()
+    };
+    (Dgram) => {
+        capabilities::cap_dgram()
+    };
+    (DiagnosticsChannel) => {
+        capabilities::cap_diagnostics_channel()
+    };
+    (Dns) => {
+        capabilities::cap_dns()
+    };
+    (Domain) => {
+        capabilities::cap_domain()
+    };
+    (Encoding) => {
+        capabilities::cap_encoding()
+    };
+    (Events) => {
+        capabilities::cap_events()
+    };
+    (FormDataNode) => {
+        capabilities::cap_formdata_node()
+    };
+    (Fs) => {
+        capabilities::cap_fs()
+    };
+    (Gc) => {
+        capabilities::cap_gc()
+    };
+    (Http2) => {
+        capabilities::cap_http2()
+    };
+    (Https) => {
+        capabilities::cap_https()
+    };
+    (Inspector) => {
+        capabilities::cap_inspector()
+    };
+    (Intl) => {
+        capabilities::cap_intl()
+    };
+    (Module) => {
+        capabilities::cap_module()
+    };
+    (Net) => {
+        capabilities::cap_net()
+    };
+    (NodeFetch) => {
+        capabilities::cap_node_fetch()
+    };
+    (NodeHttp) => {
+        capabilities::cap_node_http()
+    };
+    (NodeTest) => {
+        capabilities::cap_node_test()
+    };
+    (Os) => {
+        capabilities::cap_os()
+    };
+    (Path) => {
+        capabilities::cap_path()
+    };
+    (PerfHooks) => {
+        capabilities::cap_perf_hooks()
+    };
+    (Process) => {
+        capabilities::cap_process()
+    };
+    (Punycode) => {
+        capabilities::cap_punycode()
+    };
+    (Querystring) => {
+        capabilities::cap_querystring()
+    };
+    (Readline) => {
+        capabilities::cap_readline()
+    };
+    (Repl) => {
+        capabilities::cap_repl()
+    };
+    (Sqlite) => {
+        capabilities::cap_sqlite()
+    };
+    (Stream) => {
+        capabilities::cap_stream()
+    };
+    (StringDecoder) => {
+        capabilities::cap_string_decoder()
+    };
+    (StructuredClone) => {
+        capabilities::cap_structured_clone()
+    };
+    (Timers) => {
+        capabilities::cap_timers()
+    };
+    (Tls) => {
+        capabilities::cap_tls()
+    };
+    (TraceEvents) => {
+        capabilities::cap_trace_events()
+    };
+    (Tty) => {
+        capabilities::cap_tty()
+    };
+    (Url) => {
+        capabilities::cap_url()
+    };
+    (Util) => {
+        capabilities::cap_util()
+    };
+    (V8) => {
+        capabilities::cap_v8()
+    };
+    (Vm) => {
+        capabilities::cap_vm()
+    };
+    (WebCrypto) => {
+        capabilities::cap_web_crypto()
+    };
+    (Websocket) => {
+        capabilities::cap_websocket()
+    };
+    (Webstreams) => {
+        capabilities::cap_webstreams()
+    };
+    (WorkerThreads) => {
+        capabilities::cap_worker_threads()
+    };
+    (Zlib) => {
+        capabilities::cap_zlib()
+    };
 }
 
 mod abort_controller;
@@ -119,19 +273,19 @@ pub fn add_module_resolvers(
     // is "enabled", so this is a no-op shape change unless the host patches the
     // capability slot in the wasm. See `crate::capabilities`.
 
-    let resolver = if cap(Capability::AbortController) {
+    let resolver = if capability_enabled!(AbortController) {
         resolver.with_module("__wasm_rquickjs_builtin/abort_controller")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Base64) {
+    let resolver = if capability_enabled!(Base64) {
         resolver.with_module("__wasm_rquickjs_builtin/base64_native")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Console) {
+    let resolver = if capability_enabled!(Console) {
         resolver
             .with_module("__wasm_rquickjs_builtin/console_native")
             .with_module("__wasm_rquickjs_builtin/console")
@@ -141,7 +295,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Timers) {
+    let resolver = if capability_enabled!(Timers) {
         resolver
             .with_module("__wasm_rquickjs_builtin/timeout_native")
             .with_module("__wasm_rquickjs_builtin/timeout")
@@ -153,13 +307,13 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Gc) {
+    let resolver = if capability_enabled!(Gc) {
         resolver.with_module("__wasm_rquickjs_builtin/gc_native")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::NodeFetch) {
+    let resolver = if capability_enabled!(NodeFetch) {
         resolver
             .with_module("__wasm_rquickjs_builtin/http_native")
             .with_module("__wasm_rquickjs_builtin/http")
@@ -169,7 +323,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Webstreams) {
+    let resolver = if capability_enabled!(Webstreams) {
         resolver
             .with_module("__wasm_rquickjs_builtin/streams")
             .with_module("__wasm_rquickjs_builtin/webstreams_wrapper")
@@ -180,7 +334,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Encoding) {
+    let resolver = if capability_enabled!(Encoding) {
         resolver
             .with_module("__wasm_rquickjs_builtin/encoding_native")
             .with_module("__wasm_rquickjs_builtin/encoding")
@@ -188,7 +342,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Intl) {
+    let resolver = if capability_enabled!(Intl) {
         resolver
             .with_module("__wasm_rquickjs_builtin/intl_native")
             .with_module("__wasm_rquickjs_builtin/intl")
@@ -196,13 +350,13 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Util) {
+    let resolver = if capability_enabled!(Util) {
         resolver.with_module("node:util").with_module("util")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Fs) {
+    let resolver = if capability_enabled!(Fs) {
         resolver
             .with_module("__wasm_rquickjs_builtin/fs_native")
             .with_module("node:fs")
@@ -214,7 +368,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Buffer) {
+    let resolver = if capability_enabled!(Buffer) {
         resolver
             .with_module("node:buffer")
             .with_module("buffer")
@@ -224,7 +378,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Os) {
+    let resolver = if capability_enabled!(Os) {
         resolver
             .with_module("__wasm_rquickjs_builtin/os_native")
             .with_module("node:os")
@@ -233,7 +387,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Assert) {
+    let resolver = if capability_enabled!(Assert) {
         resolver
             .with_module("node:assert")
             .with_module("assert")
@@ -243,7 +397,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Querystring) {
+    let resolver = if capability_enabled!(Querystring) {
         resolver
             .with_module("node:querystring")
             .with_module("querystring")
@@ -251,7 +405,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::ChildProcess) {
+    let resolver = if capability_enabled!(ChildProcess) {
         resolver
             .with_module("node:child_process")
             .with_module("child_process")
@@ -259,19 +413,19 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::NodeTest) {
+    let resolver = if capability_enabled!(NodeTest) {
         resolver.with_module("node:test").with_module("test")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Module) {
+    let resolver = if capability_enabled!(Module) {
         resolver.with_module("node:module").with_module("module")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Process) {
+    let resolver = if capability_enabled!(Process) {
         resolver
             .with_module("__wasm_rquickjs_builtin/process_native")
             .with_module("node:process")
@@ -280,7 +434,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Path) {
+    let resolver = if capability_enabled!(Path) {
         resolver
             .with_module("node:path")
             .with_module("path")
@@ -292,7 +446,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Punycode) {
+    let resolver = if capability_enabled!(Punycode) {
         resolver
             .with_module("node:punycode")
             .with_module("punycode")
@@ -300,7 +454,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Url) {
+    let resolver = if capability_enabled!(Url) {
         resolver
             .with_module("__wasm_rquickjs_builtin/url_native")
             .with_module("__wasm_rquickjs_builtin/url")
@@ -310,13 +464,13 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Events) {
+    let resolver = if capability_enabled!(Events) {
         resolver.with_module("node:events").with_module("events")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Stream) {
+    let resolver = if capability_enabled!(Stream) {
         resolver
             .with_module("node:stream")
             .with_module("node:stream/promises")
@@ -328,13 +482,13 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::FormDataNode) {
+    let resolver = if capability_enabled!(FormDataNode) {
         resolver.with_module("formdata-node")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::StringDecoder) {
+    let resolver = if capability_enabled!(StringDecoder) {
         resolver
             .with_module("__wasm_rquickjs_builtin/string_decoder_native")
             .with_module("node:string_decoder")
@@ -343,7 +497,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::WebCrypto) {
+    let resolver = if capability_enabled!(WebCrypto) {
         resolver
             .with_module("__wasm_rquickjs_builtin/web_crypto_native")
             .with_module("__wasm_rquickjs_builtin/web_crypto")
@@ -353,7 +507,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Vm) {
+    let resolver = if capability_enabled!(Vm) {
         resolver
             .with_module("__wasm_rquickjs_builtin/vm_native")
             .with_module("__wasm_rquickjs_builtin/vm")
@@ -363,13 +517,13 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::StructuredClone) {
+    let resolver = if capability_enabled!(StructuredClone) {
         resolver.with_module("__wasm_rquickjs_builtin/structured_clone")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::AsyncHooks) {
+    let resolver = if capability_enabled!(AsyncHooks) {
         resolver
             .with_module("node:async_hooks")
             .with_module("async_hooks")
@@ -377,13 +531,13 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Cluster) {
+    let resolver = if capability_enabled!(Cluster) {
         resolver.with_module("node:cluster").with_module("cluster")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Constants) {
+    let resolver = if capability_enabled!(Constants) {
         resolver
             .with_module("node:constants")
             .with_module("constants")
@@ -391,7 +545,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Dgram) {
+    let resolver = if capability_enabled!(Dgram) {
         resolver
             .with_module("__wasm_rquickjs_builtin/dgram_native")
             .with_module("node:dgram")
@@ -400,7 +554,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::DiagnosticsChannel) {
+    let resolver = if capability_enabled!(DiagnosticsChannel) {
         resolver
             .with_module("node:diagnostics_channel")
             .with_module("diagnostics_channel")
@@ -408,7 +562,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Dns) {
+    let resolver = if capability_enabled!(Dns) {
         resolver
             .with_module("__wasm_rquickjs_builtin/dns_native")
             .with_module("node:dns")
@@ -419,25 +573,25 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Domain) {
+    let resolver = if capability_enabled!(Domain) {
         resolver.with_module("node:domain").with_module("domain")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Http2) {
+    let resolver = if capability_enabled!(Http2) {
         resolver.with_module("node:http2").with_module("http2")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Https) {
+    let resolver = if capability_enabled!(Https) {
         resolver.with_module("node:https").with_module("https")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Inspector) {
+    let resolver = if capability_enabled!(Inspector) {
         resolver
             .with_module("node:inspector")
             .with_module("inspector")
@@ -445,7 +599,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::NodeHttp) {
+    let resolver = if capability_enabled!(NodeHttp) {
         resolver
             .with_module("__wasm_rquickjs_builtin/node_http_native")
             .with_module("__wasm_rquickjs_builtin/node_http_server")
@@ -459,7 +613,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Net) {
+    let resolver = if capability_enabled!(Net) {
         resolver
             .with_module("__wasm_rquickjs_builtin/net_native")
             .with_module("node:net")
@@ -468,7 +622,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::PerfHooks) {
+    let resolver = if capability_enabled!(PerfHooks) {
         resolver
             .with_module("node:perf_hooks")
             .with_module("perf_hooks")
@@ -476,7 +630,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Readline) {
+    let resolver = if capability_enabled!(Readline) {
         resolver
             .with_module("node:readline")
             .with_module("readline")
@@ -486,13 +640,13 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Repl) {
+    let resolver = if capability_enabled!(Repl) {
         resolver.with_module("node:repl").with_module("repl")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::TraceEvents) {
+    let resolver = if capability_enabled!(TraceEvents) {
         resolver
             .with_module("node:trace_events")
             .with_module("trace_events")
@@ -500,25 +654,25 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Tls) {
+    let resolver = if capability_enabled!(Tls) {
         resolver.with_module("node:tls").with_module("tls")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::Tty) {
+    let resolver = if capability_enabled!(Tty) {
         resolver.with_module("node:tty").with_module("tty")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::V8) {
+    let resolver = if capability_enabled!(V8) {
         resolver.with_module("node:v8").with_module("v8")
     } else {
         resolver
     };
 
-    let resolver = if cap(Capability::WorkerThreads) {
+    let resolver = if capability_enabled!(WorkerThreads) {
         resolver
             .with_module("node:worker_threads")
             .with_module("worker_threads")
@@ -526,7 +680,7 @@ pub fn add_module_resolvers(
         resolver
     };
 
-    let resolver = if cap(Capability::Zlib) {
+    let resolver = if capability_enabled!(Zlib) {
         resolver
             .with_module("__wasm_rquickjs_builtin/zlib_native")
             .with_module("node:zlib")
@@ -536,7 +690,7 @@ pub fn add_module_resolvers(
     };
 
     // SQLite - only node:sqlite, no bare "sqlite" (matches Node.js behavior)
-    let resolver = if cap(Capability::Sqlite) {
+    let resolver = if capability_enabled!(Sqlite) {
         resolver
             .with_module("__wasm_rquickjs_builtin/sqlite_native")
             .with_module("node:sqlite")
@@ -545,7 +699,7 @@ pub fn add_module_resolvers(
     };
 
     #[cfg(feature = "golem")]
-    let resolver = if cap(Capability::DiagnosticsChannel) {
+    let resolver = if capability_enabled!(DiagnosticsChannel) {
         resolver
             .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
             .with_module("__wasm_rquickjs_builtin/diagnostics_channel_golem")
@@ -554,7 +708,7 @@ pub fn add_module_resolvers(
     };
 
     #[cfg(feature = "golem")]
-    let resolver = if cap(Capability::Websocket) {
+    let resolver = if capability_enabled!(Websocket) {
         resolver
             .with_module("__wasm_rquickjs_builtin/websocket_native")
             .with_module("__wasm_rquickjs_builtin/websocket")
@@ -565,208 +719,188 @@ pub fn add_module_resolvers(
     internal::add_to_resolver(resolver)
 }
 
+fn module_from_declarations<'a, 'js>(
+    declarations: &'a rquickjs::module::Declarations<'js>,
+) -> &'a rquickjs::Module<'js, rquickjs::module::Declared> {
+    debug_assert_eq!(
+        std::mem::size_of::<rquickjs::module::Declarations<'js>>(),
+        std::mem::size_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
+    );
+    debug_assert_eq!(
+        std::mem::align_of::<rquickjs::module::Declarations<'js>>(),
+        std::mem::align_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
+    );
+
+    // SAFETY: rquickjs 0.10 declares `Declarations<'js>` as a single-field
+    // tuple wrapper around `Module<'js, Declared>`:
+    //
+    //     pub struct Declarations<'js>(Module<'js, Declared>);
+    //
+    // rquickjs does not expose the wrapped module publicly, but the unified
+    // builtin trampoline needs the current module name to dispatch back to the
+    // original per-builtin `ModuleDef`. Keep this cast isolated and guarded by
+    // the debug size/alignment assertions above.
+    unsafe {
+        &*(declarations as *const rquickjs::module::Declarations<'js>
+            as *const rquickjs::Module<'js, rquickjs::module::Declared>)
+    }
+}
+
+fn module_from_exports<'a, 'js>(
+    exports: &'a rquickjs::module::Exports<'js>,
+) -> &'a rquickjs::Module<'js, rquickjs::module::Declared> {
+    debug_assert_eq!(
+        std::mem::size_of::<rquickjs::module::Exports<'js>>(),
+        std::mem::size_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
+    );
+    debug_assert_eq!(
+        std::mem::align_of::<rquickjs::module::Exports<'js>>(),
+        std::mem::align_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
+    );
+
+    // SAFETY: Same layout assumption as `module_from_declarations`, for
+    // rquickjs' single-field `Exports<'js>(Module<'js, Declared>)` wrapper.
+    unsafe {
+        &*(exports as *const rquickjs::module::Exports<'js>
+            as *const rquickjs::Module<'js, rquickjs::module::Declared>)
+    }
+}
+
+fn declaration_module_name(
+    declarations: &rquickjs::module::Declarations<'_>,
+) -> rquickjs::Result<String> {
+    module_from_declarations(declarations).name::<String>()
+}
+
+fn export_module_name(exports: &rquickjs::module::Exports<'_>) -> rquickjs::Result<String> {
+    module_from_exports(exports).name::<String>()
+}
+
+struct UnifiedBuiltinNativeModule;
+
+macro_rules! builtin_native_modules {
+    ($($(#[$meta:meta])* $cap:ident, $path:literal, $module:path;)*) => {
+        fn is_enabled_native_module_path(path: &str) -> bool {
+            $(
+                $(#[$meta])*
+                if capability_enabled!($cap) && path == $path {
+                    return true;
+                }
+            )*
+
+            false
+        }
+
+        impl rquickjs::module::ModuleDef for UnifiedBuiltinNativeModule {
+            fn declare(declarations: &rquickjs::module::Declarations<'_>) -> rquickjs::Result<()> {
+                let name = declaration_module_name(declarations)?;
+
+                $(
+                    $(#[$meta])*
+                    if capability_enabled!($cap) && name == $path {
+                        return <$module as rquickjs::module::ModuleDef>::declare(declarations);
+                    }
+                )*
+
+                Err(rquickjs::Error::new_loading(name))
+            }
+
+            fn evaluate<'js>(
+                ctx: &rquickjs::Ctx<'js>,
+                exports: &rquickjs::module::Exports<'js>,
+            ) -> rquickjs::Result<()> {
+                let name = export_module_name(exports)?;
+
+                $(
+                    $(#[$meta])*
+                    if capability_enabled!($cap) && name == $path {
+                        return <$module as rquickjs::module::ModuleDef>::evaluate(ctx, exports);
+                    }
+                )*
+
+                Err(rquickjs::Error::new_loading(name))
+            }
+        }
+    };
+}
+
+builtin_native_modules! {
+    Base64, "__wasm_rquickjs_builtin/base64_native", base64::js_native_module;
+    Console, "__wasm_rquickjs_builtin/console_native", console::js_native_module;
+    Timers, "__wasm_rquickjs_builtin/timeout_native", timeout::js_native_module;
+    Gc, "__wasm_rquickjs_builtin/gc_native", gc::js_native_module;
+    NodeFetch, "__wasm_rquickjs_builtin/http_native", http::js_native_module;
+    Encoding, "__wasm_rquickjs_builtin/encoding_native", encoding::js_native_module;
+    Intl, "__wasm_rquickjs_builtin/intl_native", intl::js_native_module;
+    Fs, "__wasm_rquickjs_builtin/fs_native", fs::js_native_module;
+    Os, "__wasm_rquickjs_builtin/os_native", os::js_native_module;
+    Process, "__wasm_rquickjs_builtin/process_native", process::js_native_module;
+    Util, "__wasm_rquickjs_builtin/internal/binding/util_native", internal_binding_util::js_native_module;
+    Url, "__wasm_rquickjs_builtin/url_native", url::js_native_module;
+    WebCrypto, "__wasm_rquickjs_builtin/web_crypto_native", web_crypto::js_native_module;
+    Vm, "__wasm_rquickjs_builtin/vm_native", vm::js_native_module;
+    Zlib, "__wasm_rquickjs_builtin/zlib_native", zlib::js_native_module;
+    Dgram, "__wasm_rquickjs_builtin/dgram_native", dgram::js_native_module;
+    Dns, "__wasm_rquickjs_builtin/dns_native", dns::js_native_module;
+    NodeHttp, "__wasm_rquickjs_builtin/node_http_native", node_http::js_native_module;
+    Net, "__wasm_rquickjs_builtin/net_native", net::js_native_module;
+    Sqlite, "__wasm_rquickjs_builtin/sqlite_native", sqlite::js_native_module;
+    StringDecoder, "__wasm_rquickjs_builtin/string_decoder_native", string_decoder::js_native_module;
+    #[cfg(feature = "golem")]
+    DiagnosticsChannel, "__wasm_rquickjs_builtin/diagnostics_channel_native", diagnostics_channel::js_native_module;
+    #[cfg(feature = "golem")]
+    Websocket, "__wasm_rquickjs_builtin/websocket_native", websocket::js_native_module;
+}
+
+/// Custom native-module loader for builtins.
+///
+/// Replaces the generic [`rquickjs::loader::ModuleLoader`] that previously
+/// backed wasm-rquickjs' native builtin modules. The generic loader stores
+/// one `fn(Ctx<'js>, Vec<u8>) -> Result<Module<'js>>` per registered builtin
+/// in a `HashMap<String, LoadFn>`; each `with_module(..., X::js_native_module)`
+/// monomorphises `ModuleLoader::load_func::<X>` and the resulting function
+/// pointer survives in the wasm function table even when the registering
+/// `with_module` call is dead code. The single `call_indirect` in
+/// `ModuleLoader::load` then keeps every type-compatible `load_func<X>`
+/// alive after wasm-eliminator DCE because the call's index operand is
+/// runtime-dynamic, so all type-matching elem slots stay reachable.
+///
+/// This loader avoids that retention by using exactly one native module type,
+/// [`UnifiedBuiltinNativeModule`], for every builtin. The QuickJS callback table
+/// therefore contains one rquickjs `eval_fn` instantiation instead of one per
+/// builtin. The unified callback recovers the current module name from
+/// rquickjs' declaration/export wrapper and dispatches through direct,
+/// capability-gated calls to the original per-builtin `ModuleDef`.
+pub struct BuiltinNativeLoader;
+
+impl rquickjs::loader::Loader for BuiltinNativeLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &rquickjs::Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<rquickjs::Module<'js, rquickjs::module::Declared>> {
+        if is_enabled_native_module_path(path) {
+            return rquickjs::Module::declare_def::<UnifiedBuiltinNativeModule, _>(
+                ctx.clone(),
+                Vec::from(path),
+            );
+        }
+
+        Err(rquickjs::Error::new_loading(path))
+    }
+}
+
 pub fn module_loader() -> (
-    rquickjs::loader::ModuleLoader,
+    BuiltinNativeLoader,
     rquickjs::loader::BuiltinLoader,
     rquickjs::loader::BuiltinLoader,
 ) {
-    // Native module registrations: gated by capability so that the underlying
-    // `js_native_module` reference becomes unreferenced when a capability is
-    // disabled, allowing wasm-level dead-code elimination to drop both the
-    // native function and its component-model imports.
+    // Native module registrations are now handled by `BuiltinNativeLoader`'s
+    // direct match. The remaining loaders below cover JS source modules,
+    // which already store inert bytes per builtin and have no per-builtin
+    // monomorphisation issue.
 
-    let native_loader = rquickjs::loader::ModuleLoader::default();
-
-    let native_loader = if cap(Capability::Base64) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/base64_native",
-            base64::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Console) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/console_native",
-            console::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Timers) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/timeout_native",
-            timeout::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Gc) {
-        native_loader.with_module("__wasm_rquickjs_builtin/gc_native", gc::js_native_module)
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::NodeFetch) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/http_native",
-            http::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Encoding) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/encoding_native",
-            encoding::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Intl) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/intl_native",
-            intl::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Fs) {
-        native_loader.with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Os) {
-        native_loader.with_module("__wasm_rquickjs_builtin/os_native", os::js_native_module)
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Process) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/process_native",
-            process::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    // `internal/binding/util_native` is required by `util` and is treated as
-    // part of the Util capability — `util.js` re-imports it for low-level
-    // helpers like inspect.
-    let native_loader = if cap(Capability::Util) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/internal/binding/util_native",
-            internal_binding_util::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Url) {
-        native_loader.with_module("__wasm_rquickjs_builtin/url_native", url::js_native_module)
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::WebCrypto) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/web_crypto_native",
-            web_crypto::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Vm) {
-        native_loader.with_module("__wasm_rquickjs_builtin/vm_native", vm::js_native_module)
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Zlib) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/zlib_native",
-            zlib::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Dgram) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/dgram_native",
-            dgram::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Dns) {
-        native_loader.with_module("__wasm_rquickjs_builtin/dns_native", dns::js_native_module)
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::NodeHttp) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/node_http_native",
-            node_http::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Net) {
-        native_loader.with_module("__wasm_rquickjs_builtin/net_native", net::js_native_module)
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::Sqlite) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/sqlite_native",
-            sqlite::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    let native_loader = if cap(Capability::StringDecoder) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/string_decoder_native",
-            string_decoder::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    #[cfg(feature = "golem")]
-    let native_loader = if cap(Capability::DiagnosticsChannel) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/diagnostics_channel_native",
-            diagnostics_channel::js_native_module,
-        )
-    } else {
-        native_loader
-    };
-
-    #[cfg(feature = "golem")]
-    let native_loader = if cap(Capability::Websocket) {
-        native_loader.with_module(
-            "__wasm_rquickjs_builtin/websocket_native",
-            websocket::js_native_module,
-        )
-    } else {
-        native_loader
-    };
+    let native_loader = BuiltinNativeLoader;
 
     // Builtin loader: registers JS source strings for each capability's
     // user-visible / internal modules. Mirrors the resolver gating above so
@@ -775,7 +909,7 @@ pub fn module_loader() -> (
 
     let builtin_loader = rquickjs::loader::BuiltinLoader::default();
 
-    let builtin_loader = if cap(Capability::AbortController) {
+    let builtin_loader = if capability_enabled!(AbortController) {
         builtin_loader.with_module(
             "__wasm_rquickjs_builtin/abort_controller",
             abort_controller::ABORT_CONTROLLER_JS,
@@ -784,7 +918,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Console) {
+    let builtin_loader = if capability_enabled!(Console) {
         builtin_loader
             .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
             .with_module("node:console", console::CONSOLE_JS)
@@ -793,7 +927,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Timers) {
+    let builtin_loader = if capability_enabled!(Timers) {
         builtin_loader
             .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
             .with_module("node:timers", timers::TIMERS_JS)
@@ -804,7 +938,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::NodeFetch) {
+    let builtin_loader = if capability_enabled!(NodeFetch) {
         builtin_loader
             .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
             .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
@@ -813,7 +947,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Webstreams) {
+    let builtin_loader = if capability_enabled!(Webstreams) {
         builtin_loader
             .with_module("__wasm_rquickjs_builtin/streams", webstreams::WEBSTREAMS_JS)
             .with_module(
@@ -827,25 +961,25 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::FormDataNode) {
+    let builtin_loader = if capability_enabled!(FormDataNode) {
         builtin_loader.with_module("formdata-node", formdata_node::FORMDATA_NODE_JS)
     } else {
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Encoding) {
+    let builtin_loader = if capability_enabled!(Encoding) {
         builtin_loader.with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
     } else {
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Intl) {
+    let builtin_loader = if capability_enabled!(Intl) {
         builtin_loader.with_module("__wasm_rquickjs_builtin/intl", intl::INTL_JS)
     } else {
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Util) {
+    let builtin_loader = if capability_enabled!(Util) {
         builtin_loader
             .with_module("node:util", util::UTIL_JS)
             .with_module("util", util::REEXPORT_JS)
@@ -853,7 +987,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Buffer) {
+    let builtin_loader = if capability_enabled!(Buffer) {
         builtin_loader
             .with_module("base64-js", base64::BASE64_JS)
             .with_module("ieee754", ieee754::IEEE754_JS)
@@ -863,7 +997,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Fs) {
+    let builtin_loader = if capability_enabled!(Fs) {
         builtin_loader
             .with_module("node:fs", fs::FS_JS)
             .with_module("fs", fs::REEXPORT_JS)
@@ -874,7 +1008,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Os) {
+    let builtin_loader = if capability_enabled!(Os) {
         builtin_loader
             .with_module("node:os", os::OS_JS)
             .with_module("os", os::REEXPORT_JS)
@@ -882,7 +1016,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Assert) {
+    let builtin_loader = if capability_enabled!(Assert) {
         builtin_loader
             .with_module("node:assert", assert::ASSERT_JS)
             .with_module("assert", assert::REEXPORT_JS)
@@ -892,7 +1026,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Querystring) {
+    let builtin_loader = if capability_enabled!(Querystring) {
         builtin_loader
             .with_module("node:querystring", querystring::QUERYSTRING_JS)
             .with_module("querystring", querystring::REEXPORT_JS)
@@ -900,7 +1034,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::ChildProcess) {
+    let builtin_loader = if capability_enabled!(ChildProcess) {
         builtin_loader
             .with_module("node:child_process", child_process::CHILD_PROCESS_JS)
             .with_module("child_process", child_process::REEXPORT_JS)
@@ -908,7 +1042,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::NodeTest) {
+    let builtin_loader = if capability_enabled!(NodeTest) {
         builtin_loader
             .with_module("node:test", node_test::TEST_JS)
             .with_module("test", node_test::REEXPORT_JS)
@@ -916,7 +1050,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Module) {
+    let builtin_loader = if capability_enabled!(Module) {
         builtin_loader
             .with_module("node:module", module::MODULE_JS)
             .with_module("module", module::REEXPORT_JS)
@@ -924,7 +1058,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Process) {
+    let builtin_loader = if capability_enabled!(Process) {
         builtin_loader
             .with_module("node:process", process::PROCESS_JS)
             .with_module("process", process::REEXPORT_JS)
@@ -932,7 +1066,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Path) {
+    let builtin_loader = if capability_enabled!(Path) {
         builtin_loader
             .with_module("node:path", path::PATH_JS)
             .with_module("path", path::REEXPORT_JS)
@@ -944,7 +1078,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Punycode) {
+    let builtin_loader = if capability_enabled!(Punycode) {
         builtin_loader
             .with_module("node:punycode", punycode::PUNYCODE_JS)
             .with_module("punycode", punycode::REEXPORT_JS)
@@ -952,7 +1086,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Url) {
+    let builtin_loader = if capability_enabled!(Url) {
         builtin_loader
             .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
             .with_module("node:url", url::URL_JS)
@@ -961,7 +1095,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Events) {
+    let builtin_loader = if capability_enabled!(Events) {
         builtin_loader
             .with_module("node:events", events::EVENTS_JS)
             .with_module("events", events::REEXPORT_JS)
@@ -969,7 +1103,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Stream) {
+    let builtin_loader = if capability_enabled!(Stream) {
         builtin_loader
             .with_module("node:stream", stream::STREAM_JS)
             .with_module("stream", stream::REEXPORT_JS)
@@ -981,7 +1115,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::StringDecoder) {
+    let builtin_loader = if capability_enabled!(StringDecoder) {
         builtin_loader
             .with_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
             .with_module("string_decoder", string_decoder::REEXPORT_JS)
@@ -989,7 +1123,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::WebCrypto) {
+    let builtin_loader = if capability_enabled!(WebCrypto) {
         builtin_loader
             .with_module(
                 "__wasm_rquickjs_builtin/web_crypto",
@@ -1001,7 +1135,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Vm) {
+    let builtin_loader = if capability_enabled!(Vm) {
         builtin_loader
             .with_module("__wasm_rquickjs_builtin/vm", vm::VM_JS)
             .with_module("node:vm", vm::REEXPORT_JS)
@@ -1010,7 +1144,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::StructuredClone) {
+    let builtin_loader = if capability_enabled!(StructuredClone) {
         builtin_loader.with_module(
             "__wasm_rquickjs_builtin/structured_clone",
             structured_clone::STRUCTURED_CLONE_JS,
@@ -1019,7 +1153,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::AsyncHooks) {
+    let builtin_loader = if capability_enabled!(AsyncHooks) {
         builtin_loader
             .with_module("node:async_hooks", async_hooks::ASYNC_HOOKS_JS)
             .with_module("async_hooks", async_hooks::REEXPORT_JS)
@@ -1027,7 +1161,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Cluster) {
+    let builtin_loader = if capability_enabled!(Cluster) {
         builtin_loader
             .with_module("node:cluster", cluster::CLUSTER_JS)
             .with_module("cluster", cluster::REEXPORT_JS)
@@ -1035,7 +1169,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Constants) {
+    let builtin_loader = if capability_enabled!(Constants) {
         builtin_loader
             .with_module("node:constants", constants::CONSTANTS_JS)
             .with_module("constants", constants::REEXPORT_JS)
@@ -1043,7 +1177,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Dgram) {
+    let builtin_loader = if capability_enabled!(Dgram) {
         builtin_loader
             .with_module("node:dgram", dgram::DGRAM_JS)
             .with_module("dgram", dgram::REEXPORT_JS)
@@ -1051,7 +1185,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::DiagnosticsChannel) {
+    let builtin_loader = if capability_enabled!(DiagnosticsChannel) {
         builtin_loader
             .with_module(
                 "node:diagnostics_channel",
@@ -1062,7 +1196,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Dns) {
+    let builtin_loader = if capability_enabled!(Dns) {
         builtin_loader
             .with_module("node:dns", dns::DNS_JS)
             .with_module("dns", dns::REEXPORT_JS)
@@ -1072,7 +1206,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Domain) {
+    let builtin_loader = if capability_enabled!(Domain) {
         builtin_loader
             .with_module("node:domain", domain::DOMAIN_JS)
             .with_module("domain", domain::REEXPORT_JS)
@@ -1080,7 +1214,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::NodeHttp) {
+    let builtin_loader = if capability_enabled!(NodeHttp) {
         builtin_loader
             .with_module(
                 "__wasm_rquickjs_builtin/node_http_server",
@@ -1096,7 +1230,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Http2) {
+    let builtin_loader = if capability_enabled!(Http2) {
         builtin_loader
             .with_module("node:http2", http2::HTTP2_JS)
             .with_module("http2", http2::REEXPORT_JS)
@@ -1104,7 +1238,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Https) {
+    let builtin_loader = if capability_enabled!(Https) {
         builtin_loader
             .with_module("node:https", https::HTTPS_JS)
             .with_module("https", https::REEXPORT_JS)
@@ -1112,7 +1246,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Inspector) {
+    let builtin_loader = if capability_enabled!(Inspector) {
         builtin_loader
             .with_module("node:inspector", inspector::INSPECTOR_JS)
             .with_module("inspector", inspector::REEXPORT_JS)
@@ -1120,7 +1254,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Net) {
+    let builtin_loader = if capability_enabled!(Net) {
         builtin_loader
             .with_module("node:net", net::NET_JS)
             .with_module("net", net::REEXPORT_JS)
@@ -1128,7 +1262,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::PerfHooks) {
+    let builtin_loader = if capability_enabled!(PerfHooks) {
         builtin_loader
             .with_module("node:perf_hooks", perf_hooks::PERF_HOOKS_JS)
             .with_module("perf_hooks", perf_hooks::REEXPORT_JS)
@@ -1136,7 +1270,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Readline) {
+    let builtin_loader = if capability_enabled!(Readline) {
         builtin_loader
             .with_module("node:readline", readline::READLINE_JS)
             .with_module("readline", readline::REEXPORT_JS)
@@ -1146,7 +1280,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Repl) {
+    let builtin_loader = if capability_enabled!(Repl) {
         builtin_loader
             .with_module("node:repl", repl::REPL_JS)
             .with_module("repl", repl::REEXPORT_JS)
@@ -1154,7 +1288,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::TraceEvents) {
+    let builtin_loader = if capability_enabled!(TraceEvents) {
         builtin_loader
             .with_module("node:trace_events", trace_events::TRACE_EVENTS_JS)
             .with_module("trace_events", trace_events::REEXPORT_JS)
@@ -1162,7 +1296,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Tls) {
+    let builtin_loader = if capability_enabled!(Tls) {
         builtin_loader
             .with_module("node:tls", tls::TLS_JS)
             .with_module("tls", tls::REEXPORT_JS)
@@ -1170,7 +1304,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Tty) {
+    let builtin_loader = if capability_enabled!(Tty) {
         builtin_loader
             .with_module("node:tty", tty::TTY_JS)
             .with_module("tty", tty::REEXPORT_JS)
@@ -1178,7 +1312,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::V8) {
+    let builtin_loader = if capability_enabled!(V8) {
         builtin_loader
             .with_module("node:v8", v8::V8_JS)
             .with_module("v8", v8::REEXPORT_JS)
@@ -1186,7 +1320,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::WorkerThreads) {
+    let builtin_loader = if capability_enabled!(WorkerThreads) {
         builtin_loader
             .with_module("node:worker_threads", worker_threads::WORKER_THREADS_JS)
             .with_module("worker_threads", worker_threads::REEXPORT_JS)
@@ -1194,7 +1328,7 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Zlib) {
+    let builtin_loader = if capability_enabled!(Zlib) {
         builtin_loader
             .with_module("node:zlib", zlib::ZLIB_JS)
             .with_module("zlib", zlib::REEXPORT_JS)
@@ -1202,14 +1336,14 @@ pub fn module_loader() -> (
         builtin_loader
     };
 
-    let builtin_loader = if cap(Capability::Sqlite) {
+    let builtin_loader = if capability_enabled!(Sqlite) {
         builtin_loader.with_module("node:sqlite", sqlite::SQLITE_JS)
     } else {
         builtin_loader
     };
 
     #[cfg(feature = "golem")]
-    let builtin_loader = if cap(Capability::DiagnosticsChannel) {
+    let builtin_loader = if capability_enabled!(DiagnosticsChannel) {
         builtin_loader.with_module(
             "__wasm_rquickjs_builtin/diagnostics_channel_golem",
             diagnostics_channel::DIAGNOSTICS_CHANNEL_GOLEM_JS,
@@ -1219,7 +1353,7 @@ pub fn module_loader() -> (
     };
 
     #[cfg(feature = "golem")]
-    let builtin_loader = if cap(Capability::Websocket) {
+    let builtin_loader = if capability_enabled!(Websocket) {
         builtin_loader.with_module("__wasm_rquickjs_builtin/websocket", websocket::WEBSOCKET_JS)
     } else {
         builtin_loader
@@ -1237,55 +1371,55 @@ pub fn wire_builtins() -> String {
     // drop both the corresponding `WIRE_JS` strings and any host imports they
     // would have transitively kept alive.
 
-    if cap(Capability::Events) {
+    if capability_enabled!(Events) {
         writeln!(result, "{}", events::WIRE_JS).unwrap();
     }
-    if cap(Capability::AbortController) {
+    if capability_enabled!(AbortController) {
         writeln!(result, "{}", abort_controller::WIRE_JS).unwrap();
     }
-    if cap(Capability::Base64) {
+    if capability_enabled!(Base64) {
         writeln!(result, "{}", base64::WIRE_JS).unwrap();
     }
-    if cap(Capability::Buffer) {
+    if capability_enabled!(Buffer) {
         writeln!(result, "{}", buffer::WIRE_JS).unwrap();
     }
-    if cap(Capability::Console) {
+    if capability_enabled!(Console) {
         writeln!(result, "{}", console::WIRE_JS).unwrap();
     }
-    if cap(Capability::Timers) {
+    if capability_enabled!(Timers) {
         writeln!(result, "{}", timeout::WIRE_JS).unwrap();
     }
-    if cap(Capability::Gc) {
+    if capability_enabled!(Gc) {
         writeln!(result, "{}", gc::WIRE_JS).unwrap();
     }
-    if cap(Capability::NodeFetch) {
+    if capability_enabled!(NodeFetch) {
         writeln!(result, "{}", http::WIRE_JS).unwrap();
     }
-    if cap(Capability::Webstreams) {
+    if capability_enabled!(Webstreams) {
         writeln!(result, "{}", webstreams::WIRE_JS).unwrap();
     }
-    if cap(Capability::Encoding) {
+    if capability_enabled!(Encoding) {
         writeln!(result, "{}", encoding::WIRE_JS).unwrap();
     }
-    if cap(Capability::Intl) {
+    if capability_enabled!(Intl) {
         writeln!(result, "{}", intl::WIRE_JS).unwrap();
     }
-    if cap(Capability::Url) {
+    if capability_enabled!(Url) {
         writeln!(result, "{}", url::WIRE_JS).unwrap();
     }
-    if cap(Capability::WebCrypto) {
+    if capability_enabled!(WebCrypto) {
         writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
     }
-    if cap(Capability::Process) {
+    if capability_enabled!(Process) {
         writeln!(result, "{}", process::WIRE_JS).unwrap();
     }
-    if cap(Capability::StructuredClone) {
+    if capability_enabled!(StructuredClone) {
         writeln!(result, "{}", structured_clone::WIRE_JS).unwrap();
     }
-    if cap(Capability::Module) {
+    if capability_enabled!(Module) {
         writeln!(result, "{}", module::WIRE_JS).unwrap();
     }
-    if cap(Capability::WorkerThreads) {
+    if capability_enabled!(WorkerThreads) {
         writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();
     }
     writeln!(result, "globalThis.global = globalThis;").unwrap();
@@ -1294,12 +1428,12 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", IMPORT_ATTRS_VALIDATE_JS).unwrap();
 
     #[cfg(feature = "golem")]
-    if cap(Capability::DiagnosticsChannel) {
+    if capability_enabled!(DiagnosticsChannel) {
         writeln!(result, "{}", diagnostics_channel::GOLEM_WIRE_JS).unwrap();
     }
 
     #[cfg(feature = "golem")]
-    if cap(Capability::Websocket) {
+    if capability_enabled!(Websocket) {
         writeln!(result, "{}", websocket::WIRE_JS).unwrap();
     }
 

@@ -8,7 +8,7 @@ version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59317f77929f0e679d39364702289274de2f0f0b22cbf50b2b8cff2169a0b27a"
 dependencies = [
- "gimli",
+ "gimli 0.33.0",
 ]
 
 [[package]]
@@ -561,7 +561,7 @@ dependencies = [
  "cranelift-control",
  "cranelift-entity",
  "cranelift-isle",
- "gimli",
+ "gimli 0.33.0",
  "hashbrown 0.17.1",
  "libm",
  "log",
@@ -932,6 +932,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5692dd7b5a1978a5aeb0ce83b7655c58ca8efdcb79d21036ea249da95afec2c6"
 
 [[package]]
+name = "fallible-iterator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
+
+[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1144,6 +1150,17 @@ dependencies = [
  "rand_core 0.10.1",
  "wasip2",
  "wasip3",
+]
+
+[[package]]
+name = "gimli"
+version = "0.32.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
+dependencies = [
+ "fallible-iterator",
+ "indexmap",
+ "stable_deref_trait",
 ]
 
 [[package]]
@@ -3302,6 +3319,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-eliminator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gimli 0.32.3",
+ "indexmap",
+ "log",
+ "wasm-encoder 0.248.0",
+ "wasm-metadata 0.248.0",
+ "wasmparser 0.248.0",
+ "wasmprinter",
+ "wat",
+ "wit-component 0.248.0",
+ "wit-encoder 0.248.0",
+ "wit-parser 0.248.0",
+]
+
+[[package]]
 name = "wasm-encoder"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3363,6 +3398,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-metadata"
+version = "0.248.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee4f85f11dcdabc91e805c03eb84ccc7b7ef2282c6610bb83c7a7c853425850c"
+dependencies = [
+ "anyhow",
+ "auditable-serde",
+ "flate2",
+ "indexmap",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "spdx",
+ "url",
+ "wasm-encoder 0.248.0",
+ "wasmparser 0.248.0",
+]
+
+[[package]]
 name = "wasm-rquickjs"
 version = "0.0.0"
 dependencies = [
@@ -3389,7 +3443,7 @@ dependencies = [
  "wasmtime-wasi-http",
  "wasmtime-wizer",
  "wit-bindgen-core 0.57.1",
- "wit-encoder",
+ "wit-encoder 0.247.0",
  "wit-parser 0.247.0",
 ]
 
@@ -3424,7 +3478,9 @@ dependencies = [
  "tokio-util",
  "uuid",
  "wac-graph",
+ "wasm-eliminator",
  "wasm-rquickjs",
+ "wasmparser 0.247.0",
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
@@ -3493,7 +3549,7 @@ dependencies = [
  "encoding_rs",
  "futures",
  "fxprof-processed-profile",
- "gimli",
+ "gimli 0.33.0",
  "ittapi",
  "libc",
  "log",
@@ -3541,7 +3597,7 @@ dependencies = [
  "cranelift-bforest",
  "cranelift-bitset",
  "cranelift-entity",
- "gimli",
+ "gimli 0.33.0",
  "hashbrown 0.17.1",
  "indexmap",
  "log",
@@ -3621,7 +3677,7 @@ dependencies = [
  "cranelift-entity",
  "cranelift-frontend",
  "cranelift-native",
- "gimli",
+ "gimli 0.33.0",
  "itertools",
  "log",
  "object",
@@ -3700,7 +3756,7 @@ version = "45.0.0"
 source = "git+https://github.com/golemcloud/wasmtime.git?branch=golem-wasmtime-v45.0.0#106dc8ea896dfb3ca1baef2462063e6db6569b2f"
 dependencies = [
  "cranelift-codegen",
- "gimli",
+ "gimli 0.33.0",
  "log",
  "object",
  "target-lexicon",
@@ -3929,7 +3985,7 @@ source = "git+https://github.com/golemcloud/wasmtime.git?branch=golem-wasmtime-v
 dependencies = [
  "cranelift-assembler-x64",
  "cranelift-codegen",
- "gimli",
+ "gimli 0.33.0",
  "regalloc2",
  "smallvec",
  "target-lexicon",
@@ -4174,7 +4230,7 @@ dependencies = [
  "syn",
  "wasm-metadata 0.244.0",
  "wit-bindgen-core 0.51.0",
- "wit-component",
+ "wit-component 0.244.0",
 ]
 
 [[package]]
@@ -4212,6 +4268,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-component"
+version = "0.248.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0012379f0ff47e1d44dd312e76cfa42de2589251f093fb105e9de9db90c89221"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "indexmap",
+ "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "wasm-encoder 0.248.0",
+ "wasm-metadata 0.248.0",
+ "wasmparser 0.248.0",
+ "wit-parser 0.248.0",
+]
+
+[[package]]
 name = "wit-encoder"
 version = "0.247.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4222,6 +4297,19 @@ dependencies = [
  "semver",
  "serde",
  "wit-parser 0.247.0",
+]
+
+[[package]]
+name = "wit-encoder"
+version = "0.248.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9eefea6899862e37c81fecef708fd01b6aa8f5da2b21c4715939c765977fca6"
+dependencies = [
+ "id-arena",
+ "pretty_assertions",
+ "semver",
+ "serde",
+ "wit-parser 0.248.0",
 ]
 
 [[package]]

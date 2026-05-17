@@ -644,7 +644,7 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
         Assert => &[Fs, Util],
         Buffer => &[StringDecoder],
         ChildProcess => &[Buffer, Events, Module, Path, Process],
-        Console => &[Buffer, Util],
+        Console => &[Buffer, Process, Util],
         Constants => &[WebCrypto, Fs, Os],
         Dgram => &[Buffer, Dns, Events, Process],
         Dns => &[Net],
@@ -653,9 +653,10 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
         FormDataNode => &[NodeFetch],
         Https => &[NodeHttp],
         Inspector => &[Events],
+        Module => &[Vm],
         Net => &[Buffer, Dns, Events, Fs, Path],
-        NodeFetch => &[AbortController, Buffer],
-        NodeHttp => &[Buffer, DiagnosticsChannel, Events, Net],
+        NodeFetch => &[AbortController, Base64, Buffer, Encoding, NodeHttp, Webstreams],
+        NodeHttp => &[Buffer, DiagnosticsChannel, Events, Net, Timers, Url],
         NodeTest => &[Assert],
         Process => &[Events],
         Querystring => &[Buffer],
@@ -667,11 +668,11 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
         Tty => &[Net],
         Url => &[Querystring],
         Util => &[Encoding, WebCrypto],
-        WebCrypto => &[AbortController, Buffer],
+        WebCrypto => &[AbortController, Base64, Buffer],
         Zlib => &[Buffer, Stream],
         // Caps with no inter-cap dependencies (only internal/native deps).
         AsyncHooks | Base64 | Cluster | DiagnosticsChannel | Events | Fs | Gc | Http2 | Intl
-        | Module | Os | Path | PerfHooks | Punycode | Readline | Repl | Sqlite
+        | Os | Path | PerfHooks | Punycode | Readline | Repl | Sqlite
         | StructuredClone | V8 | Vm | Websocket | Webstreams | WorkerThreads => &[],
     }
 }
@@ -1151,6 +1152,12 @@ mod tests {
     }
 
     #[test]
+    fn global_readable_stream_maps_to_webstreams() {
+        let r = scan(r#"const stream = new ReadableStream({});"#);
+        assert!(r.used.contains(&Capability::Webstreams));
+    }
+
+    #[test]
     fn global_event_target_maps_to_events() {
         let r = scan(r#"class X extends EventTarget {}"#);
         assert!(r.used.contains(&Capability::Events));
@@ -1196,8 +1203,33 @@ mod tests {
         let c = closure(&seed);
         assert!(c.contains(&Capability::AbortController));
         assert!(c.contains(&Capability::Events)); // from AbortController
+        assert!(c.contains(&Capability::Base64));
         assert!(c.contains(&Capability::Buffer));
         assert!(c.contains(&Capability::StringDecoder)); // from Buffer
+        assert!(c.contains(&Capability::Encoding));
+        assert!(c.contains(&Capability::NodeHttp));
+        assert!(c.contains(&Capability::Net)); // from NodeHttp
+        assert!(c.contains(&Capability::Webstreams));
+    }
+
+    #[test]
+    fn closure_pulls_console_deps() {
+        let mut seed = BTreeSet::new();
+        seed.insert(Capability::Console);
+        let c = closure(&seed);
+        assert!(c.contains(&Capability::Buffer));
+        assert!(c.contains(&Capability::Process));
+        assert!(c.contains(&Capability::Util));
+    }
+
+    #[test]
+    fn closure_pulls_web_crypto_deps() {
+        let mut seed = BTreeSet::new();
+        seed.insert(Capability::WebCrypto);
+        let c = closure(&seed);
+        assert!(c.contains(&Capability::AbortController));
+        assert!(c.contains(&Capability::Base64));
+        assert!(c.contains(&Capability::Buffer));
     }
 
     #[test]
@@ -1207,6 +1239,16 @@ mod tests {
         let c = closure(&seed);
         assert!(c.contains(&Capability::Net));
         assert!(c.contains(&Capability::Dns));
+        assert!(c.contains(&Capability::Timers));
+        assert!(c.contains(&Capability::Url));
+    }
+
+    #[test]
+    fn closure_module_pulls_vm() {
+        let mut seed = BTreeSet::new();
+        seed.insert(Capability::Module);
+        let c = closure(&seed);
+        assert!(c.contains(&Capability::Vm));
     }
 
     #[test]

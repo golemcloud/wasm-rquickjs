@@ -1,8 +1,248 @@
 use crate::cli::{Args, Command};
+use anyhow::Context;
 use clap::Parser;
+use camino::Utf8Path;
+use std::collections::{BTreeMap, BTreeSet};
+use wasm_rquickjs::capability_scan::ALL_CAPABILITIES;
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_dts, generate_wrapper_crate};
 
 mod cli;
+
+const CAPABILITY_ROOTS_SECTION: &str = "wasm-rquickjs.capability-roots";
+const CAPABILITY_ROOTS_MAGIC: &[u8; 8] = b"WRQJSCAP";
+const CAPABILITY_ROOTS_VERSION: u8 = 1;
+const ROOT_KIND_INDIRECT_ANY: u8 = 0;
+const ROOT_KIND_DIRECT_SCRUB: u8 = 1;
+
+fn auto_trim_dce_in_place(path: &Utf8Path, enabled_bits: u64) -> anyhow::Result<()> {
+    let before = std::fs::read(path.as_std_path())
+        .with_context(|| format!("Failed to read injected component: {path}"))?;
+    let component_options = component_dce_options_from_capability_roots(&before, enabled_bits)
+        .context("building wasm-eliminator options from capability metadata")?;
+    let options = wasm_eliminator::DceOptions {
+        component: component_options,
+        ..Default::default()
+    };
+    let after = wasm_eliminator::dce_with_options(&before, &options)
+        .context("running wasm-eliminator after capability gate patching")?;
+    std::fs::write(path.as_std_path(), &after)
+        .with_context(|| format!("Failed to write DCE'd component: {path}"))?;
+    eprintln!(
+        "wasm-eliminator auto-trim: {} B -> {} B",
+        before.len(),
+        after.len()
+    );
+    Ok(())
+}
+
+fn component_dce_options_from_capability_roots(
+    bytes: &[u8],
+    enabled_bits: u64,
+) -> anyhow::Result<wasm_eliminator::component::DceOptions> {
+    let ir = wasm_eliminator::component::ir::parse(bytes)
+        .context("parsing component to locate embedded core modules")?;
+    component_dce_options_from_ir(&ir, enabled_bits)
+}
+
+fn component_dce_options_from_ir(
+    ir: &wasm_eliminator::component::ir::ComponentIr<'_>,
+    enabled_bits: u64,
+) -> anyhow::Result<wasm_eliminator::component::DceOptions> {
+    let mut options = wasm_eliminator::component::DceOptions::default();
+
+    for (module_idx, module) in ir.module_entries.iter().enumerate() {
+        if let Some(hints) = producer_hints_from_capability_roots(module, enabled_bits)? {
+            options.module_hints.insert(module_idx as u32, hints);
+        }
+    }
+
+    for (component_idx, component) in ir.nested_components.iter().enumerate() {
+        let child = component_dce_options_from_ir(component, enabled_bits)?;
+        if child != wasm_eliminator::component::DceOptions::default() {
+            options.nested_components.insert(component_idx as u32, child);
+        }
+    }
+
+    Ok(options)
+}
+
+fn producer_hints_from_capability_roots(
+    module: &[u8],
+    enabled_bits: u64,
+) -> anyhow::Result<Option<wasm_eliminator::core::analyze::ProducerHints>> {
+    let mut hints = wasm_eliminator::core::analyze::ProducerHints::default();
+    let mut saw_metadata = false;
+    hints.foldable_globals = capability_foldable_globals(module, enabled_bits)?;
+
+    for payload in wasmparser_encoder::Parser::new(0).parse_all(module) {
+        let payload = payload.context("parsing embedded core module")?;
+        let wasmparser_encoder::Payload::CustomSection(section) = payload else {
+            continue;
+        };
+        if section.name() != CAPABILITY_ROOTS_SECTION {
+            continue;
+        }
+        saw_metadata = true;
+        apply_capability_roots_section(section.data(), enabled_bits, &mut hints)?;
+    }
+
+    if saw_metadata || !hints.foldable_globals.is_empty() {
+        Ok(Some(hints))
+    } else {
+        Ok(None)
+    }
+}
+
+fn capability_foldable_globals(
+    module: &[u8],
+    enabled_bits: u64,
+) -> anyhow::Result<std::collections::BTreeMap<u32, wasm_eliminator::core::const_fold::ConstValue>> {
+    let mut imported_globals = 0u32;
+    let mut defined_i32_consts = Vec::new();
+
+    for payload in wasmparser_encoder::Parser::new(0).parse_all(module) {
+        match payload.context("parsing embedded core module")? {
+            wasmparser_encoder::Payload::ImportSection(section) => {
+                for imports in section {
+                    imported_globals += imported_global_count_for_imports(imports?)?;
+                }
+            }
+            wasmparser_encoder::Payload::GlobalSection(section) => {
+                for (defined_idx, global) in section.into_iter().enumerate() {
+                    let global = global?;
+                    if global.ty.mutable {
+                        continue;
+                    }
+                    let mut reader = global.init_expr.get_operators_reader();
+                    let value = match (reader.read(), reader.read()) {
+                        (
+                            Ok(wasmparser_encoder::Operator::I32Const { value }),
+                            Ok(wasmparser_encoder::Operator::End),
+                        ) => value,
+                        _ => continue,
+                    };
+                    defined_i32_consts.push((imported_globals + defined_idx as u32, value));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let count = ALL_CAPABILITIES.len();
+    if defined_i32_consts.len() < count {
+        return Ok(Default::default());
+    }
+    let Some(window_start) = defined_i32_consts.windows(count).position(|window| {
+        window.iter().enumerate().all(|(idx, (_, value))| {
+            *value == ((enabled_bits >> ALL_CAPABILITIES[idx].bit_index()) & 1) as i32
+        })
+    }) else {
+        return Ok(Default::default());
+    };
+    let capability_globals = &defined_i32_consts[window_start..window_start + count];
+
+    Ok(capability_globals
+        .iter()
+        .map(|(global_idx, value)| {
+            (
+                *global_idx,
+                wasm_eliminator::core::const_fold::ConstValue::I32(*value),
+            )
+        })
+        .collect())
+}
+
+fn imported_global_count_for_imports(imports: wasmparser_encoder::Imports<'_>) -> anyhow::Result<u32> {
+    Ok(match imports {
+        wasmparser_encoder::Imports::Single(_, import) => {
+            imported_global_count_for_type_ref(import.ty, 1)
+        }
+        wasmparser_encoder::Imports::Compact1 { items, .. } => {
+            let mut count = 0;
+            for item in items {
+                count += imported_global_count_for_type_ref(item?.ty, 1);
+            }
+            count
+        }
+        wasmparser_encoder::Imports::Compact2 { ty, names, .. } => {
+            imported_global_count_for_type_ref(ty, names.count())
+        }
+    })
+}
+
+fn imported_global_count_for_type_ref(ty: wasmparser_encoder::TypeRef, names_count: u32) -> u32 {
+    match ty {
+        wasmparser_encoder::TypeRef::Global(_) => names_count,
+        _ => 0,
+    }
+}
+
+fn apply_capability_roots_section(
+    data: &[u8],
+    enabled_bits: u64,
+    hints: &mut wasm_eliminator::core::analyze::ProducerHints,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        data.len() >= CAPABILITY_ROOTS_MAGIC.len() + 1 + 4,
+        "malformed {CAPABILITY_ROOTS_SECTION}: header is too short"
+    );
+    anyhow::ensure!(
+        &data[..CAPABILITY_ROOTS_MAGIC.len()] == CAPABILITY_ROOTS_MAGIC,
+        "malformed {CAPABILITY_ROOTS_SECTION}: bad magic"
+    );
+    let version = data[CAPABILITY_ROOTS_MAGIC.len()];
+    anyhow::ensure!(
+        version == CAPABILITY_ROOTS_VERSION,
+        "unsupported {CAPABILITY_ROOTS_SECTION} version {version}"
+    );
+
+    let mut offset = CAPABILITY_ROOTS_MAGIC.len() + 1;
+    let count = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+    offset += 4;
+    anyhow::ensure!(
+        data.len() == offset + count * 6,
+        "malformed {CAPABILITY_ROOTS_SECTION}: wrong payload length"
+    );
+
+    let mut roots: BTreeMap<(u32, u8), BTreeSet<u8>> = BTreeMap::new();
+    for _ in 0..count {
+        let func = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+        let capability_bit = data[offset + 4];
+        let kind = data[offset + 5];
+        offset += 6;
+
+        match kind {
+            ROOT_KIND_INDIRECT_ANY | ROOT_KIND_DIRECT_SCRUB => {}
+            other => anyhow::bail!(
+                "unsupported {CAPABILITY_ROOTS_SECTION} root kind {other}"
+            ),
+        }
+
+        roots.entry((func, kind)).or_default().insert(capability_bit);
+    }
+
+    for ((func, kind), capability_bits) in roots {
+        let all_disabled = capability_bits
+            .iter()
+            .all(|capability_bit| ((enabled_bits >> *capability_bit) & 1) == 0);
+        if !all_disabled {
+            continue;
+        }
+
+        match kind {
+            ROOT_KIND_INDIRECT_ANY => {
+                hints.suppress_any_targets.insert(func);
+            }
+            ROOT_KIND_DIRECT_SCRUB => {
+                hints.suppress_any_targets.insert(func);
+                hints.scrub_direct_targets.insert(func);
+            }
+            _ => unreachable!("validated capability root kind while decoding"),
+        }
+    }
+
+    Ok(())
+}
 
 fn main() {
     let args = Args::parse();
@@ -299,6 +539,11 @@ fn main() {
                     std::process::exit(1);
                 }
                 let _ = std::fs::remove_file(staging.as_std_path());
+
+                if let Err(err) = auto_trim_dce_in_place(output, bits) {
+                    eprintln!("Error running wasm-eliminator auto-trim: {err:#}");
+                    std::process::exit(1);
+                }
             } else if let Err(err) =
                 wasm_rquickjs::inject_js_into_component(input, output, &js_refs)
             {
