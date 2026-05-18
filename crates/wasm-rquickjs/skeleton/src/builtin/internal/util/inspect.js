@@ -1752,7 +1752,7 @@ function formatError(
             fallback = fallback || "Error";
             const previousName = cachedErrorName.get(err);
 
-            if (nameAsString === "Error" && /^Error(?::|\n)/.test(improvedStack)) {
+            if (nameAsString === "Error" && /^Error(?::|\n|$)/.test(improvedStack)) {
                 if (typeof previousName === "string" && previousName !== "Error") {
                     nameAsString = previousName;
                     if (fallback === "Error") {

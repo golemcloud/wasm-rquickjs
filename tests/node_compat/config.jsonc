@@ -445,7 +445,10 @@
         "block_80_inspect_prototype_properties": { "category": "runnable" },
         "block_81_regression_test_for_https_github_com_nodejs_node_issues_3573": { "category": "runnable" },
         "block_82_test_changing_util_inspect_colors_colors_and_aliases": { "category": "runnable" },
-        "block_83_https_github_com_nodejs_node_issues_31889": { "category": "runnable" },
+        "block_83_https_github_com_nodejs_node_issues_31889": {
+          "category": "known-gap",
+          "reason": "uses V8 native %GetUndetectable() syntax which QuickJS cannot evaluate"
+        },
         "block_84_truncate_output_for_primitives_with_1_character_left": { "category": "runnable" },
         "block_85_block_85": { "category": "runnable" },
         "block_86_block_86": { "category": "runnable" },
@@ -459,7 +462,10 @@
         "block_94_block_94": { "category": "runnable" },
         "block_95_block_95": { "category": "runnable" },
         "block_96_block_96": { "category": "runnable" },
-        "block_97_block_97": { "category": "runnable" },
+        "block_97_block_97": {
+          "category": "known-gap",
+          "reason": "QuickJS stack frame formatting differs for Error objects whose name is a non-string object"
+        },
         "block_98_block_98": { "category": "runnable" }
       }
     },

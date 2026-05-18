@@ -318,7 +318,7 @@ function findGlobalConstructorNameByPrototype(value) {
     return "";
 }
 
-const inspectNewCallPattern = /\binspect\s*\(\s*new\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/;
+const inspectNewCallPattern = /\b(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?inspect\s*\(\s*new\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/;
 const stackLocationPattern = /\(?(.+):(\d+):(\d+)\)?\s*$/;
 
 function inferConstructorNameFromCallsite() {
@@ -341,7 +341,7 @@ function inferConstructorNameFromCallsite() {
     const sourceLines = currentModule.source.split("\n");
     const stackLines = stack.split("\n");
     for (let i = stackLines.length - 1; i >= 1; i--) {
-        if (!stackLines[i].includes("anonymous (")) {
+        if (!stackLines[i].includes("anonymous (") && !stackLines[i].includes("<anonymous> (")) {
             continue;
         }
 
