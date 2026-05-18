@@ -99,7 +99,7 @@ const serializer = (strict, json, $, _) => {
             const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
             return as([type, {bytes: [...bytes], byteOffset: 0, byteLength: value.byteLength}], value);
           }
-          else if (type === 'ArrayBuffer') {
+          else if (type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
             spread = new Uint8Array(value);
           }
           return as([type, [...spread]], value);
@@ -231,6 +231,11 @@ const deserializer = ($, _) => {
         return as(Object(BigInt(value)), index);
       case 'ArrayBuffer':
         return as(new Uint8Array(value).buffer, index);
+      case 'SharedArrayBuffer': {
+        const buffer = new SharedArrayBuffer(value.length);
+        new Uint8Array(buffer).set(value);
+        return as(buffer, index);
+      }
       case 'DataView': {
         const {bytes, byteOffset, byteLength} = value;
         const buf = new Uint8Array(bytes).buffer;
