@@ -195,6 +195,7 @@ capability_gate_helpers! {
     Webstreams => cap_webstreams, "__wrjs_cap_webstreams";
     WorkerThreads => cap_worker_threads, "__wrjs_cap_worker_threads";
     Zlib => cap_zlib, "__wrjs_cap_zlib";
+    FsModuleLoader => cap_fs_module_loader, "__wrjs_cap_fs_module_loader";
 }
 
 /// Identifiers for each builtin capability the skeleton can be asked to enable
@@ -262,6 +263,7 @@ pub enum Capability {
     Webstreams = 49,
     WorkerThreads = 50,
     Zlib = 51,
+    FsModuleLoader = 52,
 }
 
 impl Capability {
@@ -322,6 +324,7 @@ impl Capability {
             Webstreams => "webstreams",
             WorkerThreads => "worker_threads",
             Zlib => "zlib",
+            FsModuleLoader => "fs_module_loader",
         }
     }
 }

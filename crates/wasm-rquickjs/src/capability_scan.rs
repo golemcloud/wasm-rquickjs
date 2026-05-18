@@ -108,6 +108,7 @@ pub enum Capability {
     Webstreams = 49,
     WorkerThreads = 50,
     Zlib = 51,
+    FsModuleLoader = 52,
 }
 
 /// Every capability the scanner knows about, in declaration order.
@@ -165,6 +166,7 @@ pub const ALL_CAPABILITIES: &[Capability] = &[
     Capability::Webstreams,
     Capability::WorkerThreads,
     Capability::Zlib,
+    Capability::FsModuleLoader,
 ];
 
 impl Capability {
@@ -239,6 +241,7 @@ impl Capability {
             Webstreams => "webstreams",
             WorkerThreads => "worker_threads",
             Zlib => "zlib",
+            FsModuleLoader => "fs_module_loader",
         }
     }
 }
@@ -655,7 +658,14 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
         Inspector => &[Events],
         Module => &[Vm],
         Net => &[Buffer, Dns, Events, Fs, Path],
-        NodeFetch => &[AbortController, Base64, Buffer, Encoding, NodeHttp, Webstreams],
+        NodeFetch => &[
+            AbortController,
+            Base64,
+            Buffer,
+            Encoding,
+            NodeHttp,
+            Webstreams,
+        ],
         NodeHttp => &[Buffer, DiagnosticsChannel, Events, Net, Timers, Url],
         NodeTest => &[Assert],
         Process => &[Events],
@@ -671,8 +681,8 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
         WebCrypto => &[AbortController, Base64, Buffer],
         Zlib => &[Buffer, Stream],
         // Caps with no inter-cap dependencies (only internal/native deps).
-        AsyncHooks | Base64 | Cluster | DiagnosticsChannel | Events | Fs | Gc | Http2 | Intl
-        | Os | Path | PerfHooks | Punycode | Readline | Repl | Sqlite
+        AsyncHooks | Base64 | Cluster | DiagnosticsChannel | Events | Fs | FsModuleLoader | Gc
+        | Http2 | Intl | Os | Path | PerfHooks | Punycode | Readline | Repl | Sqlite
         | StructuredClone | V8 | Vm | Websocket | Webstreams | WorkerThreads => &[],
     }
 }
@@ -769,7 +779,12 @@ impl<'src> Scanner<'src> {
 
     fn record_specifier(&mut self, raw: &str, span: Span) {
         if raw.starts_with('.') || raw.starts_with('/') {
+            self.out.used.insert(Capability::FsModuleLoader);
             self.warn(WarningKind::RelativeImport(raw.to_string()), span);
+            return;
+        }
+        if raw.starts_with("file:") {
+            self.out.used.insert(Capability::FsModuleLoader);
             return;
         }
         // `spec_to_cap` is checked first so `node:fs/promises` resolves to Fs
@@ -1347,7 +1362,18 @@ mod tests {
         std::fs::write(&entry, "import './helper.js';\n").unwrap();
         let r = scan_entry_point(&entry);
         assert!(r.used.contains(&Capability::Fs));
+        assert!(r.used.contains(&Capability::FsModuleLoader));
         assert!(r.warnings.is_empty(), "warnings: {:?}", r.warnings);
+    }
+
+    #[test]
+    fn file_url_import_uses_fs_module_loader_without_node_fs() {
+        let r = scan_module(
+            Utf8Path::new("entry.js"),
+            "import 'file:///tmp/plugin.mjs';\n",
+        );
+        assert!(r.used.contains(&Capability::FsModuleLoader));
+        assert!(!r.used.contains(&Capability::Fs));
     }
 
     #[test]

@@ -7,6 +7,17 @@ use wasm_encoder::reencode::{Error, Reencode, ReencodeComponent};
 
 use crate::capability_scan::{ALL_CAPABILITIES, Capability};
 
+/// Custom section emitted by wasm-rquickjs to describe capability-owned opaque
+/// roots to the generic wasm-eliminator.
+///
+/// The section is a producer-owned conditional reachability contract: a listed
+/// function/resource shim belongs to one capability, and callers may suppress it
+/// only when that capability is disabled. Shared implementation glue is emitted
+/// once per owner capability so it is retained while any owner remains enabled.
+/// This is intentionally not a generic "delete these symbols" override; it
+/// fills in semantic ownership that cannot be recovered safely from QuickJS /
+/// rquickjs callback tables, vtables, WIT resource drops, and component adapter
+/// glue alone.
 const CAPABILITY_ROOTS_SECTION: &str = "wasm-rquickjs.capability-roots";
 const CAPABILITY_ROOTS_MAGIC: &[u8; 8] = b"WRQJSCAP";
 const CAPABILITY_ROOTS_VERSION: u8 = 1;
@@ -498,13 +509,8 @@ fn build_capability_roots_metadata(module: &[u8]) -> Vec<u8> {
     let mut entries = BTreeSet::new();
 
     for func in direct.keys().copied() {
-        for cap in reachable_builtin_capabilities(
-            func,
-            &names,
-            &helper_exports,
-            &direct,
-            &mut memo,
-        ) {
+        for cap in reachable_builtin_capabilities(func, &names, &helper_exports, &direct, &mut memo)
+        {
             entries.insert(CapabilityRootEntry {
                 func,
                 capability: cap,
@@ -512,11 +518,11 @@ fn build_capability_roots_metadata(module: &[u8]) -> Vec<u8> {
             });
         }
         if let Some(name) = names.get(&func)
-            && is_fs_loader_function(name)
+            && is_file_module_loader_function(name)
         {
             entries.insert(CapabilityRootEntry {
                 func,
-                capability: Capability::Fs,
+                capability: Capability::FsModuleLoader,
                 kind: ROOT_KIND_DIRECT_SCRUB,
             });
         }
@@ -564,10 +570,9 @@ fn function_names(module: &[u8]) -> BTreeMap<u32, String> {
         if section.name() != "name" {
             continue;
         }
-        let names = wasmparser_encoder::NameSectionReader::new(wasmparser_encoder::BinaryReader::new(
-            section.data(),
-            0,
-        ));
+        let names = wasmparser_encoder::NameSectionReader::new(
+            wasmparser_encoder::BinaryReader::new(section.data(), 0),
+        );
         for name in names.into_iter().flatten() {
             if let wasmparser_encoder::Name::Function(map) = name {
                 for naming in map.into_iter().flatten() {
@@ -656,14 +661,7 @@ fn reachable_builtin_capabilities(
     memo: &mut BTreeMap<u32, BTreeSet<Capability>>,
 ) -> BTreeSet<Capability> {
     let mut visiting = BTreeSet::new();
-    reachable_builtin_capabilities_inner(
-        func,
-        names,
-        helper_exports,
-        direct,
-        memo,
-        &mut visiting,
-    )
+    reachable_builtin_capabilities_inner(func, names, helper_exports, direct, memo, &mut visiting)
 }
 
 fn reachable_builtin_capabilities_inner(
@@ -682,10 +680,8 @@ fn reachable_builtin_capabilities_inner(
     }
 
     let mut caps = BTreeSet::new();
-    if let Some(name) = names.get(&func)
-        && let Some(cap) = callback_capability(name)
-    {
-        caps.insert(cap);
+    if let Some(name) = names.get(&func) {
+        caps.extend(function_name_capabilities(name));
     }
     if let Some(cap) = helper_exports.get(&func) {
         caps.insert(*cap);
@@ -705,6 +701,17 @@ fn reachable_builtin_capabilities_inner(
 
     visiting.remove(&func);
     memo.insert(func, caps.clone());
+    caps
+}
+
+fn function_name_capabilities(name: &str) -> BTreeSet<Capability> {
+    let mut caps = BTreeSet::new();
+
+    if let Some(cap) = callback_capability(name) {
+        caps.insert(cap);
+    }
+
+    caps.extend(wit_import_capabilities(name));
     caps
 }
 
@@ -738,6 +745,108 @@ fn callback_capability(name: &str) -> Option<Capability> {
     })
 }
 
+struct SymbolCapabilityFamily {
+    fragments: &'static [&'static str],
+    capabilities: &'static [Capability],
+}
+
+const SYMBOL_CAPABILITY_FAMILIES: &[SymbolCapabilityFamily] = &[
+    SymbolCapabilityFamily {
+        fragments: &[
+            "wasi::http::",
+            "wasi..http..",
+            "wasi:http/",
+            "golem_wasi_http::",
+            "golem_wasi_http..",
+        ],
+        // `fetch` and `node:http` share the same wasi:http-backed native
+        // resource types. Suppress roots that only reach those imports only
+        // when both capabilities are disabled.
+        capabilities: &[Capability::NodeFetch, Capability::NodeHttp],
+    },
+    SymbolCapabilityFamily {
+        fragments: &[
+            "wasi::filesystem::",
+            "wasi..filesystem..",
+            "wasi:filesystem/",
+            "wasip2::imports::wasi::filesystem::",
+            "wasip2..imports..wasi..filesystem..",
+            "wasi10filesystem",
+            "__wasm_import_filesystem_",
+        ],
+        // Filesystem WIT/resource glue is shared by user-facing `node:fs` and
+        // the optional filesystem-backed module loader. Keep it whenever either
+        // owner remains enabled.
+        capabilities: &[Capability::Fs, Capability::FsModuleLoader],
+    },
+    SymbolCapabilityFamily {
+        fragments: &[
+            "wasi::sockets::tcp",
+            "wasi..sockets..tcp",
+            "wasi:sockets/tcp",
+            "wasip2::imports::wasi::sockets::tcp",
+            "wasip2..imports..wasi..sockets..tcp",
+            "wasi7sockets3tcp",
+        ],
+        capabilities: &[Capability::Net],
+    },
+    SymbolCapabilityFamily {
+        fragments: &[
+            "wasi::sockets::udp",
+            "wasi..sockets..udp",
+            "wasi:sockets/udp",
+            "wasip2::imports::wasi::sockets::udp",
+            "wasip2..imports..wasi..sockets..udp",
+            "wasi7sockets3udp",
+        ],
+        capabilities: &[Capability::Dgram],
+    },
+    SymbolCapabilityFamily {
+        fragments: &[
+            "wasi::sockets::network",
+            "wasi..sockets..network",
+            "wasi:sockets/network",
+            "wasi::sockets::instance_network",
+            "wasi..sockets..instance_network",
+            "wasi:sockets/instance-network",
+            "wasip2::imports::wasi::sockets::network",
+            "wasip2..imports..wasi..sockets..network",
+            "wasip2::imports::wasi::sockets::instance_network",
+            "wasip2..imports..wasi..sockets..instance_network",
+            "wasi7sockets7network",
+            "wasi7sockets16instance_network",
+        ],
+        capabilities: &[Capability::Dgram, Capability::Dns, Capability::Net],
+    },
+    SymbolCapabilityFamily {
+        fragments: &[
+            "wasi::sockets::ip_name_lookup",
+            "wasi..sockets..ip_name_lookup",
+            "wasi:sockets/ip-name-lookup",
+            "wasip2::imports::wasi::sockets::ip_name_lookup",
+            "wasip2..imports..wasi..sockets..ip_name_lookup",
+            "wasi7sockets14ip_name_lookup",
+        ],
+        capabilities: &[Capability::Dns],
+    },
+];
+
+fn wit_import_capabilities(name: &str) -> impl Iterator<Item = Capability> {
+    let mut caps = BTreeSet::new();
+
+    for family in SYMBOL_CAPABILITY_FAMILIES {
+        if contains_any(name, family.fragments) {
+            caps.extend(family.capabilities.iter().copied());
+        }
+    }
+
+    caps.into_iter()
+}
+
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
+}
+
 fn builtin_module_fragment(name: &str) -> Option<&str> {
     let rest = if let Some((_, rest)) = name.split_once("::builtin::") {
         rest
@@ -753,19 +862,8 @@ fn builtin_module_fragment(name: &str) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
-fn is_fs_loader_function(name: &str) -> bool {
+fn is_file_module_loader_function(name: &str) -> bool {
     [
-        "__wasilibc_populate_preopens",
-        "std::fs::",
-        "std..fs..",
-        "std::sys::fs::",
-        "std..sys..fs..",
-        "std::os::wasi::fs::",
-        "std..os..wasi..fs..",
-        "wasip2::imports::wasi::filesystem::",
-        "wasip2..imports..wasi..filesystem..",
-        "wasi::filesystem::",
-        "wasi..filesystem..",
         "::internal::NodeModulesResolver::",
         "..internal..NodeModulesResolver..",
         "::internal::FileUrlResolver::",
@@ -961,12 +1059,8 @@ impl ReencodeComponent for CapabilityGlobalLowerer {
         let outer = std::mem::take(&mut self.module);
         let capability_roots = build_capability_roots_metadata(data);
         let mut module = wasm_encoder::Module::new();
-        let result = wasm_encoder::reencode::utils::parse_core_module(
-            self,
-            &mut module,
-            parser,
-            data,
-        );
+        let result =
+            wasm_encoder::reencode::utils::parse_core_module(self, &mut module, parser, data);
         if result.is_ok() && !capability_roots.is_empty() {
             module.section(&wasm_encoder::CustomSection {
                 name: Cow::Borrowed(CAPABILITY_ROOTS_SECTION),
@@ -1278,6 +1372,168 @@ mod tests {
     }
 
     #[test]
+    fn test_wit_import_name_marks_shared_http_capabilities() {
+        let caps = function_name_capabilities(
+            "_ZN99_$LT$wasip2..proxy..wasi..http..types..OutgoingBody$u20$as$u20$wasip2..proxy.._rt..WasmResource$GT$4drop4drop17h6f713e54171a0b9aE",
+        );
+
+        assert!(caps.contains(&Capability::NodeFetch));
+        assert!(caps.contains(&Capability::NodeHttp));
+    }
+
+    #[test]
+    fn test_wit_import_name_marks_socket_capabilities() {
+        let tcp = function_name_capabilities(
+            "_ZN6wasip27imports4wasi7sockets3tcp9TcpSocket8shutdown11wit_import117h5b0c15b842d805aaE",
+        );
+        assert!(tcp.contains(&Capability::Net));
+
+        let udp = function_name_capabilities(
+            "_ZN6wasip27imports4wasi7sockets3udp9UdpSocket14address_family11wit_import017h44adbf7bd3630a11E",
+        );
+        assert!(udp.contains(&Capability::Dgram));
+
+        let network = function_name_capabilities(
+            "_ZN6wasip27imports4wasi7sockets7network7Network11wit_import017h44adbf7bd3630a11E",
+        );
+        assert!(network.contains(&Capability::Dgram));
+        assert!(network.contains(&Capability::Dns));
+        assert!(network.contains(&Capability::Net));
+    }
+
+    #[test]
+    fn test_wit_import_name_marks_filesystem_shims() {
+        let caps = function_name_capabilities(
+            "__wasm_import_filesystem_method_descriptor_read_via_stream",
+        );
+        assert!(caps.contains(&Capability::Fs));
+        assert!(caps.contains(&Capability::FsModuleLoader));
+    }
+
+    #[test]
+    fn test_capability_roots_metadata_emits_all_shared_filesystem_owners() {
+        let module = build_named_empty_func_module(
+            "__wasm_import_filesystem_method_descriptor_read_via_stream",
+        );
+
+        let roots = parse_capability_roots_metadata(&build_capability_roots_metadata(&module));
+
+        assert!(roots.contains(&CapabilityRootEntry {
+            func: 0,
+            capability: Capability::Fs,
+            kind: ROOT_KIND_INDIRECT_ANY,
+        }));
+        assert!(roots.contains(&CapabilityRootEntry {
+            func: 0,
+            capability: Capability::FsModuleLoader,
+            kind: ROOT_KIND_INDIRECT_ANY,
+        }));
+    }
+
+    #[test]
+    fn test_generic_filesystem_support_is_not_module_loader_only() {
+        let module =
+            build_named_empty_func_module("std::sys::fs::unix::File::open::h0123456789abcdef");
+
+        assert!(build_capability_roots_metadata(&module).is_empty());
+    }
+
+    #[test]
+    fn test_capability_roots_metadata_emits_all_shared_network_owners() {
+        let module = build_named_empty_func_module(
+            "_ZN6wasip27imports4wasi7sockets7network7Network11wit_import017h44adbf7bd3630a11E",
+        );
+
+        let roots = parse_capability_roots_metadata(&build_capability_roots_metadata(&module));
+
+        for capability in [Capability::Dgram, Capability::Dns, Capability::Net] {
+            assert!(roots.contains(&CapabilityRootEntry {
+                func: 0,
+                capability,
+                kind: ROOT_KIND_INDIRECT_ANY,
+            }));
+        }
+    }
+
+    #[test]
+    fn test_reachable_capability_flows_through_wit_import_callee() {
+        let mut names = BTreeMap::new();
+        names.insert(
+            0,
+            "_ZN99_$LT$wasip2..proxy..wasi..http..types..OutgoingBody$u20$as$u20$wasip2..proxy.._rt..WasmResource$GT$4drop4drop17h6f713e54171a0b9aE"
+                .to_string(),
+        );
+        names.insert(
+            1,
+            "_ZN13rquickjs_core5class3ffi6VTable14finalizer_impl17ha32912750bccd5b5E".to_string(),
+        );
+
+        let direct = BTreeMap::from([(1, vec![0])]);
+        let helper_exports = BTreeMap::new();
+        let mut memo = BTreeMap::new();
+
+        let caps = reachable_builtin_capabilities(1, &names, &helper_exports, &direct, &mut memo);
+
+        assert!(caps.contains(&Capability::NodeFetch));
+        assert!(caps.contains(&Capability::NodeHttp));
+    }
+
+    fn build_named_empty_func_module(function_name: &str) -> Vec<u8> {
+        let mut module = wasm_encoder::Module::new();
+
+        let mut types = wasm_encoder::TypeSection::new();
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut functions = wasm_encoder::FunctionSection::new();
+        functions.function(0);
+        module.section(&functions);
+
+        let mut code = wasm_encoder::CodeSection::new();
+        let mut function = wasm_encoder::Function::new([]);
+        function.instruction(&wasm_encoder::Instruction::End);
+        code.function(&function);
+        module.section(&code);
+
+        let mut names = wasm_encoder::NameMap::new();
+        names.append(0, function_name);
+        let mut name_section = wasm_encoder::NameSection::new();
+        name_section.functions(&names);
+        module.section(&name_section);
+
+        module.finish()
+    }
+
+    fn parse_capability_roots_metadata(data: &[u8]) -> BTreeSet<CapabilityRootEntry> {
+        assert!(data.starts_with(CAPABILITY_ROOTS_MAGIC));
+        assert_eq!(data[CAPABILITY_ROOTS_MAGIC.len()], CAPABILITY_ROOTS_VERSION);
+
+        let count_offset = CAPABILITY_ROOTS_MAGIC.len() + 1;
+        let count = u32::from_le_bytes(data[count_offset..count_offset + 4].try_into().unwrap());
+
+        let mut roots = BTreeSet::new();
+        let mut offset = count_offset + 4;
+        for _ in 0..count {
+            let func = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+            let capability = ALL_CAPABILITIES
+                .iter()
+                .copied()
+                .find(|capability| capability.bit_index() == data[offset + 4])
+                .expect("unknown capability bit");
+            let kind = data[offset + 5];
+            roots.insert(CapabilityRootEntry {
+                func,
+                capability,
+                kind,
+            });
+            offset += 6;
+        }
+        assert_eq!(offset, data.len());
+
+        roots
+    }
+
+    #[test]
     fn test_patch_capability_gates_no_marker() {
         let buf = vec![0u8; 100];
         let result = patch_capability_gates_in_bytes(&buf, 0);
@@ -1308,10 +1564,10 @@ mod tests {
             (1u64 << Capability::Fs.bit_index()) | (1u64 << Capability::Sqlite.bit_index())
         );
 
-        // The enum is laid out so all 52 bits fit inside the lower half of u64.
+        // The enum is laid out so all known bits fit inside the lower half of u64.
         let all_known: u64 = enabled_bits(crate::capability_scan::ALL_CAPABILITIES.iter().copied());
-        assert_eq!(all_known.count_ones(), 52);
-        // Bits 52..64 must be unused.
-        assert_eq!(all_known & !((1u64 << 52) - 1), 0);
+        assert_eq!(all_known.count_ones(), 53);
+        // Bits 53..64 must be unused.
+        assert_eq!(all_known & !((1u64 << 53) - 1), 0);
     }
 }

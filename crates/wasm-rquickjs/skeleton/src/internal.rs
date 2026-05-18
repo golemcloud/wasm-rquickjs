@@ -1445,7 +1445,7 @@ impl JsState {
             builtin_loader = builtin_loader.with_module(name.to_string(), injected);
         }
 
-        if crate::capabilities::cap_fs() {
+        if crate::capabilities::cap_fs_module_loader() {
             let file_resolver = FileResolver::default()
                 .with_path("/")
                 .with_pattern("{}.js")

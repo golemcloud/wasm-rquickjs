@@ -1,7 +1,7 @@
 use crate::cli::{Args, Command};
 use anyhow::Context;
-use clap::Parser;
 use camino::Utf8Path;
+use clap::Parser;
 use std::collections::{BTreeMap, BTreeSet};
 use wasm_rquickjs::capability_scan::ALL_CAPABILITIES;
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_dts, generate_wrapper_crate};
@@ -59,7 +59,9 @@ fn component_dce_options_from_ir(
     for (component_idx, component) in ir.nested_components.iter().enumerate() {
         let child = component_dce_options_from_ir(component, enabled_bits)?;
         if child != wasm_eliminator::component::DceOptions::default() {
-            options.nested_components.insert(component_idx as u32, child);
+            options
+                .nested_components
+                .insert(component_idx as u32, child);
         }
     }
 
@@ -96,7 +98,8 @@ fn producer_hints_from_capability_roots(
 fn capability_foldable_globals(
     module: &[u8],
     enabled_bits: u64,
-) -> anyhow::Result<std::collections::BTreeMap<u32, wasm_eliminator::core::const_fold::ConstValue>> {
+) -> anyhow::Result<std::collections::BTreeMap<u32, wasm_eliminator::core::const_fold::ConstValue>>
+{
     let mut imported_globals = 0u32;
     let mut defined_i32_consts = Vec::new();
 
@@ -152,7 +155,9 @@ fn capability_foldable_globals(
         .collect())
 }
 
-fn imported_global_count_for_imports(imports: wasmparser_encoder::Imports<'_>) -> anyhow::Result<u32> {
+fn imported_global_count_for_imports(
+    imports: wasmparser_encoder::Imports<'_>,
+) -> anyhow::Result<u32> {
     Ok(match imports {
         wasmparser_encoder::Imports::Single(_, import) => {
             imported_global_count_for_type_ref(import.ty, 1)
@@ -213,12 +218,13 @@ fn apply_capability_roots_section(
 
         match kind {
             ROOT_KIND_INDIRECT_ANY | ROOT_KIND_DIRECT_SCRUB => {}
-            other => anyhow::bail!(
-                "unsupported {CAPABILITY_ROOTS_SECTION} root kind {other}"
-            ),
+            other => anyhow::bail!("unsupported {CAPABILITY_ROOTS_SECTION} root kind {other}"),
         }
 
-        roots.entry((func, kind)).or_default().insert(capability_bit);
+        roots
+            .entry((func, kind))
+            .or_default()
+            .insert(capability_bit);
     }
 
     for ((func, kind), capability_bits) in roots {
@@ -447,8 +453,8 @@ fn main() {
             if want_patch {
                 use std::collections::BTreeSet;
                 use wasm_rquickjs::capability_scan::{
-                    ALL_CAPABILITIES, Capability, Policy, ScanResult, apply_policy,
-                    enabled_bits, scan_entry_point,
+                    ALL_CAPABILITIES, Capability, Policy, ScanResult, apply_policy, enabled_bits,
+                    scan_entry_point,
                 };
 
                 // Helper to parse capability marker names from `--include`/`--exclude`
@@ -525,9 +531,7 @@ fn main() {
                 // Stage to the output path, then patch + inject in two steps so
                 // the user gets a single output even when both happen.
                 let staging = output.with_extension("wasm.staging");
-                if let Err(err) =
-                    wasm_rquickjs::patch_capability_gates(input, &staging, bits)
-                {
+                if let Err(err) = wasm_rquickjs::patch_capability_gates(input, &staging, bits) {
                     eprintln!("Error patching capability gates: {err:#}");
                     std::process::exit(1);
                 }

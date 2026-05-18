@@ -8,11 +8,11 @@ use camino::{Utf8Path, Utf8PathBuf};
 use common::TestInstance;
 use heck::ToSnakeCase;
 use std::process::Command;
+use wasm_rquickjs::capability_scan::{ALL_CAPABILITIES, Capability, enabled_bits};
 use wasm_rquickjs::{
     EmbeddingMode, JsModuleSpec, generate_wrapper_crate, inject_js_into_component,
     patch_capability_gates_in_bytes, read_capability_gates_from_bytes,
 };
-use wasm_rquickjs::capability_scan::{ALL_CAPABILITIES, Capability, enabled_bits};
 use wasmtime::component::Val;
 
 /// Generates a wrapper crate using BinarySlot mode, compiles it, injects JS,
@@ -266,8 +266,8 @@ async fn test_patch_capability_gates_and_run() {
     let builder = BinarySlotTestBuilder::new("example1").expect("Failed to build template");
 
     // Step 1 + 2: read the default gates from the freshly-built template.
-    let template_bytes = std::fs::read(builder.wasm_path.as_std_path())
-        .expect("Failed to read template wasm");
+    let template_bytes =
+        std::fs::read(builder.wasm_path.as_std_path()).expect("Failed to read template wasm");
     let initial = read_capability_gates_from_bytes(&template_bytes)
         .expect("Failed to read default capability gates from template");
     assert_eq!(
@@ -308,8 +308,8 @@ async fn test_patch_capability_gates_and_run() {
         .expect("patch_capability_gates_in_bytes failed");
 
     // Step 4: read back and verify each disabled bit is cleared.
-    let read_back = read_capability_gates_from_bytes(&patched_bytes)
-        .expect("Failed to read patched gates");
+    let read_back =
+        read_capability_gates_from_bytes(&patched_bytes).expect("Failed to read patched gates");
     assert_eq!(read_back, new_bits, "patched gates must round-trip");
     for cap in to_disable {
         assert_eq!(
