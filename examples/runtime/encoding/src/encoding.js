@@ -54,7 +54,7 @@ async function test1Impl() {
             let offset = 0;
             const chunkSize = 16;
             while (offset < buf.length) {
-                controller.enqueue(buf.slice(offset, offset + chunkSize));
+                controller.enqueue(new Uint8Array(buf.slice(offset, offset + chunkSize)));
                 offset += chunkSize;
             }
             controller.close();
