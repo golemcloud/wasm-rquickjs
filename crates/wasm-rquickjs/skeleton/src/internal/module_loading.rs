@@ -10709,9 +10709,11 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
     }
 
     #[cfg(feature = "p2")]
-    let fs_enabled = crate::capabilities::cap_fs();
+    let fs_enabled = crate::capabilities::cap_fs_module_loader();
     #[cfg(feature = "p3")]
     let fs_enabled = true;
+
+    let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
 
     if fs_enabled {
         let file_resolver = FileResolver::default()
@@ -10719,7 +10721,6 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             .with_pattern("{}.js")
             .with_pattern("{}.mjs")
             .with_pattern("{}.json");
-        let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
 
         let resolver = (
             (

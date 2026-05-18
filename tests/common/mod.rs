@@ -17,11 +17,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time::timeout;
+use wac_graph::types::{Package, SubtypeChecker};
+use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
 use wasm_rquickjs::capability_scan::{
     ALL_CAPABILITIES, Policy, ScanResult, apply_policy, enabled_bits, scan_entry_point,
 };
-use wac_graph::types::{Package, SubtypeChecker};
-use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
 use wasm_rquickjs::{
     EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
     patch_capability_gates_in_bytes,
@@ -2530,7 +2530,9 @@ fn env_flag(name: &str) -> bool {
 }
 
 fn capability_bits_for_example(example_path: &Utf8Path, trim_unknown: bool) -> anyhow::Result<u64> {
-    let name = example_path.file_name().expect("example path has a file name");
+    let name = example_path
+        .file_name()
+        .expect("example path has a file name");
     let js_path = example_path.join("src").join(format!("{name}.js"));
     let scan = if js_path.exists() {
         scan_entry_point(&js_path)
@@ -2554,7 +2556,11 @@ fn capability_bits_for_example(example_path: &Utf8Path, trim_unknown: bool) -> a
     Ok(enabled_bits(outcome.enabled.iter().copied()))
 }
 
-fn auto_trim_component(input: &Utf8Path, output: &Utf8Path, enabled_bits: u64) -> anyhow::Result<()> {
+fn auto_trim_component(
+    input: &Utf8Path,
+    output: &Utf8Path,
+    enabled_bits: u64,
+) -> anyhow::Result<()> {
     let before = fs::read(input.as_std_path())?;
     let patched = patch_capability_gates_in_bytes(&before, enabled_bits)?;
     let component_options = component_dce_options_from_capability_roots(&patched, enabled_bits)?;
@@ -2564,7 +2570,11 @@ fn auto_trim_component(input: &Utf8Path, output: &Utf8Path, enabled_bits: u64) -
     };
     let after = wasm_eliminator::dce_with_options(&patched, &options)?;
     fs::write(output.as_std_path(), &after)?;
-    println!("wasm-eliminator auto-trim: {} B -> {} B", before.len(), after.len());
+    println!(
+        "wasm-eliminator auto-trim: {} B -> {} B",
+        before.len(),
+        after.len()
+    );
     Ok(())
 }
 
@@ -2591,7 +2601,9 @@ fn component_dce_options_from_ir(
     for (component_idx, component) in ir.nested_components.iter().enumerate() {
         let child = component_dce_options_from_ir(component, enabled_bits)?;
         if child != wasm_eliminator::component::DceOptions::default() {
-            options.nested_components.insert(component_idx as u32, child);
+            options
+                .nested_components
+                .insert(component_idx as u32, child);
         }
     }
 
@@ -2684,7 +2696,9 @@ fn capability_foldable_globals(
         .collect())
 }
 
-fn imported_global_count_for_imports(imports: wasmparser_encoder::Imports<'_>) -> anyhow::Result<u32> {
+fn imported_global_count_for_imports(
+    imports: wasmparser_encoder::Imports<'_>,
+) -> anyhow::Result<u32> {
     Ok(match imports {
         wasmparser_encoder::Imports::Single(_, import) => {
             imported_global_count_for_type_ref(import.ty, 1)
@@ -2745,12 +2759,13 @@ fn apply_capability_roots_section(
 
         match kind {
             ROOT_KIND_INDIRECT_ANY | ROOT_KIND_DIRECT_SCRUB => {}
-            other => anyhow::bail!(
-                "unsupported {CAPABILITY_ROOTS_SECTION} root kind {other}"
-            ),
+            other => anyhow::bail!("unsupported {CAPABILITY_ROOTS_SECTION} root kind {other}"),
         }
 
-        roots.entry((func, kind)).or_default().insert(capability_bit);
+        roots
+            .entry((func, kind))
+            .or_default()
+            .insert(capability_bit);
     }
 
     for ((func, kind), capability_bits) in roots {
