@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3112/4317 (72.1%)
+**Primary compatibility (CI-enforced):** 3111/4317 (72.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3112 | 72.1% | 55.4% | 46.2% |
-| 🧩 known gap | 1205 | 27.9% | 21.5% | 17.9% |
+| ✅ passing (runnable) | 3111 | 72.1% | 55.4% | 46.2% |
+| 🧩 known gap | 1206 | 27.9% | 21.5% | 17.9% |
 | 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
 | **Total** | **6734** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3112/5613 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3111/5613 (55.4%)**.
 
 ## Inventory by Module
 
@@ -84,7 +84,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm | 121 | 25 | 84 | 3 | 9 | 0 | 0 | 22.9% | 20.7% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| whatwg | 264 | 58 | 20 | 0 | 0 | 0 | 186 | 74.4% | 74.4% |
+| whatwg | 264 | 57 | 21 | 0 | 0 | 0 | 186 | 73.1% | 73.1% |
 | worker_threads | 189 | 19 | 51 | 111 | 0 | 0 | 8 | 27.1% | 10.5% |
 | zlib | 61 | 52 | 5 | 0 | 0 | 0 | 4 | 91.2% | 91.2% |
 
@@ -611,7 +611,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-webstreams-pipeline.js` | 17 | 17 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-encoding-custom-fatal-streaming.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-whatwg-encoding-custom-interop.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
-| `test-whatwg-encoding-custom-textdecoder.js` | 12 | 12 | 0 | 0 | 0 | 0 | 0 |
+| `test-whatwg-encoding-custom-textdecoder.js` | 12 | 11 | 1 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-add-event-listener-options-passive.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-add-event-listener-options-signal.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-customevent.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1205)
+### known gap (1206)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1125,6 +1125,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | global web streams and node:stream/web exports are inconsistent | 1 | `parallel/test-global-webstreams.js` |
 | globalThis shape differs from Node.js | 1 | `parallel/test-global.js` |
 | half-open/pipelined HTTP/1.1 server behavior is not fully Node-compatible | 1 | `parallel/test-http-server.js` |
+| hidden TextDecoder inspect output exposes Node/V8 internal decoder handles that are not represented in this runtime | 1 | `parallel/test-whatwg-encoding-custom-textdecoder.js#block_05_test_textdecoder_inspect_with_hidden_fields` |
 | http client request lifecycle can hang in method-token validation scenario | 1 | `parallel/test-http-client-check-http-token.js` |
 | http.Agent keepAlive maxSockets/maxFreeSockets pooling semantics are not Node-compatible | 1 | `sequential/test-http-keepalive-maxsockets.js` |
 | http.Agent maxSockets enforcement and abort lifecycle can hang | 1 | `parallel/test-http-agent-maxsockets-respected.js` |

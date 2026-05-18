@@ -9393,7 +9393,7 @@
         "block_02_invalid_encoders": { "category": "runnable" },
         "block_03_test_textdecoder_label_undefined_options_null": { "category": "runnable" },
         "block_04_test_textdecoder_utf_16le": { "category": "runnable" },
-        "block_05_test_textdecoder_inspect_with_hidden_fields": { "category": "runnable" },
+        "block_05_test_textdecoder_inspect_with_hidden_fields": { "category": "known-gap", "reason": "hidden TextDecoder inspect output exposes Node/V8 internal decoder handles that are not represented in this runtime" },
         "block_06_test_textdecoder_inspect_without_hidden_fields": { "category": "runnable" },
         "block_07_test_textdecoder_inspect_with_negative_depth": { "category": "runnable" },
         "block_08_block_08": { "category": "runnable" },
