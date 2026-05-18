@@ -9575,11 +9575,9 @@
     "parallel/test-whatwg-url-custom-href-side-effect.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-inspect.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
     "parallel/test-whatwg-url-custom-parsing.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
-    "parallel/test-whatwg-url-custom-properties.js": { "category": "runnable" },
+    "parallel/test-whatwg-url-custom-properties.js": { "category": "known-gap", "reason": "native rquickjs URL class property enumeration order does not match Web IDL order and descriptors are not fully configurable from JS" },
     "parallel/test-whatwg-url-custom-searchparams-append.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-searchparams-constructor.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": { "category": "runnable" },
@@ -9587,8 +9585,6 @@
       }
     },
     "parallel/test-whatwg-url-custom-searchparams-delete.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": { "category": "runnable" },
@@ -9605,8 +9601,6 @@
     "parallel/test-whatwg-url-custom-searchparams-set.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-searchparams-sort.js": { "category": "known-gap", "reason": "node_compat common shim is missing ../common/wpt harness" },
     "parallel/test-whatwg-url-custom-searchparams-stringifier.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": { "category": "runnable" },
@@ -9616,8 +9610,6 @@
     "parallel/test-whatwg-url-custom-searchparams-values.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-searchparams.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-setters.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
@@ -9625,14 +9617,12 @@
       }
     },
     "parallel/test-whatwg-url-custom-tostringtag.js": { "category": "runnable" },
-    "parallel/test-whatwg-url-invalidthis.js": { "category": "runnable" },
+    "parallel/test-whatwg-url-invalidthis.js": { "category": "known-gap", "reason": "native rquickjs URL accessors report Rust conversion errors for invalid receivers before JS can normalize them to V8/Web IDL private-member messages" },
     "parallel/test-whatwg-url-properties.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "runnable" },
-        "block_01_block_01": { "category": "runnable" }
+        "block_00_block_00": { "category": "known-gap", "reason": "native rquickjs URL accessor descriptor function names are empty instead of Web IDL names like `get href`" },
+        "block_01_block_01": { "category": "known-gap", "reason": "native rquickjs URL accessor descriptor function names are empty instead of Web IDL names like `get href`" }
       }
     },
     "parallel/test-whatwg-webstreams-adapters-streambase.js": {

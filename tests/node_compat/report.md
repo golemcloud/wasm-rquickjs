@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3117/4317 (72.2%)
+**Primary compatibility (CI-enforced):** 3113/4317 (72.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3117 | 72.2% | 55.5% | 46.3% |
-| 🧩 known gap | 1200 | 27.8% | 21.4% | 17.8% |
+| ✅ passing (runnable) | 3113 | 72.1% | 55.5% | 46.2% |
+| 🧩 known gap | 1204 | 27.9% | 21.5% | 17.9% |
 | 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
 | **Total** | **6734** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3117/5613 (55.5%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3113/5613 (55.5%)**.
 
 ## Inventory by Module
 
@@ -84,7 +84,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm | 121 | 25 | 84 | 3 | 9 | 0 | 0 | 22.9% | 20.7% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| whatwg | 264 | 62 | 16 | 0 | 0 | 0 | 186 | 79.5% | 79.5% |
+| whatwg | 264 | 58 | 20 | 0 | 0 | 0 | 186 | 74.4% | 74.4% |
 | worker_threads | 189 | 19 | 51 | 111 | 0 | 0 | 8 | 27.1% | 10.5% |
 | zlib | 61 | 52 | 5 | 0 | 0 | 0 | 4 | 91.2% | 91.2% |
 
@@ -623,7 +623,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-whatwg-url-custom-searchparams-delete.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-url-custom-searchparams-stringifier.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-url-custom-setters.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-whatwg-url-properties.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-whatwg-url-properties.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-whatwg-webstreams-adapters-streambase.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `test-whatwg-webstreams-adapters-to-readablestream.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
 | `test-whatwg-webstreams-adapters-to-readablewritablepair.js` | 12 | 0 | 0 | 0 | 0 | 0 | 12 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1200)
+### known gap (1204)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -796,6 +796,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: process.getActiveResourcesInfo() is not implemented | 2 | `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`, `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01` |
 | inherited: queueMicrotask argument validation/error codes are incomplete | 2 | `parallel/test-queue-microtask.js#block_00_block_00`, `parallel/test-queue-microtask.js#block_01_block_01` |
 | inherited: requires perf_hooks.PerformanceObserver with net detail | 2 | `parallel/test-net-perf_hooks.js#block_00_block_00`, `parallel/test-net-perf_hooks.js#block_01_block_01` |
+| native rquickjs URL accessor descriptor function names are empty instead of Web IDL names like `get href` | 2 | `parallel/test-whatwg-url-properties.js#block_00_block_00`, `parallel/test-whatwg-url-properties.js#block_01_block_01` |
 | perf_hooks performance.timeOrigin/nodeTiming semantics are not Node-compatible | 2 | `sequential/test-perf-hooks.js#block_00_block_00`, `sequential/test-perf-hooks.js#block_01_block_01` |
 | perf_hooks resource timing buffer/full-event behavior is incomplete | 2 | `parallel/test-performance-resourcetimingbufferfull.js`, `parallel/test-performance-resourcetimingbuffersize.js` |
 | process API incomplete | 2 | `parallel/test-process-beforeexit-throw-exit.js`, `parallel/test-process-beforeexit.js` |
@@ -1152,6 +1153,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | mixed headersTimeout/requestTimeout handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeouts-mixed.js` |
 | module cache behavior with circular symlinked dependencies is not Node-compatible | 1 | `parallel/test-module-circular-symlinks.js` |
 | moveMessagePortToContext cross-context object/prototype semantics are incomplete | 1 | `parallel/test-worker-message-port-move.js` |
+| native rquickjs URL accessors report Rust conversion errors for invalid receivers before JS can normalize them to V8/Web IDL private-member messages | 1 | `parallel/test-whatwg-url-invalidthis.js` |
+| native rquickjs URL class property enumeration order does not match Web IDL order and descriptors are not fully configurable from JS | 1 | `parallel/test-whatwg-url-custom-properties.js` |
 | net reusePort listen option/support probing is incomplete | 1 | `parallel/test-net-reuseport.js` |
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
