@@ -23,6 +23,12 @@ function formatErrorForStderr(err) {
     let text;
     if (err && err.stack) {
         text = String(err.stack);
+        if (err.name && err.name !== 'Error' && text.indexOf('Error:') === 0) {
+            text = String(err.name) + text.slice('Error'.length);
+        }
+        if (text.indexOf('Error: return not in a function') === 0) {
+            text = 'SyntaxError:' + text.slice('Error:'.length);
+        }
         if (err && err.message) {
             const message = String(err.message);
             if (text.indexOf(message) === -1) {
@@ -31,6 +37,10 @@ function formatErrorForStderr(err) {
         }
     } else {
         text = String(err);
+    }
+
+    if (text.indexOf('Error: return not in a function') === 0) {
+        text = 'SyntaxError:' + text.slice('Error:'.length);
     }
 
     if (err && typeof err.code === 'string') {
@@ -363,7 +373,7 @@ function formatWarningForStderr(warning, typeOrOptions, code) {
     return prefix + info.name + ': ' + info.message + '\n';
 }
 
-function executeInlineSource(runtimeRequire, inlineArgs) {
+function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
     const mode = String(inlineArgs[0]);
     const source = String(inlineArgs[1]);
     const shouldPrint = mode === '-p' || mode === '--print';
@@ -373,6 +383,7 @@ function executeInlineSource(runtimeRequire, inlineArgs) {
     }
 
     const vmModule = runtimeRequire('node:vm');
+    const evalRequire = moduleExports.createRequire(path.join(childCwd || process.cwd(), '[eval].js'));
     const bufferProbe = parseBufferConstructorProbe(source);
     let result;
 
@@ -381,9 +392,12 @@ function executeInlineSource(runtimeRequire, inlineArgs) {
         result = vmModule.runInNewContext('new Buffer(10)', { Buffer }, {
             filename: bufferProbe.callSiteFilename,
         });
+    } else if (shouldPrint) {
+        const evaluator = new Function('Buffer', 'process', 'vm', 'require', 'return eval(' + JSON.stringify(source) + ');\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, evalRequire);
     } else {
-        const evaluator = new Function('Buffer', 'process', 'vm', source + '\n//# sourceURL=[eval]\n');
-        result = evaluator(Buffer, process, vmModule);
+        const evaluator = new Function('Buffer', 'process', 'vm', 'require', source + '\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, evalRequire);
     }
 
     if (shouldPrint && process.stdout && typeof process.stdout.write === 'function') {
@@ -452,6 +466,7 @@ function runInline(command, args, options) {
     const oldArgv = process.argv.slice();
     const oldExecArgv = Array.isArray(process.execArgv) ? process.execArgv.slice() : [];
     const oldArgv0 = process.argv0;
+    const oldRequireModuleFeature = process.features && process.features.require_module;
     const oldCwd = process.cwd;
     const hadMainModule = Object.prototype.hasOwnProperty.call(process, 'mainModule');
     const oldMainModule = process.mainModule;
@@ -474,11 +489,16 @@ function runInline(command, args, options) {
     let capturedStderr = '';
     let status = 0;
     let inlineBufferProbe = null;
+    const checkSyntaxMode = execArgv.indexOf('-c') !== -1 || execArgv.indexOf('--check') !== -1;
+    let currentScriptPath = null;
 
     try {
         process.argv = [String(command)].concat(invocationArgs);
         process.execArgv = execArgv;
         process.argv0 = String(command);
+        if (process.features) {
+            process.features.require_module = execArgv.indexOf('--no-experimental-require-module') === -1;
+        }
         process.cwd = function cwd() {
             return childCwd;
         };
@@ -636,16 +656,13 @@ function runInline(command, args, options) {
         }
 
         // Handle --require / -r preloading
+        const preloadRequire = moduleExports.createRequire(path.join(childCwd, '[preload].js'));
         for (let ri = 0; ri < execArgv.length; ri++) {
             const ea = execArgv[ri];
             if (ea === '--require' || ea === '-r') {
                 if (ri + 1 < execArgv.length) {
                     ri++;
-                    const requirePath = execArgv[ri];
-                    if (!path.isAbsolute(requirePath)) {
-                        requirePath = path.resolve(childCwd, requirePath);
-                    }
-                    runtimeRequire(requirePath);
+                    preloadRequire(execArgv[ri]);
                 }
             }
         }
@@ -668,7 +685,7 @@ function runInline(command, args, options) {
 
             let inlineResult;
             try {
-                inlineResult = executeInlineSource(runtimeRequire, invocationArgs);
+                inlineResult = executeInlineSource(runtimeRequire, invocationArgs, childCwd);
             } finally {
                 globalThis.__wasm_rquickjs_current_module = savedModuleContext;
                 globalThis.__wasm_rquickjs_buffer_dep0005_warned = oldBufferDepWarned;
@@ -685,6 +702,7 @@ function runInline(command, args, options) {
             if (!path.isAbsolute(scriptPath)) {
                 scriptPath = path.resolve(childCwd, scriptPath);
             }
+            currentScriptPath = scriptPath;
             const scriptArgs = invocationArgs.slice(1);
 
             if (execArgv.indexOf('--test') !== -1) {
@@ -714,12 +732,18 @@ function runInline(command, args, options) {
             status = firstExitCode !== null ? firstExitCode : (typeof err.code === 'number' ? err.code : 0);
         } else {
             status = 1;
+            if (checkSyntaxMode && currentScriptPath) {
+                capturedStderr += currentScriptPath + '\n';
+            }
             capturedStderr += formatErrorForStderr(err);
         }
     } finally {
         process.argv = oldArgv;
         process.execArgv = oldExecArgv;
         process.argv0 = oldArgv0;
+        if (process.features) {
+            process.features.require_module = oldRequireModuleFeature;
+        }
         process.cwd = oldCwd;
         if (hadMainModule) {
             process.mainModule = oldMainModule;

@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3133/4317 (72.6%)
+**Primary compatibility (CI-enforced):** 3120/4317 (72.3%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3133 | 72.6% | 55.8% | 46.5% |
-| 🧩 known gap | 1184 | 27.4% | 21.1% | 17.6% |
+| ✅ passing (runnable) | 3120 | 72.3% | 55.6% | 46.3% |
+| 🧩 known gap | 1197 | 27.7% | 21.3% | 17.8% |
 | 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
 | **Total** | **6734** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3133/5613 (55.8%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3120/5613 (55.6%)**.
 
 ## Inventory by Module
 
@@ -53,7 +53,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | http | 898 | 244 | 305 | 267 | 2 | 0 | 80 | 44.4% | 29.8% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 184 | 114 | 50 | 7 | 1 | 0 | 12 | 69.5% | 66.3% |
+| module | 184 | 102 | 62 | 7 | 1 | 0 | 12 | 62.2% | 59.3% |
 | net | 223 | 150 | 36 | 19 | 1 | 0 | 17 | 80.6% | 72.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
@@ -73,7 +73,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | stdio | 23 | 14 | 7 | 1 | 0 | 0 | 1 | 66.7% | 63.6% |
 | stream | 753 | 713 | 31 | 2 | 0 | 0 | 7 | 95.8% | 95.6% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| test_runner | 157 | 94 | 33 | 21 | 1 | 0 | 8 | 74.0% | 63.1% |
+| test_runner | 157 | 93 | 34 | 21 | 1 | 0 | 8 | 73.2% | 62.4% |
 | timers | 97 | 47 | 4 | 0 | 0 | 0 | 46 | 92.2% | 92.2% |
 | tls | 207 | 4 | 7 | 185 | 0 | 0 | 11 | 36.4% | 2.0% |
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
@@ -670,7 +670,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-fs-watch.js` | 6 | 3 | 3 | 0 | 0 | 0 | 0 |
 | `test-heapdump.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
 | `test-init.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-module-loading.js` | 11 | 11 | 0 | 0 | 0 | 0 | 0 |
+| `test-module-loading.js` | 11 | 0 | 11 | 0 | 0 | 0 | 0 |
 | `test-net-server-address.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-server-bind.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-perf-hooks.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1184)
+### known gap (1197)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -693,6 +693,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 12 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
 | QuickJS module system does not support ESM-CJS interop cycle detection | 11 | `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_00_a_mjs_b_cjs_c_mjs_a_mjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_01_b_cjs_c_mjs_a_mjs_b_cjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_02_c_mjs_a_mjs_b_cjs_c_mjs`, ... (+8) |
+| full script module-loading test still exposes incomplete main-module/cache/package-main edge semantics | 11 | `sequential/test-module-loading.js#block_00_block_00`, `sequential/test-module-loading.js#block_01_block_01`, `sequential/test-module-loading.js#block_02_block_02`, ... (+8) |
 | inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation | 11 | `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`, `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`, `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`, ... (+8) |
 | net.js TCP implementation incomplete - needs event handling and API fixes | 11 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+8) |
 | wasi:sockets UDP implementation hangs in wasmtime | 11 | `parallel/test-dgram-implicit-bind.js`, `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`, `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`, ... (+8) |
@@ -925,6 +926,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | OutgoingMessage implicit Content-Length/Transfer-Encoding and Connection header behavior is not Node-compatible | 1 | `parallel/test-http-content-length.js` |
 | OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected) | 1 | `parallel/test-http-mutable-headers.js` |
 | Overridden globalAgent socket bookkeeping (agent.sockets/close lifecycle) is not Node-compatible | 1 | `parallel/test-http-client-override-global-agent.js` |
+| QuickJS require(esm) bridge reports async-module semantics before surfacing synchronous ESM evaluation errors | 1 | `es-module/test-require-module-error-catching.js` |
 | QuickJS stack frame formatting differs for Error objects whose name is a non-string object | 1 | `parallel/test-util-inspect.js#block_97_block_97` |
 | RSA imported-key algorithm metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-encrypt-decrypt-rsa.js` |
 | RSA key import/export metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-export-import-rsa.js` |
@@ -1079,6 +1081,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | dotenv CLI flags are incomplete in execPath child emulation | 1 | `parallel/test-dotenv-edge-cases.js` |
 | duplicate Set-Cookie response header handling/lifecycle is not fully Node-compatible | 1 | `parallel/test-http-set-cookies.js` |
 | dynamic import callback handling does not correctly support module namespace return values | 1 | `parallel/test-vm-module-dynamic-namespace.js` |
+| emulated child_process inline eval does not keep the child alive for dynamic import() resolution | 1 | `parallel/test-runner-import-no-scheme.js` |
 | events.EventEmitterAsyncResource API and ERR_INVALID_THIS branding are incomplete | 1 | `parallel/test-eventemitter-asyncresource.js` |
 | events.once() with EventTarget does not handle sequential waits correctly | 1 | `parallel/test-eventtarget-once-twice.js` |
 | exceptions thrown in client response callbacks do not follow Node uncaughtException flow | 1 | `parallel/test-http-uncaught-from-request-callback.js` |

@@ -509,6 +509,14 @@ function isBuiltin(id) {
     return false;
 }
 
+function isBuiltinResolveTarget(id) {
+    if (typeof id !== 'string') return false;
+    if (id.startsWith('node:')) {
+        return publicBuiltinIdSet.has(id.slice(5));
+    }
+    return publicBuiltinIdSet.has(id);
+}
+
 // Module cache: resolved absolute path -> Module object
 const moduleCache = Object.create(null);
 
@@ -563,18 +571,23 @@ function getPackageScopeType(filename) {
     return 'commonjs';
 }
 
-function resolveFilename(id, parentDir) {
-    const candidate = pathModule.isAbsolute(id)
-        ? pathModule.normalize(id)
-        : pathModule.resolve(parentDir, id);
+function isPathDirectory(filename) {
+    try {
+        return fsModule.statSync(filename).isDirectory();
+    } catch (_) {
+        return false;
+    }
+}
 
-    // Try exact path
-    let content = tryReadFile(candidate);
-    if (content !== null) {
-        return { filename: candidate, content: content };
+function loadAsFile(candidate, skipExact) {
+    let content = null;
+    if (!skipExact) {
+        content = tryReadFile(candidate);
+        if (content !== null) {
+            return { filename: candidate, content: content };
+        }
     }
 
-    // Try with each registered extension
     const exts = Object.keys(requireExtensions);
     for (let i = 0; i < exts.length; i++) {
         content = tryReadFile(candidate + exts[i]);
@@ -583,14 +596,64 @@ function resolveFilename(id, parentDir) {
         }
     }
 
-    // Try as directory: index.js, index.json
-    content = tryReadFile(pathModule.join(candidate, 'index.js'));
+    return null;
+}
+
+function loadAsDirectory(candidate, id, parentDir, seen) {
+    seen = seen || Object.create(null);
+    if (seen[candidate]) return null;
+    seen[candidate] = true;
+
+    const pkgJsonPath = pathModule.join(candidate, 'package.json');
+    const pkgJson = tryReadFile(pkgJsonPath);
+    if (pkgJson !== null) {
+        try {
+            const pkg = JSON.parse(pkgJson);
+            if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string' && pkg.main.length > 0) {
+                const mainPath = pathModule.resolve(candidate, pkg.main);
+                let resolved = loadAsFile(mainPath, false);
+                if (resolved !== null) return resolved;
+                resolved = loadAsDirectory(mainPath, id, parentDir, seen);
+                if (resolved !== null) return resolved;
+            }
+        } catch (e) {
+            const pkgErr = new Error(
+                'Invalid package config ' + pkgJsonPath +
+                ' while resolving "' + id + '" from ' + parentDir + '.' +
+                (e.message ? ' ' + e.message : '')
+            );
+            pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
+            throw pkgErr;
+        }
+    }
+
+    let content = tryReadFile(pathModule.join(candidate, 'index.js'));
     if (content !== null) {
         return { filename: pathModule.join(candidate, 'index.js'), content: content };
     }
     content = tryReadFile(pathModule.join(candidate, 'index.json'));
     if (content !== null) {
         return { filename: pathModule.join(candidate, 'index.json'), content: content };
+    }
+    return null;
+}
+
+function resolveFilename(id, parentDir) {
+    const hasTrailingSlash = /\/$/.test(id);
+    const forceDirectory = hasTrailingSlash || /(?:^|\/)\.\.?$/.test(id);
+    const candidate = pathModule.isAbsolute(id)
+        ? pathModule.normalize(id)
+        : pathModule.resolve(parentDir, id);
+
+    let resolved = null;
+    if (!forceDirectory) {
+        resolved = loadAsFile(candidate, false);
+        if (resolved !== null) return resolved;
+    }
+
+    if (forceDirectory || isPathDirectory(candidate)) {
+        resolved = loadAsDirectory(candidate, id, parentDir);
+        if (resolved !== null) return resolved;
     }
 
     const err = new Error("Cannot find module '" + id + "' from '" + parentDir + "'");
@@ -947,13 +1010,26 @@ function normalizeEsmSyntaxError(err) {
     }
 }
 
+function markAsSyntaxError(err) {
+    if (!err || err.name === 'SyntaxError') return;
+    err.name = 'SyntaxError';
+    if (typeof err.stack === 'string') {
+        err.stack = err.stack.replace(/^Error:/, 'SyntaxError:');
+    }
+}
+
+function looksLikeEsmSource(source) {
+    return /(^|[\r\n])\s*(?:import\s+(?:[\s\S]*?\s+from\s+)?['"]|import\s*[\{\*]|export\s+)/.test(source);
+}
+
 const wrapper = [
     '(function (exports, require, module, __filename, __dirname) { ',
     '\n});'
 ];
 
 function wrap(script) {
-    return wrapper[0] + script + wrapper[1];
+    const activeWrapper = (typeof moduleExports !== 'undefined' && moduleExports.wrapper) || wrapper;
+    return activeWrapper[0] + script + activeWrapper[1];
 }
 
 function compileCjs(filename, source) {
@@ -983,15 +1059,32 @@ function loadModule(resolvedFilename, source, parentModule) {
         return cached;
     }
 
-    const mod = {
-        id: resolvedFilename,
-        filename: resolvedFilename,
-        path: pathModule.dirname(resolvedFilename),
-        exports: {},
-        loaded: false,
-        parent: parentModule || null,
-        children: [],
-    };
+    let mod;
+    if (!parentModule && typeof mainModule !== 'undefined' && mainModule.filename === '/') {
+        mod = mainModule;
+        mod.id = '.';
+        mod.filename = resolvedFilename;
+        mod.path = pathModule.dirname(resolvedFilename);
+        mod.exports = {};
+        mod.loaded = false;
+        mod.parent = null;
+        mod.children = [];
+        mod.paths = _nodeModulePaths(pathModule.dirname(resolvedFilename));
+        if (globalThis.process) {
+            globalThis.process.mainModule = mod;
+        }
+    } else {
+        mod = {
+            id: resolvedFilename,
+            filename: resolvedFilename,
+            path: pathModule.dirname(resolvedFilename),
+            exports: {},
+            loaded: false,
+            parent: parentModule || null,
+            children: [],
+            paths: _nodeModulePaths(pathModule.dirname(resolvedFilename)),
+        };
+    }
 
     // Cache before executing (handles circular dependencies)
     moduleCache[resolvedFilename] = mod;
@@ -1018,7 +1111,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             mod.exports = JSON.parse(source);
         } catch (e) {
             delete moduleCache[resolvedFilename];
-            const err = new Error("Cannot parse JSON module '" + resolvedFilename + "': " + e.message);
+            const err = new SyntaxError(resolvedFilename + ': ' + e.message);
             err.code = 'ERR_INVALID_JSON';
             throw err;
         }
@@ -1028,7 +1121,9 @@ function loadModule(resolvedFilename, source, parentModule) {
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
             delete moduleCache[resolvedFilename];
             const esmErr = new Error(
-                "require() of ES Module " + resolvedFilename + " not supported."
+                "require() of ES Module " + resolvedFilename + " not supported. " +
+                "Instead change the require of " + resolvedFilename + " to a dynamic " +
+                "import() which is available in all CommonJS modules."
             );
             esmErr.code = 'ERR_REQUIRE_ESM';
             throw esmErr;
@@ -1051,6 +1146,8 @@ function loadModule(resolvedFilename, source, parentModule) {
                 // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
                 if (err && err.name === 'SyntaxError') {
                     normalizeEsmSyntaxError(err);
+                } else if (err && typeof err.message === 'string' && err.message === 'return not in a function') {
+                    markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
                 if (!resolvedFilename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
@@ -1066,8 +1163,11 @@ function loadModule(resolvedFilename, source, parentModule) {
                 try {
                     mod.exports = wrapEsmNamespace(_requireEsm(resolvedFilename));
                 } catch (esmErr) {
-                    // ESM loading also failed — throw the original CJS SyntaxError
                     delete moduleCache[resolvedFilename];
+                    if (looksLikeEsmSource(source)) {
+                        throw esmErr;
+                    }
+                    // ESM loading also failed — throw the original CJS SyntaxError
                     maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, resolvedFilename, source);
                     throw cjsSyntaxError;
                 }
@@ -1082,6 +1182,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 try {
                     compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
                 } catch (err) {
+                    delete moduleCache[resolvedFilename];
                     maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
                     throw err;
                 } finally {
@@ -1256,13 +1357,13 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         }
 
         // Builtin modules
-        const builtin = builtinModuleMap[id];
+        const builtin = schemelessBlockList.has(id) ? undefined : builtinModuleMap[id];
         if (builtin !== undefined) {
             return builtin;
         }
 
         // Relative or absolute file paths
-        if (id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
+        if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
             const resolved = resolveFilename(id, parentDir);
             const mod = loadModule(resolved.filename, resolved.content, parentModule || null);
             return mod.exports;
@@ -1291,15 +1392,25 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
             return id;
         }
         if (id.startsWith('node:')) {
-            const err = new Error('No such built-in module: ' + id);
-            err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
+            const err = new Error("Cannot find module '" + id + "'");
+            err.code = 'MODULE_NOT_FOUND';
             throw err;
         }
         // If paths option is provided, resolve relative to each path
-        if (options && options.paths) {
+        if (options && options.paths !== undefined) {
             const searchPaths = options.paths;
+            if (!Array.isArray(searchPaths)) {
+                const argErr = new TypeError("The argument 'paths' must be an array of strings. Received " + typeof searchPaths);
+                argErr.code = 'ERR_INVALID_ARG_VALUE';
+                throw argErr;
+            }
             const isRelative = id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/');
             for (let pi = 0; pi < searchPaths.length; pi++) {
+                if (typeof searchPaths[pi] !== 'string') {
+                    const argErr = new TypeError("The argument 'paths[" + pi + "]' must be a string. Received " + typeof searchPaths[pi]);
+                    argErr.code = 'ERR_INVALID_ARG_VALUE';
+                    throw argErr;
+                }
                 const searchDir = pathModule.resolve(searchPaths[pi]);
                 if (isRelative) {
                     // Relative/absolute: resolve directly against the search path
@@ -1319,7 +1430,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
             err.code = 'MODULE_NOT_FOUND';
             throw err;
         }
-        if (id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
+        if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
             const resolved = resolveFilename(id, parentDir);
             return resolved.filename;
         }
@@ -1337,7 +1448,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         if (typeof request !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('request', 'string', request);
         }
-        if (isBuiltinModule(request)) {
+        if (isBuiltinResolveTarget(request)) {
             return null;
         }
         return _resolveLookupPaths(request, parentModule);
@@ -1466,8 +1577,7 @@ function _resolveLookupPaths(request, parent) {
         return ['.'];
     }
 
-    const parentDir = pathModule.dirname(parent.filename);
-    return [parentDir].concat(parent.paths || []);
+    return [pathModule.dirname(parent.filename)];
 }
 
 function setSourceMapsSupport(enabled, options) {
