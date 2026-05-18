@@ -793,6 +793,27 @@ export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends Error {
     }
 }
 
+export class ERR_ENCODING_NOT_SUPPORTED extends RangeError {
+    constructor(encoding) {
+        super(`The "${encoding}" encoding is not supported`);
+        addCodeToMessage(this, "ERR_ENCODING_NOT_SUPPORTED");
+    }
+}
+
+export class ERR_ENCODING_INVALID_ENCODED_DATA extends TypeError {
+    constructor(encoding) {
+        super(`The encoded data was not valid for encoding ${encoding}`);
+        addCodeToMessage(this, "ERR_ENCODING_INVALID_ENCODED_DATA");
+    }
+}
+
+export class ERR_NO_ICU extends TypeError {
+    constructor(feature) {
+        super(`"${feature}" option is not supported on Node.js compiled without ICU`);
+        addCodeToMessage(this, "ERR_NO_ICU");
+    }
+}
+
 export class ERR_UNKNOWN_ENCODING extends TypeError {
     constructor(x) {
         super(format("Unknown encoding: %s", x));
@@ -1341,6 +1362,8 @@ export const codes = Object.freeze({
     ERR_CRYPTO_UNKNOWN_CIPHER,
     ERR_DIR_CLOSED,
     ERR_DIR_CONCURRENT_OPERATION,
+    ERR_ENCODING_INVALID_ENCODED_DATA,
+    ERR_ENCODING_NOT_SUPPORTED,
     ERR_FS_CP_DIR_TO_NON_DIR,
     ERR_FS_CP_EEXIST,
     ERR_FS_CP_EINVAL,
@@ -1375,6 +1398,7 @@ export const codes = Object.freeze({
     ERR_MISSING_ARGS,
     ERR_MISSING_OPTION,
     ERR_MULTIPLE_CALLBACK,
+    ERR_NO_ICU,
     ERR_OPERATION_FAILED,
     ERR_OUT_OF_RANGE,
     ERR_SOCKET_BAD_PORT,

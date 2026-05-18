@@ -79,10 +79,6 @@ function ensureTransferListItemsAreTransferable(transferList) {
 }
 
 function cloneMessagePayload(value, transferList) {
-    if (transferList.length === 0) {
-        return value;
-    }
-
     const TRANSFERABLE_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
     const signalMap = new Map();
     const remainingTransfers = [];
@@ -103,12 +99,17 @@ function cloneMessagePayload(value, transferList) {
         }
     }
 
+    let valueWasTransferableSignal = false;
     if (signalMap.size > 0 && signalMap.has(value)) {
         value = signalMap.get(value);
+        valueWasTransferableSignal = true;
     }
 
     if (remainingTransfers.length === 0) {
-        return value;
+        if (valueWasTransferableSignal) {
+            return value;
+        }
+        return structuredClone(value);
     }
 
     return structuredClone(value, { transfer: remainingTransfers });

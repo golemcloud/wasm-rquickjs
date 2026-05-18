@@ -12,8 +12,10 @@ const MAP = 5;
 const SET = 6;
 const ERROR = 7;
 const BIGINT = 8;
+const CUSTOM = 9;
 
 const EMPTY = '';
+const customCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
 
 const {toString} = {};
 const {keys} = Object;
@@ -67,6 +69,9 @@ const serializer = (strict, json, $, _) => {
     if ($.has(value))
       return $.get(value);
 
+    if (value && (typeof value === 'object' || typeof value === 'function') && typeof value[customCloneSymbol] === 'function')
+      return as([CUSTOM, value[customCloneSymbol]()], value);
+
     let [TYPE, type] = typeOf(value);
     switch (TYPE) {
       case PRIMITIVE: {
@@ -94,7 +99,7 @@ const serializer = (strict, json, $, _) => {
             const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
             return as([type, {bytes: [...bytes], byteOffset: 0, byteLength: value.byteLength}], value);
           }
-          else if (type === 'ArrayBuffer') {
+          else if (type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
             spread = new Uint8Array(value);
           }
           return as([type, [...spread]], value);
@@ -220,10 +225,17 @@ const deserializer = ($, _) => {
       }
       case BIGINT:
         return as(BigInt(value), index);
+      case CUSTOM:
+        return as(value, index);
       case 'BigInt':
         return as(Object(BigInt(value)), index);
       case 'ArrayBuffer':
         return as(new Uint8Array(value).buffer, index);
+      case 'SharedArrayBuffer': {
+        const buffer = new SharedArrayBuffer(value.length);
+        new Uint8Array(buffer).set(value);
+        return as(buffer, index);
+      }
       case 'DataView': {
         const {bytes, byteOffset, byteLength} = value;
         const buf = new Uint8Array(bytes).buffer;

@@ -129,8 +129,8 @@ fn run_scheduled_task(
     let restored_code_or_fn = code_or_fn.restore(&ctx)?;
     let restored_args = args.restore(&ctx)?;
 
-    if let Some(func) = restored_code_or_fn.as_function() {
-        let mut args = Args::new(ctx, restored_args.len());
+    let result = if let Some(func) = restored_code_or_fn.as_function() {
+        let mut args = Args::new(ctx.clone(), restored_args.len());
         args.push_args(&restored_args)?;
         func.call_arg(args)
     } else if let Some(code) = restored_code_or_fn.as_string() {
@@ -138,5 +138,11 @@ fn run_scheduled_task(
     } else {
         eprintln!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
         Ok(())
-    }
+    };
+
+    result?;
+
+    while ctx.execute_pending_job() {}
+
+    Ok(())
 }

@@ -26,6 +26,24 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
+    pub fn canonical_encoding(encoding: Coerced<String>) -> Option<String> {
+        let encoding = encoding.0;
+        #[cfg(feature = "encoding")]
+        {
+            encoding_rs::Encoding::for_label(encoding.as_bytes())
+                .map(|encoding| encoding.name().to_ascii_lowercase())
+        }
+        #[cfg(not(feature = "encoding"))]
+        {
+            let label = encoding.trim().to_ascii_lowercase();
+            match label.as_str() {
+                "utf-8" | "utf8" | "unicode-1-1-utf-8" => Some("utf-8".to_string()),
+                _ => None,
+            }
+        }
+    }
+
+    #[rquickjs::function]
     pub fn decode(
         bytes: TypedArray<'_, u8>,
         encoding: Coerced<String>,
@@ -34,9 +52,9 @@ pub mod native_module {
         ignore_bom: bool,
     ) -> List<(Option<String>, Option<String>)> {
         let encoding = encoding.0;
-        let bytes = bytes
-            .as_bytes()
-            .expect("the UInt8Array passed to decode is detached");
+        let Some(bytes) = bytes.as_bytes() else {
+            return List((Some(String::new()), None));
+        };
         match super::decode_impl(bytes, encoding, stream, fatal, ignore_bom) {
             Ok(result) => List((Some(result), None)),
             Err(error) => List((None, Some(error))),

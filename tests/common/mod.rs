@@ -27,6 +27,9 @@ use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 
+/// Default timeout for node_compat tests (in seconds).
+pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
+
 /// Strip JSONC comments (// and /* */) while respecting string literals.
 pub fn strip_jsonc_comments(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
@@ -72,6 +75,198 @@ pub fn strip_jsonc_comments(input: &str) -> String {
     }
 
     result
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NodeCompatCategory {
+    /// The test exercises supported public API and should pass. Failures count against primary compatibility.
+    Runnable,
+    /// The tested public API is not implemented yet, but is in scope for this runtime.
+    KnownGap,
+    /// The test requires capabilities that WASI Preview 2 cannot provide.
+    WasmImpossible,
+    /// The test depends on V8-specific behavior that QuickJS cannot reasonably mirror.
+    EngineDifference,
+    /// The test checks Node.js internal implementation details rather than public API.
+    NodeInternals,
+    /// The test has not been triaged yet and should not affect compatibility percentages.
+    Unevaluated,
+}
+
+impl NodeCompatCategory {
+    pub fn from_config_value(value: &str) -> anyhow::Result<Self> {
+        match value {
+            "runnable" | "expected-pass" => Ok(Self::Runnable),
+            "gap" | "known-gap" | "not-implemented" => Ok(Self::KnownGap),
+            "wasi-impossible" | "wasm-impossible" | "impossible" | "unsupported-by-wasi" => {
+                Ok(Self::WasmImpossible)
+            }
+            "engine-difference" | "quickjs-difference" | "v8-specific" => {
+                Ok(Self::EngineDifference)
+            }
+            "node-internals" | "internals" | "implementation-detail" => Ok(Self::NodeInternals),
+            "unevaluated" | "untriaged" => Ok(Self::Unevaluated),
+            other => anyhow::bail!("unknown node_compat category '{other}'"),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Runnable => "runnable",
+            Self::KnownGap => "known gap",
+            Self::WasmImpossible => "WASI-impossible",
+            Self::EngineDifference => "engine difference",
+            Self::NodeInternals => "Node.js internals",
+            Self::Unevaluated => "unevaluated",
+        }
+    }
+
+    pub fn should_ignore_in_runner(self) -> bool {
+        !matches!(self, Self::Runnable)
+    }
+
+    pub fn is_primary_surface(self) -> bool {
+        matches!(self, Self::Runnable | Self::KnownGap)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeCompatSubtestEntry {
+    pub name: String,
+    pub index: usize,
+    pub category: NodeCompatCategory,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeCompatTestEntry {
+    pub path: String,
+    pub category: NodeCompatCategory,
+    pub reason: Option<String>,
+    pub split: bool,
+    pub timeout_secs: u64,
+    pub subtests: Vec<NodeCompatSubtestEntry>,
+}
+
+/// Extract the numeric index from a subtest name like "block_00_foo" or "test_03_bar".
+/// Panics if the name doesn't match the expected format (config is authoritative).
+pub fn extract_node_compat_subtest_index(name: &str) -> usize {
+    let after_prefix = if let Some(rest) = name.strip_prefix("block_") {
+        rest
+    } else if let Some(rest) = name.strip_prefix("test_") {
+        rest
+    } else {
+        panic!("Subtest name '{name}' must start with 'block_' or 'test_'");
+    };
+    let digits: String = after_prefix
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits
+        .parse()
+        .unwrap_or_else(|_| panic!("Subtest name '{name}' has no valid numeric index after prefix"))
+}
+
+fn is_unevaluated_node_compat_reason(reason: &str) -> bool {
+    let r = reason.trim();
+    r == "newly discovered, not yet evaluated" || r.starts_with("inherited: newly discovered")
+}
+
+fn node_compat_category_from_entry(
+    path: &str,
+    entry: &serde_json::Value,
+    inherited: Option<NodeCompatCategory>,
+) -> anyhow::Result<NodeCompatCategory> {
+    if let Some(category) = entry.get("category").and_then(|v| v.as_str()) {
+        return NodeCompatCategory::from_config_value(category);
+    }
+
+    if entry
+        .get("impossible")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return Ok(NodeCompatCategory::WasmImpossible);
+    }
+
+    if entry.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let reason = entry.get("reason").and_then(|v| v.as_str()).unwrap_or("");
+        return Ok(if is_unevaluated_node_compat_reason(reason) {
+            NodeCompatCategory::Unevaluated
+        } else if uses_node_internals(path) {
+            NodeCompatCategory::NodeInternals
+        } else {
+            NodeCompatCategory::KnownGap
+        });
+    }
+
+    if let Some(category) = inherited
+        && category.should_ignore_in_runner()
+    {
+        return Ok(category);
+    }
+
+    if uses_node_internals(path) {
+        Ok(NodeCompatCategory::NodeInternals)
+    } else {
+        Ok(NodeCompatCategory::Runnable)
+    }
+}
+
+pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestEntry>> {
+    let content = fs::read_to_string(path)?;
+    let json_str = strip_jsonc_comments(&content);
+    let value: serde_json::Value = serde_json::from_str(&json_str)?;
+
+    let tests_obj = value
+        .get("tests")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| anyhow::anyhow!("config.jsonc missing 'tests' object"))?;
+
+    let mut tests = Vec::new();
+    for (path, opts) in tests_obj {
+        let category = node_compat_category_from_entry(path, opts, None)?;
+        let reason = opts
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let split = opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false);
+        let timeout_secs = opts
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS);
+
+        let mut subtests = Vec::new();
+        if let Some(subtests_obj) = opts.get("subtests").and_then(|v| v.as_object()) {
+            for (subtest_name, subtest_opts) in subtests_obj {
+                let sub_category =
+                    node_compat_category_from_entry(path, subtest_opts, Some(category))?;
+                let sub_reason = subtest_opts
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| reason.clone());
+                let index = extract_node_compat_subtest_index(subtest_name);
+                subtests.push(NodeCompatSubtestEntry {
+                    name: subtest_name.clone(),
+                    index,
+                    category: sub_category,
+                    reason: sub_reason,
+                });
+            }
+        }
+
+        tests.push(NodeCompatTestEntry {
+            path: path.clone(),
+            category,
+            reason,
+            split,
+            timeout_secs,
+            subtests,
+        });
+    }
+
+    Ok(tests)
 }
 
 /// Recursively copy a directory and all its contents to a destination.

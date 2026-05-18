@@ -366,8 +366,9 @@ function _addListener(target, type, listener, prepend) {
             w.emitter = target;
             w.type = type;
             w.count = existing.length;
-            if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
-                process.emitWarning(w);
+            const processObject = globalThis.process;
+            if (processObject && typeof processObject.emitWarning === 'function') {
+                processObject.emitWarning(w);
             } else if (typeof console !== 'undefined' && console.error) {
                 console.error(w);
             }

@@ -395,12 +395,17 @@ export async function runAmp(
 
 const AMP_TIMEOUT_MS = 45 * 60 * 1000; // 45 minutes
 
+function ensureLogDir(): void {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
 async function runAmpGeneric(
   prompt: string,
   labels: string[],
   iteration: number,
   mode: "smart" | "deep" = "deep",
 ): Promise<AmpResult> {
+  ensureLogDir();
   const ampLog = path.join(LOG_DIR, `amp-${iteration}-${Date.now()}.txt`);
   console.log(
     `  ${c.cyan}🤖 Launching amp agent${c.reset} ${c.dim}(iteration ${iteration}, mode: ${mode}, timeout: ${AMP_TIMEOUT_MS / 60000}m)${c.reset}`,
@@ -601,6 +606,7 @@ Respond ONLY with the JSON array, no other text.`;
 }
 
 export async function runAmpPrioritize(prompt: string, category: string): Promise<AmpResult> {
+  ensureLogDir();
   const ampLog = path.join(LOG_DIR, `amp-prioritize-${Date.now()}.txt`);
   console.log(`  ${c.cyan}🤖 Launching amp agent for test prioritization${c.reset}`);
   console.log(`  ${c.dim}Log: ${ampLog}${c.reset}`);

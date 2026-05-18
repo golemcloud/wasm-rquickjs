@@ -79,7 +79,9 @@ if (!EventEmitter.prototype[_patched]) {
                 theDomain.emit('error', err);
             } finally {
                 _stack.length = 0;
-                _stack.push(...savedStack);
+                for (let i = 0; i < savedStack.length; i++) {
+                    _stack.push(savedStack[i]);
+                }
                 active = savedActive;
                 if (globalThis.process) {
                     globalThis.process.domain = active || undefined;
@@ -87,7 +89,7 @@ if (!EventEmitter.prototype[_patched]) {
             }
             return false;
         }
-        return _origEmit.call(this, event, ...args);
+        return _origEmit.apply(this, [event].concat(args));
     };
     EventEmitter.prototype[_patched] = true;
 }
