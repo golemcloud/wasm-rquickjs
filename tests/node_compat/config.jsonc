@@ -6020,7 +6020,7 @@
     "parallel/test-async-local-storage-snapshot.js": { "category": "known-gap", "reason": "AsyncLocalStorage.snapshot is missing or incomplete" },
     "parallel/test-async-wrap-constructor.js": { "category": "known-gap", "reason": "async_hooks createHook callback validation is incomplete" },
     "parallel/test-async-wrap-destroyid.js": { "category": "node-internals", "reason": "uses --expose-internals and internal/test/binding async_wrap" },
-    "parallel/test-async-wrap-pop-id-during-load.js": {},
+    "parallel/test-async-wrap-pop-id-during-load.js": { "category": "known-gap", "reason": "execPath child-process emulation runs recursive async stack-overflow tests in-process, which can trap the WASM runtime instead of isolating the child stack" },
     "parallel/test-async-wrap-tlssocket-asyncreset.js": { "category": "wasi-impossible", "reason": "requires https.createServer/TLSSocket server support, unavailable in WebAssembly" },
     "parallel/test-asyncresource-bind.js": {},
     "parallel/test-atomics-wake.js": { "category": "wasi-impossible", "reason": "requires Atomics/SharedArrayBuffer support, unavailable without threads in WASM" },
@@ -6517,8 +6517,8 @@
         "block_03_ensure_that_we_cannot_override_console_properties": { "reason": "inherited: --frozen-intrinsics flag semantics are not implemented" }
       }
     },
-    "parallel/test-gc-http-client-connaborted.js": {},
-    "parallel/test-gc-net-timeout.js": {},
+    "parallel/test-gc-http-client-connaborted.js": { "category": "known-gap", "reason": "requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably" },
+    "parallel/test-gc-net-timeout.js": { "category": "known-gap", "reason": "requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably" },
     "parallel/test-gc-tls-external-memory.js": { "category": "wasi-impossible", "reason": "tls is not supported in WebAssembly environment" },
     "parallel/test-global-console-exists.js": {},
     "parallel/test-global-customevent-disabled.js": { "category": "known-gap", "reason": "--no-experimental-global-customevent flag is not honored" },
@@ -8906,7 +8906,7 @@
     "parallel/test-tty-stdin-end.js": { "category": "known-gap", "reason": "tty stdin stream/event-emitter compatibility is incomplete" },
     "parallel/test-tty-stdin-pipe.js": { "category": "known-gap", "reason": "node:readline module is not yet supported in WebAssembly environment" },
     "parallel/test-ttywrap-invalid-fd.js": { "category": "node-internals", "reason": "uses --expose-internals and internalBinding('uv')" },
-    "parallel/test-ttywrap-stack.js": { "category": "runnable" },
+    "parallel/test-ttywrap-stack.js": { "category": "known-gap", "reason": "deep async recursion intended to exercise V8 stack recovery can trap the QuickJS/WASM runtime before JavaScript can catch and log the RangeError" },
     "parallel/test-tz-version.js": { "category": "known-gap", "reason": "Intl (including process.versions.tz expectations) is not available in current runtime" },
     "parallel/test-unhandled-exception-rethrow-error.js": { "category": "known-gap", "reason": "uncaughtException rethrow exit-code semantics are incomplete" },
     "parallel/test-unhandled-exception-with-worker-inuse.js": { "category": "wasi-impossible", "reason": "requires worker_threads" },

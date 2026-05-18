@@ -94,6 +94,11 @@ function parseNativeError(e) {
 }
 
 function nextTick(fn, ...args) {
+    const processObject = globalThis.process;
+    if (processObject && typeof processObject.nextTick === 'function') {
+        processObject.nextTick(fn, ...args);
+        return;
+    }
     Promise.resolve().then(() => fn(...args));
 }
 
@@ -1164,6 +1169,17 @@ Server.prototype.listen = function listen(...args) {
 
     if (this.listening) {
         throw makeError('ERR_SERVER_ALREADY_LISTEN', 'Server is already listening');
+    }
+
+    if (options.fd !== undefined) {
+        nextTick(() => {
+            const err = makeError('EINVAL', 'listen EINVAL: invalid argument');
+            err.errno = errnoMap['EINVAL'] || -22;
+            err.code = 'EINVAL';
+            err.syscall = 'listen';
+            this.emit('error', err);
+        });
+        return this;
     }
 
     if (cb) this.once('listening', cb);

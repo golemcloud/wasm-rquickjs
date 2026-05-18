@@ -1,6 +1,8 @@
 import {
     get_args,
     get_env,
+    get_cwd,
+    chdir as native_chdir,
     write_stdout,
     write_stderr,
     hrtime_ns,
@@ -280,17 +282,16 @@ function createWritableStdio(fd, writer) {
 process.stdout = createWritableStdio(1, write_stdout);
 process.stderr = createWritableStdio(2, write_stderr);
 
+let _cwd = get_cwd();
+
 process.cwd = function cwd() {
-    return "/";
+    return _cwd;
 };
 
-// nextTick queue: callbacks are batched and drained via a triple-deferred
-// Promise chain.  This gives nextTick the right priority in QuickJS's
-// single job queue:
-//   QuickJS jobs (promise reactions, import resolution) > nextTick > spawned tasks (timers)
-// Triple-deferring ensures the drain runs after import() resolution
-// (DynamicImportJob + 1 PromiseReaction = 2 jobs) but before spawned
-// tasks like setTimeout(fn, 0).
+// nextTick queue: callbacks are batched and drained through QuickJS's Promise
+// job queue. Timer/immediate callbacks also run a native microtask checkpoint
+// after each callback, so nextTicks scheduled by promise reactions inside one
+// timer turn run before the next timer turn.
 const __nextTickQueue = [];
 let __nextTickDrainScheduled = false;
 
@@ -310,7 +311,7 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
     }
 
     if (process.listenerCount('uncaughtException') > 0) {
-        process.emit('uncaughtException', err);
+        process.emit('uncaughtException', err, 'uncaughtException');
         return;
     }
 
@@ -356,18 +357,7 @@ process.nextTick = function processNextTick(callback, ...args) {
     __nextTickQueue.push({ callback, args, domain });
     if (!__nextTickDrainScheduled) {
         __nextTickDrainScheduled = true;
-        // Use enough deferral levels to fire after import() resolution +
-        // await resumption in QuickJS (which may involve multiple
-        // intermediate PromiseReaction jobs).
-        Promise.resolve().then(() => {
-            Promise.resolve().then(() => {
-                Promise.resolve().then(() => {
-                    Promise.resolve().then(() => {
-                        Promise.resolve().then(__drainNextTickQueue);
-                    });
-                });
-            });
-        });
+        Promise.resolve().then(__drainNextTickQueue);
     }
 };
 
@@ -418,8 +408,17 @@ process.chdir = function chdir(directory) {
         normalized.push(parts[i]);
     }
     resolved = '/' + normalized.join('/');
-    // Update cwd
-    process.cwd = function cwd() { return resolved; };
+    const code = native_chdir(resolved);
+    if (code !== undefined && code !== null) {
+        const err = new Error(`${code}: no such file or directory, chdir '${process.cwd()}' -> '${directory}'`);
+        err.errno = code === 'ENOENT' ? -2 : -22;
+        err.code = code;
+        err.syscall = 'chdir';
+        err.path = process.cwd();
+        err.dest = directory;
+        throw err;
+    }
+    _cwd = get_cwd();
 };
 
 function _makeCredentialSetter(name, argName, credentialType) {
@@ -592,7 +591,20 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         obj = warning;
         if (!obj.name) obj.name = 'Warning';
     }
-    process.nextTick(function() { process.emit('warning', obj); });
+    const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
+    process.nextTick(function() {
+        if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
+            const header = String(obj.name || 'Warning') + ': ' + String(obj.message || obj);
+            let text = header;
+            if (typeof obj.stack === 'string') {
+                text = obj.stack.indexOf(String(obj.message || obj)) >= 0
+                    ? obj.stack
+                    : header + '\n' + obj.stack;
+            }
+            process.stderr.write(text.endsWith('\n') ? text : text + '\n');
+        }
+        process.emit('warning', obj);
+    });
 };
 
 process.exit = function exit(code) {
@@ -655,7 +667,9 @@ process._runExitHandlers = function _runExitHandlers(code) {
         if (code !== undefined) {
             process.exitCode = code;
         }
+        __drainNextTickQueue();
         process.emit('beforeExit', process.exitCode || 0);
+        __drainNextTickQueue();
         process.emit('exit', process.exitCode || 0);
     }
 };

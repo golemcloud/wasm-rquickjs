@@ -2,13 +2,15 @@
 // Context propagation through Promise.prototype.then/catch/finally and setTimeout/setInterval.
 //
 // Intentional deviations from upstream Node.js:
-// - executionAsyncId/triggerAsyncId/executionAsyncResource are stubs (no native async_wrap)
-// - AsyncResource.runInAsyncScope is a plain fn.apply (no hook emit since createHook is a no-op)
-// - AsyncResource.bind / AsyncLocalStorage.bind are essentially identity (no context frame capture)
+// - triggerAsyncId/executionAsyncResource are stubs (no native async_wrap)
+// - AsyncResource tracks a lightweight execution async id for bind/runInAsyncScope,
+//   but does not emit async_hooks lifecycle events because createHook is a no-op.
+// - AsyncLocalStorage.bind is essentially identity (no context frame capture)
 // - QuickJS `await` uses internal C-level perform_promise_then and bypasses JS-visible
 //   Promise.prototype.then, so await propagation is NOT possible — this is an accepted limitation.
 
-let _nextAsyncId = 1;
+let _nextAsyncId = 2;
+let _executionAsyncId = 1;
 
 const _alsRegistry = new Set();
 
@@ -92,21 +94,51 @@ class AsyncResource {
     }
 
     runInAsyncScope(fn, thisArg, ...args) {
-        return fn.apply(thisArg, args);
+        if (typeof fn !== 'function') {
+            const err = new TypeError('The "fn" argument must be of type function. Received ' + typeof fn);
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        const previous = _executionAsyncId;
+        _executionAsyncId = this._asyncId;
+        try {
+            return fn.apply(thisArg, args);
+        } finally {
+            _executionAsyncId = previous;
+        }
     }
 
     bind(fn, thisArg) {
-        if (thisArg !== undefined) {
-            return fn.bind(thisArg);
+        if (typeof fn !== 'function') {
+            const err = new TypeError('The "fn" argument must be of type function. Received ' + typeof fn);
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
         }
-        return fn;
+        const resource = this;
+        const bound = function(...args) {
+            const receiver = thisArg !== undefined ? thisArg : this;
+            return resource.runInAsyncScope(fn, receiver, ...args);
+        };
+        Object.defineProperty(bound, 'length', {
+            value: fn.length,
+            configurable: true,
+        });
+        Object.defineProperty(bound, 'asyncResource', {
+            value: resource,
+            enumerable: true,
+            configurable: true,
+        });
+        return bound;
     }
 
     static bind(fn, type, thisArg) {
-        if (thisArg !== undefined) {
-            return fn.bind(thisArg);
+        if (typeof fn !== 'function') {
+            const err = new TypeError('The "fn" argument must be of type function. Received ' + typeof fn);
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
         }
-        return fn;
+        const resource = new AsyncResource(typeof type === 'string' ? type : 'bound-anonymous-fn');
+        return resource.bind(fn, thisArg);
     }
 }
 
@@ -118,7 +150,7 @@ function createHook(callbacks) {
 }
 
 function executionAsyncId() {
-    return 1;
+    return _executionAsyncId;
 }
 
 function triggerAsyncId() {

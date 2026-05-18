@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3111/4317 (72.1%)
+**Primary compatibility (CI-enforced):** 3107/4317 (72.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3111 | 72.1% | 55.4% | 46.2% |
-| 🧩 known gap | 1206 | 27.9% | 21.5% | 17.9% |
+| ✅ passing (runnable) | 3107 | 72.0% | 55.4% | 46.1% |
+| 🧩 known gap | 1210 | 28.0% | 21.6% | 18.0% |
 | 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
 | **Total** | **6734** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3111/5613 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3107/5613 (55.4%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 150 | 36 | 19 | 1 | 0 | 17 | 80.6% | 72.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 469 | 104 | 89 | 83 | 11 | 0 | 182 | 53.9% | 36.2% |
+| other | 469 | 101 | 92 | 83 | 11 | 0 | 182 | 52.3% | 35.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 5 | 38 | 8 | 2 | 0 | 2 | 11.6% | 9.4% |
@@ -77,7 +77,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | timers | 97 | 47 | 4 | 0 | 0 | 0 | 46 | 92.2% | 92.2% |
 | tls | 207 | 4 | 7 | 185 | 0 | 0 | 11 | 36.4% | 2.0% |
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
-| tty | 5 | 1 | 2 | 0 | 0 | 0 | 2 | 33.3% | 33.3% |
+| tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1206)
+### known gap (1210)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1049,6 +1049,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | createContext incorrectly triggers Proxy getOwnPropertyDescriptor traps | 1 | `parallel/test-vm-proxy-failure-CP.js` |
 | custom ESM loader hooks (--experimental-loader) and assertionless JSON import behavior are not implemented | 1 | `es-module/test-esm-assertionless-json-import.js` |
 | decoding empty-passphrase encrypted PEM traps in the WASM crypto backend | 1 | `parallel/test-crypto-keygen-empty-passphrase-no-prompt.js` |
+| deep async recursion intended to exercise V8 stack recovery can trap the QuickJS/WASM runtime before JavaScript can catch and log the RangeError | 1 | `parallel/test-ttywrap-stack.js` |
 | default clientError path does not send/close with Node-compatible 400 Bad Request behavior | 1 | `parallel/test-http-server-destroy-socket-on-client-error.js` |
 | defining global accessor properties in vm contexts does not round-trip to the sandbox correctly | 1 | `parallel/test-vm-global-define-property.js` |
 | depends on WebCrypto ECDH P-521 deriveKey support | 1 | `parallel/test-webcrypto-derivekey.js#block_03_test_default_key_lengths` |
@@ -1094,6 +1095,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | execFileSync default maxBuffer overflow behavior is not Node-compatible | 1 | `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
 | execFileSync maxBuffer overflow ENOBUFS error semantics are not implemented | 1 | `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
 | execPath child emulation does not support --trace-atomics-wait CLI behavior | 1 | `parallel/test-trace-atomic-deprecation.js` |
+| execPath child-process emulation runs recursive async stack-overflow tests in-process, which can trap the WASM runtime instead of isolating the child stack | 1 | `parallel/test-async-wrap-pop-id-during-load.js` |
 | execSync is ENOSYS-stubbed in WASM child_process emulation | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works` |
 | execSync is ENOSYS-stubbed; default maxBuffer behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
 | execSync is ENOSYS-stubbed; maxBuffer overflow ENOBUFS behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
@@ -1232,6 +1234,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
 | requires Intl/timezone data support that is not available in the current runtime | 1 | `parallel/test-datetime-change-notify.js` |
+| requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably | 1 | `parallel/test-gc-http-client-connaborted.js` |
+| requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably | 1 | `parallel/test-gc-net-timeout.js` |
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
 | requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests | 1 | `parallel/test-http-agent-keepalive-delay.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |

@@ -309,6 +309,10 @@ function isWarningSuppressed() {
         return true;
     }
 
+    if (process.env && process.env.NODE_NO_WARNINGS === '1') {
+        return true;
+    }
+
     const execArgv = process.execArgv;
     if (!Array.isArray(execArgv)) {
         return false;
@@ -321,6 +325,19 @@ function isWarningSuppressed() {
         }
     }
 
+    return false;
+}
+
+function hasExecArgvFlag(flag) {
+    const execArgv = process.execArgv;
+    if (!Array.isArray(execArgv)) {
+        return false;
+    }
+    for (let i = 0; i < execArgv.length; i++) {
+        if (String(execArgv[i]) === flag) {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -370,7 +387,21 @@ function formatWarningForStderr(warning, typeOrOptions, code) {
         prefix += '[' + info.code + '] ';
     }
 
-    return prefix + info.name + ': ' + info.message + '\n';
+    let output = prefix + info.name + ': ' + info.message + '\n';
+    if (hasExecArgvFlag('--trace-warnings')) {
+        const stack = warning && typeof warning === 'object' && typeof warning.stack === 'string'
+            ? warning.stack
+            : (new Error()).stack;
+        if (typeof stack === 'string' && stack.length > 0) {
+            const lines = stack.split('\n');
+            if (lines.length > 1) {
+                output += lines.slice(1).join('\n').replace(/at <anonymous> \(/g, 'at Object.<anonymous> (') + '\n';
+            }
+        }
+    } else {
+        output += '(Use `node --trace-warnings ...` to show where the warning was created)\n';
+    }
+    return output;
 }
 
 function parseInlineInvocation(inlineArgs) {
@@ -613,6 +644,15 @@ function runInline(command, args, options) {
     const oldArgv0 = process.argv0;
     const oldRequireModuleFeature = process.features && process.features.require_module;
     const oldCwd = process.cwd;
+    const oldChdir = process.chdir;
+    const oldRealCwd = typeof oldCwd === 'function' ? oldCwd.call(process) : '/';
+    const oldExitCode = process.exitCode;
+    const hadNoDeprecation = Object.prototype.hasOwnProperty.call(process, 'noDeprecation');
+    const oldNoDeprecation = process.noDeprecation;
+    const hadTraceDeprecation = Object.prototype.hasOwnProperty.call(process, 'traceDeprecation');
+    const oldTraceDeprecation = process.traceDeprecation;
+    const hadThrowDeprecation = Object.prototype.hasOwnProperty.call(process, 'throwDeprecation');
+    const oldThrowDeprecation = process.throwDeprecation;
     const hadMainModule = Object.prototype.hasOwnProperty.call(process, 'mainModule');
     const oldMainModule = process.mainModule;
     const oldProcessEvents = process._events;
@@ -647,9 +687,9 @@ function runInline(command, args, options) {
         if (process.features) {
             process.features.require_module = execArgv.indexOf('--no-experimental-require-module') === -1;
         }
-        process.cwd = function cwd() {
-            return childCwd;
-        };
+        if (typeof oldChdir === 'function' && childCwd !== oldRealCwd) {
+            oldChdir.call(process, childCwd);
+        }
         process._events = Object.create(null);
         process._eventsCount = 0;
         process._exiting = false;
@@ -709,7 +749,13 @@ function runInline(command, args, options) {
                     capturedStderr += formatWarningForStderr(warning, typeOrOptions, code);
                 }
 
-                return oldEmitWarning.call(this, warning, typeOrOptions, code, ctor);
+                const previousSuppressWarningStderr = globalThis.__wasm_rquickjs_suppress_warning_stderr;
+                globalThis.__wasm_rquickjs_suppress_warning_stderr = true;
+                try {
+                    return oldEmitWarning.call(this, warning, typeOrOptions, code, ctor);
+                } finally {
+                    globalThis.__wasm_rquickjs_suppress_warning_stderr = previousSuppressWarningStderr;
+                }
             };
         }
 
@@ -901,7 +947,32 @@ function runInline(command, args, options) {
         if (process.features) {
             process.features.require_module = oldRequireModuleFeature;
         }
+        if (typeof oldChdir === 'function') {
+            try {
+                oldChdir.call(process, oldRealCwd);
+            } catch (_) {
+                // Keep restoring the remaining process state even if the host
+                // cwd disappeared during in-process child emulation.
+            }
+        }
         process.cwd = oldCwd;
+        process.chdir = oldChdir;
+        process.exitCode = oldExitCode;
+        if (hadNoDeprecation) {
+            process.noDeprecation = oldNoDeprecation;
+        } else {
+            delete process.noDeprecation;
+        }
+        if (hadTraceDeprecation) {
+            process.traceDeprecation = oldTraceDeprecation;
+        } else {
+            delete process.traceDeprecation;
+        }
+        if (hadThrowDeprecation) {
+            process.throwDeprecation = oldThrowDeprecation;
+        } else {
+            delete process.throwDeprecation;
+        }
         process._events = oldProcessEvents;
         process._eventsCount = oldProcessEventsCount;
         process._exiting = oldProcessExiting;
