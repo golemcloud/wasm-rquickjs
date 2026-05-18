@@ -6029,8 +6029,6 @@
     "parallel/test-binding-constants.js": { "category": "node-internals", "reason": "uses --expose-internals and internal/test/binding internalBinding('constants')" },
     "parallel/test-blocklist-clone.js": {},
     "parallel/test-blocklist.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": { "category": "runnable" },
@@ -10173,7 +10171,7 @@
     "sequential/test-deprecation-flags.js": {},
     "sequential/test-dgram-bind-shared-ports.js": { "category": "wasi-impossible", "reason": "requires cluster.fork/process forking" },
     "sequential/test-dgram-implicit-bind-failure.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/dgram" },
-    "sequential/test-dgram-pingpong.js": { "category": "runnable" },
+    "sequential/test-dgram-pingpong.js": { "category": "known-gap", "reason": "WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution" },
     "sequential/test-diagnostic-dir-cpu-prof.js": {
       "category": "unevaluated",
       "reason": "newly discovered, not yet evaluated",

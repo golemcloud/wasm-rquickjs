@@ -13,6 +13,9 @@ import {
     ERR_SOCKET_BAD_PORT,
 } from '__wasm_rquickjs_builtin/internal/errors';
 
+const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
+const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
+
 // --- IP address utilities ---
 
 const v4Seg = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])';
@@ -71,6 +74,12 @@ function makeError(code, message) {
     return err;
 }
 
+function makeTypeError(code, message) {
+    const err = new TypeError(message);
+    err.code = code;
+    return err;
+}
+
 function parseNativeError(e) {
     try {
         const parsed = JSON.parse(e.message);
@@ -123,6 +132,105 @@ function ipv4ToNum(ip) {
     return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
 }
 
+function parseIPv4(ip) {
+    if (!isIPv4(ip)) return null;
+    return BigInt(ipv4ToNum(ip));
+}
+
+function parseIPv6(ip) {
+    if (!isIPv6(ip)) return null;
+    const zoneIndex = ip.indexOf('%');
+    if (zoneIndex !== -1) ip = ip.slice(0, zoneIndex);
+
+    let ipv4Tail = null;
+    const lastColon = ip.lastIndexOf(':');
+    const tail = lastColon === -1 ? ip : ip.slice(lastColon + 1);
+    if (tail.includes('.')) {
+        ipv4Tail = parseIPv4(tail);
+        if (ipv4Tail === null) return null;
+        ip = `${ip.slice(0, lastColon)}:${Number((ipv4Tail >> 16n) & 0xffffn).toString(16)}:${Number(ipv4Tail & 0xffffn).toString(16)}`;
+    }
+
+    const parts = ip.split('::');
+    if (parts.length > 2) return null;
+
+    const left = parts[0] ? parts[0].split(':').filter(Boolean) : [];
+    const right = parts.length === 2 && parts[1] ? parts[1].split(':').filter(Boolean) : [];
+    const missing = 8 - left.length - right.length;
+    if (missing < 0 || (parts.length === 1 && missing !== 0)) return null;
+
+    const groups = [...left, ...new Array(parts.length === 2 ? missing : 0).fill('0'), ...right];
+    if (groups.length !== 8) return null;
+
+    let value = 0n;
+    for (const group of groups) {
+        if (!/^[0-9a-fA-F]{1,4}$/.test(group)) return null;
+        value = (value << 16n) + BigInt(parseInt(group, 16));
+    }
+    return value;
+}
+
+function mappedIPv4FromIPv6(value) {
+    return (value >> 32n) === 0xffffn ? value & 0xffffffffn : null;
+}
+
+function normalizeBlockListFamily(family, allowUndefined = true) {
+    if (family === undefined && allowUndefined) return undefined;
+    if (typeof family !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('type', 'string', family);
+    }
+    const lower = family.toLowerCase();
+    if (lower === 'ipv4') return 'ipv4';
+    if (lower === 'ipv6') return 'ipv6';
+    throw new ERR_INVALID_ARG_VALUE('type', family);
+}
+
+function familyLabel(family) {
+    return family === 'ipv6' ? 'IPv6' : 'IPv4';
+}
+
+function normalizeSocketAddressLike(value, name) {
+    if (value instanceof SocketAddress || (value && typeof value === 'object' && value.address)) {
+        return { address: value.address, family: value.family };
+    }
+    if (typeof value !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE(name, ['string', 'SocketAddress'], value);
+    }
+    return { address: value, family: undefined };
+}
+
+function parseBlockListAddress(address, family) {
+    const requestedFamily = normalizeBlockListFamily(family);
+    const inferredFamily = requestedFamily || 'ipv4';
+    const value = inferredFamily === 'ipv6' ? parseIPv6(address) : parseIPv4(address);
+    if (value === null) {
+        throw new ERR_INVALID_ARG_VALUE('address', address);
+    }
+
+    const mapped4 = inferredFamily === 'ipv6' ? mappedIPv4FromIPv6(value) : null;
+    return {
+        address,
+        family: inferredFamily,
+        value,
+        mapped4: mapped4 !== null ? mapped4 : (inferredFamily === 'ipv4' ? value : null),
+    };
+}
+
+function subnetMask(bits, prefix) {
+    if (prefix === 0) return 0n;
+    return ((1n << BigInt(prefix)) - 1n) << BigInt(bits - prefix);
+}
+
+function validatePrefix(prefix, family) {
+    if (typeof prefix !== 'number') {
+        throw new ERR_INVALID_ARG_TYPE('prefix', 'number', prefix);
+    }
+    const max = family === 'ipv6' ? 128 : 32;
+    if (!Number.isInteger(prefix) || prefix < 0 || prefix > max) {
+        throw new ERR_OUT_OF_RANGE('prefix', `>= 0 && <= ${max}`, prefix);
+    }
+}
+
 // --- Socket (extends Duplex) ---
 
 function Socket(options) {
@@ -132,6 +240,7 @@ function Socket(options) {
         options = { fd: options };
     }
     options = options || {};
+    this._creationOptions = options;
 
     const streamOptions = {
         ...options,
@@ -272,14 +381,15 @@ Socket.prototype.connect = function connect(...args) {
         throw new ERR_MISSING_ARGS(['options', 'port', 'path']);
     }
 
-    if (options.objectMode) {
-        throw new ERR_INVALID_ARG_VALUE('options.objectMode', options.objectMode, 'is not supported');
+    const objectModeOptions = this._creationOptions || {};
+    if (options.objectMode || objectModeOptions.objectMode) {
+        throw new ERR_INVALID_ARG_VALUE('options.objectMode', options.objectMode || objectModeOptions.objectMode, 'is not supported');
     }
-    if (options.readableObjectMode) {
-        throw new ERR_INVALID_ARG_VALUE('options.readableObjectMode', options.readableObjectMode, 'is not supported');
+    if (options.readableObjectMode || objectModeOptions.readableObjectMode) {
+        throw new ERR_INVALID_ARG_VALUE('options.readableObjectMode', options.readableObjectMode || objectModeOptions.readableObjectMode, 'is not supported');
     }
-    if (options.writableObjectMode) {
-        throw new ERR_INVALID_ARG_VALUE('options.writableObjectMode', options.writableObjectMode, 'is not supported');
+    if (options.writableObjectMode || objectModeOptions.writableObjectMode) {
+        throw new ERR_INVALID_ARG_VALUE('options.writableObjectMode', options.writableObjectMode || objectModeOptions.writableObjectMode, 'is not supported');
     }
 
     if (options.host !== undefined && typeof options.host !== 'string') {
@@ -317,6 +427,43 @@ Socket.prototype.connect = function connect(...args) {
         options.port = ipcEntry.port;
         options.host = ipcEntry.host;
         delete options.path;
+    }
+
+    const port = options.port;
+    const host = options.host || options.hostname || 'localhost';
+    const autoSelectFamily = options.autoSelectFamily ?? _defaultAutoSelectFamily;
+    const family = options.family ?? (autoSelectFamily ? 0 : this._family ?? 4);
+    const lookup = options.lookup || dns.lookup;
+    const autoSelectFamilyAttemptTimeout = Math.max(
+        10,
+        options.autoSelectFamilyAttemptTimeout ?? _defaultAutoSelectFamilyAttemptTimeout
+    );
+    const localAddress = options.localAddress;
+    const localPort = options.localPort;
+
+    if (port !== undefined) {
+        const p = +port;
+        if (p !== p || p < 0 || p > 65535 || p !== (p | 0)) {
+            throw new ERR_SOCKET_BAD_PORT('Port', port, false);
+        }
+    }
+
+    if (localAddress !== undefined) {
+        if (typeof localAddress !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE('options.localAddress', 'string', localAddress);
+        }
+        if (!isIPv4(localAddress) && !isIPv6(localAddress)) {
+            throw makeTypeError('ERR_INVALID_IP_ADDRESS', `Invalid IP address: ${localAddress}`);
+        }
+    }
+
+    if (localPort !== undefined) {
+        if (typeof localPort !== 'number') {
+            throw new ERR_INVALID_ARG_TYPE('options.localPort', 'number', localPort);
+        }
+        if (localPort !== localPort || localPort < 0 || localPort > 65535 || localPort !== (localPort | 0)) {
+            throw new ERR_SOCKET_BAD_PORT('options.localPort', localPort, false);
+        }
     }
 
     // Reset state for reconnection (Node.js allows calling connect() on a
@@ -402,23 +549,6 @@ Socket.prototype.connect = function connect(...args) {
 
     if (cb) this.once('connect', cb);
 
-    const port = options.port;
-    const host = options.host || options.hostname || 'localhost';
-    const autoSelectFamily = options.autoSelectFamily ?? _defaultAutoSelectFamily;
-    const family = options.family ?? (autoSelectFamily ? 0 : this._family ?? 4);
-    const lookup = options.lookup || dns.lookup;
-    const autoSelectFamilyAttemptTimeout = Math.max(
-        10,
-        options.autoSelectFamilyAttemptTimeout ?? _defaultAutoSelectFamilyAttemptTimeout
-    );
-
-    if (port !== undefined) {
-        const p = +port;
-        if (p !== p || p < 0 || p > 65535 || p !== (p | 0)) {
-            throw new ERR_SOCKET_BAD_PORT('Port', port, false);
-        }
-    }
-
     const completeConnection = (handle) => {
         forwardNativeHandle(this._handle, handle);
         this.connecting = false;
@@ -452,9 +582,6 @@ Socket.prototype.connect = function connect(...args) {
         err.port = port;
         return err;
     };
-
-    const localAddress = options.localAddress;
-    const localPort = options.localPort;
 
     const connectAttempt = (ip, addressFamily, onResult) => {
         if (addressFamily === 6) {
@@ -1272,59 +1399,99 @@ Server.prototype[Symbol.asyncDispose] = function () {
 // --- BlockList ---
 
 class BlockList {
-    constructor() {
-        this._rules = [];
+    constructor(rules) {
+        this._rules = rules || [];
     }
 
     addAddress(address, type) {
-        if (address && typeof address === 'object' && address.address) {
-            type = address.family;
-            address = address.address;
-        }
-        type = type || (isIPv6(address) ? 'ipv6' : 'ipv4');
-        this._rules.push({ type: 'address', address, family: type });
+        const normalized = normalizeSocketAddressLike(address, 'address');
+        const parsed = parseBlockListAddress(normalized.address, type !== undefined ? type : normalized.family);
+        this._rules.unshift({
+            type: 'address',
+            address: parsed.address,
+            family: parsed.family,
+            value: parsed.value,
+            mapped4: parsed.mapped4,
+        });
     }
 
     addRange(start, end, type) {
-        if (start && typeof start === 'object' && start.address) {
-            type = start.family;
-            end = typeof end === 'object' ? end.address : end;
-            start = start.address;
+        const normalizedStart = normalizeSocketAddressLike(start, 'start');
+        const normalizedEnd = normalizeSocketAddressLike(end, 'end');
+        const familyInput = type !== undefined ? type : (normalizedStart.family !== undefined ? normalizedStart.family : normalizedEnd.family);
+        const family = normalizeBlockListFamily(familyInput) ||
+            (isIPv6(normalizedStart.address) ? 'ipv6' : 'ipv4');
+        const parsedStart = parseBlockListAddress(normalizedStart.address, family);
+        const parsedEnd = parseBlockListAddress(normalizedEnd.address, family);
+        if (parsedEnd.value < parsedStart.value) {
+            throw new ERR_INVALID_ARG_VALUE('end', normalizedEnd.address);
         }
-        type = type || (isIPv6(start) ? 'ipv6' : 'ipv4');
-        this._rules.push({ type: 'range', start, end, family: type });
+        this._rules.unshift({
+            type: 'range',
+            start: parsedStart.address,
+            end: parsedEnd.address,
+            family,
+            startValue: parsedStart.value,
+            endValue: parsedEnd.value,
+            startMapped4: parsedStart.mapped4,
+            endMapped4: parsedEnd.mapped4,
+        });
     }
 
     addSubnet(net, prefix, type) {
-        if (net && typeof net === 'object' && net.address) {
-            type = net.family;
-            net = net.address;
-        }
-        type = type || (isIPv6(net) ? 'ipv6' : 'ipv4');
-        this._rules.push({ type: 'subnet', network: net, prefix, family: type });
+        const normalized = normalizeSocketAddressLike(net, 'net');
+        const family = normalizeBlockListFamily(type !== undefined ? type : normalized.family) ||
+            (isIPv6(normalized.address) ? 'ipv6' : 'ipv4');
+        const parsed = parseBlockListAddress(normalized.address, family);
+        validatePrefix(prefix, family);
+        const bits = family === 'ipv6' ? 128 : 32;
+        const mask = subnetMask(bits, prefix);
+        this._rules.unshift({
+            type: 'subnet',
+            network: parsed.address,
+            prefix,
+            family,
+            networkValue: parsed.value,
+            mapped4: parsed.mapped4,
+            mask,
+        });
     }
 
     check(address, type) {
-        if (address && typeof address === 'object' && address.address) {
-            type = address.family;
-            address = address.address;
+        const normalized = normalizeSocketAddressLike(address, 'address');
+        let parsed;
+        try {
+            parsed = parseBlockListAddress(normalized.address, type !== undefined ? type : normalized.family);
+        } catch (err) {
+            if (err && err.code === 'ERR_INVALID_ARG_VALUE') {
+                return false;
+            }
+            throw err;
         }
-        type = type || (isIPv6(address) ? 'ipv6' : 'ipv4');
         for (const rule of this._rules) {
-            if (rule.family !== type) continue;
-            if (rule.type === 'address' && rule.address === address) return true;
+            if (rule.family !== parsed.family && (parsed.mapped4 === null || rule.family !== 'ipv4') && (rule.mapped4 === null || parsed.family !== 'ipv4')) {
+                continue;
+            }
+            const candidateValue = rule.family === parsed.family ? parsed.value : parsed.mapped4;
+            const ruleAddressValue = rule.family === parsed.family ? rule.value : rule.mapped4;
+
+            if (rule.type === 'address' && ruleAddressValue !== null && candidateValue !== null && ruleAddressValue === candidateValue) return true;
             if (rule.type === 'range') {
-                if (type === 'ipv4') {
-                    const ip = ipv4ToNum(address);
-                    if (ip >= ipv4ToNum(rule.start) && ip <= ipv4ToNum(rule.end)) return true;
+                const rangeCandidate = rule.family === parsed.family ? parsed.value : parsed.mapped4;
+                const rangeStart = rule.family === parsed.family ? rule.startValue : rule.startMapped4;
+                const rangeEnd = rule.family === parsed.family ? rule.endValue : rule.endMapped4;
+                if (rangeCandidate !== null && rangeStart !== null && rangeEnd !== null &&
+                    rangeCandidate >= rangeStart && rangeCandidate <= rangeEnd) {
+                    return true;
                 }
             }
             if (rule.type === 'subnet') {
-                if (type === 'ipv4') {
-                    const ip = ipv4ToNum(address);
-                    const net = ipv4ToNum(rule.network);
-                    const mask = (~0 << (32 - rule.prefix)) >>> 0;
-                    if ((ip & mask) === (net & mask)) return true;
+                const subnetCandidate = rule.family === parsed.family ? parsed.value : parsed.mapped4;
+                const subnetNetwork = rule.family === parsed.family ? rule.networkValue : rule.mapped4;
+                const mask = rule.family === parsed.family ? rule.mask : subnetMask(32, rule.prefix);
+                if (subnetCandidate !== null && subnetNetwork !== null &&
+                    (subnetCandidate & mask) === (subnetNetwork & mask)) {
+                    return true;
                 }
             }
         }
@@ -1333,11 +1500,20 @@ class BlockList {
 
     get rules() {
         return this._rules.map(r => {
-            if (r.type === 'address') return `Address: ${r.family} ${r.address}`;
-            if (r.type === 'range') return `Range: ${r.family} ${r.start}-${r.end}`;
-            if (r.type === 'subnet') return `Subnet: ${r.family} ${r.network}/${r.prefix}`;
+            if (r.type === 'address') return `Address: ${familyLabel(r.family)} ${r.address}`;
+            if (r.type === 'range') return `Range: ${familyLabel(r.family)} ${r.start}-${r.end}`;
+            if (r.type === 'subnet') return `Subnet: ${familyLabel(r.family)} ${r.network}/${r.prefix}`;
             return '';
         });
+    }
+
+    [customInspectSymbol](depth, opts, inspect) {
+        if (depth !== null && depth < 0) return '[BlockList]';
+        return `BlockList { rules: ${inspect(this.rules, opts)} }`;
+    }
+
+    [structuredCloneSymbol]() {
+        return new BlockList(this._rules);
     }
 
     static isBlockList(value) {

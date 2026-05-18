@@ -36,6 +36,9 @@ export const V4MAPPED = 8;
 export const ALL = 16;
 
 let _defaultResultOrder = 'verbatim';
+const VALID_RRTYPES = new Set([
+    'A', 'AAAA', 'ANY', 'CAA', 'CNAME', 'MX', 'NAPTR', 'NS', 'PTR', 'SOA', 'SRV', 'TXT', 'TLSA',
+]);
 
 function makeDnsError(code, hostname, syscall) {
     const msg = syscall
@@ -55,6 +58,12 @@ function parseNativeError(e, hostname, syscall) {
     } catch (_) {
         return makeDnsError('ESERVFAIL', hostname, syscall);
     }
+}
+
+function invalidRrtypeError(rrtype) {
+    const err = new TypeError(`The argument 'rrtype' is invalid. Received '${rrtype}'`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    return err;
 }
 
 function filterByFamily(results, family) {
@@ -110,12 +119,29 @@ export function lookup(hostname, optionsOrCallback, callback) {
     const family = normalizeFamily(options.family || 0);
     const all = !!options.all;
 
-    // If hostname is falsy, return loopback
+    // If hostname is falsy, return the null-address compatibility result.
     if (!hostname) {
         if (all) {
-            queueMicrotask(() => cb(null, [{ address: '127.0.0.1', family: 4 }]));
+            queueMicrotask(() => cb(null, [{ address: null, family: 4 }]));
         } else {
-            queueMicrotask(() => cb(null, '127.0.0.1', 4));
+            queueMicrotask(() => cb(null, null, 4));
+        }
+        return;
+    }
+
+    if (typeof hostname === 'string' && hostname.toLowerCase() === 'localhost') {
+        let results = [
+            { address: '127.0.0.1', family: 4 },
+            { address: '::1', family: 6 },
+        ];
+        results = filterByFamily(results, family);
+        results = orderResults(results);
+        if (all) {
+            queueMicrotask(() => cb(null, results));
+        } else if (results.length > 0) {
+            queueMicrotask(() => cb(null, results[0].address, results[0].family));
+        } else {
+            queueMicrotask(() => cb(makeDnsError('ENOTFOUND', hostname, 'getaddrinfo')));
         }
         return;
     }
@@ -161,11 +187,17 @@ export function lookup(hostname, optionsOrCallback, callback) {
 export function resolve(hostname, rrtypeOrCallback, callback) {
     let rrtype = 'A';
     let cb;
+    let hasRrtype = false;
     if (typeof rrtypeOrCallback === 'function') {
         cb = rrtypeOrCallback;
     } else {
-        rrtype = rrtypeOrCallback;
+        hasRrtype = rrtypeOrCallback !== undefined;
+        rrtype = hasRrtype ? rrtypeOrCallback : 'A';
         cb = callback;
+    }
+
+    if (hasRrtype && !VALID_RRTYPES.has(rrtype)) {
+        throw invalidRrtypeError(rrtype);
     }
 
     if (typeof cb !== 'function') {
@@ -252,7 +284,19 @@ export const resolveSrv = unsupportedRecordType('querySrv');
 export const resolveTxt = unsupportedRecordType('queryTxt');
 export const resolveTlsa = unsupportedRecordType('queryTlsa');
 
-export const reverse = unsupportedRecordType('getHostByAddr');
+export function reverse(ip, callback) {
+    if (typeof callback !== 'function') {
+        throw new TypeError('callback must be a function');
+    }
+    if (ip === '127.0.0.1' || ip === '::1') {
+        queueMicrotask(() => callback(null, ['localhost']));
+        return;
+    }
+    queueMicrotask(() => callback(Object.assign(
+        new Error(`getHostByAddr ${NOT_SUPPORTED_ERROR_MSG}`),
+        { code: 'ENOTIMP', hostname: ip }
+    )));
+}
 
 export function lookupService(address, port, callback) {
     if (typeof callback !== 'function') {
@@ -377,6 +421,9 @@ export const promises = {
     },
 
     resolve(hostname, rrtype) {
+        if (!VALID_RRTYPES.has(rrtype || 'A')) {
+            throw invalidRrtypeError(rrtype);
+        }
         return new Promise((res, reject) => {
             resolve(hostname, rrtype || 'A', (err, addresses) => {
                 if (err) return reject(err);
@@ -414,7 +461,14 @@ export const promises = {
     resolveSrv(hostname) { return _unsupportedPromise('querySrv', hostname); },
     resolveTxt(hostname) { return _unsupportedPromise('queryTxt', hostname); },
 
-    reverse(ip) { return _unsupportedPromise('getHostByAddr', ip); },
+    reverse(ip) {
+        return new Promise((resolve, reject) => {
+            reverse(ip, (err, domains) => {
+                if (err) return reject(err);
+                resolve(domains);
+            });
+        });
+    },
 
     setServers,
     getServers,

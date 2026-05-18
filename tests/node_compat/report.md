@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3113/4317 (72.1%)
+**Primary compatibility (CI-enforced):** 3112/4317 (72.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3113 | 72.1% | 55.5% | 46.2% |
-| 🧩 known gap | 1204 | 27.9% | 21.5% | 17.9% |
+| ✅ passing (runnable) | 3112 | 72.1% | 55.4% | 46.2% |
+| 🧩 known gap | 1205 | 27.9% | 21.5% | 17.9% |
 | 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
 | **Total** | **6734** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3113/5613 (55.5%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3112/5613 (55.4%)**.
 
 ## Inventory by Module
 
@@ -38,7 +38,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | compile | 15 | 0 | 0 | 0 | 15 | 0 | 0 | 0.0% | 0.0% |
 | console | 31 | 29 | 1 | 0 | 0 | 0 | 1 | 96.7% | 96.7% |
 | crypto | 239 | 206 | 11 | 6 | 0 | 0 | 16 | 94.9% | 92.4% |
-| dgram | 118 | 24 | 73 | 7 | 0 | 0 | 14 | 24.7% | 23.1% |
+| dgram | 118 | 23 | 74 | 7 | 0 | 0 | 14 | 23.7% | 22.1% |
 | diagnostics_channel | 33 | 18 | 12 | 1 | 2 | 0 | 0 | 60.0% | 54.5% |
 | dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
 | domain | 61 | 28 | 20 | 12 | 0 | 0 | 1 | 58.3% | 46.7% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1204)
+### known gap (1205)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -960,6 +960,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | SourceTextModule import.meta initialization hook is not implemented | 1 | `parallel/test-vm-module-import-meta.js` |
 | SourceTextModule linker/dependency parsing semantics are incomplete (imports, cycles, and attributes) | 1 | `parallel/test-vm-module-link.js` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
+| WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
 | WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags | 1 | `parallel/test-runner-module-mocking.js#test_16_wrong_import_syntax_should_throw_error_after_module_mocking` |
 | WASM child emulation does not support --no-experimental-sqlite CLI flag | 1 | `parallel/test-sqlite.js#test_00_accessing_the_node_sqlite_module` |

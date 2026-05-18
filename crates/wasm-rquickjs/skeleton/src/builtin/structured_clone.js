@@ -12,8 +12,10 @@ const MAP = 5;
 const SET = 6;
 const ERROR = 7;
 const BIGINT = 8;
+const CUSTOM = 9;
 
 const EMPTY = '';
+const customCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
 
 const {toString} = {};
 const {keys} = Object;
@@ -66,6 +68,9 @@ const serializer = (strict, json, $, _) => {
   const pair = value => {
     if ($.has(value))
       return $.get(value);
+
+    if (value && (typeof value === 'object' || typeof value === 'function') && typeof value[customCloneSymbol] === 'function')
+      return as([CUSTOM, value[customCloneSymbol]()], value);
 
     let [TYPE, type] = typeOf(value);
     switch (TYPE) {
@@ -220,6 +225,8 @@ const deserializer = ($, _) => {
       }
       case BIGINT:
         return as(BigInt(value), index);
+      case CUSTOM:
+        return as(value, index);
       case 'BigInt':
         return as(Object(BigInt(value)), index);
       case 'ArrayBuffer':
