@@ -1165,6 +1165,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 } catch (esmErr) {
                     delete moduleCache[resolvedFilename];
                     if (looksLikeEsmSource(source)) {
+                        normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
                     }
                     // ESM loading also failed — throw the original CJS SyntaxError

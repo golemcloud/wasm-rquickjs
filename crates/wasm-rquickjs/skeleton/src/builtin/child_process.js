@@ -117,7 +117,7 @@ function buildOutputResult(capturedStdout, capturedStderr, status, encoding) {
 }
 
 function isInlineEvalOption(value) {
-    return value === '-e' || value === '--eval' || value === '-p' || value === '--print';
+    return value === '-e' || value === '--eval' || value === '-p' || value === '--print' || value === '-pe';
 }
 
 function execArgTakesValue(arg) {
@@ -373,39 +373,184 @@ function formatWarningForStderr(warning, typeOrOptions, code) {
     return prefix + info.name + ': ' + info.message + '\n';
 }
 
-function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
-    const mode = String(inlineArgs[0]);
-    const source = String(inlineArgs[1]);
-    const shouldPrint = mode === '-p' || mode === '--print';
+function parseInlineInvocation(inlineArgs) {
+    let shouldPrint = false;
+    let source = null;
+    let sourceIndex = -1;
+    const execArgvSuffix = [];
+
+    for (let i = 0; i < inlineArgs.length; i++) {
+        const arg = String(inlineArgs[i]);
+
+        if (arg === '-p' || arg === '--print') {
+            shouldPrint = true;
+            execArgvSuffix.push(arg);
+            continue;
+        }
+
+        if (arg === '-pe') {
+            shouldPrint = true;
+            execArgvSuffix.push(arg);
+            if (i + 1 < inlineArgs.length) {
+                source = String(inlineArgs[i + 1]);
+                sourceIndex = i + 1;
+                execArgvSuffix.push(source);
+            }
+            break;
+        }
+
+        if (arg === '-e' || arg === '--eval') {
+            execArgvSuffix.push(arg);
+            if (i + 1 < inlineArgs.length) {
+                source = String(inlineArgs[i + 1]);
+                sourceIndex = i + 1;
+                execArgvSuffix.push(source);
+            }
+            break;
+        }
+
+        if (arg.indexOf('--eval=') === 0) {
+            source = arg.slice('--eval='.length);
+            sourceIndex = i;
+            execArgvSuffix.push(arg);
+            break;
+        }
+
+        source = arg;
+        sourceIndex = i;
+        execArgvSuffix.push(arg);
+        break;
+    }
+
+    if (source === null) {
+        return null;
+    }
+
     const evalArgv = [];
-    for (let i = 2; i < inlineArgs.length; i++) {
+    for (let i = sourceIndex + 1; i < inlineArgs.length; i++) {
+        if (inlineArgs[i] === '--') {
+            for (let j = i + 1; j < inlineArgs.length; j++) {
+                evalArgv.push(String(inlineArgs[j]));
+            }
+            return { shouldPrint, source, evalArgv, execArgvSuffix };
+        }
         evalArgv.push(String(inlineArgs[i]));
     }
 
+    return { shouldPrint, source, evalArgv, execArgvSuffix };
+}
+
+function getInputType(execArgv) {
+    for (let i = 0; i < execArgv.length; i++) {
+        const arg = String(execArgv[i]);
+        if (arg === '--input-type' && i + 1 < execArgv.length) {
+            return String(execArgv[i + 1]);
+        }
+        if (arg.indexOf('--input-type=') === 0) {
+            return arg.slice('--input-type='.length);
+        }
+    }
+    return 'commonjs';
+}
+
+function transpileModuleEvalToCommonJs(source) {
+    let transformed = String(source);
+    transformed = transformed.replace(/\bimport\.meta\b/g, '({ url: "file://[eval]" })');
+    transformed = transformed.replace(
+        /^\s*import\s+(['"][^'"]+['"])\s*;?\s*$/gm,
+        '__wasm_eval_require($1);'
+    );
+    return transformed;
+}
+
+function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
+    const parsed = parseInlineInvocation(inlineArgs);
+    if (!parsed) {
+        const err = new Error(String(inlineArgs[0]) + ' requires an argument');
+        err.code = 9;
+        throw err;
+    }
+    if (parsed.source.indexOf('\\-') === 0) {
+        parsed.source = parsed.source.slice(1);
+    }
+    process.argv = [process.argv0 || process.execPath].concat(parsed.evalArgv);
+    process.execArgv = (process.execArgv || []).concat(parsed.execArgvSuffix);
+
     const vmModule = runtimeRequire('node:vm');
     const evalRequire = moduleExports.createRequire(path.join(childCwd || process.cwd(), '[eval].js'));
-    const bufferProbe = parseBufferConstructorProbe(source);
+    const childRequire = function childEvalRequire(id) {
+        if (evalRequire && evalRequire.cache && typeof evalRequire.resolve === 'function') {
+            try {
+                const resolved = evalRequire.resolve(id);
+                if (evalRequire.cache[resolved]) {
+                    delete evalRequire.cache[resolved];
+                }
+            } catch (_) {}
+        }
+        return evalRequire(id);
+    };
+    if (evalRequire.resolve) childRequire.resolve = evalRequire.resolve;
+    if (evalRequire.cache) childRequire.cache = evalRequire.cache;
+    const inputType = getInputType(process.execArgv || []);
+    const bufferProbe = parseBufferConstructorProbe(parsed.source);
     let result;
+    const hadGlobalOs = Object.prototype.hasOwnProperty.call(globalThis, 'os');
+    const oldGlobalOs = globalThis.os;
+    const oldGlobalCrypto = globalThis.crypto;
+    globalThis.os = runtimeRequire('node:os');
+    globalThis.crypto = runtimeRequire('node:crypto');
 
+    try {
     if (bufferProbe) {
         process.mainModule = { filename: bufferProbe.mainFilename };
         result = vmModule.runInNewContext('new Buffer(10)', { Buffer }, {
             filename: bufferProbe.callSiteFilename,
         });
-    } else if (shouldPrint) {
-        const evaluator = new Function('Buffer', 'process', 'vm', 'require', 'return eval(' + JSON.stringify(source) + ');\n//# sourceURL=[eval]\n');
-        result = evaluator(Buffer, process, vmModule, evalRequire);
+    } else if (inputType === 'module') {
+        if (parsed.shouldPrint) {
+            const err = new Error('--print cannot be used with ESM input');
+            err.name = 'SyntaxError';
+            throw err;
+        }
+        const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
+        globalThis.__wasm_rquickjs_cjs_import_dir = childCwd || process.cwd();
+        try {
+            const moduleSource = transpileModuleEvalToCommonJs(parsed.source);
+            const evaluator = new Function('Buffer', 'process', 'vm', '__wasm_eval_require', 'const require = undefined;\n' + moduleSource + '\n//# sourceURL=[eval]\n');
+            result = evaluator(Buffer, process, vmModule, childRequire);
+        } finally {
+            if (previousCjsImportDir !== undefined) {
+                globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
+            } else {
+                delete globalThis.__wasm_rquickjs_cjs_import_dir;
+            }
+        }
+    } else if (inputType !== 'commonjs') {
+        throw new Error('Unsupported --input-type value: ' + inputType);
+    } else if (parsed.shouldPrint) {
+        const evaluator = new Function('Buffer', 'process', 'vm', 'require', 'return eval(' + JSON.stringify(parsed.source) + ');\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, childRequire);
     } else {
-        const evaluator = new Function('Buffer', 'process', 'vm', 'require', source + '\n//# sourceURL=[eval]\n');
-        result = evaluator(Buffer, process, vmModule, evalRequire);
+        const evaluator = new Function('Buffer', 'process', 'vm', 'require', parsed.source + '\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, childRequire);
+    }
+    } finally {
+        if (hadGlobalOs) {
+            globalThis.os = oldGlobalOs;
+        } else {
+            delete globalThis.os;
+        }
+        globalThis.crypto = oldGlobalCrypto;
     }
 
-    if (shouldPrint && process.stdout && typeof process.stdout.write === 'function') {
-        process.stdout.write(String(result) + '\n');
+    if (parsed.shouldPrint && process.stdout && typeof process.stdout.write === 'function') {
+        const util = runtimeRequire('node:util');
+        const output = typeof result === 'string' ? result : util.inspect(result);
+        process.stdout.write(String(output) + '\n');
     }
 
     return {
-        evalArgv,
+        evalArgv: parsed.evalArgv,
         bufferProbe,
     };
 }
@@ -470,6 +615,9 @@ function runInline(command, args, options) {
     const oldCwd = process.cwd;
     const hadMainModule = Object.prototype.hasOwnProperty.call(process, 'mainModule');
     const oldMainModule = process.mainModule;
+    const oldProcessEvents = process._events;
+    const oldProcessEventsCount = process._eventsCount;
+    const oldProcessExiting = process._exiting;
     const oldEnv = snapshotEnv(process.env);
     const oldStdoutWrite = process.stdout && process.stdout.write;
     const oldStderrWrite = process.stderr && process.stderr.write;
@@ -502,6 +650,9 @@ function runInline(command, args, options) {
         process.cwd = function cwd() {
             return childCwd;
         };
+        process._events = Object.create(null);
+        process._eventsCount = 0;
+        process._exiting = false;
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
         globalThis.__wasm_rquickjs_sync_callbacks = true;
@@ -667,7 +818,7 @@ function runInline(command, args, options) {
             }
         }
 
-        if (invocationArgs.length >= 2 && isInlineEvalOption(invocationArgs[0])) {
+        if (invocationArgs.length >= 1 && isInlineEvalOption(invocationArgs[0])) {
             const savedModuleContext = globalThis.__wasm_rquickjs_current_module;
             const hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
             const oldEvalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
@@ -727,9 +878,15 @@ function runInline(command, args, options) {
                 runtimeRequire(scriptPath);
             }
         }
+        if (typeof process._runExitHandlers === 'function' && firstExitCode === null) {
+            process._runExitHandlers(status);
+        }
     } catch (err) {
         if (err && err.__isProcessExit) {
             status = firstExitCode !== null ? firstExitCode : (typeof err.code === 'number' ? err.code : 0);
+        } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
+            status = 9;
+            capturedStderr += String(command) + ': ' + err.message + '\n';
         } else {
             status = 1;
             if (checkSyntaxMode && currentScriptPath) {
@@ -745,6 +902,9 @@ function runInline(command, args, options) {
             process.features.require_module = oldRequireModuleFeature;
         }
         process.cwd = oldCwd;
+        process._events = oldProcessEvents;
+        process._eventsCount = oldProcessEventsCount;
+        process._exiting = oldProcessExiting;
         if (hadMainModule) {
             process.mainModule = oldMainModule;
         } else {
@@ -889,6 +1049,7 @@ function splitCommandTokens(command) {
     const text = String(command);
     const tokens = [];
     let current = '';
+    let tokenActive = false;
     let quote = null;
     let escaping = false;
 
@@ -897,6 +1058,7 @@ function splitCommandTokens(command) {
 
         if (escaping) {
             current += ch;
+            tokenActive = true;
             escaping = false;
             continue;
         }
@@ -909,18 +1071,21 @@ function splitCommandTokens(command) {
 
             if (ch === '"' || ch === "'") {
                 quote = ch;
+                tokenActive = true;
                 continue;
             }
 
             if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
-                if (current.length > 0) {
+                if (tokenActive) {
                     tokens.push(current);
                     current = '';
+                    tokenActive = false;
                 }
                 continue;
             }
 
             current += ch;
+            tokenActive = true;
             continue;
         }
 
@@ -942,19 +1107,21 @@ function splitCommandTokens(command) {
             const next = text[i + 1];
             if (next === '"' || next === '\\' || next === '$' || next === '`') {
                 current += next;
+                tokenActive = true;
                 i += 1;
                 continue;
             }
         }
 
         current += ch;
+        tokenActive = true;
     }
 
     if (escaping || quote !== null) {
         return null;
     }
 
-    if (current.length > 0) {
+    if (tokenActive) {
         tokens.push(current);
     }
 

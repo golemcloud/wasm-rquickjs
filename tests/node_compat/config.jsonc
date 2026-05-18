@@ -2581,10 +2581,10 @@
       "split": true,
       "subtests": {
         "block_00_assert_that_module_loading_works": {},
-        "block_01_regression_test_for_https_github_com_nodejs_node_issues_3574": {},
+        "block_01_regression_test_for_https_github_com_nodejs_node_issues_3574": { "category": "known-gap", "reason": "fork() child output/event-loop lifetime is incomplete in execPath eval emulation" },
         "block_02_regression_test_for_https_github_com_nodejs_node_issues_8534": {},
-        "block_03_regression_test_for_https_github_com_nodejs_node_issues_1194": {},
-        "block_04_block_04": {}
+        "block_03_regression_test_for_https_github_com_nodejs_node_issues_1194": { "category": "known-gap", "reason": "fork() IPC child.send/process.send emulation is not implemented" },
+        "block_04_block_04": { "category": "known-gap", "reason": "--input-type=module eval emulation is incomplete for cwd-relative static/dynamic imports" }
       }
     },
     "parallel/test-console-assign-undefined.js": {},

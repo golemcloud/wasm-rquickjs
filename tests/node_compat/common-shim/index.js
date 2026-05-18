@@ -201,6 +201,39 @@ function transpileModuleEvalToCommonJs(source) {
     return transformed;
 }
 
+function snapshotRequireCacheForChild(requireFn) {
+    var cache = requireFn && requireFn.cache;
+    if (!cache || typeof cache !== 'object') {
+        return null;
+    }
+
+    var snapshot = [];
+    var keys = Object.keys(cache);
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        snapshot.push([key, cache[key]]);
+        delete cache[key];
+    }
+
+    return { cache: cache, snapshot: snapshot };
+}
+
+function restoreRequireCacheForChild(snapshot) {
+    if (!snapshot) {
+        return;
+    }
+
+    var cache = snapshot.cache;
+    var keys = Object.keys(cache);
+    for (var i = 0; i < keys.length; i++) {
+        delete cache[keys[i]];
+    }
+    for (var j = 0; j < snapshot.snapshot.length; j++) {
+        var entry = snapshot.snapshot[j];
+        cache[entry[0]] = entry[1];
+    }
+}
+
 function runInlineEval(command, args, options) {
     var parsed = parseInlineEvalArgs(args || []);
 
@@ -214,6 +247,7 @@ function runInlineEval(command, args, options) {
     var oldWarnedInvalidHostnameState = globalThis.__wasm_rquickjs_url_warned_invalid_hostname;
     var hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
     var oldEvalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
+    var requireCacheSnapshot = null;
 
     var stdout = '';
     var stderr = '';
@@ -248,6 +282,7 @@ function runInlineEval(command, args, options) {
 
         // Each emulated child process needs its own warning state.
         globalThis.__wasm_rquickjs_url_warned_invalid_hostname = false;
+        requireCacheSnapshot = snapshotRequireCacheForChild(require);
 
         var evalSource = parsed.evalCode;
         var scriptRequire = require;
@@ -341,6 +376,7 @@ function runInlineEval(command, args, options) {
         process.argv0 = oldArgv0;
         process.cwd = oldCwd;
         replaceEnv(process.env, oldEnv);
+        restoreRequireCacheForChild(requireCacheSnapshot);
 
         if (process.stdout && typeof oldStdoutWrite === 'function') {
             process.stdout.write = oldStdoutWrite;

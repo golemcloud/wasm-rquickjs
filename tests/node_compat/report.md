@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3120/4317 (72.3%)
+**Primary compatibility (CI-enforced):** 3117/4317 (72.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3120 | 72.3% | 55.6% | 46.3% |
-| 🧩 known gap | 1197 | 27.7% | 21.3% | 17.8% |
+| ✅ passing (runnable) | 3117 | 72.2% | 55.5% | 46.3% |
+| 🧩 known gap | 1200 | 27.8% | 21.4% | 17.8% |
 | 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
 | **Total** | **6734** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3120/5613 (55.6%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3117/5613 (55.5%)**.
 
 ## Inventory by Module
 
@@ -32,7 +32,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | blob | 24 | 2 | 0 | 0 | 0 | 0 | 22 | 100.0% | 100.0% |
 | buffer | 180 | 172 | 0 | 1 | 1 | 0 | 6 | 100.0% | 98.9% |
 | child_process | 208 | 42 | 58 | 93 | 0 | 0 | 15 | 42.0% | 21.8% |
-| cli | 32 | 12 | 18 | 0 | 0 | 0 | 2 | 40.0% | 40.0% |
+| cli | 32 | 9 | 21 | 0 | 0 | 0 | 2 | 30.0% | 30.0% |
 | cluster | 87 | 0 | 0 | 85 | 0 | 0 | 2 | 0.0% | 0.0% |
 | common | 9 | 1 | 8 | 0 | 0 | 0 | 0 | 11.1% | 11.1% |
 | compile | 15 | 0 | 0 | 0 | 15 | 0 | 0 | 0.0% | 0.0% |
@@ -158,7 +158,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-child-process-stdio.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-child-process-validate-stdio.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-child-process-windows-hide.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
-| `test-cli-eval.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-cli-eval.js` | 5 | 2 | 3 | 0 | 0 | 0 | 0 |
 | `test-cli-permission-deny-fs.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-cli-permission-multiple-allow.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-common-gc.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1197)
+### known gap (1200)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -813,6 +813,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | --disable-proto=delete semantics differ in QuickJS (__proto__ yields null) | 1 | `parallel/test-disable-proto-delete.js` |
 | --disable-proto=throw flag semantics are not implemented | 1 | `parallel/test-disable-proto-throw.js` |
 | --disallow-code-generation-from-strings flag semantics are not implemented | 1 | `parallel/test-eval-disallow-code-generation-from-strings.js` |
+| --input-type=module eval emulation is incomplete for cwd-relative static/dynamic imports | 1 | `parallel/test-cli-eval.js#block_04_block_04` |
 | --no-experimental-global-customevent flag is not honored | 1 | `parallel/test-global-customevent-disabled.js` |
 | --no-experimental-global-webcrypto flag is not honored | 1 | `parallel/test-global-webcrypto-disbled.js` |
 | --no-experimental-websocket flag is not honored | 1 | `parallel/test-websocket-disabled.js` |
@@ -1094,9 +1095,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | execSync is ENOSYS-stubbed in WASM child_process emulation | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works` |
 | execSync is ENOSYS-stubbed; default maxBuffer behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
 | execSync is ENOSYS-stubbed; maxBuffer overflow ENOBUFS behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
+| fork() IPC child.send/process.send emulation is not implemented | 1 | `parallel/test-cli-eval.js#block_03_regression_test_for_https_github_com_nodejs_node_issues_1194` |
 | fork() abort-listener lifecycle for timeout+signal is incomplete | 1 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_03_block_03` |
 | fork() args/options parsing and ERR_INVALID_ARG_TYPE behavior are incomplete | 1 | `parallel/test-child-process-fork-args.js#block_01_correctly_if_args_is_undefined_or_null` |
 | fork() argument type validation is not Node-compatible | 1 | `parallel/test-child-process-fork-args.js#block_00_and_be_of_type_string` |
+| fork() child output/event-loop lifetime is incomplete in execPath eval emulation | 1 | `parallel/test-cli-eval.js#block_01_regression_test_for_https_github_com_nodejs_node_issues_3574` |
 | fork() third-argument validation is not Node-compatible | 1 | `parallel/test-child-process-fork-args.js#block_02_ensure_that_the_third_argument_should_be_type_of_object_if_p` |
 | fork() timeout option validation is incomplete | 1 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_02_block_02` |
 | forked child emulation does not honor --redirect-warnings | 1 | `parallel/test-process-redirect-warnings.js` |
