@@ -8,11 +8,6 @@ var { inspect } = require('util');
 var noop = function() {};
 var _mustCallChecks = [];
 
-// Set process.cwd() to /home/node — the Node.js source-root equivalent in
-// our VFS layout.  Many vendored tests use relative paths like
-// './test/parallel/...' which must resolve against this directory.
-process.cwd = function cwd() { return '/home/node'; };
-
 function copyEnv(env) {
     var copy = {};
     var keys = Object.keys(env || {});
@@ -239,7 +234,7 @@ function runInlineEval(command, args, options) {
 
     var oldArgv = process.argv.slice();
     var oldArgv0 = process.argv0;
-    var oldCwd = process.cwd;
+    var oldCwdValue = typeof process.cwd === 'function' ? process.cwd() : '/';
     var oldEnv = copyEnv(process.env);
     var oldStdoutWrite = process.stdout && process.stdout.write;
     var oldStderrWrite = process.stderr && process.stderr.write;
@@ -258,10 +253,11 @@ function runInlineEval(command, args, options) {
         process.argv0 = String(command);
 
         if (options && typeof options.cwd === 'string') {
-            var childCwd = String(options.cwd);
-            process.cwd = function cwd() {
-                return childCwd;
-            };
+            var pathModuleForCwd = require('path');
+            var childCwd = pathModuleForCwd.isAbsolute(options.cwd)
+                ? String(options.cwd)
+                : pathModuleForCwd.resolve(oldCwdValue, String(options.cwd));
+            process.chdir(childCwd);
         }
         if (options && options.env) {
             replaceEnv(process.env, options.env);
@@ -374,7 +370,9 @@ function runInlineEval(command, args, options) {
     } finally {
         process.argv = oldArgv;
         process.argv0 = oldArgv0;
-        process.cwd = oldCwd;
+        try {
+            process.chdir(oldCwdValue);
+        } catch (_) {}
         replaceEnv(process.env, oldEnv);
         restoreRequireCacheForChild(requireCacheSnapshot);
 

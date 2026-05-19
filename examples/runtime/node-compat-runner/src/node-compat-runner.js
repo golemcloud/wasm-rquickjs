@@ -107,6 +107,7 @@ function applyTestFlagsToProcess(testPath) {
 export const runTest = async (testPath) => {
     var restorePromise = null;
     var restoreArgv = null;
+    var restoreCwd = null;
 
     if (globalThis.process) {
         var originalArgv = Array.isArray(globalThis.process.argv) ? globalThis.process.argv.slice() : null;
@@ -114,15 +115,26 @@ export const runTest = async (testPath) => {
         var execPath = (typeof globalThis.process.execPath === 'string' && globalThis.process.execPath.length > 0)
             ? globalThis.process.execPath
             : 'node';
+        var originalCwd = typeof globalThis.process.cwd === 'function' ? globalThis.process.cwd() : null;
 
         globalThis.process.argv = [execPath, testPath];
         globalThis.process.argv0 = execPath;
+        if (typeof globalThis.process.chdir === 'function') {
+            globalThis.process.chdir('/home/node');
+        }
 
         restoreArgv = function restoreArgv() {
             if (originalArgv) {
                 globalThis.process.argv = originalArgv;
             }
             globalThis.process.argv0 = originalArgv0;
+        };
+        restoreCwd = function restoreCwd() {
+            if (originalCwd !== null && typeof globalThis.process.chdir === 'function') {
+                try {
+                    globalThis.process.chdir(originalCwd);
+                } catch (_) {}
+            }
         };
     }
 
@@ -206,6 +218,9 @@ export const runTest = async (testPath) => {
         var fullMsg = (e && e.message) ? (e.message + "\n" + msg) : msg;
         return "FAIL: " + fullMsg;
     } finally {
+        if (restoreCwd) {
+            restoreCwd();
+        }
         if (restoreArgv) {
             restoreArgv();
         }

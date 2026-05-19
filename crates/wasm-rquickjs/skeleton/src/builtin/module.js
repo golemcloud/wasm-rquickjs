@@ -1501,7 +1501,17 @@ export function createRequire(filename) {
         filepath = filename;
     }
     const dir = pathModule.dirname(filepath);
-    return makeRequire(dir, null, filepath);
+    const syntheticParent = {
+        id: filepath,
+        filename: filepath,
+        path: dir,
+        exports: {},
+        loaded: true,
+        parent: null,
+        children: [],
+        paths: _nodeModulePaths(dir),
+    };
+    return makeRequire(dir, syntheticParent, filepath);
 }
 
 export { builtinModuleNames as builtinModules };

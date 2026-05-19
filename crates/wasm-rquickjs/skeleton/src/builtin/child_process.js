@@ -547,8 +547,8 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
         globalThis.__wasm_rquickjs_cjs_import_dir = childCwd || process.cwd();
         try {
             const moduleSource = transpileModuleEvalToCommonJs(parsed.source);
-            const evaluator = new Function('Buffer', 'process', 'vm', '__wasm_eval_require', 'const require = undefined;\n' + moduleSource + '\n//# sourceURL=[eval]\n');
-            result = evaluator(Buffer, process, vmModule, childRequire);
+            const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'crypto', '__wasm_eval_require', 'const require = undefined;\n' + moduleSource + '\n//# sourceURL=[eval]\n');
+            result = evaluator(Buffer, process, vmModule, globalThis.os, globalThis.crypto, childRequire);
         } finally {
             if (previousCjsImportDir !== undefined) {
                 globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
@@ -559,11 +559,11 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
     } else if (inputType !== 'commonjs') {
         throw new Error('Unsupported --input-type value: ' + inputType);
     } else if (parsed.shouldPrint) {
-        const evaluator = new Function('Buffer', 'process', 'vm', 'require', 'return eval(' + JSON.stringify(parsed.source) + ');\n//# sourceURL=[eval]\n');
-        result = evaluator(Buffer, process, vmModule, childRequire);
+        const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'crypto', 'require', 'return eval(' + JSON.stringify(parsed.source) + ');\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, globalThis.os, globalThis.crypto, childRequire);
     } else {
-        const evaluator = new Function('Buffer', 'process', 'vm', 'require', parsed.source + '\n//# sourceURL=[eval]\n');
-        result = evaluator(Buffer, process, vmModule, childRequire);
+        const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'crypto', 'require', parsed.source + '\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, globalThis.os, globalThis.crypto, childRequire);
     }
     } finally {
         if (hadGlobalOs) {
@@ -635,7 +635,7 @@ function runInline(command, args, options) {
 
     let childCwd = process.cwd();
     if (options && typeof options.cwd === 'string') {
-        childCwd = options.cwd;
+        childCwd = path.isAbsolute(options.cwd) ? options.cwd : path.resolve(childCwd, options.cwd);
     }
     const encoding = getOutputEncoding(options);
 

@@ -288,12 +288,12 @@ process.cwd = function cwd() {
     return _cwd;
 };
 
-// nextTick queue: callbacks are batched and drained through QuickJS's Promise
-// job queue. Timer/immediate callbacks also run a native microtask checkpoint
-// after each callback, so nextTicks scheduled by promise reactions inside one
-// timer turn run before the next timer turn.
+// nextTick queue: callbacks are drained at Node.js-style checkpoints exposed
+// by the timer/event-loop shims and process exit handling.  Do not model this
+// as a regular Promise job: Node's nextTick queue is separate from the ECMAScript
+// microtask queue, and treating it as a Promise can run ticks during dynamic
+// import jobs where Node keeps CommonJS import evaluation atomic.
 const __nextTickQueue = [];
-let __nextTickDrainScheduled = false;
 
 function __wasm_rquickjs_handleUncaughtError(err, domain) {
     if (domain && typeof domain.emit === 'function') {
@@ -323,7 +323,6 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
 globalThis.__wasm_rquickjs_handleUncaughtError = __wasm_rquickjs_handleUncaughtError;
 
 function __drainNextTickQueue() {
-    __nextTickDrainScheduled = false;
     while (__nextTickQueue.length > 0) {
         const entry = __nextTickQueue.shift();
         try {
@@ -355,10 +354,6 @@ process.nextTick = function processNextTick(callback, ...args) {
     }
     const domain = process.domain || null;
     __nextTickQueue.push({ callback, args, domain });
-    if (!__nextTickDrainScheduled) {
-        __nextTickDrainScheduled = true;
-        Promise.resolve().then(__drainNextTickQueue);
-    }
 };
 
 let _umask = 0o022;
@@ -418,7 +413,11 @@ process.chdir = function chdir(directory) {
         err.dest = directory;
         throw err;
     }
-    _cwd = get_cwd();
+    // WASI's current_dir display can be lossy after changing into a nested
+    // preopened path. Node's process.cwd() reflects the successful chdir
+    // target, so keep the normalized absolute path as the JavaScript-visible
+    // cwd once the native chdir succeeds.
+    _cwd = resolved;
 };
 
 function _makeCredentialSetter(name, argName, credentialType) {
@@ -591,10 +590,20 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         obj = warning;
         if (!obj.name) obj.name = 'Warning';
     }
+    const warningName = String(obj.name || 'Warning');
+    const isDeprecationWarning = warningName === 'DeprecationWarning';
+    if (isDeprecationWarning && process.noDeprecation) {
+        return;
+    }
+
     const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
+    const shouldThrowDeprecation = isDeprecationWarning && !!process.throwDeprecation;
     process.nextTick(function() {
+        if (shouldThrowDeprecation) {
+            throw obj;
+        }
         if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
-            const header = String(obj.name || 'Warning') + ': ' + String(obj.message || obj);
+            const header = warningName + ': ' + String(obj.message || obj);
             let text = header;
             if (typeof obj.stack === 'string') {
                 text = obj.stack.indexOf(String(obj.message || obj)) >= 0
