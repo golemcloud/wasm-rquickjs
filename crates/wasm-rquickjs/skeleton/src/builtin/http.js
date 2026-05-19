@@ -80,31 +80,30 @@ export function fetch(resource, options = {}) {
             throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
         }
 
+        if (body instanceof FormData) {
+            const blob = formDataToBlob(body);
+            if (blob.type && blob.type !== '') {
+                rawHeaders['content-type'] = blob.type;
+            }
+            body = await blob.arrayBuffer();
+        } else if (body instanceof Blob) {
+            if (body.type && body.type !== '') {
+                rawHeaders['content-type'] = body.type;
+            }
+            body = await body.arrayBuffer();
+        }
+
         // Create the fetch promise
         let fetchPromise;
-        if (body instanceof ReadableStream || body instanceof FormData || body instanceof Blob) {
+        if (body instanceof ReadableStream) {
             let bodyCreator;
-            if (body instanceof ReadableStream) {
-                if (body.locked) throw new TypeError("ReadableStream is locked");
-                let used = false;
-                bodyCreator = () => {
-                    if (used) throw new TypeError("Disturbed stream");
-                    used = true;
-                    return body;
-                };
-            } else if (body instanceof FormData) {
-                const blob = formDataToBlob(body);
-                // We update rawHeaders here to include Content-Type
-                if (blob.type && blob.type !== '') {
-                    rawHeaders['content-type'] = blob.type;
-                }
-                bodyCreator = () => blob.stream();
-            } else if (body instanceof Blob) {
-                if (body.type && body.type !== '') {
-                    rawHeaders['content-type'] = body.type;
-                }
-                bodyCreator = () => body.stream();
-            }
+            if (body.locked) throw new TypeError("ReadableStream is locked");
+            let used = false;
+            bodyCreator = () => {
+                if (used) throw new TypeError("Disturbed stream");
+                used = true;
+                return body;
+            };
 
             fetchPromise = streamingRequest(
                 url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,

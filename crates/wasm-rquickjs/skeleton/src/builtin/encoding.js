@@ -10,6 +10,8 @@ import {
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
 const textDecoderState = new WeakMap();
+const textDecoderStreamState = new WeakSet();
+const textEncoderStreamState = new WeakSet();
 
 function validateOptions(options) {
     if (options !== undefined && options !== null && typeof options !== 'object') {
@@ -273,6 +275,7 @@ export class TextDecoderStream extends streams.TransformStream {
         this._label = encoding;
         this._fatal = fatal;
         this._ignoreBOM = !!options?.ignoreBOM;
+        textDecoderStreamState.add(this);
     }
 
     get encoding() {
@@ -285,6 +288,13 @@ export class TextDecoderStream extends streams.TransformStream {
 
     get ignoreBOM() {
         return this._ignoreBOM;
+    }
+
+    [customInspectSymbol]() {
+        if (!textDecoderStreamState.has(this)) {
+            throw new ERR_INVALID_THIS('TextDecoderStream');
+        }
+        return `TextDecoderStream {\n  encoding: '${this.encoding}',\n  fatal: ${this.fatal},\n  ignoreBOM: ${this.ignoreBOM},\n  readable: ReadableStream { locked: ${this.readable.locked}, state: 'readable', supportsBYOB: false },\n  writable: WritableStream { locked: ${this.writable.locked}, state: 'writable' }\n}`;
     }
 }
 
@@ -302,9 +312,17 @@ export class TextEncoderStream extends streams.TransformStream {
                 encoder = null;
             },
         });
+        textEncoderStreamState.add(this);
     }
 
     get encoding() {
         return 'utf-8';
+    }
+
+    [customInspectSymbol]() {
+        if (!textEncoderStreamState.has(this)) {
+            throw new ERR_INVALID_THIS('TextEncoderStream');
+        }
+        return `TextEncoderStream {\n  encoding: '${this.encoding}',\n  readable: ReadableStream { locked: ${this.readable.locked}, state: 'readable', supportsBYOB: false },\n  writable: WritableStream { locked: ${this.writable.locked}, state: 'writable' }\n}`;
     }
 }

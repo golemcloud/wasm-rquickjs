@@ -914,6 +914,71 @@ impl Resolver for CjsEvalResolver {
     }
 }
 
+/// Resolver for filesystem-backed ES modules.
+///
+/// QuickJS gives dynamic imports from CommonJS `eval()` a synthetic `<input>`
+/// base (handled by `CjsEvalResolver` above), but normal ESM resolution still
+/// needs Node-style filesystem handling for absolute paths and paths relative
+/// to the referrer module. `rquickjs::FileResolver` is kept as a fallback, but
+/// it does not reliably accept already-absolute guest paths in this WASI setup.
+struct NodeFileResolver;
+
+impl NodeFileResolver {
+    fn resolve_candidate(candidate: std::path::PathBuf) -> Option<String> {
+        let normalized = CjsEvalResolver::normalize_path(&candidate);
+        if std::path::Path::new(&normalized).is_file() {
+            return Some(normalized);
+        }
+
+        if std::path::Path::new(&normalized).extension().is_none() {
+            for ext in ["js", "mjs", "json"] {
+                let with_ext = format!("{}.{}", normalized, ext);
+                if std::path::Path::new(&with_ext).is_file() {
+                    return Some(with_ext);
+                }
+            }
+        }
+
+        None
+    }
+}
+
+impl Resolver for NodeFileResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if name.contains("://") || name.starts_with("node:") {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let candidate = if name.starts_with('/') {
+            std::path::PathBuf::from(name)
+        } else if name.starts_with("./") || name.starts_with("../") {
+            let base_path = if let Some(path) = FileUrlResolver::file_url_to_path(base) {
+                path
+            } else {
+                base.to_string()
+            };
+
+            if base_path == "<input>" {
+                return Err(Error::new_resolving(base, name));
+            }
+
+            let base_dir = std::path::Path::new(&base_path)
+                .parent()
+                .ok_or_else(|| Error::new_resolving(base, name))?;
+            base_dir.join(name)
+        } else {
+            return Err(Error::new_resolving(base, name));
+        };
+
+        Self::resolve_candidate(candidate).ok_or_else(|| Error::new_resolving(base, name))
+    }
+}
+
 /// Resolver that provides Node.js-style error codes for failed module resolution.
 /// This should be the LAST resolver in the chain, catching everything that
 /// preceding resolvers couldn't handle.
@@ -1430,6 +1495,7 @@ impl JsState {
                 FileUrlResolver,
                 builtin_resolver,
                 NodeModulesResolver,
+                NodeFileResolver,
             ),
             (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
         );

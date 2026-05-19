@@ -590,7 +590,7 @@ export class ERR_INVALID_ARG_TYPE extends TypeError {
 function inspectValue(value) {
     if (value === undefined) return 'undefined';
     if (typeof value === 'number' && !Number.isFinite(value)) return String(value);
-    return JSON.stringify(value);
+    return inspect(value, { colors: false });
 }
 
 export class ERR_INVALID_ARG_VALUE_RANGE extends RangeError {

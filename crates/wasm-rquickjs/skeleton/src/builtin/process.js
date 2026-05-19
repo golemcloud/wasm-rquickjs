@@ -261,10 +261,12 @@ process.dlopen = function dlopen(module, filename) {
 process.stdin = { isTTY: false, fd: 0, read() { return null; }, on() { return this; }, resume() { return this; }, pause() { return this; } };
 
 function createWritableStdio(fd, writer) {
-    return {
+    const stream = new EventEmitter();
+    Object.assign(stream, {
         isTTY: false,
         fd,
         writable: true,
+        writableNeedDrain: false,
         write(chunk, encoding, callback) {
             let cb = callback;
             if (typeof encoding === 'function') {
@@ -275,8 +277,21 @@ function createWritableStdio(fd, writer) {
                 cb();
             }
             return true;
+        },
+        end(chunk, encoding, callback) {
+            if (chunk !== undefined && typeof chunk !== 'function') {
+                this.write(chunk, encoding);
+            }
+            const cb = typeof chunk === 'function' ? chunk :
+                (typeof encoding === 'function' ? encoding : callback);
+            if (typeof cb === 'function') {
+                cb();
+            }
+            this.emit('finish');
+            return this;
         }
-    };
+    });
+    return stream;
 }
 
 process.stdout = createWritableStdio(1, write_stdout);
@@ -289,11 +304,12 @@ process.cwd = function cwd() {
 };
 
 // nextTick queue: callbacks are drained at Node.js-style checkpoints exposed
-// by the timer/event-loop shims and process exit handling.  Do not model this
-// as a regular Promise job: Node's nextTick queue is separate from the ECMAScript
-// microtask queue, and treating it as a Promise can run ticks during dynamic
-// import jobs where Node keeps CommonJS import evaluation atomic.
+// by the timer/event-loop shims and process exit handling.  A zero-delay timer
+// is used only as a wakeup when no other host callback would reach a checkpoint;
+// this keeps nextTick separate from ECMAScript Promise jobs, unlike the previous
+// Promise-based drain which could run during dynamic import evaluation.
 const __nextTickQueue = [];
+let __nextTickWakeupScheduled = false;
 
 function __wasm_rquickjs_handleUncaughtError(err, domain) {
     if (domain && typeof domain.emit === 'function') {
@@ -323,6 +339,7 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
 globalThis.__wasm_rquickjs_handleUncaughtError = __wasm_rquickjs_handleUncaughtError;
 
 function __drainNextTickQueue() {
+    __nextTickWakeupScheduled = false;
     while (__nextTickQueue.length > 0) {
         const entry = __nextTickQueue.shift();
         try {
@@ -342,10 +359,25 @@ function __drainNextTickQueue() {
     }
 }
 
+function __requestNextTickWakeup() {
+    if (__nextTickWakeupScheduled || __nextTickQueue.length === 0) {
+        return;
+    }
+    __nextTickWakeupScheduled = true;
+    if (typeof globalThis.setTimeout === 'function') {
+        globalThis.setTimeout(function __nextTickWakeup() {
+            __drainNextTickQueue();
+        }, 0);
+    } else {
+        Promise.resolve().then(__drainNextTickQueue);
+    }
+}
+
 // Expose the drain function so that timer callbacks can drain pending
 // nextTick work before executing, matching Node.js's guarantee that
 // process.nextTick always fires before timers (setTimeout/setImmediate).
 globalThis.__wasm_rquickjs_drainNextTick = __drainNextTickQueue;
+globalThis.__wasm_rquickjs_requestNextTickWakeup = __requestNextTickWakeup;
 
 process.nextTick = function processNextTick(callback, ...args) {
     if (typeof callback !== 'function') {
@@ -354,6 +386,7 @@ process.nextTick = function processNextTick(callback, ...args) {
     }
     const domain = process.domain || null;
     __nextTickQueue.push({ callback, args, domain });
+    __requestNextTickWakeup();
 };
 
 let _umask = 0o022;

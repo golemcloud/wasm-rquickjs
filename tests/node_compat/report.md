@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-05-18 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-05-19 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3107/4317 (72.0%)
+**Primary compatibility (CI-enforced):** 3104/4314 (72.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3107 | 72.0% | 55.4% | 46.1% |
+| ✅ passing (runnable) | 3104 | 72.0% | 55.3% | 46.1% |
 | 🧩 known gap | 1210 | 28.0% | 21.6% | 18.0% |
 | 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
-| 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
-| **Total** | **6734** |  |  | **100.0%** |
+| 🔒 Node.js internals (excluded) | 1121 | — | — | 16.7% |
+| **Total** | **6731** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3107/5613 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3104/5610 (55.3%)**.
 
 ## Inventory by Module
 
@@ -84,7 +84,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm | 121 | 25 | 84 | 3 | 9 | 0 | 0 | 22.9% | 20.7% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| whatwg | 264 | 57 | 21 | 0 | 0 | 0 | 186 | 73.1% | 73.1% |
+| whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
 | worker_threads | 189 | 19 | 51 | 111 | 0 | 0 | 8 | 27.1% | 10.5% |
 | zlib | 61 | 52 | 5 | 0 | 0 | 0 | 4 | 91.2% | 91.2% |
 
@@ -615,7 +615,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-whatwg-events-add-event-listener-options-passive.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-add-event-listener-options-signal.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-customevent.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-whatwg-readablebytestream-bad-buffers-and-views.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-readablebytestream.js` | 11 | 0 | 0 | 0 | 0 | 0 | 11 |
 | `test-whatwg-readablestream.js` | 82 | 0 | 0 | 0 | 0 | 0 | 82 |
 | `test-whatwg-transformstream.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |

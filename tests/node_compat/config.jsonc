@@ -9436,17 +9436,8 @@
     },
     "parallel/test-whatwg-events-event-constructors.js": { "category": "known-gap", "reason": "node_compat common shim is missing ../common/wpt harness" },
     "parallel/test-whatwg-events-eventtarget-this-of-listener.js": { "category": "known-gap", "reason": "node_compat common shim is missing ../common/wpt harness" },
-    "parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
-      "split": true,
-      "subtests": {
-        "block_00_block_00": { "category": "runnable" },
-        "block_01_block_01": { "category": "runnable" },
-        "block_02_block_02": { "category": "runnable" },
-        "block_03_block_03": { "category": "runnable" }
-      }
-    },
+    // Keep unsplit: this test has a shared pass counter and one process exit assertion spanning blocks.
+    "parallel/test-whatwg-readablebytestream-bad-buffers-and-views.js": { "category": "runnable" },
     "parallel/test-whatwg-readablebytestream.js": {
       "category": "unevaluated",
       "reason": "newly discovered, not yet evaluated",
