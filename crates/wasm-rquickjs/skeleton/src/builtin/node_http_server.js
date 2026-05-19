@@ -216,6 +216,8 @@ function ServerResponse(req, options) {
     this._chunked = false;
     this._hasBody = true;
     this._keepAlive = false;
+    this._keepAliveTimeout = 5000;
+    this._keepAliveMaxRequests = 0;
     this._sentContentLength = false;
     this._headersSentWire = false;
     this._rejectNonStandardBodyWrites = !!(options && options.rejectNonStandardBodyWrites);
@@ -552,6 +554,15 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         }
     }
 
+    if (this._keepAlive && !this.hasHeader('keep-alive')) {
+        const timeoutSeconds = Math.trunc((this._keepAliveTimeout || 5000) / 1000);
+        head += 'Keep-Alive: timeout=' + timeoutSeconds;
+        if (this._keepAliveMaxRequests > 0) {
+            head += ', max=' + this._keepAliveMaxRequests;
+        }
+        head += '\r\n';
+    }
+
     head += '\r\n';
     return head;
 };
@@ -866,6 +877,7 @@ function createConnectionParser(server, socket) {
         closeAfterResponse: false,
         responseFinished: false,
         shouldKeepAliveAfterResponse: false,
+        requestsServed: 0,
         detached: false,
     };
 
@@ -1085,10 +1097,21 @@ function createConnectionParser(server, socket) {
                 }
 
                 const connKeepAlive = computeKeepAlive(req.headers.connection, parsed.httpVersion);
+                const maxRequestsPerSocket = server.maxRequestsPerSocket == null
+                    ? 0
+                    : Math.max(0, server.maxRequestsPerSocket | 0);
+                const requestNumber = ++state.requestsServed;
+                if (maxRequestsPerSocket > 0 && requestNumber > maxRequestsPerSocket) {
+                    socket.write(Buffer.from('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'));
+                    socket.end();
+                    return;
+                }
                 const res = new ServerResponse(req, {
                     rejectNonStandardBodyWrites: server._rejectNonStandardBodyWrites,
                 });
-                res._keepAlive = connKeepAlive;
+                res._keepAlive = connKeepAlive && (maxRequestsPerSocket === 0 || requestNumber < maxRequestsPerSocket);
+                res._keepAliveTimeout = server.keepAliveTimeout;
+                res._keepAliveMaxRequests = maxRequestsPerSocket;
 
                 state.req = req;
                 state.res = res;

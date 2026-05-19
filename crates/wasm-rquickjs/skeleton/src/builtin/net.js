@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import pathModule from 'node:path';
 import { create_tcp_socket, create_tcp_listener } from '__wasm_rquickjs_builtin/net_native';
 import {
+    AbortError,
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_ARG_VALUE,
     ERR_MISSING_ARGS,
@@ -100,6 +101,14 @@ function nextTick(fn, ...args) {
         return;
     }
     Promise.resolve().then(() => fn(...args));
+}
+
+function deferred(fn) {
+    if (typeof globalThis.setImmediate === 'function') {
+        globalThis.setImmediate(fn);
+    } else {
+        nextTick(fn);
+    }
 }
 
 function createHandleWrap() {
@@ -262,6 +271,8 @@ function Socket(options) {
     this._readInFlight = false;
     this._netPaused = false;
     this._pendingReadChunks = [];
+    this._abortSignal = null;
+    this._abortHandler = null;
     this.connecting = false;
     this._timeout = null;
     this._timeoutValue = 0;
@@ -278,6 +289,7 @@ function Socket(options) {
 
     // Shut down the socket when we're finished with it.
     this.on('end', onReadableStreamEnd);
+    this._setupAbortSignal(options.signal);
 }
 
 function onReadableStreamEnd() {
@@ -357,6 +369,56 @@ Object.defineProperty(Socket.prototype, 'readyState', {
     },
 });
 
+Socket.prototype._clearAbortSignal = function _clearAbortSignal() {
+    if (this._abortSignal && this._abortHandler && typeof this._abortSignal.removeEventListener === 'function') {
+        try {
+            this._abortSignal.removeEventListener('abort', this._abortHandler);
+        } catch (_) {}
+    }
+    this._abortSignal = null;
+    this._abortHandler = null;
+};
+
+Socket.prototype._setupAbortSignal = function _setupAbortSignal(signal) {
+    if (signal === undefined || signal === null) {
+        return 'unchanged';
+    }
+    if (signal === this._abortSignal) {
+        return signal.aborted === true ? 'preaborted' : 'unchanged';
+    }
+
+    this._clearAbortSignal();
+
+    if (signal.aborted === true) {
+        this._abortSignal = signal;
+        deferred(() => {
+            if (!this.destroyed) {
+                this.destroy(new AbortError(signal.reason));
+            }
+        });
+        return 'preaborted';
+    }
+
+    if (typeof signal.addEventListener !== 'function') {
+        return 'unchanged';
+    }
+
+    const onAbort = () => {
+        this._clearAbortSignal();
+        deferred(() => {
+            if (!this.destroyed) {
+                this.destroy(new AbortError(signal.reason));
+            }
+        });
+    };
+
+    this._abortSignal = signal;
+    this._abortHandler = onAbort;
+    signal.addEventListener('abort', onAbort, { once: true });
+    this.once('close', () => this._clearAbortSignal());
+    return 'armed';
+};
+
 Socket.prototype.connect = function connect(...args) {
     let options, cb;
 
@@ -398,6 +460,10 @@ Socket.prototype.connect = function connect(...args) {
     }
     if (options.writableObjectMode || objectModeOptions.writableObjectMode) {
         throw new ERR_INVALID_ARG_VALUE('options.writableObjectMode', options.writableObjectMode || objectModeOptions.writableObjectMode, 'is not supported');
+    }
+
+    if (this._setupAbortSignal(options.signal) === 'preaborted') {
+        return this;
     }
 
     if (options.host !== undefined && typeof options.host !== 'string') {
@@ -987,6 +1053,7 @@ Socket.prototype._destroy = function _destroy(err, callback) {
     this._readInFlight = false;
     this._netPaused = false;
     this._pendingReadChunks.length = 0;
+    this._clearAbortSignal();
     this._clearTimeout();
     if (this._connectingHandle) {
         try { this._connectingHandle.close(); } catch (_) {}

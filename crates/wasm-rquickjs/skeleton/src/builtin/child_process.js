@@ -491,6 +491,7 @@ function transpileModuleEvalToCommonJs(source) {
         /^\s*import\s+(['"][^'"]+['"])\s*;?\s*$/gm,
         '__wasm_eval_require($1);'
     );
+    transformed = transformed.replace(/\bimport\s*\(/g, '__wasm_eval_dynamic_import(');
     return transformed;
 }
 
@@ -530,6 +531,7 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
     const oldGlobalCrypto = globalThis.crypto;
     globalThis.os = runtimeRequire('node:os');
     globalThis.crypto = runtimeRequire('node:crypto');
+    const evalFs = runtimeRequire('node:fs');
 
     try {
     if (bufferProbe) {
@@ -547,8 +549,11 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
         globalThis.__wasm_rquickjs_cjs_import_dir = childCwd || process.cwd();
         try {
             const moduleSource = transpileModuleEvalToCommonJs(parsed.source);
-            const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'crypto', '__wasm_eval_require', 'const require = undefined;\n' + moduleSource + '\n//# sourceURL=[eval]\n');
-            result = evaluator(Buffer, process, vmModule, globalThis.os, globalThis.crypto, childRequire);
+            const dynamicImport = function dynamicImport(specifier) {
+                return Promise.resolve(childRequire(specifier));
+            };
+            const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'fs', '__wasm_eval_require', '__wasm_eval_dynamic_import', 'const require = undefined;\n' + moduleSource + '\n//# sourceURL=[eval]\n');
+            result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire, dynamicImport);
         } finally {
             if (previousCjsImportDir !== undefined) {
                 globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
@@ -559,11 +564,11 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
     } else if (inputType !== 'commonjs') {
         throw new Error('Unsupported --input-type value: ' + inputType);
     } else if (parsed.shouldPrint) {
-        const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'crypto', 'require', 'return eval(' + JSON.stringify(parsed.source) + ');\n//# sourceURL=[eval]\n');
-        result = evaluator(Buffer, process, vmModule, globalThis.os, globalThis.crypto, childRequire);
+        const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'fs', 'require', 'return eval(' + JSON.stringify(parsed.source) + ');\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire);
     } else {
-        const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'crypto', 'require', parsed.source + '\n//# sourceURL=[eval]\n');
-        result = evaluator(Buffer, process, vmModule, globalThis.os, globalThis.crypto, childRequire);
+        const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'fs', 'require', parsed.source + '\n//# sourceURL=[eval]\n');
+        result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire);
     }
     } finally {
         if (hadGlobalOs) {
@@ -1467,6 +1472,7 @@ export function exec(command, options, callback) {
     const child = createExecChildProcess();
     const result = runExecCommand(command, normalized.options);
     const error = createExecError(command, result);
+    const spawnError = result && result.error ? result.error : null;
 
     child.exitCode = typeof result.status === 'number' ? result.status : null;
     child.signalCode = result.signal;
@@ -1476,8 +1482,8 @@ export function exec(command, options, callback) {
             normalized.callback(error, result.stdout, result.stderr);
         }
 
-        if (error) {
-            child.emit('error', error);
+        if (spawnError) {
+            child.emit('error', spawnError);
         }
         child.emit('exit', child.exitCode, child.signalCode);
         child.emit('close', child.exitCode, child.signalCode);
@@ -1497,6 +1503,7 @@ export function execFile(file, args, options, callback) {
 
     const result = spawnSync(String(file), normalized.args, resolvedOptions);
     const error = createExecFileError(file, normalized.args, result);
+    const spawnError = result && result.error ? result.error : null;
 
     child.spawnfile = String(file);
     child.spawnargs = [String(file)].concat(normalized.args);
@@ -1508,8 +1515,8 @@ export function execFile(file, args, options, callback) {
             normalized.callback(error, result.stdout, result.stderr);
         }
 
-        if (error) {
-            child.emit('error', error);
+        if (spawnError) {
+            child.emit('error', spawnError);
         }
         child.emit('exit', child.exitCode, child.signalCode);
         child.emit('close', child.exitCode, child.signalCode);

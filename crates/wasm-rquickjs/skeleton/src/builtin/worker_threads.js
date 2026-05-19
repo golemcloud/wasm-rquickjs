@@ -1,6 +1,8 @@
 // node:worker_threads compatibility shim for single-threaded WASM runtimes.
 
 import { _emitInit } from 'node:async_hooks';
+import moduleExports from 'node:module';
+import process from 'node:process';
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
 const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
@@ -13,6 +15,12 @@ function createDataCloneError(message) {
 function createTargetContextUnavailableError() {
     const error = new Error('Message target context unavailable');
     error.code = 'ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE';
+    return error;
+}
+
+function createClosedMessagePortError() {
+    const error = new Error('MessagePort was closed');
+    error.code = 'ERR_CLOSED_MESSAGE_PORT';
     return error;
 }
 
@@ -133,21 +141,57 @@ function emitListeners(listeners, event, value) {
     }
 }
 
-export const isMainThread = true;
-export const parentPort = null;
-export const workerData = null;
+let currentIsMainThread = true;
+let currentParentPort = null;
+let currentWorkerData = null;
+export { currentIsMainThread as isMainThread };
+export { currentParentPort as parentPort };
+export { currentWorkerData as workerData };
 export const threadId = 0;
 export const resourceLimits = {};
 
 export class Worker {
     #closed = false;
     #listeners = createListenerMap();
+    #mainPort = null;
+    #workerPort = null;
 
     constructor(filename, options) {
         const transferList = normalizeTransferList(options?.transferList);
         ensureTransferListItemsAreTransferable(transferList);
 
         this.filename = filename;
+        const channel = new MessageChannel();
+        this.#mainPort = channel.port1;
+        this.#workerPort = channel.port2;
+        this.#mainPort.on('message', (value) => emitListeners(this.#listeners, 'message', value));
+        this.#mainPort.on('messageerror', (value) => emitListeners(this.#listeners, 'messageerror', value));
+        this.#mainPort.on('close', () => emitListeners(this.#listeners, 'close'));
+
+        const previousIsMainThread = currentIsMainThread;
+        const previousParentPort = currentParentPort;
+        const previousWorkerData = currentWorkerData;
+        const previousEnvStartedWorker = process.env.HAS_STARTED_WORKER;
+        currentIsMainThread = false;
+        currentParentPort = this.#workerPort;
+        currentWorkerData = options?.workerData;
+        if (moduleExports.require?.cache && moduleExports.require.cache[String(filename)]) {
+            delete moduleExports.require.cache[String(filename)];
+        }
+        try {
+            moduleExports.require(String(filename));
+        } catch (error) {
+            Promise.resolve().then(() => emitListeners(this.#listeners, 'error', error));
+        } finally {
+            currentIsMainThread = previousIsMainThread;
+            currentParentPort = previousParentPort;
+            currentWorkerData = previousWorkerData;
+            if (previousEnvStartedWorker === undefined) {
+                delete process.env.HAS_STARTED_WORKER;
+            } else {
+                process.env.HAS_STARTED_WORKER = previousEnvStartedWorker;
+            }
+        }
     }
 
     on(event, fn) {
@@ -165,17 +209,16 @@ export class Worker {
         return this;
     }
 
+    off(event, fn) {
+        return this.removeListener(event, fn);
+    }
+
     postMessage(value) {
         if (this.#closed) {
             return;
         }
 
-        Promise.resolve().then(() => {
-            if (this.#closed) {
-                return;
-            }
-            emitListeners(this.#listeners, 'message', value);
-        });
+        this.#mainPort.postMessage(value);
     }
 
     ref() {}
@@ -184,6 +227,8 @@ export class Worker {
 
     terminate() {
         this.#closed = true;
+        if (this.#mainPort) this.#mainPort.close();
+        if (this.#workerPort) this.#workerPort.close();
         return Promise.resolve(0);
     }
 }
@@ -268,16 +313,21 @@ export class MessagePort {
         }
     }
 
-    close() {
+    close(callback) {
+        if (typeof callback === 'function') {
+            this.once('close', callback);
+        }
         if (this.#closed) {
             return;
         }
         const target = this._target;
+        this.#closed = true;
+        this._target = null;
+        if (target instanceof MessagePort) {
+            target.#closed = true;
+            target._target = null;
+        }
         Promise.resolve().then(() => {
-            this.#closed = true;
-            if (target instanceof MessagePort) {
-                target.#closed = true;
-            }
             emitListeners(this.#listeners, 'close');
             if (target instanceof MessagePort) {
                 emitListeners(target.#listeners, 'close');
@@ -315,6 +365,14 @@ export class MessagePort {
         removeListener(this.#listeners, event, fn);
         return this;
     }
+
+    off(event, fn) {
+        return this.removeListener(event, fn);
+    }
+
+    _isClosed() {
+        return this.#closed;
+    }
 }
 
 export class MessageChannel {
@@ -349,8 +407,15 @@ function createContextPortProxy() {
     port.start = function start() {};
     port.ref = function ref() {};
     port.unref = function unref() {};
-    port.close = function close() {
+    port.close = function close(callback) {
+        if (typeof callback === 'function') {
+            port.once('close', callback);
+        }
+        if (closed) {
+            return;
+        }
         closed = true;
+        Promise.resolve().then(() => emitListeners(listeners, 'close'));
     };
 
     port.on = function on(event, fn) {
@@ -367,6 +432,8 @@ function createContextPortProxy() {
         removeListener(listeners, event, fn);
         return port;
     };
+
+    port.off = port.removeListener;
 
     Object.defineProperty(port, 'onmessageerror', {
         configurable: true,
@@ -416,6 +483,10 @@ export function moveMessagePortToContext(port) {
         throw new TypeError('The "port" argument must be a MessagePort');
     }
 
+    if (port._isClosed()) {
+        throw createClosedMessagePortError();
+    }
+
     const movedPort = createContextPortProxy();
     const counterpart = port._target;
     if (counterpart && typeof counterpart === 'object') {
@@ -438,9 +509,9 @@ export function setEnvironmentData() {
 }
 
 export default {
-    isMainThread,
-    parentPort,
-    workerData,
+    get isMainThread() { return currentIsMainThread; },
+    get parentPort() { return currentParentPort; },
+    get workerData() { return currentWorkerData; },
     threadId,
     resourceLimits,
     Worker,
