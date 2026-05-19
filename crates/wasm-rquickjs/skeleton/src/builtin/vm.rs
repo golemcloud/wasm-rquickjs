@@ -164,6 +164,10 @@ fn require_esm_impl<'js>(
 
     let globals = ctx.globals();
 
+    if cached_async_esm_module(&globals, filename, &file_url) {
+        return throw_require_async_module(ctx, &globals, filename);
+    }
+
     unsafe {
         let val = qjs::JS_Eval(
             ctx.as_raw().as_ptr(),
@@ -227,17 +231,54 @@ fn require_esm_impl<'js>(
         // Module didn't store the namespace — likely has top-level await (TLA)
         // and the module evaluation Promise hasn't resolved synchronously.
         // Throw ERR_REQUIRE_ASYNC_MODULE matching Node.js behavior.
-        let error_ctor: rquickjs::Function = globals.get("Error")?;
-        let msg = format!(
-            "require() cannot be used on an ESM graph with top-level await. Use import() instead. Module: {}",
-            filename
-        );
-        let error_obj: rquickjs::Object = error_ctor.call((&msg,))?;
-        error_obj.set("code", "ERR_REQUIRE_ASYNC_MODULE")?;
-        Err(ctx.throw(error_obj.into_value()))
+        mark_async_esm_module(&ctx, &globals, filename, &file_url)?;
+        throw_require_async_module(ctx, &globals, filename)
     } else {
         Ok(ns)
     }
+}
+
+fn cached_async_esm_module<'js>(globals: &rquickjs::Object<'js>, filename: &str, file_url: &str) -> bool {
+    let Ok(registry) = globals.get::<_, rquickjs::Object>("__wasm_rquickjs_async_esm_modules") else {
+        return false;
+    };
+
+    registry.get::<_, bool>(filename).unwrap_or(false)
+        || registry.get::<_, bool>(file_url).unwrap_or(false)
+}
+
+fn mark_async_esm_module<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    globals: &rquickjs::Object<'js>,
+    filename: &str,
+    file_url: &str,
+) -> rquickjs::Result<()> {
+    let registry = match globals.get::<_, rquickjs::Value>("__wasm_rquickjs_async_esm_modules") {
+        Ok(value) if value.is_object() => value.into_object().unwrap(),
+        _ => {
+            let object = rquickjs::Object::new(ctx.clone())?;
+            globals.set("__wasm_rquickjs_async_esm_modules", object.clone())?;
+            object
+        }
+    };
+    registry.set(filename, true)?;
+    registry.set(file_url, true)?;
+    Ok(())
+}
+
+fn throw_require_async_module<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    globals: &rquickjs::Object<'js>,
+    filename: &str,
+) -> rquickjs::Result<rquickjs::Value<'js>> {
+    let error_ctor: rquickjs::Function = globals.get("Error")?;
+    let msg = format!(
+        "require() cannot be used on an ESM graph with top-level await. Use import() instead. Module: {}",
+        filename
+    );
+    let error_obj: rquickjs::Object = error_ctor.call((&msg,))?;
+    error_obj.set("code", "ERR_REQUIRE_ASYNC_MODULE")?;
+    Err(ctx.throw(error_obj.into_value()))
 }
 
 fn eval_with_filename_impl<'js>(

@@ -6190,6 +6190,14 @@ pub const REEXPORT_JS: &str = r#"import * as _crypto from '__wasm_rquickjs_built
 
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"
-        import { webcrypto as __wasm_rquickjs_webcrypto } from '__wasm_rquickjs_builtin/web_crypto';
+        import { webcrypto as __wasm_rquickjs_webcrypto, randomBytes as __wasm_rquickjs_random_bytes } from '__wasm_rquickjs_builtin/web_crypto';
         globalThis.crypto = __wasm_rquickjs_webcrypto;
+        Math.random = function random() {
+            const bytes = __wasm_rquickjs_random_bytes(8);
+            let value = 0;
+            for (let i = 0; i < 6; i++) {
+                value = value * 256 + bytes[i];
+            }
+            return (value >>> 0) / 281474976710656 + Math.floor(value / 4294967296) / 65536;
+        };
     "#;

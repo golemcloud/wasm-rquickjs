@@ -1060,7 +1060,7 @@ function loadModule(resolvedFilename, source, parentModule) {
     }
 
     let mod;
-    if (!parentModule && typeof mainModule !== 'undefined' && mainModule.filename === '/') {
+    if ((!parentModule || parentModule === mainModule || parentModule.filename === '/') && typeof mainModule !== 'undefined' && mainModule.filename === '/') {
         mod = mainModule;
         mod.id = '.';
         mod.filename = resolvedFilename;

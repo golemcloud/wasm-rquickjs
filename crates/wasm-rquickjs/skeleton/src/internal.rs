@@ -1260,6 +1260,153 @@ fn escape_js_string(s: &str) -> String {
     out
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum JsBraceContext {
+    Normal,
+    Function,
+    Class,
+}
+
+fn source_has_top_level_await(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut function_depth = 0usize;
+    let mut class_depth = 0usize;
+    let mut braces = Vec::new();
+    let mut pending_function_body = false;
+    let mut pending_class_body = false;
+    let mut after_arrow = false;
+    let mut skip_arrow_expression: Option<(usize, usize, usize)> = None;
+
+    while i < bytes.len() {
+        let b = bytes[i];
+
+        if b.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+
+        if b == b'/' && i + 1 < bytes.len() {
+            if bytes[i + 1] == b'/' {
+                i += 2;
+                while i < bytes.len() && bytes[i] != b'\n' && bytes[i] != b'\r' {
+                    i += 1;
+                }
+                continue;
+            }
+            if bytes[i + 1] == b'*' {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+        }
+
+        if b == b'\'' || b == b'"' || b == b'`' {
+            let quote = b;
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i = (i + 2).min(bytes.len());
+                    continue;
+                }
+                if bytes[i] == quote {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        if after_arrow {
+            after_arrow = false;
+            if b == b'{' {
+                pending_function_body = true;
+            } else {
+                skip_arrow_expression = Some((paren_depth, bracket_depth, braces.len()));
+            }
+        }
+
+        if is_js_identifier_start(b) {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && is_js_identifier_continue(bytes[i]) {
+                i += 1;
+            }
+            let ident = &source[start..i];
+            if skip_arrow_expression.is_none() {
+                match ident {
+                    "await" if function_depth == 0 && class_depth == 0 => return true,
+                    "function" => pending_function_body = true,
+                    "class" => pending_class_body = true,
+                    _ => {}
+                }
+            }
+            continue;
+        }
+
+        if let Some((start_paren, start_bracket, start_brace)) = skip_arrow_expression
+            && (b == b';'
+                || b == b','
+                || (b == b')' && paren_depth <= start_paren)
+                || (b == b']' && bracket_depth <= start_bracket)
+                || (b == b'}' && braces.len() <= start_brace))
+        {
+            skip_arrow_expression = None;
+        }
+
+        match b {
+            b'(' => paren_depth += 1,
+            b')' => paren_depth = paren_depth.saturating_sub(1),
+            b'[' => bracket_depth += 1,
+            b']' => bracket_depth = bracket_depth.saturating_sub(1),
+            b'=' if i + 1 < bytes.len() && bytes[i + 1] == b'>' => {
+                after_arrow = true;
+                i += 1;
+            }
+            b'{' => {
+                if pending_function_body {
+                    braces.push(JsBraceContext::Function);
+                    function_depth += 1;
+                    pending_function_body = false;
+                } else if pending_class_body {
+                    braces.push(JsBraceContext::Class);
+                    class_depth += 1;
+                    pending_class_body = false;
+                } else {
+                    braces.push(JsBraceContext::Normal);
+                }
+            }
+            b'}' => {
+                if let Some(context) = braces.pop() {
+                    match context {
+                        JsBraceContext::Function => function_depth = function_depth.saturating_sub(1),
+                        JsBraceContext::Class => class_depth = class_depth.saturating_sub(1),
+                        JsBraceContext::Normal => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    false
+}
+
+fn is_js_identifier_start(byte: u8) -> bool {
+    byte == b'_' || byte == b'$' || byte.is_ascii_alphabetic()
+}
+
+fn is_js_identifier_continue(byte: u8) -> bool {
+    is_js_identifier_start(byte) || byte.is_ascii_digit()
+}
+
 fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     let mut props = Vec::new();
 
@@ -1370,7 +1517,16 @@ impl Loader for ImportMetaLoader {
             return Err(ctx.throw(cached_error));
         }
 
-        let injected = inject_import_meta_prologue(&init, &source);
+        let mut injected = inject_import_meta_prologue(&init, &source);
+        if source_has_top_level_await(&source) {
+            let escaped_path = escape_js_string(&abs_path);
+            let escaped_url = escape_js_string(&init.url);
+            let marker = format!(
+                "globalThis.__wasm_rquickjs_async_esm_modules=globalThis.__wasm_rquickjs_async_esm_modules||Object.create(null);globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;\n",
+                escaped_path, escaped_url
+            );
+            injected = format!("{}{}", marker, injected);
+        }
         match Module::declare(ctx.clone(), path, injected.as_bytes().to_vec()) {
             Ok(module) => Ok(module),
             Err(Error::Exception) => {

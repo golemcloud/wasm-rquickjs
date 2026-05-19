@@ -1,39 +1,13 @@
 // node:worker_threads compatibility shim for single-threaded WASM runtimes.
 
+import { _emitInit } from 'node:async_hooks';
+
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
-const FIPS_IN_WORKER_ERROR = 'Calling crypto.setFips() is not supported in workers';
 const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
 const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
 
 function createDataCloneError(message) {
     return new DOMException(message, 'DataCloneError');
-}
-
-function bytesToHex(bytes) {
-    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    let result = '';
-    for (let i = 0; i < data.length; i++) {
-        result += data[i].toString(16).padStart(2, '0');
-    }
-    return result;
-}
-
-function keyToStringForWorkerEcho(key) {
-    let value = key;
-    if (value && typeof value === 'object' && value._keyObject) {
-        value = value._keyObject;
-    }
-    if (!value || typeof value !== 'object' || typeof value.export !== 'function') {
-        return key;
-    }
-    if (value.type === 'secret') {
-        const exported = value.export();
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(exported).toString('hex');
-        }
-        return bytesToHex(exported);
-    }
-    return value.export({ type: 'pkcs1', format: 'pem' });
 }
 
 function createTargetContextUnavailableError() {
@@ -119,6 +93,7 @@ function createListenerMap() {
     return {
         message: [],
         messageerror: [],
+        close: [],
         disconnect: [],
     };
 }
@@ -169,15 +144,6 @@ export class Worker {
     #listeners = createListenerMap();
 
     constructor(filename, options) {
-        if (
-            options &&
-            options.eval === true &&
-            typeof filename === 'string' &&
-            filename.indexOf('setFips(') !== -1
-        ) {
-            throw new Error(FIPS_IN_WORKER_ERROR);
-        }
-
         const transferList = normalizeTransferList(options?.transferList);
         ensureTransferListItemsAreTransferable(transferList);
 
@@ -208,15 +174,7 @@ export class Worker {
             if (this.#closed) {
                 return;
             }
-            let response = value;
-            if (
-                value &&
-                typeof value === 'object' &&
-                Object.prototype.hasOwnProperty.call(value, 'key')
-            ) {
-                response = keyToStringForWorkerEcho(value.key);
-            }
-            emitListeners(this.#listeners, 'message', response);
+            emitListeners(this.#listeners, 'message', value);
         });
     }
 
@@ -240,9 +198,14 @@ export class MessagePort {
     #onmessage = null;
     #onmessageerror = null;
     #closed = false;
+    #refed = false;
     #queue = [];
     #draining = false;
     #listeners = createListenerMap();
+
+    constructor() {
+        _emitInit('MESSAGEPORT', this);
+    }
 
     get onmessage() {
         return this.#onmessage;
@@ -306,12 +269,35 @@ export class MessagePort {
     }
 
     close() {
-        this.#closed = true;
+        if (this.#closed) {
+            return;
+        }
+        const target = this._target;
+        Promise.resolve().then(() => {
+            this.#closed = true;
+            if (target instanceof MessagePort) {
+                target.#closed = true;
+            }
+            emitListeners(this.#listeners, 'close');
+            if (target instanceof MessagePort) {
+                emitListeners(target.#listeners, 'close');
+            }
+        });
     }
 
-    ref() {}
+    ref() {
+        this.#refed = true;
+        return this;
+    }
 
-    unref() {}
+    unref() {
+        this.#refed = false;
+        return this;
+    }
+
+    hasRef() {
+        return !this.#closed && (this.#refed || this.#listeners.message.length > 0 || this.#listeners.close.length > 0);
+    }
 
     start() {}
 

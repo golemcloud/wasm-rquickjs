@@ -259,6 +259,9 @@ function Socket(options) {
     this._connectingHandle = null;
     this._reading = false;
     this._readToken = 0;
+    this._readInFlight = false;
+    this._netPaused = false;
+    this._pendingReadChunks = [];
     this.connecting = false;
     this._timeout = null;
     this._timeoutValue = 0;
@@ -477,6 +480,9 @@ Socket.prototype.connect = function connect(...args) {
         this._handle = null;
         this._reading = false;
         this._readToken++;
+        this._readInFlight = false;
+        this._netPaused = false;
+        this._pendingReadChunks.length = 0;
         this.destroyed = false;
         this.readable = true;
         this._hadError = false;
@@ -847,9 +853,46 @@ Socket.prototype._read = function _read(n) {
         return;
     }
     if (!this._handle || this.destroyed) return;
+    if (this._pendingReadChunks.length > 0) {
+        this._drainPendingReadChunks();
+        if (this._netPaused || this._pendingReadChunks.length > 0) return;
+    }
     if (!this._reading) {
         this._reading = true;
+    }
+    if (!this._readInFlight) {
         this._startPollLoop();
+    }
+};
+
+Socket.prototype.pause = function pause() {
+    this._netPaused = true;
+    this._reading = false;
+    return Duplex.prototype.pause.call(this);
+};
+
+Socket.prototype.resume = function resume() {
+    this._netPaused = false;
+    const result = Duplex.prototype.resume.call(this);
+    this._drainPendingReadChunks();
+    if (!this._reading && this._handle && !this.destroyed && !this._netPaused) {
+        this.read(0);
+    }
+    return result;
+};
+
+Socket.prototype._drainPendingReadChunks = function _drainPendingReadChunks() {
+    while (!this._netPaused && this._pendingReadChunks.length > 0) {
+        const chunk = this._pendingReadChunks.shift();
+        if (chunk === null || chunk === undefined) {
+            this.push(null);
+            return;
+        }
+        const keepGoing = this.push(chunk);
+        if (!keepGoing) {
+            this._reading = false;
+            return;
+        }
     }
 };
 
@@ -858,21 +901,34 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
     (async () => {
         while (this._reading && this._handle && token === this._readToken) {
             try {
+                this._readInFlight = true;
                 const chunk = await this._handle.read(16384);
+                this._readInFlight = false;
                 if (token !== this._readToken) break;
                 if (chunk === null || chunk === undefined) {
-                    this.push(null);
-                    this.read(0);
+                    if (this._netPaused) {
+                        this._pendingReadChunks.push(null);
+                    } else {
+                        this.push(null);
+                        this.read(0);
+                    }
                     break;
                 }
                 this.bytesRead += chunk.length;
                 this._resetTimeout();
-                const keepGoing = this.push(Buffer.from(chunk));
+                const buffer = Buffer.from(chunk);
+                if (this._netPaused) {
+                    this._pendingReadChunks.push(buffer);
+                    this._reading = false;
+                    break;
+                }
+                const keepGoing = this.push(buffer);
                 if (!keepGoing) {
                     this._reading = false;
                     break;
                 }
             } catch (e) {
+                this._readInFlight = false;
                 if (token !== this._readToken) break;
                 this.destroy(parseNativeError(e));
                 break;
@@ -928,6 +984,9 @@ Socket.prototype._destroy = function _destroy(err, callback) {
     this._hadError = !!err;
     this._reading = false;
     this._readToken++;
+    this._readInFlight = false;
+    this._netPaused = false;
+    this._pendingReadChunks.length = 0;
     this._clearTimeout();
     if (this._connectingHandle) {
         try { this._connectingHandle.close(); } catch (_) {}

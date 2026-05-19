@@ -1,4 +1,5 @@
 import { ws_connect } from '__wasm_rquickjs_builtin/websocket_native';
+import { Event as NodeEvent } from 'node:events';
 
 // readyState constants
 const CONNECTING = 0;
@@ -37,15 +38,44 @@ function normalizeWebSocketUrl(url) {
     return url;
 }
 
-class MessageEvent {
-    constructor(type, data, origin) {
-        this.type = type;
-        this.data = data;
-        this.origin = origin || '';
-        this.lastEventId = '';
-        this.source = null;
-        this.ports = [];
+const MESSAGE_EVENT_STATE = Symbol('MessageEvent.state');
+
+function getMessageEventState(event) {
+    const state = event?.[MESSAGE_EVENT_STATE];
+    if (!state) {
+        throw new TypeError('Value of "this" must be of type MessageEvent');
     }
+    return state;
+}
+
+class MessageEvent extends NodeEvent {
+    constructor(type, eventInitDictOrData = {}, legacyOrigin = '') {
+        const init = eventInitDictOrData && typeof eventInitDictOrData === 'object' && (
+            Object.prototype.hasOwnProperty.call(eventInitDictOrData, 'data') ||
+            Object.prototype.hasOwnProperty.call(eventInitDictOrData, 'origin') ||
+            Object.prototype.hasOwnProperty.call(eventInitDictOrData, 'lastEventId') ||
+            Object.prototype.hasOwnProperty.call(eventInitDictOrData, 'source') ||
+            Object.prototype.hasOwnProperty.call(eventInitDictOrData, 'ports')
+        ) ? eventInitDictOrData : { data: eventInitDictOrData, origin: legacyOrigin };
+
+        super(type, init);
+        Object.defineProperty(this, MESSAGE_EVENT_STATE, {
+            value: {
+                data: init.data === undefined ? null : init.data,
+                origin: init.origin === undefined ? '' : String(init.origin),
+                lastEventId: init.lastEventId === undefined ? '' : String(init.lastEventId),
+                source: init.source === undefined ? null : init.source,
+                ports: init.ports === undefined ? [] : [...init.ports],
+            },
+            enumerable: false,
+        });
+    }
+
+    get data() { return getMessageEventState(this).data; }
+    get origin() { return getMessageEventState(this).origin; }
+    get lastEventId() { return getMessageEventState(this).lastEventId; }
+    get source() { return getMessageEventState(this).source; }
+    get ports() { return getMessageEventState(this).ports; }
 }
 
 class CloseEvent {

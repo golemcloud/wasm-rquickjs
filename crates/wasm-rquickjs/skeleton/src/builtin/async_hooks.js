@@ -13,6 +13,7 @@ let _nextAsyncId = 2;
 let _executionAsyncId = 1;
 
 const _alsRegistry = new Set();
+const _enabledHooks = new Set();
 
 class AsyncLocalStorage {
     constructor() {
@@ -143,10 +144,27 @@ class AsyncResource {
 }
 
 function createHook(callbacks) {
-    return {
-        enable() { return this; },
-        disable() { return this; },
+    const hook = {
+        enable() {
+            _enabledHooks.add(callbacks || {});
+            return this;
+        },
+        disable() {
+            _enabledHooks.delete(callbacks || {});
+            return this;
+        },
     };
+    return hook;
+}
+
+function _emitInit(type, resource, triggerAsyncId = _executionAsyncId) {
+    const asyncId = _nextAsyncId++;
+    for (const callbacks of [..._enabledHooks]) {
+        if (typeof callbacks.init === 'function') {
+            callbacks.init(asyncId, type, triggerAsyncId, resource);
+        }
+    }
+    return asyncId;
 }
 
 function executionAsyncId() {
@@ -217,6 +235,7 @@ export {
     executionAsyncId,
     triggerAsyncId,
     executionAsyncResource,
+    _emitInit,
     _captureContext,
     _restoreContext,
 };
@@ -228,6 +247,7 @@ export default {
     executionAsyncId,
     triggerAsyncId,
     executionAsyncResource,
+    _emitInit,
     _captureContext,
     _restoreContext,
 };

@@ -144,7 +144,8 @@ export const runTest = async (testPath) => {
         // Reset mustCall tracking for this test
         var commonMod;
         try {
-            commonMod = require('/home/node/test/common/index.js');
+            commonMod = require('node:module')
+                .createRequire('/home/node/test/common/index.js')('/home/node/test/common/index.js');
         } catch(e) {}
         if (commonMod && typeof commonMod._resetMustCalls === 'function') {
             commonMod._resetMustCalls();
@@ -179,7 +180,8 @@ export const runTest = async (testPath) => {
         // Verify mustCall expectations first
         var common;
         try {
-            common = require('/home/node/test/common/index.js');
+            common = require('node:module')
+                .createRequire('/home/node/test/common/index.js')('/home/node/test/common/index.js');
         } catch(e) {}
         var mustCallErrors = [];
         if (common && typeof common._checkMustCalls === 'function') {

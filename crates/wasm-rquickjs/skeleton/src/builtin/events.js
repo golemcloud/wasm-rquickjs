@@ -1,9 +1,13 @@
 // Web platform Event, EventTarget, and CustomEvent implementations
 
 const _eventTrusted = new WeakMap();
+let _currentPassiveListener = false;
 
 class Event {
     constructor(type, eventInitDict = {}) {
+        if (arguments.length === 0) {
+            throw new TypeError("Failed to construct 'Event': 1 argument required, but only 0 present.");
+        }
         this.type = String(type);
         this.bubbles = !!eventInitDict.bubbles;
         this.cancelable = !!eventInitDict.cancelable;
@@ -27,7 +31,7 @@ class Event {
     }
 
     preventDefault() {
-        if (this.cancelable) {
+        if (this.cancelable && !_currentPassiveListener) {
             this.defaultPrevented = true;
         }
     }
@@ -62,12 +66,17 @@ class EventTarget {
     }
 
     addEventListener(type, listener, options) {
-        if (listener == null) return;
+        const opts = options != null && typeof options === 'object' ? options : null;
+        const capture = typeof options === 'boolean' ? options : !!(opts && opts.capture);
+        const once = !!(opts && opts.once);
+        const passive = !!(opts && opts.passive);
+        const signal = opts ? opts.signal : undefined;
 
-        const capture = typeof options === 'boolean' ? options : !!(options && options.capture);
-        const once = !!(options && typeof options === 'object' && options.once);
-        const passive = !!(options && typeof options === 'object' && options.passive);
-        const signal = options && typeof options === 'object' ? options.signal : undefined;
+        if (signal !== undefined && (signal === null || typeof signal !== 'object' || typeof signal.addEventListener !== 'function' || typeof signal.removeEventListener !== 'function' || !('aborted' in signal))) {
+            throw new TypeError("Failed to execute 'addEventListener': member signal is not of type AbortSignal.");
+        }
+
+        if (listener == null) return;
 
         if (signal && signal.aborted) return;
 
@@ -80,13 +89,15 @@ class EventTarget {
             if (entry.listener === listener && entry.capture === capture) return;
         }
 
-        const entry = { listener, capture, once, passive };
+        const entry = { listener, capture, once, passive, abortHandler: null, removed: false };
         this._listeners[type].push(entry);
 
         if (signal) {
-            signal.addEventListener('abort', () => {
+            entry.abortHandler = () => {
                 this.removeEventListener(type, listener, { capture });
-            }, { once: true });
+            };
+            signal.addEventListener('abort', entry.abortHandler, { once: true });
+            entry.signal = signal;
         }
     }
 
@@ -94,9 +105,17 @@ class EventTarget {
         if (!this._listeners[type]) return;
 
         const capture = typeof options === 'boolean' ? options : !!(options && options.capture);
-        this._listeners[type] = this._listeners[type].filter(
-            e => e.listener !== listener || e.capture !== capture
-        );
+        const entries = this._listeners[type];
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const entry = entries[i];
+            if (entry.listener === listener && entry.capture === capture) {
+                entry.removed = true;
+                if (entry.signal && entry.abortHandler) {
+                    entry.signal.removeEventListener('abort', entry.abortHandler);
+                }
+                entries.splice(i, 1);
+            }
+        }
     }
 
     dispatchEvent(event) {
@@ -112,7 +131,13 @@ class EventTarget {
             const handlers = list.slice();
             for (const entry of handlers) {
                 if (event._stopImmediatePropagation) break;
+                if (entry.removed) continue;
+                if (entry.once) {
+                    this.removeEventListener(event.type, entry.listener, { capture: entry.capture });
+                }
+                const previousPassiveListener = _currentPassiveListener;
                 try {
+                    _currentPassiveListener = entry.passive;
                     if (typeof entry.listener === 'function') {
                         entry.listener.call(this, event);
                     } else if (entry.listener && typeof entry.listener.handleEvent === 'function') {
@@ -120,9 +145,8 @@ class EventTarget {
                     }
                 } catch (e) {
                     // Swallow errors in event listeners
-                }
-                if (entry.once) {
-                    this.removeEventListener(event.type, entry.listener, { capture: entry.capture });
+                } finally {
+                    _currentPassiveListener = previousPassiveListener;
                 }
             }
         }
@@ -565,6 +589,26 @@ EventEmitter.once = function(emitter, name, options) {
         }
 
         let onAbort;
+
+        if (emitter && typeof emitter.addEventListener === 'function') {
+            function eventHandler(event) {
+                emitter.removeEventListener(name, eventHandler);
+                if (onAbort) signal.removeEventListener('abort', onAbort);
+                resolve([event]);
+            }
+
+            emitter.addEventListener(name, eventHandler, { once: true });
+
+            if (signal) {
+                onAbort = function() {
+                    emitter.removeEventListener(name, eventHandler);
+                    reject(signal.reason);
+                };
+                signal.addEventListener('abort', onAbort, { once: true });
+            }
+
+            return;
+        }
 
         function eventHandler() {
             if (errorHandler) emitter.removeListener('error', errorHandler);
