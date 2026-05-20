@@ -13,6 +13,7 @@ import {
     ERR_OUT_OF_RANGE,
     ERR_SOCKET_BAD_PORT,
 } from '__wasm_rquickjs_builtin/internal/errors';
+import { validateAbortSignal } from '__wasm_rquickjs_builtin/internal/validators';
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
 const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
@@ -256,11 +257,24 @@ function Socket(options) {
     options = options || {};
     this._creationOptions = options;
 
+    // Validate the abort signal early (before any stream wiring) so that
+    // a bad signal raises the same TypeError Node.js raises on construction.
+    if (options.signal !== undefined) {
+        validateAbortSignal(options.signal, 'options.signal');
+    }
+
+    // Strip Socket-specific options (notably `signal`) before forwarding to
+    // Duplex: otherwise Duplex's readable+writable each register their own
+    // abort listener on `signal` via addAbortSignalNoValidate, which both
+    // inflates the visible listener count (breaking Node-compat for
+    // `getEventListeners(signal, 'abort')`) and runs destroy() twice on
+    // abort. Socket owns the abort signal lifecycle itself.
     const streamOptions = {
         ...options,
         allowHalfOpen: options.allowHalfOpen !== undefined ? options.allowHalfOpen : false,
         autoDestroy: true,
     };
+    delete streamOptions.signal;
 
     Duplex.call(this, streamOptions);
 
@@ -462,8 +476,11 @@ Socket.prototype.connect = function connect(...args) {
         throw new ERR_INVALID_ARG_VALUE('options.writableObjectMode', options.writableObjectMode || objectModeOptions.writableObjectMode, 'is not supported');
     }
 
-    if (this._setupAbortSignal(options.signal) === 'preaborted') {
-        return this;
+    // Validate signal shape up-front so a bad signal still raises the same
+    // synchronous TypeError Node.js raises (before any abort-handling state
+    // changes happen on this Socket).
+    if (options.signal !== undefined) {
+        validateAbortSignal(options.signal, 'options.signal');
     }
 
     if (options.host !== undefined && typeof options.host !== 'string') {
@@ -486,21 +503,20 @@ Socket.prototype.connect = function connect(...args) {
         throw new ERR_INVALID_ARG_TYPE('options.path', 'string', options.path);
     }
 
+    // Resolve IPC entry (if `path` is given) so subsequent argument validation
+    // and abort-signal handling can run against the resolved host/port. Defer
+    // the ENOENT early-return until after `_setupAbortSignal()` so that a
+    // pre-aborted signal still wins over a missing IPC target.
+    let pendingIpcMissingPath = null;
     if (options.path) {
         const ipcEntry = _ipcListeners[options.path];
         if (!ipcEntry) {
-            const ipcPath = options.path;
-            this.connecting = true;
-            nextTick(() => {
-                this.connecting = false;
-                const err = makeError('ENOENT', `connect ENOENT ${ipcPath}`);
-                this.destroy(err);
-            });
-            return this;
+            pendingIpcMissingPath = options.path;
+        } else {
+            options.port = ipcEntry.port;
+            options.host = ipcEntry.host;
+            delete options.path;
         }
-        options.port = ipcEntry.port;
-        options.host = ipcEntry.host;
-        delete options.path;
     }
 
     const port = options.port;
@@ -541,7 +557,9 @@ Socket.prototype.connect = function connect(...args) {
     }
 
     // Reset state for reconnection (Node.js allows calling connect() on a
-    // destroyed socket to reconnect)
+    // destroyed socket to reconnect). Must happen before `_setupAbortSignal()`
+    // so a pre-aborted signal can actually schedule a destroy on the freshly
+    // reset socket instead of being a silent no-op on `this.destroyed`.
     if (this.destroyed) {
         this._handle = null;
         this._reading = false;
@@ -602,6 +620,26 @@ Socket.prototype.connect = function connect(...args) {
     // Reset write method if it was overridden (e.g., writeAfterFIN)
     if (this.write !== Socket.prototype.write) {
         this.write = Socket.prototype.write;
+    }
+
+    // Wire up the abort signal after all synchronous argument validation has
+    // succeeded and after the reconnect reset has run, but before any
+    // non-throwing error-scheduling early-return branches (e.g. IPC ENOENT).
+    // A pre-aborted signal must therefore win over a missing IPC target.
+    if (this._setupAbortSignal(options.signal) === 'preaborted') {
+        return this;
+    }
+
+    // Deferred IPC ENOENT: only scheduled if signal did not already abort.
+    if (pendingIpcMissingPath !== null) {
+        const ipcPath = pendingIpcMissingPath;
+        this.connecting = true;
+        nextTick(() => {
+            this.connecting = false;
+            const err = makeError('ENOENT', `connect ENOENT ${ipcPath}`);
+            this.destroy(err);
+        });
+        return this;
     }
 
     // Reset bytes counters for new connection

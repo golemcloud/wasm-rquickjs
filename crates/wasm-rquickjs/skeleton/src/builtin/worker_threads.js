@@ -1,8 +1,17 @@
 // node:worker_threads compatibility shim for single-threaded WASM runtimes.
+//
+// This runtime does not support real worker threads: there is no separate
+// JavaScript context or thread of execution. The `Worker` class below is an
+// inert API stub — it validates some constructor / postMessage inputs, but it
+// does NOT execute worker code, deliver messages, or simulate worker
+// lifecycle events.
+//
+// Tests or applications that require real worker execution / isolation are
+// intentionally unsupported here and should be classified in node_compat as
+// `known-gap` or `wasi-impossible`, depending on whether the behavior is
+// fundamentally unavailable in this environment.
 
 import { _emitInit } from 'node:async_hooks';
-import moduleExports from 'node:module';
-import process from 'node:process';
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
 const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
@@ -141,57 +150,29 @@ function emitListeners(listeners, event, value) {
     }
 }
 
-let currentIsMainThread = true;
-let currentParentPort = null;
-let currentWorkerData = null;
-export { currentIsMainThread as isMainThread };
-export { currentParentPort as parentPort };
-export { currentWorkerData as workerData };
+export const isMainThread = true;
+export const parentPort = null;
+export const workerData = null;
 export const threadId = 0;
 export const resourceLimits = {};
 
 export class Worker {
     #closed = false;
     #listeners = createListenerMap();
-    #mainPort = null;
-    #workerPort = null;
 
     constructor(filename, options) {
+        // Validate transferList eagerly so callers see the same DataCloneError
+        // they would on real Node.js, even though no work is dispatched.
         const transferList = normalizeTransferList(options?.transferList);
         ensureTransferListItemsAreTransferable(transferList);
 
         this.filename = filename;
-        const channel = new MessageChannel();
-        this.#mainPort = channel.port1;
-        this.#workerPort = channel.port2;
-        this.#mainPort.on('message', (value) => emitListeners(this.#listeners, 'message', value));
-        this.#mainPort.on('messageerror', (value) => emitListeners(this.#listeners, 'messageerror', value));
-        this.#mainPort.on('close', () => emitListeners(this.#listeners, 'close'));
-
-        const previousIsMainThread = currentIsMainThread;
-        const previousParentPort = currentParentPort;
-        const previousWorkerData = currentWorkerData;
-        const previousEnvStartedWorker = process.env.HAS_STARTED_WORKER;
-        currentIsMainThread = false;
-        currentParentPort = this.#workerPort;
-        currentWorkerData = options?.workerData;
-        if (moduleExports.require?.cache && moduleExports.require.cache[String(filename)]) {
-            delete moduleExports.require.cache[String(filename)];
-        }
-        try {
-            moduleExports.require(String(filename));
-        } catch (error) {
-            Promise.resolve().then(() => emitListeners(this.#listeners, 'error', error));
-        } finally {
-            currentIsMainThread = previousIsMainThread;
-            currentParentPort = previousParentPort;
-            currentWorkerData = previousWorkerData;
-            if (previousEnvStartedWorker === undefined) {
-                delete process.env.HAS_STARTED_WORKER;
-            } else {
-                process.env.HAS_STARTED_WORKER = previousEnvStartedWorker;
-            }
-        }
+        // NOTE: We intentionally do NOT execute `filename` inline in the main
+        // context. Doing so created a fake worker semantics (shared globals,
+        // shared `process`, no real terminate(), broken FileHandle transfer)
+        // that silently passed some tests by violating Node.js's isolation
+        // contract. Tests that depend on real worker execution are classified
+        // as `known-gap` in node_compat config instead.
     }
 
     on(event, fn) {
@@ -213,12 +194,18 @@ export class Worker {
         return this.removeListener(event, fn);
     }
 
-    postMessage(value) {
+    postMessage(value, transferListOrOptions) {
+        // No worker exists to deliver to. Validate the transfer list shape
+        // (so callers see the same TypeError / DataCloneError they would on
+        // real Node.js for clearly invalid inputs), but do NOT clone the
+        // payload — cloning with `transfer` would detach the caller's
+        // ArrayBuffers / disentangle their MessagePorts even though there is
+        // no recipient, which would silently consume caller state.
         if (this.#closed) {
             return;
         }
-
-        this.#mainPort.postMessage(value);
+        const transferList = normalizeTransferList(transferListOrOptions);
+        ensureTransferListItemsAreTransferable(transferList);
     }
 
     ref() {}
@@ -227,8 +214,6 @@ export class Worker {
 
     terminate() {
         this.#closed = true;
-        if (this.#mainPort) this.#mainPort.close();
-        if (this.#workerPort) this.#workerPort.close();
         return Promise.resolve(0);
     }
 }
@@ -243,6 +228,7 @@ export class MessagePort {
     #onmessage = null;
     #onmessageerror = null;
     #closed = false;
+    #pendingClose = false;
     #refed = false;
     #queue = [];
     #draining = false;
@@ -269,7 +255,11 @@ export class MessagePort {
     }
 
     _enqueueDelivery(value, messageError) {
-        if (this.#closed) {
+        // Already-queued messages must still drain after close() per Node docs
+        // example (https://nodejs.org/api/worker_threads.html#class-messageport),
+        // so we only refuse new deposits once the port is fully closed *or*
+        // has been disentangled by close().
+        if (this.#closed || this.#pendingClose) {
             return;
         }
         this.#queue.push({ value, messageError: messageError === true });
@@ -299,7 +289,10 @@ export class MessagePort {
     }
 
     postMessage(value, transferListOrOptions) {
-        if (this.#closed) {
+        // Once close() has been called the port is disentangled immediately,
+        // even though the 'close' event is asynchronous, so no further
+        // messages may be queued in either direction.
+        if (this.#closed || this.#pendingClose) {
             return;
         }
 
@@ -317,17 +310,25 @@ export class MessagePort {
         if (typeof callback === 'function') {
             this.once('close', callback);
         }
-        if (this.#closed) {
+        if (this.#closed || this.#pendingClose) {
             return;
         }
+        // Disentangle synchronously so further postMessage() calls are dropped,
+        // but defer the observable #closed flip and the 'close' event emission
+        // to a microtask so callers like Node's `hasRef()` semantics still see
+        // the port as ref'd between close() and the close event.
         const target = this._target;
-        this.#closed = true;
-        this._target = null;
+        this.#pendingClose = true;
         if (target instanceof MessagePort) {
-            target.#closed = true;
-            target._target = null;
+            target.#pendingClose = true;
         }
         Promise.resolve().then(() => {
+            this.#closed = true;
+            this._target = null;
+            if (target instanceof MessagePort) {
+                target.#closed = true;
+                target._target = null;
+            }
             emitListeners(this.#listeners, 'close');
             if (target instanceof MessagePort) {
                 emitListeners(target.#listeners, 'close');
@@ -371,7 +372,9 @@ export class MessagePort {
     }
 
     _isClosed() {
-        return this.#closed;
+        // Disentangled-but-not-yet-fully-closed counts as closed for transfer
+        // operations like moveMessagePortToContext.
+        return this.#closed || this.#pendingClose;
     }
 }
 
@@ -509,9 +512,9 @@ export function setEnvironmentData() {
 }
 
 export default {
-    get isMainThread() { return currentIsMainThread; },
-    get parentPort() { return currentParentPort; },
-    get workerData() { return currentWorkerData; },
+    isMainThread,
+    parentPort,
+    workerData,
     threadId,
     resourceLimits,
     Worker,

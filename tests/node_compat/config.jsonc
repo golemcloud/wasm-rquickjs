@@ -714,7 +714,7 @@
     "parallel/test-fs-promises-file-handle-close.js": {},
     "parallel/test-fs-promises-file-handle-dispose.js": {},
     "parallel/test-fs-promises-file-handle-op-errors.js": { "category": "node-internals", "reason": "patches internal/fs/promises FileHandle fd internals" },
-    "parallel/test-fs-promises-file-handle-read-worker.js": {},
+    "parallel/test-fs-promises-file-handle-read-worker.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads execution to read the transferred FileHandle in a separate context, which is not available in single-threaded WASM" },
     "parallel/test-fs-promises-file-handle-read.js": {},
     "parallel/test-fs-promises-file-handle-readFile.js": {},
     "parallel/test-fs-promises-file-handle-stat.js": {},
@@ -1653,7 +1653,7 @@
         "block_06_block_06": {}
       }
     },
-    "parallel/test-crypto-key-objects-messageport.js": {},
+    "parallel/test-crypto-key-objects-messageport.js": { "category": "wasi-impossible", "reason": "requires real worker_threads execution (HAS_STARTED_WORKER round-trip) which is not available in single-threaded WASM" },
     "parallel/test-crypto-key-objects-to-crypto-key.js": {
       "split": true,
       "subtests": {
@@ -1852,7 +1852,7 @@
     "parallel/test-crypto-update-encoding.js": {},
     "parallel/test-crypto-verify-failure.js": { "category": "wasi-impossible", "reason": "requires tls server/client APIs, which are unsupported in WASM" },
     "parallel/test-crypto-webcrypto-aes-decrypt-tag-too-small.js": { "category": "known-gap", "reason": "WebCrypto AES-GCM short-ciphertext OperationError message does not match Node" },
-    "parallel/test-crypto-worker-thread.js": {},
+    "parallel/test-crypto-worker-thread.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads execution for cryptographic round-trip, which is not available in single-threaded WASM" },
     "parallel/test-crypto-x509.js": {
       "category": "node-internals",
       "reason": "requires --expose-internals and internal/crypto/x509",
@@ -6971,7 +6971,7 @@
       "split": true,
       "subtests": {
         "block_00_guarantee_the_initial_state": { "category": "known-gap", "reason": "process.permission and --permission CLI semantics are incomplete in execPath emulation" },
-        "block_01_to_spawn_unless_allow_worker_is_sent": { "category": "runnable" }
+        "block_01_to_spawn_unless_allow_worker_is_sent": { "category": "wasi-impossible", "reason": "asserts via Worker 'exit' event, which is not emitted without real worker_threads execution in single-threaded WASM" }
       }
     },
     "parallel/test-permission-child-process-cli.js": {
@@ -9804,14 +9804,14 @@
     },
     "parallel/test-worker-cjs-workerdata.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-cleanexit-with-js.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-cleanexit-with-moduleload.js": {},
+    "parallel/test-worker-cleanexit-with-moduleload.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads exit semantics which require a separate JS context (not available in single-threaded WASM)" },
     "parallel/test-worker-cleanup-handles.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-cli-options.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/options" },
     "parallel/test-worker-console-listeners.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-crypto-sign-transfer-result.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-data-url.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-debug.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
-    "parallel/test-worker-dns-terminate-during-query.js": {},
+    "parallel/test-worker-dns-terminate-during-query.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads terminate() interrupting an in-flight DNS query, which is not available in single-threaded WASM" },
     "parallel/test-worker-dns-terminate.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-environmentdata.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/worker" },
     "parallel/test-worker-error-stack-getter-throws.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
@@ -9856,7 +9856,7 @@
     "parallel/test-worker-http2-stream-terminate.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-init-failure.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-invalid-workerdata.js": { "category": "known-gap", "reason": "Worker constructor does not enforce DataCloneError for unserializable workerData" },
-    "parallel/test-worker-load-file-with-extension-other-than-js.js": {},
+    "parallel/test-worker-load-file-with-extension-other-than-js.js": { "category": "wasi-impossible", "reason": "depends on Worker actually loading and executing a .ts file as TypeScript, which requires real worker_threads execution that is not available in single-threaded WASM" },
     "parallel/test-worker-memory.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-message-channel-sharedarraybuffer.js": { "category": "known-gap", "reason": "Worker message delivery does not preserve SharedArrayBuffer shared-memory semantics" },
     "parallel/test-worker-message-channel.js": {
@@ -9936,7 +9936,7 @@
     },
     "parallel/test-worker-message-port-transfer-self.js": { "category": "known-gap", "reason": "MessagePort source-port transfer validation and DataCloneError message are not Node-compatible" },
     "parallel/test-worker-message-port-transfer-target.js": { "category": "known-gap", "reason": "posting a port to its target and channel-loss warning semantics are incomplete" },
-    "parallel/test-worker-message-port-transfer-terminate.js": {},
+    "parallel/test-worker-message-port-transfer-terminate.js": { "category": "wasi-impossible", "reason": "tests the race between transferring a MessagePort to a real worker and worker.terminate(); meaningless without real worker_threads execution" },
     "parallel/test-worker-message-port-wasm-module.js": { "category": "known-gap", "reason": "WebAssembly global is missing in current runtime" },
     "parallel/test-worker-message-port-wasm-threads.js": {
       "category": "wasi-impossible",
@@ -9981,14 +9981,14 @@
     "parallel/test-worker-name.js": { "category": "wasi-impossible", "reason": "inspector is not available in WASM" },
     "parallel/test-worker-nearheaplimit-deadlock.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-nested-on-process-exit.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-nested-uncaught.js": {},
+    "parallel/test-worker-nested-uncaught.js": { "category": "wasi-impossible", "reason": "tests that an uncaught error from a nested worker propagates as 'error' on the outer worker; requires real worker_threads execution / error propagation" },
     "parallel/test-worker-nexttick-terminate.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-no-sab.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-no-stdin-stdout-interaction.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-node-options.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-non-fatal-uncaught-exception.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-on-process-exit.js": {},
-    "parallel/test-worker-onmessage-not-a-function.js": {},
+    "parallel/test-worker-on-process-exit.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads exit-event behavior across a separate JS context, which is not available in single-threaded WASM" },
+    "parallel/test-worker-onmessage-not-a-function.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads execution (HAS_STARTED_WORKER round-trip and parentPort.onmessage setter side effects), not available in single-threaded WASM" },
     "parallel/test-worker-onmessage.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-parent-port-ref.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-process-argv.js": { "category": "known-gap", "reason": "Worker constructor argv option validation/stringification is not Node-compatible" },
@@ -9996,7 +9996,7 @@
     "parallel/test-worker-process-env-shared.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-process-env.js": { "category": "known-gap", "reason": "Worker options.env validation and env-isolation semantics are incomplete" },
     "parallel/test-worker-process-exit-async-module.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-ref-onexit.js": {},
+    "parallel/test-worker-ref-onexit.js": { "category": "wasi-impossible", "reason": "tests worker.unref() interaction with worker exit-event scheduling, which requires real worker_threads execution that is not available in single-threaded WASM" },
     "parallel/test-worker-ref.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-relative-path-double-dot.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-relative-path.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
@@ -10004,14 +10004,14 @@
     "parallel/test-worker-safe-getters.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-sharedarraybuffer-from-worker-thread.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-stack-overflow-stack-size.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-stack-overflow.js": {},
+    "parallel/test-worker-stack-overflow.js": { "category": "wasi-impossible", "reason": "tests that a worker-side stack overflow surfaces as RangeError on the 'error' event; requires real worker_threads execution and error propagation" },
     "parallel/test-worker-stdio-flush-inflight.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-stdio-flush.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-stdio-from-preload-module.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-stdio.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-syntax-error-file.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-syntax-error.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-terminate-http2-respond-with-file.js": {},
+    "parallel/test-worker-terminate-http2-respond-with-file.js": { "category": "wasi-impossible", "reason": "tests Worker terminate() during http2.respondWithFile() in the worker; requires real worker_threads execution which is not available in single-threaded WASM" },
     "parallel/test-worker-terminate-microtask-loop.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-terminate-nested.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-terminate-null-handler.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
@@ -10036,16 +10036,16 @@
     },
     "parallel/test-worker-unsupported-things.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-vm-context-terminate.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-voluntarily-exit-followed-by-addition.js": {},
-    "parallel/test-worker-voluntarily-exit-followed-by-throw.js": {},
+    "parallel/test-worker-voluntarily-exit-followed-by-addition.js": { "category": "wasi-impossible", "reason": "tests that worker's process.exit() interrupts subsequent worker code; requires real worker_threads execution which is not available in single-threaded WASM" },
+    "parallel/test-worker-voluntarily-exit-followed-by-throw.js": { "category": "wasi-impossible", "reason": "tests that worker's process.exit() interrupts subsequent worker code; requires real worker_threads execution which is not available in single-threaded WASM" },
     "parallel/test-worker-workerdata-messageport.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {},
+        "block_00_block_00": { "category": "wasi-impossible", "reason": "verifies that Worker receives transferList'd MessagePort in workerData; requires real worker_threads execution" },
+        "block_01_block_01": { "category": "wasi-impossible", "reason": "verifies that Worker receives multiple transferList'd MessagePorts in workerData; requires real worker_threads execution" },
         "block_02_block_02": { "category": "known-gap", "reason": "Worker transferList ArrayBuffer detachment semantics are incomplete" },
         "block_03_block_03": { "category": "known-gap", "reason": "Worker transferList missing-port DataCloneError is not enforced" },
-        "block_04_block_04": {}
+        "block_04_block_04": { "category": "wasi-impossible", "reason": "depends on real worker_threads execution + node:vm runInContext inside the worker, neither available in single-threaded WASM" }
       }
     },
     "parallel/test-worker-workerdata-sharedarraybuffer.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },

@@ -546,16 +546,29 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
     }
 
     // Implicit Connection header (after user headers)
-    if (!this.hasHeader('connection')) {
-        if (this._keepAlive) {
-            head += 'Connection: keep-alive\r\n';
-        } else {
-            head += 'Connection: close\r\n';
-        }
+    const userConnection = this.getHeader('connection');
+    const userConnectionTokens = typeof userConnection === 'string'
+        ? userConnection.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
+        : [];
+    const userSaysClose = userConnectionTokens.includes('close');
+    const userSaysKeepAlive = userConnectionTokens.includes('keep-alive');
+    const canKeepAlive = !!this._keepAlive;
+    // The user may narrow a keep-alive response to close, but must not widen
+    // a close response to keep-alive: header semantics must match the actual
+    // socket lifecycle decided elsewhere (maxRequestsPerSocket, server.close()).
+    const effectiveKeepAlive = userConnection === undefined
+        ? canKeepAlive
+        : (canKeepAlive && userSaysKeepAlive && !userSaysClose);
+
+    if (userConnection === undefined) {
+        head += 'Connection: ' + (effectiveKeepAlive ? 'keep-alive' : 'close') + '\r\n';
     }
 
-    if (this._keepAlive && !this.hasHeader('keep-alive')) {
-        const timeoutSeconds = Math.trunc((this._keepAliveTimeout || 5000) / 1000);
+    if (effectiveKeepAlive && this.getHeader('keep-alive') === undefined) {
+        const timeoutMs = typeof this._keepAliveTimeout === 'number' && this._keepAliveTimeout >= 0
+            ? this._keepAliveTimeout
+            : 5000;
+        const timeoutSeconds = Math.trunc(timeoutMs / 1000);
         head += 'Keep-Alive: timeout=' + timeoutSeconds;
         if (this._keepAliveMaxRequests > 0) {
             head += ', max=' + this._keepAliveMaxRequests;

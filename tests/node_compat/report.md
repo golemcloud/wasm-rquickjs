@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-05-19 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-05-20 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3104/4314 (72.0%)
+**Primary compatibility (CI-enforced):** 3085/4295 (71.8%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3104 | 72.0% | 55.3% | 46.1% |
-| 🧩 known gap | 1210 | 28.0% | 21.6% | 18.0% |
-| 🚫 WASI-impossible (excluded) | 1134 | — | 20.2% | 16.8% |
+| ✅ passing (runnable) | 3085 | 71.8% | 55.0% | 45.8% |
+| 🧩 known gap | 1210 | 28.2% | 21.6% | 18.0% |
+| 🚫 WASI-impossible (excluded) | 1153 | — | 20.6% | 17.1% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.7% |
 | **Total** | **6731** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3104/5610 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3085/5610 (55.0%)**.
 
 ## Inventory by Module
 
@@ -37,7 +37,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | common | 9 | 1 | 8 | 0 | 0 | 0 | 0 | 11.1% | 11.1% |
 | compile | 15 | 0 | 0 | 0 | 15 | 0 | 0 | 0.0% | 0.0% |
 | console | 31 | 29 | 1 | 0 | 0 | 0 | 1 | 96.7% | 96.7% |
-| crypto | 239 | 206 | 11 | 6 | 0 | 0 | 16 | 94.9% | 92.4% |
+| crypto | 239 | 204 | 11 | 8 | 0 | 0 | 16 | 94.9% | 91.5% |
 | dgram | 118 | 23 | 74 | 7 | 0 | 0 | 14 | 23.7% | 22.1% |
 | diagnostics_channel | 33 | 18 | 12 | 1 | 2 | 0 | 0 | 60.0% | 54.5% |
 | dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
@@ -47,7 +47,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | eslint | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 0.0% | 0.0% |
 | events | 93 | 59 | 2 | 0 | 0 | 0 | 32 | 96.7% | 96.7% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| fs | 482 | 375 | 12 | 19 | 5 | 0 | 71 | 96.9% | 91.2% |
+| fs | 482 | 374 | 12 | 20 | 5 | 0 | 71 | 96.9% | 91.0% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
 | http | 898 | 244 | 305 | 267 | 2 | 0 | 80 | 44.4% | 29.8% |
@@ -60,7 +60,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | other | 469 | 101 | 92 | 83 | 11 | 0 | 182 | 52.3% | 35.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
-| permission | 55 | 5 | 38 | 8 | 2 | 0 | 2 | 11.6% | 9.4% |
+| permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
 | process | 93 | 45 | 34 | 4 | 0 | 0 | 10 | 57.0% | 54.2% |
 | promises | 23 | 1 | 15 | 0 | 7 | 0 | 0 | 6.2% | 4.3% |
 | querystring | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
@@ -85,7 +85,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
-| worker_threads | 189 | 19 | 51 | 111 | 0 | 0 | 8 | 27.1% | 10.5% |
+| worker_threads | 189 | 4 | 51 | 126 | 0 | 0 | 8 | 7.3% | 2.2% |
 | zlib | 61 | 52 | 5 | 0 | 0 | 0 | 4 | 91.2% | 91.2% |
 
 ## Split Test Summary
@@ -383,7 +383,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-performanceobserver.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-permission-allow-child-process-cli.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-allow-wasi-cli.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-permission-allow-worker-cli.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-permission-allow-worker-cli.js` | 2 | 0 | 1 | 1 | 0 | 0 | 0 |
 | `test-permission-child-process-cli.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-fs-read.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
 | `test-permission-fs-require.js` | 4 | 2 | 2 | 0 | 0 | 0 | 0 |
@@ -647,7 +647,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-worker-message-port.js` | 9 | 0 | 9 | 0 | 0 | 0 | 0 |
 | `test-worker-message-transfer-port-mark-as-untransferable.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-worker-unsupported-path.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-worker-workerdata-messageport.js` | 5 | 3 | 2 | 0 | 0 | 0 | 0 |
+| `test-worker-workerdata-messageport.js` | 5 | 0 | 2 | 3 | 0 | 0 | 0 |
 | `test-wrap-js-stream-destroy.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-wrap-js-stream-duplex.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-x509-escaping.js` | 8 | 0 | 5 | 3 | 0 | 0 | 0 |
@@ -1370,7 +1370,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1134)
+### WASI-impossible (1153)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1428,6 +1428,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires spawning external OS commands (sleep/pwd), unavailable in WASM | 2 | `parallel/test-child-process-spawnsync.js#block_00_block_00`, `parallel/test-child-process-spawnsync.js#block_01_block_01` |
 | requires worker_threads | 2 | `parallel/test-unhandled-exception-with-worker-inuse.js`, `parallel/test-worker-messaging.js` |
 | test coverage reporting depends on inspector/V8 coverage, unavailable in WASM | 2 | `parallel/test-runner-coverage-source-map.js`, `parallel/test-runner-coverage-thresholds.js` |
+| tests that worker's process.exit() interrupts subsequent worker code; requires real worker_threads execution which is not available in single-threaded WASM | 2 | `parallel/test-worker-voluntarily-exit-followed-by-addition.js`, `parallel/test-worker-voluntarily-exit-followed-by-throw.js` |
 | tls.checkServerIdentity is unavailable in the WASM tls stub | 2 | `parallel/test-x509-escaping.js#block_04_the_internal_parsing_logic_must_match_the_json_specification`, `parallel/test-x509-escaping.js#block_05_correctly_i_e_not_simply_split_at_commas` |
 | Linux-specific recursive fs.watch behavior is not applicable in WASI | 1 | `parallel/test-fs-watch-recursive-linux-parallel-remove.js` |
 | Windows named-pipe enumeration behavior is not available in WASI | 1 | `parallel/test-fs-readdir-pipe.js` |
@@ -1441,8 +1442,17 @@ Secondary full-public compatibility, including public tests that are currently e
 | Windows-specific readonly-module filesystem behavior is not applicable in WASI | 1 | `parallel/test-module-readonly.js` |
 | [manual] This test fundamentally requires `child_process.spawn()` with IPC communication and OS signal handling (`SIGKILL`), which are impossible in a WebAssembly sandbox. The entire test logic dep... | 1 | `parallel/test-net-child-process-connect-reset.js` |
 | [manual] This test requires `http2.createServer()` (TCP server listening on a port) and `http2.connect()` (full HTTP/2 protocol client), neither of which are available in the WebAssembly/WASI envir... | 1 | `parallel/test-stream-pipeline-http2.js` |
+| asserts via Worker 'exit' event, which is not emitted without real worker_threads execution in single-threaded WASM | 1 | `parallel/test-permission-allow-worker-cli.js#block_01_to_spawn_unless_allow_worker_is_sent` |
 | child process signal termination semantics are not available in WASI | 1 | `parallel/test-signal-unregister.js` |
 | cluster requires process forking and fd passing between processes | 1 | `parallel/test-listen-fd-cluster.js` |
+| depends on Worker actually loading and executing a .ts file as TypeScript, which requires real worker_threads execution that is not available in single-threaded WASM | 1 | `parallel/test-worker-load-file-with-extension-other-than-js.js` |
+| depends on real worker_threads execution (HAS_STARTED_WORKER round-trip and parentPort.onmessage setter side effects), not available in single-threaded WASM | 1 | `parallel/test-worker-onmessage-not-a-function.js` |
+| depends on real worker_threads execution + node:vm runInContext inside the worker, neither available in single-threaded WASM | 1 | `parallel/test-worker-workerdata-messageport.js#block_04_block_04` |
+| depends on real worker_threads execution for cryptographic round-trip, which is not available in single-threaded WASM | 1 | `parallel/test-crypto-worker-thread.js` |
+| depends on real worker_threads execution to read the transferred FileHandle in a separate context, which is not available in single-threaded WASM | 1 | `parallel/test-fs-promises-file-handle-read-worker.js` |
+| depends on real worker_threads exit semantics which require a separate JS context (not available in single-threaded WASM) | 1 | `parallel/test-worker-cleanexit-with-moduleload.js` |
+| depends on real worker_threads exit-event behavior across a separate JS context, which is not available in single-threaded WASM | 1 | `parallel/test-worker-on-process-exit.js` |
+| depends on real worker_threads terminate() interrupting an in-flight DNS query, which is not available in single-threaded WASM | 1 | `parallel/test-worker-dns-terminate-during-query.js` |
 | depends on worker_threads-based event loop utilization behavior | 1 | `parallel/test-performance-eventlooputil.js` |
 | host signal delivery and SIGINT interruption semantics are not available in WASI | 1 | `parallel/test-sigint-infinite-loop.js` |
 | http2 is not implemented | 1 | `parallel/test-http2-compat-client-upload-reject.js` |
@@ -1500,6 +1510,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires raw TLS handshake/protocol-mismatch behavior (HTTPS client to HTTP server), unavailable with wasi:http | 1 | `parallel/test-https-connecting-to-http.js` |
 | requires real child_process for fork/event-loop-exit semantics | 1 | `parallel/test-pipe-unref.js` |
 | requires real child_process.spawn concurrency for server/client subprocesses | 1 | `sequential/test-net-GH-5504.js` |
+| requires real worker_threads execution (HAS_STARTED_WORKER round-trip) which is not available in single-threaded WASM | 1 | `parallel/test-crypto-key-objects-messageport.js` |
 | requires spawning an interactive Node REPL subprocess (--interactive) and driving it via stdin | 1 | `parallel/test-cwd-enoent-repl.js` |
 | requires spawning node subprocesses to run package scripts | 1 | `parallel/test-node-run.js` |
 | requires spawning node subprocesses to validate CLI CA flags | 1 | `parallel/test-openssl-ca-options.js` |
@@ -1517,6 +1528,13 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires worker_threads, which are unavailable in WASM | 1 | `sequential/test-vm-break-on-sigint.js` |
 | sending host process signals is not supported in WASI | 1 | `parallel/test-process-kill-null.js` |
 | test is gated to Linux/macOS/Windows shell behavior and excludes WASI | 1 | `parallel/test-stdin-from-file-spawn.js` |
+| tests Worker terminate() during http2.respondWithFile() in the worker; requires real worker_threads execution which is not available in single-threaded WASM | 1 | `parallel/test-worker-terminate-http2-respond-with-file.js` |
+| tests that a worker-side stack overflow surfaces as RangeError on the 'error' event; requires real worker_threads execution and error propagation | 1 | `parallel/test-worker-stack-overflow.js` |
+| tests that an uncaught error from a nested worker propagates as 'error' on the outer worker; requires real worker_threads execution / error propagation | 1 | `parallel/test-worker-nested-uncaught.js` |
+| tests the race between transferring a MessagePort to a real worker and worker.terminate(); meaningless without real worker_threads execution | 1 | `parallel/test-worker-message-port-transfer-terminate.js` |
+| tests worker.unref() interaction with worker exit-event scheduling, which requires real worker_threads execution that is not available in single-threaded WASM | 1 | `parallel/test-worker-ref-onexit.js` |
+| verifies that Worker receives multiple transferList'd MessagePorts in workerData; requires real worker_threads execution | 1 | `parallel/test-worker-workerdata-messageport.js#block_01_block_01` |
+| verifies that Worker receives transferList'd MessagePort in workerData; requires real worker_threads execution | 1 | `parallel/test-worker-workerdata-messageport.js#block_00_block_00` |
 | wasi:http always derives/sends Host from URL authority, so an HTTP/1.1 request without Host cannot be expressed | 1 | `parallel/test-http-request-host-header.js#block_00_block_00` |
 | wasi:http does not expose HTTP reason phrases (`statusMessage`) | 1 | `parallel/test-http-status-reason-invalid-chars.js` |
 | wasi:http does not expose custom HTTP reason phrases (status messages) | 1 | `parallel/test-http-response-status-message.js` |
