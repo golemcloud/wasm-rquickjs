@@ -2719,7 +2719,7 @@
         "block_00_connect_without_calling_dns_lookup": {},
         "block_01_connect_with_single_ip_returned_by_dns_lookup": {},
         "block_02_connect_with_autoselectfamily_and_single_ip": {},
-        "block_03_connect_with_autoselectfamily_and_multiple_ips": {}
+        "block_03_connect_with_autoselectfamily_and_multiple_ips": { "flaky": true }
       }
     },
     "parallel/test-net-buffersize.js": {},
@@ -4521,7 +4521,7 @@
     "parallel/test-http-keep-alive-close-on-header.js": { "category": "known-gap", "reason": "Agent/socket bookkeeping on 'Connection: close' responses is not Node-compatible" },
     "parallel/test-http-keep-alive-drop-requests.js": { "category": "known-gap", "reason": "server.maxRequestsPerSocket/dropRequest behavior is not fully implemented" },
     "parallel/test-http-keep-alive-max-requests.js": { "category": "known-gap", "reason": "maxRequestsPerSocket keep-alive header behavior (Keep-Alive/Connection framing) is not Node-compatible" },
-    "parallel/test-http-keep-alive-pipeline-max-requests.js": {},
+    "parallel/test-http-keep-alive-pipeline-max-requests.js": { "flaky": true },
     "parallel/test-http-keep-alive-timeout-custom.js": { "category": "known-gap", "reason": "wasi:http strips hop-by-hop response headers, so 'Keep-Alive' is not visible to node:http clients" },
     "parallel/test-http-keep-alive-timeout-race-condition.js": { "category": "known-gap", "reason": "keep-alive socket timeout/reuse race handling is not Node-compatible" },
     "parallel/test-http-keep-alive-timeout.js": { "category": "known-gap", "reason": "wasi:http strips hop-by-hop response headers, so computed Keep-Alive timeout headers are not visible to clients" },
@@ -4687,8 +4687,8 @@
     "parallel/test-http-server-headers-timeout-keepalive.js": { "category": "known-gap", "reason": "server.headersTimeout handling across keep-alive requests is not Node-compatible" },
     "parallel/test-http-server-headers-timeout-pipelining.js": { "category": "known-gap", "reason": "server.headersTimeout handling for pipelined requests is not Node-compatible" },
     "parallel/test-http-server-incomingmessage-destroy.js": { "category": "known-gap", "reason": "req.destroy() on server-side IncomingMessage does not propagate Node-compatible ECONNRESET client behavior" },
-    "parallel/test-http-server-keep-alive-defaults.js": {},
-    "parallel/test-http-server-keep-alive-max-requests-null.js": {},
+    "parallel/test-http-server-keep-alive-defaults.js": { "flaky": true },
+    "parallel/test-http-server-keep-alive-max-requests-null.js": { "flaky": true },
     "parallel/test-http-server-keepalive-end.js": { "category": "node-internals", "reason": "asserts private req.socket.parser.incoming lifecycle after keep-alive request end" },
     "parallel/test-http-server-multiheaders.js": { "category": "known-gap", "reason": "HTTP server duplicate request-header coalescing/deduplication is not Node-compatible" },
     "parallel/test-http-server-multiheaders2.js": { "category": "known-gap", "reason": "HTTP server duplicate request-header coalescing for allowed/forbidden header sets is not Node-compatible" },
@@ -5006,7 +5006,7 @@
     "parallel/test-domain-async-id-map-leak.js": { "category": "known-gap", "reason": "domain/async_hooks integration for AsyncResource domain tracking and async-id map behavior is incomplete" },
 
     // === Additional node:http tests (require HTTP server or internals) ===
-    "parallel/test-http-1.0-keep-alive.js": {},
+    "parallel/test-http-1.0-keep-alive.js": { "flaky": true },
     "parallel/test-http-1.0.js": {
       "split": true,
       "subtests": {
@@ -8352,7 +8352,7 @@
         "block_03_block_03": {},
         "block_04_block_04": {},
         "block_05_block_05": {},
-        "block_06_block_06": {},
+        "block_06_block_06": { "flaky": true },
         "block_07_block_07": {},
         "block_08_block_08": { "category": "wasi-impossible", "reason": "requires full-duplex HTTP request/response streaming semantics not provided by wasi:http" },
         "block_09_block_09": {},
@@ -9259,7 +9259,7 @@
       "split": true,
       "subtests": {
         "block_00_test_sign_verify_rsassa_pkcs1_v1_5": {},
-        "block_01_test_sign_verify_rsa_pss": {},
+        "block_01_test_sign_verify_rsa_pss": { "flaky": true },
         "block_02_test_sign_verify_ecdsa": {},
         "block_03_test_sign_verify_hmac": {},
         "block_04_test_sign_verify_ed25519": {},

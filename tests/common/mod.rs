@@ -136,6 +136,7 @@ pub struct NodeCompatSubtestEntry {
     pub index: usize,
     pub category: NodeCompatCategory,
     pub reason: Option<String>,
+    pub flaky: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -145,6 +146,7 @@ pub struct NodeCompatTestEntry {
     pub reason: Option<String>,
     pub split: bool,
     pub timeout_secs: u64,
+    pub flaky: bool,
     pub subtests: Vec<NodeCompatSubtestEntry>,
 }
 
@@ -235,6 +237,7 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             .get("timeout")
             .and_then(|v| v.as_u64())
             .unwrap_or(DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS);
+        let flaky = opts.get("flaky").and_then(|v| v.as_bool()).unwrap_or(false);
 
         let mut subtests = Vec::new();
         if let Some(subtests_obj) = opts.get("subtests").and_then(|v| v.as_object()) {
@@ -246,12 +249,17 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string())
                     .or_else(|| reason.clone());
+                let sub_flaky = subtest_opts
+                    .get("flaky")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(flaky);
                 let index = extract_node_compat_subtest_index(subtest_name);
                 subtests.push(NodeCompatSubtestEntry {
                     name: subtest_name.clone(),
                     index,
                     category: sub_category,
                     reason: sub_reason,
+                    flaky: sub_flaky,
                 });
             }
         }
@@ -262,6 +270,7 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             reason,
             split,
             timeout_secs,
+            flaky,
             subtests,
         });
     }
