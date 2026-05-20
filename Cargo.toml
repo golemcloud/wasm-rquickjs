@@ -80,6 +80,11 @@ harness = false
 
 [[test]]
 name = "node_compat_report"
+path = "tests/node_compat_config_report.rs"
+harness = false
+
+[[test]]
+name = "node_compat_validate"
 harness = false
 
 [[test]]

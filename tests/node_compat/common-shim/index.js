@@ -8,11 +8,6 @@ var { inspect } = require('util');
 var noop = function() {};
 var _mustCallChecks = [];
 
-// Set process.cwd() to /home/node — the Node.js source-root equivalent in
-// our VFS layout.  Many vendored tests use relative paths like
-// './test/parallel/...' which must resolve against this directory.
-process.cwd = function cwd() { return '/home/node'; };
-
 function copyEnv(env) {
     var copy = {};
     var keys = Object.keys(env || {});
@@ -201,12 +196,45 @@ function transpileModuleEvalToCommonJs(source) {
     return transformed;
 }
 
+function snapshotRequireCacheForChild(requireFn) {
+    var cache = requireFn && requireFn.cache;
+    if (!cache || typeof cache !== 'object') {
+        return null;
+    }
+
+    var snapshot = [];
+    var keys = Object.keys(cache);
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        snapshot.push([key, cache[key]]);
+        delete cache[key];
+    }
+
+    return { cache: cache, snapshot: snapshot };
+}
+
+function restoreRequireCacheForChild(snapshot) {
+    if (!snapshot) {
+        return;
+    }
+
+    var cache = snapshot.cache;
+    var keys = Object.keys(cache);
+    for (var i = 0; i < keys.length; i++) {
+        delete cache[keys[i]];
+    }
+    for (var j = 0; j < snapshot.snapshot.length; j++) {
+        var entry = snapshot.snapshot[j];
+        cache[entry[0]] = entry[1];
+    }
+}
+
 function runInlineEval(command, args, options) {
     var parsed = parseInlineEvalArgs(args || []);
 
     var oldArgv = process.argv.slice();
     var oldArgv0 = process.argv0;
-    var oldCwd = process.cwd;
+    var oldCwdValue = typeof process.cwd === 'function' ? process.cwd() : '/';
     var oldEnv = copyEnv(process.env);
     var oldStdoutWrite = process.stdout && process.stdout.write;
     var oldStderrWrite = process.stderr && process.stderr.write;
@@ -214,6 +242,7 @@ function runInlineEval(command, args, options) {
     var oldWarnedInvalidHostnameState = globalThis.__wasm_rquickjs_url_warned_invalid_hostname;
     var hadEvalScriptName = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_current_eval_script_name');
     var oldEvalScriptName = globalThis.__wasm_rquickjs_current_eval_script_name;
+    var requireCacheSnapshot = null;
 
     var stdout = '';
     var stderr = '';
@@ -224,10 +253,11 @@ function runInlineEval(command, args, options) {
         process.argv0 = String(command);
 
         if (options && typeof options.cwd === 'string') {
-            var childCwd = String(options.cwd);
-            process.cwd = function cwd() {
-                return childCwd;
-            };
+            var pathModuleForCwd = require('path');
+            var childCwd = pathModuleForCwd.isAbsolute(options.cwd)
+                ? String(options.cwd)
+                : pathModuleForCwd.resolve(oldCwdValue, String(options.cwd));
+            process.chdir(childCwd);
         }
         if (options && options.env) {
             replaceEnv(process.env, options.env);
@@ -248,6 +278,7 @@ function runInlineEval(command, args, options) {
 
         // Each emulated child process needs its own warning state.
         globalThis.__wasm_rquickjs_url_warned_invalid_hostname = false;
+        requireCacheSnapshot = snapshotRequireCacheForChild(require);
 
         var evalSource = parsed.evalCode;
         var scriptRequire = require;
@@ -339,8 +370,11 @@ function runInlineEval(command, args, options) {
     } finally {
         process.argv = oldArgv;
         process.argv0 = oldArgv0;
-        process.cwd = oldCwd;
+        try {
+            process.chdir(oldCwdValue);
+        } catch (_) {}
         replaceEnv(process.env, oldEnv);
+        restoreRequireCacheForChild(requireCacheSnapshot);
 
         if (process.stdout && typeof oldStdoutWrite === 'function') {
             process.stdout.write = oldStdoutWrite;

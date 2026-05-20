@@ -178,7 +178,17 @@ Socket.prototype._doBind = function _doBind(address, port) {
     (async () => {
         try {
             if (!this._handle) return;
-            await this._handle.bind(address, port);
+            let bindAddress = address;
+            if (bindAddress && !isIPAddress(bindAddress)) {
+                const family = this._type === 'udp4' ? 4 : 6;
+                bindAddress = await new Promise((resolve, reject) => {
+                    dns.lookup(bindAddress, family, (err, resolved) => {
+                        if (err) reject(err);
+                        else resolve(resolved);
+                    });
+                });
+            }
+            await this._handle.bind(bindAddress, port);
             if (!this._handle) return;
 
             if (this._recvBufferSize !== undefined) {

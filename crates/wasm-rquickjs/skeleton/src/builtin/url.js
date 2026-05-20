@@ -2,68 +2,187 @@ import { URL } from '__wasm_rquickjs_builtin/url_native';
 import * as querystring from 'node:querystring';
 import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 
-// Based on https://github.com/jerrybendy/url-search-params-polyfill
-/**!
- * url-search-params-polyfill
- *
- * @author Jerry Bendy (https://github.com/jerrybendy)
- * @licence MIT
- */
-
 const __URLSearchParams__ = "__URLSearchParams__";
+const __URLSearchParamsURL__ = "__URLSearchParamsURL__";
+const __URLSearchParamsUpdating__ = "__URLSearchParamsUpdating__";
+const __URLSearchParamsIterator__ = "__URLSearchParamsIterator__";
+const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
+
+function makeInvalidThisError(type) {
+    const err = new TypeError('Value of "this" must be of type ' + type);
+    err.code = 'ERR_INVALID_THIS';
+    return err;
+}
+
+function makeTupleError() {
+    const err = new TypeError('Each query pair must be an iterable [name, value] tuple');
+    err.code = 'ERR_INVALID_TUPLE';
+    return err;
+}
+
+function makeNotIterableError() {
+    const err = new TypeError('Query pairs must be iterable');
+    err.code = 'ERR_ARG_NOT_ITERABLE';
+    return err;
+}
+
+function requireSearchParams(value) {
+    if (!value || !Object.prototype.hasOwnProperty.call(value, __URLSearchParams__)) {
+        throw makeInvalidThisError('URLSearchParams');
+    }
+    const url = value[__URLSearchParamsURL__];
+    if (url && !value[__URLSearchParamsUpdating__]) {
+        value[__URLSearchParams__] = parseToPairs(url.search);
+    }
+    return value[__URLSearchParams__];
+}
+
+function requireIterator(value) {
+    if (!value || !Object.prototype.hasOwnProperty.call(value, __URLSearchParamsIterator__)) {
+        throw makeInvalidThisError('URLSearchParamsIterator');
+    }
+    return value[__URLSearchParamsIterator__];
+}
+
+function toUSVString(value) {
+    if (typeof value === 'symbol') {
+        throw new TypeError('Cannot convert a Symbol value to a string');
+    }
+    const string = String(value);
+    let out = '';
+    for (let i = 0; i < string.length; i++) {
+        const c = string.charCodeAt(i);
+        if (c >= 0xD800 && c <= 0xDBFF) {
+            if (i + 1 < string.length) {
+                const d = string.charCodeAt(i + 1);
+                if (d >= 0xDC00 && d <= 0xDFFF) {
+                    out += string[i] + string[i + 1];
+                    i++;
+                    continue;
+                }
+            }
+            out += '\uFFFD';
+        } else if (c >= 0xDC00 && c <= 0xDFFF) {
+            out += '\uFFFD';
+        } else {
+            out += string[i];
+        }
+    }
+    return out;
+}
 
 function URLSearchParamsPolyfill(search) {
-    search = search || "";
+    if (!(this instanceof URLSearchParamsPolyfill)) {
+        throw new TypeError("Class constructor URLSearchParams cannot be invoked without 'new'");
+    }
 
-    if (search instanceof URLSearchParams || search instanceof URLSearchParamsPolyfill) {
+    if (search === undefined || search === null) {
+        search = "";
+    } else if (search instanceof URLSearchParams || search instanceof URLSearchParamsPolyfill) {
         search = search.toString();
     }
-    this[__URLSearchParams__] = parseToDict(search);
+
+    Object.defineProperty(this, __URLSearchParams__, {
+        value: parseToPairs(search),
+        writable: true,
+        configurable: true,
+    });
 }
 
 const prototype = URLSearchParamsPolyfill.prototype;
 
 prototype.append = function (name, value) {
-    appendTo(this[__URLSearchParams__], name, value);
+    const pairs = requireSearchParams(this);
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('name', 'value');
+    }
+    pairs.push([toUSVString(name), toUSVString(value)]);
+    updateLinkedUrl(this);
 };
 
 prototype['delete'] = function (name) {
-    delete this[__URLSearchParams__][name];
+    const pairs = requireSearchParams(this);
+    if (arguments.length < 1) {
+        throw new ERR_MISSING_ARGS('name');
+    }
+    const key = toUSVString(name);
+    if (arguments.length > 1) {
+        const val = toUSVString(arguments[1]);
+        this[__URLSearchParams__] = pairs.filter((pair) => pair[0] !== key || pair[1] !== val);
+    } else {
+        this[__URLSearchParams__] = pairs.filter((pair) => pair[0] !== key);
+    }
+    updateLinkedUrl(this);
 };
 
 prototype.get = function (name) {
-    const dict = this[__URLSearchParams__];
-    return this.has(name) ? dict[name][0] : null;
+    const pairs = requireSearchParams(this);
+    if (arguments.length < 1) {
+        throw new ERR_MISSING_ARGS('name');
+    }
+    const key = toUSVString(name);
+    for (let i = 0; i < pairs.length; i++) {
+        if (pairs[i][0] === key) return pairs[i][1];
+    }
+    return null;
 };
 
 prototype.getAll = function (name) {
-    const dict = this[__URLSearchParams__];
-    return this.has(name) ? dict[name].slice(0) : [];
+    const pairs = requireSearchParams(this);
+    if (arguments.length < 1) {
+        throw new ERR_MISSING_ARGS('name');
+    }
+    const key = toUSVString(name);
+    const out = [];
+    for (let i = 0; i < pairs.length; i++) {
+        if (pairs[i][0] === key) out.push(pairs[i][1]);
+    }
+    return out;
 };
 
 prototype.has = function (name, value) {
-    if (!hasOwnProperty(this[__URLSearchParams__], name)) {
-        return false;
+    const pairs = requireSearchParams(this);
+    if (arguments.length < 1) {
+        throw new ERR_MISSING_ARGS('name');
     }
-    if (value === undefined) {
-        return true;
+    const key = toUSVString(name);
+    const hasValue = value !== undefined;
+    const val = hasValue ? toUSVString(value) : undefined;
+    for (let i = 0; i < pairs.length; i++) {
+        if (pairs[i][0] === key && (!hasValue || pairs[i][1] === val)) return true;
     }
-    return this[__URLSearchParams__][name].includes(value);
+    return false;
 };
 
 prototype.set = function set(name, value) {
-    this[__URLSearchParams__][name] = ['' + value];
+    const pairs = requireSearchParams(this);
+    if (arguments.length < 2) {
+        throw new ERR_MISSING_ARGS('name', 'value');
+    }
+    const key = toUSVString(name);
+    const val = toUSVString(value);
+    let found = false;
+    const out = [];
+    for (let i = 0; i < pairs.length; i++) {
+        if (pairs[i][0] === key) {
+            if (!found) {
+                out.push([key, val]);
+                found = true;
+            }
+        } else {
+            out.push(pairs[i]);
+        }
+    }
+    if (!found) out.push([key, val]);
+    this[__URLSearchParams__] = out;
+    updateLinkedUrl(this);
 };
 
 prototype.toString = function () {
-    const dict = this[__URLSearchParams__];
+    const pairs = requireSearchParams(this);
     const query = [];
-    for (const key in dict) {
-        const name = encode(key);
-        const value = dict[key];
-        for (let i = 0; i < value.length; i++) {
-            query.push(name + '=' + encode(value[i]));
-        }
+    for (let i = 0; i < pairs.length; i++) {
+        query.push(encode(pairs[i][0]) + '=' + encode(pairs[i][1]));
     }
     return query.join('&');
 };
@@ -72,10 +191,55 @@ export const URLSearchParams = URLSearchParamsPolyfill;
 
 // Define searchParams getter on URL.prototype
 Object.defineProperty(URL.prototype, "searchParams", {
-    get() { return new URLSearchParams(this.search); },
+    get: function getSearchParams() {
+        requireURLReceiver(this, 'searchParams', 'get');
+        if (!urlSearchParamsCache.has(this)) {
+            const params = new URLSearchParams(this.search);
+            Object.defineProperty(params, __URLSearchParamsURL__, {
+                value: this,
+                writable: true,
+                configurable: true,
+            });
+            Object.defineProperty(params, __URLSearchParamsUpdating__, {
+                value: false,
+                writable: true,
+                configurable: true,
+            });
+            urlSearchParamsCache.set(this, params);
+        }
+        return urlSearchParamsCache.get(this);
+    },
     enumerable: true,
     configurable: true
 });
+
+const urlSearchParamsCache = new WeakMap();
+
+function syncSearchParamsFromUrl(url) {
+    const params = urlSearchParamsCache.get(url);
+    if (params && !params[__URLSearchParamsUpdating__]) {
+        params[__URLSearchParams__] = parseToPairs(url.search);
+    }
+}
+
+function updateLinkedUrl(params) {
+    const url = params[__URLSearchParamsURL__];
+    if (!url) return;
+    if (!Object.prototype.hasOwnProperty.call(params, __URLSearchParamsUpdating__)) {
+        Object.defineProperty(params, __URLSearchParamsUpdating__, {
+            value: false,
+            writable: true,
+            configurable: true,
+        });
+    }
+    params[__URLSearchParamsUpdating__] = true;
+    try {
+        const query = params.toString();
+        url.search = query ? '?' + query : '';
+    } finally {
+        params[__URLSearchParamsUpdating__] = false;
+    }
+}
 
 // Wrap createObjectURL to validate Blob argument with proper error code
 const _origCreateObjectURL = URL.createObjectURL;
@@ -88,6 +252,17 @@ URL.createObjectURL = function createObjectURL(obj) {
 };
 
 // Match Node.js behavior: throw ERR_MISSING_ARGS when no URL was passed.
+const _origCanParse = URL.canParse;
+URL.canParse = function canParse(url, base) {
+    if (arguments.length === 0) {
+        throw new ERR_MISSING_ARGS('url');
+    }
+    if (arguments.length > 1) {
+        return _origCanParse.call(this, url, base);
+    }
+    return _origCanParse.call(this, url);
+};
+
 const _origRevokeObjectURL = URL.revokeObjectURL;
 URL.revokeObjectURL = function revokeObjectURL(url) {
     if (arguments.length === 0) {
@@ -101,56 +276,104 @@ const USPProto = URLSearchParams.prototype;
 USPProto[Symbol.toStringTag] = 'URLSearchParams';
 
 USPProto.forEach = function (callback, thisArg) {
-    const dict = parseToDict(this.toString());
-    for (const name of Object.getOwnPropertyNames(dict)) {
-        for (const value of dict[name]) {
-            callback.call(thisArg, value, name, this);
-        }
+    requireSearchParams(this);
+    if (typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'function', callback);
+    }
+    for (let i = 0; i < requireSearchParams(this).length; i++) {
+        const pairs = requireSearchParams(this);
+        callback.call(thisArg, pairs[i][1], pairs[i][0], this);
     }
 };
 
 USPProto.sort = function () {
-    const dict = parseToDict(this.toString());
-    const keys = Object.keys(dict).sort();
-
-    for (const key of keys) {
-        this['delete'](key);
-    }
-    for (const key of keys) {
-        for (const val of dict[key]) {
-            this.append(key, val);
-        }
-    }
+    const pairs = requireSearchParams(this);
+    pairs.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    updateLinkedUrl(this);
 };
 
 USPProto.keys = function () {
-    const items = [];
-    this.forEach((item, name) => items.push(name));
-    return makeIterator(items);
+    requireSearchParams(this);
+    return makeIterator(this, 'key');
 };
 
 USPProto.values = function () {
-    const items = [];
-    this.forEach((item) => items.push(item));
-    return makeIterator(items);
+    requireSearchParams(this);
+    return makeIterator(this, 'value');
 };
 
 USPProto.entries = function () {
-    const items = [];
-    this.forEach((item, name) => items.push([name, item]));
-    return makeIterator(items);
+    requireSearchParams(this);
+    return makeIterator(this, 'entry');
 };
 
 USPProto[Symbol.iterator] = USPProto.entries;
 
+USPProto[customInspectSymbol] = function inspectURLSearchParams(depth, opts) {
+    const pairs = requireSearchParams(this);
+    if (depth < 0) return '[Object]';
+    if (pairs.length === 0) return 'URLSearchParams {}';
+    const entries = pairs.map((pair) => inspectString(pair[0]) + ' => ' + inspectString(pair[1]));
+    return formatInspectCollection('URLSearchParams', entries, opts);
+};
+
 Object.defineProperty(USPProto, 'size', {
-    get: function () {
-        if (USPProto === this) {
-            throw new TypeError('Illegal invocation at URLSearchParams.invokeGetter');
-        }
-        const dict = parseToDict(this.toString());
-        return Object.keys(dict).reduce((prev, cur) => prev + dict[cur].length, 0);
+    get: function getSize() {
+        return requireSearchParams(this).length;
     }
+});
+
+const originalURLSearchParamsMethods = {
+    append: USPProto.append,
+    delete: USPProto['delete'],
+    get: USPProto.get,
+    getAll: USPProto.getAll,
+    has: USPProto.has,
+    set: USPProto.set,
+    sort: USPProto.sort,
+    entries: USPProto.entries,
+    forEach: USPProto.forEach,
+    keys: USPProto.keys,
+    values: USPProto.values,
+    toString: USPProto.toString,
+    inspect: USPProto[customInspectSymbol],
+};
+
+const urlSearchParamsMethods = {
+    append(...args) { return originalURLSearchParamsMethods.append.apply(this, args); },
+    ['delete'](...args) { return originalURLSearchParamsMethods.delete.apply(this, args); },
+    get(...args) { return originalURLSearchParamsMethods.get.apply(this, args); },
+    getAll(...args) { return originalURLSearchParamsMethods.getAll.apply(this, args); },
+    has(...args) { return originalURLSearchParamsMethods.has.apply(this, args); },
+    set(...args) { return originalURLSearchParamsMethods.set.apply(this, args); },
+    sort(...args) { return originalURLSearchParamsMethods.sort.apply(this, args); },
+    entries(...args) { return originalURLSearchParamsMethods.entries.apply(this, args); },
+    forEach(...args) { return originalURLSearchParamsMethods.forEach.apply(this, args); },
+    keys(...args) { return originalURLSearchParamsMethods.keys.apply(this, args); },
+    values(...args) { return originalURLSearchParamsMethods.values.apply(this, args); },
+    toString(...args) { return originalURLSearchParamsMethods.toString.apply(this, args); },
+    [customInspectSymbol](...args) { return originalURLSearchParamsMethods.inspect.apply(this, args); },
+};
+
+for (const name of ['append', 'delete', 'get', 'getAll', 'has', 'set', 'sort', 'entries', 'forEach', 'keys', 'values', 'toString']) {
+    Object.defineProperty(USPProto, name, {
+        value: urlSearchParamsMethods[name],
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
+}
+Object.defineProperty(USPProto, Symbol.iterator, {
+    value: USPProto.entries,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+});
+Object.defineProperty(USPProto, customInspectSymbol, {
+    value: urlSearchParamsMethods[customInspectSymbol],
+    writable: true,
+    enumerable: false,
+    configurable: true,
 });
 
 const ENCODE_REPLACE = {
@@ -164,7 +387,7 @@ const ENCODE_REPLACE = {
 };
 
 function encode(str) {
-    return encodeURIComponent(str).replace(/[!'\(\)~]|%20|%00/g, function (match) {
+    return encodeURIComponent(toUSVString(str)).replace(/[!'\(\)~]|%20|%00/g, function (match) {
         return ENCODE_REPLACE[match];
     });
 }
@@ -177,41 +400,122 @@ function decode(str) {
         });
 }
 
-function makeIterator(arr) {
+const URLSearchParamsIteratorPrototype = {};
+Object.defineProperty(URLSearchParamsIteratorPrototype, Symbol.toStringTag, {
+    value: 'URLSearchParams Iterator',
+    writable: false,
+    enumerable: false,
+    configurable: true,
+});
+
+function makeIterator(params, kind) {
     const iterator = {
-        next: function () {
-            const value = arr.shift();
-            return {done: value === undefined, value: value};
+        next: function next() {
+            const state = requireIterator(this);
+            const pairs = requireSearchParams(state.params);
+            if (state.index >= pairs.length) {
+                return {done: true, value: undefined};
+            }
+            const pair = pairs[state.index++];
+            const value = state.kind === 'key' ? pair[0] : state.kind === 'value' ? pair[1] : [pair[0], pair[1]];
+            return {done: false, value};
         }
     };
+    Object.setPrototypeOf(iterator, URLSearchParamsIteratorPrototype);
+
+    Object.defineProperty(iterator, __URLSearchParamsIterator__, {
+        value: { params, kind, index: 0 },
+        writable: true,
+        configurable: true,
+    });
 
     iterator[Symbol.iterator] = function () {
         return iterator;
+    };
+    Object.defineProperty(iterator, Symbol.toStringTag, {
+        value: 'URLSearchParams Iterator',
+        writable: false,
+        enumerable: false,
+        configurable: true,
+    });
+    iterator[customInspectSymbol] = function inspectURLSearchParamsIterator(depth, opts) {
+        const iteratorState = requireIterator(this);
+        if (depth < 0) return '[Object]';
+        const pairs = requireSearchParams(iteratorState.params);
+        const values = [];
+        for (let i = iteratorState.index; i < pairs.length; i++) {
+            const pair = pairs[i];
+            if (iteratorState.kind === 'key') {
+                values.push(inspectString(pair[0]));
+            } else if (iteratorState.kind === 'value') {
+                values.push(inspectString(pair[1]));
+            } else {
+                values.push('[ ' + inspectString(pair[0]) + ', ' + inspectString(pair[1]) + ' ]');
+            }
+        }
+        return formatInspectCollection('URLSearchParams Iterator', values, opts);
     };
 
     return iterator;
 }
 
-function parseToDict(search) {
-    const dict = {};
+function inspectString(value) {
+    return "'" + String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+}
 
-    if (typeof search === "object") {
-        if (Array.isArray(search)) {
-            for (const item of search) {
-                if (Array.isArray(item) && item.length === 2) {
-                    appendTo(dict, item[0], item[1]);
-                } else {
-                    throw new TypeError("Failed to construct 'URLSearchParams': Sequence initializer must only contain pair elements");
+function formatInspectCollection(name, entries, opts) {
+    if (entries.length === 0) return name + ' {  }';
+    if (opts && opts.breakLength === 1) {
+        return name + ' {\n  ' + entries.join(',\n  ') + ' }';
+    }
+    return name + ' { ' + entries.join(', ') + ' }';
+}
+
+function parseToPairs(search) {
+    const pairs = [];
+
+    if (typeof search === 'symbol') {
+        toUSVString(search);
+    }
+
+    if (typeof search === "object" || typeof search === 'function') {
+        const iterator = search && search[Symbol.iterator];
+        if (iterator !== undefined) {
+            if (typeof iterator !== 'function') {
+                throw makeNotIterableError();
+            }
+            const iterable = iterator.call(search);
+            if (!iterable || typeof iterable.next !== 'function') {
+                throw makeNotIterableError();
+            }
+            let step;
+            while (!(step = iterable.next()).done) {
+                const item = step.value;
+                if (!item || typeof item[Symbol.iterator] !== 'function') {
+                    throw makeTupleError();
                 }
+                const itemIterator = item[Symbol.iterator]();
+                const first = itemIterator.next();
+                const second = itemIterator.next();
+                const third = itemIterator.next();
+                if (first.done || second.done || !third.done) {
+                    throw makeTupleError();
+                }
+                pairs.push([toUSVString(first.value), toUSVString(second.value)]);
             }
         } else {
-            for (const key in search) {
-                if (hasOwnProperty(search, key)) {
-                    appendTo(dict, key, search[key]);
-                }
+            const symbols = Object.getOwnPropertySymbols(search || {});
+            if (symbols.length > 0) {
+                toUSVString(symbols[0]);
+            }
+            const keys = Object.keys(search || {});
+            for (let i = 0; i < keys.length; i++) {
+                const key = keys[i];
+                pairs.push([toUSVString(key), toUSVString(search[key])]);
             }
         }
     } else {
+        search = String(search);
         if (search.startsWith("?")) {
             search = search.slice(1);
         }
@@ -219,30 +523,145 @@ function parseToDict(search) {
         for (const value of search.split("&")) {
             const index = value.indexOf('=');
             if (index !== -1) {
-                appendTo(dict, decode(value.slice(0, index)), decode(value.slice(index + 1)));
+                pairs.push([decode(value.slice(0, index)), decode(value.slice(index + 1))]);
             } else if (value) {
-                appendTo(dict, decode(value), '');
+                pairs.push([decode(value), '']);
             }
         }
     }
 
-    return dict;
+    return pairs;
 }
 
-function appendTo(dict, name, value) {
-    const val = typeof value === 'string' ? value : (
-        value !== null && value !== undefined && typeof value.toString === 'function' ? value.toString() : JSON.stringify(value)
-    );
-    if (hasOwnProperty(dict, name)) {
-        dict[name].push(val);
-    } else {
-        dict[name] = [val];
+const originalURLDescriptors = {};
+for (const name of ['href', 'origin', 'protocol', 'username', 'password', 'host', 'hostname', 'port', 'pathname', 'search', 'hash']) {
+    originalURLDescriptors[name] = Object.getOwnPropertyDescriptor(URL.prototype, name);
+}
+originalURLDescriptors.searchParams = Object.getOwnPropertyDescriptor(URL.prototype, 'searchParams');
+originalURLDescriptors.toString = Object.getOwnPropertyDescriptor(URL.prototype, 'toString');
+originalURLDescriptors.toJSON = Object.getOwnPropertyDescriptor(URL.prototype, 'toJSON');
+
+function makeURLReceiverError(property, operation) {
+    if (operation === 'method' || (operation === 'get' && (property === 'href' || property === 'search'))) {
+        return new TypeError('Receiver must be an instance of class URL');
+    }
+    return new TypeError('Cannot read private member from an object whose class did not declare it');
+}
+
+function requireURLReceiver(receiver, property, operation) {
+    if (!(receiver instanceof URL)) {
+        throw makeURLReceiverError(property, operation);
     }
 }
 
-function hasOwnProperty(obj, prop) {
-    return Object.prototype.hasOwnProperty.call(obj, prop);
+function getURLProperty(receiver, property) {
+    requireURLReceiver(receiver, property, 'get');
+    return originalURLDescriptors[property].get.call(receiver);
 }
+
+function setURLProperty(receiver, property, value) {
+    requireURLReceiver(receiver, property, 'set');
+    try {
+        return originalURLDescriptors[property].set.call(receiver, value);
+    } catch (error) {
+        if (error && error.name !== 'TypeError') {
+            throw new TypeError(error.message);
+        }
+        throw error;
+    } finally {
+        syncSearchParamsFromUrl(receiver);
+    }
+}
+
+function callURLMethod(receiver, method, args) {
+    requireURLReceiver(receiver, method, 'method');
+    return originalURLDescriptors[method].value.apply(receiver, args);
+}
+
+const urlPrototypeMethods = {
+    toString(...args) { return callURLMethod(this, 'toString', args); },
+    toJSON(...args) { return callURLMethod(this, 'toJSON', args); },
+    [customInspectSymbol]() { return this.href; },
+};
+
+const urlAccessors = {
+    get href() { return getURLProperty(this, 'href'); },
+    set href(value) { setURLProperty(this, 'href', value); },
+    get origin() { return getURLProperty(this, 'origin'); },
+    get protocol() { return getURLProperty(this, 'protocol'); },
+    set protocol(value) { setURLProperty(this, 'protocol', value); },
+    get username() { return getURLProperty(this, 'username'); },
+    set username(value) { setURLProperty(this, 'username', value); },
+    get password() { return getURLProperty(this, 'password'); },
+    set password(value) { setURLProperty(this, 'password', value); },
+    get host() { return getURLProperty(this, 'host'); },
+    set host(value) { setURLProperty(this, 'host', value); },
+    get hostname() { return getURLProperty(this, 'hostname'); },
+    set hostname(value) { setURLProperty(this, 'hostname', value); },
+    get port() { return getURLProperty(this, 'port'); },
+    set port(value) { setURLProperty(this, 'port', value); },
+    get pathname() { return getURLProperty(this, 'pathname'); },
+    set pathname(value) { setURLProperty(this, 'pathname', value); },
+    get search() { return getURLProperty(this, 'search'); },
+    set search(value) { setURLProperty(this, 'search', value); },
+    get searchParams() { return originalURLDescriptors.searchParams.get.call(this); },
+    get hash() { return getURLProperty(this, 'hash'); },
+    set hash(value) { setURLProperty(this, 'hash', value); },
+};
+
+try {
+    Object.defineProperty(URL.prototype, 'toString', {
+        value: urlPrototypeMethods.toString,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
+    for (const property of ['href', 'origin', 'protocol', 'username', 'password', 'host', 'hostname', 'port', 'pathname', 'search', 'searchParams', 'hash']) {
+        const descriptor = Object.getOwnPropertyDescriptor(urlAccessors, property);
+        descriptor.enumerable = true;
+        descriptor.configurable = true;
+        Object.defineProperty(URL.prototype, property, descriptor);
+    }
+    Object.defineProperty(URL.prototype, 'toJSON', {
+        value: urlPrototypeMethods.toJSON,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
+    Object.defineProperty(URL.prototype, customInspectSymbol, {
+        value: urlPrototypeMethods[customInspectSymbol],
+        writable: true,
+        enumerable: false,
+        configurable: true,
+    });
+} catch (_) {
+    // rquickjs currently exposes native class properties as non-configurable.
+    // Keep the native descriptors when they cannot be redefined; behavioral
+    // compatibility is still provided by the native URL implementation and the
+    // JS URLSearchParams wrapper above.
+}
+try {
+    Object.defineProperty(URL.prototype, 'toJSON', {
+        value: urlPrototypeMethods.toJSON,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
+} catch (_) {}
+try {
+    Object.defineProperty(URL.prototype, customInspectSymbol, {
+        value: urlPrototypeMethods[customInspectSymbol],
+        writable: true,
+        enumerable: false,
+        configurable: true,
+    });
+} catch (_) {}
+Object.defineProperty(URL.prototype, Symbol.toStringTag, {
+    value: 'URL',
+    writable: false,
+    enumerable: false,
+    configurable: true,
+});
 
 // --- node:url module APIs ---
 

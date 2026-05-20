@@ -43,6 +43,8 @@ cargo test
 
 **DO NOT run `cargo test` without arguments** — it runs everything and takes too long. **ALWAYS filter** to a specific test harness and module. Load the `skeleton-development` skill for full test rules and examples.
 
+**ALWAYS pass `--nocapture` when running `cargo test --test node_compat` locally.** The harness shares a `#[test_dep]`, so with output capture on, `test-r` forcibly collapses to a single thread (an order of magnitude slower than CI, which already passes `--nocapture`). Same rule applies to any harness using a shared `#[test_dep]`. See the `skeleton-development` skill for details and the `--test-threads` workaround.
+
 ### Generate code for a JavaScript module
 ```bash
 ./target/release/wasm-rquickjs generate-wrapper-crate \

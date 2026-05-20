@@ -4,6 +4,7 @@ pub mod native_module {
     use rquickjs::Ctx;
     use std::collections::HashMap;
     use std::io::Write;
+    use std::path::PathBuf;
     use std::time::Instant;
 
     #[rquickjs::function]
@@ -40,6 +41,29 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn get_env() -> HashMap<String, String> {
         std::env::vars().collect()
+    }
+
+    #[rquickjs::function]
+    pub fn get_cwd() -> String {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("/"))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[rquickjs::function]
+    pub fn chdir(path: String) -> Option<String> {
+        match std::env::set_current_dir(path) {
+            Ok(()) => None,
+            Err(error) => Some(
+                match error.kind() {
+                    std::io::ErrorKind::NotFound => "ENOENT",
+                    std::io::ErrorKind::PermissionDenied => "EACCES",
+                    _ => "EINVAL",
+                }
+                .to_string(),
+            ),
+        }
     }
 
     #[rquickjs::function]

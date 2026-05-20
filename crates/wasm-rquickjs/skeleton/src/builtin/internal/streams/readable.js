@@ -355,9 +355,10 @@ Readable.prototype.setEncoding = function (enc) {
 // Don't raise the hwm > 1GB.
 const MAX_HWM = 0x40000000;
 function computeNewHighWaterMark(n) {
-    if (n >= MAX_HWM) {
-        // TODO(ronag): Throw ERR_VALUE_OUT_OF_RANGE.
-        n = MAX_HWM;
+    if (n > MAX_HWM) {
+        throw new ERR_OUT_OF_RANGE('size', '<= 1GiB', n);
+    } else if (n === MAX_HWM) {
+        return MAX_HWM;
     } else {
         // Get the next highest power of 2 to prevent increasing hwm excessively in
         // tiny amounts.

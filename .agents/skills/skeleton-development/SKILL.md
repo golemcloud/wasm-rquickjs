@@ -64,6 +64,34 @@ cargo test --test node_compat -- --nocapture                               # ❌
 cargo test --test runtime url -- --nocapture 2>&1 | tee /tmp/test-output.txt
 ```
 
+## Always pass `--nocapture` when running `node_compat` (or any `#[test_dep]` harness) locally
+
+The `tests/node_compat.rs` harness shares a single `#[test_dep] FullPreparedComponent`
+across every test. In `test-r 3.0.x`, **with output capture on** (i.e. `--nocapture` not
+passed) and shared `#[test_dep]` dependencies, the harness forcibly sets
+`test_threads = 1` and emits a warning. This is why local shard runs that omit
+`--nocapture` take an order of magnitude longer than CI — they collapse to a single
+thread, even though tests are isolated and safe to run in parallel.
+
+CI runs are already correct (they pass `--nocapture`). For local runs:
+
+```bash
+# ✅ multi-threaded (default = std::thread::available_parallelism())
+cargo test --test node_compat <filter> -- --nocapture
+
+# ❌ forced single-thread because of shared #[test_dep] + capture-on
+cargo test --test node_compat <filter>
+```
+
+If you must keep capture on for some reason, explicitly opt back into parallelism with
+`--test-threads <N>` (test-r reads it from CLI args, NOT from `RUST_TEST_THREADS`):
+
+```bash
+cargo test --test node_compat <filter> -- --test-threads 8
+```
+
+The same rule applies to any test binary that uses a shared `#[test_dep]`.
+
 ## Target Platform
 
 The skeleton is **always compiled to `wasm32-wasip1`**. Never write conditional code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`, `#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`, `path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code complexity.

@@ -12,8 +12,10 @@ const MAP = 5;
 const SET = 6;
 const ERROR = 7;
 const BIGINT = 8;
+const CUSTOM = 9;
 
 const EMPTY = '';
+const customCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
 
 const {toString} = {};
 const {keys} = Object;
@@ -67,6 +69,9 @@ const serializer = (strict, json, $, _) => {
     if ($.has(value))
       return $.get(value);
 
+    if (value && (typeof value === 'object' || typeof value === 'function') && typeof value[customCloneSymbol] === 'function')
+      return as([CUSTOM, value[customCloneSymbol]()], value);
+
     let [TYPE, type] = typeOf(value);
     switch (TYPE) {
       case PRIMITIVE: {
@@ -94,7 +99,7 @@ const serializer = (strict, json, $, _) => {
             const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
             return as([type, {bytes: [...bytes], byteOffset: 0, byteLength: value.byteLength}], value);
           }
-          else if (type === 'ArrayBuffer') {
+          else if (type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
             spread = new Uint8Array(value);
           }
           return as([type, [...spread]], value);
@@ -220,10 +225,17 @@ const deserializer = ($, _) => {
       }
       case BIGINT:
         return as(BigInt(value), index);
+      case CUSTOM:
+        return as(value, index);
       case 'BigInt':
         return as(Object(BigInt(value)), index);
       case 'ArrayBuffer':
         return as(new Uint8Array(value).buffer, index);
+      case 'SharedArrayBuffer': {
+        const buffer = new SharedArrayBuffer(value.length);
+        new Uint8Array(buffer).set(value);
+        return as(buffer, index);
+      }
       case 'DataView': {
         const {bytes, byteOffset, byteLength} = value;
         const buf = new Uint8Array(bytes).buffer;
@@ -246,6 +258,18 @@ const dataCloneError = (message) => {
 
 const _TRANSFER_MARKER_KEY = '__wasm_rquickjs_sc_transfer__';
 
+function _nodeTypeError(code, message) {
+  const err = new TypeError(message);
+  err.code = code;
+  return err;
+}
+
+function _missingArgsError() {
+  const err = new TypeError('The "value" argument must be specified');
+  err.code = 'ERR_MISSING_ARGS';
+  return err;
+}
+
 function _isTransferableType(item) {
   return (
     item instanceof ArrayBuffer ||
@@ -253,6 +277,40 @@ function _isTransferableType(item) {
     item instanceof WritableStream ||
     item instanceof TransformStream
   );
+}
+
+function _normalizeStructuredCloneOptions(options) {
+  const prefix = "Failed to execute 'structuredClone'";
+  const dictionaryConverterError = `${prefix}: Options cannot be converted to a dictionary`;
+  const memberConverterError = `${prefix}: transfer in Options can not be converted to sequence.`;
+
+  if (options == null) {
+    return undefined;
+  }
+  if (typeof options !== 'object') {
+    throw _nodeTypeError('ERR_INVALID_ARG_TYPE', dictionaryConverterError);
+  }
+  if (!Object.prototype.hasOwnProperty.call(options, 'transfer')) {
+    return options;
+  }
+  const transfer = options.transfer;
+  if (transfer == null || typeof transfer === 'string' || typeof transfer[Symbol.iterator] !== 'function') {
+    throw _nodeTypeError('ERR_INVALID_ARG_TYPE', memberConverterError);
+  }
+  return { ...options, transfer: [...transfer] };
+}
+
+function _cloneTransferredPlatformObject(item) {
+  if (item instanceof ReadableStream) {
+    return Object.create(ReadableStream.prototype);
+  }
+  if (item instanceof WritableStream) {
+    return Object.create(WritableStream.prototype);
+  }
+  if (item instanceof TransformStream) {
+    return Object.create(TransformStream.prototype);
+  }
+  return item;
 }
 
 function _replaceTransferItems(value, itemToMarker, visited) {
@@ -297,7 +355,13 @@ function _restoreTransferItems(value, reverseMap, visited) {
   return value;
 }
 
-const structuredClone = (any, options) => {
+function structuredClone(any, options) {
+  if (arguments.length === 0) {
+    throw _missingArgsError();
+  }
+
+  options = _normalizeStructuredCloneOptions(options);
+
   // Detect file-backed Blobs (from fs.openAsBlob) and reject them
   const kFileBackedBlob = Symbol.for('kFileBackedBlob');
   if (any && typeof any === 'object' && any[kFileBackedBlob]) {
@@ -333,7 +397,7 @@ const structuredClone = (any, options) => {
       if (!(item instanceof ArrayBuffer)) {
         const marker = { [_TRANSFER_MARKER_KEY]: idx };
         itemToMarker.set(item, marker);
-        reverseMap.set(idx, item);
+        reverseMap.set(idx, _cloneTransferredPlatformObject(item));
         idx++;
       }
     }
@@ -364,6 +428,6 @@ const structuredClone = (any, options) => {
   }
 
   return result;
-};
+}
 
 export default structuredClone;

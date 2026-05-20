@@ -1,6 +1,8 @@
 import {
     get_args,
     get_env,
+    get_cwd,
+    chdir as native_chdir,
     write_stdout,
     write_stderr,
     hrtime_ns,
@@ -259,10 +261,12 @@ process.dlopen = function dlopen(module, filename) {
 process.stdin = { isTTY: false, fd: 0, read() { return null; }, on() { return this; }, resume() { return this; }, pause() { return this; } };
 
 function createWritableStdio(fd, writer) {
-    return {
+    const stream = new EventEmitter();
+    Object.assign(stream, {
         isTTY: false,
         fd,
         writable: true,
+        writableNeedDrain: false,
         write(chunk, encoding, callback) {
             let cb = callback;
             if (typeof encoding === 'function') {
@@ -273,26 +277,39 @@ function createWritableStdio(fd, writer) {
                 cb();
             }
             return true;
+        },
+        end(chunk, encoding, callback) {
+            if (chunk !== undefined && typeof chunk !== 'function') {
+                this.write(chunk, encoding);
+            }
+            const cb = typeof chunk === 'function' ? chunk :
+                (typeof encoding === 'function' ? encoding : callback);
+            if (typeof cb === 'function') {
+                cb();
+            }
+            this.emit('finish');
+            return this;
         }
-    };
+    });
+    return stream;
 }
 
 process.stdout = createWritableStdio(1, write_stdout);
 process.stderr = createWritableStdio(2, write_stderr);
 
+let _cwd = get_cwd();
+
 process.cwd = function cwd() {
-    return "/";
+    return _cwd;
 };
 
-// nextTick queue: callbacks are batched and drained via a triple-deferred
-// Promise chain.  This gives nextTick the right priority in QuickJS's
-// single job queue:
-//   QuickJS jobs (promise reactions, import resolution) > nextTick > spawned tasks (timers)
-// Triple-deferring ensures the drain runs after import() resolution
-// (DynamicImportJob + 1 PromiseReaction = 2 jobs) but before spawned
-// tasks like setTimeout(fn, 0).
+// nextTick queue: callbacks are drained at Node.js-style checkpoints exposed
+// by the timer/event-loop shims and process exit handling.  A zero-delay timer
+// is used only as a wakeup when no other host callback would reach a checkpoint;
+// this keeps nextTick separate from ECMAScript Promise jobs, unlike the previous
+// Promise-based drain which could run during dynamic import evaluation.
 const __nextTickQueue = [];
-let __nextTickDrainScheduled = false;
+let __nextTickWakeupScheduled = false;
 
 function __wasm_rquickjs_handleUncaughtError(err, domain) {
     if (domain && typeof domain.emit === 'function') {
@@ -310,7 +327,7 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
     }
 
     if (process.listenerCount('uncaughtException') > 0) {
-        process.emit('uncaughtException', err);
+        process.emit('uncaughtException', err, 'uncaughtException');
         return;
     }
 
@@ -322,7 +339,7 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
 globalThis.__wasm_rquickjs_handleUncaughtError = __wasm_rquickjs_handleUncaughtError;
 
 function __drainNextTickQueue() {
-    __nextTickDrainScheduled = false;
+    __nextTickWakeupScheduled = false;
     while (__nextTickQueue.length > 0) {
         const entry = __nextTickQueue.shift();
         try {
@@ -342,10 +359,25 @@ function __drainNextTickQueue() {
     }
 }
 
+function __requestNextTickWakeup() {
+    if (__nextTickWakeupScheduled || __nextTickQueue.length === 0) {
+        return;
+    }
+    __nextTickWakeupScheduled = true;
+    if (typeof globalThis.setTimeout === 'function') {
+        globalThis.setTimeout(function __nextTickWakeup() {
+            __drainNextTickQueue();
+        }, 0);
+    } else {
+        Promise.resolve().then(__drainNextTickQueue);
+    }
+}
+
 // Expose the drain function so that timer callbacks can drain pending
 // nextTick work before executing, matching Node.js's guarantee that
 // process.nextTick always fires before timers (setTimeout/setImmediate).
 globalThis.__wasm_rquickjs_drainNextTick = __drainNextTickQueue;
+globalThis.__wasm_rquickjs_requestNextTickWakeup = __requestNextTickWakeup;
 
 process.nextTick = function processNextTick(callback, ...args) {
     if (typeof callback !== 'function') {
@@ -354,21 +386,7 @@ process.nextTick = function processNextTick(callback, ...args) {
     }
     const domain = process.domain || null;
     __nextTickQueue.push({ callback, args, domain });
-    if (!__nextTickDrainScheduled) {
-        __nextTickDrainScheduled = true;
-        // Use enough deferral levels to fire after import() resolution +
-        // await resumption in QuickJS (which may involve multiple
-        // intermediate PromiseReaction jobs).
-        Promise.resolve().then(() => {
-            Promise.resolve().then(() => {
-                Promise.resolve().then(() => {
-                    Promise.resolve().then(() => {
-                        Promise.resolve().then(__drainNextTickQueue);
-                    });
-                });
-            });
-        });
-    }
+    __requestNextTickWakeup();
 };
 
 let _umask = 0o022;
@@ -418,8 +436,21 @@ process.chdir = function chdir(directory) {
         normalized.push(parts[i]);
     }
     resolved = '/' + normalized.join('/');
-    // Update cwd
-    process.cwd = function cwd() { return resolved; };
+    const code = native_chdir(resolved);
+    if (code !== undefined && code !== null) {
+        const err = new Error(`${code}: no such file or directory, chdir '${process.cwd()}' -> '${directory}'`);
+        err.errno = code === 'ENOENT' ? -2 : -22;
+        err.code = code;
+        err.syscall = 'chdir';
+        err.path = process.cwd();
+        err.dest = directory;
+        throw err;
+    }
+    // WASI's current_dir display can be lossy after changing into a nested
+    // preopened path. Node's process.cwd() reflects the successful chdir
+    // target, so keep the normalized absolute path as the JavaScript-visible
+    // cwd once the native chdir succeeds.
+    _cwd = resolved;
 };
 
 function _makeCredentialSetter(name, argName, credentialType) {
@@ -592,7 +623,30 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         obj = warning;
         if (!obj.name) obj.name = 'Warning';
     }
-    process.nextTick(function() { process.emit('warning', obj); });
+    const warningName = String(obj.name || 'Warning');
+    const isDeprecationWarning = warningName === 'DeprecationWarning';
+    if (isDeprecationWarning && process.noDeprecation) {
+        return;
+    }
+
+    const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
+    const shouldThrowDeprecation = isDeprecationWarning && !!process.throwDeprecation;
+    process.nextTick(function() {
+        if (shouldThrowDeprecation) {
+            throw obj;
+        }
+        if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
+            const header = warningName + ': ' + String(obj.message || obj);
+            let text = header;
+            if (typeof obj.stack === 'string') {
+                text = obj.stack.indexOf(String(obj.message || obj)) >= 0
+                    ? obj.stack
+                    : header + '\n' + obj.stack;
+            }
+            process.stderr.write(text.endsWith('\n') ? text : text + '\n');
+        }
+        process.emit('warning', obj);
+    });
 };
 
 process.exit = function exit(code) {
@@ -655,7 +709,9 @@ process._runExitHandlers = function _runExitHandlers(code) {
         if (code !== undefined) {
             process.exitCode = code;
         }
+        __drainNextTickQueue();
         process.emit('beforeExit', process.exitCode || 0);
+        __drainNextTickQueue();
         process.emit('exit', process.exitCode || 0);
     }
 };

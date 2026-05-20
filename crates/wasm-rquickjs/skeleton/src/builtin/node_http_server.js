@@ -216,6 +216,8 @@ function ServerResponse(req, options) {
     this._chunked = false;
     this._hasBody = true;
     this._keepAlive = false;
+    this._keepAliveTimeout = 5000;
+    this._keepAliveMaxRequests = 0;
     this._sentContentLength = false;
     this._headersSentWire = false;
     this._rejectNonStandardBodyWrites = !!(options && options.rejectNonStandardBodyWrites);
@@ -544,12 +546,34 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
     }
 
     // Implicit Connection header (after user headers)
-    if (!this.hasHeader('connection')) {
-        if (this._keepAlive) {
-            head += 'Connection: keep-alive\r\n';
-        } else {
-            head += 'Connection: close\r\n';
+    const userConnection = this.getHeader('connection');
+    const userConnectionTokens = typeof userConnection === 'string'
+        ? userConnection.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
+        : [];
+    const userSaysClose = userConnectionTokens.includes('close');
+    const userSaysKeepAlive = userConnectionTokens.includes('keep-alive');
+    const canKeepAlive = !!this._keepAlive;
+    // The user may narrow a keep-alive response to close, but must not widen
+    // a close response to keep-alive: header semantics must match the actual
+    // socket lifecycle decided elsewhere (maxRequestsPerSocket, server.close()).
+    const effectiveKeepAlive = userConnection === undefined
+        ? canKeepAlive
+        : (canKeepAlive && userSaysKeepAlive && !userSaysClose);
+
+    if (userConnection === undefined) {
+        head += 'Connection: ' + (effectiveKeepAlive ? 'keep-alive' : 'close') + '\r\n';
+    }
+
+    if (effectiveKeepAlive && this.getHeader('keep-alive') === undefined) {
+        const timeoutMs = typeof this._keepAliveTimeout === 'number' && this._keepAliveTimeout >= 0
+            ? this._keepAliveTimeout
+            : 5000;
+        const timeoutSeconds = Math.trunc(timeoutMs / 1000);
+        head += 'Keep-Alive: timeout=' + timeoutSeconds;
+        if (this._keepAliveMaxRequests > 0) {
+            head += ', max=' + this._keepAliveMaxRequests;
         }
+        head += '\r\n';
     }
 
     head += '\r\n';
@@ -866,6 +890,7 @@ function createConnectionParser(server, socket) {
         closeAfterResponse: false,
         responseFinished: false,
         shouldKeepAliveAfterResponse: false,
+        requestsServed: 0,
         detached: false,
     };
 
@@ -1085,10 +1110,21 @@ function createConnectionParser(server, socket) {
                 }
 
                 const connKeepAlive = computeKeepAlive(req.headers.connection, parsed.httpVersion);
+                const maxRequestsPerSocket = server.maxRequestsPerSocket == null
+                    ? 0
+                    : Math.max(0, server.maxRequestsPerSocket | 0);
+                const requestNumber = ++state.requestsServed;
+                if (maxRequestsPerSocket > 0 && requestNumber > maxRequestsPerSocket) {
+                    socket.write(Buffer.from('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'));
+                    socket.end();
+                    return;
+                }
                 const res = new ServerResponse(req, {
                     rejectNonStandardBodyWrites: server._rejectNonStandardBodyWrites,
                 });
-                res._keepAlive = connKeepAlive;
+                res._keepAlive = connKeepAlive && (maxRequestsPerSocket === 0 || requestNumber < maxRequestsPerSocket);
+                res._keepAliveTimeout = server.keepAliveTimeout;
+                res._keepAliveMaxRequests = maxRequestsPerSocket;
 
                 state.req = req;
                 state.res = res;

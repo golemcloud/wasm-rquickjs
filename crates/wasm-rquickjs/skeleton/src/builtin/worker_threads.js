@@ -1,7 +1,19 @@
 // node:worker_threads compatibility shim for single-threaded WASM runtimes.
+//
+// This runtime does not support real worker threads: there is no separate
+// JavaScript context or thread of execution. The `Worker` class below is an
+// inert API stub — it validates some constructor / postMessage inputs, but it
+// does NOT execute worker code, deliver messages, or simulate worker
+// lifecycle events.
+//
+// Tests or applications that require real worker execution / isolation are
+// intentionally unsupported here and should be classified in node_compat as
+// `known-gap` or `wasi-impossible`, depending on whether the behavior is
+// fundamentally unavailable in this environment.
+
+import { _emitInit } from 'node:async_hooks';
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
-const FIPS_IN_WORKER_ERROR = 'Calling crypto.setFips() is not supported in workers';
 const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
 const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
 
@@ -9,36 +21,15 @@ function createDataCloneError(message) {
     return new DOMException(message, 'DataCloneError');
 }
 
-function bytesToHex(bytes) {
-    const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    let result = '';
-    for (let i = 0; i < data.length; i++) {
-        result += data[i].toString(16).padStart(2, '0');
-    }
-    return result;
-}
-
-function keyToStringForWorkerEcho(key) {
-    let value = key;
-    if (value && typeof value === 'object' && value._keyObject) {
-        value = value._keyObject;
-    }
-    if (!value || typeof value !== 'object' || typeof value.export !== 'function') {
-        return key;
-    }
-    if (value.type === 'secret') {
-        const exported = value.export();
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(exported).toString('hex');
-        }
-        return bytesToHex(exported);
-    }
-    return value.export({ type: 'pkcs1', format: 'pem' });
-}
-
 function createTargetContextUnavailableError() {
     const error = new Error('Message target context unavailable');
     error.code = 'ERR_MESSAGE_TARGET_CONTEXT_UNAVAILABLE';
+    return error;
+}
+
+function createClosedMessagePortError() {
+    const error = new Error('MessagePort was closed');
+    error.code = 'ERR_CLOSED_MESSAGE_PORT';
     return error;
 }
 
@@ -79,10 +70,6 @@ function ensureTransferListItemsAreTransferable(transferList) {
 }
 
 function cloneMessagePayload(value, transferList) {
-    if (transferList.length === 0) {
-        return value;
-    }
-
     const TRANSFERABLE_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
     const signalMap = new Map();
     const remainingTransfers = [];
@@ -103,12 +90,17 @@ function cloneMessagePayload(value, transferList) {
         }
     }
 
+    let valueWasTransferableSignal = false;
     if (signalMap.size > 0 && signalMap.has(value)) {
         value = signalMap.get(value);
+        valueWasTransferableSignal = true;
     }
 
     if (remainingTransfers.length === 0) {
-        return value;
+        if (valueWasTransferableSignal) {
+            return value;
+        }
+        return structuredClone(value);
     }
 
     return structuredClone(value, { transfer: remainingTransfers });
@@ -118,6 +110,7 @@ function createListenerMap() {
     return {
         message: [],
         messageerror: [],
+        close: [],
         disconnect: [],
     };
 }
@@ -168,19 +161,18 @@ export class Worker {
     #listeners = createListenerMap();
 
     constructor(filename, options) {
-        if (
-            options &&
-            options.eval === true &&
-            typeof filename === 'string' &&
-            filename.indexOf('setFips(') !== -1
-        ) {
-            throw new Error(FIPS_IN_WORKER_ERROR);
-        }
-
+        // Validate transferList eagerly so callers see the same DataCloneError
+        // they would on real Node.js, even though no work is dispatched.
         const transferList = normalizeTransferList(options?.transferList);
         ensureTransferListItemsAreTransferable(transferList);
 
         this.filename = filename;
+        // NOTE: We intentionally do NOT execute `filename` inline in the main
+        // context. Doing so created a fake worker semantics (shared globals,
+        // shared `process`, no real terminate(), broken FileHandle transfer)
+        // that silently passed some tests by violating Node.js's isolation
+        // contract. Tests that depend on real worker execution are classified
+        // as `known-gap` in node_compat config instead.
     }
 
     on(event, fn) {
@@ -198,25 +190,22 @@ export class Worker {
         return this;
     }
 
-    postMessage(value) {
+    off(event, fn) {
+        return this.removeListener(event, fn);
+    }
+
+    postMessage(value, transferListOrOptions) {
+        // No worker exists to deliver to. Validate the transfer list shape
+        // (so callers see the same TypeError / DataCloneError they would on
+        // real Node.js for clearly invalid inputs), but do NOT clone the
+        // payload — cloning with `transfer` would detach the caller's
+        // ArrayBuffers / disentangle their MessagePorts even though there is
+        // no recipient, which would silently consume caller state.
         if (this.#closed) {
             return;
         }
-
-        Promise.resolve().then(() => {
-            if (this.#closed) {
-                return;
-            }
-            let response = value;
-            if (
-                value &&
-                typeof value === 'object' &&
-                Object.prototype.hasOwnProperty.call(value, 'key')
-            ) {
-                response = keyToStringForWorkerEcho(value.key);
-            }
-            emitListeners(this.#listeners, 'message', response);
-        });
+        const transferList = normalizeTransferList(transferListOrOptions);
+        ensureTransferListItemsAreTransferable(transferList);
     }
 
     ref() {}
@@ -239,9 +228,15 @@ export class MessagePort {
     #onmessage = null;
     #onmessageerror = null;
     #closed = false;
+    #pendingClose = false;
+    #refed = false;
     #queue = [];
     #draining = false;
     #listeners = createListenerMap();
+
+    constructor() {
+        _emitInit('MESSAGEPORT', this);
+    }
 
     get onmessage() {
         return this.#onmessage;
@@ -260,7 +255,11 @@ export class MessagePort {
     }
 
     _enqueueDelivery(value, messageError) {
-        if (this.#closed) {
+        // Already-queued messages must still drain after close() per Node docs
+        // example (https://nodejs.org/api/worker_threads.html#class-messageport),
+        // so we only refuse new deposits once the port is fully closed *or*
+        // has been disentangled by close().
+        if (this.#closed || this.#pendingClose) {
             return;
         }
         this.#queue.push({ value, messageError: messageError === true });
@@ -290,7 +289,10 @@ export class MessagePort {
     }
 
     postMessage(value, transferListOrOptions) {
-        if (this.#closed) {
+        // Once close() has been called the port is disentangled immediately,
+        // even though the 'close' event is asynchronous, so no further
+        // messages may be queued in either direction.
+        if (this.#closed || this.#pendingClose) {
             return;
         }
 
@@ -304,13 +306,49 @@ export class MessagePort {
         }
     }
 
-    close() {
-        this.#closed = true;
+    close(callback) {
+        if (typeof callback === 'function') {
+            this.once('close', callback);
+        }
+        if (this.#closed || this.#pendingClose) {
+            return;
+        }
+        // Disentangle synchronously so further postMessage() calls are dropped,
+        // but defer the observable #closed flip and the 'close' event emission
+        // to a microtask so callers like Node's `hasRef()` semantics still see
+        // the port as ref'd between close() and the close event.
+        const target = this._target;
+        this.#pendingClose = true;
+        if (target instanceof MessagePort) {
+            target.#pendingClose = true;
+        }
+        Promise.resolve().then(() => {
+            this.#closed = true;
+            this._target = null;
+            if (target instanceof MessagePort) {
+                target.#closed = true;
+                target._target = null;
+            }
+            emitListeners(this.#listeners, 'close');
+            if (target instanceof MessagePort) {
+                emitListeners(target.#listeners, 'close');
+            }
+        });
     }
 
-    ref() {}
+    ref() {
+        this.#refed = true;
+        return this;
+    }
 
-    unref() {}
+    unref() {
+        this.#refed = false;
+        return this;
+    }
+
+    hasRef() {
+        return !this.#closed && (this.#refed || this.#listeners.message.length > 0 || this.#listeners.close.length > 0);
+    }
 
     start() {}
 
@@ -327,6 +365,16 @@ export class MessagePort {
     removeListener(event, fn) {
         removeListener(this.#listeners, event, fn);
         return this;
+    }
+
+    off(event, fn) {
+        return this.removeListener(event, fn);
+    }
+
+    _isClosed() {
+        // Disentangled-but-not-yet-fully-closed counts as closed for transfer
+        // operations like moveMessagePortToContext.
+        return this.#closed || this.#pendingClose;
     }
 }
 
@@ -362,8 +410,15 @@ function createContextPortProxy() {
     port.start = function start() {};
     port.ref = function ref() {};
     port.unref = function unref() {};
-    port.close = function close() {
+    port.close = function close(callback) {
+        if (typeof callback === 'function') {
+            port.once('close', callback);
+        }
+        if (closed) {
+            return;
+        }
         closed = true;
+        Promise.resolve().then(() => emitListeners(listeners, 'close'));
     };
 
     port.on = function on(event, fn) {
@@ -380,6 +435,8 @@ function createContextPortProxy() {
         removeListener(listeners, event, fn);
         return port;
     };
+
+    port.off = port.removeListener;
 
     Object.defineProperty(port, 'onmessageerror', {
         configurable: true,
@@ -427,6 +484,10 @@ export function markAsUntransferable(value) {
 export function moveMessagePortToContext(port) {
     if (!(port instanceof MessagePort)) {
         throw new TypeError('The "port" argument must be a MessagePort');
+    }
+
+    if (port._isClosed()) {
+        throw createClosedMessagePortError();
     }
 
     const movedPort = createContextPortProxy();

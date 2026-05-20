@@ -162,10 +162,9 @@ pub mod native_module {
                     self.url = url;
                     Ok(())
                 }
-                Err(err) => Err(ctx.throw(
-                    Exception::from_message(ctx.clone(), &format!("Failed to set URL href: {err}"))
-                        .unwrap()
-                        .into(),
+                Err(err) => Err(Exception::throw_type(
+                    &ctx,
+                    &format!("Failed to set URL href: {err}"),
                 )),
             }
         }
@@ -398,8 +397,17 @@ pub const REEXPORT_JS: &str = r#"export * from 'node:url'; export { default } fr
 
 // JS code wiring the URL module into the global context
 pub const WIRE_JS: &str = r#"
-        import { URL as __wasm_rquickjs_URL } from '__wasm_rquickjs_builtin/url_native';
-        import { URLSearchParams as __wasm_rquickjs_USP } from '__wasm_rquickjs_builtin/url';
-        globalThis.URL = __wasm_rquickjs_URL;
-        globalThis.URLSearchParams = __wasm_rquickjs_USP;
+        import { URL as __wasm_rquickjs_URL, URLSearchParams as __wasm_rquickjs_USP } from '__wasm_rquickjs_builtin/url';
+        Object.defineProperty(globalThis, 'URL', {
+            value: __wasm_rquickjs_URL,
+            writable: true,
+            enumerable: false,
+            configurable: true,
+        });
+        Object.defineProperty(globalThis, 'URLSearchParams', {
+            value: __wasm_rquickjs_USP,
+            writable: true,
+            enumerable: false,
+            configurable: true,
+        });
     "#;

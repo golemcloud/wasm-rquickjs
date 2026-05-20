@@ -19,6 +19,8 @@ import { normalizeEncoding } from '__wasm_rquickjs_builtin/internal/util'
 import { inspect } from '__wasm_rquickjs_builtin/internal/util/inspect'
 import { kMaxLength } from 'buffer'
 
+const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone')
+
 const HASH_ALIASES = {
     'md5': 'md5',
     'rsa-md5': 'md5',
@@ -3166,6 +3168,10 @@ class KeyObject {
             return value._keyObject;
         }
         throw new ERR_INVALID_ARG_TYPE('key', 'CryptoKey', value);
+    }
+
+    [structuredCloneSymbol]() {
+        return new KeyObject(this._handle, this._type, this._customData);
     }
 }
 
@@ -8581,6 +8587,20 @@ class CryptoKey {
 
     export(options) {
         return this._keyObject.export(options);
+    }
+
+    [structuredCloneSymbol]() {
+        const keyObject = this._keyObject && typeof this._keyObject[structuredCloneSymbol] === 'function'
+            ? this._keyObject[structuredCloneSymbol]()
+            : this._keyObject;
+        return new CryptoKey(
+            kInternal,
+            this._type,
+            this._algorithm,
+            this._extractable,
+            this._usages.slice(),
+            keyObject,
+        );
     }
 }
 
