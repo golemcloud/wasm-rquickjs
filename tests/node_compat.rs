@@ -168,9 +168,10 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                                     .await
                                 {
                                     Ok(result) => result,
-                                    Err(_) => {
-                                        Err(anyhow::anyhow!("Test timed out after {}s", test_timeout_secs))
-                                    }
+                                    Err(_) => Err(anyhow::anyhow!(
+                                        "Test timed out after {}s",
+                                        test_timeout_secs
+                                    )),
                                 };
                             match attempt_result {
                                 Ok(()) => return Ok(()),
