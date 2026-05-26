@@ -21,7 +21,7 @@ pkg-fmt = "tgz"
 pkg-fmt = "zip"
 
 [dependencies]
-"wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize"] }
+"wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize", "use-golem-wasmtime"] }
 
 anyhow = { workspace = true }
 camino = { workspace = true }
