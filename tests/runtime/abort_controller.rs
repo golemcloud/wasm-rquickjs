@@ -2,7 +2,7 @@ use crate::common::{CompiledTest, invoke_and_capture_output};
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 
-#[test_dep(tagged_as = "abort_controller")]
+#[test_dep(tagged_as = "abort_controller", scope = Cloneable)]
 async fn compiled_abort_controller() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/abort-controller");
     CompiledTest::new(path, true)

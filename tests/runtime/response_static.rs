@@ -4,7 +4,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "response_static")]
+#[test_dep(tagged_as = "response_static", scope = Cloneable)]
 async fn compiled_response_static() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/response-static");
     CompiledTest::new(path, true)

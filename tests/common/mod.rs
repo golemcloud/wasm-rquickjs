@@ -1183,7 +1183,60 @@ impl CompiledTest {
             WasmSource::OwnedTemporary(temp_file) => temp_file.path(),
         }
     }
+}
 
+/// Opt `CompiledTest` into test-r's `Cloneable` sharing strategy so that
+/// worker subprocesses can share the parent's compilation result instead
+/// of forcing the suite into single-threaded mode under output capturing.
+///
+/// The wire format is just the **absolute** wasm path. The parent compiles
+/// the wrapper crate once (via the existing `CompiledTest::new*` ctors) into
+/// a stable on-disk location under `tmp/<example>/<features>/...` (or the
+/// shared `tmp/rt-target/...` tree when `use_shared_target = true`) — these
+/// paths outlive both the dep value and the suite. Each worker simply receives
+/// the path and reconstructs a `Precompiled(...)` `CompiledTest` that points
+/// at the same on-disk artifact.
+///
+/// `OwnedTemporary` is only ever produced by `plug_into`, which is called
+/// inside test bodies (never inside a `#[test_dep]` ctor). Shipping an
+/// `OwnedTemporary` over wire would silently delete the temp file as soon as
+/// the parent dropped the value after `to_wire`, leaving workers reading a
+/// dangling path. We refuse loudly instead.
+impl test_r::core::CloneableDep for CompiledTest {
+    fn to_wire(&self) -> Vec<u8> {
+        match &self.wasm {
+            Precompiled(path) => {
+                let abs = path.canonicalize_utf8().unwrap_or_else(|e| {
+                    panic!(
+                        "CompiledTest path '{path}' must exist before \
+                         being shipped via Cloneable scope: {e}"
+                    )
+                });
+                abs.as_str().as_bytes().to_vec()
+            }
+            WasmSource::OwnedTemporary(_) => panic!(
+                "OwnedTemporary CompiledTest cannot be shared via Cloneable \
+                 scope; plug_into() output must stay inside a single test body"
+            ),
+        }
+    }
+
+    fn from_wire(bytes: &[u8]) -> Self {
+        let path_str = std::str::from_utf8(bytes)
+            .expect("Cloneable CompiledTest wire bytes must be valid UTF-8 path");
+        let path = Utf8PathBuf::from(path_str);
+        assert!(
+            path.exists(),
+            "Cloneable CompiledTest received path that does not exist: {path}. \
+             The parent must keep the compiled wasm artifact alive for the suite duration."
+        );
+        CompiledTest {
+            wasm: Precompiled(path),
+        }
+    }
+}
+
+impl CompiledTest {
     pub fn plug_into(&self, other: &CompiledTest) -> anyhow::Result<CompiledTest> {
         let mut graph = CompositionGraph::new();
         let socket_package =

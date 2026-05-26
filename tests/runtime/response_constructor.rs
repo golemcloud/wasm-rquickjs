@@ -4,7 +4,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "response_constructor")]
+#[test_dep(tagged_as = "response_constructor", scope = Cloneable)]
 async fn compiled_response_constructor() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/response-constructor");
     CompiledTest::new(path, true)

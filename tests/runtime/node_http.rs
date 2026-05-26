@@ -4,7 +4,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "node_http")]
+#[test_dep(tagged_as = "node_http", scope = Cloneable)]
 async fn compiled_node_http() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/node-http");
     CompiledTest::new(path, true)

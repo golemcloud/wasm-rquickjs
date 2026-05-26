@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "example2")]
+#[test_dep(tagged_as = "example2", scope = Cloneable)]
 async fn compiled_example2() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/example2");
     CompiledTest::new(path, true)

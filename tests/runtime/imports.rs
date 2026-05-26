@@ -5,7 +5,7 @@ use indoc::indoc;
 use test_r::{inherit_test_dep, test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "imports1")]
+#[test_dep(tagged_as = "imports1", scope = Cloneable)]
 async fn compiled_imports1() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/imports1");
     CompiledTest::new(path, true)
@@ -13,7 +13,7 @@ async fn compiled_imports1() -> CompiledTest {
         .expect("Failed to compile imports1")
 }
 
-#[test_dep(tagged_as = "imports2")]
+#[test_dep(tagged_as = "imports2", scope = Cloneable)]
 async fn compiled_imports2() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/imports2");
     CompiledTest::new(path, true)
@@ -21,7 +21,7 @@ async fn compiled_imports2() -> CompiledTest {
         .expect("Failed to compile imports2")
 }
 
-#[test_dep(tagged_as = "imports3")]
+#[test_dep(tagged_as = "imports3", scope = Cloneable)]
 async fn compiled_imports3() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/imports3");
     CompiledTest::new(path, true)
@@ -34,7 +34,7 @@ inherit_test_dep!(
     CompiledTest
 );
 
-#[test_dep(tagged_as = "types_in_exports")]
+#[test_dep(tagged_as = "types_in_exports", scope = Cloneable)]
 async fn compiled_types_in_exports() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/types-in-exports");
     CompiledTest::new(path, true)

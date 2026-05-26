@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "toplevel_timer")]
+#[test_dep(tagged_as = "toplevel_timer", scope = Cloneable)]
 async fn compiled_toplevel_timer() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/toplevel-timer");
     CompiledTest::new(path, true)

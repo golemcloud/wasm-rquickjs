@@ -10,7 +10,7 @@ use wasmtime::component::Val;
 #[allow(dead_code)]
 mod common;
 
-#[test_dep(tagged_as = "errors")]
+#[test_dep(tagged_as = "errors", scope = Cloneable)]
 async fn compiled_errors() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/errors");
     CompiledTest::new(path, true)

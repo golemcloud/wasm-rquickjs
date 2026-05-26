@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "sqlite")]
+#[test_dep(tagged_as = "sqlite", scope = Cloneable)]
 async fn compiled_sqlite() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/sqlite");
     CompiledTest::new_with_features(path, true, FeatureCombination::Full)
@@ -11,7 +11,7 @@ async fn compiled_sqlite() -> CompiledTest {
         .expect("Failed to compile sqlite")
 }
 
-#[test_dep(tagged_as = "sqlite_unoptimized")]
+#[test_dep(tagged_as = "sqlite_unoptimized", scope = Cloneable)]
 async fn compiled_sqlite_unoptimized() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/sqlite");
     CompiledTest::new_unoptimized_with_features(path, true, FeatureCombination::Full)

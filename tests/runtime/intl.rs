@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "intl")]
+#[test_dep(tagged_as = "intl", scope = Cloneable)]
 async fn compiled_intl() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/intl");
     CompiledTest::new(path, true)

@@ -43,7 +43,7 @@ cargo test
 
 **DO NOT run `cargo test` without arguments** — it runs everything and takes too long. **ALWAYS filter** to a specific test harness and module. Load the `skeleton-development` skill for full test rules and examples.
 
-**ALWAYS pass `--nocapture` when running `cargo test --test node_compat` locally.** The harness shares a `#[test_dep]`, so with output capture on, `test-r` forcibly collapses to a single thread (an order of magnitude slower than CI, which already passes `--nocapture`). Same rule applies to any harness using a shared `#[test_dep]`. See the `skeleton-development` skill for details and the `--test-threads` workaround.
+**`--nocapture` is no longer required for parallel execution.** Every `#[test_dep]` in this repo uses `scope = Cloneable` or `scope = PerWorker`, so test-r keeps `cargo test --test runtime` and `cargo test --test node_compat` parallel under `--test-threads N` even with output capturing on. You can still pass `--nocapture` when you want to see live test output, but you no longer need it just to keep the suite fast. See the `skeleton-development` skill for the (deprecated) `--test-threads` workaround.
 
 ### Generate code for a JavaScript module
 ```bash
