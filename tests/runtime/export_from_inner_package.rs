@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "export_from_inner_package")]
+#[test_dep(tagged_as = "export_from_inner_package", scope = Cloneable)]
 async fn compiled_export_from_inner_package() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/export-from-inner-package");
     CompiledTest::new(path, true)

@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "cjs_require")]
+#[test_dep(tagged_as = "cjs_require", scope = Cloneable)]
 async fn compiled_cjs_require() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/cjs-require");
     CompiledTest::new(path, true)

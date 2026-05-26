@@ -24,23 +24,34 @@ mod common;
 
 struct FullPreparedComponent(Arc<GolemPreparedComponent>);
 
-async fn compile_node_compat_with_features(
-    feature_combination: common::FeatureCombination,
-) -> Arc<GolemPreparedComponent> {
+/// Parent compiles the node-compat wrapper crate exactly once and ships
+/// the wasm path to every worker via test-r's `Cloneable` scope. The
+/// expensive piece (cargo build of the wrapper crate) therefore runs a
+/// single time per suite even with `--test-threads N` and capture on.
+#[test_dep(tagged_as = "node_compat_full_compiled", scope = Cloneable)]
+async fn compiled_node_compat_full() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/node-compat-runner");
-    let compiled = CompiledTest::new_with_features(path, true, feature_combination)
-        .await
-        .expect("Failed to compile node-compat-runner");
-    Arc::new(
-        GolemPreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"),
+    CompiledTest::new_with_features(
+        path,
+        true,
+        common::FeatureCombination::FullNoLoggingWithGolem,
     )
+    .await
+    .expect("Failed to compile node-compat-runner")
 }
 
-#[test_dep]
-async fn prepare_node_compat_full() -> Arc<FullPreparedComponent> {
-    Arc::new(FullPreparedComponent(
-        compile_node_compat_with_features(common::FeatureCombination::FullNoLoggingWithGolem).await,
-    ))
+/// Each worker materialises its own `FullPreparedComponent` (which owns
+/// the per-worker `wasmtime::Engine`, `Linker`, `Component`, and
+/// epoch-ticker thread) from the parent-shipped wasm path. This is
+/// `PerWorker` rather than `Shared` so it does not re-trigger the
+/// single-threaded fallback that `Shared` deps cause under capture.
+#[test_dep(scope = PerWorker)]
+fn prepare_node_compat_full(
+    #[tagged_as("node_compat_full_compiled")] compiled: &CompiledTest,
+) -> Arc<FullPreparedComponent> {
+    Arc::new(FullPreparedComponent(Arc::new(
+        GolemPreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"),
+    )))
 }
 
 // --- Helper types and functions ---

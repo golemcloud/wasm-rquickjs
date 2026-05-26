@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "structured_clone")]
+#[test_dep(tagged_as = "structured_clone", scope = Cloneable)]
 async fn compiled_structured_clone() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/structured-clone");
     CompiledTest::new(path, true)
