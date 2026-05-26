@@ -45,6 +45,7 @@ struct Host {
     wasi_http: Arc<Mutex<WasiHttpCtx>>,
     started_at: Instant,
     timeout: Duration,
+    #[cfg(feature = "use-golem-wasmtime")]
     io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
 }
 
@@ -53,6 +54,7 @@ impl WasiView for Host {
         WasiCtxView {
             ctx: Arc::get_mut(&mut self.wasi).unwrap().get_mut().unwrap(),
             table: Arc::get_mut(&mut self.table).unwrap().get_mut().unwrap(),
+            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::get_mut(&mut self.io_ctx).unwrap().get_mut().unwrap(),
         }
     }
@@ -154,13 +156,17 @@ async fn measure_first_call(
         ctx_builder
             .stdout(OutputFile::new(stdout_file.reopen().unwrap()))
             .stderr(OutputFile::new(stderr_file.reopen().unwrap()));
+        #[cfg(feature = "use-golem-wasmtime")]
         let (ctx, io_ctx) = ctx_builder.build();
+        #[cfg(not(feature = "use-golem-wasmtime"))]
+        let ctx = ctx_builder.build();
         let host = Host {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(Mutex::new(WasiHttpCtx::new())),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
+            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::new(Mutex::new(io_ctx)),
         };
 

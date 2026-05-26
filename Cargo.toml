@@ -21,7 +21,7 @@ pkg-fmt = "tgz"
 pkg-fmt = "zip"
 
 [dependencies]
-"wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize", "use-golem-wasmtime"] }
+"wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize"] }
 
 anyhow = { workspace = true }
 camino = { workspace = true }
@@ -147,7 +147,7 @@ rand = "0.9.2"
 serde = "1.0.219"
 serde_json = "1.0.142"
 syn = "2.0.101"
-test-r = "3.0.6"
+test-r = "3.0.7"
 tokio = "1.47.1"
 tokio-util = "0.7.16"
 toml_edit = "0.22.27"
@@ -166,9 +166,10 @@ oxc_allocator = "0.115"
 oxc_ast = "0.115"
 oxc_span = "0.115"
 
-# Golem's forked wasmtime — pinned to a GitHub branch while v45 fork is unpublished.
-[patch.crates-io]
-wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+# Golem's forked wasmtime — uncomment these patches together with enabling the
+# `use-golem-wasmtime` feature.
+#[patch.crates-io]
+#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+#wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
