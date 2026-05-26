@@ -17,6 +17,13 @@ env:
   CARGO_TERM_COLOR: always
   WASI_SDK_VERSION: "25"
   WASI_SDK_PATH: /opt/wasi-sdk
+  # CI always builds and tests against Golem's wasmtime fork — see
+  # .github/scripts/enable-wasmtime-fork.sh for the rationale. Build/test
+  # jobs run that script (which uncomments the [patch.crates-io] block in
+  # Cargo.toml) and pass --features use-golem-wasmtime via this variable.
+  # The `release-binaries` and `publish` jobs deliberately skip both so
+  # they keep using the unpatched, crates.io-publishable wasmtime.
+  CI_WASMTIME_FORK_FEATURES: --features use-golem-wasmtime
 
 jobs:
   build:
@@ -26,12 +33,14 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - name: Enable Golem wasmtime fork
+        run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Check formatting
         run: cargo fmt -- --check
       - name: Clippy
-        run: cargo clippy -- -Dwarnings
+        run: cargo clippy $CI_WASMTIME_FORK_FEATURES -- -Dwarnings
       - name: Build
-        run: cargo build --all-targets
+        run: cargo build --all-targets $CI_WASMTIME_FORK_FEATURES
 
   test-other:
     needs: [build]
@@ -41,8 +50,10 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - name: Enable Golem wasmtime fork
+        run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Compilation, DTS and error tests
-        run: cargo test --test compilation --test dts --test errors -- --report-time --format ctrf --logfile target/ctrf.json
+        run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
@@ -73,8 +84,10 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - name: Enable Golem wasmtime fork
+        run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Runtime tests (group ${{ matrix.group }}/8)
-        run: cargo test --test runtime -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
@@ -105,10 +118,12 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - name: Enable Golem wasmtime fork
+        run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Vendor Node.js test suite
         run: bash tests/node_compat/vendor.sh
       - name: Node compat tests (shard ${{ matrix.shard }}/8)
-        run: cargo test --test node_compat -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
+        run: cargo test --test node_compat $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
