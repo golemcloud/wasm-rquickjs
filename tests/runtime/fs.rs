@@ -2,7 +2,7 @@ use crate::common::{CompiledTest, TestInstance};
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 
-#[test_dep(tagged_as = "fs")]
+#[test_dep(tagged_as = "fs", scope = Cloneable)]
 async fn compiled_fs() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/fs");
     CompiledTest::new(path, true)

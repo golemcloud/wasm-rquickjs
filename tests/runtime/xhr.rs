@@ -4,7 +4,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "xhr")]
+#[test_dep(tagged_as = "xhr", scope = Cloneable)]
 async fn compiled_xhr() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/xhr");
     CompiledTest::new(path, true)

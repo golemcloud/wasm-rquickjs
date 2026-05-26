@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "buffer_utils")]
+#[test_dep(tagged_as = "buffer_utils", scope = Cloneable)]
 async fn compiled_buffer_utils() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/buffer-utils");
     CompiledTest::new(path, true)

@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "fetch")]
+#[test_dep(tagged_as = "fetch", scope = Cloneable)]
 async fn compiled_fetch() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/fetch");
     CompiledTest::new(path, true)

@@ -4,7 +4,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "crypto")]
+#[test_dep(tagged_as = "crypto", scope = Cloneable)]
 async fn compiled_crypto() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/crypto");
     CompiledTest::new_with_features(path, true, FeatureCombination::Full)

@@ -5,7 +5,7 @@ use std::slice;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "bigint_roundtrip")]
+#[test_dep(tagged_as = "bigint_roundtrip", scope = Cloneable)]
 async fn compiled_bigint_roundtrip() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/bigint-roundtrip");
     CompiledTest::new(path, true)

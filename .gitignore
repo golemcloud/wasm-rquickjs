@@ -1,6 +1,8 @@
 *.iml
 .idea
 tmp
+.tmp
+.amp
 target
 .DS_Store
 tests/node_compat/suite

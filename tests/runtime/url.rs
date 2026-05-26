@@ -4,7 +4,7 @@ use indoc::indoc;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-#[test_dep(tagged_as = "url")]
+#[test_dep(tagged_as = "url", scope = Cloneable)]
 async fn compiled_url() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/url");
     CompiledTest::new(path, true)

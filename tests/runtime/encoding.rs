@@ -3,7 +3,7 @@ use camino::Utf8Path;
 use indoc::indoc;
 use test_r::{test, test_dep};
 
-#[test_dep(tagged_as = "encoding")]
+#[test_dep(tagged_as = "encoding", scope = Cloneable)]
 async fn compiled_encoding() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/encoding");
     CompiledTest::new(path, true)
